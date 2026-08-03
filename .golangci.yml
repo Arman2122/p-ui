@@ -46,7 +46,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/mhsanaei/3x-ui
+        - github.com/Arman2122/p-ui
   exclusions:
     paths:
       - frontend

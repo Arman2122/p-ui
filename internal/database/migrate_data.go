@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -21,7 +21,7 @@ import (
 )
 
 // migrationModels is the FK-aware order in which tables are created and copied
-// during `x-ui migrate-db --dsn` (SQLite → PostgreSQL data migration) and in
+// during `p-ui migrate-db --dsn` (SQLite → PostgreSQL data migration) and in
 // related tests.
 //
 // Important: When adding a new top-level model (like OutboundSubscription),
@@ -145,7 +145,7 @@ func MigrateData(srcPath, dstDSN string) error {
 	}
 
 	log.Printf("Migration complete: %d rows across %d tables.", totalRows, len(migrationModels()))
-	log.Println("Set XUI_DB_TYPE=postgres and XUI_DB_DSN=... in /etc/default/x-ui, then restart x-ui.")
+	log.Println("Set PUI_DB_TYPE=postgres and PUI_DB_DSN=... in /etc/default/p-ui, then restart p-ui.")
 	return nil
 }
 
@@ -333,7 +333,7 @@ func PrepareSQLiteForMigration(dbPath string) error {
 
 	for _, table := range []string{"users", "settings", "inbounds"} {
 		if !sqliteTableExists(sqlDB, table) {
-			return fmt.Errorf("not a 3x-ui panel database: required table %q is missing", table)
+			return fmt.Errorf("not a p-ui panel database: required table %q is missing", table)
 		}
 	}
 	for _, m := range migrationModels() {

@@ -1,6 +1,6 @@
 ---
 title: Backup & Restore
-description: Back up and restore your 3x-ui database and certificates, manually or via the Telegram bot.
+description: Back up and restore your p-ui database and certificates, manually or via the Telegram bot.
 icon: DatabaseBackup
 ---
 
@@ -9,7 +9,7 @@ database. Back it up regularly so you can recover or migrate.
 
 ## What to back up
 
-- **The database** — SQLite at `/etc/x-ui/x-ui.db` by default (or your
+- **The database** — SQLite at `/etc/p-ui/p-ui.db` by default (or your
   PostgreSQL database if you use that backend).
 - **Certificates** — anything under `/root/cert/` (or wherever you store TLS
   certs).
@@ -20,7 +20,7 @@ You can download a backup from the panel's overview, or copy the database file
 directly from the server:
 
 ```bash title="copy the SQLite database"
-cp /etc/x-ui/x-ui.db /root/x-ui-backup-$(date +%F).db
+cp /etc/p-ui/p-ui.db /root/p-ui-backup-$(date +%F).db
 ```
 
 To restore, stop the panel, put the database back in place, and start it again.
@@ -41,12 +41,12 @@ can also request a backup on demand from the bot's menu.
 
 ## SQLite dump / restore
 
-The `x-ui migrate-db` command converts the SQLite database to and from a plain
+The `p-ui migrate-db` command converts the SQLite database to and from a plain
 SQL text dump (handy for inspection or transferring between machines):
 
 ```bash
-x-ui migrate-db --dump /root/x-ui.sql       # SQLite -> SQL text
-x-ui migrate-db --restore /root/x-ui.sql     # SQL text -> SQLite
+p-ui migrate-db --dump /root/p-ui.sql       # SQLite -> SQL text
+p-ui migrate-db --restore /root/p-ui.sql     # SQL text -> SQLite
 ```
 
 To move to PostgreSQL instead, see [Database](/docs/reference/database).

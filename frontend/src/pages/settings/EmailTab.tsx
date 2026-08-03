@@ -89,7 +89,7 @@ export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
             </SettingListItem>
 
             <SettingListItem paddings="small" title={t('pages.settings.smtpFromName')} description={t('pages.settings.smtpFromNameDesc')}>
-              <Input value={allSetting.smtpFromName} placeholder="3x-ui"
+              <Input value={allSetting.smtpFromName} placeholder="p-ui"
                 onChange={(e) => updateSetting({ smtpFromName: e.target.value })} />
             </SettingListItem>
 

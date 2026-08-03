@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking the time to contribute to 3x-ui. This guide gets a development panel running locally and explains the conventions the project follows so changes land cleanly.
+Thanks for taking the time to contribute to p-ui. This guide gets a development panel running locally and explains the conventions the project follows so changes land cleanly.
 
 ## Prerequisites
 
@@ -50,12 +50,12 @@ Cross-building the Linux SQLite target from Windows (or vice versa) requires a s
 ## First-time setup
 
 ```bash
-git clone https://github.com/MHSanaei/3x-ui.git
-cd 3x-ui
+git clone https://github.com/Arman2122/p-ui.git
+cd p-ui
 
 cp .env.example .env
 
-mkdir x-ui
+mkdir p-ui
 
 go mod download
 
@@ -65,18 +65,18 @@ npm run build
 cd ..
 ```
 
-`.env.example` ships with defaults that keep the database, logs, and xray binary inside the local `x-ui/` folder so nothing escapes the project directory:
+`.env.example` ships with defaults that keep the database, logs, and xray binary inside the local `p-ui/` folder so nothing escapes the project directory:
 
 ```
-XUI_DEBUG=true
-XUI_DB_FOLDER=x-ui
-XUI_LOG_FOLDER=x-ui
-XUI_BIN_FOLDER=x-ui
-XUI_INIT_WEB_BASE_PATH=/
-# XUI_PORT=8080
+PUI_DEBUG=true
+PUI_DB_FOLDER=p-ui
+PUI_LOG_FOLDER=p-ui
+PUI_BIN_FOLDER=p-ui
+PUI_INIT_WEB_BASE_PATH=/
+# PUI_PORT=8080
 ```
 
-Drop the xray binary (`xray-windows-amd64.exe` on Windows, `xray-linux-amd64` on Linux, etc.) plus the matching `geoip.dat` and `geosite.dat` files into `x-ui/`. The easiest source is a [released Xray-core build](https://github.com/XTLS/Xray-core/releases). On Windows, `wintun.dll` is also required for testing TUN inbounds.
+Drop the xray binary (`xray-windows-amd64.exe` on Windows, `xray-linux-amd64` on Linux, etc.) plus the matching `geoip.dat` and `geosite.dat` files into `p-ui/`. The easiest source is a [released Xray-core build](https://github.com/XTLS/Xray-core/releases). On Windows, `wintun.dll` is also required for testing TUN inbounds.
 
 ## Running
 
@@ -88,7 +88,7 @@ Open [http://localhost:2053](http://localhost:2053) and log in with `admin` / `a
 
 ### Inside VS Code
 
-The repo checks in two VS Code launch profiles in `.vscode/launch.json`: **Run 3x-ui (Debug)** for the default SQLite setup, and **Run 3x-ui (Postgres)** which points `XUI_DB_TYPE`/`XUI_DB_DSN` at a local PostgreSQL. The Postgres profile also prepends the PostgreSQL `bin` to `PATH` so the panel can find `pg_dump`/`pg_restore` (the `postgresql-client` tools used for DB backup/restore) — adjust the DSN and that path to your machine:
+The repo checks in two VS Code launch profiles in `.vscode/launch.json`: **Run p-ui (Debug)** for the default SQLite setup, and **Run p-ui (Postgres)** which points `PUI_DB_TYPE`/`PUI_DB_DSN` at a local PostgreSQL. The Postgres profile also prepends the PostgreSQL `bin` to `PATH` so the panel can find `pg_dump`/`pg_restore` (the `postgresql-client` tools used for DB backup/restore) — adjust the DSN and that path to your machine:
 
 ```jsonc
 {
@@ -96,33 +96,33 @@ The repo checks in two VS Code launch profiles in `.vscode/launch.json`: **Run 3
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run 3x-ui (Debug)",
+      "name": "Run p-ui (Debug)",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
       "cwd": "${workspaceFolder}",
       "env": {
-        "XUI_DEBUG": "true",
-        "XUI_DB_FOLDER": "x-ui",
-        "XUI_LOG_FOLDER": "x-ui",
-        "XUI_BIN_FOLDER": "x-ui"
+        "PUI_DEBUG": "true",
+        "PUI_DB_FOLDER": "p-ui",
+        "PUI_LOG_FOLDER": "p-ui",
+        "PUI_BIN_FOLDER": "p-ui"
       },
       "console": "integratedTerminal"
     },
     {
-      "name": "Run 3x-ui (Postgres)",
+      "name": "Run p-ui (Postgres)",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
       "cwd": "${workspaceFolder}",
       "env": {
-        "XUI_DEBUG": "true",
-        "XUI_LOG_FOLDER": "x-ui",
-        "XUI_BIN_FOLDER": "x-ui",
-        "XUI_DB_TYPE": "postgres",
-        "XUI_DB_DSN": "postgres://xui:xuipass@127.0.0.1:5432/xui?sslmode=disable",
+        "PUI_DEBUG": "true",
+        "PUI_LOG_FOLDER": "p-ui",
+        "PUI_BIN_FOLDER": "p-ui",
+        "PUI_DB_TYPE": "postgres",
+        "PUI_DB_DSN": "postgres://pui:xuipass@127.0.0.1:5432/pui?sslmode=disable",
         "PATH": "C:\\Program Files\\PostgreSQL\\18\\bin;${env:PATH}"
       },
       "console": "integratedTerminal"
@@ -167,7 +167,7 @@ Locale strings live in `internal/web/translation/<locale>.json`, **not** under `
 
 The Vite dev proxy serves the admin SPA for any `/panel/*` URL — `bypassMigratedRoute` in `vite.config.js` rewrites those requests to `index.html` and lets React Router take over — while forwarding `/panel/api/*`, `/panel/api/setting/*`, `/panel/api/xray/*`, and the WebSocket to the Go panel. Because routing is now client-side, new panel routes need no proxy or allowlist changes.
 
-> **`XUI_DEBUG=true` gotcha** — in debug mode the panel serves HTML from the embedded FS (frozen at the last `go build` / `go run`) but JS/CSS off disk. Re-running `npm run build` without restarting Go leaves the embedded HTML pointing at the *old* hashed asset names, producing a blank page with 404s in the console. Always restart `go run .` after a frontend rebuild.
+> **`PUI_DEBUG=true` gotcha** — in debug mode the panel serves HTML from the embedded FS (frozen at the last `go build` / `go run`) but JS/CSS off disk. Re-running `npm run build` without restarting Go leaves the embedded HTML pointing at the *old* hashed asset names, producing a blank page with 404s in the console. Always restart `go run .` after a frontend rebuild.
 
 ### Adding a new page
 
@@ -236,7 +236,7 @@ For deeper notes on the frontend toolchain see [`frontend/README.md`](frontend/R
 | `internal/xray/` | Xray-core process lifecycle and gRPC API client |
 | `internal/sub/` | Subscription endpoints (raw, JSON, Clash) |
 | `internal/config/` | Environment-variable helpers, paths, defaults |
-| `x-ui/` | **Runtime data** — db, logs, xray binary, geo files (gitignored) |
+| `p-ui/` | **Runtime data** — db, logs, xray binary, geo files (gitignored) |
 
 ## Testing
 
@@ -246,7 +246,7 @@ Tests live next to the code (`foo.go` ↔ `foo_test.go`); frontend specs and gol
 
 - **Stdlib `testing` only** — no testify. Table-driven with `t.Run` subtests and `t.Helper()` on helpers.
 - **Assert the contract, not internals.** Pin the exact value / typed error / emitted string — not `err != nil` or `len > 0`. A test that still passes when the behavior is broken is worse than no test.
-- **Real dependencies over mocks.** Get a throwaway DB with `database.InitDB(filepath.Join(t.TempDir(), "x-ui.db"))` + `t.Cleanup(func() { _ = database.CloseDB() })` (Windows-safe), and use `httptest` servers for HTTP. The `internal/sub` suite's `initSubDB(t)` is the template.
+- **Real dependencies over mocks.** Get a throwaway DB with `database.InitDB(filepath.Join(t.TempDir(), "p-ui.db"))` + `t.Cleanup(func() { _ = database.CloseDB() })` (Windows-safe), and use `httptest` servers for HTTP. The `internal/sub` suite's `initSubDB(t)` is the template.
 
 ### Running
 
@@ -296,24 +296,24 @@ CI runs this for you nightly (and on demand) via `.github/workflows/mutation.yml
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `XUI_DEBUG` | `false` | Verbose logs + Gin debug mode + serve `/assets` from disk |
-| `XUI_LOG_LEVEL` | `info` | `debug` / `info` / `notice` / `warning` / `error` |
-| `XUI_DB_FOLDER` | platform default | Where `x-ui.db` lives |
-| `XUI_LOG_FOLDER` | platform default | Where `3xui.log` lives |
-| `XUI_BIN_FOLDER` | `bin` | Where the xray binary, geo files, and xray `config.json` live |
-| `XUI_INIT_WEB_BASE_PATH` | `/` | The initial URI path for the web panel |
-| `XUI_PORT` | persisted `webPort` | Runtime-only web panel listener port override (`1` through `65535`) |
-| `XUI_DB_TYPE` | `sqlite` | Set to `postgres` to use PostgreSQL via `XUI_DB_DSN` |
-| `XUI_DB_DSN` | — | PostgreSQL DSN when `XUI_DB_TYPE=postgres` |
+| `PUI_DEBUG` | `false` | Verbose logs + Gin debug mode + serve `/assets` from disk |
+| `PUI_LOG_LEVEL` | `info` | `debug` / `info` / `notice` / `warning` / `error` |
+| `PUI_DB_FOLDER` | platform default | Where `p-ui.db` lives |
+| `PUI_LOG_FOLDER` | platform default | Where `pui.log` lives |
+| `PUI_BIN_FOLDER` | `bin` | Where the xray binary, geo files, and xray `config.json` live |
+| `PUI_INIT_WEB_BASE_PATH` | `/` | The initial URI path for the web panel |
+| `PUI_PORT` | persisted `webPort` | Runtime-only web panel listener port override (`1` through `65535`) |
+| `PUI_DB_TYPE` | `sqlite` | Set to `postgres` to use PostgreSQL via `PUI_DB_DSN` |
+| `PUI_DB_DSN` | — | PostgreSQL DSN when `PUI_DB_TYPE=postgres` |
 
-A valid `XUI_PORT` takes precedence over the database-backed `webPort` for the
+A valid `PUI_PORT` takes precedence over the database-backed `webPort` for the
 current process without changing the stored setting. Unset, empty, whitespace-only,
 malformed, or out-of-range values fall back to `webPort`; invalid configured values
 also produce a warning. With Docker bridge networking, the published container port
-must match the override, for example `XUI_PORT: "8080"` with `ports: ["8080:8080"]`.
+must match the override, for example `PUI_PORT: "8080"` with `ports: ["8080:8080"]`.
 
 ## Issues
 
-- Bug reports and feature requests: [GitHub Issues](https://github.com/MHSanaei/3x-ui/issues)
+- Bug reports and feature requests: [GitHub Issues](https://github.com/Arman2122/p-ui/issues)
 
-Before filing a bug, include the OS, Go version, panel version (`/panel/api/server/status` or the dashboard footer), and the relevant excerpt from `x-ui/3xui.log`.
+Before filing a bug, include the OS, Go version, panel version (`/panel/api/server/status` or the dashboard footer), and the relevant excerpt from `p-ui/pui.log`.

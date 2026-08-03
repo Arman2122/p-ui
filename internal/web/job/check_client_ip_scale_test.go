@@ -13,27 +13,27 @@ import (
 	"github.com/op/go-logging"
 	"gorm.io/gorm"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/config"
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	xuilogger "github.com/mhsanaei/3x-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/config"
+	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 // setupScaleJobDB mirrors the service package's scale gating: Postgres via
-// XUI_DB_TYPE/XUI_DB_DSN, SQLite via XUI_SCALE_TEST=1, skip otherwise.
+// PUI_DB_TYPE/PUI_DB_DSN, SQLite via PUI_SCALE_TEST=1, skip otherwise.
 func setupScaleJobDB(t *testing.T) {
 	t.Helper()
 	loggerInitOnce.Do(func() { xuilogger.InitLogger(logging.ERROR) })
-	t.Setenv("XUI_LOG_FOLDER", t.TempDir())
+	t.Setenv("PUI_LOG_FOLDER", t.TempDir())
 
-	if os.Getenv("XUI_DB_TYPE") == "postgres" && strings.TrimSpace(os.Getenv("XUI_DB_DSN")) != "" {
+	if os.Getenv("PUI_DB_TYPE") == "postgres" && strings.TrimSpace(os.Getenv("PUI_DB_DSN")) != "" {
 		if err := database.InitDB(""); err != nil {
 			t.Fatalf("InitDB(postgres): %v", err)
 		}
 		t.Cleanup(func() { _ = database.CloseDB() })
 		return
 	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("XUI_SCALE_TEST"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("PUI_SCALE_TEST"))) {
 	case "1", "true", "yes":
 		if err := database.InitDB(filepath.Join(t.TempDir(), "scale.db")); err != nil {
 			t.Fatalf("InitDB(sqlite): %v", err)
@@ -41,12 +41,12 @@ func setupScaleJobDB(t *testing.T) {
 		t.Cleanup(func() { _ = database.CloseDB() })
 		return
 	}
-	t.Skip("set XUI_SCALE_TEST=1 (sqlite) or XUI_DB_TYPE=postgres + XUI_DB_DSN (postgres) to run the scale benchmark")
+	t.Skip("set PUI_SCALE_TEST=1 (sqlite) or PUI_DB_TYPE=postgres + PUI_DB_DSN (postgres) to run the scale benchmark")
 }
 
 func scaleJobSizes(t *testing.T, def ...int) []int {
 	t.Helper()
-	raw := strings.TrimSpace(os.Getenv("XUI_SCALE_SIZES"))
+	raw := strings.TrimSpace(os.Getenv("PUI_SCALE_SIZES"))
 	if raw == "" {
 		return def
 	}
@@ -58,7 +58,7 @@ func scaleJobSizes(t *testing.T, def ...int) []int {
 		}
 		n, err := strconv.Atoi(part)
 		if err != nil || n <= 0 {
-			t.Fatalf("XUI_SCALE_SIZES: invalid size %q", part)
+			t.Fatalf("PUI_SCALE_SIZES: invalid size %q", part)
 		}
 		out = append(out, n)
 	}

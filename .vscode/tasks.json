@@ -8,14 +8,14 @@
       "args": [
         "build",
         "-o",
-        "bin/3x-ui",
+        "bin/p-ui",
         "./main.go"
       ],
       "windows": {
         "args": [
           "build",
           "-o",
-          "bin/3x-ui.exe",
+          "bin/p-ui.exe",
           "./main.go"
         ]
       },
@@ -41,7 +41,7 @@
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "XUI_DEBUG": "true"
+          "PUI_DEBUG": "true"
         }
       },
       "problemMatcher": [

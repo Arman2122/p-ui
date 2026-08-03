@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/util/netsafe"
+	"github.com/Arman2122/p-ui/v3/internal/util/netsafe"
 )
 
 // dnsAllowRuleTag marks the routing rules this file manages. Both
@@ -17,7 +17,7 @@ import (
 // untouched, so it is a stable provenance marker: only rules carrying it
 // (or legacy managed rules recognized by exact content, see
 // managedDnsAllowRule) are ever stripped and rebuilt.
-const dnsAllowRuleTag = "xui-dns-allow"
+const dnsAllowRuleTag = "pui-dns-allow"
 
 // managedDnsAllowRule reports whether a routing rule was created by this
 // file. Current managed rules carry dnsAllowRuleTag. Rules written before

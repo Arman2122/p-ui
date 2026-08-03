@@ -1,4 +1,4 @@
-// Package web provides the main web server implementation for the 3x-ui panel,
+// Package web provides the main web server implementation for the p-ui panel,
 // including HTTP/HTTPS serving, routing, templates, and background job scheduling.
 package web
 
@@ -16,24 +16,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/config"
-	"github.com/mhsanaei/3x-ui/v3/internal/eventbus"
-	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/mtproto"
-	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
-	"github.com/mhsanaei/3x-ui/v3/internal/util/sys"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/controller"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/job"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/locale"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/middleware"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/network"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service/email"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service/panel"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service/tgbot"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/websocket"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/config"
+	"github.com/Arman2122/p-ui/v3/internal/eventbus"
+	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/mtproto"
+	"github.com/Arman2122/p-ui/v3/internal/util/common"
+	"github.com/Arman2122/p-ui/v3/internal/util/sys"
+	"github.com/Arman2122/p-ui/v3/internal/web/controller"
+	"github.com/Arman2122/p-ui/v3/internal/web/job"
+	"github.com/Arman2122/p-ui/v3/internal/web/locale"
+	"github.com/Arman2122/p-ui/v3/internal/web/middleware"
+	"github.com/Arman2122/p-ui/v3/internal/web/network"
+	"github.com/Arman2122/p-ui/v3/internal/web/runtime"
+	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/v3/internal/web/service/email"
+	"github.com/Arman2122/p-ui/v3/internal/web/service/panel"
+	"github.com/Arman2122/p-ui/v3/internal/web/service/tgbot"
+	"github.com/Arman2122/p-ui/v3/internal/web/websocket"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-contrib/sessions"
@@ -107,13 +107,13 @@ func EmbeddedDist() embed.FS {
 	return distFS
 }
 
-// Server represents the main web server for the 3x-ui panel with controllers, services, and scheduled jobs.
+// Server represents the main web server for the p-ui panel with controllers, services, and scheduled jobs.
 type Server struct {
 	httpServer *http.Server
 	listener   net.Listener
 
 	index *controller.IndexController
-	panel *controller.XUIController
+	panel *controller.PUIController
 	api   *controller.APIController
 	ws    *controller.WebSocketController
 
@@ -207,7 +207,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 		sessionOptions.MaxAge = sessionMaxAge * 60 // minutes -> seconds
 	}
 	store.Options(sessionOptions)
-	engine.Use(sessions.Sessions("3x-ui", store))
+	engine.Use(sessions.Sessions("p-ui", store))
 	engine.Use(func(c *gin.Context) {
 		c.Set("base_path", basePath)
 	})
@@ -246,7 +246,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	g := engine.Group(basePath)
 
 	s.index = controller.NewIndexController(g)
-	s.panel = controller.NewXUIController(g)
+	s.panel = controller.NewPUIController(g)
 	s.api = controller.NewAPIController(g)
 
 	// Initialize WebSocket hub
@@ -545,10 +545,10 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	}
 	if envPort, configured, envErr := config.GetPortOverride(); configured {
 		if envErr != nil {
-			logger.Warning("Ignoring invalid XUI_PORT; using configured web port:", port, envErr)
+			logger.Warning("Ignoring invalid PUI_PORT; using configured web port:", port, envErr)
 		} else {
 			port = envPort
-			logger.Info("Using XUI_PORT override for web panel port:", port)
+			logger.Info("Using PUI_PORT override for web panel port:", port)
 		}
 	}
 	listenAddr := net.JoinHostPort(listen, strconv.Itoa(port))
@@ -627,7 +627,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		if err := s.tgbotService.TestConnection(); err != nil {
 			return fmt.Errorf("telegram API test failed: %w", err)
 		}
-		s.tgbotService.SendMsgToTgbotAdmins("✅ Test message from 3x-ui")
+		s.tgbotService.SendMsgToTgbotAdmins("✅ Test message from p-ui")
 		return nil
 	})
 

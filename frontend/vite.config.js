@@ -8,18 +8,18 @@ const outDir = path.resolve(__dirname, '../internal/web/dist');
 const BACKEND_TARGET = 'http://localhost:2053';
 
 function resolveDBPath() {
-  const envFolder = process.env.XUI_DB_FOLDER;
+  const envFolder = process.env.PUI_DB_FOLDER;
   if (envFolder) {
     const abs = path.isAbsolute(envFolder)
       ? envFolder
       : path.resolve(__dirname, '..', envFolder);
-    return path.join(abs, 'x-ui.db');
+    return path.join(abs, 'p-ui.db');
   }
-  const repoSubDB = path.resolve(__dirname, '..', 'x-ui', 'x-ui.db');
+  const repoSubDB = path.resolve(__dirname, '..', 'p-ui', 'p-ui.db');
   if (fs.existsSync(repoSubDB)) return repoSubDB;
-  const repoDB = path.resolve(__dirname, '..', 'x-ui.db');
+  const repoDB = path.resolve(__dirname, '..', 'p-ui.db');
   if (fs.existsSync(repoDB)) return repoDB;
-  return '/etc/x-ui/x-ui.db';
+  return '/etc/p-ui/p-ui.db';
 }
 
 const PANEL_API_PREFIXES = ['panel/api/', 'panel/csrf-token'];
@@ -65,7 +65,7 @@ function readPanelVersion() {
 // already injects webBasePath and version at runtime in production.
 function injectBasePathPlugin() {
   return {
-    name: 'xui-inject-base-path',
+    name: 'pui-inject-base-path',
     apply: 'serve',
     transformIndexHtml(html) {
       const basePath = refreshBasePath();
@@ -81,7 +81,7 @@ function injectBasePathPlugin() {
 // own loader, breaking ES-module semantics; data-cfasync="false" opts out.
 function rocketLoaderOptOutPlugin() {
   return {
-    name: 'xui-rocket-loader-opt-out',
+    name: 'pui-rocket-loader-opt-out',
     apply: 'build',
     transformIndexHtml(html) {
       return html.replaceAll('<script ', '<script data-cfasync="false" ');
@@ -175,9 +175,9 @@ export default defineConfig({
     // production sourcemaps (~18MB across 112 files, 72% of dist) ship inside
     // every release build. Nothing consumes them there; `npm run dev` serves
     // its own maps regardless of this setting. To debug a minified bundle
-    // (including the XUI_DEBUG serve-from-disk path), build once with
-    // XUI_SOURCEMAP=true — no tracked-file edit to accidentally commit.
-    sourcemap: process.env.XUI_SOURCEMAP === 'true',
+    // (including the PUI_DEBUG serve-from-disk path), build once with
+    // PUI_SOURCEMAP=true — no tracked-file edit to accidentally commit.
+    sourcemap: process.env.PUI_SOURCEMAP === 'true',
     target: 'es2020',
     chunkSizeWarningLimit: 1500,
     rollupOptions: {

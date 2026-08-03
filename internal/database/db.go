@@ -20,11 +20,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/config"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/util/crypto"
-	"github.com/mhsanaei/3x-ui/v3/internal/util/random"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/config"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
+	"github.com/Arman2122/p-ui/v3/internal/util/random"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 
 	"github.com/mattn/go-sqlite3"
 	"gorm.io/driver/postgres"
@@ -59,7 +59,7 @@ func Dialect() string {
 const (
 	defaultUsername       = "admin"
 	defaultPassword       = "admin"
-	sqliteBackupDirPrefix = ".x-ui-backup-"
+	sqliteBackupDirPrefix = ".p-ui-backup-"
 )
 
 func allModels() []any {
@@ -1341,7 +1341,7 @@ func resetIpLimitsWithoutFail2ban() error {
 }
 
 func fail2banCanEnforce() bool {
-	if v, ok := os.LookupEnv("XUI_ENABLE_FAIL2BAN"); ok && v != "true" {
+	if v, ok := os.LookupEnv("PUI_ENABLE_FAIL2BAN"); ok && v != "true" {
 		return false
 	}
 	if runtime.GOOS == "windows" {
@@ -1951,7 +1951,7 @@ func InitDB(dbPath string) error {
 	case "postgres":
 		dsn := config.GetDBDSN()
 		if dsn == "" {
-			return errors.New("XUI_DB_TYPE=postgres but XUI_DB_DSN is empty")
+			return errors.New("PUI_DB_TYPE=postgres but PUI_DB_DSN is empty")
 		}
 		db, err = openPostgresWithRetry(dsn, c)
 		if err != nil {
@@ -1982,8 +1982,8 @@ func InitDB(dbPath string) error {
 			"PRAGMA journal_mode=" + journal,
 			"PRAGMA busy_timeout=10000",
 			"PRAGMA synchronous=" + sync,
-			fmt.Sprintf("PRAGMA cache_size=-%d", envInt("XUI_DB_CACHE_MB", 32)*1024),
-			fmt.Sprintf("PRAGMA mmap_size=%d", int64(envInt("XUI_DB_MMAP_MB", 256))*1024*1024),
+			fmt.Sprintf("PRAGMA cache_size=-%d", envInt("PUI_DB_CACHE_MB", 32)*1024),
+			fmt.Sprintf("PRAGMA mmap_size=%d", int64(envInt("PUI_DB_MMAP_MB", 256))*1024*1024),
 			"PRAGMA temp_store=MEMORY",
 		}
 		for _, p := range pragmas {
@@ -2000,11 +2000,11 @@ func InitDB(dbPath string) error {
 	var maxOpen, maxIdle int
 	switch config.GetDBKind() {
 	case "postgres":
-		maxOpen = envInt("XUI_DB_MAX_OPEN_CONNS", 25)
-		maxIdle = envInt("XUI_DB_MAX_IDLE_CONNS", 25)
+		maxOpen = envInt("PUI_DB_MAX_OPEN_CONNS", 25)
+		maxIdle = envInt("PUI_DB_MAX_IDLE_CONNS", 25)
 	default:
-		maxOpen = envInt("XUI_DB_MAX_OPEN_CONNS", 8)
-		maxIdle = envInt("XUI_DB_MAX_IDLE_CONNS", 4)
+		maxOpen = envInt("PUI_DB_MAX_OPEN_CONNS", 8)
+		maxIdle = envInt("PUI_DB_MAX_IDLE_CONNS", 4)
 	}
 	sqlDB.SetMaxOpenConns(maxOpen)
 	sqlDB.SetMaxIdleConns(maxIdle)
@@ -2058,7 +2058,7 @@ func openPostgresWithRetry(dsn string, c *gorm.Config) (*gorm.DB, error) {
 }
 
 func sqliteJournalMode() string {
-	switch strings.ToUpper(strings.TrimSpace(os.Getenv("XUI_DB_JOURNAL_MODE"))) {
+	switch strings.ToUpper(strings.TrimSpace(os.Getenv("PUI_DB_JOURNAL_MODE"))) {
 	case "DELETE":
 		return "DELETE"
 	default:
@@ -2092,7 +2092,7 @@ func cleanupSQLiteBackupDirs(dir string) error {
 }
 
 func sqliteSynchronous() string {
-	switch strings.ToUpper(strings.TrimSpace(os.Getenv("XUI_DB_SYNCHRONOUS"))) {
+	switch strings.ToUpper(strings.TrimSpace(os.Getenv("PUI_DB_SYNCHRONOUS"))) {
 	case "OFF":
 		return "OFF"
 	case "NORMAL":

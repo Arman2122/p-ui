@@ -1,6 +1,6 @@
 ---
 title: تنظیمات پنل
-description: تمام تنظیمات پنل 3x-ui — وب‌سرور، TLS، نمایش، امنیت و اعلان‌ها — همراه با مقادیر پیش‌فرض برگرفته از سورس.
+description: تمام تنظیمات پنل p-ui — وب‌سرور، TLS، نمایش، امنیت و اعلان‌ها — همراه با مقادیر پیش‌فرض برگرفته از سورس.
 icon: SlidersHorizontal
 ---
 
@@ -14,7 +14,7 @@ icon: SlidersHorizontal
 
 | Setting             | Default                 | Meaning                                                                 |
 | ------------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `webPort`           | `2053`                  | پورت پنل (۱ تا ۶۵۵۳۵). متغیر محیطی `XUI_PORT` در زمان اجرا آن را بازنویسی می‌کند. |
+| `webPort`           | `2053`                  | پورت پنل (۱ تا ۶۵۵۳۵). متغیر محیطی `PUI_PORT` در زمان اجرا آن را بازنویسی می‌کند. |
 | `webListen`         | _(همه‌ی واسط‌ها)_      | پنل را به یک IP مشخص مقید کنید.                                        |
 | `webBasePath`       | `/`                     | مسیر URLی که پنل زیر آن ارائه می‌شود (همیشه به شکل `/…/` نرمال‌سازی می‌شود).        |
 | `webCertFile` / `webKeyFile` | _(هیچ‌کدام)_   | گواهی + کلید TLS. وقتی هر دو تنظیم شوند، پنل با **HTTPS** ارائه می‌شود.   |
@@ -24,12 +24,12 @@ icon: SlidersHorizontal
 
 پس از تغییر پورت یا مسیر پایه، آدرس پنل به‌صورت
 `http(s)://<server>:<port><web-base-path>` درمی‌آید. می‌توانید مسیر پایه را در
-نخستین اجرا با [`XUI_INIT_WEB_BASE_PATH`](/docs/reference/env-vars) از پیش تعیین کنید.
+نخستین اجرا با [`PUI_INIT_WEB_BASE_PATH`](/docs/reference/env-vars) از پیش تعیین کنید.
 
 ### TLS
 
 ارائه‌ی پنل روی HTTPS از اطلاعات احراز هویت شما در حین انتقال محافظت می‌کند. یا
-`webCertFile` + `webKeyFile` را تنظیم کنید — [منوی SSL در `x-ui`](/docs/config/ssl-certificates)
+`webCertFile` + `webKeyFile` را تنظیم کنید — [منوی SSL در `p-ui`](/docs/config/ssl-certificates)
 می‌تواند یک گواهی Let's Encrypt برای شما تهیه کند — یا TLS را روی یک
 [پروکسی معکوس](/docs/operations/reverse-proxy) خاتمه دهید.
 

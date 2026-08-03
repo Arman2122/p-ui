@@ -1,13 +1,13 @@
-// Package controller provides HTTP request handlers and controllers for the 3x-ui web management panel.
+// Package controller provides HTTP request handlers and controllers for the p-ui web management panel.
 // It handles routing, authentication, and API endpoints for managing Xray inbounds, settings, and more.
 package controller
 
 import (
 	"net/http"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/locale"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/web/locale"
+	"github.com/Arman2122/p-ui/v3/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 )

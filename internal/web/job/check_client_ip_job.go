@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 
 	"gorm.io/gorm"
 )
@@ -451,7 +451,7 @@ func (j *CheckClientIpJob) checkFail2BanInstalled() bool {
 }
 
 func isFail2BanEnabled() bool {
-	value, ok := os.LookupEnv("XUI_ENABLE_FAIL2BAN")
+	value, ok := os.LookupEnv("PUI_ENABLE_FAIL2BAN")
 	return !ok || value == "true"
 }
 
@@ -524,7 +524,7 @@ func (j *CheckClientIpJob) updateInboundClientIps(tx *gorm.DB, inboundClientIps 
 		defer logIpFile.Close()
 		ipLogger := log.New(logIpFile, "", log.LstdFlags)
 
-		// log format is load-bearing: x-ui.sh create_iplimit_jails builds
+		// log format is load-bearing: p-ui.sh create_iplimit_jails builds
 		// filter.d/3x-ipl.conf with
 		//   failregex = \[LIMIT_IP\]\s*Email\s*=\s*<F-USER>.+</F-USER>\s*\|\|\s*Disconnecting OLD IP\s*=\s*<ADDR>\s*\|\|\s*Timestamp\s*=\s*\d+
 		// don't change the wording.
