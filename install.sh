@@ -1452,17 +1452,31 @@ install_p-ui() {
             exit 1
         fi
     fi
+    # The management script installed at /usr/bin/p-ui has to match the release
+    # being installed -- it drives the panel binary and shares its assumptions.
+    # It ships inside the archive, so take it from there. Fetching it from the
+    # main branch instead (as this did) hands a pinned install such as
+    # `install.sh v3.4.0` whatever script main happens to carry, and also
+    # reaches out to GitHub when installing from PUI_LOCAL_ARCHIVE.
+    # Archives predating the shipped script fall back to the main branch.
+    # This runs BEFORE the old install is torn down, so a failure here is
+    # non-destructive.
     local pui_script_temp="/usr/bin/p-ui-temp.$$"
     rm -f "${pui_script_temp}"
-    curl -fLRo "${pui_script_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.sh
-    if [[ $? -ne 0 ]]; then
-        rm -f "${pui_script_temp}"
-        echo -e "${red}Failed to download p-ui.sh${plain}"
-        exit 1
+    if tar tzf ${pui_folder}-linux-$(arch).tar.gz p-ui/p-ui.sh >/dev/null 2>&1; then
+        tar xzf ${pui_folder}-linux-$(arch).tar.gz -O p-ui/p-ui.sh >"${pui_script_temp}"
+    else
+        echo -e "${yellow}Release archive has no p-ui.sh; falling back to the main branch${plain}"
+        curl -fLRo "${pui_script_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.sh
+        if [[ $? -ne 0 ]]; then
+            rm -f "${pui_script_temp}"
+            echo -e "${red}Failed to download p-ui.sh${plain}"
+            exit 1
+        fi
     fi
     if [[ ! -s "${pui_script_temp}" ]]; then
         rm -f "${pui_script_temp}"
-        echo -e "${red}Downloaded p-ui.sh is empty${plain}"
+        echo -e "${red}p-ui.sh is missing or empty${plain}"
         exit 1
     fi
 
