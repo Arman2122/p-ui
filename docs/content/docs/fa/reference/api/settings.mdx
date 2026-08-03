@@ -116,7 +116,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/setting/all","method":"post"},{"path":"/panel/api/setting/defaultSettings","method":"post"},{"path":"/panel/api/setting/update","method":"post"},{"path":"/panel/api/setting/updateUser","method":"post"},{"path":"/panel/api/setting/restartPanel","method":"post"},{"path":"/panel/api/setting/testSmtp","method":"post"},{"path":"/panel/api/setting/testTgBot","method":"post"},{"path":"/panel/api/setting/getDefaultJsonConfig","method":"get"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/setting/all","method":"post"},{"path":"/panel/api/setting/defaultSettings","method":"post"},{"path":"/panel/api/setting/factoryDefaults","method":"post"},{"path":"/panel/api/setting/update","method":"post"},{"path":"/panel/api/setting/validateRegex","method":"post"},{"path":"/panel/api/setting/updateUser","method":"post"},{"path":"/panel/api/setting/restartPanel","method":"post"},{"path":"/panel/api/setting/testSmtp","method":"post"},{"path":"/panel/api/setting/testTgBot","method":"post"},{"path":"/panel/api/setting/getDefaultJsonConfig","method":"get"}]} showTitle />
     </>
   );
 }
