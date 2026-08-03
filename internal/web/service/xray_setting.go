@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // XraySettingService provides business logic for Xray configuration management.

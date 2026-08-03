@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/netsafe"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 )
 
 // dnsAllowRuleTag marks the routing rules this file manages. Both

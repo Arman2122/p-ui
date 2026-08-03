@@ -11,9 +11,9 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/web/locale"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/locale"
+	"github.com/Arman2122/p-ui/internal/web/session"
 )
 
 func newSPAFallbackTestEngine(t *testing.T) *gin.Engine {

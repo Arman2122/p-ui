@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/logger"
 )
 
 // DefaultBufferSize is the number of events the bus can hold before Publish starts dropping.

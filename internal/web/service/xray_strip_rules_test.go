@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
 )
 
 // rulesOf unmarshals a router config and returns its rules for assertions.

@@ -20,8 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/logger"
 )
 
 // GetBinaryName returns the mtg binary filename for the current arch, matching

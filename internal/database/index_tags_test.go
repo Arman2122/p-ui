@@ -3,8 +3,8 @@ package database
 import (
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // AutoMigrate must create the hot-path indexes added for client group filters

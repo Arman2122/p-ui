@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/logger"
 )
 
 // Compiled once at package load: Write runs on every line Xray emits, so

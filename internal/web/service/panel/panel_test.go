@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 func TestIsNewerVersion(t *testing.T) {

@@ -17,14 +17,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
-	"github.com/Arman2122/p-ui/v3/internal/util/netsafe"
-	"github.com/Arman2122/p-ui/v3/internal/web/runtime"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
+	"github.com/Arman2122/p-ui/internal/web/runtime"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/gorm"
 )
@@ -1200,7 +1200,7 @@ type ProbeResultUI struct {
 	Status       string  `json:"status" example:"online"`
 	LatencyMs    int     `json:"latencyMs" example:"42"`
 	XrayVersion  string  `json:"xrayVersion" example:"25.10.31"`
-	PanelVersion string  `json:"panelVersion" example:"v3.x.x"`
+	PanelVersion string  `json:"panelVersion" example:"v1.x.x"`
 	CpuPct       float64 `json:"cpuPct" example:"12.5"`
 	MemPct       float64 `json:"memPct" example:"45.2"`
 	UptimeSecs   uint64  `json:"uptimeSecs" example:"86400"`

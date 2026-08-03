@@ -1,4 +1,4 @@
-module github.com/Arman2122/p-ui/v3
+module github.com/Arman2122/p-ui
 
 go 1.26.5
 

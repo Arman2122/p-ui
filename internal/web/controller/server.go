@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/entity"
-	"github.com/Arman2122/p-ui/v3/internal/web/global"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/panel"
-	"github.com/Arman2122/p-ui/v3/internal/web/websocket"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/entity"
+	"github.com/Arman2122/p-ui/internal/web/global"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service/panel"
+	"github.com/Arman2122/p-ui/internal/web/websocket"
 
 	"github.com/gin-gonic/gin"
 )

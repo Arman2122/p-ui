@@ -2148,7 +2148,7 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "panelVersion": {
-        "example": "v3.x.x",
+        "example": "v1.x.x",
         "type": "string"
       },
       "parentGuid": {
@@ -2467,7 +2467,7 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "panelVersion": {
-        "example": "v3.x.x",
+        "example": "v1.x.x",
         "type": "string"
       },
       "parentGuid": {
@@ -2643,7 +2643,7 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "number"
       },
       "panelVersion": {
-        "example": "v3.x.x",
+        "example": "v1.x.x",
         "type": "string"
       },
       "status": {

@@ -5,7 +5,7 @@ import (
 	"encoding/pem"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
 // NodeMtlsCaCert returns the PEM of this panel's node-auth CA certificate (the

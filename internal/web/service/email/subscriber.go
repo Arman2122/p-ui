@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/eventbus"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/locale"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/eventbus"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/locale"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // Subscriber handles event bus messages and sends email notifications.

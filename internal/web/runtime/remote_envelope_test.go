@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/wirecodec"
+	"github.com/Arman2122/p-ui/internal/util/wirecodec"
 )
 
 // TestRemoteSendsEnvelopeWhenNodeAdvertisesCap: once a node has advertised the

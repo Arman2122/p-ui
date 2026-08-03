@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"

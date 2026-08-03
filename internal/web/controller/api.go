@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/web/middleware"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/panel"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/tgbot"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/web/middleware"
+	"github.com/Arman2122/p-ui/internal/web/service/panel"
+	"github.com/Arman2122/p-ui/internal/web/service/tgbot"
+	"github.com/Arman2122/p-ui/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 )

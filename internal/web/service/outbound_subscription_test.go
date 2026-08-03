@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/link"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/link"
 )
 
 func TestReadBoundedOutboundSubscriptionBody(t *testing.T) {

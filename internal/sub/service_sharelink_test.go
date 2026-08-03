@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 // shareLinkInbound builds a VLESS inbound with one client and the given stream

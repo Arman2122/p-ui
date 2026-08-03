@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 // nodeForPlainServer builds an http (non-TLS) node so do()'s token handling can

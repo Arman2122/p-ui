@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/netsafe"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 )
 
 func TestSubscriptionFetchClientBlocksPrivateDial(t *testing.T) {

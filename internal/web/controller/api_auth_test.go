@@ -12,10 +12,10 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/web/session"
 )
 
 // newAPIAuthTestEngine builds a gin engine that mirrors the production auth

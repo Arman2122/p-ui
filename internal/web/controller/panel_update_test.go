@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
+	"github.com/Arman2122/p-ui/internal/config"
 
 	"github.com/gin-gonic/gin"
 )

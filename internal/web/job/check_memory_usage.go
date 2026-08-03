@@ -1,7 +1,7 @@
 package job
 
 import (
-	"github.com/Arman2122/p-ui/v3/internal/eventbus"
+	"github.com/Arman2122/p-ui/internal/eventbus"
 
 	"github.com/shirou/gopsutil/v4/mem"
 )

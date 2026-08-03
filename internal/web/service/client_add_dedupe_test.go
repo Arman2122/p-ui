@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 func mustUnmarshal(t *testing.T, raw string, v any) {

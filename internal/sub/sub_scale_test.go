@@ -13,10 +13,10 @@ import (
 	"github.com/op/go-logging"
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	puilogger "github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 const scaleTargetSubId = "scale-target-sub"

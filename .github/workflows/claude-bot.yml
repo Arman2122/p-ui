@@ -397,7 +397,7 @@ jobs:
             contribution. Do NOT check out the PR branch; its code is untrusted.
 
             Stack: Backend is Go 1.26 (module
-            github.com/Arman2122/p-ui/v3) with Gin and GORM; it runs
+            github.com/Arman2122/p-ui) with Gin and GORM; it runs
             Xray-core as a managed child process (internal/xray/process.go)
             and imports github.com/xtls/xray-core for config types and its
             gRPC stats/handler API. Storage is PostgreSQL and nothing else,
@@ -721,7 +721,7 @@ jobs:
             - tools/openapigen generates the OpenAPI spec and frontend API types.
             - docs/ holds extra documentation.
 
-            Stack and runtime facts: Backend is Go (module github.com/Arman2122/p-ui/v3) with Gin and GORM; storage is PostgreSQL only, reached through PUI_DB_DSN, which is REQUIRED - the panel fails fast at startup when it is unset or unparseable, and there is no SQLite, no PUI_DB_TYPE and no migrate-db subcommand; further env vars include PUI_DB_MAX_OPEN_CONNS, PUI_DB_MAX_IDLE_CONNS, PUI_INIT_WEB_BASE_PATH, PUI_ENABLE_FAIL2BAN; the installer writes env to /etc/default/p-ui; backup and restore run pg_dump and pg_restore; install uses install.sh and the p-ui menu, generating random initial credentials; the only supported platform is Linux on Ubuntu 22.04/24.04/26.04 and Debian 12+ with systemd, apt and iptables - there is no Windows build and no Docker image, so never offer either. Do not hardcode a version: for version or is-this-fixed questions, check the latest release and recent commits or closed PRs with gh.
+            Stack and runtime facts: Backend is Go (module github.com/Arman2122/p-ui) with Gin and GORM; storage is PostgreSQL only, reached through PUI_DB_DSN, which is REQUIRED - the panel fails fast at startup when it is unset or unparseable, and there is no SQLite, no PUI_DB_TYPE and no migrate-db subcommand; further env vars include PUI_DB_MAX_OPEN_CONNS, PUI_DB_MAX_IDLE_CONNS, PUI_INIT_WEB_BASE_PATH, PUI_ENABLE_FAIL2BAN; the installer writes env to /etc/default/p-ui; backup and restore run pg_dump and pg_restore; install uses install.sh and the p-ui menu, generating random initial credentials; the only supported platform is Linux on Ubuntu 22.04/24.04/26.04 and Debian 12+ with systemd, apt and iptables - there is no Windows build and no Docker image, so never offer either. Do not hardcode a version: for version or is-this-fixed questions, check the latest release and recent commits or closed PRs with gh.
 
             Style: professional, courteous, and matter-of-fact; no emoji, no exclamation marks, no filler; lead with the answer in the first sentence; use fenced code blocks for commands and backtick formatting for paths and setting names; distinguish what you confirmed in the source (name the file) from what you infer; never promise fixes, timelines, or releases. Ground every claim in the code or the README and wiki; do not invent features, paths, flags, or commands, and do not stop at the first plausible match. Token cost is not a concern, so investigate as deeply as the question needs.
 

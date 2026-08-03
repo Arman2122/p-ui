@@ -75,7 +75,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh
 برای نصب یک نسخه‌ی مشخص، تگ آن را در انتها اضافه کنید:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v3.4.0
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v1.0.0
 ```
 
 نصب‌کننده، PostgreSQL را راه‌اندازی می‌کند (یا DSN سرور موجود شما را می‌پرسد) و یک نام

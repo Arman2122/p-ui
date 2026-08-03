@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
 )
 
 // masterCertForTest builds a real CA-signed client certificate for mtls tests.

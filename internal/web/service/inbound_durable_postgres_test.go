@@ -8,9 +8,9 @@ import (
 	"github.com/op/go-logging"
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	puilogger "github.com/Arman2122/p-ui/internal/logger"
 )
 
 func durablePostgresDB(t *testing.T) *gorm.DB {

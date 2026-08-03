@@ -23,9 +23,9 @@ describe('buildScriptCommand', () => {
   });
 
   it('pins a specific version by passing the tag to main-branch install.sh', () => {
-    const cmd = buildScriptCommand({ ...base, version: 'v3.4.1' });
+    const cmd = buildScriptCommand({ ...base, version: 'v1.0.0' });
     expect(cmd).toBe(
-      'bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v3.4.1',
+      'bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v1.0.0',
     );
   });
 

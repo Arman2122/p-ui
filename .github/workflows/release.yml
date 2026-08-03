@@ -88,7 +88,7 @@ jobs:
           # stable releases stay unstamped so config.IsDevBuild() returns false.
           LDFLAGS="-w -s"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/v3/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/Arman2122/p-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/Arman2122/p-ui/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
           go build -ldflags "$LDFLAGS" -o pui-release -v main.go
           file pui-release
@@ -169,6 +169,15 @@ jobs:
           name: p-ui-linux-${{ matrix.platform }}
           path: ./p-ui-linux-${{ matrix.platform }}.tar.gz
 
+      # `prerelease: true` is a CREATE-time staging state, not the final one: the
+      # release does not exist when the tag is pushed, so whichever matrix leg
+      # gets here first creates it while the other six are still uploading their
+      # archives. Keeping it out of `releases/latest` for that window stops the
+      # installer from resolving a tag whose asset for the caller's architecture
+      # is not there yet. The `promote-release` job below flips it to the real
+      # latest release once every platform has uploaded — it is load-bearing, the
+      # tag would otherwise stay a pre-release forever and every default install
+      # path would 404 (see that job's comment).
       - name: Upload files to GH release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
@@ -179,6 +188,46 @@ jobs:
           asset_name: p-ui-linux-${{ matrix.platform }}.tar.gz
           overwrite: true
           prerelease: true
+
+  # =====================================
+  #  Promote the tagged release to latest
+  # =====================================
+  # GitHub's `/releases/latest` endpoint skips drafts and pre-releases, and that
+  # endpoint is what every *default* path resolves: `install.sh` with no argument
+  # (the headline command in the READMEs and the docs), `update.sh` — which backs
+  # both `p-ui update` and the in-panel Update button — and the panel's stable
+  # update channel (fetchPanelRelease("")). While the tag release is still marked
+  # pre-release those all fail: empty tag_version, "Failed to fetch p-ui version",
+  # HTTP 404. So the staged pre-release from the build job must be promoted here,
+  # after all seven platform archives are uploaded (`needs: [build]` with
+  # fail-fast disabled only succeeds when every leg did).
+  # Re-running a single matrix leg later cannot undo this: upload-release-action
+  # only applies `prerelease` when it has to create the release.
+  promote-release:
+    name: Promote tagged release to latest
+    needs: [build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Mark tagged release as the latest stable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No checkout in this job, so gh takes the repo from the environment.
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          for i in 1 2 3 4 5; do
+            if gh release edit "${TAG}" --draft=false --prerelease=false --latest; then
+              exit 0
+            fi
+            echo "attempt $i to promote ${TAG} failed" >&2
+            sleep $((i * 5))
+          done
+          echo "could not promote ${TAG}: it stays a pre-release, so releases/latest keeps returning 404 and the default install/update commands stay broken" >&2
+          exit 1
 
   # =================================
   #  Rolling dev channel (per-commit)

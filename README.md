@@ -76,7 +76,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh
 Install a specific version by appending its tag:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v3.4.0
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v1.0.0
 ```
 
 The installer sets up PostgreSQL (or asks for the DSN of an existing server) and generates

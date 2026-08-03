@@ -7,10 +7,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/web/runtime"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/runtime"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 func initTrafficTestDB(t *testing.T) *gorm.DB {

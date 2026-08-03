@@ -12,7 +12,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/Arman2122/p-ui/v3/internal/web/global"
+	"github.com/Arman2122/p-ui/internal/web/global"
 )
 
 /*

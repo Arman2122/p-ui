@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // remarkContext carries the per-client data a remark template can interpolate.

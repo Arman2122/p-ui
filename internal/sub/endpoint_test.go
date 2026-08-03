@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 // N1 — externalProxyToEndpoint maps the scalar fields and carries the source

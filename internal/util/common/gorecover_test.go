@@ -7,7 +7,7 @@ import (
 
 	"github.com/op/go-logging"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/logger"
 )
 
 func TestMain(m *testing.M) {

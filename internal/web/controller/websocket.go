@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/panel"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service/panel"
+	"github.com/Arman2122/p-ui/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 	ws "github.com/gorilla/websocket"

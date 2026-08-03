@@ -3,9 +3,9 @@ package job
 import (
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/integration"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service/integration"
 )
 
 type WarpIpJob struct {

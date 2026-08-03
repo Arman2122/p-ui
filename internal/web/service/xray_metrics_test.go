@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/eventbus"
+	"github.com/Arman2122/p-ui/internal/eventbus"
 )
 
 // probe is one observatory sample: whether the outbound is alive and the

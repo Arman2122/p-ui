@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 func createWGInbound(t *testing.T, remark string, port int, peers []any) *model.Inbound {

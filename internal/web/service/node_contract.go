@@ -3,8 +3,8 @@ package service
 import (
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
 // NodeView is the browser/API read contract for nodes. Credentials are
@@ -30,7 +30,7 @@ type NodeView struct {
 	LastHeartbeat       int64    `json:"lastHeartbeat" example:"1700000000"`
 	LatencyMs           int      `json:"latencyMs" example:"42"`
 	XrayVersion         string   `json:"xrayVersion" example:"25.10.31"`
-	PanelVersion        string   `json:"panelVersion" example:"v3.x.x"`
+	PanelVersion        string   `json:"panelVersion" example:"v1.x.x"`
 	CpuPct              float64  `json:"cpuPct" example:"12.5"`
 	MemPct              float64  `json:"memPct" example:"45.2"`
 	UptimeSecs          uint64   `json:"uptimeSecs" example:"86400"`

@@ -1,9 +1,9 @@
 package job
 
 import (
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/websocket"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/websocket"
 )
 
 // OutboundSubscriptionJob periodically re-fetches enabled outbound subscriptions,

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/integration"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/outbound"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service/integration"
+	"github.com/Arman2122/p-ui/internal/web/service/outbound"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"github.com/gin-gonic/gin"
 )

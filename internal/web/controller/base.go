@@ -5,9 +5,9 @@ package controller
 import (
 	"net/http"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/locale"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/locale"
+	"github.com/Arman2122/p-ui/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 )

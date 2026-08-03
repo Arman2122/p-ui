@@ -17,9 +17,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
 // GetBinaryName returns the Xray binary filename for the current OS and architecture.

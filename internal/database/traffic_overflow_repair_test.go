@@ -3,7 +3,7 @@ package database
 import (
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // TestRepairOverflowedTrafficCounters_ClampsOutOfRangeCounters covers the #5762

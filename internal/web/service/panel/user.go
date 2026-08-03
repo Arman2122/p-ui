@@ -6,12 +6,12 @@ import (
 	"github.com/xlzd/gotp"
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
-	ldaputil "github.com/Arman2122/p-ui/v3/internal/util/ldap"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
+	ldaputil "github.com/Arman2122/p-ui/internal/util/ldap"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // UserService provides business logic for user management and authentication.

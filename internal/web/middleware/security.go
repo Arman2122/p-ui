@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"net/http"
 
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 )

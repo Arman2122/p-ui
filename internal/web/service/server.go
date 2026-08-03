@@ -27,12 +27,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/util/sys"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/sys"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"github.com/google/uuid"
 	utls "github.com/refraction-networking/utls"

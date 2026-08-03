@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "P-UI Panel API",
-    "version": "3.x",
+    "version": "1.x",
     "description": "Programmatic interface to a Penhoon UI (P-UI) panel. Authenticate either by logging in (cookie) or with an API token from Settings → Security → API Token (Bearer). All endpoints under /panel/api/* honour both modes — an API token is a full-admin credential, so treat it like the panel password."
   },
   "servers": [
@@ -2174,7 +2174,7 @@
             "type": "string"
           },
           "panelVersion": {
-            "example": "v3.x.x",
+            "example": "v1.x.x",
             "type": "string"
           },
           "parentGuid": {
@@ -2493,7 +2493,7 @@
             "type": "string"
           },
           "panelVersion": {
-            "example": "v3.x.x",
+            "example": "v1.x.x",
             "type": "string"
           },
           "parentGuid": {
@@ -2669,7 +2669,7 @@
             "type": "number"
           },
           "panelVersion": {
-            "example": "v3.x.x",
+            "example": "v1.x.x",
             "type": "string"
           },
           "status": {
@@ -7925,7 +7925,7 @@
                       "netUp": 2097152,
                       "onlineCount": 5,
                       "outboundTag": "direct",
-                      "panelVersion": "v3.x.x",
+                      "panelVersion": "v1.x.x",
                       "parentGuid": "",
                       "pinnedCertSha256": "",
                       "port": 2053,
@@ -8096,7 +8096,7 @@
                     "netUp": 2097152,
                     "onlineCount": 5,
                     "outboundTag": "direct",
-                    "panelVersion": "v3.x.x",
+                    "panelVersion": "v1.x.x",
                     "parentGuid": "",
                     "pinnedCertSha256": "",
                     "port": 2053,
@@ -8246,7 +8246,7 @@
                     "netUp": 2097152,
                     "onlineCount": 5,
                     "outboundTag": "direct",
-                    "panelVersion": "v3.x.x",
+                    "panelVersion": "v1.x.x",
                     "parentGuid": "",
                     "pinnedCertSha256": "",
                     "port": 2053,
@@ -8476,7 +8476,7 @@
                     "error": "",
                     "latencyMs": 42,
                     "memPct": 45.2,
-                    "panelVersion": "v3.x.x",
+                    "panelVersion": "v1.x.x",
                     "status": "online",
                     "uptimeSecs": 86400,
                     "xrayError": "",

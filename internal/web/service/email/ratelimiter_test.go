@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/eventbus"
+	"github.com/Arman2122/p-ui/internal/eventbus"
 )
 
 func TestRateLimiterAllow(t *testing.T) {

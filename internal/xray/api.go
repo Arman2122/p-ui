@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	wgutil "github.com/Arman2122/p-ui/v3/internal/util/wireguard"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 
 	"github.com/xtls/xray-core/app/proxyman/command"
 	routerService "github.com/xtls/xray-core/app/router/command"

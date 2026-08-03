@@ -6,9 +6,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/web/runtime"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/runtime"
 )
 
 // While a node is config-dirty (a local edit committed before it could be

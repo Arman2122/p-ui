@@ -12,9 +12,9 @@ import (
 	"github.com/op/go-logging"
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	puilogger "github.com/Arman2122/p-ui/internal/logger"
 )
 
 // setupScaleJobDB mirrors the service package's scale gating: PostgreSQL via
