@@ -4,13 +4,19 @@ A single [`cloud-init.yaml`](cloud-init.yaml) user-data file that installs
 Penhoon UI non-interactively on a fresh Ubuntu/Debian VM and generates **unique
 random credentials per instance**. It works on any cloud-init platform.
 
+**Supported images:** Ubuntu 22.04 / 24.04 / 26.04 or Debian 12+ (apt + systemd).
+Penhoon UI is Linux-only; no other distribution is supported.
+
 ## How it works
 
 1. The VM boots a stock Ubuntu/Debian cloud image.
 2. cloud-init writes and runs `/opt/pui-bootstrap.sh`, which exports
    `PUI_NONINTERACTIVE=1` and pipes the project's `install.sh` into `bash`.
 3. `install.sh` runs end-to-end with **zero prompts**, picking secure random
-   values for any credential you didn't pin.
+   values for any credential you didn't pin. Unless you set `PUI_DB_DSN`, it also
+   apt-installs PostgreSQL, creates a dedicated role + database, and writes the
+   generated DSN to `/etc/default/p-ui` (mode 600) — the env file the `p-ui`
+   systemd unit reads.
 4. The generated credentials are written to `/etc/p-ui/install-result.env`
    (mode 600) and echoed in full to the **serial console**. `/etc/motd` is
    world-readable, so it gets only the access URL and username.
@@ -18,7 +24,8 @@ random credentials per instance**. It works on any cloud-init platform.
 Retrieve them after boot with either:
 
 ```bash
-sudo cat /etc/p-ui/install-result.env     # over SSH
+sudo cat /etc/p-ui/install-result.env     # panel credentials, over SSH
+sudo cat /etc/default/p-ui                # PostgreSQL DSN
 ```
 
 …or read the provider's **serial console** output (handy before you have SSH).
@@ -37,7 +44,13 @@ Edit the `export PUI_*` lines inside the `write_files` block of
 | `PUI_WEB_BASE_PATH` | random | Panel base path (obscures the URL) |
 | `PUI_DOMAIN` | — | Required when `PUI_SSL_MODE=domain` |
 | `PUI_ACME_EMAIL` | — | Let's Encrypt account email (domain mode) |
-| `PUI_DB_TYPE` / `PUI_DB_DSN` | `sqlite` | Set `postgres` + DSN to use PostgreSQL |
+| `PUI_DB_DSN` | local PostgreSQL | Point at an existing PostgreSQL server instead of installing one |
+
+> **Database:** PostgreSQL is the panel's only backend and `PUI_DB_DSN` is
+> **required at runtime** — the panel exits at startup if it is unset or
+> unreachable. The installer guarantees it is set: either from the `PUI_DB_DSN`
+> you provide (`postgres://user:pass@host:5432/dbname?sslmode=disable`) or from
+> the local server it provisions. Don't remove `/etc/default/p-ui`.
 
 > **TLS note:** `none` serves the panel over plain HTTP on a random high port —
 > fine behind a reverse proxy or an SSH tunnel, but put TLS in front of it before
@@ -45,6 +58,8 @@ Edit the `export PUI_*` lines inside the `write_files` block of
 > at the box and port 80 reachable at install time.
 
 ## Per-provider usage
+
+Pick an Ubuntu/Debian image on every provider below.
 
 - **Hetzner Cloud** — *Create Server → Cloud config*: paste the file. Or CLI:
   `hcloud server create --image ubuntu-24.04 --user-data-from-file cloud-init.yaml ...`
@@ -58,7 +73,8 @@ Edit the `export PUI_*` lines inside the `write_files` block of
   --metadata-from-file user-data=cloud-init.yaml`
 - **Azure** — `az vm create --image Ubuntu2404 --custom-data cloud-init.yaml ...`
 - **Oracle Cloud (OCI)** — *Create Instance → Show advanced options →
-  Management → Cloud-init script*: paste (or base64-upload) the file.
+  Management → Cloud-init script*: paste (or base64-upload) the file. Choose the
+  **Canonical Ubuntu** image, not Oracle Linux.
 
 ## Validate before you deploy
 

@@ -16,7 +16,7 @@ import (
 // Methods without a body (GET/HEAD/OPTIONS/TRACE) and a non-positive limit are
 // passed through untouched. Paths ending in one of skipSuffixes are also passed
 // through uncapped — these are routes that legitimately accept a large upload
-// (e.g. database restore, which streams a multi-MiB SQLite file).
+// (e.g. database restore, which streams a multi-MiB pg_dump archive).
 func MaxBodyBytes(limit int64, skipSuffixes ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if limit > 0 {

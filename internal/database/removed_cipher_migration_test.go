@@ -2,7 +2,6 @@ package database
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
@@ -14,12 +13,7 @@ import (
 // both the inbound method and any per-client method to a supported cipher and
 // leave a valid inbound untouched.
 func TestMigrateShadowsocksRemovedCiphers_RewritesNoneAndPlain(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	removed := `{"method": "none", "clients": [{"email": "a@x", "password": "p", "method": "plain"}]}`
 	dirty := model.Inbound{UserId: 1, Port: 31001, Protocol: model.Shadowsocks, Tag: "ss-removed", Settings: removed}
@@ -68,12 +62,7 @@ func TestMigrateShadowsocksRemovedCiphers_RewritesNoneAndPlain(t *testing.T) {
 // removal of vmess "none"/"zero" security values: startup rewrites them to
 // "auto" on both the clients column and each vmess inbound's settings JSON.
 func TestMigrateVmessRemovedSecurities_RewritesNoneAndZero(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	settings := `{"clients": [{"id": "u1", "email": "a@x", "security": "none"},` +
 		`{"id": "u2", "email": "b@x", "security": "zero"},` +

@@ -51,8 +51,6 @@ export default function IndexPage() {
     updateAvailable: false,
   });
 
-  const basePath = window.PUI_BASE_PATH || '';
-
   const [showIp, setShowIp] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
@@ -297,7 +295,6 @@ export default function IndexPage() {
         <LazyMount when={backupOpen}>
           <BackupModal
             open={backupOpen}
-            basePath={basePath}
             onClose={() => setBackupOpen(false)}
             onBusy={setBusy}
           />

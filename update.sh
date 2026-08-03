@@ -8,6 +8,7 @@ plain='\033[0m'
 
 pui_folder="${PUI_MAIN_FOLDER:=/usr/local/p-ui}"
 pui_service="${PUI_SERVICE:=/etc/systemd/system}"
+pui_env_file="/etc/default/p-ui"
 
 # Don't edit this config
 b_source="${BASH_SOURCE[0]}"
@@ -151,60 +152,18 @@ gen_random_string() {
         | head -c "$length"
 }
 
-pui_env_file_path() {
-    case "${release}" in
-        ubuntu | debian | armbian)
-            echo "/etc/default/p-ui"
-            ;;
-        arch | manjaro | parch | alpine)
-            echo "/etc/conf.d/p-ui"
-            ;;
-        *)
-            echo "/etc/sysconfig/p-ui"
-            ;;
-    esac
-}
-
 load_pui_env() {
-    local env_file
-    env_file="$(pui_env_file_path)"
-    if [[ -r "$env_file" ]]; then
+    if [[ -r "$pui_env_file" ]]; then
         set -a
         # shellcheck disable=SC1090
-        source "$env_file"
+        source "$pui_env_file"
         set +a
     fi
 }
 
 install_base() {
     echo -e "${green}Updating and install dependency packages...${plain}"
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update > /dev/null 2>&1 && apt-get install -y -q cron curl tar tzdata socat openssl > /dev/null 2>&1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf makecache -y > /dev/null 2>&1 && dnf install -y -q cronie curl tar tzdata socat openssl > /dev/null 2>&1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum makecache -y > /dev/null 2>&1 && yum install -y -q cronie curl tar tzdata socat openssl > /dev/null 2>&1
-            else
-                dnf makecache -y > /dev/null 2>&1 && dnf install -y -q cronie curl tar tzdata socat openssl > /dev/null 2>&1
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm cronie curl tar tzdata socat openssl > /dev/null 2>&1
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper refresh > /dev/null 2>&1 && zypper -q install -y cron curl tar timezone socat openssl > /dev/null 2>&1
-            ;;
-        alpine)
-            apk update > /dev/null 2>&1 && apk add dcron curl tar tzdata socat openssl > /dev/null 2>&1
-            ;;
-        *)
-            apt-get update > /dev/null 2>&1 && apt install -y -q cron curl tar tzdata socat openssl > /dev/null 2>&1
-            ;;
-    esac
+    apt-get update > /dev/null 2>&1 && apt-get install -y -q cron curl tar tzdata socat openssl > /dev/null 2>&1
 }
 
 install_acme() {
@@ -328,7 +287,7 @@ setup_ip_certificate() {
     fi
 
     # Set reload command for auto-renewal (add || true so it doesn't fail if service stopped)
-    local reloadCmd="systemctl restart p-ui 2>/dev/null || rc-service p-ui restart 2>/dev/null || true"
+    local reloadCmd="systemctl restart p-ui 2>/dev/null || true"
 
     # Choose port for HTTP-01 listener (default 80, prompt override)
     local WebPort=""
@@ -508,7 +467,7 @@ ssl_cert_issue() {
 
     # Stop panel temporarily
     echo -e "${yellow}Stopping panel temporarily...${plain}"
-    systemctl stop p-ui 2> /dev/null || rc-service p-ui stop 2> /dev/null
+    systemctl stop p-ui 2> /dev/null
 
     if [[ ${cert_exists} -eq 0 ]]; then
         # issue the certificate
@@ -517,7 +476,7 @@ ssl_cert_issue() {
         if [ $? -ne 0 ]; then
             echo -e "${red}Issuing certificate failed, please check logs.${plain}"
             rm -rf ~/.acme.sh/${domain}
-            systemctl start p-ui 2> /dev/null || rc-service p-ui start 2> /dev/null
+            systemctl start p-ui 2> /dev/null
             return 1
         else
             echo -e "${green}Issuing certificate succeeded, installing certificates...${plain}"
@@ -527,8 +486,8 @@ ssl_cert_issue() {
     fi
 
     # Setup reload command
-    reloadCmd="systemctl restart p-ui || rc-service p-ui restart"
-    echo -e "${green}Default --reloadcmd for ACME is: ${yellow}systemctl restart p-ui || rc-service p-ui restart${plain}"
+    reloadCmd="systemctl restart p-ui"
+    echo -e "${green}Default --reloadcmd for ACME is: ${yellow}systemctl restart p-ui${plain}"
     echo -e "${green}This command will run on every certificate issue and renew.${plain}"
     read -rp "Would you like to modify --reloadcmd for ACME? (y/n): " setReloadcmd
     if [[ "$setReloadcmd" == "y" || "$setReloadcmd" == "Y" ]]; then
@@ -572,7 +531,7 @@ ssl_cert_issue() {
         if [[ ${cert_exists} -eq 0 ]]; then
             rm -rf ~/.acme.sh/${domain}
         fi
-        systemctl start p-ui 2> /dev/null || rc-service p-ui start 2> /dev/null
+        systemctl start p-ui 2> /dev/null
         return 1
     fi
 
@@ -591,7 +550,7 @@ ssl_cert_issue() {
     fi
 
     # Restart panel
-    systemctl start p-ui 2> /dev/null || rc-service p-ui start 2> /dev/null
+    systemctl start p-ui 2> /dev/null
 
     # Prompt user to set panel paths after successful certificate installation
     read -rp "Would you like to set this certificate for the panel? (y/n): " setPanel
@@ -607,7 +566,7 @@ ssl_cert_issue() {
             echo ""
             echo -e "${green}Access URL: https://${domain}:${existing_port}/${existing_webBasePath}${plain}"
             echo -e "${yellow}Panel will restart to apply SSL certificate...${plain}"
-            systemctl restart p-ui 2> /dev/null || rc-service p-ui restart 2> /dev/null
+            systemctl restart p-ui 2> /dev/null
         else
             echo -e "${red}Error: Certificate or private key file not found for domain: $domain.${plain}"
         fi
@@ -689,11 +648,7 @@ prompt_and_setup_ssl() {
             ipv6_addr="${ipv6_addr// /}" # Trim whitespace
 
             # Stop panel if running (port 80 needed)
-            if [[ $release == "alpine" ]]; then
-                rc-service p-ui stop > /dev/null 2>&1
-            else
-                systemctl stop p-ui > /dev/null 2>&1
-            fi
+            systemctl stop p-ui > /dev/null 2>&1
 
             setup_ip_certificate "${server_ip}" "${ipv6_addr}"
             if [ $? -eq 0 ]; then
@@ -705,12 +660,7 @@ prompt_and_setup_ssl() {
             fi
 
             # Restart panel after SSL is configured (restart applies new cert settings)
-            if [[ $release == "alpine" ]]; then
-                rc-service p-ui restart > /dev/null 2>&1
-            else
-                systemctl restart p-ui > /dev/null 2>&1
-            fi
-
+            systemctl restart p-ui > /dev/null 2>&1
             ;;
         3)
             # User chose Custom Paths (User Provided) option
@@ -770,7 +720,7 @@ prompt_and_setup_ssl() {
             echo -e "${green}✓ Custom certificate paths applied.${plain}"
             echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
 
-            systemctl restart p-ui > /dev/null 2>&1 || rc-service p-ui restart > /dev/null 2>&1
+            systemctl restart p-ui > /dev/null 2>&1
             ;;
         4)
             echo ""
@@ -804,7 +754,7 @@ prompt_and_setup_ssl() {
                 echo -e "${yellow}Panel will listen on all interfaces over plain HTTP. Make sure something else is terminating TLS in front of it.${plain}"
             fi
 
-            systemctl restart p-ui > /dev/null 2>&1 || rc-service p-ui restart > /dev/null 2>&1
+            systemctl restart p-ui > /dev/null 2>&1
             echo -e "${green}✓ SSL setup skipped.${plain}"
             ;;
         *)
@@ -902,7 +852,7 @@ config_after_update() {
 
     if [[ "$panel_needs_restart" -eq 1 ]]; then
         echo -e "${yellow}Restarting panel to apply the new web base path...${plain}"
-        systemctl restart p-ui 2> /dev/null || rc-service p-ui restart 2> /dev/null
+        systemctl restart p-ui 2> /dev/null
     fi
 }
 
@@ -1004,27 +954,15 @@ update_p-ui() {
 
     if [[ -e ${pui_folder}/ ]]; then
         echo -e "${green}Stopping p-ui...${plain}"
-        if [[ $release == "alpine" ]]; then
-            if [ -f "/etc/init.d/p-ui" ]; then
-                rc-service p-ui stop > /dev/null 2>&1
-                rc-update del p-ui > /dev/null 2>&1
-                echo -e "${green}Removing old service unit version...${plain}"
-                rm -f /etc/init.d/p-ui > /dev/null 2>&1
-            else
-                rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
-                _fail "ERROR: p-ui service unit not installed."
-            fi
+        if [ -f "${pui_service}/p-ui.service" ]; then
+            systemctl stop p-ui > /dev/null 2>&1
+            systemctl disable p-ui > /dev/null 2>&1
+            echo -e "${green}Removing old systemd unit version...${plain}"
+            rm ${pui_service}/p-ui.service -f > /dev/null 2>&1
+            systemctl daemon-reload > /dev/null 2>&1
         else
-            if [ -f "${pui_service}/p-ui.service" ]; then
-                systemctl stop p-ui > /dev/null 2>&1
-                systemctl disable p-ui > /dev/null 2>&1
-                echo -e "${green}Removing old systemd unit version...${plain}"
-                rm ${pui_service}/p-ui.service -f > /dev/null 2>&1
-                systemctl daemon-reload > /dev/null 2>&1
-            else
-                rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
-                _fail "ERROR: p-ui systemd unit not installed."
-            fi
+            rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
+            _fail "ERROR: p-ui systemd unit not installed."
         fi
         # Kill any leftover mtg (MTProto) sidecars. p-ui runs them outside its own
         # lifecycle, so on Linux a stale one can survive the stop and keep holding
@@ -1035,8 +973,6 @@ update_p-ui() {
         rm ${pui_folder} -f > /dev/null 2>&1
         rm ${pui_folder}/p-ui.service -f > /dev/null 2>&1
         rm ${pui_folder}/p-ui.service.debian -f > /dev/null 2>&1
-        rm ${pui_folder}/p-ui.service.arch -f > /dev/null 2>&1
-        rm ${pui_folder}/p-ui.service.rhel -f > /dev/null 2>&1
         rm ${pui_folder}/p-ui -f > /dev/null 2>&1
         rm ${pui_folder}/p-ui.sh -f > /dev/null 2>&1
         echo -e "${green}Removing old mtg version...${plain}"
@@ -1113,91 +1049,31 @@ update_p-ui() {
         chmod 640 ${pui_folder}/bin/config.json > /dev/null 2>&1
     fi
 
-    if [[ $release == "alpine" ]]; then
-        echo -e "${green}Downloading and installing startup unit p-ui.rc...${plain}"
-        pui_rc_temp="/etc/init.d/p-ui.tmp.$$"
-        rm -f "${pui_rc_temp}"
-        ${curl_bin} -fLRo "${pui_rc_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.rc > /dev/null 2>&1
-        if [[ $? -ne 0 ]]; then
-            rm -f "${pui_rc_temp}"
-            _fail "ERROR: Failed to download startup unit p-ui.rc, please be sure that your server can access GitHub"
+    if [ -f "p-ui.service" ]; then
+        echo -e "${green}Installing systemd unit...${plain}"
+        if ! _install_pui_service_unit "p-ui.service" "false"; then
+            echo -e "${red}Failed to copy p-ui.service${plain}"
+            exit 1
         fi
-        if [[ ! -s "${pui_rc_temp}" ]]; then
-            rm -f "${pui_rc_temp}"
-            _fail "ERROR: Downloaded startup unit p-ui.rc is empty, please be sure that your server can access GitHub"
+    elif [ -f "p-ui.service.debian" ]; then
+        echo -e "${green}Installing systemd unit...${plain}"
+        if ! _install_pui_service_unit "p-ui.service.debian" "false"; then
+            echo -e "${red}Failed to copy p-ui.service.debian${plain}"
+            exit 1
         fi
-        mv -f "${pui_rc_temp}" /etc/init.d/p-ui
-        if [[ $? -ne 0 ]]; then
-            rm -f "${pui_rc_temp}"
-            _fail "ERROR: Failed to install startup unit p-ui.rc"
-        fi
-        chmod +x /etc/init.d/p-ui > /dev/null 2>&1
-        chown root:root /etc/init.d/p-ui > /dev/null 2>&1
-        rc-update add p-ui > /dev/null 2>&1
-        rc-service p-ui start > /dev/null 2>&1
     else
-        if [ -f "p-ui.service" ]; then
-            echo -e "${green}Installing systemd unit...${plain}"
-            if ! _install_pui_service_unit "p-ui.service" "false"; then
-                echo -e "${red}Failed to copy p-ui.service${plain}"
-                exit 1
-            fi
-        else
-            service_installed=false
-            case "${release}" in
-                ubuntu | debian | armbian)
-                    if [ -f "p-ui.service.debian" ]; then
-                        echo -e "${green}Installing debian-like systemd unit...${plain}"
-                        if _install_pui_service_unit "p-ui.service.debian" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-                arch | manjaro | parch)
-                    if [ -f "p-ui.service.arch" ]; then
-                        echo -e "${green}Installing arch-like systemd unit...${plain}"
-                        if _install_pui_service_unit "p-ui.service.arch" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-                *)
-                    if [ -f "p-ui.service.rhel" ]; then
-                        echo -e "${green}Installing rhel-like systemd unit...${plain}"
-                        if _install_pui_service_unit "p-ui.service.rhel" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-            esac
-
-            # If service file not found in tar.gz, download from GitHub
-            if [ "$service_installed" = false ]; then
-                echo -e "${yellow}Service files not found in tar.gz, downloading from GitHub...${plain}"
-                case "${release}" in
-                    ubuntu | debian | armbian)
-                        service_unit_url="https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.debian"
-                        ;;
-                    arch | manjaro | parch)
-                        service_unit_url="https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.arch"
-                        ;;
-                    *)
-                        service_unit_url="https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.rhel"
-                        ;;
-                esac
-
-                if ! _install_pui_service_unit "$service_unit_url" "true"; then
-                    echo -e "${red}Failed to install p-ui.service from GitHub${plain}"
-                    exit 1
-                fi
-            fi
+        # Not shipped in the tar.gz, fall back to GitHub
+        echo -e "${yellow}Service file not found in tar.gz, downloading from GitHub...${plain}"
+        if ! _install_pui_service_unit "https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.debian" "true"; then
+            echo -e "${red}Failed to install p-ui.service from GitHub${plain}"
+            exit 1
         fi
-        chown root:root ${pui_service}/p-ui.service > /dev/null 2>&1
-        chmod 644 ${pui_service}/p-ui.service > /dev/null 2>&1
-        systemctl daemon-reload > /dev/null 2>&1
-        systemctl enable p-ui > /dev/null 2>&1
-        systemctl start p-ui > /dev/null 2>&1
     fi
+    chown root:root ${pui_service}/p-ui.service > /dev/null 2>&1
+    chmod 644 ${pui_service}/p-ui.service > /dev/null 2>&1
+    systemctl daemon-reload > /dev/null 2>&1
+    systemctl enable p-ui > /dev/null 2>&1
+    systemctl start p-ui > /dev/null 2>&1
 
     config_after_update
 

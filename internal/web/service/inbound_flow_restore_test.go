@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
@@ -14,12 +13,7 @@ import (
 // when the client's intended flow (its flow_override on a sibling) is Vision,
 // only on now-eligible inbounds, and never overwriting an explicit flow.
 func TestRestoreVisionFlowForEligibleInbound(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 	db := database.GetDB()
 
 	const vision = "xtls-rprx-vision"

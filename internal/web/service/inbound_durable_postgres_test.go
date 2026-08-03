@@ -15,11 +15,11 @@ import (
 
 func durablePostgresDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	if os.Getenv("PUI_DB_TYPE") != "postgres" || strings.TrimSpace(os.Getenv("PUI_DB_DSN")) == "" {
-		t.Skip("set PUI_DB_TYPE=postgres and PUI_DB_DSN to run commit-failure injection")
+	if strings.TrimSpace(os.Getenv("PUI_DB_DSN")) == "" {
+		t.Skip("set PUI_DB_DSN to run commit-failure injection")
 	}
 	portConflictLoggerOnce.Do(func() { puilogger.InitLogger(logging.ERROR) })
-	if err := database.InitDB(""); err != nil {
+	if err := database.InitDB(); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
 	t.Cleanup(func() { _ = database.CloseDB() })

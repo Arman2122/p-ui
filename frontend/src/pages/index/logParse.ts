@@ -43,8 +43,8 @@ const GO_LOG_DATE = /^\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}\s+/;
 const TELEGO = /^\[[^\]]+\]\s+([A-Z]+)\s+(.*)$/;
 // App-log format emitted by the in-memory buffer:
 // "2006/01/02 15:04:05 LEVEL - message". Only a line matching this exact shape
-// carries a structured timestamp/level; anything else (e.g. a plain notice such
-// as the Windows "Syslog is not supported" message) is kept whole as the body.
+// carries a structured timestamp/level; anything else (e.g. a plain notice
+// emitted without a timestamp) is kept whole as the body.
 const APP_LOG = /^(\d{4}\/\d{2}\/\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\S+)\s+-\s+([\s\S]*)$/;
 
 // splitLevelDash pulls a leading "LEVEL - " off a message, returning the level

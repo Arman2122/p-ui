@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,7 +13,6 @@ import (
 	"github.com/op/go-logging"
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
@@ -23,28 +21,12 @@ import (
 
 const scaleTargetSubId = "scale-target-sub"
 
-// setupScaleSubDB mirrors the service package's scale gating: Postgres via
-// PUI_DB_TYPE/PUI_DB_DSN, SQLite via PUI_SCALE_TEST=1, skip otherwise.
+// setupScaleSubDB mirrors the service package's scale gating: the benchmark
+// needs a real PostgreSQL instance, so it skips unless PUI_DB_DSN points at one.
 func setupScaleSubDB(t *testing.T) {
 	t.Helper()
 	puilogger.InitLogger(logging.ERROR)
-
-	if os.Getenv("PUI_DB_TYPE") == "postgres" && strings.TrimSpace(os.Getenv("PUI_DB_DSN")) != "" {
-		if err := database.InitDB(""); err != nil {
-			t.Fatalf("InitDB(postgres): %v", err)
-		}
-		t.Cleanup(func() { _ = database.CloseDB() })
-		return
-	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("PUI_SCALE_TEST"))) {
-	case "1", "true", "yes":
-		if err := database.InitDB(filepath.Join(t.TempDir(), "scale.db")); err != nil {
-			t.Fatalf("InitDB(sqlite): %v", err)
-		}
-		t.Cleanup(func() { _ = database.CloseDB() })
-		return
-	}
-	t.Skip("set PUI_SCALE_TEST=1 (sqlite) or PUI_DB_TYPE=postgres + PUI_DB_DSN (postgres) to run the scale benchmark")
+	initSubDB(t)
 }
 
 func scaleSubSizes(t *testing.T, def ...int) []int {
@@ -73,17 +55,8 @@ func scaleSubSizes(t *testing.T, def ...int) []int {
 
 func resetScaleSubTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
-	if config.GetDBKind() == "postgres" {
-		if err := db.Exec("TRUNCATE TABLE inbounds, clients, client_inbounds, client_traffics RESTART IDENTITY CASCADE").Error; err != nil {
-			t.Fatalf("truncate: %v", err)
-		}
-	} else {
-		for _, tbl := range []string{"inbounds", "clients", "client_inbounds", "client_traffics"} {
-			if err := db.Exec("DELETE FROM " + tbl).Error; err != nil {
-				t.Fatalf("delete %s: %v", tbl, err)
-			}
-		}
-		db.Exec("DELETE FROM sqlite_sequence")
+	if err := db.Exec("TRUNCATE TABLE inbounds, clients, client_inbounds, client_traffics RESTART IDENTITY CASCADE").Error; err != nil {
+		t.Fatalf("truncate: %v", err)
 	}
 	if err := db.Where("1 = 1").Delete(&model.ClientExternalLink{}).Error; err != nil {
 		t.Fatalf("clear client_external_links: %v", err)

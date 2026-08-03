@@ -1,7 +1,6 @@
 package sub
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
@@ -10,12 +9,7 @@ import (
 )
 
 func TestAggregateTrafficByEmails_FallsBackToClientLimits(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initSubDB(t)
 
 	const email = "node-client@example.com"
 	const totalBytes = int64(300) * 1024 * 1024 * 1024

@@ -1,23 +1,12 @@
 package sub
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
-
-func initSubDB(t *testing.T) {
-	t.Helper()
-	if err := database.InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	// Close the handle before t.TempDir cleanup so Windows doesn't refuse to
-	// remove the still-open sqlite file.
-	t.Cleanup(func() { _ = database.CloseDB() })
-}
 
 // The subscription page's Copy URL must be built from the same host the
 // subscriber reached the page on (after PrepareForRequest normalizes away a

@@ -3,10 +3,6 @@ package database
 import (
 	"testing"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 	"github.com/Arman2122/p-ui/v3/internal/xray"
 )
@@ -15,15 +11,8 @@ import (
 // and client_traffics inbound lookups. gorm creates missing indexes on migrate,
 // so this also protects existing DBs after upgrade.
 func TestAutoMigrateCreatesHotPathIndexes(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ClientRecord{}, &xray.ClientTraffic{}, &model.ClientGlobalTraffic{}); err != nil {
-		t.Fatalf("automigrate: %v", err)
-	}
+	initTestDB(t)
+	migrator := GetDB().Migrator()
 
 	cases := []struct {
 		model any
@@ -35,7 +24,7 @@ func TestAutoMigrateCreatesHotPathIndexes(t *testing.T) {
 		{&model.ClientGlobalTraffic{}, "idx_client_global_email"},
 	}
 	for _, c := range cases {
-		if !db.Migrator().HasIndex(c.model, c.index) {
+		if !migrator.HasIndex(c.model, c.index) {
 			t.Errorf("expected index %q to exist after AutoMigrate", c.index)
 		}
 	}

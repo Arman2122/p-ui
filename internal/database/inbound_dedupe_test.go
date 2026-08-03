@@ -2,7 +2,6 @@ package database
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
@@ -13,12 +12,7 @@ import (
 // email several times; startup must collapse them to the first occurrence and
 // leave clean inbounds byte-for-byte untouched.
 func TestDedupeInboundSettingsClients_CollapsesDuplicateEmails(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	dupSettings := `{"clients": [` +
 		`{"id": "u1", "email": "dup@x", "subId": "s1", "enable": true},` +

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,12 +16,7 @@ import (
 // inbound is present so that query returns rows and the function runs to completion; both
 // the backfill and the MultiDomain→ExternalProxy migration must then commit.
 func TestMigrationRequirements_BackfillsClientTrafficsWithMultiDomainInbound(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 
@@ -96,12 +90,7 @@ func TestMigrationRequirements_BackfillsClientTrafficsWithMultiDomainInbound(t *
 // at len(externalProxy)==0 otherwise). The cleanup must use tx.Exec, not tx.Raw, which
 // only builds a non-SELECT statement without running it.
 func TestMigrationRequirements_CleansLegacyZeroAddrTag(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 	legacy := &model.Inbound{

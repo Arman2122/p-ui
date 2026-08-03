@@ -64,7 +64,7 @@ jobs:
       - name: PostgreSQL durable-first tests
         run: |
           set -o pipefail
-          PUI_DB_TYPE=postgres PUI_DB_DSN="host=127.0.0.1 port=5432 user=postgres password=postgres dbname=pui_durable sslmode=disable" \
+          PUI_DB_DSN="host=127.0.0.1 port=5432 user=postgres password=postgres dbname=pui_durable sslmode=disable" \
             go test ./internal/web/service -run 'PostgresCommitFailure' -count=1 -v | tee /tmp/postgres-durable-first.log
           if grep -q -- '--- SKIP' /tmp/postgres-durable-first.log; then
             exit 1

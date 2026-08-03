@@ -1194,17 +1194,6 @@ func (s *InboundService) DelInbound(id int) (bool, error) {
 			needRestart = true
 		}
 	}
-	if !database.IsPostgres() {
-		var count int64
-		if err := db.Model(&model.Inbound{}).Count(&count).Error; err != nil {
-			return needRestart, err
-		}
-		if count == 0 {
-			if err := db.Exec("DELETE FROM sqlite_sequence WHERE name = ?", "inbounds").Error; err != nil {
-				return needRestart, err
-			}
-		}
-	}
 	// Drop the egress SOCKS bridge a routed mtproto inbound left in the config.
 	if mtprotoRoutesThroughXray(&ib) {
 		needRestart = true

@@ -1,74 +1,53 @@
 ---
 title: Database
-description: Penhoon UI storage backends — SQLite (default) and PostgreSQL — the database path, connection pool, and SQLite-to-PostgreSQL migration.
+description: Penhoon UI runs on PostgreSQL — the required PUI_DB_DSN connection string, the connection pool, and the client tools used for backups.
 icon: Database
 ---
 
-Penhoon UI stores everything — inbounds, clients, settings — in a database. You choose
-the backend at install time; both are first-class.
+Penhoon UI stores everything — inbounds, clients, settings — in **PostgreSQL**. It is the
+only supported backend; there is nothing to choose at install time.
 
-## SQLite (default)
+## Connecting
 
-A single file at `/etc/p-ui/p-ui.db`. Zero setup, ideal for small and medium
-deployments. The folder is configurable with
-[`PUI_DB_FOLDER`](/docs/reference/env-vars#database) (on Windows it defaults next
-to the binary).
+The installer either installs PostgreSQL from your distribution's packages and
+creates a dedicated role and database, or takes a DSN for a server you already
+run. Either way it writes the connection string to the service environment file
+that systemd loads, `/etc/default/p-ui`:
 
-## PostgreSQL
-
-Recommended for high client counts or multi-node setups. The installer can
-install PostgreSQL locally for you, or accept a DSN to an existing server. At
-runtime the backend is selected via environment variables, which the installer
-writes to the service environment file for your distro — `/etc/default/p-ui` on
-Debian/Ubuntu/Armbian, `/etc/conf.d/p-ui` on Arch/Manjaro/Parch/Alpine, and
-`/etc/sysconfig/p-ui` on RHEL-family hosts:
-
-```bash title="/etc/default/p-ui (Debian/Ubuntu)"
-PUI_DB_TYPE=postgres
+```bash title="/etc/default/p-ui"
 PUI_DB_DSN=postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable
 ```
 
-Tune the connection pool with `PUI_DB_MAX_OPEN_CONNS` and
-`PUI_DB_MAX_IDLE_CONNS`.
-
-### Docker
-
-`docker compose up -d` keeps using SQLite. To run with the bundled PostgreSQL
-service, uncomment the two `PUI_DB_*` lines in `docker-compose.yml` and start
-with the profile:
-
-```bash
-docker compose --profile postgres up -d
-```
-
-## Migrate SQLite → PostgreSQL
-
-The easiest route is the management script: run `p-ui`, choose **25) PostgreSQL
-Management**, then **2) Migrate SQLite → PostgreSQL**. It copies the data, writes
-`PUI_DB_TYPE` and `PUI_DB_DSN` to the environment file for your distro, and
-restarts the panel for you.
-
-To migrate by hand, call the panel binary directly — `migrate-db` is a subcommand
-of `/usr/local/p-ui/p-ui`, not of the `p-ui` management script:
-
-```bash
-systemctl stop p-ui
-/usr/local/p-ui/p-ui migrate-db --dsn "postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable"
-```
-
-Then set `PUI_DB_TYPE` and `PUI_DB_DSN` in the environment file for your distro
-(see above) and restart:
-
-```bash
-systemctl restart p-ui
-```
-
-<Callout type="info">
-  The source SQLite file is left untouched — remove it manually only after you've
-  verified the new backend works.
+<Callout type="warn">
+  `PUI_DB_DSN` is **required**. If it is unset or unparseable the panel stops at
+  startup with an error naming the variable and showing an example DSN — it never
+  falls back to a local file. After editing the file, restart:
+  `systemctl restart p-ui`.
 </Callout>
+
+Tune the connection pool with `PUI_DB_MAX_OPEN_CONNS` and
+`PUI_DB_MAX_IDLE_CONNS`. See [Environment variables](/docs/reference/env-vars).
+
+## Managing PostgreSQL
+
+Run `p-ui` and open **PostgreSQL Management** to install the server, check
+cluster status, start/stop/restart it, enable it on boot, read its log, or
+install the client tools.
+
+## Client tools
+
+`pg_dump` and `pg_restore` come from the `postgresql-client` package and back the
+panel's Back Up / Import buttons. The installer adds them for you; if they are
+missing, the panel says so instead of producing a broken backup.
+
+A dump written by a **newer** PostgreSQL than the local `pg_restore` understands
+cannot be imported. The panel's error names the major version it needs — install
+a matching client with:
+
+```bash
+p-ui pgclient 17
+```
 
 ## Backups
 
-Whichever backend you use, back it up regularly — see
-[Backup & restore](/docs/operations/backup-restore).
+Back up regularly — see [Backup & restore](/docs/operations/backup-restore).

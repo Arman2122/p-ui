@@ -2,21 +2,10 @@ package database
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
-
-func initMtprotoMigrationDB(t *testing.T) {
-	t.Helper()
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
-}
 
 func createMtprotoInbound(t *testing.T, remark string, port int, settings map[string]any) *model.Inbound {
 	t.Helper()
@@ -46,7 +35,7 @@ func clearSeederHistory(t *testing.T, name string) {
 }
 
 func TestStripMtprotoInboundSecretsRemovesDeadSecret(t *testing.T) {
-	initMtprotoMigrationDB(t)
+	initTestDB(t)
 	in := createMtprotoInbound(t, "mt-mc", 8443, map[string]any{
 		"fakeTlsDomain": "www.cloudflare.com",
 		"secret":        "eedeadbeef7777772e636c6f7564666c6172652e636f6d",
@@ -77,7 +66,7 @@ func TestStripMtprotoInboundSecretsRemovesDeadSecret(t *testing.T) {
 }
 
 func TestStripMtprotoInboundSecretsIsGated(t *testing.T) {
-	initMtprotoMigrationDB(t)
+	initTestDB(t)
 	in := createMtprotoInbound(t, "mt-gate", 8444, map[string]any{
 		"fakeTlsDomain": "a.com",
 		"secret":        "eebeef61",
@@ -108,7 +97,7 @@ func TestStripMtprotoInboundSecretsIsGated(t *testing.T) {
 }
 
 func TestSeedThenStripPreservesLegacySecretOnClient(t *testing.T) {
-	initMtprotoMigrationDB(t)
+	initTestDB(t)
 	const legacy = "eedeadbeefdeadbeefdeadbeefdeadbe7777772e636c6f7564666c6172652e636f6d"
 	in := createMtprotoInbound(t, "mt-legacy", 8445, map[string]any{
 		"fakeTlsDomain": "www.cloudflare.com",

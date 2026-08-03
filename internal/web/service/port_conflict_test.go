@@ -1,7 +1,6 @@
 package service
 
 import (
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,23 +16,13 @@ import (
 // binary so a stray warning from gorm doesn't blow up on a nil logger.
 var portConflictLoggerOnce sync.Once
 
-// setupConflictDB wires a temp sqlite db so checkPortConflict can read
-// real candidates. closes the db before t.TempDir cleans up so windows
-// doesn't refuse to remove the file.
+// setupConflictDB wires a throwaway database so checkPortConflict can read
+// real candidates, closing the pool before t.TempDir cleans up.
 func setupConflictDB(t *testing.T) {
 	t.Helper()
 	portConflictLoggerOnce.Do(func() { puilogger.InitLogger(logging.ERROR) })
 
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := database.CloseDB(); err != nil {
-			t.Logf("CloseDB warning: %v", err)
-		}
-	})
+	initTestDB(t)
 }
 
 func seedInboundConflict(t *testing.T, tag, listen string, port int, protocol model.Protocol, streamSettings, settings string) {

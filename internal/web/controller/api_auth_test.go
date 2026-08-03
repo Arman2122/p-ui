@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/gin-contrib/sessions"
@@ -28,12 +27,7 @@ import (
 func newAPIAuthTestEngine(t *testing.T) (*gin.Engine, *APIController) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 	engine := gin.New()
 	store := cookie.NewStore([]byte("api-auth-test-secret"))
 	engine.Use(sessions.Sessions("p-ui", store))

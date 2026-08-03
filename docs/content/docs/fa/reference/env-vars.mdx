@@ -5,24 +5,21 @@ icon: Variable
 ---
 
 ‏Penhoon UI پیکربندی زمان‌اجرای خود را از متغیرهای محیطی `PUI_*` می‌خواند. در نصب
-اسکریپتی، نصب‌کننده آن‌ها را در فایل محیطی سرویس می‌نویسد
-(`/etc/default/p-ui`، یا بسته به توزیع `/etc/conf.d/p-ui` / `/etc/sysconfig/p-ui`)؛
-برای Docker آن‌ها را در `docker-compose.yml` یا `docker run -e` تنظیم می‌کنید.
-مقادیر پیش‌فرض منطقی هستند — فقط آنچه را که نیاز به تغییر دارید تنظیم کنید، سپس
-ری‌استارت کنید: `systemctl restart p-ui`.
+اسکریپتی، نصب‌کننده آن‌ها را در فایل محیطی سرویس که systemd می‌خواند، یعنی
+`/etc/default/p-ui`، می‌نویسد. مقادیر پیش‌فرض منطقی هستند — فقط آنچه را که نیاز به تغییر
+دارید تنظیم کنید، سپس ری‌استارت کنید: `systemctl restart p-ui`.
 
 ## پایگاه‌داده
 
 | Variable                 | Default     | Description                                                          |
 | ------------------------ | ----------- | -------------------------------------------------------------------- |
-| `PUI_DB_TYPE`            | `sqlite`    | بک‌اند: `sqlite`، یا `postgres` (همچنین `postgresql` / `pg` را می‌پذیرد). |
-| `PUI_DB_FOLDER`          | `/etc/p-ui` | پوشه‌ی فایل پایگاه‌داده‌ی SQLite (`p-ui.db`).                     |
-| `PUI_DB_DSN`             | —           | رشته‌ی اتصال PostgreSQL (وقتی `PUI_DB_TYPE=postgres` باشد استفاده می‌شود).     |
+| `PUI_DB_DSN`             | —           | **الزامی.** رشته‌ی اتصال PostgreSQL، مثلاً `postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable`. |
 | `PUI_DB_MAX_OPEN_CONNS`  | —           | حداکثر اتصالات باز در استخر PostgreSQL.                         |
 | `PUI_DB_MAX_IDLE_CONNS`  | —           | حداکثر اتصالات بی‌کار در استخر PostgreSQL.                         |
 
-مسیر پیش‌فرض پایگاه‌داده‌ی SQLite برابر `/etc/p-ui/p-ui.db` است. برای جزئیات
-‏SQLite ↔ PostgreSQL به [پایگاه‌داده](/docs/reference/database) مراجعه کنید.
+تنها بک‌اند موجود PostgreSQL است. اگر `PUI_DB_DSN` تنظیم نشده یا نامعتبر باشد، پنل به‌جای
+بازگشت به هر گزینه‌ی دیگری هنگام راه‌اندازی خارج می‌شود — به
+[پایگاه‌داده](/docs/reference/database) مراجعه کنید.
 
 ## پنل
 

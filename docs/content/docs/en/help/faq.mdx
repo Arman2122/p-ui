@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Frequently asked questions about Penhoon UI — licensing, supported systems, databases, and clients.
+description: Frequently asked questions about Penhoon UI — licensing, supported systems, the database, and clients.
 icon: CircleQuestionMark
 ---
 
@@ -11,14 +11,16 @@ Yes. Penhoon UI is open source under the GPL-3.0 license. The source is on
 
 ## What systems does it run on?
 
-Most major Linux distributions (Ubuntu, Debian, CentOS/RHEL and derivatives,
-Fedora, Arch, Alpine, and more) across `amd64`, `arm64`, and other architectures.
-It also runs as a Docker container. See [Installation](/docs/guide/installation).
+Ubuntu 22.04, 24.04 and 26.04, and Debian 12 or newer — systemd hosts managed
+with `apt` — on `amd64`, `arm64`, `armv7` and `s390x`. There is no Windows or
+Docker support, and no support for other distribution families. See
+[Installation](/docs/guide/installation).
 
-## SQLite or PostgreSQL?
+## Which database does it use?
 
-SQLite is the default and is fine for most deployments. PostgreSQL is available
-for larger setups via `PUI_DB_TYPE=postgres` and `PUI_DB_DSN` — see the
+PostgreSQL, and only PostgreSQL. The installer sets it up (or takes a DSN for a
+server you already run) and writes `PUI_DB_DSN` to `/etc/default/p-ui`. The
+variable is required — see [Database](/docs/reference/database) and the
 [environment variables](/docs/reference/env-vars).
 
 ## Which client apps work with it?
@@ -37,8 +39,8 @@ interface in two languages — English and Farsi.
 
 ## How do I update?
 
-Re-run the install script (it updates in place), or pull the new Docker image.
-See [Installation](/docs/guide/installation) and the
+Run `p-ui update`, or re-run the install script — it updates in place. See
+[Update & uninstall](/docs/guide/update-uninstall) and the
 [releases page](https://github.com/Arman2122/p-ui/releases).
 
 ## Where can I get help?

@@ -2,7 +2,6 @@ package sub
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,12 +15,7 @@ import (
 // stays clean. The subscription output must still contain one profile per
 // (inbound, client).
 func TestGetSubs_DuplicateSettingsClients_Deduped(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initSubDB(t)
 
 	const subId = "sub-dup"
 	const email = "dup@example.com"
@@ -74,12 +68,7 @@ func TestGetSubs_DuplicateSettingsClients_Deduped(t *testing.T) {
 // can coexist (import drift), and dropping strings.ToLower (or keying on another field)
 // would emit both. The first row by id must win, matching the old settings-JSON order.
 func TestMatchingClients_DedupsCaseInsensitiveEmail(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initSubDB(t)
 
 	const subId = "s1"
 	const uuid = "11111111-2222-4333-8444-555555555555"

@@ -26,9 +26,9 @@ Link related issues here: "Closes #123", "Refs #456".
 - [ ] Xray config generation
 - [ ] Subscription (share links / Clash / JSON)
 - [ ] Statistics / traffic counters
-- [ ] Database / migrations
+- [ ] Database / migrations (PostgreSQL)
+- [ ] Backup / restore (pg_dump / pg_restore)
 - [ ] Install / upgrade script
-- [ ] Docker image
 - [ ] Multi-node (sub-nodes)
 - [ ] Telegram bot
 

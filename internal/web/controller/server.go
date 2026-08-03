@@ -54,7 +54,6 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getUpdateStatus", a.getUpdateStatus)
 	g.GET("/getConfigJson", a.getConfigJson)
 	g.GET("/getDb", a.getDb)
-	g.GET("/getMigration", a.getMigration)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getWebCertFiles", a.getWebCertFiles)
 	g.GET("/descendants", a.descendants)
@@ -330,7 +329,7 @@ func (a *ServerController) getConfigJson(c *gin.Context) {
 	jsonObj(c, configJson, nil)
 }
 
-// getDb downloads the database file.
+// getDb downloads a pg_dump archive of the panel database.
 func (a *ServerController) getDb(c *gin.Context) {
 	db, err := a.serverService.GetDb()
 	if err != nil {
@@ -349,25 +348,8 @@ func (a *ServerController) getDb(c *gin.Context) {
 	_, _ = c.Writer.Write(db)
 }
 
-// getMigration downloads a cross-engine migration file: a .dump on SQLite or a
-// .db SQLite database on PostgreSQL, so the data can seed the other backend.
-func (a *ServerController) getMigration(c *gin.Context) {
-	data, filename, err := a.serverService.GetMigration()
-	if err != nil {
-		jsonMsg(c, I18nWeb(c, "pages.index.getDatabaseError"), err)
-		return
-	}
-	if !filenameRegex.MatchString(filename) {
-		_ = c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid filename"))
-		return
-	}
-
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	_, _ = c.Writer.Write(data)
-}
-
-// importDB imports a database file and restarts the Xray service.
+// importDB restores the database from an uploaded pg_dump archive and restarts
+// the Xray service.
 func (a *ServerController) importDB(c *gin.Context) {
 	file, _, err := c.Request.FormFile("db")
 	if err != nil {

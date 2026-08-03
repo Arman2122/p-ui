@@ -3,22 +3,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run p-ui (Debug)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PUI_DEBUG": "true",
-        "PUI_DB_FOLDER": "p-ui",
-        "PUI_LOG_FOLDER": "p-ui",
-        "PUI_BIN_FOLDER": "p-ui"
-      },
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Run p-ui (Postgres)",
+      "name": "Run p-ui",
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -28,18 +13,7 @@
         "PUI_DEBUG": "true",
         "PUI_LOG_FOLDER": "p-ui",
         "PUI_BIN_FOLDER": "p-ui",
-        "PUI_DB_TYPE": "postgres",
         "PUI_DB_DSN": "postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable"
-      },
-      "windows": {
-        "env": {
-          "PUI_DEBUG": "true",
-          "PUI_LOG_FOLDER": "p-ui",
-          "PUI_BIN_FOLDER": "p-ui",
-          "PUI_DB_TYPE": "postgres",
-          "PUI_DB_DSN": "postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable",
-          "PATH": "C:\\Program Files\\PostgreSQL\\18\\bin;${env:PATH}"
-        }
       },
       "console": "integratedTerminal"
     }

@@ -3,7 +3,6 @@ package sub
 import (
 	"encoding/base64"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,16 +11,11 @@ import (
 	"github.com/Arman2122/p-ui/v3/internal/xray"
 )
 
-// initMutDB spins up a real temp SQLite DB for tests that exercise DB-backed
-// query helpers, mirroring the house pattern in service_sharelink/dedup tests.
+// initMutDB opens the real database for tests that exercise DB-backed query
+// helpers, mirroring the house pattern in service_sharelink/dedup tests.
 func initMutDB(t *testing.T) {
 	t.Helper()
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initSubDB(t)
 }
 
 // --- json_service.go:40 — rules are merged into routing only when non-empty ---

@@ -14,8 +14,6 @@ on:
       - "**.sh"
       - "frontend/**"
       - "p-ui.service.debian"
-      - "p-ui.service.arch"
-      - "p-ui.service.rhel"
       - ".github/workflows/release.yml"
   pull_request:
     paths:
@@ -25,8 +23,6 @@ on:
       - "**.sh"
       - "frontend/**"
       - "p-ui.service.debian"
-      - "p-ui.service.arch"
-      - "p-ui.service.rhel"
       - ".github/workflows/release.yml"
 
 jobs:
@@ -77,47 +73,29 @@ jobs:
         run: |
           CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
           fetch() { wget -q --tries=5 --waitretry=10 --retry-on-http-error=429,500,502,503 "$@"; }
-          export CGO_ENABLED=1
+          # Pure Go, no cgo: the panel has no C dependency left, so every target
+          # cross-compiles straight from the runner's toolchain and links
+          # statically without an external linker or a downloaded cross-gcc.
+          export CGO_ENABLED=0
           export GOOS=linux
           export GOARCH=${{ matrix.platform }}
-          # Use Bootlin prebuilt cross-toolchains (musl 1.2.5 in stable series)
           case "${{ matrix.platform }}" in
-            amd64) BOOTLIN_ARCH="x86-64" ;;
-            arm64) BOOTLIN_ARCH="aarch64" ;;
-            armv7) BOOTLIN_ARCH="armv7-eabihf"; export GOARCH=arm GOARM=7 ;;
-            armv6) BOOTLIN_ARCH="armv6-eabihf"; export GOARCH=arm GOARM=6 ;;
-            armv5) BOOTLIN_ARCH="armv5-eabi"; export GOARCH=arm GOARM=5 ;;
-            386) BOOTLIN_ARCH="x86-i686" ;;
-            s390x) BOOTLIN_ARCH="s390x-z13" ;;
+            armv7) export GOARCH=arm GOARM=7 ;;
+            armv6) export GOARCH=arm GOARM=6 ;;
+            armv5) export GOARCH=arm GOARM=5 ;;
           esac
-          echo "Resolving Bootlin musl toolchain for arch=$BOOTLIN_ARCH (platform=${{ matrix.platform }})"
-          TARBALL_BASE="https://toolchains.bootlin.com/downloads/releases/toolchains/$BOOTLIN_ARCH/tarballs/"
-          TARBALL_URL=$(curl -fsSL $CURL_RETRY "$TARBALL_BASE" | grep -oE "${BOOTLIN_ARCH}--musl--stable-[^\"]+\\.tar\\.xz" | sort -r | head -n1)
-          [ -z "$TARBALL_URL" ] && { echo "Failed to locate Bootlin musl toolchain for arch=$BOOTLIN_ARCH" >&2; exit 1; }
-          echo "Downloading: $TARBALL_URL"
-          cd /tmp
-          curl -fL -sS $CURL_RETRY -o "$(basename "$TARBALL_URL")" "$TARBALL_BASE/$TARBALL_URL"
-          tar -xf "$(basename "$TARBALL_URL")"
-          TOOLCHAIN_DIR=$(find . -maxdepth 1 -type d -name "${BOOTLIN_ARCH}--musl--stable-*" | head -n1)
-          export PATH="$(realpath "$TOOLCHAIN_DIR")/bin:$PATH"
-          export CC=$(realpath "$(find "$TOOLCHAIN_DIR/bin" -name '*-gcc.br_real' -type f -executable | head -n1)")
-          [ -z "$CC" ] && { echo "No gcc.br_real found in $TOOLCHAIN_DIR/bin" >&2; exit 1; }
-          cd -
           # Stamp the commit into per-commit (dev channel) builds only; tagged
           # stable releases stay unstamped so config.IsDevBuild() returns false.
-          LDFLAGS="-w -s -linkmode external -extldflags '-static'"
+          LDFLAGS="-w -s"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/v3/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/Arman2122/p-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
           go build -ldflags "$LDFLAGS" -o pui-release -v main.go
           file pui-release
-          ldd pui-release || echo "Static binary confirmed"
 
           mkdir p-ui
           cp pui-release p-ui/
           cp p-ui.service.debian p-ui/
-          cp p-ui.service.arch p-ui/
-          cp p-ui.service.rhel p-ui/
           cp p-ui.sh p-ui/
           mv p-ui/pui-release p-ui/p-ui
           mkdir p-ui/bin
@@ -203,137 +181,6 @@ jobs:
           prerelease: true
 
   # =================================
-  #  Windows Build
-  # =================================
-  build-windows:
-    name: Build for Windows
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        platform:
-          - amd64
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          check-latest: true
-
-      # Frontend dist must be built BEFORE go build — see comment on the
-      # Linux job above. This step is identical except npm runs on the
-      # Windows runner here.
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build frontend bundle
-        shell: pwsh
-        run: |
-          npm ci
-          npm run build
-        working-directory: frontend
-
-      - name: Install MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-sqlite3
-            mingw-w64-x86_64-pkg-config
-
-      - name: Build P-UI for Windows (CGO)
-        shell: msys2 {0}
-        run: |
-          export PATH="/c/hostedtoolcache/windows/go/$(ls /c/hostedtoolcache/windows/go | sort -V | tail -n1)/x64/bin:$PATH"
-
-          export CGO_ENABLED=1
-          export GOOS=windows
-          export GOARCH=amd64
-          export CC=x86_64-w64-mingw32-gcc
-
-          which go
-          go version
-          gcc --version
-
-          # Stamp the commit into per-commit (dev channel) builds only.
-          LDFLAGS="-w -s"
-          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/v3/internal/config.buildCommit=${GITHUB_SHA:0:8} -X github.com/Arman2122/p-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          fi
-          go build -ldflags "$LDFLAGS" -o pui-release.exe -v main.go
-
-      - name: Copy and download resources
-        shell: pwsh
-        run: |
-          $retry = @{ MaximumRetryCount = 5; RetryIntervalSec = 10 }
-          mkdir p-ui
-          Copy-Item pui-release.exe p-ui\p-ui.exe
-          mkdir p-ui\bin
-          cd p-ui\bin
-
-          # Download Xray for Windows
-          $Xray_URL = "https://github.com/XTLS/Xray-core/releases/download/v26.7.28/"
-          Invoke-WebRequest @retry -Uri "${Xray_URL}Xray-windows-64.zip" -OutFile "Xray-windows-64.zip"
-          Expand-Archive -Path "Xray-windows-64.zip" -DestinationPath .
-          Remove-Item "Xray-windows-64.zip"
-          Remove-Item geoip.dat, geosite.dat -ErrorAction SilentlyContinue
-          Invoke-WebRequest @retry -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip.dat"
-          Invoke-WebRequest @retry -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite.dat"
-          Invoke-WebRequest @retry -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat" -OutFile "geoip_IR.dat"
-          Invoke-WebRequest @retry -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat" -OutFile "geosite_IR.dat"
-          Invoke-WebRequest @retry -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip_RU.dat"
-          Invoke-WebRequest @retry -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite_RU.dat"
-          Rename-Item xray.exe xray-windows-amd64.exe
-
-          # mtg-multi (MTProto sidecar) publishes a prebuilt Windows binary, so
-          # download and unpack it instead of compiling. The tag comes from the
-          # release-page redirect on github.com — not api.github.com, whose
-          # outages have failed release runs while asset downloads kept working.
-          $MTG_MULTI_VER = (curl.exe -sf --retry 5 --retry-all-errors --retry-delay 3 -o NUL -w '%{redirect_url}' "https://github.com/mhsanaei/mtg-multi/releases/latest") -replace '^.*/releases/tag/', ''
-          if (-not $MTG_MULTI_VER -or $MTG_MULTI_VER -notmatch '^v[\d.]+$') { throw "could not resolve the latest mtg-multi release tag" }
-          $MTG_PKG = "mtg-multi-$($MTG_MULTI_VER.TrimStart('v'))-windows-amd64"
-          curl.exe -sfLRO --retry 5 --retry-all-errors --retry-delay 3 "https://github.com/mhsanaei/mtg-multi/releases/download/$MTG_MULTI_VER/$MTG_PKG.zip"
-          Expand-Archive -Path "$MTG_PKG.zip" -DestinationPath "mtg-tmp" -Force
-          Move-Item "mtg-tmp/$MTG_PKG/mtg-multi.exe" "mtg-windows-amd64.exe"
-          Remove-Item -Recurse -Force "mtg-tmp", "$MTG_PKG.zip"
-
-          cd ..
-          Copy-Item -Path ..\windows_files\* -Destination . -Recurse
-          cd ..
-
-      - name: Package to Zip
-        shell: pwsh
-        run: |
-          Compress-Archive -Path .\p-ui -DestinationPath "p-ui-windows-amd64.zip"
-
-      - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: p-ui-windows-amd64
-          path: ./p-ui-windows-amd64.zip
-
-      - name: Upload files to GH release
-        uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          file: p-ui-windows-amd64.zip
-          asset_name: p-ui-windows-amd64.zip
-          overwrite: true
-          prerelease: true
-
-  # =================================
   #  Rolling dev channel (per-commit)
   # =================================
   # Publishes/overwrites the build artifacts to a single fixed-tag pre-release
@@ -343,7 +190,7 @@ jobs:
   # channel is unaffected.
   publish-dev:
     name: Publish rolling dev release
-    needs: [build, build-windows]
+    needs: [build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -397,4 +244,4 @@ jobs:
               --target "${COMMIT}" --title "Dev build ${short}" --notes "${notes}"
           fi
 
-          retry gh release upload dev-latest dev-artifacts/*.tar.gz dev-artifacts/*.zip --clobber
+          retry gh release upload dev-latest dev-artifacts/*.tar.gz --clobber

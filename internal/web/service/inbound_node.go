@@ -472,7 +472,7 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 		for email := range snapEmailsAll {
 			snapEmailList = append(snapEmailList, email)
 		}
-		for _, batch := range chunkStrings(snapEmailList, sqliteMaxVars) {
+		for _, batch := range chunkStrings(snapEmailList, maxBindVars) {
 			var found []string
 			if err := db.Model(xray.ClientTraffic{}).Where("email IN ?", batch).Pluck("email", &found).Error; err != nil {
 				return false, err
@@ -691,9 +691,9 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 					baselineGone = append(baselineGone, e)
 				}
 			}
-			// Chunk to avoid SQLite bind var limit when a node has many clients
+			// Chunk to avoid the bind-variable limit when a node has many clients
 			// removed (e.g. after API bulk delete or structural change on node inbound).
-			for _, batch := range chunkStrings(baselineGone, sqliteMaxVars) {
+			for _, batch := range chunkStrings(baselineGone, maxBindVars) {
 				if err := tx.Where("node_id = ? AND email IN ?", nodeID, batch).
 					Delete(&model.NodeClientTraffic{}).Error; err != nil {
 					return false, err
@@ -714,7 +714,7 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 					delEmails = append(delEmails, e)
 				}
 			}
-			for _, batch := range chunkStrings(delEmails, sqliteMaxVars) {
+			for _, batch := range chunkStrings(delEmails, maxBindVars) {
 				if err := tx.Where("inbound_id = ? AND email IN ?", c.Id, batch).
 					Delete(&xray.ClientTraffic{}).Error; err != nil {
 					return false, err
@@ -1204,10 +1204,10 @@ func (s *InboundService) FilterAndSortClientEmails(emails []string) ([]string, [
 	db := database.GetDB()
 
 	// Step 1: Get ClientTraffic records for emails in the input list.
-	// Chunked to stay under SQLite's bind-variable limit on huge inputs.
+	// Chunked to stay under the bind-variable limit on huge inputs.
 	uniqEmails := uniqueNonEmptyStrings(emails)
 	clients := make([]xray.ClientTraffic, 0, len(uniqEmails))
-	for _, batch := range chunkStrings(uniqEmails, sqliteMaxVars) {
+	for _, batch := range chunkStrings(uniqEmails, maxBindVars) {
 		var page []xray.ClientTraffic
 		if err := db.Where("email IN ?", batch).Find(&page).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, err

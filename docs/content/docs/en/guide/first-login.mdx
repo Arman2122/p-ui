@@ -31,7 +31,6 @@ PUI_PANEL_PORT=...
 PUI_WEB_BASE_PATH=...
 PUI_ACCESS_URL=...
 PUI_API_TOKEN=...
-PUI_DB_TYPE=sqlite
 ```
 
 If you missed them, use the management tools:
@@ -40,9 +39,6 @@ If you missed them, use the management tools:
 p-ui              # menu → 11 (View Current Settings)
 p-ui settings     # or the one-shot form
 ```
-
-For **Docker**, read the generated credentials from the container logs, or run
-`docker exec -it <container> p-ui setting -show`.
 
 <Callout type="warn">
   If your panel still uses the default `admin` / `admin` (the panel warns when it

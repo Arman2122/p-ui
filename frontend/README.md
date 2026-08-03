@@ -25,6 +25,11 @@ auto-rewrites `/panel`, `/panel/settings`, `/panel/inbounds`,
 `/panel/xray` to the matching Vite-served HTML, so the sidebar's
 production-style links work without round-tripping through Go.
 
+The dev proxy assumes the panel's `webBasePath` is `/`. If yours is
+not, export the same `PUI_INIT_WEB_BASE_PATH` the Go panel was seeded
+with before running `npm run dev` — Vite reads it to prefix proxied
+requests and to inject `window.PUI_BASE_PATH`.
+
 ## Scripts
 
 | Command | What |

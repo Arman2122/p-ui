@@ -13,7 +13,7 @@ file locations when it can answer in one hop.
   imports `github.com/xtls/xray-core` for config types + gRPC stats/handler/router
   API. MTProto inbounds run a second managed child — the `mtg-multi` binary
   (a multi-secret mtg fork — NOT a Go dependency; its prebuilt release binary is
-  fetched at image/release build time by `DockerInit.sh` + `release.yml`,
+  fetched at release build time by `release.yml`,
   panel-side code in `internal/mtproto/`) — outside Xray, one process per inbound
   serving each
   client's FakeTLS secret via the fork's `[secrets]` section (plus per-client
@@ -24,16 +24,18 @@ file locations when it can answer in one hop.
   falls back to a process restart on older binaries. A client's panel-side
   traffic reset also calls `POST /secrets/{name}/reset-quota` so a renewed client
   is not re-blocked by the sidecar's quota counter.
-- Storage: SQLite by default (`/etc/p-ui/p-ui.db` on Linux; the executable dir on
-  Windows), PostgreSQL optional (`PUI_DB_TYPE` / `PUI_DB_DSN`). The CGo SQLite
-  driver (`mattn/go-sqlite3`) needs a C compiler — `CGO_ENABLED=0` builds fail.
+- Platform: Linux only — Ubuntu 22.04/24.04/26.04 and Debian 12+, systemd + apt
+  + iptables. No Windows, no Docker, no other distro families.
+- Storage: PostgreSQL only. `PUI_DB_DSN` is REQUIRED; the panel fails fast at
+  startup without it. No SQLite, no `PUI_DB_TYPE`. Builds are pure Go —
+  `CGO_ENABLED=0`, statically linked, no C toolchain.
 - Frontend: React 19 + Ant Design 6 + Vite 8 + TypeScript in `frontend/`,
   built into `internal/web/dist/` (gitignored) and embedded via `embed.FS`.
 
 ## Repo map
-- `main.go` — entry point + `p-ui` CLI (run, migrate, migrate-db, setting, cert).
+- `main.go` — entry point + `p-ui` CLI (run, migrate, setting, cert).
 - `internal/config/` — env parsing (PUI_DEBUG, PUI_LOG_LEVEL, PUI_LOG_FOLDER,
-  PUI_BIN_FOLDER, PUI_SKIP_HSTS, PUI_PORT, PUI_DB_*).
+  PUI_BIN_FOLDER, PUI_SKIP_HSTS, PUI_PORT, PUI_DB_DSN, PUI_DB_MAX_*_CONNS).
 - `internal/database/` + `internal/database/model/` — GORM schema (~24 models;
   Inbound, Client, Setting, User are the core), inbound Protocol enum,
   AutoMigrate + hand-written migrations in `db.go`.
@@ -107,10 +109,9 @@ file locations when it can answer in one hop.
 ## Go conventions
 - Stdlib `testing` only (no testify). Table-driven, `t.Run` subtests,
   `t.Helper()` on helpers. Assert the exact value / typed error / emitted
-  string, never just `err != nil`. Prefer real deps over mocks: throwaway DB via
-  `database.InitDB(filepath.Join(t.TempDir(), "p-ui.db"))` +
-  `t.Cleanup(func() { _ = database.CloseDB() })`; `httptest` for HTTP.
-  `internal/sub`'s `initSubDB(t)` is the template.
+  string, never just `err != nil`. Prefer real deps over mocks: a throwaway
+  Postgres database paired with `t.Cleanup(func() { _ = database.CloseDB() })`;
+  `httptest` for HTTP. `internal/sub`'s `initSubDB(t)` is the template.
 - A test must fail without its fix. Write it, revert the fix, watch it go red,
   restore. A test that passes either way is worse than no test: it certifies
   nothing and then gets cited as proof the fix works.
@@ -118,9 +119,9 @@ file locations when it can answer in one hop.
   pure map lookup, or inputs the function can never receive. One real test that
   drives the bug through the actual code path beats five that restate the code.
 - Code must pass `golangci-lint run` (gofumpt + goimports formatting): `make lint`.
-- Postgres, xray-gRPC-e2e and scale tests `t.Skip` unless `PUI_TEST_PG_DSN`,
-  `PUI_DB_TYPE`+`PUI_DB_DSN`, `XRAY_E2E_BINARY` or `PUI_SCALE_TEST` is set — a
-  green `go test ./...` does not mean those paths ran.
+- DB, xray-gRPC-e2e and scale tests `t.Skip` unless `PUI_DB_DSN`,
+  `XRAY_E2E_BINARY` or `PUI_SCALE_TEST` is set — a green `go test ./...` on a
+  box with no PostgreSQL does not mean those paths ran.
 
 ## Frontend conventions (summary; full version in frontend/CLAUDE.md)
 - Ant Design 6 only — no Tailwind/shadcn. Targeted tweaks, not rewrites.

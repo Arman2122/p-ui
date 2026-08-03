@@ -293,7 +293,7 @@ func collectPrivateDnsAllowGroups(dnsRaw json.RawMessage) []dnsAllowPortGroup {
 // Why this matters: Xray's own DNS client traffic is dispatched through
 // the same routing table as proxied client traffic. If dns.servers points
 // at a private IP (e.g. a self-hosted AdGuard Home / Pi-hole reachable on
-// the same Docker network as Xray — a common self-hosted setup) and the
+// the same private network as Xray — a common self-hosted setup) and the
 // panel's default private-IP block rule is active, Xray's own DNS lookups
 // get silently dropped by that rule. Xray then falls back to dialing
 // destinations by raw hostname once its internal DNS attempt times out

@@ -2,7 +2,6 @@ package database
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"regexp"
 	"testing"
 
@@ -10,12 +9,7 @@ import (
 )
 
 func TestSeedClientsFromInboundJSON_IsIdempotentAgainstExistingClients(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	settings, err := json.Marshal(map[string]any{
 		"clients": []any{
@@ -72,12 +66,7 @@ func TestSeedClientsFromInboundJSON_IsIdempotentAgainstExistingClients(t *testin
 }
 
 func TestNormalizeInboundClientSubId_FillsMissingAndPreservesExisting(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	settings, err := json.Marshal(map[string]any{
 		"clients": []any{
@@ -155,12 +144,7 @@ func TestNormalizeInboundClientSubId_FillsMissingAndPreservesExisting(t *testing
 }
 
 func TestNormalizeSettingPaths_RepairsLegacyValues(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	seed := []model.Setting{
 		{Key: "subJsonPath", Value: "YIrCXJOOOL"},

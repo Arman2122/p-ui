@@ -4,20 +4,12 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/pem"
-	"path/filepath"
 	"testing"
-
-	"github.com/Arman2122/p-ui/v3/internal/database"
 )
 
 func setupSettingMtlsDB(t *testing.T) *SettingService {
 	t.Helper()
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 	return &SettingService{}
 }
 

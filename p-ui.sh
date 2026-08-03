@@ -15,6 +15,10 @@ function LOGE() {
     echo -e "${red}[ERR] $* ${plain}"
 }
 
+function LOGW() {
+    echo -e "${yellow}[WRN] $* ${plain}"
+}
+
 function LOGI() {
     echo -e "${green}[INF] $* ${plain}"
 }
@@ -81,18 +85,10 @@ echo "The OS release is: $release"
 os_version=""
 os_version=$(grep "^VERSION_ID" /etc/os-release | cut -d '=' -f2 | tr -d '"' | tr -d '.')
 
-running_in_docker="false"
-if [[ -f /.dockerenv ]] || [[ "${PUI_IN_DOCKER}" == "true" ]]; then
-    running_in_docker="true"
-fi
-
 # Declare Variables
-if [[ "${running_in_docker}" == "true" ]]; then
-    pui_folder="${PUI_MAIN_FOLDER:=/app}"
-else
-    pui_folder="${PUI_MAIN_FOLDER:=/usr/local/p-ui}"
-fi
+pui_folder="${PUI_MAIN_FOLDER:=/usr/local/p-ui}"
 pui_service="${PUI_SERVICE:=/etc/systemd/system}"
+pui_env_file="/etc/default/p-ui"
 log_folder="${PUI_LOG_FOLDER:=/var/log/p-ui}"
 mkdir -p "${log_folder}"
 iplimit_log_path="${log_folder}/pui-ipl.log"
@@ -250,20 +246,6 @@ delete_script() {
     exit 1
 }
 
-pui_env_file_path() {
-    case "${release}" in
-        ubuntu | debian | armbian)
-            echo "/etc/default/p-ui"
-            ;;
-        arch | manjaro | parch | alpine)
-            echo "/etc/conf.d/p-ui"
-            ;;
-        *)
-            echo "/etc/sysconfig/p-ui"
-            ;;
-    esac
-}
-
 uninstall() {
     confirm "Are you sure you want to uninstall the panel? xray will also uninstalled!" "n"
     if [[ $? != 0 ]]; then
@@ -273,30 +255,17 @@ uninstall() {
         return 0
     fi
 
-    if [[ $release == "alpine" ]]; then
-        rc-service p-ui stop
-        rc-update del p-ui
-        rm /etc/init.d/p-ui -f
-    else
-        systemctl stop p-ui
-        systemctl disable p-ui
-        rm ${pui_service}/p-ui.service -f
-        systemctl daemon-reload
-        systemctl reset-failed
-    fi
-
-    local panel_used_postgres="false"
-    local db_env_file
-    db_env_file="$(pui_env_file_path)"
-    if [[ -r "$db_env_file" ]] && grep -q '^PUI_DB_TYPE=postgres' "$db_env_file"; then
-        panel_used_postgres="true"
-    fi
+    systemctl stop p-ui
+    systemctl disable p-ui
+    rm ${pui_service}/p-ui.service -f
+    systemctl daemon-reload
+    systemctl reset-failed
 
     rm /etc/p-ui/ -rf
     rm ${pui_folder}/ -rf
-    rm -f "$db_env_file"
+    rm -f "${pui_env_file}"
 
-    if [[ "$panel_used_postgres" == "true" ]] && postgresql_installed; then
+    if postgresql_installed; then
         purge_postgresql
     fi
 
@@ -386,16 +355,17 @@ check_config() {
     fi
     LOGI "${info}"
 
-    local db_env_file
-    db_env_file="$(pui_env_file_path)"
-    if [[ -r "$db_env_file" ]] && grep -q '^PUI_DB_TYPE=postgres' "$db_env_file"; then
-        local dsn
-        dsn="$(grep -E '^PUI_DB_DSN=' "$db_env_file" | head -1 | cut -d= -f2-)"
+    local dsn=""
+    if [[ -r "${pui_env_file}" ]]; then
+        dsn="$(grep -E '^PUI_DB_DSN=' "${pui_env_file}" | head -1 | cut -d= -f2-)"
+    fi
+    if [[ -n "$dsn" ]]; then
         local dsn_safe
         dsn_safe="$(echo "$dsn" | sed -E 's|(://[^:/@]+:)[^@]+@|\1****@|')"
         echo -e "${green}Database: PostgreSQL — ${dsn_safe}${plain}"
     else
-        echo -e "${green}Database: SQLite (/etc/p-ui/p-ui.db)${plain}"
+        echo -e "${red}Database: PUI_DB_DSN is not set in ${pui_env_file} — the panel will not start.${plain}"
+        echo -e "${yellow}Set it via main menu option 25 (PostgreSQL Management).${plain}"
     fi
 
     local existing_webBasePath=$(echo "$info" | grep -Eo 'webBasePath: .+' | awk '{print $2}')
@@ -496,20 +466,7 @@ start() {
         echo ""
         LOGI "Panel is running, No need to start again, If you need to restart, please select restart"
     else
-        if [[ "${running_in_docker}" == "true" ]]; then
-            LOGE "Panel process is not running inside this container."
-            LOGI "In Docker the panel is the container's main process. Restart the container to bring it back up:"
-            LOGI "  docker restart <container_name>"
-            if [[ $# == 0 ]]; then
-                before_show_menu
-            fi
-            return 0
-        fi
-        if [[ $release == "alpine" ]]; then
-            rc-service p-ui start
-        else
-            systemctl start p-ui
-        fi
+        systemctl start p-ui
         sleep 2
         check_status
         if [[ $? == 0 ]]; then
@@ -530,20 +487,7 @@ stop() {
         echo ""
         LOGI "Panel stopped, No need to stop again!"
     else
-        if [[ "${running_in_docker}" == "true" ]]; then
-            LOGI "In Docker the panel runs as the container's main process."
-            LOGI "To stop it, stop the container from the host:"
-            LOGI "  docker stop <container_name>"
-            if [[ $# == 0 ]]; then
-                before_show_menu
-            fi
-            return 0
-        fi
-        if [[ $release == "alpine" ]]; then
-            rc-service p-ui stop
-        else
-            systemctl stop p-ui
-        fi
+        systemctl stop p-ui
         sleep 2
         check_status
         if [[ $? == 1 ]]; then
@@ -559,31 +503,7 @@ stop() {
 }
 
 restart() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        if signal_pui HUP; then
-            sleep 1
-            signal_pui USR1
-            LOGI "Restart signal sent to the panel and xray-core."
-        else
-            LOGE "Could not find the running panel process to signal."
-        fi
-        sleep 2
-        check_status
-        if [[ $? == 0 ]]; then
-            LOGI "p-ui and xray Restarted successfully"
-        else
-            LOGE "Panel restart failed, Please check the log information later"
-        fi
-        if [[ $# == 0 ]]; then
-            before_show_menu
-        fi
-        return 0
-    fi
-    if [[ $release == "alpine" ]]; then
-        rc-service p-ui restart
-    else
-        systemctl restart p-ui
-    fi
+    systemctl restart p-ui
     sleep 2
     check_status
     if [[ $? == 0 ]]; then
@@ -597,24 +517,7 @@ restart() {
 }
 
 restart_xray() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        if signal_pui USR1; then
-            LOGI "xray-core Restart signal sent successfully, Please check the log information to confirm whether xray restarted successfully"
-        else
-            LOGE "Could not find the running panel process to signal."
-        fi
-        sleep 2
-        show_xray_status
-        if [[ $# == 0 ]]; then
-            before_show_menu
-        fi
-        return 0
-    fi
-    if [[ $release == "alpine" ]]; then
-        rc-service p-ui reload
-    else
-        systemctl reload p-ui
-    fi
+    systemctl reload p-ui
     LOGI "xray-core Restart signal sent successfully, Please check the log information to confirm whether xray restarted successfully"
     sleep 2
     show_xray_status
@@ -624,37 +527,14 @@ restart_xray() {
 }
 
 status() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        show_status
-        if [[ $# == 0 ]]; then
-            before_show_menu
-        fi
-        return 0
-    fi
-    if [[ $release == "alpine" ]]; then
-        rc-service p-ui status
-    else
-        systemctl status p-ui -l
-    fi
+    systemctl status p-ui -l
     if [[ $# == 0 ]]; then
         before_show_menu
     fi
 }
 
 enable() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        LOGI "Autostart is controlled by the Docker restart policy (e.g. 'restart: unless-stopped' in docker-compose.yml)."
-        LOGI "There is no service to enable inside the container."
-        if [[ $# == 0 ]]; then
-            before_show_menu
-        fi
-        return 0
-    fi
-    if [[ $release == "alpine" ]]; then
-        rc-update add p-ui default
-    else
-        systemctl enable p-ui
-    fi
+    systemctl enable p-ui
     if [[ $? == 0 ]]; then
         LOGI "p-ui Set to boot automatically on startup successfully"
     else
@@ -667,19 +547,7 @@ enable() {
 }
 
 disable() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        LOGI "Autostart is controlled by the Docker restart policy (e.g. 'restart: unless-stopped' in docker-compose.yml)."
-        LOGI "Set 'restart: no' for the container on the host to disable autostart."
-        if [[ $# == 0 ]]; then
-            before_show_menu
-        fi
-        return 0
-    fi
-    if [[ $release == "alpine" ]]; then
-        rc-update del p-ui
-    else
-        systemctl disable p-ui
-    fi
+    systemctl disable p-ui
     if [[ $? == 0 ]]; then
         LOGI "p-ui Autostart Cancelled successfully"
     else
@@ -692,54 +560,32 @@ disable() {
 }
 
 show_log() {
-    if [[ $release == "alpine" ]]; then
-        echo -e "${green}\t1.${plain} Debug Log"
-        echo -e "${green}\t0.${plain} Back to Main Menu"
-        read -rp "Choose an option: " choice
+    echo -e "${green}\t1.${plain} Debug Log"
+    echo -e "${green}\t2.${plain} Clear All logs"
+    echo -e "${green}\t0.${plain} Back to Main Menu"
+    read -rp "Choose an option: " choice
 
-        case "$choice" in
-            0)
-                show_menu
-                ;;
-            1)
-                grep -F 'p-ui[' /var/log/messages
-                if [[ $# == 0 ]]; then
-                    before_show_menu
-                fi
-                ;;
-            *)
-                echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
-                show_log
-                ;;
-        esac
-    else
-        echo -e "${green}\t1.${plain} Debug Log"
-        echo -e "${green}\t2.${plain} Clear All logs"
-        echo -e "${green}\t0.${plain} Back to Main Menu"
-        read -rp "Choose an option: " choice
-
-        case "$choice" in
-            0)
-                show_menu
-                ;;
-            1)
-                journalctl -u p-ui -e --no-pager -f -p debug
-                if [[ $# == 0 ]]; then
-                    before_show_menu
-                fi
-                ;;
-            2)
-                sudo journalctl --rotate
-                sudo journalctl --vacuum-time=1s
-                echo "All Logs cleared."
-                restart
-                ;;
-            *)
-                echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
-                show_log
-                ;;
-        esac
-    fi
+    case "$choice" in
+        0)
+            show_menu
+            ;;
+        1)
+            journalctl -u p-ui -e --no-pager -f -p debug
+            if [[ $# == 0 ]]; then
+                before_show_menu
+            fi
+            ;;
+        2)
+            sudo journalctl --rotate
+            sudo journalctl --vacuum-time=1s
+            echo "All Logs cleared."
+            restart
+            ;;
+        *)
+            echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
+            show_log
+            ;;
+    esac
 }
 
 bbr_menu() {
@@ -846,67 +692,25 @@ update_shell() {
     fi
 }
 
-pui_pid() {
-    ps -ef 2> /dev/null | grep -F "${pui_folder}/p-ui" | grep -v grep | awk 'NR==1 {print $1}'
-}
-
-signal_pui() {
-    local sig="$1" pid
-    pid="$(pui_pid)"
-    if [[ -z "${pid}" ]]; then
-        return 1
-    fi
-    kill -"${sig}" "${pid}" 2> /dev/null
-}
-
 # 0: running, 1: not running, 2: not installed
 check_status() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        if [[ ! -x "${pui_folder}/p-ui" ]]; then
-            return 2
-        fi
-        if [[ -n "$(pui_pid)" ]]; then
-            return 0
-        else
-            return 1
-        fi
+    if [[ ! -f ${pui_service}/p-ui.service ]]; then
+        return 2
     fi
-    if [[ $release == "alpine" ]]; then
-        if [[ ! -f /etc/init.d/p-ui ]]; then
-            return 2
-        fi
-        if [[ $(rc-service p-ui status | grep -F 'status: started' -c) == 1 ]]; then
-            return 0
-        else
-            return 1
-        fi
+    temp=$(systemctl status p-ui | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
+    if [[ "${temp}" == "running" ]]; then
+        return 0
     else
-        if [[ ! -f ${pui_service}/p-ui.service ]]; then
-            return 2
-        fi
-        temp=$(systemctl status p-ui | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
-        if [[ "${temp}" == "running" ]]; then
-            return 0
-        else
-            return 1
-        fi
+        return 1
     fi
 }
 
 check_enabled() {
-    if [[ $release == "alpine" ]]; then
-        if [[ $(rc-update show | grep -F 'p-ui' | grep default -c) == 1 ]]; then
-            return 0
-        else
-            return 1
-        fi
+    temp=$(systemctl is-enabled p-ui)
+    if [[ "${temp}" == "enabled" ]]; then
+        return 0
     else
-        temp=$(systemctl is-enabled p-ui)
-        if [[ "${temp}" == "enabled" ]]; then
-            return 0
-        else
-            return 1
-        fi
+        return 1
     fi
 }
 
@@ -958,10 +762,6 @@ show_status() {
 }
 
 show_enable_status() {
-    if [[ "${running_in_docker}" == "true" ]]; then
-        echo -e "Start automatically: ${green}Managed by Docker${plain}"
-        return
-    fi
     check_enabled
     if [[ $? == 0 ]]; then
         echo -e "Start automatically: ${green}Yes${plain}"
@@ -1584,33 +1384,7 @@ ssl_cert_issue_for_ip() {
     fi
 
     # install socat
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update > /dev/null 2>&1 && apt-get install socat -y > /dev/null 2>&1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf makecache -y > /dev/null 2>&1 && dnf -y install socat > /dev/null 2>&1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum makecache -y > /dev/null 2>&1 && yum -y install socat > /dev/null 2>&1
-            else
-                dnf makecache -y > /dev/null 2>&1 && dnf -y install socat > /dev/null 2>&1
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm socat > /dev/null 2>&1
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper refresh > /dev/null 2>&1 && zypper -q install -y socat > /dev/null 2>&1
-            ;;
-        alpine)
-            apk add socat curl openssl > /dev/null 2>&1
-            ;;
-        *)
-            LOGW "Unsupported OS for automatic socat installation"
-            ;;
-    esac
+    apt-get update > /dev/null 2>&1 && apt-get install socat -y > /dev/null 2>&1
 
     # Create certificate directory
     certPath="/root/cert/ip"
@@ -1660,7 +1434,7 @@ ssl_cert_issue_for_ip() {
     done
 
     # Reload command - restarts panel after renewal
-    local reloadCmd="systemctl restart p-ui 2>/dev/null || rc-service p-ui restart 2>/dev/null"
+    local reloadCmd="systemctl restart p-ui"
 
     # issue the certificate for IP with shortlived profile
     ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt --force
@@ -1750,33 +1524,7 @@ ssl_cert_issue() {
     fi
 
     # install socat
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update > /dev/null 2>&1 && apt-get install socat -y > /dev/null 2>&1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf makecache -y > /dev/null 2>&1 && dnf -y install socat > /dev/null 2>&1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum makecache -y > /dev/null 2>&1 && yum -y install socat > /dev/null 2>&1
-            else
-                dnf makecache -y > /dev/null 2>&1 && dnf -y install socat > /dev/null 2>&1
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm socat > /dev/null 2>&1
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper refresh > /dev/null 2>&1 && zypper -q install -y socat > /dev/null 2>&1
-            ;;
-        alpine)
-            apk add socat curl openssl > /dev/null 2>&1
-            ;;
-        *)
-            LOGW "Unsupported OS for automatic socat installation"
-            ;;
-    esac
+    apt-get update > /dev/null 2>&1 && apt-get install socat -y > /dev/null 2>&1
     if [ $? -ne 0 ]; then
         LOGE "install socat failed, please check logs"
         exit 1
@@ -2113,32 +1861,14 @@ run_speedtest() {
             echo "Installing Speedtest using snap..."
             snap install speedtest
         else
-            # Fallback to using package managers
-            local pkg_manager=""
-            local speedtest_install_script=""
-
-            if command -v dnf &> /dev/null; then
-                pkg_manager="dnf"
-                speedtest_install_script="https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.rpm.sh"
-            elif command -v yum &> /dev/null; then
-                pkg_manager="yum"
-                speedtest_install_script="https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.rpm.sh"
-            elif command -v apt-get &> /dev/null; then
-                pkg_manager="apt-get"
-                speedtest_install_script="https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh"
-            elif command -v apt &> /dev/null; then
-                pkg_manager="apt"
-                speedtest_install_script="https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh"
-            fi
-
-            if [[ -z $pkg_manager ]]; then
-                echo "Error: Package manager not found. You may need to install Speedtest manually."
+            # Fallback to apt via Ookla's packagecloud repository
+            if ! command -v apt-get &> /dev/null; then
+                echo "Error: apt-get not found. You may need to install Speedtest manually."
                 return 1
-            else
-                echo "Installing Speedtest using $pkg_manager..."
-                curl -s $speedtest_install_script | bash
-                $pkg_manager install -y speedtest
             fi
+            echo "Installing Speedtest using apt-get..."
+            curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | bash
+            apt-get install -y speedtest
         fi
     fi
 
@@ -2179,11 +1909,7 @@ iplimit_main() {
             read -rp "Please enter new Ban Duration in Minutes [default 30]: " NUM
             if [[ $NUM =~ ^[0-9]+$ ]]; then
                 create_iplimit_jails ${NUM}
-                if [[ $release == "alpine" ]]; then
-                    rc-service fail2ban restart
-                else
-                    systemctl restart fail2ban
-                fi
+                systemctl restart fail2ban
             else
                 echo -e "${red}${NUM} is not a number! Please, try again.${plain}"
             fi
@@ -2236,11 +1962,7 @@ iplimit_main() {
             iplimit_main
             ;;
         9)
-            if [[ $release == "alpine" ]]; then
-                rc-service fail2ban restart
-            else
-                systemctl restart fail2ban
-            fi
+            systemctl restart fail2ban
             iplimit_main
             ;;
         10)
@@ -2269,57 +1991,24 @@ setup_fail2ban_iplimit() {
         # Install fail2ban together with nftables. Recent fail2ban packages
         # default to `banaction = nftables-multiport` in /etc/fail2ban/jail.conf,
         # but the `nftables` package isn't pulled in as a dependency on most
-        # minimal server images (Debian 12+, Ubuntu 24+, fresh RHEL-family).
-        # Without `nft` in PATH the default sshd jail fails to ban with
+        # minimal server images (Debian 12+, Ubuntu 24+). Without `nft` in PATH
+        # the default sshd jail fails to ban with
         #   stderr: '/bin/sh: 1: nft: not found'
         # even though our own p-ui-ipl jail uses iptables. Bundling the binary
         # at install time prevents that confusing log spam for new installs.
+        apt-get update
         case "${release}" in
             ubuntu)
-                apt-get update
                 if [[ "${os_version}" -ge 2400 ]]; then
                     apt-get install python3-pip -y
                     python3 -m pip install pyasynchat --break-system-packages
                 fi
-                apt-get install fail2ban nftables -y
                 ;;
             debian)
-                apt-get update
-                if [ "$os_version" -ge 12 ]; then
-                    apt-get install -y python3-systemd
-                fi
-                apt-get install -y fail2ban nftables
-                ;;
-            armbian)
-                apt-get update && apt-get install fail2ban nftables -y
-                ;;
-            fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-                if [[ "${release}" != "fedora" ]] && ! dnf repolist enabled 2> /dev/null | grep -qiw epel; then
-                    dnf install -y epel-release \
-                        || dnf install -y "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm" \
-                        || echo -e "${yellow}Could not enable the EPEL repository; fail2ban is only available from EPEL on this distro.${plain}"
-                fi
-                dnf makecache -y && dnf -y install fail2ban nftables
-                ;;
-            centos)
-                if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                    yum makecache -y && yum install epel-release -y
-                    yum -y install fail2ban nftables
-                else
-                    dnf makecache -y && dnf -y install fail2ban nftables
-                fi
-                ;;
-            arch | manjaro | parch)
-                pacman -Sy --noconfirm fail2ban nftables
-                ;;
-            alpine)
-                apk add fail2ban nftables
-                ;;
-            *)
-                echo -e "${red}Unsupported operating system. Please check the script and install the necessary packages manually.${plain}\n"
-                return 1
+                apt-get install -y python3-systemd
                 ;;
         esac
+        apt-get install -y fail2ban nftables
 
         if ! command -v fail2ban-client &> /dev/null; then
             echo -e "${red}Fail2ban installation failed.${plain}\n"
@@ -2351,21 +2040,12 @@ setup_fail2ban_iplimit() {
     create_iplimit_jails
 
     # Launching fail2ban
-    if [[ $release == "alpine" ]]; then
-        if [[ $(rc-service fail2ban status | grep -F 'status: started' -c) == 0 ]]; then
-            rc-service fail2ban start
-        else
-            rc-service fail2ban restart
-        fi
-        rc-update add fail2ban
+    if ! systemctl is-active --quiet fail2ban; then
+        systemctl start fail2ban
     else
-        if ! systemctl is-active --quiet fail2ban; then
-            systemctl start fail2ban
-        else
-            systemctl restart fail2ban
-        fi
-        systemctl enable fail2ban
+        systemctl restart fail2ban
     fi
+    systemctl enable fail2ban
 
     echo -e "${green}IP Limit installed and configured successfully!${plain}\n"
     return 0
@@ -2389,51 +2069,16 @@ remove_iplimit() {
             rm -f /etc/fail2ban/filter.d/p-ui-ipl.conf
             rm -f /etc/fail2ban/action.d/p-ui-ipl.conf
             rm -f /etc/fail2ban/jail.d/p-ui-ipl.conf
-            if [[ $release == "alpine" ]]; then
-                rc-service fail2ban restart
-            else
-                systemctl restart fail2ban
-            fi
+            systemctl restart fail2ban
             echo -e "${green}IP Limit removed successfully!${plain}\n"
             before_show_menu
             ;;
         2)
             rm -rf /etc/fail2ban
-            if [[ $release == "alpine" ]]; then
-                rc-service fail2ban stop
-            else
-                systemctl stop fail2ban
-            fi
-            case "${release}" in
-                ubuntu | debian | armbian)
-                    apt-get remove -y fail2ban
-                    apt-get purge -y fail2ban -y
-                    apt-get autoremove -y
-                    ;;
-                fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-                    dnf remove fail2ban -y
-                    dnf autoremove -y
-                    ;;
-                centos)
-                    if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                        yum remove fail2ban -y
-                        yum autoremove -y
-                    else
-                        dnf remove fail2ban -y
-                        dnf autoremove -y
-                    fi
-                    ;;
-                arch | manjaro | parch)
-                    pacman -Rns --noconfirm fail2ban
-                    ;;
-                alpine)
-                    apk del fail2ban
-                    ;;
-                *)
-                    echo -e "${red}Unsupported operating system. Please uninstall Fail2ban manually.${plain}\n"
-                    exit 1
-                    ;;
-            esac
+            systemctl stop fail2ban
+            apt-get remove -y fail2ban
+            apt-get purge -y fail2ban
+            apt-get autoremove -y
             echo -e "${green}Fail2ban and IP Limit removed successfully!${plain}\n"
             before_show_menu
             ;;
@@ -2452,16 +2097,9 @@ show_banlog() {
 
     echo -e "${green}Checking ban logs...${plain}\n"
 
-    if [[ $release == "alpine" ]]; then
-        if [[ $(rc-service fail2ban status | grep -F 'status: started' -c) == 0 ]]; then
-            echo -e "${red}Fail2ban service is not running!${plain}\n"
-            return 1
-        fi
-    else
-        if ! systemctl is-active --quiet fail2ban; then
-            echo -e "${red}Fail2ban service is not running!${plain}\n"
-            return 1
-        fi
+    if ! systemctl is-active --quiet fail2ban; then
+        echo -e "${red}Fail2ban service is not running!${plain}\n"
+        return 1
     fi
 
     if [[ -f "$system_log" ]]; then
@@ -2492,10 +2130,9 @@ create_iplimit_jails() {
     # Uncomment 'allowipv6 = auto' in fail2ban.conf
     sed -i 's/#allowipv6 = auto/allowipv6 = auto/g' /etc/fail2ban/fail2ban.conf
 
-    # On Debian 12+ and Ubuntu 22.04+ fail2ban's default backend should be changed to systemd
-    if [[ ( "${release}" == "debian" && ${os_version} -ge 12 ) || ( "${release}" == "ubuntu" && ${os_version} -ge 2200 ) ]]; then
-        sed -i '0,/action =/s/backend = auto/backend = systemd/' /etc/fail2ban/jail.conf
-    fi
+    # On every supported release (Debian 12+, Ubuntu 22.04+) fail2ban's default
+    # backend has to be changed to systemd.
+    sed -i '0,/action =/s/backend = auto/backend = systemd/' /etc/fail2ban/jail.conf
 
     cat << EOF > /etc/fail2ban/jail.d/p-ui-ipl.conf
 [p-ui-ipl]
@@ -2682,7 +2319,7 @@ SSH_port_forwarding() {
     esac
 }
 
-# PostgreSQL service management (for panels configured with PUI_DB_TYPE=postgres).
+# PostgreSQL service management. PostgreSQL is the panel's only database backend.
 
 postgresql_installed() {
     command -v pg_lsclusters > /dev/null 2>&1 || command -v psql > /dev/null 2>&1 || command -v postgres > /dev/null 2>&1
@@ -2733,43 +2370,27 @@ postgresql_status() {
 
 postgresql_start() {
     pg_require_installed || return 1
-    if [[ $release == "alpine" ]]; then
-        rc-service postgresql start
-    else
-        systemctl start "$(pg_systemd_unit)"
-    fi
+    systemctl start "$(pg_systemd_unit)"
     sleep 1
     postgresql_status
 }
 
 postgresql_stop() {
     pg_require_installed || return 1
-    if [[ $release == "alpine" ]]; then
-        rc-service postgresql stop
-    else
-        systemctl stop "$(pg_systemd_unit)"
-    fi
+    systemctl stop "$(pg_systemd_unit)"
     LOGI "PostgreSQL stop signal sent."
 }
 
 postgresql_restart() {
     pg_require_installed || return 1
-    if [[ $release == "alpine" ]]; then
-        rc-service postgresql restart
-    else
-        systemctl restart "$(pg_systemd_unit)"
-    fi
+    systemctl restart "$(pg_systemd_unit)"
     sleep 1
     postgresql_status
 }
 
 postgresql_enable() {
     pg_require_installed || return 1
-    if [[ $release == "alpine" ]]; then
-        rc-update add postgresql default
-    else
-        systemctl enable "$(pg_systemd_unit)"
-    fi
+    systemctl enable "$(pg_systemd_unit)"
     if [[ $? == 0 ]]; then
         LOGI "PostgreSQL set to start automatically on boot."
     else
@@ -2804,11 +2425,10 @@ pg_require_installed() {
 
 # Completely removes the PostgreSQL server and ALL of its databases from the system.
 # Gated behind an explicit confirmation because this is system-wide and irreversible:
-# any other application sharing this PostgreSQL instance loses its data too. Mirrors the
-# package names used by pg_install_local() so the right packages are removed per distro.
+# any other application sharing this PostgreSQL instance loses its data too.
 purge_postgresql() {
     echo ""
-    echo -e "${yellow}This panel was using PostgreSQL.${plain}"
+    echo -e "${yellow}This panel stores all of its data in PostgreSQL.${plain}"
     echo -e "${red}WARNING:${plain} purging removes the PostgreSQL server and ${red}ALL${plain} of its databases on"
     echo -e "this machine, including any used by other applications. This cannot be undone."
     confirm "Also purge PostgreSQL and delete all of its data?" "n"
@@ -2817,54 +2437,20 @@ purge_postgresql() {
         return 0
     fi
 
-    if [[ $release == "alpine" ]]; then
-        rc-service postgresql stop 2> /dev/null
-        rc-update del postgresql 2> /dev/null
-    else
-        systemctl stop "$(pg_systemd_unit)" 2> /dev/null
-        systemctl disable "$(pg_systemd_unit)" 2> /dev/null
-    fi
+    systemctl stop "$(pg_systemd_unit)" 2> /dev/null
+    systemctl disable "$(pg_systemd_unit)" 2> /dev/null
 
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get -y --purge remove 'postgresql*'
-            apt-get -y autoremove --purge
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf remove -y postgresql postgresql-server postgresql-contrib
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum remove -y postgresql postgresql-server postgresql-contrib
-            else
-                dnf remove -y postgresql postgresql-server postgresql-contrib
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Rns --noconfirm postgresql
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper -q remove -y postgresql postgresql-server postgresql-contrib
-            ;;
-        alpine)
-            apk del postgresql postgresql-contrib postgresql-client
-            ;;
-        *)
-            LOGE "Unsupported distro for automatic PostgreSQL purge: ${release}. Remove it manually."
-            return 1
-            ;;
-    esac
+    apt-get -y --purge remove 'postgresql*'
+    apt-get -y autoremove --purge
 
-    rm -rf /var/lib/postgresql /var/lib/pgsql /var/lib/postgres /etc/postgresql
+    rm -rf /var/lib/postgresql /etc/postgresql
     LOGI "PostgreSQL has been purged."
 }
 
-# RHEL-family initdb writes pg_hba.conf host rules with ident auth, which
-# compares the OS username against the Postgres role and always rejects the
-# randomly generated panel role over TCP (#5806). Prepend password-auth rules
-# scoped to the panel database; first match wins, and md5 also accepts
-# scram-sha-256-stored verifiers, so this works on every supported distro.
-# Mirrors pg_ensure_hba_password_auth() from install.sh.
+# Makes password authentication explicit for the panel database so the randomly
+# generated panel role can log in over TCP regardless of the local pg_hba.conf
+# defaults. First match wins, and md5 also accepts scram-sha-256-stored
+# verifiers. Mirrors pg_ensure_hba_password_auth() from install.sh.
 pg_ensure_hba_password_auth() {
     local pg_db="$1"
     local hba_file
@@ -2901,52 +2487,8 @@ pg_install_local() {
     pg_host="127.0.0.1"
     pg_port="5432"
 
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update >&2 && apt-get install -y -q postgresql >&2 || return 1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf install -y -q postgresql-server postgresql-contrib >&2 || return 1
-            [[ -d /var/lib/pgsql/data && -f /var/lib/pgsql/data/PG_VERSION ]] || postgresql-setup --initdb >&2 || return 1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum install -y postgresql-server postgresql-contrib >&2 || return 1
-            else
-                dnf install -y -q postgresql-server postgresql-contrib >&2 || return 1
-            fi
-            [[ -d /var/lib/pgsql/data && -f /var/lib/pgsql/data/PG_VERSION ]] || postgresql-setup --initdb >&2 || return 1
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm postgresql >&2 || return 1
-            if [[ ! -f /var/lib/postgres/data/PG_VERSION ]]; then
-                sudo -u postgres initdb -D /var/lib/postgres/data >&2 || return 1
-            fi
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper -q install -y postgresql-server postgresql-contrib >&2 || return 1
-            if [[ ! -f /var/lib/pgsql/data/PG_VERSION ]]; then
-                install -d -o postgres -g postgres -m 700 /var/lib/pgsql/data >&2 || return 1
-                su - postgres -c "initdb -D /var/lib/pgsql/data" >&2 || return 1
-            fi
-            ;;
-        alpine)
-            apk add --no-cache postgresql postgresql-contrib >&2 || return 1
-            if [[ ! -f /var/lib/postgresql/data/PG_VERSION ]]; then
-                /etc/init.d/postgresql setup >&2 || return 1
-            fi
-            rc-update add postgresql default >&2 2> /dev/null || true
-            rc-service postgresql start >&2 || return 1
-            ;;
-        *)
-            echo -e "${red}Unsupported distro for automatic PostgreSQL install: ${release}${plain}" >&2
-            return 1
-            ;;
-    esac
-
-    if [[ "${release}" != "alpine" ]]; then
-        systemctl enable --now postgresql >&2 || return 1
-    fi
+    apt-get update >&2 && apt-get install -y -q postgresql >&2 || return 1
+    systemctl enable --now postgresql >&2 || return 1
 
     local i
     for i in 1 2 3 4 5; do
@@ -2990,33 +2532,7 @@ pg_ensure_client() {
         return 0
     fi
     echo -e "${yellow}Installing PostgreSQL client tools (pg_dump/pg_restore)...${plain}" >&2
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update >&2 && apt-get install -y -q postgresql-client >&2 || return 1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf install -y -q postgresql >&2 || return 1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum install -y postgresql >&2 || return 1
-            else
-                dnf install -y -q postgresql >&2 || return 1
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm postgresql >&2 || return 1
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper -q install -y postgresql >&2 || return 1
-            ;;
-        alpine)
-            apk add --no-cache postgresql-client >&2 || return 1
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    apt-get update >&2 && apt-get install -y -q postgresql-client >&2 || return 1
     command -v pg_dump > /dev/null 2>&1 && command -v pg_restore > /dev/null 2>&1
 }
 
@@ -3045,67 +2561,17 @@ pg_upgrade_client() {
         fi
         LOGI "Installed PostgreSQL client tools are version ${have}; version ${want} or newer is required."
     fi
-    if [[ "${running_in_docker}" == "true" ]]; then
-        LOGI "Note: packages installed inside the container are lost when the container is recreated."
+    apt-get update >&2 || return 1
+    if [[ -z "$want" ]]; then
+        apt-get install -y -q postgresql-client >&2 || return 1
+    elif ! apt-get install -y -q "postgresql-client-${want}" >&2; then
+        LOGI "postgresql-client-${want} is not in the distribution repositories; adding the official PostgreSQL apt repository..."
+        apt-get install -y -q postgresql-common ca-certificates >&2 || return 1
+        /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >&2 || return 1
+        apt-get install -y -q "postgresql-client-${want}" >&2 || return 1
     fi
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update >&2 || return 1
-            if [[ -z "$want" ]]; then
-                apt-get install -y -q postgresql-client >&2 || return 1
-            elif ! apt-get install -y -q "postgresql-client-${want}" >&2; then
-                LOGI "postgresql-client-${want} is not in the distribution repositories; adding the official PostgreSQL apt repository..."
-                apt-get install -y -q postgresql-common ca-certificates >&2 || return 1
-                /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >&2 || return 1
-                apt-get install -y -q "postgresql-client-${want}" >&2 || return 1
-            fi
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol | centos)
-            local pkg_mgr="dnf"
-            command -v dnf > /dev/null 2>&1 || pkg_mgr="yum"
-            if [[ -z "$want" ]]; then
-                "$pkg_mgr" install -y -q postgresql >&2 || return 1
-            elif ! "$pkg_mgr" install -y -q "postgresql${want}" >&2; then
-                local elver
-                elver=$(rpm -E %rhel 2> /dev/null)
-                if [[ ! "$elver" =~ ^[0-9]+$ ]]; then
-                    LOGE "Could not determine the Enterprise Linux release; install the PostgreSQL ${want} client tools manually."
-                    return 1
-                fi
-                LOGI "postgresql${want} is not in the enabled repositories; adding the official PostgreSQL yum repository..."
-                "$pkg_mgr" install -y "https://download.postgresql.org/pub/repos/yum/reporpms/EL-${elver}-$(uname -m)/pgdg-redhat-repo-latest.noarch.rpm" >&2 || return 1
-                if [[ "$pkg_mgr" == "dnf" ]]; then
-                    dnf -qy module disable postgresql >&2 || true
-                fi
-                "$pkg_mgr" install -y -q "postgresql${want}" >&2 || return 1
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm postgresql >&2 || return 1
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            if [[ -z "$want" ]] || ! zypper -q install -y "postgresql${want}" >&2; then
-                zypper -q install -y postgresql >&2 || return 1
-            fi
-            ;;
-        alpine)
-            if [[ -z "$want" ]] || ! apk add --no-cache "postgresql${want}-client" >&2; then
-                apk add --no-cache postgresql-client >&2 || return 1
-            fi
-            ;;
-        *)
-            LOGE "Unsupported OS '${release}'; install the PostgreSQL client tools manually."
-            return 1
-            ;;
-    esac
     hash -r 2> /dev/null
     have=$(pg_client_major)
-    if [[ -n "$want" && ( -z "$have" || "$have" -lt "$want" ) && -x "/usr/pgsql-${want}/bin/pg_restore" ]]; then
-        ln -sf "/usr/pgsql-${want}/bin/pg_dump" /usr/local/bin/pg_dump
-        ln -sf "/usr/pgsql-${want}/bin/pg_restore" /usr/local/bin/pg_restore
-        hash -r 2> /dev/null
-        have=$(pg_client_major)
-    fi
     if [[ -z "$have" ]]; then
         LOGE "pg_dump/pg_restore are still unavailable after installation."
         return 1
@@ -3118,18 +2584,45 @@ pg_upgrade_client() {
     return 0
 }
 
-# Writes PUI_DB_TYPE/PUI_DB_DSN into the service env file, preserving other entries.
+# Writes PUI_DB_DSN into the service env file, preserving other entries.
 pg_write_env() {
-    local dsn="$1" envfile
-    envfile="$(pui_env_file_path)"
-    install -d -m 755 "$(dirname "$envfile")"
-    touch "$envfile"
-    sed -i '/^PUI_DB_TYPE=/d; /^PUI_DB_DSN=/d' "$envfile"
-    {
-        echo "PUI_DB_TYPE=postgres"
-        echo "PUI_DB_DSN=${dsn}"
-    } >> "$envfile"
-    chmod 600 "$envfile"
+    local dsn="$1"
+    install -d -m 755 "$(dirname "${pui_env_file}")"
+    touch "${pui_env_file}"
+    sed -i '/^PUI_DB_DSN=/d' "${pui_env_file}"
+    echo "PUI_DB_DSN=${dsn}" >> "${pui_env_file}"
+    chmod 600 "${pui_env_file}"
+}
+
+# Points the panel at a DSN and restarts it. PUI_DB_DSN is required, so this is
+# how an operator repairs or repoints a broken database configuration.
+pg_apply_dsn() {
+    local dsn="$1"
+    pg_write_env "$dsn"
+    LOGI "Wrote PUI_DB_DSN to ${pui_env_file}."
+    if [[ -f "${pui_service}/p-ui.service" ]]; then
+        LOGI "Restarting the panel on the new database..."
+        restart 0
+        sleep 1
+        if check_status; then
+            LOGI "The panel is running."
+        else
+            LOGE "The panel did not come up. Check logs (main menu option 17)."
+        fi
+    fi
+}
+
+pg_set_dsn_action() {
+    local dsn=""
+    echo -e "${yellow}PUI_DB_DSN is required — the panel refuses to start without it.${plain}"
+    echo -e "Example: ${green}postgres://user:pass@127.0.0.1:5432/pui?sslmode=disable${plain}"
+    read -rp "Enter PostgreSQL DSN (empty to cancel): " dsn
+    dsn="${dsn// /}"
+    if [[ -z "$dsn" ]]; then
+        LOGI "Cancelled."
+        return 0
+    fi
+    pg_apply_dsn "$dsn"
 }
 
 pg_install_server_action() {
@@ -3144,91 +2637,27 @@ pg_install_server_action() {
         LOGE "PostgreSQL installation failed."
         return 1
     fi
-    PG_LAST_DSN="$dsn"
     pg_ensure_client || LOGE "Could not install pg_dump/pg_restore (panel DB backup may be unavailable)."
     echo ""
     LOGI "PostgreSQL is installed and ready."
     echo -e "${green}Connection DSN:${plain} ${dsn}"
-    echo -e "${yellow}Use option 2 to migrate your SQLite data and switch the panel to PostgreSQL.${plain}"
-}
-
-# Copies the current SQLite data into PostgreSQL, then switches the panel over.
-migrate_to_postgres() {
-    if [[ ! -x "${pui_folder}/p-ui" ]]; then
-        LOGE "p-ui is not installed."
-        return 1
-    fi
-    echo ""
-    echo -e "${yellow}This copies your current SQLite data into a PostgreSQL database,${plain}"
-    echo -e "${yellow}then switches the panel to PostgreSQL and restarts it.${plain}"
-    echo -e "${red}Any existing panel tables in the destination will be cleared and overwritten.${plain}"
-    confirm "Continue?" "n" || return 0
-
-    local dsn="" pg_mode
-    if [[ -n "$PG_LAST_DSN" ]]; then
-        echo -e "A PostgreSQL database was created in this session:"
-        echo -e "  ${green}${PG_LAST_DSN}${plain}"
-        confirm "Migrate into this database?" "y" && dsn="$PG_LAST_DSN"
-    fi
-
-    if [[ -z "$dsn" ]]; then
-        echo ""
-        echo -e "${green}\t1.${plain} Install PostgreSQL locally and create a dedicated user/db (recommended)"
-        echo -e "${green}\t2.${plain} Use an existing PostgreSQL server (enter DSN)"
-        read -rp "Choose [1]: " pg_mode
-        pg_mode="${pg_mode:-1}"
-        if [[ "$pg_mode" == "2" ]]; then
-            while [[ -z "$dsn" ]]; do
-                read -rp "Enter PostgreSQL DSN (postgres://user:pass@host:port/dbname?sslmode=disable): " dsn
-                dsn="${dsn// /}"
-            done
-        else
-            LOGI "Installing PostgreSQL locally (this may take a moment)..."
-            dsn=$(pg_install_local)
-            if [[ $? -ne 0 || -z "$dsn" ]]; then
-                LOGE "PostgreSQL installation failed. Aborting migration."
-                return 1
-            fi
-            PG_LAST_DSN="$dsn"
-        fi
-    fi
-
-    pg_ensure_client || LOGE "Could not install pg_dump/pg_restore (in-panel DB backup/restore may be unavailable)."
-
-    LOGI "Stopping panel to take a consistent snapshot..."
-    stop 0 > /dev/null 2>&1
-
-    echo ""
-    LOGI "Migrating data into PostgreSQL..."
-    if ! ${pui_folder}/p-ui migrate-db --dsn "$dsn"; then
-        LOGE "Migration failed. The panel was NOT switched to PostgreSQL."
-        start 0 > /dev/null 2>&1
-        return 1
-    fi
-
-    pg_write_env "$dsn"
-    LOGI "Wrote database settings to $(pui_env_file_path) (PUI_DB_TYPE=postgres)."
-    LOGI "Restarting panel on PostgreSQL..."
-    restart 0
-    sleep 1
-    if check_status; then
-        LOGI "Migration complete. The panel is now running on PostgreSQL."
+    if confirm "Point the panel at this database (writes PUI_DB_DSN and restarts)?" "y"; then
+        pg_apply_dsn "$dsn"
     else
-        LOGE "Panel did not come up. Check logs (main menu option 17). Your SQLite data is left intact."
+        echo -e "${yellow}Set PUI_DB_DSN in ${pui_env_file} yourself, then restart the panel.${plain}"
     fi
 }
 
 postgresql_menu() {
     echo -e "${green}\t1.${plain} ${green}Install${plain} PostgreSQL (server + client + pui db)"
-    echo -e "${green}\t2.${plain} Migrate SQLite ${green}->${plain} PostgreSQL"
+    echo -e "${green}\t2.${plain} Set panel database DSN (PUI_DB_DSN)"
     echo -e "${green}\t3.${plain} Status (clusters & port 5432)"
     echo -e "${green}\t4.${plain} ${green}Start${plain} PostgreSQL"
     echo -e "${green}\t5.${plain} ${red}Stop${plain} PostgreSQL"
     echo -e "${green}\t6.${plain} Restart PostgreSQL"
     echo -e "${green}\t7.${plain} ${green}Enable${plain} Autostart on boot"
     echo -e "${green}\t8.${plain} View PostgreSQL Log"
-    echo -e "${green}\t9.${plain} Convert SQLite ${green}.db <-> .dump${plain}"
-    echo -e "${green}\t10.${plain} Install/Upgrade client tools (pg_dump/pg_restore)"
+    echo -e "${green}\t9.${plain} Install/Upgrade client tools (pg_dump/pg_restore)"
     echo -e "${green}\t0.${plain} Back to Main Menu"
     read -rp "Choose an option: " choice
     case "$choice" in
@@ -3240,7 +2669,7 @@ postgresql_menu() {
             postgresql_menu
             ;;
         2)
-            migrate_to_postgres
+            pg_set_dsn_action
             postgresql_menu
             ;;
         3)
@@ -3268,10 +2697,6 @@ postgresql_menu() {
             postgresql_menu
             ;;
         9)
-            migrate_db_prompt
-            postgresql_menu
-            ;;
-        10)
             read -rp "Required PostgreSQL major version (empty = any): " pg_client_ver
             pg_upgrade_client "$pg_client_ver"
             postgresql_menu
@@ -3281,99 +2706,6 @@ postgresql_menu() {
             postgresql_menu
             ;;
     esac
-}
-
-# Convert between the panel's SQLite database and a portable .dump (SQL text)
-# file using the bundled p-ui binary. With no arguments it dumps the installed
-# panel database; an optional second argument overrides the output path.
-#   p-ui migrateDB [file.db|file.dump] [output]
-migrate_db() {
-    local input="$1" output="$2"
-    local default_db="/etc/p-ui/p-ui.db"
-    local bin="${pui_folder}/p-ui"
-
-    [[ -z "$input" ]] && input="$default_db"
-
-    if [[ ! -x "$bin" ]]; then
-        LOGE "p-ui binary not found at ${bin}. Is the panel installed?"
-        return 1
-    fi
-
-    if ! "$bin" migrate-db -h 2>&1 | grep -q -- '-dump'; then
-        LOGE "This p-ui build does not support .db <-> .dump conversion yet."
-        LOGE "Update the panel first (p-ui update) to a version with 'migrate-db --dump/--restore'."
-        return 1
-    fi
-
-    if [[ ! -f "$input" ]]; then
-        LOGE "Input file not found: ${input}"
-        echo -e "Usage: ${green}p-ui migrateDB [file.db|file.dump] [output]${plain}"
-        return 1
-    fi
-
-    local mode
-    case "$input" in
-        *.db | *.sqlite | *.sqlite3)
-            mode="dump"
-            ;;
-        *.dump | *.sql)
-            mode="restore"
-            ;;
-        *)
-            if head -c 16 "$input" | grep -q "SQLite format 3"; then
-                mode="dump"
-            else
-                mode="restore"
-            fi
-            ;;
-    esac
-
-    if [[ "$mode" == "dump" ]]; then
-        [[ -z "$output" ]] && output="${input%.*}.dump"
-        if [[ -f "$output" ]]; then
-            confirm "Output ${output} already exists and will be overwritten. Continue?" "n" || return 0
-        fi
-        LOGI "Dumping SQLite database to SQL text:"
-        echo -e "  ${green}${input}${plain} -> ${green}${output}${plain}"
-        if "$bin" migrate-db --src "$input" --dump "$output"; then
-            LOGI "Done. Wrote ${output}."
-        else
-            LOGE "Dump failed."
-            return 1
-        fi
-    else
-        [[ -z "$output" ]] && output="${input%.*}.db"
-        if [[ "$output" == "$default_db" ]] && check_status > /dev/null 2>&1; then
-            LOGE "Refusing to restore into the live database (${default_db}) while p-ui is running."
-            LOGE "Stop the panel first (p-ui stop) or choose a different output path."
-            return 1
-        fi
-        if [[ -f "$output" ]]; then
-            confirm "Output ${output} already exists and will be overwritten. Continue?" "n" || return 0
-            rm -f "$output"
-        fi
-        LOGI "Rebuilding SQLite database from SQL text:"
-        echo -e "  ${green}${input}${plain} -> ${green}${output}${plain}"
-        if "$bin" migrate-db --restore "$input" --out "$output"; then
-            LOGI "Done. Created ${output}."
-        else
-            LOGE "Restore failed."
-            rm -f "$output"
-            return 1
-        fi
-    fi
-}
-
-# Interactive wrapper around migrate_db for the menu: prompts for the paths and
-# lets migrate_db auto-detect the direction.
-migrate_db_prompt() {
-    local default_db="/etc/p-ui/p-ui.db"
-    local input output
-    echo -e "Convert between a SQLite ${green}.db${plain} and a portable ${green}.dump${plain} (direction auto-detected)."
-    read -rp "Input file [${default_db}]: " input
-    input="${input:-$default_db}"
-    read -rp "Output file (leave empty to auto-name next to input): " output
-    migrate_db "$input" "$output"
 }
 
 show_usage() {
@@ -3394,7 +2726,6 @@ show_usage() {
 │  ${blue}p-ui update${plain}                - Update                           │
 │  ${blue}p-ui update-dev${plain}            - Update to Dev channel (latest)   │
 │  ${blue}p-ui update-all-geofiles${plain}   - Update all geo files             │
-│  ${blue}p-ui migrateDB [file]${plain}      - Convert .db <-> .dump (SQLite)   │
 │  ${blue}p-ui pgclient [ver]${plain}        - Upgrade pg_dump/pg_restore tools │
 │  ${blue}p-ui legacy${plain}                - Legacy version                   │
 │  ${blue}p-ui install${plain}               - Install                          │
@@ -3595,9 +2926,6 @@ if [[ $# > 0 ]]; then
             if check_install 0 && update_all_geofiles 0; then
                 [[ $geo_updated -eq 0 ]] || restart 0
             fi
-            ;;
-        "migrateDB")
-            migrate_db "$2" "$3"
             ;;
         "pgclient")
             pg_upgrade_client "$2"

@@ -11,14 +11,6 @@
         "bin/p-ui",
         "./main.go"
       ],
-      "windows": {
-        "args": [
-          "build",
-          "-o",
-          "bin/p-ui.exe",
-          "./main.go"
-        ]
-      },
       "options": {
         "cwd": "${workspaceFolder}"
       },

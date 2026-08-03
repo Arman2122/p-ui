@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -97,28 +96,6 @@ func TestGetUpdateStatus_RunIdIsAlwaysAString(t *testing.T) {
 	}
 	if status.State != "success" {
 		t.Fatalf("State = %q, want %q", status.State, "success")
-	}
-}
-
-// TestUpdatePanel_UnsupportedPlatformReturnsNoRunId covers the one path of
-// updatePanel that's safe to exercise in an automated test on any OS/CI
-// runner: the runtime.GOOS != "linux" guard. Actually invoking StartUpdate's
-// launch logic on Linux would make a real network call and could launch a
-// real update.sh process, so that path is deliberately not covered here --
-// see the PR description for why.
-func TestUpdatePanel_UnsupportedPlatformReturnsNoRunId(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		t.Skip("this test only exercises the non-Linux guard path; on Linux, updatePanel would attempt a real download/exec")
-	}
-	newHostTestDB(t)
-	engine := newPanelUpdateTestEngine()
-
-	env := doPanelUpdateReq(t, engine, http.MethodPost, "/panel/api/server/updatePanel")
-	if env.Success {
-		t.Fatal("updatePanel on an unsupported platform: success = true, want false")
-	}
-	if len(env.Obj) != 0 && string(env.Obj) != "null" {
-		t.Fatalf("updatePanel error response must not carry an obj/runId: got %s", env.Obj)
 	}
 }
 

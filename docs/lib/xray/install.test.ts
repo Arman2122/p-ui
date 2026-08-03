@@ -1,17 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildScriptCommand,
-  buildDockerRun,
-  buildDockerCompose,
+  buildEnvAssignments,
+  buildInstallCommand,
   type InstallOptions,
 } from './install';
 
 const base: InstallOptions = {
-  method: 'script',
   version: '',
+  unattended: false,
   enableFail2ban: true,
   panelPort: '',
   webBasePath: '',
+  dbDsn: '',
 };
 
 describe('buildScriptCommand', () => {
@@ -36,34 +37,39 @@ describe('buildScriptCommand', () => {
   });
 });
 
-describe('buildDockerRun', () => {
-  it('reflects fail2ban, port, and base path options', () => {
-    const cmd = buildDockerRun({
-      ...base,
-      enableFail2ban: false,
-      panelPort: '8443',
-      webBasePath: '/panel',
-    });
-    expect(cmd).toContain('PUI_ENABLE_FAIL2BAN=false');
-    expect(cmd).toContain('PUI_PORT=8443');
-    expect(cmd).toContain('PUI_INIT_WEB_BASE_PATH=/panel');
-    expect(cmd).toContain('ghcr.io/arman2122/p-ui:latest');
-    expect(cmd).toContain('-v $PWD/db/:/etc/p-ui/');
+describe('buildEnvAssignments', () => {
+  it('emits nothing for the interactive defaults', () => {
+    expect(buildEnvAssignments(base)).toEqual([]);
   });
 
-  it('omits unset port and path', () => {
-    const cmd = buildDockerRun(base);
-    expect(cmd).not.toContain('PUI_PORT');
-    expect(cmd).not.toContain('PUI_INIT_WEB_BASE_PATH');
+  it('emits the overrides the installer reads', () => {
+    const env = buildEnvAssignments({
+      ...base,
+      unattended: true,
+      enableFail2ban: false,
+      panelPort: '8443',
+      webBasePath: 'panel',
+      dbDsn: 'postgres://pui:pw@db:5432/pui?sslmode=disable',
+    });
+    expect(env).toEqual([
+      'PUI_NONINTERACTIVE=1',
+      'PUI_ENABLE_FAIL2BAN=false',
+      'PUI_PANEL_PORT=8443',
+      'PUI_WEB_BASE_PATH=panel',
+      "PUI_DB_DSN='postgres://pui:pw@db:5432/pui?sslmode=disable'",
+    ]);
   });
 });
 
-describe('buildDockerCompose', () => {
-  it('produces valid-looking compose with the image and volumes', () => {
-    const yaml = buildDockerCompose({ ...base, panelPort: '2096' });
-    expect(yaml).toContain('image: ghcr.io/arman2122/p-ui:latest');
-    expect(yaml).toContain('network_mode: host');
-    expect(yaml).toContain("PUI_PORT: '2096'");
-    expect(yaml).toContain('- ./db/:/etc/p-ui/');
+describe('buildInstallCommand', () => {
+  it('is the bare script when nothing is overridden', () => {
+    expect(buildInstallCommand(base)).toBe(buildScriptCommand(base));
+  });
+
+  it('prefixes the overrides before the script', () => {
+    const cmd = buildInstallCommand({ ...base, unattended: true, panelPort: '2096' });
+    expect(cmd).toBe(
+      'PUI_NONINTERACTIVE=1 PUI_PANEL_PORT=2096 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)',
+    );
   });
 });

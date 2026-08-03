@@ -9,6 +9,10 @@ generates unique per-instance credentials (no `admin/admin`, no shared secret).
 Use the generic user-data from [`../../cloud-init/`](../../cloud-init/). It installs
 P-UI non-interactively and generates unique per-instance credentials.
 
+Pick an **Ubuntu 22.04/24.04/26.04 or Debian 12+** image (`ubuntu-24.04`,
+`debian-12`, …) — Penhoon UI installs with apt + systemd and supports nothing
+else. Both x86 (`cx*`) and Arm (`cax*`) server types work.
+
 Web console: **Create Server → Cloud config** → paste
 [`deploy/cloud-init/cloud-init.yaml`](../../cloud-init/cloud-init.yaml).
 
@@ -27,6 +31,11 @@ After boot, fetch the generated credentials:
 ```bash
 ssh root@<server-ip> 'cat /etc/p-ui/install-result.env'
 ```
+
+The panel stores its data in PostgreSQL. With no `PUI_DB_DSN` set, the install
+provisions a local PostgreSQL server on the same instance and pins the generated
+DSN in `/etc/default/p-ui`; point `PUI_DB_DSN` at a managed server if you'd
+rather keep the database off the box.
 
 ## "App"-style listing
 

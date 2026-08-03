@@ -17,7 +17,7 @@ JSON ‏Xray به‌صورت دستی، همه‌چیز — ورودی‌ها، 
 flowchart LR
   Admin["Admin browser"] -->|HTTPS panel| Panel["Penhoon UI panel"]
   Panel -->|writes config, reloads| Xray["Xray-core"]
-  Panel --- DB[("SQLite or PostgreSQL")]
+  Panel --- DB[("PostgreSQL")]
   Clients["Client apps"] -->|VLESS / VMess / Trojan / ...| Xray
   Xray -->|proxied traffic| Internet["Internet"]
 `}
@@ -50,10 +50,12 @@ flowchart LR
 | ------------ | -------------------------------------------- |
 | بک‌اند        | Go با فریم‌ورک وب Gin                          |
 | فرانت‌اند      | TypeScript / React                           |
-| پایگاه‌داده    | SQLite (پیش‌فرض) یا PostgreSQL                 |
+| پایگاه‌داده    | PostgreSQL                                   |
+| میزبان        | ‏Linux (‏Ubuntu ۲۲.۰۴ به بالا / Debian ۱۲ به بالا) با systemd |
 | موتور پروکسی | Xray-core (همراه و مدیریت‌شده توسط پنل)        |
 
-پایگاه‌دادهٔ پیش‌فرض SQLite در مسیر `/etc/p-ui/p-ui.db` قرار دارد و پنل به‌صورت
+پنل از طریق متغیر الزامی
+[`PUI_DB_DSN`](/docs/reference/env-vars) به PostgreSQL وصل می‌شود و به‌صورت
 پیش‌فرض روی پورت **2053** گوش می‌دهد. هر دو قابل پیکربندی هستند — به
 [نخستین ورود](/docs/guide/first-login) و مرجع متغیرهای محیطی مراجعه کنید.
 

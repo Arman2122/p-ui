@@ -5,6 +5,10 @@ SHELL := bash
 GO_PKGS = $(shell go list ./... | grep -v '/frontend/node_modules/')
 FRONTEND = frontend
 
+# Dropping go-sqlite3 removed the last cgo dependency, so the panel builds as
+# pure Go and links statically. CI sets the same value.
+export CGO_ENABLED = 0
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -45,9 +49,11 @@ typecheck: ## tsc --noEmit
 test-go: dist-stub ## Go tests (shuffle, no cache)
 	go test -shuffle=on -count=1 $(GO_PKGS)
 
+# The race detector is the one thing that still needs cgo, so this target opts
+# back in. It is a local-only tool; the PR gate (`verify`) does not run it.
 .PHONY: race
-race: dist-stub ## Go tests with the race detector (needs a C compiler)
-	go test -race -shuffle=on -count=1 $(GO_PKGS)
+race: dist-stub ## Go tests with the race detector (needs cgo + a C compiler)
+	CGO_ENABLED=1 go test -race -shuffle=on -count=1 $(GO_PKGS)
 
 .PHONY: test-fe
 test-fe: ## Frontend tests (vitest)

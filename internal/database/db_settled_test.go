@@ -1,7 +1,6 @@
 package database
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
@@ -10,10 +9,7 @@ import (
 // Locks the #5665 guard: composite-PK client_inbounds has no id column, so the
 // sequence-reset SQL must never be issued for it.
 func TestTableWithIdColumn_SkipsCompositeKeyModels(t *testing.T) {
-	if err := InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	if table, ok := tableWithIdColumn(db, &model.ClientInbound{}); ok {
 		t.Errorf("ClientInbound (table %q) has no id column but was not skipped", table)
@@ -27,13 +23,10 @@ func TestTableWithIdColumn_SkipsCompositeKeyModels(t *testing.T) {
 	}
 }
 
-// Exercises the #5665 AutoMigrate skip on SQLite (the check is dialect-agnostic):
-// settled after InitDB, not settled with a missing column or table.
+// Exercises the #5665 AutoMigrate skip: settled after InitDB, not settled with
+// a missing column or table.
 func TestPostgresModelSettled_TracksSchemaPresence(t *testing.T) {
-	if err := InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	for _, mdl := range []any{&model.ClientRecord{}, &model.ClientGroup{}, &model.ClientInbound{}} {
 		if !postgresModelSettled(mdl) {

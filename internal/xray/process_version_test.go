@@ -3,17 +3,12 @@ package xray
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestRefreshVersionTimesOut(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fixture is Unix-only")
-	}
-
 	dir := t.TempDir()
 	t.Setenv("PUI_BIN_FOLDER", dir)
 	binaryPath := filepath.Join(dir, GetBinaryName())

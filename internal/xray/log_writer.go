@@ -2,7 +2,6 @@ package xray
 
 import (
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -46,12 +45,6 @@ func (lw *LogWriter) setLastLine(line string) {
 func (lw *LogWriter) Write(m []byte) (n int, err error) {
 	// Convert the data to a string
 	message := strings.TrimSpace(string(m))
-	msgLowerAll := strings.ToLower(message)
-
-	// Suppress noisy Windows process-kill signal that surfaces as exit status 1
-	if runtime.GOOS == "windows" && strings.Contains(msgLowerAll, "exit status 1") {
-		return len(m), nil
-	}
 
 	// Check if the message contains a crash
 	if crashRegex.MatchString(message) {

@@ -7,14 +7,12 @@ export interface Fail2banStatus {
   enabled: boolean;
   installed: boolean;
   usable: boolean;
-  windows: boolean;
 }
 
 const FAIL_OPEN_STATUS: Fail2banStatus = {
   enabled: true,
   installed: true,
   usable: true,
-  windows: false,
 };
 
 async function fetchFail2banStatus(): Promise<Fail2banStatus> {
@@ -26,7 +24,6 @@ async function fetchFail2banStatus(): Promise<Fail2banStatus> {
 export function getLimitIpNotice(status: Fail2banStatus, t: (key: string) => string): string {
   if (status.usable) return '';
   if (!status.enabled) return t('pages.clients.limitIpDisabled');
-  if (status.windows) return t('pages.clients.limitIpFail2banWindows');
   return t('pages.clients.limitIpFail2banMissing');
 }
 
