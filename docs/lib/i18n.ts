@@ -5,7 +5,7 @@ import { defineI18n } from 'fumadocs-core/i18n';
 // pages transparently serve English instead of 404ing.
 export const i18n = defineI18n({
   defaultLanguage: 'en',
-  languages: ['en', 'fa', 'ru', 'zh'],
+  languages: ['en', 'fa'],
   parser: 'dir',
   // English keeps canonical `/docs/...`; other locales are prefixed `/fa/...`.
   hideLocale: 'default-locale',
@@ -17,8 +17,6 @@ export type Locale = (typeof i18n.languages)[number];
 export const locales: { locale: Locale; name: string }[] = [
   { locale: 'en', name: 'English' },
   { locale: 'fa', name: 'فارسی' },
-  { locale: 'ru', name: 'Русский' },
-  { locale: 'zh', name: '中文' },
 ];
 
 // Right-to-left locales (Persian). Drives `<html dir>` and `rtl:` variants.
