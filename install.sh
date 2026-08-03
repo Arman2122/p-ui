@@ -1389,8 +1389,22 @@ _install_pui_service_unit() {
 install_p-ui() {
     cd ${pui_folder%/p-ui}/
 
+    # Testing hook: install from a locally built archive instead of a published
+    # GitHub release. Point PUI_LOCAL_ARCHIVE at a p-ui-linux-<arch>.tar.gz built
+    # the same way .github/workflows/release.yml builds it. This exists so the
+    # install path can be exercised on a real host BEFORE a release is cut --
+    # otherwise the very first run of this script is against production users.
+    # Unset (the normal case) nothing below changes.
+    if [[ -n "${PUI_LOCAL_ARCHIVE:-}" ]]; then
+        if [[ ! -s "${PUI_LOCAL_ARCHIVE}" ]]; then
+            echo -e "${red}PUI_LOCAL_ARCHIVE is set but '${PUI_LOCAL_ARCHIVE}' is missing or empty${plain}"
+            exit 1
+        fi
+        tag_version="${1:-local}"
+        echo -e "${yellow}Installing from local archive ${PUI_LOCAL_ARCHIVE} (version label: ${tag_version})${plain}"
+        cp -f "${PUI_LOCAL_ARCHIVE}" "${pui_folder}-linux-$(arch).tar.gz"
     # Download resources
-    if [ $# == 0 ]; then
+    elif [ $# == 0 ]; then
         tag_version=$(curl -Ls --retry 5 --retry-delay 3 --connect-timeout 15 --max-time 60 "https://api.github.com/repos/Arman2122/p-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         if [[ ! -n "$tag_version" ]]; then
             echo -e "${red}Failed to fetch p-ui version, it may be due to GitHub API restrictions, please try it later${plain}"
