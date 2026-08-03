@@ -1,41 +1,84 @@
-# Ignore editor and IDE settings
+# ── Editors / IDEs ───────────────────────────────────────────────────────────
 .idea/
-.vscode/
 .cursor/
 .specify/
-.claude/
 .cache/
 .sync*
 
-# Ignore log files
-*.log
+# .vscode holds two files we deliberately SHARE (debug + build config). Ignoring
+# the whole folder hid new files and contradicted those two being tracked.
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 
-# Ignore temporary files
-tmp/
-*.tar.gz
+# Claude Code local state; the shared CLAUDE.md instructions stay tracked.
+.claude/
 
-# Ignore build and distribution directories
-backup/
-bin/
-p-ui/
+# ── Dependencies / framework output ──────────────────────────────────────────
+node_modules/
 dist/
+
+# ── Frontend build output embedded into the Go binary ────────────────────────
+# `//go:embed all:dist` fails when the directory is missing, so .gitkeep is
+# tracked and a fresh clone builds without running `make dist-stub` first.
+# The `!internal/web/dist/` line is load-bearing: git cannot re-include a file
+# whose PARENT directory is excluded, and `dist/` above excludes this one.
 !internal/web/dist/
 internal/web/dist/*
 !internal/web/dist/.gitkeep
-release/
-node_modules/
+.next/
+.source/
+out/
+storybook-static/
+coverage/
+*.tsbuildinfo
 
-# Ignore compiled binaries
-main
-
-# Ignore OS specific files
-.DS_Store
-Thumbs.db
-
-# Ignore Go build files
+# ── Compiled binaries ────────────────────────────────────────────────────────
+# The release workflow builds `pui-release`; local cross-compiles land as
+# p-ui-<arch>. Anchored to the repo root so the tracked p-ui.sh and
+# p-ui.service.debian are never caught.
+/p-ui
+/pui-release
+/p-ui-linux-*
+/p-ui-amd64
+/p-ui-arm64
+/p-ui-armv*
+/p-ui-s390x
+/p-ui-386
+/main
 *.exe
+*.dll
+*.so
+*.dylib
+
+# Go test / profiling artefacts
+*.test
+coverage.out
+coverage.html
+*.cover
+*.prof
+
+# ── Release archives and runtime state ───────────────────────────────────────
+*.tar.gz
+*.zip
+release/
+backup/
+bin/
+p-ui/
+tmp/
+*.log
 system_metrics.gob
 *.dump
 
-# Ignore .env (Environment Variables) file
+# ── Secrets / environment ────────────────────────────────────────────────────
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── OS noise ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
