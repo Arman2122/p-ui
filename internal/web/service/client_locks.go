@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
 
 	"gorm.io/gorm"
 )

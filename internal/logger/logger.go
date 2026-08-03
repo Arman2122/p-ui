@@ -11,7 +11,7 @@ import (
 
 	"github.com/op/go-logging"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
+	"github.com/Arman2122/p-ui/internal/config"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )

@@ -3,7 +3,7 @@ package database
 import (
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 // Locks the #5665 guard: composite-PK client_inbounds has no id column, so the

@@ -3,7 +3,7 @@ package xray
 import (
 	"bytes"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
 )
 
 // InboundConfig represents an Xray inbound configuration.

@@ -1,8 +1,8 @@
 package job
 
 import (
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/tgbot"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service/tgbot"
 )
 
 // LoginStatus represents the status of a login attempt.

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/logger"
 )
 
 // MetricSample is one point of any time-series we keep in memory.

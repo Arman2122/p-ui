@@ -42,7 +42,7 @@ const (
 )
 
 // GetBaseVersion returns the raw embedded release version of the Penhoon UI panel
-// (e.g. "3.6.0"). This is the panel's own version, not the Xray version. For the
+// (e.g. "1.0.0"). This is the panel's own version, not the Xray version. For the
 // version a panel advertises/displays (which adds a "dev+<sha>" label on dev
 // builds), use GetPanelVersion.
 func GetBaseVersion() string {

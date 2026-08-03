@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
+	puilogger "github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
 
 	"github.com/op/go-logging"
 )

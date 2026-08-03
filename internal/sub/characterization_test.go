@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 // Characterization snapshots (Phase 0 of the Hosts feature). These lock the

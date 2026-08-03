@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	wgutil "github.com/Arman2122/p-ui/v3/internal/util/wireguard"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
 func hasDirectOutOutbound(svc *SubJsonService) bool {

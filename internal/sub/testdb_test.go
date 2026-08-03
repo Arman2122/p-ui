@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/internal/database"
 )
 
 var subTestSchemaSeq atomic.Int64

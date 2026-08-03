@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/netsafe"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 )
 
 // SanitizeHTTPURL validates and normalizes an http(s) URL without resolving

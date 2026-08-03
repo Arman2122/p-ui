@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/outbound"
-	"github.com/Arman2122/p-ui/v3/internal/web/websocket"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service/outbound"
+	"github.com/Arman2122/p-ui/internal/web/websocket"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"github.com/valyala/fasthttp"
 )

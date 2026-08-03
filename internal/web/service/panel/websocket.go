@@ -7,9 +7,9 @@ package panel
 import (
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/web/websocket"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/web/websocket"
 
 	"github.com/google/uuid"
 	ws "github.com/gorilla/websocket"

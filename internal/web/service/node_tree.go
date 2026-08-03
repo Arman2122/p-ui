@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/web/runtime"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/runtime"
 )
 
 // LocalDescendants returns this panel's read-only summaries of the nodes it

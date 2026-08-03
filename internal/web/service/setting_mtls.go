@@ -3,8 +3,8 @@ package service
 import (
 	"crypto/x509"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
 )
 
 const (

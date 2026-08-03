@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/web/runtime"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/runtime"
 )
 
 type blockingResetRuntime struct {

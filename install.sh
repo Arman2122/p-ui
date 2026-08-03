@@ -1431,10 +1431,14 @@ install_p-ui() {
             echo -e "${yellow}Installing the rolling dev build (tag: dev-latest). This is a per-commit pre-release, not a stable version.${plain}"
         else
             tag_version_numeric=${tag_version#v}
-            min_version="2.3.5"
+            # Penhoon UI's own release history starts at 1.0.0 -- this fork does
+            # not continue upstream 3x-ui's tag line, so 1.0.0 is the oldest tag
+            # that can possibly exist. The floor stays to reject bogus/ancient
+            # tags (e.g. a copy-pasted upstream 0.x), it is just retargeted.
+            min_version="1.0.0"
 
             if [[ "$(printf '%s\n' "$min_version" "$tag_version_numeric" | sort -V | head -n1)" != "$min_version" ]]; then
-                echo -e "${red}Please use a newer version (at least v2.3.5). Exiting installation.${plain}"
+                echo -e "${red}Please use a newer version (at least v${min_version}). Exiting installation.${plain}"
                 exit 1
             fi
         fi
@@ -1456,7 +1460,7 @@ install_p-ui() {
     # being installed -- it drives the panel binary and shares its assumptions.
     # It ships inside the archive, so take it from there. Fetching it from the
     # main branch instead (as this did) hands a pinned install such as
-    # `install.sh v3.4.0` whatever script main happens to carry, and also
+    # `install.sh v1.0.0` whatever script main happens to carry, and also
     # reaches out to GitHub when installing from PUI_LOCAL_ARCHIVE.
     # Archives predating the shipped script fall back to the main branch.
     # This runs BEFORE the old install is torn down, so a failure here is

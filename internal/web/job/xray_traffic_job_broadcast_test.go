@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 func TestSplitMovedClientTraffics(t *testing.T) {

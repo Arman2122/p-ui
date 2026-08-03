@@ -10,10 +10,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/util/wireguard"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/wireguard"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // WarpService provides business logic for Cloudflare WARP integration.

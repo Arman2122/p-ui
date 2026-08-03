@@ -7,10 +7,10 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
-	"github.com/Arman2122/p-ui/v3/internal/util/random"
-	wgutil "github.com/Arman2122/p-ui/v3/internal/util/wireguard"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/util/random"
+	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
 //go:embed default.json

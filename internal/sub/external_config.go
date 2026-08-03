@@ -7,10 +7,10 @@ import (
 
 	"github.com/goccy/go-json"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
-	"github.com/Arman2122/p-ui/v3/internal/util/link"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/util/link"
 )
 
 // externalLinkEntry is one client × external-link row, resolved for a

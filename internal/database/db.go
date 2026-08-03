@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
-	"github.com/Arman2122/p-ui/v3/internal/util/random"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/util/random"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

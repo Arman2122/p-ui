@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // Protocol represents the protocol type for Xray inbounds.
@@ -790,7 +790,7 @@ type Node struct {
 	LastHeartbeat int64   `json:"lastHeartbeat" example:"1700000000"`             // unix seconds, 0 = never
 	LatencyMs     int     `json:"latencyMs" example:"42"`
 	XrayVersion   string  `json:"xrayVersion" example:"25.10.31"`
-	PanelVersion  string  `json:"panelVersion" gorm:"column:panel_version" example:"v3.x.x"`
+	PanelVersion  string  `json:"panelVersion" gorm:"column:panel_version" example:"v1.x.x"`
 	CpuPct        float64 `json:"cpuPct" example:"23.5"`
 	MemPct        float64 `json:"memPct" example:"45.1"`
 	UptimeSecs    uint64  `json:"uptimeSecs" example:"86400"`

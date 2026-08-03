@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
 )
 
 // xray-core v26.6.22 (#6258) renamed the XHTTP session keys with no fallback.

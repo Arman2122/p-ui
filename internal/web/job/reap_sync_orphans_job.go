@@ -1,8 +1,8 @@
 package job
 
 import (
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // ReapSyncOrphansJob hard-deletes the clients the node-snapshot sweep only

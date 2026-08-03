@@ -10,7 +10,7 @@ import { SCHEMAS } from '../src/generated/schemas.ts';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outPath = join(__dirname, '..', 'public', 'openapi.json');
 
-const PANEL_VERSION = process.env.PUI_VERSION || '3.x';
+const PANEL_VERSION = process.env.PUI_VERSION || '1.x';
 
 const SECURITY_SCHEMES = {
   bearerAuth: {

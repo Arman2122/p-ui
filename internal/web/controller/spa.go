@@ -5,9 +5,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/web/entity"
-	"github.com/Arman2122/p-ui/v3/internal/web/middleware"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/web/entity"
+	"github.com/Arman2122/p-ui/internal/web/middleware"
+	"github.com/Arman2122/p-ui/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 )

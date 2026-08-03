@@ -16,6 +16,8 @@ name: Deploy Smoke Tests
 # releases/latest still points at the previous release (#5756), and a `paths`
 # filter alone cannot exclude them because a brand-new tag ref has no diff
 # base, so it runs on every tag push.
+# The unpinned job also needs a published versioned release to exist at all —
+# see the probe step for why it is skipped until Penhoon UI cuts its own v1.0.0.
 
 on:
   push:
@@ -48,7 +50,37 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      # This job runs the script with no version argument, so install.sh resolves
+      # releases/latest and downloads that archive — it needs a published release
+      # to install. Penhoon UI restarts its own release line at v1.0.0 and has not
+      # cut it yet: the only published release is the rolling `dev-latest`
+      # pre-release, so releases/latest 404s and install.sh aborts with "Failed to
+      # fetch p-ui version". Until the first version tag ships there is nothing to
+      # smoke test, and every push touching install.sh would otherwise go red.
+      #
+      # The probe deliberately looks for any published v*.*.* release rather than
+      # for releases/latest itself. Once a version release exists the no-argument
+      # path is what users pipe, so it MUST work; if releases/latest is still empty
+      # at that point (e.g. every release is uploaded with prerelease: true) the
+      # step below runs and fails loudly instead of skipping into a silent green.
+      - name: Check for a published release to install
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! releases=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+"))] | length'); then
+            echo "::warning::Could not list releases — running the install smoke test anyway."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$releases" -gt 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No versioned p-ui release published yet (only the rolling dev-latest pre-release), so install.sh has nothing to resolve from releases/latest — skipping the unpinned install smoke test. The release-tag-install job covers the first v1.0.0 tag."
+          fi
       - name: Non-interactive install smoke test
+        if: steps.probe.outputs.run == 'true'
         run: bash deploy/test/smoke-noninteractive.sh
 
   release-tag-install:

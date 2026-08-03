@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
 )
 
 // TestPanelTLSAcceptsClientWithoutClientCert characterizes the invariant the

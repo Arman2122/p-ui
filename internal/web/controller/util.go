@@ -9,9 +9,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/entity"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/entity"
+	"github.com/Arman2122/p-ui/internal/web/service"
 
 	"github.com/gin-gonic/gin"
 )

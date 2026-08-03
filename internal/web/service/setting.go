@@ -18,16 +18,16 @@ import (
 	"github.com/xlzd/gotp"
 	"gorm.io/gorm"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/database"
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
-	"github.com/Arman2122/p-ui/v3/internal/util/netproxy"
-	"github.com/Arman2122/p-ui/v3/internal/util/random"
-	"github.com/Arman2122/p-ui/v3/internal/util/reflect_util"
-	"github.com/Arman2122/p-ui/v3/internal/web/entity"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/database"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/netproxy"
+	"github.com/Arman2122/p-ui/internal/util/random"
+	"github.com/Arman2122/p-ui/internal/util/reflect_util"
+	"github.com/Arman2122/p-ui/internal/web/entity"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 //go:embed config.json

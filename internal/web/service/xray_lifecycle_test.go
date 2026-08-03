@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 func TestXrayLifecycleSnapshotDoesNotOverwriteNewerResult(t *testing.T) {

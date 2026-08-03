@@ -8,8 +8,8 @@ import (
 	"github.com/goccy/go-json"
 	yaml "github.com/goccy/go-yaml"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	wgutil "github.com/Arman2122/p-ui/v3/internal/util/wireguard"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
 type SubClashService struct {

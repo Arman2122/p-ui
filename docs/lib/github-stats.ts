@@ -14,7 +14,7 @@ export interface GitHubStats {
 const FALLBACK: GitHubStats = {
   stars: 0,
   forks: 0,
-  latestVersion: 'v3.x',
+  latestVersion: 'v1.x',
 };
 
 const API_BASE = `https://api.github.com/repos/${productRepo.user}/${productRepo.repo}`;

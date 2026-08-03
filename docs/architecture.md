@@ -3,7 +3,7 @@
 > Navigation map for contributors and AI coding agents (referenced from `CLAUDE.md`).
 > Goal: jump to the right file in one hop instead of grepping the whole tree.
 > Tracks the `main` branch — paths reflect the latest changes, so verify against the live
-> tree rather than a pinned release (Go module `github.com/Arman2122/p-ui/v3`).
+> tree rather than a pinned release (Go module `github.com/Arman2122/p-ui`).
 >
 > **How to use this file:** read "Mental model" + "Request lifecycle" first, then
 > use the **Symptom → File index** to locate work. Respect the **Layering rules**
@@ -561,7 +561,7 @@ root → `go build ./...` / `go run main.go`.
 
 ## 10. Gotchas & conventions
 
-- **Module path is `.../v3`.** Internal imports use `github.com/Arman2122/p-ui/v3/internal/...`.
+- **Module path is `.../v3`.** Internal imports use `github.com/Arman2122/p-ui/internal/...`.
 - **PostgreSQL only.** `PUI_DB_DSN` is required and the panel fails fast at startup without
   it — there is no file-backed fallback. Raw SQL is PostgreSQL syntax; shared fragments live
   in `database/dialect.go`. DB-backed tests skip unless `PUI_DB_DSN` names a reachable server.

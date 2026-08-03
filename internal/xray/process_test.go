@@ -12,7 +12,7 @@ import (
 
 	"github.com/op/go-logging"
 
-	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/internal/logger"
 )
 
 func TestWriteFileAtomicModeAndRenameFailure(t *testing.T) {

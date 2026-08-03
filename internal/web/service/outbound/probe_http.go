@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // HTTP-mode probing works by spinning up ONE temporary xray instance per

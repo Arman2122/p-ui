@@ -6,14 +6,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/crypto"
-	"github.com/Arman2122/p-ui/v3/internal/web/entity"
-	"github.com/Arman2122/p-ui/v3/internal/web/middleware"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/email"
-	"github.com/Arman2122/p-ui/v3/internal/web/service/panel"
-	"github.com/Arman2122/p-ui/v3/internal/web/session"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/web/entity"
+	"github.com/Arman2122/p-ui/internal/web/middleware"
+	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service/email"
+	"github.com/Arman2122/p-ui/internal/web/service/panel"
+	"github.com/Arman2122/p-ui/internal/web/session"
 
 	"github.com/gin-gonic/gin"
 )

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
 type Msg struct {

@@ -24,7 +24,7 @@
 #
 # Usage: bash deploy/test/smoke-noninteractive.sh [version]
 #   With no argument install.sh resolves releases/latest. Pass an explicit tag
-#   (e.g. v3.4.2) to verify that exact release — the tag-triggered CI run does
+#   (e.g. v1.0.0) to verify that exact release — the tag-triggered CI run does
 #   this so it cannot silently validate the previous release
 #   (upstream MHSanaei/3x-ui#5756).
 set -euo pipefail

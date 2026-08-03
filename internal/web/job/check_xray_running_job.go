@@ -3,9 +3,9 @@
 package job
 
 import (
-	"github.com/Arman2122/p-ui/v3/internal/eventbus"
-	"github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/eventbus"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // EventBus is set from web layer to publish events.

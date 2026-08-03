@@ -5,10 +5,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
-	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
-	"github.com/Arman2122/p-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/internal/database/model"
+	puilogger "github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
+	"github.com/Arman2122/p-ui/internal/xray"
 
 	"github.com/op/go-logging"
 )

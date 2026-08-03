@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 func TestBuildMessageIsRFC5322(t *testing.T) {

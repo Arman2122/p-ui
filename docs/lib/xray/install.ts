@@ -1,7 +1,7 @@
 // Pure builders for the p-ui install command. No React/DOM.
 
 export interface InstallOptions {
-  /** A release tag like `v3.4.1`, or empty/`latest` for the latest release. */
+  /** A release tag like `v1.0.0`, or empty/`latest` for the latest release. */
   version: string;
   /** Install with zero prompts (PUI_NONINTERACTIVE=1). */
   unattended: boolean;
@@ -23,7 +23,7 @@ function isLatest(version: string): boolean {
 /**
  * The one-line script install command. The install script on `main` reads the
  * version as its first argument: empty = latest stable release, a tag like
- * `v3.4.0` = that release, and `dev-latest` = the rolling per-commit dev build.
+ * `v1.0.0` = that release, and `dev-latest` = the rolling per-commit dev build.
  */
 export function buildScriptCommand(options: InstallOptions): string {
   if (isLatest(options.version)) {

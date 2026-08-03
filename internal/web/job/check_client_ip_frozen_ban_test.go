@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/internal/database"
 )
 
 func banLineCount(t *testing.T, email string) int {

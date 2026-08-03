@@ -8,7 +8,7 @@ import (
 
 	"github.com/goccy/go-json"
 
-	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
 func TestApplyRemarkToLinkRewritesFragment(t *testing.T) {
