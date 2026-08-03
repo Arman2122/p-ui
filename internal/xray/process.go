@@ -562,9 +562,7 @@ func (p *process) Start() (err error) {
 // writeFileAtomic writes data to path via a same-directory temp file that is
 // permissioned, synced, and renamed into place, so a crash can never leave a
 // partial config; the config holds credentials, hence the 0600 perm. After the
-// rename the parent directory is fsynced to persist the directory entry. That
-// final step is skipped on Windows, where directory fsync is unsupported and
-// os.Rename already uses replace-existing semantics.
+// rename the parent directory is fsynced to persist the directory entry.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".config-*.tmp")
@@ -592,9 +590,6 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 	}
 	if err = renameFile(tmpPath, path); err != nil {
 		return err
-	}
-	if runtime.GOOS == "windows" {
-		return nil
 	}
 	dirHandle, err := os.Open(dir)
 	if err != nil {
@@ -624,8 +619,6 @@ func (p *process) startCommand(cmd *exec.Cmd) error {
 		return err
 	}
 
-	attachChildLifetime(cmd)
-
 	go p.waitForCommand(cmd, done)
 	return nil
 }
@@ -642,15 +635,6 @@ func (p *process) waitForCommand(cmd *exec.Cmd, done chan struct{}) {
 	err := cmd.Wait()
 	if err == nil || p.intentionalStop.Load() {
 		return
-	}
-
-	// On Windows, killing the process results in "exit status 1" which isn't an error for us.
-	if runtime.GOOS == "windows" {
-		errStr := strings.ToLower(err.Error())
-		if strings.Contains(errStr, "exit status 1") {
-			p.setExitErr(err)
-			return
-		}
 	}
 
 	logger.Error("Failure in running xray-core:", err)
@@ -684,13 +668,6 @@ func (p *process) Stop() error {
 				_ = os.Remove(p.configPath)
 			}
 		}
-	}
-
-	if runtime.GOOS == "windows" {
-		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return err
-		}
-		return p.waitForExit(xrayForceStopTimeout)
 	}
 
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {

@@ -43,7 +43,7 @@ func (t *Tgbot) SendReport() {
 	}
 }
 
-// SendBackupToAdmins sends a database backup to admin chats.
+// SendBackupToAdmins sends a PostgreSQL dump of the database to admin chats.
 func (t *Tgbot) SendBackupToAdmins() {
 	if !t.IsRunning() {
 		return
@@ -407,7 +407,7 @@ func (t *Tgbot) onlineClients(chatId int64, messageID ...int) {
 	}
 }
 
-// sendBackup sends a backup of the database and configuration files.
+// sendBackup sends a PostgreSQL dump of the database plus the Xray config file.
 func (t *Tgbot) sendBackup(chatId int64) {
 	dbData, err := t.serverService.GetDb()
 	if err != nil {
@@ -421,7 +421,7 @@ func (t *Tgbot) sendBackupData(chatId int64, dbData []byte, dbFilename string) {
 	output += t.I18nBot("tgbot.messages.backupTime", "Time=="+time.Now().Format("2006-01-02 15:04:05"))
 	t.SendMsgToTgbot(chatId, output)
 
-	// Send database backup (SQLite file, or a pg_dump archive on PostgreSQL)
+	// Send the database backup (a pg_dump custom-format archive)
 	if dbData != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		document := tu.Document(

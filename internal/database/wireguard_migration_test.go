@@ -2,21 +2,10 @@ package database
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
-
-func initWGMigrationDB(t *testing.T) {
-	t.Helper()
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
-}
 
 func createWGInbound(t *testing.T, remark string, port int, peers []any) *model.Inbound {
 	t.Helper()
@@ -76,7 +65,7 @@ func wgPeer(comment, priv, pub, ip string, keepAlive int) any {
 }
 
 func TestSeedWireguardPeersToClientsCreatesClients(t *testing.T) {
-	initWGMigrationDB(t)
+	initTestDB(t)
 	in := createWGInbound(t, "wg-server", 51820, []any{
 		wgPeer("laptop", "priv-1", "pub-1", "10.0.0.2/32", 25),
 	})
@@ -114,7 +103,7 @@ func TestSeedWireguardPeersToClientsCreatesClients(t *testing.T) {
 }
 
 func TestSeedWireguardPeersToClientsIdempotent(t *testing.T) {
-	initWGMigrationDB(t)
+	initTestDB(t)
 	in := createWGInbound(t, "wg-idem", 51823, []any{
 		wgPeer("", "priv-a", "pub-a", "10.0.0.2/32", 0),
 	})
@@ -139,7 +128,7 @@ func TestSeedWireguardPeersToClientsIdempotent(t *testing.T) {
 }
 
 func TestSeedWireguardPeersToClientsSkipsNonWireguard(t *testing.T) {
-	initWGMigrationDB(t)
+	initTestDB(t)
 	vless := &model.Inbound{UserId: 1, Port: 41001, Protocol: model.VLESS, Tag: "vless-x", Settings: `{"clients":[]}`}
 	if err := db.Create(vless).Error; err != nil {
 		t.Fatalf("create vless: %v", err)
@@ -156,7 +145,7 @@ func TestSeedWireguardPeersToClientsSkipsNonWireguard(t *testing.T) {
 }
 
 func TestSeedWireguardPeersToClientsMultiplePeers(t *testing.T) {
-	initWGMigrationDB(t)
+	initTestDB(t)
 	in := createWGInbound(t, "wg-multi", 51824, []any{
 		wgPeer("alpha", "p1", "pub1", "10.0.0.2/32", 0),
 		wgPeer("beta", "p2", "pub2", "10.0.0.3/32", 0),

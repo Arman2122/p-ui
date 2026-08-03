@@ -1,9 +1,10 @@
 package panel
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"runtime"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -126,6 +127,63 @@ func resetUpdateSlot(t *testing.T) {
 	})
 }
 
+// isolateUpdateStatusFile prepares the panel self-update status file for one
+// test and reports whether this process can actually write it.
+//
+// config.GetUpdateStatusFilePath() is a fixed absolute path under the panel's
+// persistent state folder (/etc/p-ui) with no test override, so these tests can
+// only exercise the real location. This helper makes that safe and
+// deterministic:
+//   - any pre-existing file is cleared and restored on cleanup, so a run on a
+//     host that really has the panel installed neither reads nor leaves behind
+//     production state;
+//   - the file always starts out absent and never survives the test, so neither
+//     the "missing status file" case nor acquireUpdateSlot's terminal-status
+//     check can be decided by what a sibling test left behind -- the order
+//     those run in is randomized by `go test -shuffle=on` in CI;
+//   - a missing or read-only state folder is reported rather than fatal. That is
+//     the normal case on a CI runner (no /etc/p-ui, and the test process is not
+//     root); callers that must write the file skip through
+//     requireWritableUpdateStatusFile instead of failing on ENOENT/EACCES.
+func isolateUpdateStatusFile(t *testing.T) (string, bool) {
+	t.Helper()
+
+	path := config.GetUpdateStatusFilePath()
+	saved, readErr := os.ReadFile(path)
+	switch {
+	case readErr == nil:
+		if err := os.Remove(path); err != nil {
+			t.Skipf("cannot clear the pre-existing %s: %v", path, err)
+		}
+		t.Cleanup(func() { _ = os.WriteFile(path, saved, 0o644) })
+	case errors.Is(readErr, os.ErrNotExist):
+		t.Cleanup(func() { _ = os.Remove(path) })
+	default:
+		t.Skipf("cannot inspect %s: %v", path, readErr)
+	}
+
+	writable := false
+	if probe, err := os.CreateTemp(filepath.Dir(path), ".update-status-probe-*"); err == nil {
+		name := probe.Name()
+		_ = probe.Close()
+		_ = os.Remove(name)
+		writable = true
+	}
+	return path, writable
+}
+
+// requireWritableUpdateStatusFile is isolateUpdateStatusFile for the tests that
+// have to write the status file themselves, skipping when the state folder
+// cannot be written.
+func requireWritableUpdateStatusFile(t *testing.T) string {
+	t.Helper()
+	path, writable := isolateUpdateStatusFile(t)
+	if !writable {
+		t.Skipf("cannot write %s: the panel state folder is missing or read-only for this process, and the path has no test override", path)
+	}
+	return path
+}
+
 // writeStatusFile hand-writes the status file in the exact wire format
 // update.sh itself produces (a bare printf, not Go's json.Marshal), since
 // that's the real cross-language contract this package reads in production.
@@ -177,9 +235,6 @@ func TestAcquireUpdateSlotExpiresAfterStaleWindow(t *testing.T) {
 // run long on a slow host with nothing actually wrong. Now a confirmed-alive
 // PID keeps the slot held past the stale window.
 func TestAcquireUpdateSlotWaitsForAliveProcessPastStaleWindow(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("processAlive is a no-op stub on non-Linux; this test only exercises real liveness checking on Linux")
-	}
 	resetUpdateSlot(t)
 
 	if !acquireUpdateSlot(1) {
@@ -200,9 +255,6 @@ func TestAcquireUpdateSlotWaitsForAliveProcessPastStaleWindow(t *testing.T) {
 // backstop: even a confirmed-alive process can't hold the slot forever, so a
 // genuinely wedged run can't lock out retries permanently.
 func TestAcquireUpdateSlotHardCeilingOverridesLiveness(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("processAlive is a no-op stub on non-Linux; this test only exercises real liveness checking on Linux")
-	}
 	resetUpdateSlot(t)
 
 	if !acquireUpdateSlot(1) {
@@ -225,9 +277,8 @@ func TestAcquireUpdateSlotHardCeilingOverridesLiveness(t *testing.T) {
 // at the in-memory started-at timestamp, never at the status file's own
 // terminal state.
 func TestAcquireUpdateSlotReleasesOnTerminalStatus(t *testing.T) {
-	t.Setenv("PUI_DB_FOLDER", t.TempDir())
 	resetUpdateSlot(t)
-	path := config.GetUpdateStatusFilePath()
+	path := requireWritableUpdateStatusFile(t)
 
 	if !acquireUpdateSlot(111) {
 		t.Fatal("first acquire: got false, want true")
@@ -245,9 +296,8 @@ func TestAcquireUpdateSlotReleasesOnTerminalStatus(t *testing.T) {
 // by some earlier, unrelated run (different runID) must not be mistaken for
 // this run finishing.
 func TestAcquireUpdateSlotIgnoresStaleUnrelatedStatus(t *testing.T) {
-	t.Setenv("PUI_DB_FOLDER", t.TempDir())
 	resetUpdateSlot(t)
-	path := config.GetUpdateStatusFilePath()
+	path := requireWritableUpdateStatusFile(t)
 
 	writeStatusFile(t, path, 999, updateStateSuccess)
 	if !acquireUpdateSlot(111) {
@@ -289,12 +339,15 @@ func TestAcquireUpdateSlotConcurrency(t *testing.T) {
 }
 
 func TestGetUpdateStatus(t *testing.T) {
-	t.Setenv("PUI_DB_FOLDER", t.TempDir())
-	path := config.GetUpdateStatusFilePath()
+	path, writable := isolateUpdateStatusFile(t)
 	svc := &PanelService{}
 
 	if got := svc.GetUpdateStatus(); got.State != updateStatePending {
 		t.Fatalf("missing status file: State = %q, want %q", got.State, updateStatePending)
+	}
+
+	if !writable {
+		t.Skipf("the remaining cases have to write %s, and the panel state folder is missing or read-only for this process", path)
 	}
 
 	writeStatusFile(t, path, 1735689600123456789, updateStateSuccess)

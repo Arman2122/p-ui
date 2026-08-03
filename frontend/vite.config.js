@@ -2,53 +2,27 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 const outDir = path.resolve(__dirname, '../internal/web/dist');
 const BACKEND_TARGET = 'http://localhost:2053';
-
-function resolveDBPath() {
-  const envFolder = process.env.PUI_DB_FOLDER;
-  if (envFolder) {
-    const abs = path.isAbsolute(envFolder)
-      ? envFolder
-      : path.resolve(__dirname, '..', envFolder);
-    return path.join(abs, 'p-ui.db');
-  }
-  const repoSubDB = path.resolve(__dirname, '..', 'p-ui', 'p-ui.db');
-  if (fs.existsSync(repoSubDB)) return repoSubDB;
-  const repoDB = path.resolve(__dirname, '..', 'p-ui.db');
-  if (fs.existsSync(repoDB)) return repoDB;
-  return '/etc/p-ui/p-ui.db';
-}
 
 const PANEL_API_PREFIXES = ['panel/api/', 'panel/csrf-token'];
 
 let cachedBasePath = '/';
 
-function readBasePathFromDB() {
-  const dbPath = resolveDBPath();
-  let db;
-  try {
-    db = new DatabaseSync(dbPath, { readOnly: true });
-  } catch (_e) {
-    return '/';
-  }
-  try {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('webBasePath');
-    let value = row && typeof row.value === 'string' ? row.value : '/';
-    if (!value.startsWith('/')) value = '/' + value;
-    if (!value.endsWith('/')) value += '/';
-    return value;
-  } catch (_e) {
-    return '/';
-  } finally {
-    db.close();
-  }
+// The Go panel seeds its `webBasePath` setting from PUI_INIT_WEB_BASE_PATH
+// (default "/"), so the dev server reads the same variable instead of talking
+// to the database. Point it at the panel's base path when it is not "/".
+function readBasePathFromEnv() {
+  let value = (process.env.PUI_INIT_WEB_BASE_PATH || '/').trim();
+  if (!value) return '/';
+  if (!value.startsWith('/')) value = '/' + value;
+  if (!value.endsWith('/')) value += '/';
+  return value;
 }
 
 function refreshBasePath() {
-  cachedBasePath = readBasePathFromDB();
+  cachedBasePath = readBasePathFromEnv();
   return cachedBasePath;
 }
 

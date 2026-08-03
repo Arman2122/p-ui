@@ -3,13 +3,11 @@ package service
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/config"
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
@@ -19,36 +17,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupScaleDB initializes the DB for a scale benchmark on either Postgres
-// (PUI_DB_TYPE=postgres + PUI_DB_DSN) or SQLite (PUI_SCALE_TEST=1, temp file;
-// PUI_SCALE_DB_PATH persists the DB for manual smoke runs), and registers
-// cleanup. Skips the test when neither backend is configured.
+// setupScaleDB initializes the PostgreSQL database for a scale benchmark and
+// registers cleanup. Skips the test when PUI_DB_DSN is not configured.
 func setupScaleDB(t *testing.T) {
 	t.Helper()
 	puilogger.InitLogger(logging.ERROR)
 
-	if os.Getenv("PUI_DB_TYPE") == "postgres" && strings.TrimSpace(os.Getenv("PUI_DB_DSN")) != "" {
-		if err := database.InitDB(""); err != nil {
-			t.Fatalf("InitDB(postgres): %v", err)
-		}
-		t.Cleanup(func() { _ = database.CloseDB() })
-		return
+	if strings.TrimSpace(os.Getenv("PUI_DB_DSN")) == "" {
+		t.Skip("set PUI_DB_DSN to run the scale benchmark")
 	}
-
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("PUI_SCALE_TEST"))) {
-	case "1", "true", "yes":
-		dbPath := strings.TrimSpace(os.Getenv("PUI_SCALE_DB_PATH"))
-		if dbPath == "" {
-			dbPath = filepath.Join(t.TempDir(), "scale.db")
-		}
-		if err := database.InitDB(dbPath); err != nil {
-			t.Fatalf("InitDB(sqlite): %v", err)
-		}
-		t.Cleanup(func() { _ = database.CloseDB() })
-		return
+	if err := database.InitDB(); err != nil {
+		t.Fatalf("InitDB: %v", err)
 	}
-
-	t.Skip("set PUI_SCALE_TEST=1 (sqlite) or PUI_DB_TYPE=postgres + PUI_DB_DSN (postgres) to run the scale benchmark")
+	t.Cleanup(func() { _ = database.CloseDB() })
 }
 
 // scaleSizes returns the default size ladder unless PUI_SCALE_SIZES overrides
@@ -189,23 +170,12 @@ func sampleEmails(emails []string, k int) []string {
 	return out
 }
 
-// resetScaleTables empties the given tables between sub-sizes. Postgres uses a
-// single TRUNCATE ... CASCADE; SQLite deletes per table and clears the
-// autoincrement counters so ids restart like RESTART IDENTITY.
+// resetScaleTables empties the given tables between sub-sizes with a single
+// TRUNCATE ... CASCADE so ids restart from 1.
 func resetScaleTables(t *testing.T, db *gorm.DB, tables ...string) {
 	t.Helper()
-	if config.GetDBKind() == "postgres" {
-		stmt := "TRUNCATE TABLE " + strings.Join(tables, ", ") + " RESTART IDENTITY CASCADE"
-		if err := db.Exec(stmt).Error; err != nil {
-			t.Fatalf("truncate: %v", err)
-		}
-		return
+	stmt := "TRUNCATE TABLE " + strings.Join(tables, ", ") + " RESTART IDENTITY CASCADE"
+	if err := db.Exec(stmt).Error; err != nil {
+		t.Fatalf("truncate: %v", err)
 	}
-	for _, tbl := range tables {
-		if err := db.Exec("DELETE FROM " + tbl).Error; err != nil {
-			t.Fatalf("delete %s: %v", tbl, err)
-		}
-	}
-	// Best-effort id reset; sqlite_sequence is absent until the first insert.
-	db.Exec("DELETE FROM sqlite_sequence")
 }

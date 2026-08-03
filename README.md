@@ -62,7 +62,8 @@ Work is ongoing and the roadmap will move. Issues and pull requests are welcome.
   [custom page templates](docs/custom-subscription-templates.md).
 - **Telegram bot** for remote monitoring and management.
 - **RESTful API** with in-panel Swagger documentation.
-- **Flexible storage** — SQLite (default) or PostgreSQL.
+- **PostgreSQL storage** — a single, well-understood backend with `pg_dump` /
+  `pg_restore` backups.
 - **Fail2ban integration** for enforcing per-client IP limits.
 - **English and Persian UI** with dark and light themes.
 
@@ -78,9 +79,10 @@ Install a specific version by appending its tag:
 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v3.4.0
 ```
 
-The installer generates a random username, password and access path. Afterwards run `p-ui`
-to open the management menu, where you can start and stop the service, view or reset your
-credentials, manage SSL certificates and more.
+The installer sets up PostgreSQL (or asks for the DSN of an existing server) and generates
+a random username, password and access path. Afterwards run `p-ui` to open the management
+menu, where you can start and stop the service, view or reset your credentials, manage SSL
+certificates and more.
 
 ### Unattended install
 
@@ -93,68 +95,39 @@ See [`deploy/`](deploy/) for [cloud-init user-data](deploy/cloud-init/) and
 
 ## Supported Platforms
 
-**Operating systems:** Ubuntu, Debian, Armbian, Fedora, CentOS, RHEL, AlmaLinux,
-Rocky Linux, Oracle Linux, Amazon Linux, Virtuozzo, Arch, Manjaro, Parch,
-openSUSE (Tumbleweed / Leap), Alpine and Windows.
+**Operating systems:** Ubuntu 22.04, 24.04 and 26.04, and Debian 12 or newer. Penhoon UI
+is Linux-only and expects systemd, `apt` and `iptables`; there is no Windows, Docker or
+other-distro support.
 
-**Architectures:** `amd64` · `386` · `arm64` (aarch64) · `armv7` · `armv6` · `armv5` · `s390x`.
+**Architectures:** `amd64` · `arm64` (aarch64) · `armv7` · `s390x` — see the
+[releases page](https://github.com/Arman2122/p-ui/releases) for the published assets.
 
 ## Database
 
-Penhoon UI supports two backends, chosen during install:
+Penhoon UI stores everything in **PostgreSQL**. It is the only supported backend.
 
-- **SQLite** (default) — a single file at `/etc/p-ui/p-ui.db`. Zero setup, good for small
-  and medium deployments.
-- **PostgreSQL** — recommended for high client counts or multi-node setups. The installer
-  can install PostgreSQL locally, or accept a DSN for an existing server.
-
-The backend is selected at runtime through environment variables, which the installer
-writes to the service environment file — `/etc/default/p-ui` on Ubuntu, Debian and
-Armbian, `/etc/conf.d/p-ui` on Arch, Manjaro, Parch and Alpine, and `/etc/sysconfig/p-ui`
-on everything else (the RHEL family):
+The installer can install PostgreSQL from your distribution's packages and create a
+dedicated role and database, or take a DSN for a server you already run. Either way it
+writes the connection string to the service environment file, `/etc/default/p-ui`:
 
 ```
-PUI_DB_TYPE=postgres
 PUI_DB_DSN=postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable
 ```
 
-To migrate an existing SQLite install, run `p-ui` and choose **25. PostgreSQL Management**,
-then option **2**. It stops the panel, copies the data across, writes the environment file
-and restarts on PostgreSQL. To do the same by hand, call the panel binary directly:
+`PUI_DB_DSN` is **required**. If it is missing or unparseable the panel stops at startup
+with an error naming the variable and showing an example DSN — it never falls back to
+another store.
 
-```bash
-/usr/local/p-ui/p-ui migrate-db --dsn "postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable"
-# then set PUI_DB_TYPE and PUI_DB_DSN in the service environment file and restart:
-systemctl restart p-ui
-```
-
-The source SQLite file is left untouched; remove it once you have verified the new backend.
-
-## Docker
-
-`docker compose up -d` uses SQLite by default. To use the bundled PostgreSQL service,
-uncomment the `PUI_DB_*` lines in `docker-compose.yml` and start with the profile:
-
-```bash
-docker compose --profile postgres up -d
-```
-
-The image bundles Fail2ban to enforce per-client **IP limits**. Fail2ban bans offenders
-with `iptables`, which needs the `NET_ADMIN` capability. `docker-compose.yml` grants it via
-`cap_add`; if you use `docker run` instead, add the capabilities yourself or bans are
-logged but never applied:
-
-```bash
-docker run -d --cap-add=NET_ADMIN --cap-add=NET_RAW ... ghcr.io/arman2122/p-ui
-```
+Backup and restore go through `pg_dump` / `pg_restore` from the `postgresql-client`
+package: download a `.dump` from the panel's overview page (or let the Telegram bot send
+one), and upload it back to restore. If a dump was produced by a newer PostgreSQL than the
+server's client tools can read, `p-ui pgclient <major>` installs a matching client.
 
 ## Environment Variables
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `PUI_DB_TYPE` | Database backend: `sqlite` or `postgres` | `sqlite` |
-| `PUI_DB_DSN` | PostgreSQL connection string (when `PUI_DB_TYPE=postgres`) | — |
-| `PUI_DB_FOLDER` | Directory for the SQLite database file | `/etc/p-ui` |
+| `PUI_DB_DSN` | PostgreSQL connection string — **required**, the panel will not start without it | — |
 | `PUI_DB_MAX_OPEN_CONNS` | Maximum open connections (PostgreSQL pool) | — |
 | `PUI_DB_MAX_IDLE_CONNS` | Maximum idle connections (PostgreSQL pool) | — |
 | `PUI_INIT_WEB_BASE_PATH` | Initial URI path for the web panel | `/` |

@@ -27,7 +27,6 @@ interface SubPageData {
 interface Window {
   PUI_BASE_PATH?: string;
   PUI_CUR_VER?: string;
-  PUI_DB_TYPE?: string;
   __SUB_PAGE_DATA__?: SubPageData;
 }
 

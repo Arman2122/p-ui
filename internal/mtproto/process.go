@@ -24,15 +24,10 @@ import (
 	"github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
-// GetBinaryName returns the mtg binary filename for the current OS and arch,
-// matching the naming scheme used for the Xray binary. On Windows the ".exe"
-// extension is appended so a natural "mtg-windows-amd64.exe" is found.
+// GetBinaryName returns the mtg binary filename for the current arch, matching
+// the naming scheme used for the Xray binary (e.g. "mtg-linux-amd64").
 func GetBinaryName() string {
-	name := fmt.Sprintf("mtg-%s-%s", runtime.GOOS, runtime.GOARCH)
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	return name
+	return fmt.Sprintf("mtg-%s-%s", runtime.GOOS, runtime.GOARCH)
 }
 
 // GetBinaryPath returns the full path to the mtg binary, alongside the Xray binary.
@@ -179,7 +174,6 @@ func (p *Process) Start() error {
 		p.mu.Unlock()
 		return err
 	}
-	attachChildLifetime(cmd)
 	go p.wait(cmd, done)
 	return nil
 }
@@ -190,12 +184,6 @@ func (p *Process) wait(cmd *exec.Cmd, done chan struct{}) {
 	p.logWriter.Flush()
 	if err == nil || p.intentionalStop.Load() {
 		return
-	}
-	if runtime.GOOS == "windows" {
-		if strings.Contains(strings.ToLower(err.Error()), "exit status 1") {
-			p.setExitErr(err)
-			return
-		}
 	}
 	logger.Errorf("mtproto: mtg process exited: %v", err)
 	p.setExitErr(err)
@@ -218,13 +206,6 @@ func (p *Process) Stop() error {
 	p.mu.RUnlock()
 	if cmd == nil || cmd.Process == nil {
 		return errors.New("mtg is not running")
-	}
-
-	if runtime.GOOS == "windows" {
-		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return err
-		}
-		return waitForExit(done, forceStopTimeout)
 	}
 
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {

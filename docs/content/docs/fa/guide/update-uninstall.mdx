@@ -38,7 +38,7 @@ p-ui
 | 22    | IP Limit Management                    | محدودیت IP به‌ازای هر کلاینت مبتنی بر Fail2ban             |
 | 23    | Firewall Management                    | نصب `ufw` و قواعد پورت                                     |
 | 24    | SSH Port Forwarding Management         | اتصال پنل به localhost و تونل‌زدن روی SSH                  |
-| 25    | PostgreSQL Management                  | نصب/مهاجرت/مدیریت PostgreSQL                               |
+| 25    | PostgreSQL Management                  | نصب، بررسی وضعیت و کنترل سرور PostgreSQL                   |
 | 26    | Enable BBR                             | فعال/غیرفعال‌کردن sysctl کنترل ازدحام BBR                  |
 | 27    | Update Geo Files                       | به‌روزرسانی دادهٔ geoip/geosite (Loyalsoldier، IR، RU)     |
 | 28    | Speedtest by Ookla                     | اجرای تست سرعت Ookla                                       |
@@ -66,15 +66,8 @@ p-ui
 | `p-ui update-dev`          | به‌روزرسانی به بیلد غلتان `dev-latest`               |
 | `p-ui legacy`              | نصب یک نسخهٔ قدیمی مشخص (می‌پرسد)                     |
 | `p-ui update-all-geofiles` | به‌روزرسانی همهٔ فایل‌های geo و راه‌اندازی مجدد در صورت تغییر |
-| `p-ui migrateDB [ورودی] [خروجی]` | تبدیل پایگاه‌دادهٔ SQLite بین `.db` و `.dump` (جهت به‌صورت خودکار تشخیص داده می‌شود؛ پیش‌فرض ورودی `/etc/p-ui/p-ui.db` است) |
 | `p-ui pgclient [نسخه]`     | نصب/ارتقای ابزارهای کلاینت PostgreSQL (`pg_dump`/`pg_restore`) به نسخهٔ اصلی خواسته‌شده |
 | `p-ui install` / `uninstall` | نصب / حذف                                          |
-
-<Callout type="info">
-  مهاجرت SQLite ← PostgreSQL زیردستور مستقیمی در `p-ui` ندارد؛ آن را از گزینهٔ منوی
-  **۲۵** (PostgreSQL Management) اجرا کنید — نگاه کنید به
-  [پایگاه‌داده](/docs/reference/database).
-</Callout>
 
 ## به‌روزرسانی
 
@@ -87,12 +80,6 @@ p-ui
 به‌روزرسانی، پایگاه‌داده و تنظیمات شما را حفظ می‌کند. پیش از یک جهش نسخهٔ اصلی، یک
 [پشتیبان](/docs/operations/backup-restore) بگیرید.
 
-<Callout type="info">
-  کاربران Docker به شیوهٔ دیگری به‌روزرسانی می‌کنند — به‌جای استفاده از دستورهای
-  به‌روزرسانی `p-ui`، ایمیج جدید را pull کرده و کانتینر را از نو بسازید
-  (`docker compose pull && docker compose up -d`).
-</Callout>
-
 ## حذف
 
 گزینهٔ منوی **۶** یا `p-ui uninstall`. سرویس را متوقف و غیرفعال می‌کند، یونیت سرویس
@@ -101,6 +88,7 @@ p-ui
 جداگانه و برگشت‌ناپذیر).
 
 <Callout type="warn">
-  حذف، پایگاه‌داده (`/etc/p-ui/p-ui.db`) و پیکربندی شما را پاک می‌کند. اگر ممکن است
-  بعداً به آن نیاز داشته باشید، ابتدا [پشتیبان بگیرید](/docs/operations/backup-restore).
+  پاک‌سازی PostgreSQL محلی، پایگاه‌داده‌ی پنل و تمام پیکربندی شما را از بین می‌برد. اگر
+  ممکن است بعداً به آن نیاز داشته باشید، ابتدا
+  [پشتیبان بگیرید](/docs/operations/backup-restore).
 </Callout>

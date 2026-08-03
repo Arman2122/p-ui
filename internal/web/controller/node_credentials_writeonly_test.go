@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,12 +19,7 @@ import (
 func newNodeCredentialTestEngine(t *testing.T) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {

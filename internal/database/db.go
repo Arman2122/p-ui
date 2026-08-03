@@ -1,20 +1,14 @@
 package database
 
 import (
-	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"os"
 	"os/exec"
-	"path"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,40 +20,16 @@ import (
 	"github.com/Arman2122/p-ui/v3/internal/util/random"
 	"github.com/Arman2122/p-ui/v3/internal/xray"
 
-	"github.com/mattn/go-sqlite3"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
 var db *gorm.DB
 
-var backupSQLiteTimeout = 2 * time.Minute
-
 const (
-	DialectSQLite   = "sqlite"
-	DialectPostgres = "postgres"
-)
-
-func IsPostgres() bool {
-	if db == nil {
-		return config.GetDBKind() == "postgres"
-	}
-	return db.Name() == "postgres"
-}
-
-func Dialect() string {
-	if db == nil {
-		return ""
-	}
-	return db.Name()
-}
-
-const (
-	defaultUsername       = "admin"
-	defaultPassword       = "admin"
-	sqliteBackupDirPrefix = ".p-ui-backup-"
+	defaultUsername = "admin"
+	defaultPassword = "admin"
 )
 
 func allModels() []any {
@@ -89,7 +59,7 @@ func allModels() []any {
 func initModels() error {
 	models := allModels()
 	for _, mdl := range models {
-		if IsPostgres() && postgresModelSettled(mdl) {
+		if postgresModelSettled(mdl) {
 			continue
 		}
 		if err := db.AutoMigrate(mdl); err != nil {
@@ -100,9 +70,6 @@ func initModels() error {
 			log.Printf("Error auto migrating model: %v", err)
 			return err
 		}
-	}
-	if err := dropLegacyInboundPortUnique(); err != nil {
-		return err
 	}
 	if err := migrateHostVerifyPeerCertByNameColumn(); err != nil {
 		return err
@@ -143,13 +110,43 @@ func initModels() error {
 	if err := migrateSyncOrphanColumns(); err != nil {
 		return err
 	}
-	if IsPostgres() {
-		if err := resyncPostgresSequences(db, models); err != nil {
-			log.Printf("Error resyncing postgres sequences: %v", err)
-			return err
-		}
+	if err := resyncPostgresSequences(db, models); err != nil {
+		log.Printf("Error resyncing postgres sequences: %v", err)
+		return err
 	}
 	return nil
+}
+
+// resyncPostgresSequences sets each model's id sequence to MAX(id); idempotent. Id-less
+// composite-PK tables are skipped — Postgres rejects MAX(id) at parse time and logs it (#5665).
+func resyncPostgresSequences(gdb *gorm.DB, models []any) error {
+	for _, m := range models {
+		t, ok := tableWithIdColumn(gdb, m)
+		if !ok {
+			continue
+		}
+		// t comes from the trusted model set parsed by GORM, not user input, so
+		// interpolating it as an identifier is safe. We ignore errors per-table.
+		_ = gdb.Exec(
+			`SELECT setval(pg_get_serial_sequence(?, 'id'), COALESCE((SELECT MAX(id) FROM "`+t+`"), 1), true)
+			 WHERE pg_get_serial_sequence(?, 'id') IS NOT NULL`,
+			t, t,
+		).Error
+	}
+	return nil
+}
+
+// tableWithIdColumn resolves a model's table name and reports whether its GORM
+// schema maps an "id" database column.
+func tableWithIdColumn(gdb *gorm.DB, m any) (string, bool) {
+	stmt := &gorm.Statement{DB: gdb}
+	if err := stmt.Parse(m); err != nil {
+		return "", false
+	}
+	if stmt.Schema == nil || stmt.Schema.LookUpField("id") == nil {
+		return "", false
+	}
+	return stmt.Table, true
 }
 
 func postgresModelSettled(mdl any) bool {
@@ -175,9 +172,6 @@ func postgresModelSettled(mdl any) bool {
 }
 
 func dropLegacyForeignKeys() error {
-	if !IsPostgres() {
-		return nil
-	}
 	if err := db.Exec("ALTER TABLE client_traffics DROP CONSTRAINT IF EXISTS fk_inbounds_client_stats").Error; err != nil {
 		log.Printf("Error dropping legacy foreign key fk_inbounds_client_stats: %v", err)
 		return err
@@ -185,123 +179,9 @@ func dropLegacyForeignKeys() error {
 	return nil
 }
 
-type sqliteIndexListRow struct {
-	Name   string `gorm:"column:name"`
-	Unique int    `gorm:"column:unique"`
-	Origin string `gorm:"column:origin"`
-}
-
-func sqliteUniquePortIndexes() (autoIndexes, explicitIndexes []string, err error) {
-	var list []sqliteIndexListRow
-	if err = db.Raw(`PRAGMA index_list('inbounds')`).Scan(&list).Error; err != nil {
-		return nil, nil, err
-	}
-	for _, idx := range list {
-		if idx.Unique != 1 {
-			continue
-		}
-		var cols []struct {
-			Name string `gorm:"column:name"`
-		}
-		if err = db.Raw(`PRAGMA index_info("` + idx.Name + `")`).Scan(&cols).Error; err != nil {
-			return nil, nil, err
-		}
-		if len(cols) != 1 || cols[0].Name != "port" {
-			continue
-		}
-		if idx.Origin == "c" {
-			explicitIndexes = append(explicitIndexes, idx.Name)
-		} else {
-			autoIndexes = append(autoIndexes, idx.Name)
-		}
-	}
-	return autoIndexes, explicitIndexes, nil
-}
-
-// dropLegacyInboundPortUnique removes the pre-multi-node UNIQUE on inbounds.port,
-// which AutoMigrate never drops and which blocks cross-node port reuse on old SQLite DBs.
-func dropLegacyInboundPortUnique() error {
-	if IsPostgres() {
-		return nil
-	}
-	autoIndexes, explicitIndexes, err := sqliteUniquePortIndexes()
-	if err != nil {
-		return err
-	}
-	for _, name := range explicitIndexes {
-		if err := db.Exec(`DROP INDEX IF EXISTS "` + name + `"`).Error; err != nil {
-			return err
-		}
-	}
-	if len(autoIndexes) == 0 {
-		return nil
-	}
-	log.Printf("Rebuilding inbounds table to drop the legacy UNIQUE constraint on port")
-	return rebuildInboundsWithoutInlineUniquePort()
-}
-
-func sqliteTableColumns(tx *gorm.DB, table string) ([]string, error) {
-	var rows []struct {
-		Name string `gorm:"column:name"`
-	}
-	if err := tx.Raw(`PRAGMA table_info("` + table + `")`).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	cols := make([]string, 0, len(rows))
-	for _, r := range rows {
-		cols = append(cols, r.Name)
-	}
-	return cols, nil
-}
-
-func rebuildInboundsWithoutInlineUniquePort() error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		var list []sqliteIndexListRow
-		if err := tx.Raw(`PRAGMA index_list('inbounds')`).Scan(&list).Error; err != nil {
-			return err
-		}
-		for _, idx := range list {
-			if idx.Origin != "c" {
-				continue
-			}
-			if err := tx.Exec(`DROP INDEX IF EXISTS "` + idx.Name + `"`).Error; err != nil {
-				return err
-			}
-		}
-		if err := tx.Exec(`ALTER TABLE inbounds RENAME TO inbounds_legacy_rebuild`).Error; err != nil {
-			return err
-		}
-		if err := tx.Migrator().CreateTable(&model.Inbound{}); err != nil {
-			return err
-		}
-		newCols, err := sqliteTableColumns(tx, "inbounds")
-		if err != nil {
-			return err
-		}
-		oldCols, err := sqliteTableColumns(tx, "inbounds_legacy_rebuild")
-		if err != nil {
-			return err
-		}
-		oldSet := make(map[string]struct{}, len(oldCols))
-		for _, c := range oldCols {
-			oldSet[c] = struct{}{}
-		}
-		shared := make([]string, 0, len(newCols))
-		for _, c := range newCols {
-			if _, ok := oldSet[c]; ok {
-				shared = append(shared, `"`+c+`"`)
-			}
-		}
-		colList := strings.Join(shared, ", ")
-		if err := tx.Exec(`INSERT INTO inbounds (` + colList + `) SELECT ` + colList + ` FROM inbounds_legacy_rebuild`).Error; err != nil {
-			return err
-		}
-		return tx.Exec(`DROP TABLE inbounds_legacy_rebuild`).Error
-	})
-}
-
-// AutoMigrate adds the column; this only backfills the NULLs an older SQLite
-// ALTER TABLE leaves behind, so the reaper's predicate never compares to NULL.
+// AutoMigrate adds the column; this only backfills the NULLs the ALTER TABLE on
+// an already populated table leaves behind, so the reaper's predicate never
+// compares to NULL.
 func migrateSyncOrphanColumns() error {
 	if !db.Migrator().HasColumn(&model.ClientRecord{}, "sync_orphaned_at") {
 		return nil
@@ -313,24 +193,19 @@ func migrateHostVerifyPeerCertByNameColumn() error {
 	if !db.Migrator().HasColumn(&model.Host{}, "verify_peer_cert_by_name") {
 		return nil
 	}
-	if IsPostgres() {
-
-		var dataType string
-		if err := db.Raw(
-			`SELECT data_type FROM information_schema.columns WHERE table_name = 'hosts' AND column_name = 'verify_peer_cert_by_name'`,
-		).Scan(&dataType).Error; err != nil {
-			return err
-		}
-		if dataType != "boolean" {
-			return nil
-		}
-		if err := db.Exec(`ALTER TABLE hosts ALTER COLUMN verify_peer_cert_by_name DROP DEFAULT`).Error; err != nil {
-			return err
-		}
-		return db.Exec(`ALTER TABLE hosts ALTER COLUMN verify_peer_cert_by_name TYPE text USING ''`).Error
+	var dataType string
+	if err := db.Raw(
+		`SELECT data_type FROM information_schema.columns WHERE table_name = 'hosts' AND column_name = 'verify_peer_cert_by_name'`,
+	).Scan(&dataType).Error; err != nil {
+		return err
 	}
-
-	return db.Exec(`UPDATE hosts SET verify_peer_cert_by_name = '' WHERE verify_peer_cert_by_name IS NULL OR typeof(verify_peer_cert_by_name) <> 'text'`).Error
+	if dataType != "boolean" {
+		return nil
+	}
+	if err := db.Exec(`ALTER TABLE hosts ALTER COLUMN verify_peer_cert_by_name DROP DEFAULT`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`ALTER TABLE hosts ALTER COLUMN verify_peer_cert_by_name TYPE text USING ''`).Error
 }
 
 func seedHostsFromExternalProxy() error {
@@ -932,12 +807,8 @@ func normalizeInboundSubSortIndex() error {
 }
 
 // repairOverflowedTrafficCounters heals traffic counters that historic
-// compounding bugs pushed past int64: on SQLite an overflowing INTEGER is
-// silently promoted to REAL, after which the column no longer scans into the
-// Go int64 field and every reader of the table fails (#5762). REAL cells are
-// cast back to INTEGER (SQLite caps the cast at math.MaxInt64), then values
-// are clamped into [0, TrafficMax] on both backends so the next delta cannot
-// overflow again.
+// compounding bugs pushed out of range (#5762): every value is clamped into
+// [0, TrafficMax] so the next delta cannot overflow int64 again.
 func repairOverflowedTrafficCounters() error {
 	targets := []struct {
 		table   string
@@ -953,11 +824,6 @@ func repairOverflowedTrafficCounters() error {
 			statements := []string{
 				fmt.Sprintf("UPDATE %s SET %s = %d WHERE %s > %d", target.table, col, TrafficMax, col, TrafficMax),
 				fmt.Sprintf("UPDATE %s SET %s = 0 WHERE %s < 0", target.table, col, col),
-			}
-			if !IsPostgres() {
-				statements = append([]string{
-					fmt.Sprintf("UPDATE %s SET %s = CAST(%s AS INTEGER) WHERE typeof(%s) = 'real'", target.table, col, col, col),
-				}, statements...)
 			}
 			var repaired int64
 			for _, statement := range statements {
@@ -1041,13 +907,6 @@ func isIgnorableDuplicateColumnErr(gdb *gorm.DB, err error, mdl any) bool {
 		return false
 	}
 	errMsg := strings.ToLower(err.Error())
-
-	const sqlitePrefix = "duplicate column name:"
-	if _, after, ok := strings.Cut(errMsg, sqlitePrefix); ok {
-		col := strings.TrimSpace(after)
-		col = strings.Trim(col, "`\"[]")
-		return col != "" && gdb != nil && gdb.Migrator().HasColumn(mdl, col)
-	}
 	if strings.Contains(errMsg, "already exists") && strings.Contains(errMsg, "column ") {
 		if _, after, ok := strings.Cut(errMsg, "column \""); ok {
 			rest := after
@@ -1342,9 +1201,6 @@ func resetIpLimitsWithoutFail2ban() error {
 
 func fail2banCanEnforce() bool {
 	if v, ok := os.LookupEnv("PUI_ENABLE_FAIL2BAN"); ok && v != "true" {
-		return false
-	}
-	if runtime.GOOS == "windows" {
 		return false
 	}
 	return exec.CommandContext(context.Background(), "fail2ban-client", "-h").Run() == nil
@@ -1929,7 +1785,40 @@ func isTableEmpty(tableName string) (bool, error) {
 	return count == 0, err
 }
 
-func InitDB(dbPath string) error {
+// exampleDSN is shown verbatim in the startup errors below, so it must stay a
+// copy-pasteable PostgreSQL connection string.
+const exampleDSN = "postgres://p-ui:PASSWORD@127.0.0.1:5432/p-ui?sslmode=disable"
+
+// requireDSN resolves PUI_DB_DSN and fails fast when it is missing or is not a
+// connection string PostgreSQL could ever accept. Catching the obviously wrong
+// value here keeps a typo (or a leftover file path) from burning the whole
+// connect-retry budget before the panel reports the real problem.
+func requireDSN() (string, error) {
+	dsn := config.GetDBDSN()
+	if dsn == "" {
+		return "", fmt.Errorf(
+			"PUI_DB_DSN is not set: Penhoon UI stores all of its data in PostgreSQL and has no other backend.\n"+
+				"Set it in /etc/default/p-ui and restart p-ui, for example:\n  PUI_DB_DSN=%s",
+			exampleDSN,
+		)
+	}
+	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") && !strings.Contains(dsn, "=") {
+		return "", fmt.Errorf(
+			"PUI_DB_DSN=%q is not a PostgreSQL connection string: expected a postgres:// URL or space-separated key=value pairs, for example:\n  PUI_DB_DSN=%s",
+			dsn, exampleDSN,
+		)
+	}
+	return dsn, nil
+}
+
+// InitDB opens the PostgreSQL database named by PUI_DB_DSN, brings the schema
+// up to date and runs the seeders.
+func InitDB() error {
+	dsn, err := requireDSN()
+	if err != nil {
+		return err
+	}
+
 	var gormLogger logger.Interface
 	if config.IsDebug() {
 		gormLogger = logger.New(
@@ -1944,70 +1833,18 @@ func InitDB(dbPath string) error {
 	} else {
 		gormLogger = logger.Discard
 	}
-	c := &gorm.Config{Logger: gormLogger, DisableForeignKeyConstraintWhenMigrating: true}
 
-	var err error
-	switch config.GetDBKind() {
-	case "postgres":
-		dsn := config.GetDBDSN()
-		if dsn == "" {
-			return errors.New("PUI_DB_TYPE=postgres but PUI_DB_DSN is empty")
-		}
-		db, err = openPostgresWithRetry(dsn, c)
-		if err != nil {
-			return err
-		}
-	default:
-		dir := path.Dir(dbPath)
-		if err = os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		if err = cleanupSQLiteBackupDirs(filepath.Dir(dbPath)); err != nil {
-			log.Printf("clean SQLite backup directories: %v", err)
-		}
-
-		sync := sqliteSynchronous()
-		journal := sqliteJournalMode()
-		dsn := dbPath + "?_journal_mode=" + journal + "&_busy_timeout=10000&_synchronous=" + sync + "&_txlock=immediate"
-		db, err = gorm.Open(sqlite.Open(dsn), c)
-		if err != nil {
-			return err
-		}
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-
-		pragmas := []string{
-			"PRAGMA journal_mode=" + journal,
-			"PRAGMA busy_timeout=10000",
-			"PRAGMA synchronous=" + sync,
-			fmt.Sprintf("PRAGMA cache_size=-%d", envInt("PUI_DB_CACHE_MB", 32)*1024),
-			fmt.Sprintf("PRAGMA mmap_size=%d", int64(envInt("PUI_DB_MMAP_MB", 256))*1024*1024),
-			"PRAGMA temp_store=MEMORY",
-		}
-		for _, p := range pragmas {
-			if _, err := sqlDB.ExecContext(context.Background(), p); err != nil {
-				return err
-			}
-		}
+	db, err = openPostgresWithRetry(dsn, &gorm.Config{Logger: gormLogger, DisableForeignKeyConstraintWhenMigrating: true})
+	if err != nil {
+		return err
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
-	var maxOpen, maxIdle int
-	switch config.GetDBKind() {
-	case "postgres":
-		maxOpen = envInt("PUI_DB_MAX_OPEN_CONNS", 25)
-		maxIdle = envInt("PUI_DB_MAX_IDLE_CONNS", 25)
-	default:
-		maxOpen = envInt("PUI_DB_MAX_OPEN_CONNS", 8)
-		maxIdle = envInt("PUI_DB_MAX_IDLE_CONNS", 4)
-	}
-	sqlDB.SetMaxOpenConns(maxOpen)
-	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetMaxOpenConns(envInt("PUI_DB_MAX_OPEN_CONNS", 25))
+	sqlDB.SetMaxIdleConns(envInt("PUI_DB_MAX_IDLE_CONNS", 25))
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
 
@@ -2057,53 +1894,6 @@ func openPostgresWithRetry(dsn string, c *gorm.Config) (*gorm.DB, error) {
 	return nil, fmt.Errorf("postgres unreachable after %d attempts: %w", len(delays), lastErr)
 }
 
-func sqliteJournalMode() string {
-	switch strings.ToUpper(strings.TrimSpace(os.Getenv("PUI_DB_JOURNAL_MODE"))) {
-	case "DELETE":
-		return "DELETE"
-	default:
-		return "WAL"
-	}
-}
-
-func backupSQLiteStepPages() int {
-	if sqliteJournalMode() == "DELETE" {
-		return 128
-	}
-	return -1
-}
-
-func cleanupSQLiteBackupDirs(dir string) error {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), sqliteBackupDirPrefix) {
-			if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func sqliteSynchronous() string {
-	switch strings.ToUpper(strings.TrimSpace(os.Getenv("PUI_DB_SYNCHRONOUS"))) {
-	case "OFF":
-		return "OFF"
-	case "NORMAL":
-		return "NORMAL"
-	case "EXTRA":
-		return "EXTRA"
-	default:
-		return "FULL"
-	}
-}
-
 func envInt(key string, def int) int {
 	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
@@ -2133,118 +1923,4 @@ func GetDB() *gorm.DB {
 
 func IsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
-}
-
-func IsSQLiteDB(file io.ReaderAt) (bool, error) {
-	signature := []byte("SQLite format 3\x00")
-	buf := make([]byte, len(signature))
-	_, err := file.ReadAt(buf, 0)
-	if err != nil {
-		return false, err
-	}
-	return bytes.Equal(buf, signature), nil
-}
-
-func BackupSQLite(dstPath string) (err error) {
-	if IsPostgres() {
-		return errors.New("sqlite backup is unavailable for PostgreSQL")
-	}
-	if db == nil {
-		return errors.New("database is not initialized")
-	}
-	if _, err := os.Lstat(dstPath); err == nil {
-		return fmt.Errorf("sqlite backup destination already exists: %s", dstPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			_ = os.Remove(dstPath)
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), backupSQLiteTimeout)
-	defer cancel()
-
-	sourceDB, err := db.DB()
-	if err != nil {
-		return err
-	}
-	sourceConn, err := sourceDB.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer sourceConn.Close()
-
-	destinationDB, err := sql.Open("sqlite3", dstPath)
-	if err != nil {
-		return err
-	}
-	defer destinationDB.Close()
-	destinationConn, err := destinationDB.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer destinationConn.Close()
-
-	return sourceConn.Raw(func(sourceDriver any) error {
-		source, ok := sourceDriver.(*sqlite3.SQLiteConn)
-		if !ok {
-			return fmt.Errorf("unexpected SQLite source connection type %T", sourceDriver)
-		}
-		return destinationConn.Raw(func(destinationDriver any) error {
-			destination, ok := destinationDriver.(*sqlite3.SQLiteConn)
-			if !ok {
-				return fmt.Errorf("unexpected SQLite destination connection type %T", destinationDriver)
-			}
-			backup, err := destination.Backup("main", source, "main")
-			if err != nil {
-				return err
-			}
-			finished := false
-			defer func() {
-				if !finished {
-					_ = backup.Finish()
-				}
-			}()
-			for {
-				done, err := backup.Step(backupSQLiteStepPages())
-				if err != nil {
-					return err
-				}
-				if done {
-					finished = true
-					return backup.Finish()
-				}
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(10 * time.Millisecond):
-				}
-			}
-		})
-	})
-}
-
-func ValidateSQLiteDB(dbPath string) error {
-	if _, err := os.Stat(dbPath); err != nil {
-		return err
-	}
-	gdb, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: logger.Discard})
-	if err != nil {
-		return err
-	}
-	sqlDB, err := gdb.DB()
-	if err != nil {
-		return err
-	}
-	defer sqlDB.Close()
-	var res string
-	if err := gdb.Raw("PRAGMA integrity_check;").Scan(&res).Error; err != nil {
-		return err
-	}
-	if res != "ok" {
-		return errors.New("sqlite integrity check failed: " + res)
-	}
-	return nil
 }

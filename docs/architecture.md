@@ -53,7 +53,7 @@ Two key ideas that explain most of the complexity:
 
 **Backend (Go 1.26):**
 - Web framework: **Gin** (`gin-gonic/gin`) + sessions (cookie store), gzip.
-- ORM: **GORM** with **SQLite** (default) or **PostgreSQL** (`PUI_DB_TYPE=postgres`).
+- ORM: **GORM** on **PostgreSQL** — the only backend (`PUI_DB_DSN`, required).
 - Scheduler: **robfig/cron/v3** (seconds-precision) for all background jobs.
 - Xray: **xtls/xray-core** vendored as a library; the panel talks to the running core over
   its **gRPC API** and also shells out to manage the process.
@@ -119,18 +119,16 @@ node heartbeat every 5s, periodic traffic resets (hourly/daily/weekly/monthly). 
 
 ```
 p-ui/
-├── main.go                     # Entry point: CLI (run / migrate / migrate-db / setting / cert),
+├── main.go                     # Entry point: CLI (run / migrate / setting / cert),
 │                               #   bootstrap, signal handling, restart loop
 ├── go.mod / go.sum             # Go deps (module path ends in /v3)
 │
 ├── internal/                   # ALL backend Go code (private packages)
-│   ├── config/                 # Env-var config: paths, DB kind/DSN, log level, version
+│   ├── config/                 # Env-var config: paths, DB DSN, log level, version
 │   │                           #   Every PUI_* env var is read here (config.go)
 │   ├── database/
 │   │   ├── db.go               # InitDB: connect, AutoMigrate, seeders (~1.4k lines). DB hotspot.
-│   │   ├── migrate_data.go     # Data migrations (seeders/normalizers beyond AutoMigrate)
-│   │   ├── dialect.go          # SQLite vs Postgres SQL differences
-│   │   ├── dump_sqlite.go      # DB export/backup
+│   │   ├── dialect.go          # Shared PostgreSQL SQL fragments (jsonb, LEAST/GREATEST, …)
 │   │   └── model/              # **ALL GORM models** (model.go ~1.1k lines + siblings:
 │   │                           #   node_client_traffic.go, node_client_ip.go,
 │   │                           #   client_global_traffic.go). ⭐ Start here for data shape.
@@ -274,11 +272,9 @@ p-ui/
 ├── docs/                     # Markdown docs (this file, custom-subscription-templates.md, …)
 ├── media/                    # README images
 │
-├── Dockerfile / docker-compose.yml / DockerEntrypoint.sh / DockerInit.sh   # Container build/run
 ├── install.sh / update.sh / p-ui.sh                        # VPS install + management CLI
-├── p-ui.service.*  / p-ui.rc                               # systemd units (debian/rhel/arch) + rc script
-├── windows_files/                                          # Windows service support
-└── .github/workflows/        # CI: ci.yml, codeql.yml, docker.yml, release.yml, smoke.yml,
+├── p-ui.service.debian                                     # systemd unit (Ubuntu/Debian)
+└── .github/workflows/        # CI: ci.yml, codeql.yml, release.yml, smoke.yml,
                               #     mutation.yml, cleanup_caches.yml, claude-bot.yml
 ```
 
@@ -490,10 +486,10 @@ for AutoMigrate in `internal/database/db.go`.
 | Xray auto-restart on **dead tunnel** | `internal/tunnelmonitor/` | `PUI_TUNNEL_HEALTH_*` in `internal/config/` |
 | **WARP / Nord** outbound integration | `service/integration/warp.go` / `nord.go` | `service/outbound_subscription.go` |
 | **MTProto** proxy issues | `internal/mtproto/manager.go`, `mtproto/process*.go` | `job/mtproto_job.go` |
-| **DB migration** / new column | `internal/database/db.go` (AutoMigrate list), `migrate_data.go` | `model/model.go` |
+| **DB migration** / new column | `internal/database/db.go` (AutoMigrate list + hand-written migrations) | `model/model.go` |
 | **Cron schedule** changes | `web.go` → `startTask()` | the specific `job/*.go` |
 | **CORS / security headers / HTTPS** | `middleware/`, `web.go` (`initRouter`, TLS setup) | `config/` (env) |
-| **Env vars / paths / DB type** | `internal/config/config.go` | `.env.example` |
+| **Env vars / paths / DB DSN** | `internal/config/config.go` | `.env.example` |
 | **Frontend route / screen** | `frontend/src/pages/<area>/`, `frontend/src/routes.tsx` | `frontend/src/api/queries/` |
 | **Frontend ↔ backend type mismatch** | regenerate: `cd frontend && npm run gen` (`tools/openapigen`) | `frontend/src/generated/` |
 | **System status / CPU / metrics** | `service/server.go`, `service/xray_metrics.go`, `service/metric_history.go` | `controller/server.go`, gopsutil |
@@ -516,7 +512,7 @@ for AutoMigrate in `internal/database/db.go`.
 6. **Don't hand-edit generated files:** `frontend/src/generated/*` and `internal/web/dist/*`.
    Regenerate instead.
 7. **Models are the contract.** Changing a model field that crosses the API boundary means:
-   update `model.go` → handle migration in `db.go`/`migrate_data.go` → regenerate frontend types.
+   update `model.go` → handle migration in `db.go` → regenerate frontend types.
 8. **Two servers, two concerns.** Admin features go in `internal/web`; anything an *end user*
    fetches goes in `internal/sub`. Don't blur them.
 9. **Cross-cutting notifications go through `internal/eventbus/`** — publish an event instead
@@ -556,20 +552,19 @@ npm run build        # gen:api + vite build → outputs to internal/web/dist (th
 **Full local loop:** `cd frontend && npm run build` (refresh embedded `dist/`) → back to repo
 root → `go build ./...` / `go run main.go`.
 
-**Docker:** `docker compose up -d` (uses `Dockerfile` + `DockerEntrypoint.sh`).
-
-**CI** (`.github/workflows/`): `ci.yml` (build/test/lint), `codeql.yml` (security scan),
-`smoke.yml` (smoke tests), `mutation.yml` (mutation testing), `docker.yml` + `release.yml`
-(multi-arch image + release builds), `cleanup_caches.yml`, `claude-bot.yml` (issue bot).
+**CI** (`.github/workflows/`): `ci.yml` (build/test/lint, incl. a live-PostgreSQL job),
+`codeql.yml` (security scan), `smoke.yml` (smoke tests), `mutation.yml` (mutation testing),
+`release.yml` (multi-arch Linux release builds, `CGO_ENABLED=0`), `cleanup_caches.yml`,
+`claude-bot.yml` (issue bot).
 
 ---
 
 ## 10. Gotchas & conventions
 
 - **Module path is `.../v3`.** Internal imports use `github.com/Arman2122/p-ui/v3/internal/...`.
-- **SQLite vs Postgres.** Default is SQLite at `{PUI_DB_FOLDER}/p-ui.db`. Postgres via
-  `PUI_DB_TYPE=postgres` + `PUI_DB_DSN`. Some SQL paths are dialect-aware (`database/dialect.go`);
-  test both when touching raw queries (there are `*_scale_postgres_test.go` suites).
+- **PostgreSQL only.** `PUI_DB_DSN` is required and the panel fails fast at startup without
+  it — there is no file-backed fallback. Raw SQL is PostgreSQL syntax; shared fragments live
+  in `database/dialect.go`. DB-backed tests skip unless `PUI_DB_DSN` names a reachable server.
 - **`Inbound.Settings` / `StreamSettings` / `Sniffing` are raw JSON strings**, not structured
   columns. Parsing/validation happens in services and the `xray` package, not in GORM.
 - **Hot-reload is the default; full restart is the fallback.** Changes that look config-only

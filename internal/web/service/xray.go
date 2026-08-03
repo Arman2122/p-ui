@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -87,18 +86,7 @@ func (s *XrayService) GetXrayErr() error {
 		return nil
 	}
 
-	err := process.GetErr()
-	if err == nil {
-		return nil
-	}
-
-	if runtime.GOOS == "windows" && err.Error() == "exit status 1" {
-		// exit status 1 on Windows means that Xray process was killed
-		// as we kill process to stop in on Windows, this is not an error
-		return nil
-	}
-
-	return err
+	return process.GetErr()
 }
 
 // GetXrayResult returns the result string from the Xray process.
@@ -112,12 +100,6 @@ func (s *XrayService) GetXrayResult() string {
 	}
 
 	result := process.GetResult()
-
-	if runtime.GOOS == "windows" && result == "exit status 1" {
-		// exit status 1 on Windows means that Xray process was killed
-		// as we kill process to stop in on Windows, this is not an error
-		return ""
-	}
 
 	xrayState.storeResult(process, result)
 	return result

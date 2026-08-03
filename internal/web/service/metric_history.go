@@ -296,7 +296,8 @@ var XrayMetricKeys = []string{
 }
 
 // systemMetricsStorePath is where the host time-series is persisted between
-// restarts. It lives next to the database so a single volume mount carries both.
+// restarts. It lives in the panel's persistent state folder so it survives a
+// panel update, which replaces PUI_MAIN_FOLDER wholesale.
 func systemMetricsStorePath() string {
 	return filepath.Join(config.GetDBFolderPath(), "system_metrics.gob")
 }

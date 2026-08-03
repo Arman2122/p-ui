@@ -1,7 +1,6 @@
 package service
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,12 +10,7 @@ import (
 )
 
 func TestSetRemoteTraffic_PreservesPanelLocalGroupAndComment(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 
@@ -80,12 +74,7 @@ func TestSetRemoteTraffic_PreservesPanelLocalGroupAndComment(t *testing.T) {
 }
 
 func TestSyncInbound_KeepsGroupWhenIncomingEmpty(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 
@@ -123,12 +112,7 @@ func TestSyncInbound_KeepsGroupWhenIncomingEmpty(t *testing.T) {
 // group-less rebuild. The editor round-trips the field, so ClientService.Update
 // applies it explicitly.
 func TestClientUpdate_ClearsGroup(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 

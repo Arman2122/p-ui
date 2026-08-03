@@ -1,6 +1,9 @@
 name: Deploy Smoke Tests
 
-# Container smoke test for the unattended (cloud-init) install path.
+# End-to-end smoke test for the unattended (cloud-init) install path. The script
+# installs the panel and PostgreSQL directly onto the runner — there is no
+# container or sandbox around it, which is why it only ever runs on ephemeral
+# GitHub-hosted Ubuntu runners.
 # Runs when the install/deploy assets change on a branch push or PR, and
 # again after a release-tag build finishes uploading its assets — passing the
 # tag as an explicit version, so the green result verifies the release

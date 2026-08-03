@@ -13,32 +13,33 @@ Moving to a new server is a database move:
 <Step>
 ### Back up the old server
 
-Copy the database (default `/etc/p-ui/p-ui.db`) and your certificates. See
+Take a database dump from the panel's **Back Up** button (or with `pg_dump`) and
+copy your certificates. See
 [Backup & restore](/docs/operations/backup-restore).
 </Step>
 
 <Step>
 ### Install Penhoon UI on the new server
 
-Use the same install method and a compatible version. See
+Use a compatible version, and let the installer set up PostgreSQL there. See
 [Installation](/docs/guide/installation).
 </Step>
 
 <Step>
 ### Restore the database
 
-Stop the panel, put the database in place, restore certificates, and start the
-panel. Update any IP/domain-specific settings.
+Import the dump from the panel (or `pg_restore` it), restore certificates, and
+restart the panel. Update any IP/domain-specific settings.
 </Step>
 
 </Steps>
 
 ## Between Penhoon UI versions
 
-Within the same backend, upgrading is usually just re-running the installer or
-pulling a new image — the panel migrates its own database. Across **major**
-versions, read the [release notes](https://github.com/Arman2122/p-ui/releases)
-first and take a backup.
+Upgrading is usually just re-running the installer or `p-ui update` — the panel
+migrates its own schema. Across **major** versions, read the
+[release notes](https://github.com/Arman2122/p-ui/releases) first and take a
+backup.
 
 ## From the original x-ui
 

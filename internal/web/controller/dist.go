@@ -114,7 +114,6 @@ func serveDistPage(c *gin.Context, name string) {
 	if name != "login.html" {
 		escapedVer := jsEscape.Replace(config.GetPanelVersion())
 		script += `;window.PUI_CUR_VER="` + escapedVer + `"`
-		script += `;window.PUI_DB_TYPE="` + config.GetDBKind() + `"`
 	}
 	script += `;</script>`
 	inject := []byte(script)

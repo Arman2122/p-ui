@@ -3373,8 +3373,7 @@
                   "obj": {
                     "enabled": true,
                     "installed": true,
-                    "usable": true,
-                    "windows": false
+                    "usable": true
                   }
                 }
               }
@@ -3750,38 +3749,8 @@
         "tags": [
           "Server"
         ],
-        "summary": "Stream the SQLite database file as an attachment. Use as a manual backup.",
+        "summary": "Stream a full database backup as an attachment — a pg_dump custom-format archive (.dump). Use as a manual backup.",
         "operationId": "get_panel_api_server_getDb",
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "obj": {}
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/panel/api/server/getMigration": {
-      "get": {
-        "tags": [
-          "Server"
-        ],
-        "summary": "Stream a cross-engine migration file as an attachment: a .dump (SQL text) on SQLite, or a .db SQLite database built from the live data on PostgreSQL.",
-        "operationId": "get_panel_api_server_getMigration",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -4488,7 +4457,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "Restore the panel DB from an uploaded SQLite file (multipart form, field name \"db\"). The panel restarts after restore. Destructive.",
+        "summary": "Restore the panel DB from an uploaded pg_dump archive (.dump), sent as multipart form field \"db\" and loaded with pg_restore. The panel restarts after restore. Destructive.",
         "operationId": "post_panel_api_server_importDB",
         "responses": {
           "200": {

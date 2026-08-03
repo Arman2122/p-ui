@@ -1,11 +1,11 @@
 package service
 
-// sqliteMaxVars is a safe ceiling for the number of bind parameters in a
-// single SQL statement. SQLite's SQLITE_MAX_VARIABLE_NUMBER is 999 on builds
-// before 3.32 and 32766 after; staying under 999 keeps queries portable
-// across forks/old binaries and also bounds per-query memory on truly large
-// installs (>32k clients) where even modern SQLite would refuse a single IN.
-const sqliteMaxVars = 900
+// maxBindVars is a safe ceiling for the number of bind parameters in a single
+// SQL statement. PostgreSQL's wire protocol caps a statement at 65535
+// parameters; staying far below that bounds per-query memory and planning time
+// on truly large installs (>32k clients) where a single IN list would otherwise
+// blow up.
+const maxBindVars = 900
 
 // normalizeSubSortIndex clamps the 1-based subscription sort order. Values
 // below 1 arrive from clients that predate the field (omitted form key binds

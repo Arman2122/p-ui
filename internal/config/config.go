@@ -1,14 +1,13 @@
 // Package config provides configuration management utilities for the Penhoon UI panel,
-// including version information, logging levels, database paths, and environment variable handling.
+// including version information, logging levels, on-disk paths, and environment
+// variable handling.
 package config
 
 import (
 	_ "embed"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -50,7 +49,7 @@ func GetBaseVersion() string {
 }
 
 // GetName returns the short application name ("p-ui") used for on-disk names
-// such as the database file.
+// such as the service and log files.
 func GetName() string {
 	return strings.TrimSpace(name)
 }
@@ -136,134 +135,43 @@ func GetBinFolderPath() string {
 	return binFolderPath
 }
 
-func getBaseDir() string {
-	exePath, err := os.Executable()
-	if err != nil {
-		return "."
-	}
-	exeDir := filepath.Dir(exePath)
-	exeDirLower := strings.ToLower(filepath.ToSlash(exeDir))
-	if strings.Contains(exeDirLower, "/appdata/local/temp/") || strings.Contains(exeDirLower, "/go-build") {
-		wd, err := os.Getwd()
-		if err != nil {
-			return "."
-		}
-		return wd
-	}
-	return exeDir
-}
-
-// GetDBFolderPath returns the path to the database folder based on environment variables or platform defaults.
+// GetDBFolderPath returns the panel's persistent state folder. It holds the
+// files the panel keeps outside PUI_MAIN_FOLDER so they survive an update (the
+// metrics history and the self-update status file).
 func GetDBFolderPath() string {
-	dbFolderPath := os.Getenv("PUI_DB_FOLDER")
-	if dbFolderPath != "" {
-		return dbFolderPath
-	}
-	if runtime.GOOS == "windows" {
-		return getBaseDir()
-	}
 	return "/etc/p-ui"
 }
 
-// GetDBPath returns the full path to the database file.
-func GetDBPath() string {
-	return fmt.Sprintf("%s/%s.db", GetDBFolderPath(), GetName())
-}
-
 // GetUpdateStatusFilePath returns the path to the panel self-update status
-// file update.sh writes on completion. It lives beside the database, outside
-// PUI_MAIN_FOLDER, so it survives an update regardless of what happens to
-// that folder.
+// file update.sh writes on completion. It lives in the persistent state folder,
+// outside PUI_MAIN_FOLDER, so it survives an update regardless of what happens
+// to that folder.
 func GetUpdateStatusFilePath() string {
 	return filepath.Join(GetDBFolderPath(), "update-status.json")
 }
 
-// GetDBKind returns the configured database backend: "sqlite" (default) or "postgres".
-func GetDBKind() string {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("PUI_DB_TYPE")))
-	switch v {
-	case "postgres", "postgresql", "pg":
-		return "postgres"
-	default:
-		return "sqlite"
-	}
-}
-
-// GetDBDSN returns the PostgreSQL DSN from PUI_DB_DSN. Empty for sqlite.
+// GetDBDSN returns the PostgreSQL DSN from PUI_DB_DSN. PostgreSQL is the only
+// supported backend, so the panel refuses to start when this is empty.
 func GetDBDSN() string {
 	return strings.TrimSpace(os.Getenv("PUI_DB_DSN"))
 }
 
-// GetEnvFilePaths returns the candidate service environment file paths (the file
-// systemd loads via EnvironmentFile) across the supported distro families.
-func GetEnvFilePaths() []string {
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	return []string{
-		"/etc/default/p-ui",
-		"/etc/conf.d/p-ui",
-		"/etc/sysconfig/p-ui",
-	}
+// GetEnvFilePath returns the service environment file systemd loads via
+// EnvironmentFile on the supported Debian/Ubuntu systems.
+func GetEnvFilePath() string {
+	return "/etc/default/p-ui"
 }
 
-// GetLogFolder returns the path to the log folder based on environment variables or platform defaults.
+// GetLogFolder returns the log folder from PUI_LOG_FOLDER, or /var/log/p-ui.
 func GetLogFolder() string {
 	logFolderPath := os.Getenv("PUI_LOG_FOLDER")
 	if logFolderPath != "" {
 		return logFolderPath
 	}
-	// Under `go test` the Windows default below is CWD-relative ("./log"), which
-	// scatters a log/ directory through the source tree (one per tested package).
-	// Redirect test runs to a shared temp folder so the source tree stays clean.
+	// A `go test` run has no business writing to /var/log/p-ui (and usually
+	// cannot): redirect it to a shared temp folder instead.
 	if testing.Testing() {
 		return filepath.Join(os.TempDir(), "p-ui-test-log")
 	}
-	if runtime.GOOS == "windows" {
-		return filepath.Join(".", "log")
-	}
 	return "/var/log/p-ui"
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-
-	return out.Sync()
-}
-
-func init() {
-	if runtime.GOOS != "windows" {
-		return
-	}
-	if os.Getenv("PUI_DB_FOLDER") != "" {
-		return
-	}
-	oldDBFolder := "/etc/p-ui"
-	oldDBPath := fmt.Sprintf("%s/%s.db", oldDBFolder, GetName())
-	newDBFolder := GetDBFolderPath()
-	newDBPath := fmt.Sprintf("%s/%s.db", newDBFolder, GetName())
-	_, err := os.Stat(newDBPath)
-	if err == nil {
-		return // new exists
-	}
-	_, err = os.Stat(oldDBPath)
-	if os.IsNotExist(err) {
-		return // old does not exist
-	}
-	_ = copyFile(oldDBPath, newDBPath) // ignore error
 }

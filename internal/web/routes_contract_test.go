@@ -12,7 +12,6 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/web/global"
 )
 
@@ -43,10 +42,7 @@ func inContractScope(method, path string) bool {
 
 func registeredContractRoutes(t *testing.T) map[string]bool {
 	t.Helper()
-	if err := database.InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("init db: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	previous := global.GetWebServer()
 	s := NewServer()

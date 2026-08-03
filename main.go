@@ -66,7 +66,7 @@ func runWebServer() {
 		}()
 	}
 
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		log.Fatalf("Error initializing database: %v", err)
 	}
@@ -175,7 +175,7 @@ func runWebServer() {
 
 // resetSetting resets all panel settings to their default values.
 func resetSetting() error {
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		fmt.Println("Failed to initialize database:", err)
 		return err
@@ -264,7 +264,7 @@ func updateTgbotEnableSts(status bool) {
 
 // updateTgbotSetting updates Telegram bot settings including token, chat ID, and runtime schedule.
 func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime string) {
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		fmt.Println("Error initializing database:", err)
 		return
@@ -302,7 +302,7 @@ func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime stri
 
 // updateSetting updates various panel settings including port, credentials, base path, listen IP, and two-factor authentication.
 func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool) error {
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		fmt.Println("Database initialization failed:", err)
 		return err
@@ -363,7 +363,7 @@ func updateSetting(port int, username string, password string, webBasePath strin
 
 // updateCert updates the SSL certificate files for the panel.
 func updateCert(publicKey string, privateKey string) {
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -440,7 +440,7 @@ func GetApiToken(getApiToken bool) {
 	if !getApiToken {
 		return
 	}
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		fmt.Println("open database failed, error info:", err)
 		return
@@ -479,7 +479,7 @@ func migrateDb() {
 	inboundService := service.InboundService{}
 
 	logger.InitLogger(logging.INFO)
-	err := database.InitDB(config.GetDBPath())
+	err := database.InitDB()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -489,18 +489,16 @@ func migrateDb() {
 }
 
 // loadServiceEnvFile loads the systemd EnvironmentFile so CLI subcommands like
-// "p-ui setting" hit the same database backend as the panel. godotenv.Load does
-// not override variables already in the environment, so it is a no-op for the
+// "p-ui setting" reach the same database as the panel. godotenv.Load does not
+// override variables already in the environment, so it is a no-op for the
 // systemd-managed service.
 func loadServiceEnvFile() {
-	for _, path := range config.GetEnvFilePaths() {
-		if _, err := os.Stat(path); err != nil {
-			continue
-		}
-		if err := godotenv.Load(path); err != nil {
-			log.Printf("warning: failed to load env file %s: %v", path, err)
-		}
+	path := config.GetEnvFilePath()
+	if _, err := os.Stat(path); err != nil {
 		return
+	}
+	if err := godotenv.Load(path); err != nil {
+		log.Printf("warning: failed to load env file %s: %v", path, err)
 	}
 }
 
@@ -518,18 +516,6 @@ func main() {
 	flag.BoolVar(&showVersion, "v", false, "show version")
 
 	runCmd := flag.NewFlagSet("run", flag.ExitOnError)
-
-	migrateDbCmd := flag.NewFlagSet("migrate-db", flag.ExitOnError)
-	var migrateDsn string
-	var migrateSrc string
-	var migrateDump string
-	var migrateRestore string
-	var migrateOut string
-	migrateDbCmd.StringVar(&migrateDsn, "dsn", "", "Destination PostgreSQL DSN (postgres://user:pass@host:port/db?sslmode=disable)")
-	migrateDbCmd.StringVar(&migrateSrc, "src", "", "Source SQLite file (defaults to the configured p-ui.db)")
-	migrateDbCmd.StringVar(&migrateDump, "dump", "", "Write a portable SQL text dump of --src to this file (.db -> .dump)")
-	migrateDbCmd.StringVar(&migrateRestore, "restore", "", "Rebuild a SQLite database from this SQL text dump (.dump -> .db); requires --out")
-	migrateDbCmd.StringVar(&migrateOut, "out", "", "Destination SQLite file for --restore (must not already exist)")
 
 	settingCmd := flag.NewFlagSet("setting", flag.ExitOnError)
 	var port int
@@ -573,8 +559,7 @@ func main() {
 		fmt.Println()
 		fmt.Println("Commands:")
 		fmt.Println("    run            run web panel")
-		fmt.Println("    migrate        migrate a database from an older x-ui/3x-ui panel")
-		fmt.Println("    migrate-db     SQLite <-> .dump (--dump/--restore) or copy into PostgreSQL (--dsn)")
+		fmt.Println("    migrate        run pending data migrations on the configured database")
 		fmt.Println("    setting        set settings")
 	}
 
@@ -594,40 +579,6 @@ func main() {
 		runWebServer()
 	case "migrate":
 		migrateDb()
-	case "migrate-db":
-		if err := migrateDbCmd.Parse(os.Args[2:]); err != nil {
-			fmt.Println(err)
-			return
-		}
-		src := migrateSrc
-		if src == "" {
-			src = config.GetDBPath()
-		}
-		switch {
-		case migrateDump != "":
-			if err := database.DumpSQLite(src, migrateDump); err != nil {
-				fmt.Println("dump failed:", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Dumped %s -> %s\n", src, migrateDump)
-		case migrateRestore != "":
-			if migrateOut == "" {
-				fmt.Println("--out is required when using --restore: the destination .db path (must not exist)")
-				return
-			}
-			if err := database.RestoreSQLite(migrateRestore, migrateOut); err != nil {
-				fmt.Println("restore failed:", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Restored %s -> %s\n", migrateRestore, migrateOut)
-		case migrateDsn != "":
-			if err := database.MigrateData(src, migrateDsn); err != nil {
-				fmt.Println("migration failed:", err)
-				os.Exit(1)
-			}
-		default:
-			fmt.Println("nothing to do: pass --dump <file>, --restore <file> --out <db>, or --dsn <postgres-dsn>")
-		}
 	case "setting":
 		err := settingCmd.Parse(os.Args[2:])
 		if err != nil {

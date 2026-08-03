@@ -56,7 +56,7 @@ func TestEnsureDnsServerRouting_NoOpWithoutPrivateBlockRule(t *testing.T) {
 }
 
 func TestEnsureDnsServerRouting_InsertsAllowRuleBeforeBlock(t *testing.T) {
-	// Reproduces the reported bug: dns.servers on a private docker IP
+	// Reproduces the reported bug: dns.servers on a private LAN IP
 	// (e.g. a same-network AdGuard Home) plus the panel's default
 	// geoip:private block rule silently drops Xray's own DNS traffic.
 	in := `{

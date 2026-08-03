@@ -38,7 +38,7 @@ The menu (items `0`–`28`) shows the panel/Xray status at the top, then:
 | 22    | IP Limit Management                    | Fail2ban-based per-client IP limits                       |
 | 23    | Firewall Management                    | `ufw` install and port rules                              |
 | 24    | SSH Port Forwarding Management         | Bind the panel to localhost and tunnel over SSH           |
-| 25    | PostgreSQL Management                  | Install/migrate/manage PostgreSQL                         |
+| 25    | PostgreSQL Management                  | Install, inspect and control the PostgreSQL server        |
 | 26    | Enable BBR                             | Toggle the BBR congestion-control sysctl                  |
 | 27    | Update Geo Files                       | Update geoip/geosite data (Loyalsoldier, IR, RU)          |
 | 28    | Speedtest by Ookla                     | Run an Ookla speed test                                   |
@@ -66,16 +66,10 @@ For scripts and quick actions, `p-ui` also takes a subcommand directly:
 | `p-ui update-dev`          | Update to the rolling `dev-latest` build            |
 | `p-ui legacy`              | Install a specific older version (prompts)          |
 | `p-ui update-all-geofiles` | Update all geo files, restart if changed            |
-| `p-ui migrateDB [in] [out]` | Convert the SQLite `.db` ↔ a portable `.dump` (direction auto-detected) |
 | `p-ui pgclient [ver]`      | Install/upgrade the PostgreSQL client tools (`pg_dump`/`pg_restore`) |
 | `p-ui install` / `uninstall` | Install / uninstall                               |
 
 Run `p-ui` with an unknown subcommand to print this list from the script itself.
-
-<Callout type="info">
-  Migrating an existing SQLite install to PostgreSQL is a *panel* command rather
-  than a menu subcommand — see [Database](/docs/reference/database).
-</Callout>
 
 ## Updating
 
@@ -88,12 +82,6 @@ Run `p-ui` with an unknown subcommand to print this list from the script itself.
 Updating preserves your database and settings. Take a
 [backup](/docs/operations/backup-restore) before a major-version jump.
 
-<Callout type="info">
-  Docker users update differently — pull the new image and recreate the
-  container (`docker compose pull && docker compose up -d`) rather than using the
-  `p-ui` update commands.
-</Callout>
-
 ## Uninstalling
 
 Menu option **6** or `p-ui uninstall`. It stops and disables the service, removes
@@ -102,6 +90,7 @@ used a locally-installed PostgreSQL, it offers to purge that too (a separate,
 irreversible confirmation).
 
 <Callout type="warn">
-  Uninstalling removes the database (`/etc/p-ui/p-ui.db`) and your configuration.
-  [Back up](/docs/operations/backup-restore) first if you might need it.
+  Purging the local PostgreSQL destroys the panel database and your entire
+  configuration. [Back up](/docs/operations/backup-restore) first if you might
+  need it.
 </Callout>

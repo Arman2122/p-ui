@@ -1,21 +1,11 @@
 package database
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
-
-func initMigrateDB(t *testing.T) {
-	t.Helper()
-	if err := InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
-}
 
 func seedInboundWithStream(t *testing.T, tag string, port int, stream string) *model.Inbound {
 	t.Helper()
@@ -37,7 +27,7 @@ const epMigrationStream = `{"network":"ws","security":"tls","externalProxy":[
 // #1 — each externalProxy entry becomes one host row with the exact field
 // mapping; sort_order is the entry index; inbound_id is correct.
 func TestMigrate_ExternalProxyToHosts(t *testing.T) {
-	initMigrateDB(t)
+	initTestDB(t)
 	ib := seedInboundWithStream(t, "m1", 5551, epMigrationStream)
 
 	if err := seedHostsFromExternalProxy(); err != nil {
@@ -79,7 +69,7 @@ func TestMigrate_ExternalProxyToHosts(t *testing.T) {
 // or restored backup) is repaired on every start, so it stays addressable by
 // the group-scoped update/delete API instead of surfacing as fallback_<id>.
 func TestBackfillEmptyHostGroupIds_RepairsLegacyRows(t *testing.T) {
-	initMigrateDB(t)
+	initTestDB(t)
 	ib := seedInboundWithStream(t, "m1b", 5556, `{"network":"tcp","security":"none"}`)
 	legacy := &model.Host{InboundId: ib.Id, Remark: "legacy", Address: "c.cdn.com", Port: 443, Security: "tls"}
 	if err := GetDB().Create(legacy).Error; err != nil {
@@ -112,7 +102,7 @@ func TestBackfillEmptyHostGroupIds_RepairsLegacyRows(t *testing.T) {
 
 // #2 — a second run is a no-op (the HistoryOfSeeders gate).
 func TestMigrate_Idempotent(t *testing.T) {
-	initMigrateDB(t)
+	initTestDB(t)
 	seedInboundWithStream(t, "m2", 5552, epMigrationStream)
 
 	if err := seedHostsFromExternalProxy(); err != nil {
@@ -130,7 +120,7 @@ func TestMigrate_Idempotent(t *testing.T) {
 
 // #3 — inbounds without externalProxy create no hosts.
 func TestMigrate_NoExternalProxy_NoHosts(t *testing.T) {
-	initMigrateDB(t)
+	initTestDB(t)
 	seedInboundWithStream(t, "m3", 5553, `{"network":"tcp","security":"none"}`)
 
 	if err := seedHostsFromExternalProxy(); err != nil {
@@ -145,7 +135,7 @@ func TestMigrate_NoExternalProxy_NoHosts(t *testing.T) {
 
 // #4 — externalProxy stays in StreamSettings (additive, rollback-safe).
 func TestMigrate_KeepsExternalProxyIntact(t *testing.T) {
-	initMigrateDB(t)
+	initTestDB(t)
 	ib := seedInboundWithStream(t, "m4", 5554, epMigrationStream)
 
 	if err := seedHostsFromExternalProxy(); err != nil {
@@ -157,36 +147,5 @@ func TestMigrate_KeepsExternalProxyIntact(t *testing.T) {
 	}
 	if !strings.Contains(got.StreamSettings, "externalProxy") || !strings.Contains(got.StreamSettings, "a.cdn.com") {
 		t.Fatalf("externalProxy must remain in StreamSettings: %s", got.StreamSettings)
-	}
-}
-
-// #5 — same against a real Postgres DSN (sequence resync); skips without a DSN.
-func TestMigrate_Postgres(t *testing.T) {
-	if strings.TrimSpace(os.Getenv("PUI_DB_DSN")) == "" || os.Getenv("PUI_DB_TYPE") != "postgres" {
-		t.Skip("set PUI_DB_TYPE=postgres and PUI_DB_DSN to run the postgres migration test")
-	}
-	if err := InitDB(""); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
-	// Clean slate so this run owns the migration regardless of prior tests.
-	GetDB().Exec("TRUNCATE TABLE hosts, inbounds RESTART IDENTITY CASCADE")
-	GetDB().Where("seeder_name = ?", "HostsFromExternalProxy").Delete(&model.HistoryOfSeeders{})
-
-	seedInboundWithStream(t, "mpg", 5555, epMigrationStream)
-	if err := seedHostsFromExternalProxy(); err != nil {
-		t.Fatalf("migrate pg: %v", err)
-	}
-	var count int64
-	GetDB().Model(&model.Host{}).Count(&count)
-	if count != 2 {
-		t.Fatalf("pg host count = %d, want 2", count)
-	}
-	if err := seedHostsFromExternalProxy(); err != nil {
-		t.Fatalf("migrate pg (2nd): %v", err)
-	}
-	GetDB().Model(&model.Host{}).Count(&count)
-	if count != 2 {
-		t.Fatalf("pg host count after 2nd run = %d, want 2 (idempotent)", count)
 	}
 }

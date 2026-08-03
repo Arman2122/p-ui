@@ -1,12 +1,10 @@
 package service
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/eventbus"
 )
 
@@ -61,10 +59,7 @@ func runObservatory(t *testing.T, threshold int, seq []probe) []eventbus.EventTy
 }
 
 func TestApplyObservatoryDebounce(t *testing.T) {
-	if err := database.InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("init db: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	tests := []struct {
 		name      string
@@ -149,11 +144,7 @@ func TestValidObsTag(t *testing.T) {
 }
 
 func TestApplyObservatoryKeepsUnicodeTags(t *testing.T) {
-	dbDir := t.TempDir()
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	s := &XrayMetricsService{settingService: SettingService{}}
 	s.applyObservatory(time.Unix(1000, 0), map[string]rawObsEntry{

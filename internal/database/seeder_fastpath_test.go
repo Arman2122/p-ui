@@ -1,17 +1,13 @@
 package database
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
 
 func TestFreshInstallFastPathMarksResetIpLimitSeeder(t *testing.T) {
-	if err := InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	if err := db.Where("1 = 1").Delete(&model.HistoryOfSeeders{}).Error; err != nil {
 		t.Fatalf("reset seeder history: %v", err)

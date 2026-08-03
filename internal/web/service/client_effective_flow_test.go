@@ -1,7 +1,6 @@
 package service
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
@@ -12,12 +11,7 @@ import (
 // query, taking the flow_override of the lowest inbound_id and skipping emails
 // with no non-empty flow anywhere.
 func TestEffectiveFlowsByEmails(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 	db := database.GetDB()
 
 	const vision = "xtls-rprx-vision"

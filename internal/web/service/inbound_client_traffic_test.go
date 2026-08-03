@@ -1,7 +1,6 @@
 package service
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -24,12 +23,7 @@ import (
 //
 // Both must have their local traffic counted.
 func TestAddClientTraffic_MatchesByEmail(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 
@@ -95,12 +89,7 @@ func TestAddClientTraffic_MatchesByEmail(t *testing.T) {
 // silently skip, leaving the client perpetually "not started". The fix resolves the
 // owning inbound via the client_inbounds link instead.
 func TestAdjustTraffics_DelayedStartConvertsDespiteStaleInboundId(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 
@@ -164,12 +153,7 @@ func TestAdjustTraffics_DelayedStartConvertsDespiteStaleInboundId(t *testing.T) 
 // deadline while an already-absolute expiry passes through byte-identical.
 // Before the fix every polled row got its own no-op expiry UPDATE.
 func TestAddClientTraffic_ExpiryWriteOnlyForConvertedClients(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	db := database.GetDB()
 

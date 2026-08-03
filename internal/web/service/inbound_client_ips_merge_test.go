@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,16 +9,11 @@ import (
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
 
-// setupClientIpTestDB spins up a throwaway SQLite database (migrations + seeders)
+// setupClientIpTestDB spins up a throwaway database (migrations + seeders)
 // for a single test, mirroring the harness used by the other service tests.
 func setupClientIpTestDB(t *testing.T) {
 	t.Helper()
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 }
 
 func marshalIps(t *testing.T, entries ...clientIpEntry) string {

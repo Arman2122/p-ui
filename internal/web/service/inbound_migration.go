@@ -40,11 +40,6 @@ func (s *InboundService) MigrationRequirements() {
 	defer func() {
 		if err == nil {
 			tx.Commit()
-			if !database.IsPostgres() {
-				if dbErr := db.Exec(`VACUUM "main"`).Error; dbErr != nil {
-					logger.Warningf("VACUUM failed: %v", dbErr)
-				}
-			}
 		} else {
 			tx.Rollback()
 		}
@@ -64,39 +59,34 @@ func (s *InboundService) MigrationRequirements() {
 		return
 	}
 
-	// Normalize "enable" columns to boolean on Postgres. Legacy SQLite data
-	// (0/1 integers), partial migrations, or mixed write paths (public API
-	// inbound updates that flow through UpdateClientStat + client syncs, plus
-	// node traffic merge deltas) can leave the column as integer or with mixed
-	// interpretation. This (combined with the dialect-aware
-	// ClientTrafficEnableMergeExpr) prevents type problems in the node traffic
-	// sync merge (SetRemoteTraffic) and makes the sync robust even when
-	// inbounds are updated via the public API (incl. ones carrying
-	// externalProxy in streamSettings). The same expression is also safe on
-	// SQLite (no PG :: casts).
-	if database.IsPostgres() {
-		// Use DO block so it is idempotent and doesn't fail if already boolean.
-		normalizeBool := func(table, col string) {
-			tx.Exec(fmt.Sprintf(`
-				DO $$
-				BEGIN
-					IF EXISTS (
-						SELECT 1 FROM information_schema.columns
-						WHERE table_name = '%s' AND column_name = '%s'
-						  AND data_type <> 'boolean'
-					) THEN
-						ALTER TABLE %s ALTER COLUMN %s
-							TYPE boolean USING (CASE WHEN %s::text IN ('1','true','t','yes') THEN true ELSE false END);
-					END IF;
-				END $$;`, table, col, table, col, col))
-		}
-		normalizeBool("inbounds", "enable")
-		normalizeBool("client_traffics", "enable")
-		normalizeBool("nodes", "enable")
-		normalizeBool("clients", "enable")
-		normalizeBool("api_tokens", "enabled")
-		normalizeBool("outbound_subscriptions", "enabled")
+	// Normalize "enable" columns to boolean. Partial migrations or mixed write
+	// paths (public API inbound updates that flow through UpdateClientStat +
+	// client syncs, plus node traffic merge deltas) can leave the column as
+	// integer or with mixed interpretation. This prevents type problems in the
+	// node traffic sync merge (SetRemoteTraffic) and makes the sync robust even
+	// when inbounds are updated via the public API (incl. ones carrying
+	// externalProxy in streamSettings).
+	// Use DO block so it is idempotent and doesn't fail if already boolean.
+	normalizeBool := func(table, col string) {
+		tx.Exec(fmt.Sprintf(`
+			DO $$
+			BEGIN
+				IF EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_name = '%s' AND column_name = '%s'
+					  AND data_type <> 'boolean'
+				) THEN
+					ALTER TABLE %s ALTER COLUMN %s
+						TYPE boolean USING (CASE WHEN %s::text IN ('1','true','t','yes') THEN true ELSE false END);
+				END IF;
+			END $$;`, table, col, table, col, col))
 	}
+	normalizeBool("inbounds", "enable")
+	normalizeBool("client_traffics", "enable")
+	normalizeBool("nodes", "enable")
+	normalizeBool("clients", "enable")
+	normalizeBool("api_tokens", "enabled")
+	normalizeBool("outbound_subscriptions", "enabled")
 
 	// Fix inbounds based problems
 	var inbounds []*model.Inbound
@@ -198,20 +188,13 @@ func (s *InboundService) MigrationRequirements() {
 	var externalProxy []struct {
 		Id             int
 		Port           int
-		StreamSettings string // text column on both DBs; safer than []byte for cross-DB scan
+		StreamSettings string // text column; safer than []byte for the raw scan
 	}
 	externalProxyQuery := `select id, port, stream_settings
 	from inbounds
 	WHERE protocol in ('vmess','vless','trojan')
-	  AND json_extract(stream_settings, '$.security') = 'tls'
-	  AND json_extract(stream_settings, '$.tlsSettings.settings.domains') IS NOT NULL`
-	if database.IsPostgres() {
-		externalProxyQuery = `select id, port, stream_settings
-	from inbounds
-	WHERE protocol in ('vmess','vless','trojan')
 	  AND NULLIF(stream_settings, '')::jsonb #>> '{security}' = 'tls'
 	  AND NULLIF(stream_settings, '')::jsonb #> '{tlsSettings,settings,domains}' IS NOT NULL`
-	}
 	err = tx.Raw(externalProxyQuery).Scan(&externalProxy).Error
 	if err != nil || len(externalProxy) == 0 {
 		return
@@ -243,15 +226,9 @@ func (s *InboundService) MigrationRequirements() {
 	}
 
 	// Legacy tag cleanup for old auto-generated tags (e.g. "0.0.0.0:443-...").
-	// Must be cross-DB: INSTR/REPLACE work on SQLite; Postgres needs position().
 	tagCleanup := `UPDATE inbounds
 		SET tag = REPLACE(tag, '0.0.0.0:', '')
-		WHERE INSTR(tag, '0.0.0.0:') > 0;`
-	if database.IsPostgres() {
-		tagCleanup = `UPDATE inbounds
-			SET tag = REPLACE(tag, '0.0.0.0:', '')
-			WHERE position('0.0.0.0:' in tag) > 0;`
-	}
+		WHERE position('0.0.0.0:' in tag) > 0;`
 	err = tx.Exec(tagCleanup).Error
 	if err != nil {
 		return

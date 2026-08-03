@@ -347,7 +347,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 	for _, traffic := range traffics {
 		renewEmails = append(renewEmails, traffic.Email)
 	}
-	for _, batch := range chunkStrings(renewEmails, sqliteMaxVars) {
+	for _, batch := range chunkStrings(renewEmails, maxBindVars) {
 		var ids []int
 		if err = tx.Table("client_inbounds").
 			Joins("JOIN clients ON clients.id = client_inbounds.client_id").
@@ -361,9 +361,9 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 	// Dedupe so an inbound hosting N expired clients is fetched and saved once
 	// per tick instead of N times across chunk boundaries.
 	inbound_ids = uniqueInts(inbound_ids)
-	// Chunked to stay under SQLite's bind-variable limit when many inbounds
+	// Chunked to stay under the bind-variable limit when many inbounds
 	// are touched in a single tick.
-	for _, batch := range chunkInts(inbound_ids, sqliteMaxVars) {
+	for _, batch := range chunkInts(inbound_ids, maxBindVars) {
 		var page []*model.Inbound
 		if err = tx.Model(model.Inbound{}).Where("id IN ?", batch).Find(&page).Error; err != nil {
 			return false, 0, err
@@ -933,11 +933,11 @@ func (s *InboundService) GetClientTrafficTgBot(tgId int64) ([]*xray.ClientTraffi
 		}
 	}
 
-	// Chunked to stay under SQLite's bind-variable limit when a single Telegram
+	// Chunked to stay under the bind-variable limit when a single Telegram
 	// account owns thousands of clients across inbounds.
 	uniqEmails := uniqueNonEmptyStrings(emails)
 	traffics := make([]*xray.ClientTraffic, 0, len(uniqEmails))
-	for _, batch := range chunkStrings(uniqEmails, sqliteMaxVars) {
+	for _, batch := range chunkStrings(uniqEmails, maxBindVars) {
 		var page []*xray.ClientTraffic
 		if err := db.Model(xray.ClientTraffic{}).Where("email IN ?", batch).Find(&page).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -978,7 +978,7 @@ func (s *InboundService) BumpClientsLastOnline(emails []string) error {
 	now := time.Now().UnixMilli()
 	return submitTrafficWrite(func() error {
 		db := database.GetDB()
-		for _, batch := range chunkStrings(uniq, sqliteMaxVars) {
+		for _, batch := range chunkStrings(uniq, maxBindVars) {
 			if err := db.Model(xray.ClientTraffic{}).Where("email IN ?", batch).Update("last_online", now).Error; err != nil {
 				return err
 			}
@@ -994,7 +994,7 @@ func (s *InboundService) GetActiveClientTraffics(emails []string) ([]*xray.Clien
 	}
 	db := database.GetDB()
 	traffics := make([]*xray.ClientTraffic, 0, len(uniq))
-	for _, batch := range chunkStrings(uniq, sqliteMaxVars) {
+	for _, batch := range chunkStrings(uniq, maxBindVars) {
 		var page []*xray.ClientTraffic
 		if err := db.Model(xray.ClientTraffic{}).Where("email IN ?", batch).Find(&page).Error; err != nil {
 			return nil, err

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/xlzd/gotp"
@@ -12,14 +11,7 @@ import (
 
 func setupSettingTestDB(t *testing.T) {
 	t.Helper()
-	if err := database.InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := database.CloseDB(); err != nil {
-			t.Fatal(err)
-		}
-	})
+	initTestDB(t)
 }
 
 func TestGetAllSettingViewRedactsSecrets(t *testing.T) {

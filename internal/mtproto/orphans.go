@@ -1,5 +1,3 @@
-//go:build linux
-
 package mtproto
 
 import (
@@ -15,12 +13,12 @@ import (
 // previous p-ui run and returns how many were killed.
 //
 // p-ui starts one mtg process per mtproto inbound outside its own lifecycle, and
-// on Linux a child is not guaranteed to die with the panel (there is no
-// kill-on-exit, unlike the Windows job object). A survivor keeps holding the
-// inbound port with a now-stale secret, so new clients are silently
-// domain-fronted to the FakeTLS domain instead of proxied to Telegram. p-ui is
-// the sole owner of mtg, so any process matching our binary name at startup is
-// an orphan and is safe to kill before we start our own.
+// a child is not guaranteed to die with the panel (Linux has no kill-on-exit for
+// child processes). A survivor keeps holding the inbound port with a now-stale
+// secret, so new clients are silently domain-fronted to the FakeTLS domain
+// instead of proxied to Telegram. p-ui is the sole owner of mtg, so any process
+// matching our binary name at startup is an orphan and is safe to kill before we
+// start our own.
 //
 // binaryPath is the configured mtg path (e.g. "bin/mtg-linux-amd64"); matching
 // is done on the executable's base name so it is independent of the bin folder

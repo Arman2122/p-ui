@@ -12,12 +12,7 @@ import (
 
 func setupBulkDB(t *testing.T) {
 	t.Helper()
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 }
 
 func clientsSettings(t *testing.T, clients []model.Client) string {

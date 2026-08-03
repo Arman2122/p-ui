@@ -7,13 +7,11 @@ import (
 	"mime"
 	"net"
 	"net/mail"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/web/service"
 )
 
@@ -131,10 +129,7 @@ func startFakeSMTPServer(t *testing.T) (string, func() []string) {
 }
 
 func TestSendUsesBareAddressFromNameAddrSmtpFrom(t *testing.T) {
-	if err := database.InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	addr, recordedLines := startFakeSMTPServer(t)
 	host, portStr, err := net.SplitHostPort(addr)
@@ -181,10 +176,7 @@ func TestSendUsesBareAddressFromNameAddrSmtpFrom(t *testing.T) {
 }
 
 func TestConnectionReportsMissingFrom(t *testing.T) {
-	if err := database.InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	settingService := service.SettingService{}
 	mustSet := func(name string, err error) {

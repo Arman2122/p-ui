@@ -20,10 +20,8 @@ import (
 // log a warning. otherwise log.Warningf panics on a nil logger.
 var loggerInitOnce sync.Once
 
-// setupIntegrationDB wires a temp sqlite db and log folder so
-// updateInboundClientIps can run end to end. closes the db before
-// TempDir cleanup so windows doesn't complain about the file being in
-// use.
+// setupIntegrationDB wires a throwaway database and log folder so
+// updateInboundClientIps can run end to end.
 func setupIntegrationDB(t *testing.T) {
 	t.Helper()
 
@@ -31,11 +29,7 @@ func setupIntegrationDB(t *testing.T) {
 		puilogger.InitLogger(logging.ERROR)
 	})
 
-	dbDir := t.TempDir()
-	logDir := t.TempDir()
-
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	t.Setenv("PUI_LOG_FOLDER", logDir)
+	t.Setenv("PUI_LOG_FOLDER", t.TempDir())
 
 	// updateInboundClientIps calls log.SetOutput on the package global,
 	// which would leak to other tests in the same binary.
@@ -46,15 +40,7 @@ func setupIntegrationDB(t *testing.T) {
 		log.SetFlags(origLogFlags)
 	})
 
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("database.InitDB failed: %v", err)
-	}
-	// LIFO cleanup order: this runs before t.TempDir's own cleanup.
-	t.Cleanup(func() {
-		if err := database.CloseDB(); err != nil {
-			t.Logf("database.CloseDB warning: %v", err)
-		}
-	})
+	initTestDB(t)
 }
 
 // seed an inbound whose settings json has a single client with the

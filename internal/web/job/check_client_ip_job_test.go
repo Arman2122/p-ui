@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"testing"
 	"time"
 
@@ -195,12 +194,7 @@ func TestPartitionLiveIps_ConcurrentLiveIpsSortedAscending(t *testing.T) {
 }
 
 func TestGetInboundByEmailFallbackIgnoresProtocolScalarFields(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 
 	inbound := &model.Inbound{
 		UserId:   1,
@@ -326,10 +320,6 @@ func fakeFail2BanClient(t *testing.T) string {
 	marker := filepath.Join(dir, "probe-called")
 	fakeClient := filepath.Join(dir, "fail2ban-client")
 	script := "#!/bin/sh\n: > \"$FAIL2BAN_PROBE_MARKER\"\nexit 0\n"
-	if runtime.GOOS == "windows" {
-		fakeClient += ".bat"
-		script = "@echo off\ntype nul > \"%FAIL2BAN_PROBE_MARKER%\"\nexit /b 0\n"
-	}
 	if err := os.WriteFile(fakeClient, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake fail2ban-client: %v", err)
 	}

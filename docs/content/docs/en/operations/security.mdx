@@ -21,8 +21,8 @@ See [First login](/docs/guide/first-login) for the full checklist.
 
 Set an **IP limit** per client (see [Clients](/docs/config/clients)) to cap the
 number of simultaneous source IPs. Enforcement is handled by **Fail2ban**, which
-Penhoon UI installs and configures for you (enabled by default on script installs, and
-on Docker via `PUI_ENABLE_FAIL2BAN=true`).
+Penhoon UI installs and configures for you (enabled by default; toggle it with
+`PUI_ENABLE_FAIL2BAN`).
 
 Manage it from the `p-ui` menu (**22 — IP Limit Management**): install/configure,
 change the ban duration (default **30 minutes**), ban/unban an IP, view ban logs,
@@ -39,15 +39,7 @@ and check status. Under the hood:
   `/etc/fail2ban/jail.d/`, `/etc/fail2ban/filter.d/` and `/etc/fail2ban/action.d/` —
   then recreate the jail from the `p-ui` menu (**22 — IP Limit Management**) and
   restart Fail2ban. Left in place, the old jail keeps tailing `3xipl.log`, which
-  nothing writes to any more. Docker needs no cleanup: the entrypoint rewrites
-  these files inside a fresh container on every start.
-</Callout>
-
-<Callout type="warn">
-  On Docker, Fail2ban bans with `iptables`, which needs the `NET_ADMIN` (and
-  `NET_RAW`) capability — `docker-compose.yml` grants them. With a bare
-  `docker run`, add `--cap-add=NET_ADMIN --cap-add=NET_RAW` or bans are logged
-  but never applied.
+  nothing writes to any more.
 </Callout>
 
 ## Firewall

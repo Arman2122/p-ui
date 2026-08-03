@@ -1,77 +1,74 @@
 ---
 title: Backup & Restore
-description: Back up and restore your Penhoon UI database and certificates, manually or via the Telegram bot.
+description: Back up and restore the Penhoon UI PostgreSQL database and certificates — from the panel, with pg_dump/pg_restore, or via the Telegram bot.
 icon: DatabaseBackup
 ---
 
 Your entire configuration — inbounds, clients, settings — lives in the panel's
-database. Back it up regularly so you can recover or migrate.
+PostgreSQL database. Back it up regularly so you can recover or migrate.
 
 ## What to back up
 
-- **The database** — SQLite at `/etc/p-ui/p-ui.db` by default (or your
-  PostgreSQL database if you use that backend).
+- **The database** — the PostgreSQL database named in
+  [`PUI_DB_DSN`](/docs/reference/env-vars#database).
 - **Certificates** — anything under `/root/cert/` (or wherever you store TLS
   certs).
 
-## Manual backup
+## From the panel
 
-You can download a backup from the panel's overview, or copy the database file
-directly from the server:
-
-```bash title="copy the SQLite database"
-cp /etc/p-ui/p-ui.db /root/p-ui-backup-$(date +%F).db
-```
-
-To restore, stop the panel, put the database back in place, and start it again.
+The overview page's **Back Up** button streams a `pg_dump` custom-format archive
+(`.dump`), named after the server and the current date. **Import** takes that
+file back: the panel checks that the local `pg_restore` can read it, stops Xray,
+restores into the database and restarts. The restore is destructive — it replaces
+the current contents of the database.
 
 <Callout type="warn">
-  Restore a backup onto the **same major version** it came from when possible.
-  Across major upgrades, let the panel run its migrations rather than forcing an
-  old schema.
+  Both buttons need `pg_dump` / `pg_restore` on the server (the
+  `postgresql-client` package). The installer adds them; if they are missing the
+  panel reports it instead of writing a broken backup.
 </Callout>
+
+## From the command line
+
+The same dump, taken by hand:
+
+```bash title="back up"
+pg_dump --format=custom --no-owner --no-privileges \
+  "postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable" \
+  > /root/p-ui-backup-$(date +%F).dump
+```
+
+```bash title="restore"
+p-ui stop
+pg_restore --clean --if-exists --no-owner --no-privileges --single-transaction \
+  --dbname "postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable" \
+  /root/p-ui-backup-2026-01-31.dump
+p-ui start
+```
 
 ## Telegram backup
 
 If you've configured the [Telegram bot](/docs/operations/telegram-bot), enable
 **`tgBotBackup`** to attach a backup to the periodic report (on the `tgRunTime`
-schedule, default daily). The bot sends both the **database** and the **Xray
+schedule, default daily). The bot sends both the **database dump** and the **Xray
 `config.json`** to your admin chat, so you always have an off-server copy. Admins
 can also request a backup on demand from the bot's menu.
 
-## SQLite dump / restore
+## Version compatibility
 
-The panel can convert its SQLite database to and from a plain SQL text dump
-(handy for inspection or transferring between machines). The management script
-exposes this as **`migrateDB`**, which auto-detects the direction from the input
-file — you don't pass `--dump` or `--restore`:
+A dump written by a newer PostgreSQL than the target server's `pg_restore`
+understands cannot be imported — the panel refuses it before touching anything
+and names the major version it needs. Install a matching client and retry:
 
 ```bash
-p-ui migrateDB                                 # /etc/p-ui/p-ui.db -> /etc/p-ui/p-ui.dump
-p-ui migrateDB /root/p-ui.db /root/p-ui.dump   # SQLite -> SQL text
-p-ui migrateDB /root/p-ui.dump /root/p-ui.db   # SQL text -> SQLite
+p-ui pgclient 17
 ```
-
-With no arguments it dumps the installed database (`/etc/p-ui/p-ui.db`). If you
-omit the output path, it's named next to the input — `.db` becomes `.dump`, and
-back. The same conversion is available from the panel menu, which prompts for
-both paths.
 
 <Callout type="warn">
-  Restoring refuses to overwrite an existing database file, and refuses to write
-  into the live `/etc/p-ui/p-ui.db` while the panel is running. Stop the panel
-  first (`p-ui stop`), or restore to a different path and move it into place.
+  Restore a backup onto the **same major version** of the panel it came from when
+  possible. Across major upgrades, let the panel run its migrations rather than
+  forcing an old schema.
 </Callout>
-
-If you'd rather drive the binary directly, it takes explicit flags — and
-`--restore` **requires** `--out` (it exits with an error otherwise):
-
-```bash
-/usr/local/p-ui/p-ui migrate-db --src /root/p-ui.db --dump /root/p-ui.dump
-/usr/local/p-ui/p-ui migrate-db --restore /root/p-ui.dump --out /root/p-ui.db
-```
-
-To move to PostgreSQL instead, see [Database](/docs/reference/database).
 
 <Callout type="info">
   Whatever method you use, store backups **off the server** and test a restore

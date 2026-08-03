@@ -269,7 +269,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/server/fail2banStatus',
         summary: 'Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the "IP Limit" field, since enforcement depends on Fail2ban being installed.',
-        response: '{\n  "success": true,\n  "obj": {\n    "enabled": true,\n    "installed": true,\n    "usable": true,\n    "windows": false\n  }\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "enabled": true,\n    "installed": true,\n    "usable": true\n  }\n}',
       },
       {
         method: 'GET',
@@ -343,12 +343,7 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/server/getDb',
-        summary: 'Stream a full database backup as an attachment: the SQLite .db file on SQLite panels, or a pg_dump custom-format archive (.dump) on PostgreSQL panels. Use as a manual backup.',
-      },
-      {
-        method: 'GET',
-        path: '/panel/api/server/getMigration',
-        summary: 'Stream a cross-engine migration file as an attachment: a .dump (SQL text) on SQLite, or a .db SQLite database built from the live data on PostgreSQL.',
+        summary: 'Stream a full database backup as an attachment — a pg_dump custom-format archive (.dump). Use as a manual backup.',
       },
       {
         method: 'GET',
@@ -473,9 +468,9 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/panel/api/server/importDB',
-        summary: 'Restore the panel DB from an uploaded backup (multipart form, field name "db"). SQLite panels accept a SQLite database (.db) or a SQLite migration dump (.dump); PostgreSQL panels accept a pg_dump archive (.dump), a SQLite database (.db), or a SQLite migration dump. The panel restarts after restore. Destructive.',
+        summary: 'Restore the panel DB from an uploaded pg_dump archive (.dump), sent as multipart form field "db" and loaded with pg_restore. The panel restarts after restore. Destructive.',
         params: [
-          { name: 'db', in: 'body (multipart)', type: 'file', desc: 'Database backup or migration file to upload.' },
+          { name: 'db', in: 'body (multipart)', type: 'file', desc: 'pg_dump archive (.dump) to upload.' },
         ],
       },
       {

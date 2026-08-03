@@ -1,24 +1,17 @@
 package database
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/xray"
 )
 
-// TestRepairOverflowedTrafficCounters_HealsSQLiteRealPromotion reproduces
-// #5762: a counter pushed past int64 makes SQLite silently store the cell as
-// REAL, after which scanning the row back into the Go int64 field fails and
-// every reader of client_traffics breaks. The startup repair must convert the
-// cell back to a scannable integer clamped to TrafficMax.
-func TestRepairOverflowedTrafficCounters_HealsSQLiteRealPromotion(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+// TestRepairOverflowedTrafficCounters_ClampsOutOfRangeCounters covers the #5762
+// startup repair: counters that historic compounding bugs pushed above the
+// TrafficMax headroom (or below zero) are pulled back into [0, TrafficMax] so
+// the next delta cannot overflow int64, and healthy rows are left alone.
+func TestRepairOverflowedTrafficCounters_ClampsOutOfRangeCounters(t *testing.T) {
+	initTestDB(t)
 
 	rows := []xray.ClientTraffic{
 		{Email: "overflowed@x", Enable: true, Up: 5, Down: 6},
@@ -31,16 +24,11 @@ func TestRepairOverflowedTrafficCounters_HealsSQLiteRealPromotion(t *testing.T) 
 		}
 	}
 
-	if err := db.Exec("UPDATE client_traffics SET down = 1.2247589467272907e+19 WHERE email = 'overflowed@x'").Error; err != nil {
+	if err := db.Exec("UPDATE client_traffics SET down = ? WHERE email = 'overflowed@x'", TrafficMax+100_000).Error; err != nil {
 		t.Fatalf("corrupt down: %v", err)
 	}
 	if err := db.Exec("UPDATE client_traffics SET up = -42 WHERE email = 'negative@x'").Error; err != nil {
 		t.Fatalf("corrupt up: %v", err)
-	}
-
-	var broken []xray.ClientTraffic
-	if err := db.Find(&broken).Error; err == nil {
-		t.Fatal("expected the REAL-promoted row to break scanning before the repair")
 	}
 
 	if err := repairOverflowedTrafficCounters(); err != nil {
@@ -71,14 +59,9 @@ func TestRepairOverflowedTrafficCounters_HealsSQLiteRealPromotion(t *testing.T) 
 
 // TestClampedAddExpr_CapsAtTrafficMax verifies the write-path clamp: a delta
 // applied to a counter near the cap must saturate at TrafficMax instead of
-// overflowing int64 (which SQLite would promote to REAL).
+// overflowing int64.
 func TestClampedAddExpr_CapsAtTrafficMax(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB failed: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 
 	row := xray.ClientTraffic{Email: "near-cap@x", Enable: true, Up: TrafficMax - 10, Down: 1}
 	if err := db.Create(&row).Error; err != nil {

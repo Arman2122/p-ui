@@ -50,8 +50,8 @@ func GetSubServer() SubServer {
 }
 
 // SetRestartHook registers a callback that triggers an in-process panel
-// restart. main.go sets this up to push SIGHUP into its own signal channel
-// so the restart path works on Windows (where p.Signal(SIGHUP) is unsupported).
+// restart. main.go sets this up to push SIGHUP into its own signal channel so
+// the restart never depends on the process being able to signal itself.
 func SetRestartHook(fn func()) {
 	restartHookMu.Lock()
 	defer restartHookMu.Unlock()

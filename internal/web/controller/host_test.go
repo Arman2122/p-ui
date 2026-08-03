@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/gin-contrib/sessions"
@@ -23,12 +22,7 @@ func newHostTestDB(t *testing.T) {
 	t.Helper()
 	puilogger.InitLogger(logging.ERROR)
 	gin.SetMode(gin.TestMode)
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initTestDB(t)
 }
 
 type hostEnvelope struct {

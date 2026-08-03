@@ -17,7 +17,7 @@ subscriptions — from a browser dashboard.
 flowchart LR
   Admin["Admin browser"] -->|HTTPS panel| Panel["Penhoon UI panel"]
   Panel -->|writes config, reloads| Xray["Xray-core"]
-  Panel --- DB[("SQLite or PostgreSQL")]
+  Panel --- DB[("PostgreSQL")]
   Clients["Client apps"] -->|VLESS / VMess / Trojan / ...| Xray
   Xray -->|proxied traffic| Internet["Internet"]
 `}
@@ -49,12 +49,14 @@ flowchart LR
 | ------------ | -------------------------------------------- |
 | Backend      | Go with the Gin web framework                |
 | Frontend     | TypeScript / React                           |
-| Database     | SQLite (default) or PostgreSQL               |
+| Database     | PostgreSQL                                   |
+| Host         | Linux (Ubuntu 22.04+/Debian 12+) with systemd |
 | Proxy engine | Xray-core (bundled and managed by the panel) |
 
-The default SQLite database lives at `/etc/p-ui/p-ui.db`, and the panel listens
-on port **2053** by default. Both are configurable — see
-[First login](/docs/guide/first-login) and the environment variable reference.
+The panel connects to PostgreSQL through the required
+[`PUI_DB_DSN`](/docs/reference/env-vars#database) and listens on port **2053** by
+default. Both are configurable — see [First login](/docs/guide/first-login) and
+the environment variable reference.
 
 ## Who it's for
 

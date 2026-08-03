@@ -5,24 +5,21 @@ icon: Variable
 ---
 
 Penhoon UI reads its runtime configuration from `PUI_*` environment variables. On a
-script install the installer writes them to the service environment file
-(`/etc/default/p-ui`, or `/etc/conf.d/p-ui` / `/etc/sysconfig/p-ui` depending on
-the distro); for Docker you set them in `docker-compose.yml` or `docker run -e`.
-Defaults are sensible — set only what you need to change, then restart:
-`systemctl restart p-ui`.
+script install the installer writes them to the service environment file that
+systemd loads, `/etc/default/p-ui`. Defaults are sensible — set only what you need
+to change, then restart: `systemctl restart p-ui`.
 
 ## Database
 
 | Variable                 | Default     | Description                                                          |
 | ------------------------ | ----------- | -------------------------------------------------------------------- |
-| `PUI_DB_TYPE`            | `sqlite`    | Backend: `sqlite`, or `postgres` (also accepts `postgresql` / `pg`). |
-| `PUI_DB_FOLDER`          | `/etc/p-ui` | Folder for the SQLite database file (`p-ui.db`).                     |
-| `PUI_DB_DSN`             | —           | PostgreSQL connection string (used when `PUI_DB_TYPE=postgres`).     |
+| `PUI_DB_DSN`             | —           | **Required.** PostgreSQL connection string, e.g. `postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable`. |
 | `PUI_DB_MAX_OPEN_CONNS`  | —           | Max open connections in the PostgreSQL pool.                         |
 | `PUI_DB_MAX_IDLE_CONNS`  | —           | Max idle connections in the PostgreSQL pool.                         |
 
-The default SQLite database path is `/etc/p-ui/p-ui.db`. See
-[Database](/docs/reference/database) for the SQLite ↔ PostgreSQL details.
+PostgreSQL is the only backend. With `PUI_DB_DSN` unset or unparseable the panel
+exits at startup instead of falling back to anything — see
+[Database](/docs/reference/database).
 
 ## Panel
 

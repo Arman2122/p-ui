@@ -4,48 +4,15 @@ Thanks for taking the time to contribute to Penhoon UI. This guide gets a develo
 
 ## Prerequisites
 
+Penhoon UI is **Linux-only** — it targets Ubuntu 22.04 / 24.04 / 26.04 and Debian 12+ with systemd, `apt` and `iptables`, and releases ship Linux binaries only. Develop on one of those distributions (a VM or container is fine): the service management, firewall and Fail2ban paths have no equivalent elsewhere.
+
 - **Go 1.26+** (the version pinned in `go.mod`)
 - **Node.js 24 LTS** (the version pinned in `.nvmrc`) and npm 10+ (for the React frontend)
 - **Git**
-- **A C compiler** — required by the CGo SQLite driver (`github.com/mattn/go-sqlite3`). Linux and macOS already ship one; for Windows see below.
+- **PostgreSQL** — the panel's only database backend. Install the distro package (`apt install postgresql postgresql-client`) and create a role and database for development.
+- **`build-essential`** — *optional*. The panel itself is pure Go and builds with `CGO_ENABLED=0`; only `go test -race` needs a C toolchain.
 
-### Windows: MinGW-w64
-
-`go build` on Windows fails with `cgo: C compiler "gcc" not found` until a GCC toolchain is installed. Two options — pick whichever fits.
-
-**Option A — standalone zip (fastest, no package manager)**
-
-1. Download the latest build from <https://github.com/niXman/mingw-builds-binaries/releases>. For most setups, pick a release named:
-   ```
-   x86_64-<version>-release-posix-seh-ucrt-rt_<n>-rev<m>.7z
-   ```
-   (64-bit, POSIX threads, SEH exceptions, UCRT runtime — matches modern Windows defaults.)
-2. Extract it somewhere stable, e.g. `C:\mingw64\`.
-3. Add `C:\mingw64\bin` to the **Windows** `PATH` (System Properties → Environment Variables → Path → New).
-4. Open a fresh terminal and confirm:
-   ```powershell
-   gcc --version
-   ```
-
-**Option B — MSYS2 (when a Unix shell is also useful)**
-
-1. Install MSYS2 from <https://www.msys2.org/>.
-2. Open the **MSYS2 UCRT64** shell from the Start menu and update once:
-   ```bash
-   pacman -Syu
-   ```
-3. Install the UCRT64 toolchain:
-   ```bash
-   pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkg-config
-   ```
-4. Add `C:\msys64\ucrt64\bin` to the Windows `PATH`.
-5. Verify with `gcc --version` in a fresh terminal.
-
-After either path, `go build ./...` and `go run .` work normally.
-
-> **Why MinGW-w64 over MSVC:** `mattn/go-sqlite3` officially supports GCC, builds are faster on Windows, and the toolchain does not require a Visual Studio install. If Visual Studio Build Tools are already present that works too — just make sure `CC=cl` is **not** set in the environment.
-
-Cross-building the Linux SQLite target from Windows (or vice versa) requires a separate cross-compiler and is out of scope here; build natively on the target OS.
+`pg_dump` and `pg_restore` (from `postgresql-client`) must be on `PATH` for the panel's backup and restore features to work locally.
 
 ## First-time setup
 
@@ -65,18 +32,18 @@ npm run build
 cd ..
 ```
 
-`.env.example` ships with defaults that keep the database, logs, and xray binary inside the local `p-ui/` folder so nothing escapes the project directory:
+`.env.example` ships with defaults that keep logs and the xray binary inside the local `p-ui/` folder so nothing escapes the project directory. The one value you must set is the database DSN — the panel refuses to start without it:
 
 ```
 PUI_DEBUG=true
-PUI_DB_FOLDER=p-ui
+PUI_DB_DSN=postgres://pui:pui@127.0.0.1:5432/pui?sslmode=disable
 PUI_LOG_FOLDER=p-ui
 PUI_BIN_FOLDER=p-ui
 PUI_INIT_WEB_BASE_PATH=/
 # PUI_PORT=8080
 ```
 
-Drop the xray binary (`xray-windows-amd64.exe` on Windows, `xray-linux-amd64` on Linux, etc.) plus the matching `geoip.dat` and `geosite.dat` files into `p-ui/`. The easiest source is a [released Xray-core build](https://github.com/XTLS/Xray-core/releases). On Windows, `wintun.dll` is also required for testing TUN inbounds.
+Drop the xray binary (`xray-linux-amd64`, or the build matching your architecture) plus the matching `geoip.dat` and `geosite.dat` files into `p-ui/`. The easiest source is a [released Xray-core build](https://github.com/XTLS/Xray-core/releases).
 
 ## Running
 
@@ -88,48 +55,20 @@ Open [http://localhost:2053](http://localhost:2053) and log in with `admin` / `a
 
 ### Inside VS Code
 
-The repo checks in two VS Code launch profiles in `.vscode/launch.json`: **Run p-ui (Debug)** for the default SQLite setup, and **Run p-ui (Postgres)** which points `PUI_DB_TYPE`/`PUI_DB_DSN` at a local PostgreSQL. The Postgres profile also prepends the PostgreSQL `bin` to `PATH` so the panel can find `pg_dump`/`pg_restore` (the `postgresql-client` tools used for DB backup/restore) — adjust the DSN and that path to your machine:
+The repo checks in a **Run p-ui** launch profile in `.vscode/launch.json`. It runs the panel in debug mode with logs and binaries under the local `p-ui/` folder and points `PUI_DB_DSN` at a local PostgreSQL — adjust the DSN for your machine:
 
 ```jsonc
 {
-  "$schema": "vscode://schemas/launch",
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Run p-ui (Debug)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PUI_DEBUG": "true",
-        "PUI_DB_FOLDER": "p-ui",
-        "PUI_LOG_FOLDER": "p-ui",
-        "PUI_BIN_FOLDER": "p-ui"
-      },
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Run p-ui (Postgres)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PUI_DEBUG": "true",
-        "PUI_LOG_FOLDER": "p-ui",
-        "PUI_BIN_FOLDER": "p-ui",
-        "PUI_DB_TYPE": "postgres",
-        "PUI_DB_DSN": "postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable",
-        "PATH": "C:\\Program Files\\PostgreSQL\\18\\bin;${env:PATH}"
-      },
-      "console": "integratedTerminal"
-    }
-  ]
+  "env": {
+    "PUI_DEBUG": "true",
+    "PUI_LOG_FOLDER": "p-ui",
+    "PUI_BIN_FOLDER": "p-ui",
+    "PUI_DB_DSN": "postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable"
+  }
 }
 ```
+
+Keep `pg_dump`/`pg_restore` on `PATH` for the panel's DB backup/restore to work from a debug session.
 
 ## Working on the frontend
 
@@ -232,11 +171,11 @@ For deeper notes on the frontend toolchain see [`frontend/README.md`](frontend/R
 | `main.go` | Process entry point, CLI subcommands, signal handling |
 | `internal/web/` | Gin HTTP server, controllers, services, embedded frontend assets |
 | `frontend/` | React + Ant Design 6 + TypeScript source for the panel UI |
-| `internal/database/` | GORM models, migrations, seeders (SQLite / PostgreSQL) |
+| `internal/database/` | GORM models, migrations, seeders (PostgreSQL) |
 | `internal/xray/` | Xray-core process lifecycle and gRPC API client |
 | `internal/sub/` | Subscription endpoints (raw, JSON, Clash) |
 | `internal/config/` | Environment-variable helpers, paths, defaults |
-| `p-ui/` | **Runtime data** — db, logs, xray binary, geo files (gitignored) |
+| `p-ui/` | **Runtime data** — logs, xray binary, geo files (gitignored) |
 
 ## Testing
 
@@ -246,16 +185,17 @@ Tests live next to the code (`foo.go` ↔ `foo_test.go`); frontend specs and gol
 
 - **Stdlib `testing` only** — no testify. Table-driven with `t.Run` subtests and `t.Helper()` on helpers.
 - **Assert the contract, not internals.** Pin the exact value / typed error / emitted string — not `err != nil` or `len > 0`. A test that still passes when the behavior is broken is worse than no test.
-- **Real dependencies over mocks.** Get a throwaway DB with `database.InitDB(filepath.Join(t.TempDir(), "p-ui.db"))` + `t.Cleanup(func() { _ = database.CloseDB() })` (Windows-safe), and use `httptest` servers for HTTP. The `internal/sub` suite's `initSubDB(t)` is the template.
+- **Real dependencies over mocks.** Database-backed tests run against a real PostgreSQL server: they `t.Skip` unless `PUI_DB_DSN` points at a reachable instance, so a green `go test ./...` on a machine without PostgreSQL does not mean those paths ran. Use `httptest` servers for HTTP. The `internal/sub` suite's `initSubDB(t)` is the template for the setup/teardown pair.
 
 ### Running
 
 | Goal | Command |
 |------|---------|
 | Standard run | `go test ./...` |
-| Hygiene — data races + order-dependence | `go test -race -shuffle=on -count=1 ./...` (`-race` needs the C compiler from Prerequisites) |
+| Hygiene — data races + order-dependence | `go test -race -shuffle=on -count=1 ./...` (`-race` needs a C toolchain — `build-essential`) |
 | Coverage gaps | `go test -coverprofile=cov.out ./<pkg>/... && go tool cover -func=cov.out` |
 | Fuzz a parser briefly | `go test -run '^$' -fuzz 'FuzzName$' -fuzztime=30s ./<pkg>/...` |
+| Include the database-backed tests | `PUI_DB_DSN="postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable" go test ./...` |
 
 Frontend: `cd frontend && npm run test` (vitest), or `npm run test -- --coverage`.
 
@@ -279,7 +219,7 @@ CI runs this for you nightly (and on demand) via `.github/workflows/mutation.yml
 
 ### CI
 
-`.github/workflows/ci.yml` runs per PR: `go-test` (with `-shuffle -count=1`), a `race` job (`-race -shuffle -count=1`), a `fuzz-smoke` job on the critical parsers, and the frontend `typecheck`/`lint`/`test`/`build`/`build-storybook`. Snapshots are regression guards — regenerate them (`npx vitest run -u`) only for intentional output changes, never to make a red test green.
+`.github/workflows/ci.yml` runs per PR: `go-test` (with `-shuffle -count=1`), a `race` job (`-race -shuffle -count=1`), a `fuzz-smoke` job on the critical parsers, a job that runs the durability tests against a live PostgreSQL service container (a SKIP there counts as a failure), and the frontend `typecheck`/`lint`/`test`/`build`/`build-storybook`. Snapshots are regression guards — regenerate them (`npx vitest run -u`) only for intentional output changes, never to make a red test green.
 
 ## Sending a pull request
 
@@ -298,19 +238,16 @@ CI runs this for you nightly (and on demand) via `.github/workflows/mutation.yml
 |----------|---------|---------|
 | `PUI_DEBUG` | `false` | Verbose logs + Gin debug mode + serve `/assets` from disk |
 | `PUI_LOG_LEVEL` | `info` | `debug` / `info` / `notice` / `warning` / `error` |
-| `PUI_DB_FOLDER` | platform default | Where `p-ui.db` lives |
-| `PUI_LOG_FOLDER` | platform default | Where `pui.log` lives |
+| `PUI_DB_DSN` | — | **Required.** PostgreSQL DSN; the panel exits at startup if it is missing or unparseable |
+| `PUI_LOG_FOLDER` | `/var/log/p-ui` | Where `pui.log` lives |
 | `PUI_BIN_FOLDER` | `bin` | Where the xray binary, geo files, and xray `config.json` live |
 | `PUI_INIT_WEB_BASE_PATH` | `/` | The initial URI path for the web panel |
 | `PUI_PORT` | persisted `webPort` | Runtime-only web panel listener port override (`1` through `65535`) |
-| `PUI_DB_TYPE` | `sqlite` | Set to `postgres` to use PostgreSQL via `PUI_DB_DSN` |
-| `PUI_DB_DSN` | — | PostgreSQL DSN when `PUI_DB_TYPE=postgres` |
 
 A valid `PUI_PORT` takes precedence over the database-backed `webPort` for the
 current process without changing the stored setting. Unset, empty, whitespace-only,
 malformed, or out-of-range values fall back to `webPort`; invalid configured values
-also produce a warning. With Docker bridge networking, the published container port
-must match the override, for example `PUI_PORT: "8080"` with `ports: ["8080:8080"]`.
+also produce a warning.
 
 ## Issues
 

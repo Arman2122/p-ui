@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -107,10 +106,6 @@ func (s *PanelService) RestartPanel(delay time.Duration) error {
 	go func() {
 		time.Sleep(delay)
 		if global.TriggerRestart() {
-			return
-		}
-		if runtime.GOOS == "windows" {
-			logger.Error("panel restart: no restart hook registered (SIGHUP unsupported on Windows)")
 			return
 		}
 		p, err := os.FindProcess(syscall.Getpid())
@@ -223,10 +218,6 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 			releaseUpdateSlot()
 		}
 	}()
-
-	if runtime.GOOS != "linux" {
-		return 0, fmt.Errorf("panel web update is supported only on Linux installations")
-	}
 
 	bash, err := exec.LookPath("bash")
 	if err != nil {

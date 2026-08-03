@@ -3,25 +3,11 @@ package database
 import (
 	"testing"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
 
 func TestNormalizeApiTokenCreatedAtSeconds(t *testing.T) {
-	originalDB := db
-	t.Cleanup(func() { db = originalDB })
-
-	var err error
-	db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ApiToken{}); err != nil {
-		t.Fatalf("migrate api_tokens: %v", err)
-	}
+	initTestDB(t)
 
 	rows := []model.ApiToken{
 		{Name: "seconds", Token: "a", CreatedAt: 1_782_485_394},
@@ -39,8 +25,11 @@ func TestNormalizeApiTokenCreatedAtSeconds(t *testing.T) {
 	}
 
 	var got []model.ApiToken
-	if err := db.Order("id asc").Find(&got).Error; err != nil {
+	if err := db.Where("name IN ?", []string{"seconds", "milliseconds"}).Order("id asc").Find(&got).Error; err != nil {
 		t.Fatalf("read api tokens: %v", err)
+	}
+	if len(got) != len(rows) {
+		t.Fatalf("read %d api tokens, want %d", len(got), len(rows))
 	}
 	for _, row := range got {
 		if row.CreatedAt != 1_782_485_394 {

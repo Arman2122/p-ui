@@ -6,7 +6,7 @@ import type { Locale } from './i18n';
 // can't live in MDX. English is the source; fa falls back to en.
 //
 // Convention matches the docs: translate prose only — product/protocol names
-// (Penhoon UI, Xray, VLESS, REALITY, x25519, Docker, REST API, …) stay in Latin.
+// (Penhoon UI, Xray, VLESS, REALITY, x25519, PostgreSQL, REST API, …) stay in Latin.
 export interface SiteMessages {
   tagline: string;
   getStarted: string;
@@ -70,7 +70,7 @@ const en: SiteMessages = {
     {
       title: 'Self-hosted & scriptable',
       description:
-        'A single Go binary or Docker image, an SQLite/PostgreSQL backend, and a full REST API for automation.',
+        'A single static Go binary on Ubuntu or Debian, a PostgreSQL backend, and a full REST API for automation.',
     },
   ],
   licenseBefore: 'released under the ',
@@ -120,7 +120,7 @@ const fa: SiteMessages = {
     {
       title: 'خودمیزبان و قابل‌اسکریپت',
       description:
-        'یک باینری Go یا ایمیج Docker، بک‌اندِ SQLite/PostgreSQL، و یک REST API کامل برای خودکارسازی.',
+        'یک باینری استاتیک Go روی Ubuntu یا Debian، بک‌اندِ PostgreSQL، و یک REST API کامل برای خودکارسازی.',
     },
   ],
   licenseBefore: 'تحت مجوز ',

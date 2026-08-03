@@ -1,7 +1,6 @@
 package sub
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
@@ -15,12 +14,7 @@ import (
 // Before the email fallback, {{TRAFFIC_USED}} stayed at 0 for such pre-existing
 // clients while the sub-info header was correct (#5567).
 func TestStatsForClient_OrphanedInboundIdFallback(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initSubDB(t)
 
 	const email = "old-client@example.com"
 	const total = int64(100) * gb

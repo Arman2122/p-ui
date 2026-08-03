@@ -8,11 +8,14 @@ plain='\033[0m'
 
 pui_folder="${PUI_MAIN_FOLDER:=/usr/local/p-ui}"
 pui_service="${PUI_SERVICE:=/etc/systemd/system}"
+# Read by the systemd unit (EnvironmentFile=-/etc/default/p-ui); holds PUI_DB_DSN.
+pui_env_file="/etc/default/p-ui"
 
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}Fatal error: ${plain} Please run this script with root privilege \n " && exit 1
 
-# Check OS and set release variable
+# Penhoon UI targets Ubuntu 22.04 / 24.04 / 26.04 and Debian 12+ exclusively.
+# apt, systemd and iptables are assumed unconditionally from here on.
 if [[ -f /etc/os-release ]]; then
     source /etc/os-release
     release=$ID
@@ -20,10 +23,46 @@ elif [[ -f /usr/lib/os-release ]]; then
     source /usr/lib/os-release
     release=$ID
 else
-    echo "Failed to check the system OS, please contact the author!" >&2
+    echo "Failed to detect the operating system: no os-release file found." >&2
     exit 1
 fi
-echo "The OS release is: $release"
+
+unsupported_os() {
+    echo -e "${red}Unsupported operating system: ${PRETTY_NAME:-${release} ${VERSION_ID:-unknown}}${plain}" >&2
+    echo -e "${yellow}Penhoon UI supports Ubuntu 22.04 / 24.04 / 26.04 and Debian 12 or newer only.${plain}" >&2
+    echo -e "${yellow}It requires apt, systemd and iptables; no other distribution or init system is supported.${plain}" >&2
+    exit 1
+}
+
+case "${release}" in
+    ubuntu)
+        case "${VERSION_ID:-}" in
+            22.04 | 24.04 | 26.04) ;;
+            *) unsupported_os ;;
+        esac
+        ;;
+    debian)
+        debian_major="${VERSION_ID%%.*}"
+        [[ "${debian_major}" =~ ^[0-9]+$ ]] && ((debian_major >= 12)) || unsupported_os
+        ;;
+    *)
+        unsupported_os
+        ;;
+esac
+
+if ! command -v apt-get > /dev/null 2>&1; then
+    echo -e "${red}apt-get not found: Penhoon UI installs its dependencies with apt.${plain}" >&2
+    exit 1
+fi
+if ! command -v systemctl > /dev/null 2>&1; then
+    echo -e "${red}systemctl not found: Penhoon UI runs as a systemd service.${plain}" >&2
+    exit 1
+fi
+
+# Every apt invocation below runs unattended.
+export DEBIAN_FRONTEND=noninteractive
+
+echo "The OS release is: ${PRETTY_NAME:-${release} ${VERSION_ID}}"
 
 arch() {
     case "$(uname -m)" in
@@ -93,34 +132,12 @@ is_port_in_use() {
     return 1
 }
 
+# sudo is a hard dependency, not a convenience: provisioning PostgreSQL runs
+# every psql call as `sudo -u postgres`, and a Debian installed with a root
+# password does not ship sudo. Without it the now-mandatory database setup
+# would abort the whole install.
 install_base() {
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update && apt-get install -y -q cron curl tar tzdata socat ca-certificates openssl
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf makecache -y && dnf install -y -q cronie curl tar tzdata socat ca-certificates openssl
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum makecache -y && yum install -y cronie curl tar tzdata socat ca-certificates openssl
-            else
-                dnf makecache -y && dnf install -y -q cronie curl tar tzdata socat ca-certificates openssl
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm cronie curl tar tzdata socat ca-certificates openssl
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper refresh && zypper -q install -y cron curl tar timezone socat ca-certificates openssl
-            ;;
-        alpine)
-            apk update && apk add dcron curl tar tzdata socat ca-certificates openssl
-            ;;
-        *)
-            apt-get update && apt-get install -y -q cron curl tar tzdata socat ca-certificates openssl
-            ;;
-    esac
+    apt-get update && apt-get install -y -q cron curl tar tzdata socat ca-certificates openssl iptables sudo
 }
 
 gen_random_string() {
@@ -144,15 +161,15 @@ prompt_or_default() {
     fi
 }
 
-# write_install_result <user> <pass> <port> <webpath> <scheme> <host> <token> <dbtype>
+# write_install_result <user> <pass> <port> <webpath> <scheme> <host> <token>
 # Persists a parseable, root-only credentials file consumed by cloud-init/MOTD.
 # Values are written with printf '%q' so a pinned password/username containing
 # spaces, quotes, $(...) or backticks is shell-escaped and the file stays safely
 # source-able (consumers do '. install-result.env'). For the alphanumeric random
 # values gen_random_string emits, %q is a no-op. This is a DIFFERENT file from the
-# Postgres env file (/etc/default/p-ui).
+# Postgres env file (/etc/default/p-ui), which holds the DSN and stays out of here.
 write_install_result() {
-    local u="$1" p="$2" port="$3" wbp="$4" scheme="$5" host="$6" token="$7" dbtype="$8"
+    local u="$1" p="$2" port="$3" wbp="$4" scheme="$5" host="$6" token="$7"
     local result_file="/etc/p-ui/install-result.env"
     local url_host="${host:-SERVER_IP_UNKNOWN}"
     install -d -m 755 /etc/p-ui 2> /dev/null
@@ -166,7 +183,6 @@ write_install_result() {
         printf 'PUI_WEB_BASE_PATH=%q\n' "$wbp"
         printf 'PUI_ACCESS_URL=%q\n' "${scheme}://${url_host}:${port}/${wbp}"
         printf 'PUI_API_TOKEN=%q\n' "$token"
-        printf 'PUI_DB_TYPE=%q\n' "$dbtype"
     } > "$result_file"; then
         umask "$prev_umask"
         echo -e "${yellow}Warning: failed to write ${result_file}.${plain}" >&2
@@ -178,11 +194,12 @@ write_install_result() {
     echo -e "${green}Install result written to ${result_file} (mode 600).${plain}"
 }
 
-# RHEL-family initdb writes pg_hba.conf host rules with ident auth, which
+# Debian/Ubuntu ship pg_hba.conf with scram-sha-256 for TCP logins, but a cluster
+# that already existed on this host may have been switched to ident auth, which
 # compares the OS username against the Postgres role and always rejects the
 # randomly generated panel role over TCP (#5806). Prepend password-auth rules
 # scoped to the panel database; first match wins, and md5 also accepts
-# scram-sha-256-stored verifiers, so this works on every supported distro.
+# scram-sha-256-stored verifiers, so this is safe on a default cluster too.
 pg_ensure_hba_password_auth() {
     local pg_db="$1"
     local hba_file
@@ -215,52 +232,10 @@ install_postgres_local() {
     local pg_host="127.0.0.1"
     local pg_port="5432"
 
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update >&2 && apt-get install -y -q postgresql >&2 || return 1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf install -y -q postgresql-server postgresql-contrib >&2 || return 1
-            [[ -d /var/lib/pgsql/data && -f /var/lib/pgsql/data/PG_VERSION ]] || postgresql-setup --initdb >&2 || return 1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum install -y postgresql-server postgresql-contrib >&2 || return 1
-            else
-                dnf install -y -q postgresql-server postgresql-contrib >&2 || return 1
-            fi
-            [[ -d /var/lib/pgsql/data && -f /var/lib/pgsql/data/PG_VERSION ]] || postgresql-setup --initdb >&2 || return 1
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm postgresql >&2 || return 1
-            if [[ ! -f /var/lib/postgres/data/PG_VERSION ]]; then
-                sudo -u postgres initdb -D /var/lib/postgres/data >&2 || return 1
-            fi
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper -q install -y postgresql-server postgresql-contrib >&2 || return 1
-            if [[ ! -f /var/lib/pgsql/data/PG_VERSION ]]; then
-                install -d -o postgres -g postgres -m 700 /var/lib/pgsql/data >&2 || return 1
-                su - postgres -c "initdb -D /var/lib/pgsql/data" >&2 || return 1
-            fi
-            ;;
-        alpine)
-            apk add --no-cache postgresql postgresql-contrib >&2 || return 1
-            if [[ ! -f /var/lib/postgresql/data/PG_VERSION ]]; then
-                /etc/init.d/postgresql setup >&2 || return 1
-            fi
-            rc-update add postgresql default >&2 2> /dev/null || true
-            rc-service postgresql start >&2 || return 1
-            ;;
-        *)
-            echo -e "${red}Unsupported distro for automatic PostgreSQL install: ${release}${plain}" >&2
-            return 1
-            ;;
-    esac
-
-    if [[ "${release}" != "alpine" ]]; then
-        systemctl enable --now postgresql >&2 || return 1
-    fi
+    # The Debian/Ubuntu postgresql package creates and starts the default
+    # cluster for us, so there is no initdb step here.
+    apt-get update >&2 && apt-get install -y -q postgresql >&2 || return 1
+    systemctl enable --now postgresql >&2 || return 1
 
     # Wait briefly for the server to accept connections.
     local i
@@ -324,46 +299,184 @@ ensure_pg_client() {
         return 0
     fi
     echo -e "${yellow}Installing PostgreSQL client tools (pg_dump/pg_restore) for in-panel backup...${plain}" >&2
-    case "${release}" in
-        ubuntu | debian | armbian)
-            apt-get update >&2 && apt-get install -y -q postgresql-client >&2 || return 1
-            ;;
-        fedora | amzn | virtuozzo | rhel | almalinux | rocky | ol)
-            dnf install -y -q postgresql >&2 || return 1
-            ;;
-        centos)
-            if [[ "${VERSION_ID}" =~ ^7 ]]; then
-                yum install -y postgresql >&2 || return 1
-            else
-                dnf install -y -q postgresql >&2 || return 1
-            fi
-            ;;
-        arch | manjaro | parch)
-            pacman -Sy --noconfirm postgresql >&2 || return 1
-            ;;
-        opensuse-tumbleweed | opensuse-leap)
-            zypper -q install -y postgresql >&2 || return 1
-            ;;
-        alpine)
-            apk add --no-cache postgresql-client >&2 || return 1
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    apt-get update >&2 && apt-get install -y -q postgresql-client >&2 || return 1
     command -v pg_dump > /dev/null 2>&1 && command -v pg_restore > /dev/null 2>&1
+}
+
+# Wraps install_postgres_local: captures the generated DSN into PROVISIONED_DSN
+# and the individual credential fields into PG_USER/PG_PASS/PG_HOST/PG_PORT/PG_DB
+# so the post-install summary can print them. Returns non-zero on failure.
+pg_provision_local() {
+    PROVISIONED_DSN=""
+    local cred_file
+    cred_file=$(mktemp 2> /dev/null) || cred_file=$(mktemp -t p-ui-pg-creds.XXXXXXXX)
+    if [[ -z "${cred_file}" ]]; then
+        echo -e "${red}Failed to create a temporary credentials file.${plain}" >&2
+        return 1
+    fi
+    if ! PROVISIONED_DSN=$(PG_CRED_FILE="${cred_file}" install_postgres_local); then
+        rm -f "${cred_file}"
+        return 1
+    fi
+    if [[ -r "${cred_file}" ]]; then
+        # shellcheck disable=SC1090
+        source "${cred_file}"
+    fi
+    rm -f "${cred_file}"
+    PG_LOCAL_INSTALLED=1
+    DB_LABEL="PostgreSQL (${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DB})"
+    return 0
+}
+
+# A DSN is only a string until something actually connects with it, and the
+# installer cannot notice a bad one on its own: `p-ui setting -show true` -- the
+# first thing config_after_install runs -- prints "Database initialization
+# failed: ..." but still exits 0 (main.go's setting case returns instead of
+# exiting), so every grep in config_after_install just comes up empty and the
+# script goes on to announce a successful install for a panel that will
+# crash-loop. `p-ui migrate` runs the exact same database.InitDB the panel does
+# and log.Fatal()s on failure, so it fails fast here with the panel's own
+# actionable message and doubles as the first schema migration. It retries the
+# connection with backoff for roughly a minute before giving up.
+verify_database_dsn() {
+    echo -e "${yellow}Verifying the PostgreSQL connection...${plain}"
+    if "${pui_folder}/p-ui" migrate; then
+        echo -e "${green}PostgreSQL connection verified.${plain}"
+        return 0
+    fi
+    echo ""
+    echo -e "${red}Cannot reach PostgreSQL with the configured PUI_DB_DSN -- aborting the install.${plain}"
+    echo -e "${yellow}Penhoon UI stores all of its data in PostgreSQL and has no other backend.${plain}"
+    echo -e "${yellow}Fix PUI_DB_DSN in ${pui_env_file} and run the installer again, for example:${plain}"
+    echo -e "  ${blue}PUI_DB_DSN=postgres://p-ui:PASSWORD@127.0.0.1:5432/p-ui?sslmode=disable${plain}"
+    echo -e "${yellow}The libpq form works too (space-separated key=value pairs):${plain}"
+    echo -e "  ${blue}PUI_DB_DSN=host=127.0.0.1 port=5432 user=p-ui password=PASSWORD dbname=p-ui sslmode=disable${plain}"
+    exit 1
+}
+
+# PostgreSQL is the only supported backend, so a DSN must exist before the panel
+# binary is ever invoked -- every `p-ui setting` call in config_after_install
+# already needs a live database. Sets PUI_DB_DSN (exported), DB_LABEL and
+# PG_LOCAL_INSTALLED, and persists the DSN into ${pui_env_file}, which the
+# systemd unit reads via EnvironmentFile.
+setup_database() {
+    PG_LOCAL_INSTALLED=0
+    DB_LABEL="PostgreSQL (external)"
+    local pui_dsn=""
+    local pg_mode=""
+    local pg_fail=""
+
+    # Re-running the installer (`p-ui install`, or the curl one-liner) must not
+    # re-provision a database that is already wired up, and must never clobber
+    # an external DSN.
+    if [[ -z "${PUI_DB_DSN:-}" && -r "${pui_env_file}" ]]; then
+        local existing_dsn
+        existing_dsn=$(grep -m1 '^PUI_DB_DSN=' "${pui_env_file}" 2> /dev/null | cut -d= -f2-)
+        # EnvironmentFile syntax permits a quoted value; systemd and the CLI's
+        # dotenv loader strip those quotes, so strip them here too -- otherwise
+        # the DSN exported below would carry a literal leading quote.
+        existing_dsn=${existing_dsn%[\"\']}
+        existing_dsn=${existing_dsn#[\"\']}
+        if [[ -n "${existing_dsn}" ]]; then
+            echo -e "${green}Reusing the PostgreSQL DSN already configured in ${pui_env_file}.${plain}"
+            PUI_DB_DSN="${existing_dsn}"
+            DB_LABEL="PostgreSQL (configured in ${pui_env_file})"
+        fi
+    fi
+
+    if [[ -n "${PUI_DB_DSN:-}" ]]; then
+        pui_dsn="${PUI_DB_DSN}"
+    elif [[ "$NONINTERACTIVE" == "1" ]]; then
+        echo -e "${yellow}Installing PostgreSQL locally (non-interactive)...${plain}"
+        if pg_provision_local; then
+            pui_dsn="${PROVISIONED_DSN}"
+        else
+            echo -e "${red}PostgreSQL installation failed; aborting.${plain}"
+            echo -e "${yellow}Set PUI_DB_DSN=postgres://user:pass@host:5432/dbname?sslmode=disable to use an existing server.${plain}"
+            exit 1
+        fi
+    else
+        while [[ -z "$pui_dsn" ]]; do
+            echo ""
+            echo -e "${green}═══════════════════════════════════════════${plain}"
+            echo -e "${green}     PostgreSQL Database                   ${plain}"
+            echo -e "${green}═══════════════════════════════════════════${plain}"
+            echo -e "  1) Install PostgreSQL locally and create a dedicated user/db (recommended)"
+            echo -e "  2) Use an existing PostgreSQL server (enter DSN)"
+            read -rp "Choose [1]: " pg_mode
+            pg_mode="${pg_mode:-1}"
+            if [[ "$pg_mode" == "2" ]]; then
+                while [[ -z "$pui_dsn" ]]; do
+                    read -rp "Enter PostgreSQL DSN (postgres://user:pass@host:port/dbname?sslmode=disable): " pui_dsn
+                    # Trim surrounding whitespace ONLY. libpq's key=value DSN form
+                    # ("host=127.0.0.1 port=5432 user=pui ...") is accepted by
+                    # requireDSN() in internal/database/db.go and its fields are
+                    # space-separated, so squeezing out every space would silently
+                    # glue them into "host=127.0.0.1port=5432user=pui".
+                    pui_dsn="${pui_dsn#"${pui_dsn%%[![:space:]]*}"}"
+                    pui_dsn="${pui_dsn%"${pui_dsn##*[![:space:]]}"}"
+                done
+                DB_LABEL="PostgreSQL (external)"
+            else
+                echo -e "${yellow}Installing PostgreSQL — this may take a moment...${plain}"
+                if pg_provision_local; then
+                    pui_dsn="${PROVISIONED_DSN}"
+                else
+                    echo ""
+                    echo -e "${red}PostgreSQL installation failed.${plain}"
+                    echo -e "  1) Back to the database menu (retry, or enter an external DSN)"
+                    echo -e "  2) Abort install"
+                    read -rp "Choose [1]: " pg_fail
+                    if [[ "${pg_fail:-1}" == "2" ]]; then
+                        echo -e "${red}Install aborted.${plain}"
+                        exit 1
+                    fi
+                fi
+            fi
+        done
+    fi
+
+    # This is the service-wide EnvironmentFile: systemd loads every PUI_* knob
+    # from it (PUI_DB_MAX_OPEN_CONNS, PUI_LOG_LEVEL, PUI_TUNNEL_HEALTH_*, ...)
+    # and so does the CLI. Rewrite only the PUI_DB_DSN line so re-running the
+    # installer never wipes an operator's other settings -- same contract as
+    # pg_write_env() in p-ui.sh.
+    install -d -m 755 "$(dirname "${pui_env_file}")"
+    local prev_umask
+    prev_umask=$(umask)
+    umask 077
+    if ! touch "${pui_env_file}"; then
+        umask "${prev_umask}"
+        echo -e "${red}Failed to create ${pui_env_file}; the panel cannot start without PUI_DB_DSN.${plain}"
+        exit 1
+    fi
+    sed -i '/^PUI_DB_DSN=/d' "${pui_env_file}"
+    if ! printf 'PUI_DB_DSN=%s\n' "${pui_dsn}" >> "${pui_env_file}"; then
+        umask "${prev_umask}"
+        echo -e "${red}Failed to write ${pui_env_file}; the panel cannot start without PUI_DB_DSN.${plain}"
+        exit 1
+    fi
+    umask "${prev_umask}"
+    chmod 600 "${pui_env_file}"
+    chown root:root "${pui_env_file}" 2> /dev/null || true
+    export PUI_DB_DSN="${pui_dsn}"
+
+    ensure_pg_client || echo -e "${yellow}⚠ Could not install pg_dump/pg_restore. In-panel database backup/restore will be unavailable until you install the postgresql-client package.${plain}"
+
+    verify_database_dsn
 }
 
 install_acme() {
     echo -e "${green}Installing acme.sh for SSL certificate management...${plain}"
-    cd ~ || return 1
-    curl -s https://get.acme.sh | sh > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
+    # The `cd ~` stays inside a subshell on purpose. install_p-ui runs from the
+    # freshly extracted ${pui_folder} and this function is reached from
+    # config_after_install -> prompt_and_setup_ssl, so leaking the cd would move
+    # the caller's working directory to /root for the rest of the install.
+    if ! (cd ~ && curl -s https://get.acme.sh | sh) > /dev/null 2>&1; then
         echo -e "${red}Failed to install acme.sh${plain}"
         return 1
-    else
-        echo -e "${green}acme.sh installed successfully${plain}"
     fi
+    echo -e "${green}acme.sh installed successfully${plain}"
     return 0
 }
 
@@ -476,7 +589,7 @@ setup_ip_certificate() {
     fi
 
     # Set reload command for auto-renewal (add || true so it doesn't fail during first install)
-    local reloadCmd="systemctl restart p-ui 2>/dev/null || rc-service p-ui restart 2>/dev/null || true"
+    local reloadCmd="systemctl restart p-ui 2>/dev/null || true"
 
     # Choose port for HTTP-01 listener (default 80, prompt override)
     local WebPort=""
@@ -599,14 +712,13 @@ ssl_cert_issue() {
     # check for acme.sh first
     if ! command -v ~/.acme.sh/acme.sh &> /dev/null; then
         echo "acme.sh could not be found. Installing now..."
-        cd ~ || return 1
-        curl -s https://get.acme.sh | sh
-        if [ $? -ne 0 ]; then
+        # Subshell: see install_acme -- the caller's working directory must
+        # survive this, install_p-ui installs the systemd unit from it later.
+        if ! (cd ~ && curl -s https://get.acme.sh | sh); then
             echo -e "${red}Failed to install acme.sh${plain}"
             return 1
-        else
-            echo -e "${green}acme.sh installed successfully${plain}"
         fi
+        echo -e "${green}acme.sh installed successfully${plain}"
     fi
 
     # get the domain here, and we need to verify it
@@ -687,7 +799,7 @@ ssl_cert_issue() {
 
     # Stop panel temporarily
     echo -e "${yellow}Stopping panel temporarily...${plain}"
-    systemctl stop p-ui 2> /dev/null || rc-service p-ui stop 2> /dev/null
+    systemctl stop p-ui 2> /dev/null
 
     if [[ ${cert_exists} -eq 0 ]]; then
         # issue the certificate
@@ -697,7 +809,7 @@ ssl_cert_issue() {
         if [ $? -ne 0 ]; then
             echo -e "${red}Issuing certificate failed, please check logs.${plain}"
             rm -rf ~/.acme.sh/${domain} ~/.acme.sh/${domain}_ecc
-            systemctl start p-ui 2> /dev/null || rc-service p-ui start 2> /dev/null
+            systemctl start p-ui 2> /dev/null
             return 1
         else
             echo -e "${green}Issuing certificate succeeded, installing certificates...${plain}"
@@ -707,8 +819,8 @@ ssl_cert_issue() {
     fi
 
     # Setup reload command
-    reloadCmd="systemctl restart p-ui || rc-service p-ui restart"
-    echo -e "${green}Default --reloadcmd for ACME is: ${yellow}systemctl restart p-ui || rc-service p-ui restart${plain}"
+    reloadCmd="systemctl restart p-ui"
+    echo -e "${green}Default --reloadcmd for ACME is: ${yellow}systemctl restart p-ui${plain}"
     echo -e "${green}This command will run on every certificate issue and renew.${plain}"
     if [[ "$NONINTERACTIVE" == "1" ]]; then
         setReloadcmd="n"
@@ -756,7 +868,7 @@ ssl_cert_issue() {
         if [[ ${cert_exists} -eq 0 ]]; then
             rm -rf ~/.acme.sh/${domain} ~/.acme.sh/${domain}_ecc
         fi
-        systemctl start p-ui 2> /dev/null || rc-service p-ui start 2> /dev/null
+        systemctl start p-ui 2> /dev/null
         return 1
     fi
 
@@ -777,7 +889,7 @@ ssl_cert_issue() {
     fi
 
     # start panel
-    systemctl start p-ui 2> /dev/null || rc-service p-ui start 2> /dev/null
+    systemctl start p-ui 2> /dev/null
 
     # Prompt user to set panel paths after successful certificate installation
     if [[ "$NONINTERACTIVE" == "1" ]]; then
@@ -797,7 +909,7 @@ ssl_cert_issue() {
             echo ""
             echo -e "${green}Access URL: https://${domain}:${existing_port}/${existing_webBasePath}${plain}"
             echo -e "${yellow}Panel will restart to apply SSL certificate...${plain}"
-            systemctl restart p-ui 2> /dev/null || rc-service p-ui restart 2> /dev/null
+            systemctl restart p-ui 2> /dev/null
         else
             echo -e "${red}Error: Certificate or private key file not found for domain: $domain.${plain}"
         fi
@@ -895,11 +1007,7 @@ prompt_and_setup_ssl() {
             ipv6_addr="${ipv6_addr// /}" # Trim whitespace
 
             # Stop panel if running (port 80 needed)
-            if [[ $release == "alpine" ]]; then
-                rc-service p-ui stop > /dev/null 2>&1
-            else
-                systemctl stop p-ui > /dev/null 2>&1
-            fi
+            systemctl stop p-ui > /dev/null 2>&1
 
             setup_ip_certificate "${server_ip}" "${ipv6_addr}"
             if [ $? -eq 0 ]; then
@@ -968,7 +1076,7 @@ prompt_and_setup_ssl() {
             echo -e "${green}✓ Custom certificate paths applied.${plain}"
             echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
 
-            systemctl restart p-ui > /dev/null 2>&1 || rc-service p-ui restart > /dev/null 2>&1
+            systemctl restart p-ui > /dev/null 2>&1
             ;;
         4)
             echo ""
@@ -1007,7 +1115,7 @@ prompt_and_setup_ssl() {
                 echo -e "${yellow}Panel will listen on all interfaces over plain HTTP. Make sure something else is terminating TLS in front of it.${plain}"
             fi
 
-            systemctl restart p-ui > /dev/null 2>&1 || rc-service p-ui restart > /dev/null 2>&1
+            systemctl restart p-ui > /dev/null 2>&1
             echo -e "${green}✓ SSL setup skipped.${plain}"
             ;;
         *)
@@ -1067,134 +1175,6 @@ config_after_install() {
             local config_password="${PUI_PASSWORD:-$(gen_random_string 10)}"
             local config_port=""
 
-            local db_label="SQLite (/etc/p-ui/p-ui.db)"
-            echo ""
-            echo -e "${green}═══════════════════════════════════════════${plain}"
-            echo -e "${green}     Database Selection                    ${plain}"
-            echo -e "${green}═══════════════════════════════════════════${plain}"
-            echo -e "  1) SQLite     (default — recommended for < 500 clients)"
-            echo -e "  2) PostgreSQL (recommended for high client counts / many nodes)"
-            if [[ "$NONINTERACTIVE" == "1" ]]; then
-                if [[ "${PUI_DB_TYPE:-sqlite}" == "postgres" ]]; then
-                    db_choice="2"
-                else
-                    db_choice="1"
-                fi
-            else
-                read -rp "Choose [1]: " db_choice
-                db_choice="${db_choice:-1}"
-            fi
-            if [[ "$db_choice" == "2" ]]; then
-                local pui_env_file
-                case "${release}" in
-                    ubuntu | debian | armbian)
-                        pui_env_file="/etc/default/p-ui"
-                        ;;
-                    arch | manjaro | parch | alpine)
-                        pui_env_file="/etc/conf.d/p-ui"
-                        ;;
-                    *)
-                        pui_env_file="/etc/sysconfig/p-ui"
-                        ;;
-                esac
-
-                local pui_dsn=""
-                local pg_mode=""
-                local pg_local_installed=0
-                while [[ -z "$pui_dsn" ]]; do
-                    if [[ "$NONINTERACTIVE" == "1" ]]; then
-                        if [[ -n "${PUI_DB_DSN:-}" ]]; then
-                            pui_dsn="${PUI_DB_DSN}"
-                            db_label="PostgreSQL (external)"
-                            break
-                        fi
-                        echo -e "${yellow}Installing PostgreSQL locally (non-interactive)...${plain}"
-                        local pg_cred_file
-                        pg_cred_file=$(mktemp 2> /dev/null) || pg_cred_file=$(mktemp -t p-ui-pg-creds.XXXXXXXX)
-                        if [[ -n "${pg_cred_file}" ]] && pui_dsn=$(PG_CRED_FILE="${pg_cred_file}" install_postgres_local); then
-                            pg_local_installed=1
-                            if [[ -r "${pg_cred_file}" ]]; then
-                                # shellcheck disable=SC1090
-                                source "${pg_cred_file}"
-                            fi
-                            rm -f "${pg_cred_file}"
-                            db_label="PostgreSQL (${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DB})"
-                            break
-                        fi
-                        rm -f "${pg_cred_file}"
-                        echo -e "${red}PostgreSQL installation failed in non-interactive mode; aborting.${plain}"
-                        echo -e "${yellow}Set PUI_DB_DSN to use an existing server, or PUI_DB_TYPE=sqlite.${plain}"
-                        exit 1
-                    fi
-                    echo ""
-                    echo -e "  1) Install PostgreSQL locally and create a dedicated user/db (recommended)"
-                    echo -e "  2) Use an existing PostgreSQL server (enter DSN)"
-                    read -rp "Choose [1]: " pg_mode
-                    pg_mode="${pg_mode:-1}"
-                    if [[ "$pg_mode" == "2" ]]; then
-                        while [[ -z "$pui_dsn" ]]; do
-                            read -rp "Enter PostgreSQL DSN (postgres://user:pass@host:port/dbname?sslmode=disable): " pui_dsn
-                            pui_dsn="${pui_dsn// /}"
-                        done
-                        db_label="PostgreSQL (external)"
-                    else
-                        echo -e "${yellow}Installing PostgreSQL — this may take a moment...${plain}"
-                        local pg_cred_file
-                        pg_cred_file=$(mktemp 2> /dev/null) || pg_cred_file=$(mktemp -t p-ui-pg-creds.XXXXXXXX)
-                        if [[ -z "${pg_cred_file}" ]]; then
-                            echo -e "${red}Failed to create temporary credentials file.${plain}"
-                            pui_dsn=""
-                            continue
-                        fi
-                        if pui_dsn=$(PG_CRED_FILE="${pg_cred_file}" install_postgres_local); then
-                            pg_local_installed=1
-                            if [[ -r "${pg_cred_file}" ]]; then
-                                # shellcheck disable=SC1090
-                                source "${pg_cred_file}"
-                            fi
-                            rm -f "${pg_cred_file}"
-                            db_label="PostgreSQL (${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DB})"
-                        else
-                            rm -f "${pg_cred_file}"
-                            echo ""
-                            echo -e "${red}PostgreSQL installation failed.${plain}"
-                            echo -e "  1) Retry local install"
-                            echo -e "  2) Enter an external DSN instead"
-                            echo -e "  3) Abort install"
-                            echo -e "  4) Fall back to SQLite"
-                            read -rp "Choose [1]: " pg_fail
-                            pg_fail="${pg_fail:-1}"
-                            case "$pg_fail" in
-                                2) pg_mode="2" ;;
-                                3)
-                                    echo -e "${red}Install aborted.${plain}"
-                                    exit 1
-                                    ;;
-                                4)
-                                    db_choice="1"
-                                    pui_dsn=""
-                                    break
-                                    ;;
-                                *) pui_dsn="" ;;
-                            esac
-                        fi
-                    fi
-                done
-                if [[ -n "$pui_dsn" ]]; then
-                    install -d -m 755 "$(dirname "$pui_env_file")"
-                    umask 077
-                    cat > "$pui_env_file" << EOF
-PUI_DB_TYPE=postgres
-PUI_DB_DSN=${pui_dsn}
-EOF
-                    chmod 600 "$pui_env_file"
-                    umask 022
-                    export PUI_DB_TYPE=postgres
-                    export PUI_DB_DSN="${pui_dsn}"
-                    ensure_pg_client || echo -e "${yellow}⚠ Could not install pg_dump/pg_restore. In-panel database backup/restore will be unavailable until you install the postgresql-client package.${plain}"
-                fi
-            fi
-
             if [[ "$NONINTERACTIVE" == "1" ]]; then
                 if [[ -n "${PUI_PANEL_PORT:-}" ]]; then
                     config_port="${PUI_PANEL_PORT}"
@@ -1239,7 +1219,7 @@ EOF
             echo -e "${green}Password:    ${config_password}${plain}"
             echo -e "${green}Port:        ${config_port}${plain}"
             echo -e "${green}WebBasePath: ${config_webBasePath}${plain}"
-            echo -e "${green}Database:    ${db_label}${plain}"
+            echo -e "${green}Database:    ${DB_LABEL}${plain}"
             echo -e "${green}Access URL:  ${SSL_SCHEME}://${SSL_HOST}:${config_port}/${config_webBasePath}${plain}"
             echo -e "${green}API Token:   ${config_apiToken}${plain}"
             echo -e "${green}═══════════════════════════════════════════${plain}"
@@ -1250,14 +1230,12 @@ EOF
                 echo -e "${yellow}⚠ SSL Certificate: Skipped — panel is HTTP-only. Use a reverse proxy or SSH tunnel.${plain}"
             fi
 
-            if [[ "$db_choice" == "2" ]]; then
-                echo ""
-                echo -e "${green}PostgreSQL backup & restore is built into the panel:${plain}"
-                echo -e "  ${blue}${SSL_SCHEME}://${SSL_HOST}:${config_port}/${config_webBasePath}${plain} → Backup & Restore"
-                echo -e "${yellow}  Back Up downloads a pg_dump .dump file; Restore reloads it via pg_restore.${plain}"
-            fi
+            echo ""
+            echo -e "${green}PostgreSQL backup & restore is built into the panel:${plain}"
+            echo -e "  ${blue}${SSL_SCHEME}://${SSL_HOST}:${config_port}/${config_webBasePath}${plain} → Backup & Restore"
+            echo -e "${yellow}  Back Up downloads a pg_dump .dump file; Restore reloads it via pg_restore.${plain}"
 
-            if [[ "$db_choice" == "2" && "$pg_local_installed" == "1" ]]; then
+            if [[ "${PG_LOCAL_INSTALLED}" == "1" ]]; then
                 echo ""
                 echo -e "${green}═══════════════════════════════════════════${plain}"
                 echo -e "${green}     PostgreSQL Credentials               ${plain}"
@@ -1267,7 +1245,7 @@ EOF
                 echo -e "${green}Password:   ${PG_PASS}${plain}"
                 echo -e "${green}Host:       ${PG_HOST}${plain}"
                 echo -e "${green}Port:       ${PG_PORT}${plain}"
-                echo -e "${green}DSN:        ${pui_dsn}${plain}"
+                echo -e "${green}DSN:        ${PUI_DB_DSN}${plain}"
                 echo -e "${green}Env file:   ${pui_env_file}${plain}"
                 echo -e "${green}-------------------------------------------${plain}"
                 echo -e "${green}Connect from this server:${plain}"
@@ -1282,10 +1260,8 @@ EOF
             # Persist a machine-parseable credentials file for cloud-init / MOTD.
             : "${SSL_SCHEME:=https}"
             : "${SSL_HOST:=${server_ip}}"
-            local db_type_out="sqlite"
-            [[ "$db_choice" == "2" ]] && db_type_out="postgres"
             write_install_result "${config_username}" "${config_password}" "${config_port}" \
-                "${config_webBasePath}" "${SSL_SCHEME}" "${SSL_HOST}" "${config_apiToken}" "${db_type_out}"
+                "${config_webBasePath}" "${SSL_SCHEME}" "${SSL_HOST}" "${config_apiToken}"
         else
             local config_webBasePath=$(gen_random_string 18)
             echo -e "${yellow}WebBasePath is missing or too short. Generating a new one...${plain}"
@@ -1326,7 +1302,7 @@ EOF
             : "${SSL_SCHEME:=https}"
             : "${SSL_HOST:=${server_ip}}"
             write_install_result "${config_username}" "${config_password}" "${existing_port}" \
-                "${existing_webBasePath}" "${SSL_SCHEME}" "${SSL_HOST}" "${config_apiToken}" "${PUI_DB_TYPE:-sqlite}"
+                "${existing_webBasePath}" "${SSL_SCHEME}" "${SSL_HOST}" "${config_apiToken}"
         else
             echo -e "${green}Username, Password, and WebBasePath are properly set.${plain}"
         fi
@@ -1354,9 +1330,8 @@ EOF
 # setup_fail2ban auto-installs and configures fail2ban for the IP Limit feature
 # by invoking the freshly installed p-ui CLI. IP Limit is load-bearing on
 # fail2ban (without it the panel disables the limitIp field and zeroes existing
-# limits), so a fresh install should make it work out of the box, just like the
-# Docker image already does. Non-fatal by design: a fail2ban failure must never
-# abort the panel install.
+# limits), so a fresh install should make it work out of the box. Non-fatal by
+# design: a fail2ban failure must never abort the panel install.
 setup_fail2ban() {
     if [[ -n "${PUI_ENABLE_FAIL2BAN+x}" && "${PUI_ENABLE_FAIL2BAN}" != "true" ]]; then
         echo -e "${yellow}PUI_ENABLE_FAIL2BAN=${PUI_ENABLE_FAIL2BAN}, skipping Fail2ban auto-setup.${plain}"
@@ -1479,11 +1454,7 @@ install_p-ui() {
 
     # Stop p-ui service and remove old resources
     if [[ -e ${pui_folder}/ ]]; then
-        if [[ $release == "alpine" ]]; then
-            rc-service p-ui stop
-        else
-            systemctl stop p-ui
-        fi
+        systemctl stop p-ui
         # Kill any leftover mtg (MTProto) sidecars. p-ui runs them outside its own
         # lifecycle, so on Linux a stale one can survive the stop and keep holding
         # an inbound port with an outdated secret, silently breaking new clients.
@@ -1538,118 +1509,53 @@ install_p-ui() {
     fi
     chmod +x /usr/bin/p-ui
     mkdir -p /var/log/p-ui
+
+    # PostgreSQL is mandatory and every `p-ui setting` call in
+    # config_after_install needs a reachable database, so provision it first.
+    setup_database
     config_after_install
 
-    # Etckeeper compatibility
-    if [ -d "/etc/.git" ]; then
-        if [ -f "/etc/.gitignore" ]; then
-            if ! grep -q "p-ui/p-ui.db" "/etc/.gitignore"; then
-                echo "" >> "/etc/.gitignore"
-                echo "p-ui/p-ui.db" >> "/etc/.gitignore"
-                echo -e "${green}Added p-ui.db to /etc/.gitignore for etckeeper${plain}"
-            fi
-        else
-            echo "p-ui/p-ui.db" > "/etc/.gitignore"
-            echo -e "${green}Created /etc/.gitignore and added p-ui.db for etckeeper${plain}"
+    # Install systemd service file.
+    # These paths are absolute on purpose: config_after_install above can run the
+    # SSL setup, which shells out to acme.sh, and relative lookups here used to
+    # resolve against whatever directory that left behind rather than the
+    # extracted release -- silently falling through to the GitHub download below.
+    service_installed=false
+
+    if [ -f "${pui_folder}/p-ui.service" ]; then
+        echo -e "${green}Found p-ui.service in extracted files, installing...${plain}"
+        if _install_pui_service_unit "${pui_folder}/p-ui.service" "false"; then
+            service_installed=true
         fi
     fi
 
-    if [[ $release == "alpine" ]]; then
-        pui_rc_temp="/etc/init.d/p-ui.tmp.$$"
-        rm -f "${pui_rc_temp}"
-        curl -fLRo "${pui_rc_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.rc
-        if [[ $? -ne 0 ]]; then
-            rm -f "${pui_rc_temp}"
-            echo -e "${red}Failed to download p-ui.rc${plain}"
-            exit 1
-        fi
-        if [[ ! -s "${pui_rc_temp}" ]]; then
-            rm -f "${pui_rc_temp}"
-            echo -e "${red}Downloaded p-ui.rc is empty${plain}"
-            exit 1
-        fi
-        mv -f "${pui_rc_temp}" /etc/init.d/p-ui
-        if [[ $? -ne 0 ]]; then
-            rm -f "${pui_rc_temp}"
-            echo -e "${red}Failed to install p-ui.rc${plain}"
-            exit 1
-        fi
-        chmod +x /etc/init.d/p-ui
-        rc-update add p-ui
-        rc-service p-ui start
-    else
-        # Install systemd service file
-        service_installed=false
-
-        if [ -f "p-ui.service" ]; then
-            echo -e "${green}Found p-ui.service in extracted files, installing...${plain}"
-            if _install_pui_service_unit "p-ui.service" "false"; then
-                service_installed=true
-            fi
-        fi
-
-        if [ "$service_installed" = false ]; then
-            case "${release}" in
-                ubuntu | debian | armbian)
-                    if [ -f "p-ui.service.debian" ]; then
-                        echo -e "${green}Found p-ui.service.debian in extracted files, installing...${plain}"
-                        if _install_pui_service_unit "p-ui.service.debian" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-                arch | manjaro | parch)
-                    if [ -f "p-ui.service.arch" ]; then
-                        echo -e "${green}Found p-ui.service.arch in extracted files, installing...${plain}"
-                        if _install_pui_service_unit "p-ui.service.arch" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-                *)
-                    if [ -f "p-ui.service.rhel" ]; then
-                        echo -e "${green}Found p-ui.service.rhel in extracted files, installing...${plain}"
-                        if _install_pui_service_unit "p-ui.service.rhel" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-            esac
-        fi
-
-        # If service file not found in tar.gz, download from GitHub
-        if [ "$service_installed" = false ]; then
-            echo -e "${yellow}Service files not found in tar.gz, downloading from GitHub...${plain}"
-            case "${release}" in
-                ubuntu | debian | armbian)
-                    service_unit_url="https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.debian"
-                    ;;
-                arch | manjaro | parch)
-                    service_unit_url="https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.arch"
-                    ;;
-                *)
-                    service_unit_url="https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.rhel"
-                    ;;
-            esac
-
-            if ! _install_pui_service_unit "$service_unit_url" "true"; then
-                echo -e "${red}Failed to install p-ui.service from GitHub${plain}"
-                exit 1
-            fi
+    if [ "$service_installed" = false ] && [ -f "${pui_folder}/p-ui.service.debian" ]; then
+        echo -e "${green}Found p-ui.service.debian in extracted files, installing...${plain}"
+        if _install_pui_service_unit "${pui_folder}/p-ui.service.debian" "false"; then
             service_installed=true
         fi
+    fi
 
-        if [ "$service_installed" = true ]; then
-            echo -e "${green}Setting up systemd unit...${plain}"
-            chown root:root ${pui_service}/p-ui.service > /dev/null 2>&1
-            chmod 644 ${pui_service}/p-ui.service > /dev/null 2>&1
-            systemctl daemon-reload
-            systemctl enable p-ui
-            systemctl start p-ui
-        else
-            echo -e "${red}Failed to install p-ui.service file${plain}"
+    # If service file not found in tar.gz, download from GitHub
+    if [ "$service_installed" = false ]; then
+        echo -e "${yellow}Service files not found in tar.gz, downloading from GitHub...${plain}"
+        if ! _install_pui_service_unit "https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.service.debian" "true"; then
+            echo -e "${red}Failed to install p-ui.service from GitHub${plain}"
             exit 1
         fi
+        service_installed=true
+    fi
+
+    if [ "$service_installed" = true ]; then
+        echo -e "${green}Setting up systemd unit...${plain}"
+        chown root:root ${pui_service}/p-ui.service > /dev/null 2>&1
+        chmod 644 ${pui_service}/p-ui.service > /dev/null 2>&1
+        systemctl daemon-reload
+        systemctl enable p-ui
+        systemctl start p-ui
+    else
+        echo -e "${red}Failed to install p-ui.service file${plain}"
+        exit 1
     fi
 
     # IP Limit relies on fail2ban; install + configure it now so the feature

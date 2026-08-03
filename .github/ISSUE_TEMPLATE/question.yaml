@@ -55,7 +55,6 @@ body:
       label: How did you install P-UI?
       options:
         - install.sh script
-        - Docker / Docker Compose
         - Manual build from source
         - Other
     validations:
@@ -65,7 +64,8 @@ body:
     id: os
     attributes:
       label: Operating system
-      placeholder: Ubuntu 24.04 / Debian 12 / CentOS Stream 9 …
+      description: Ubuntu 22.04 / 24.04 / 26.04 and Debian 12+ are the supported distributions.
+      placeholder: Ubuntu 24.04 / Debian 12 …
     validations:
       required: false
 

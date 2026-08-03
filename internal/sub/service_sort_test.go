@@ -2,7 +2,6 @@ package sub
 
 import (
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
@@ -14,12 +13,7 @@ import (
 // The same query feeds the raw body, the HTML sub page, and the JSON/Clash
 // formats, so asserting on GetSubs covers all of them.
 func TestGetSubs_OrdersBySubSortIndexThenId(t *testing.T) {
-	dbDir := t.TempDir()
-	t.Setenv("PUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.CloseDB() })
+	initSubDB(t)
 
 	const subId = "sub-sort"
 	db := database.GetDB()

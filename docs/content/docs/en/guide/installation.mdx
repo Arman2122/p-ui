@@ -1,26 +1,25 @@
 ---
 title: Installation
-description: Install Penhoon UI via the official script (stable, pinned, or dev-latest), unattended/cloud-init, or Docker — and choose SQLite or PostgreSQL.
+description: Install Penhoon UI on Ubuntu or Debian via the official script (stable, pinned, or dev-latest), or unattended with cloud-init.
 icon: Download
 ---
 
-Penhoon UI runs on a wide range of Linux distributions — Ubuntu, Debian, Armbian,
-Fedora, CentOS, RHEL, AlmaLinux, Rocky Linux, Oracle Linux, Amazon Linux,
-Virtuozzo, Arch, Manjaro, openSUSE (Tumbleweed/Leap), Alpine — and Windows,
-across `amd64`, `386`, `arm64`, `armv7`, `armv6`, `armv5`, and `s390x`.
+Penhoon UI runs on **Ubuntu 22.04, 24.04 and 26.04** and **Debian 12 or newer**, on
+`amd64`, `arm64`, `armv7` and `s390x`. It expects a systemd host managed with
+`apt`, and stores its data in **PostgreSQL**.
 
 <Callout type="warn">
   Run the script installer as **root** (or with `sudo`). It installs a service,
   sets up the `p-ui` management command, and enables the panel on boot.
 </Callout>
 
-<Tabs items={['Script', 'Docker', 'Manual']}>
+<Tabs items={['Script', 'Manual']}>
 
 <Tab value="Script">
 
-The official script is the recommended path. During installation it generates a
-**random** username, password, and access (web base) path, sets up the service,
-and installs the `p-ui` management command.
+The official script is the recommended path. During installation it sets up
+PostgreSQL, generates a **random** username, password, and access (web base)
+path, installs the service, and installs the `p-ui` management command.
 
 ```bash title="latest stable"
 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)
@@ -45,51 +44,13 @@ continue to [First login](/docs/guide/first-login).
 
 </Tab>
 
-<Tab value="Docker">
-
-The default Compose setup uses SQLite. Clone the repo (or copy its
-`docker-compose.yml` and `Dockerfile`) and start it:
-
-```bash
-docker compose up -d
-```
-
-To run with the bundled **PostgreSQL** service, uncomment the two `PUI_DB_*`
-lines in `docker-compose.yml` and start with the profile:
-
-```bash
-docker compose --profile postgres up -d
-```
-
-Prefer the prebuilt image? It's published to the GitHub Container Registry. The
-image bundles Fail2ban (for [IP limits](/docs/operations/security)), which bans
-with `iptables` and therefore needs `NET_ADMIN` (and `NET_RAW` for IPv6) —
-otherwise bans are logged but never applied:
-
-```bash title="docker run"
-docker run -d \
-  --cap-add=NET_ADMIN \
-  --cap-add=NET_RAW \
-  -e PUI_ENABLE_FAIL2BAN=true \
-  -v $PWD/db/:/etc/p-ui/ \
-  -v $PWD/cert/:/root/cert/ \
-  --network=host \
-  --restart=unless-stopped \
-  --name p-ui \
-  ghcr.io/arman2122/p-ui:latest
-```
-
-The `db/` volume holds the SQLite database (`/etc/p-ui/p-ui.db`) and `cert/`
-holds TLS certificates, so your data survives upgrades.
-
-</Tab>
-
 <Tab value="Manual">
 
 For advanced users, download a release archive for your architecture from the
-[releases page](https://github.com/Arman2122/p-ui/releases), extract it, and run
-the binary as a systemd service. The install script automates exactly these
-steps, so it's preferred unless you have a specific reason to install by hand.
+[releases page](https://github.com/Arman2122/p-ui/releases), extract it, provide
+a reachable PostgreSQL database via `PUI_DB_DSN`, and run the binary as a systemd
+service. The install script automates exactly these steps, so it's preferred
+unless you have a specific reason to install by hand.
 
 </Tab>
 
@@ -101,16 +62,19 @@ Tailor the command to your setup:
 
 <InstallCommandBuilder />
 
-## Choose a database
+## The database
 
-You pick the storage backend at install time:
+Penhoon UI stores everything in PostgreSQL — it is the only supported backend.
+The installer offers two routes:
 
-- **SQLite** (default) — a single file at `/etc/p-ui/p-ui.db`. Zero setup.
-- **PostgreSQL** — for high client counts or multi-node setups. The installer
-  can install it locally or use a DSN you provide.
+- **Install PostgreSQL locally** (recommended) — it installs the distro package
+  and creates a dedicated role and database for the panel.
+- **Use an existing server** — paste a DSN and the installer wires the panel to
+  it.
 
-See [Database](/docs/reference/database) for details and SQLite→PostgreSQL
-migration.
+Either way the connection string lands in `/etc/default/p-ui` as `PUI_DB_DSN`,
+which is **required**: without it the panel refuses to start. See
+[Database](/docs/reference/database).
 
 ## Unattended / cloud-init
 
@@ -122,6 +86,10 @@ prompts, generating random credentials and writing them to
 ```bash
 PUI_NONINTERACTIVE=1 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)
 ```
+
+Non-interactively it installs PostgreSQL locally unless `PUI_DB_DSN` is already
+set in the environment or in `/etc/default/p-ui`, in which case it reuses that
+server.
 
 The repo's [`deploy/`](https://github.com/Arman2122/p-ui/tree/main/deploy)
 directory has ready-made **cloud-init** user-data for unattended installs on any

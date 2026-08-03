@@ -2,13 +2,20 @@
 # ---------------------------------------------------------------------------
 # Generic Penhoon UI (p-ui) unattended install via cloud-init user-data.
 #
-# Works on any cloud-init platform: Hetzner, AWS, DigitalOcean, Vultr, GCP,
-# Azure, Oracle. Paste the whole file as the instance "user data".
+# Works on any cloud-init platform (Hetzner, AWS, DigitalOcean, Vultr, GCP,
+# Azure, OCI) as long as the instance boots an Ubuntu 22.04/24.04/26.04 or
+# Debian 12+ image — Penhoon UI is Linux-only and installs with apt + systemd.
+# Paste the whole file as the instance "user data".
 #
 # It installs the latest Penhoon UI release NON-INTERACTIVELY, generating unique
 # random credentials per instance. Full credentials are surfaced ONLY on the
 # serial console (owner-only); /etc/motd (world-readable) shows just the access
 # URL + username. Nothing is baked in advance — every instance is unique.
+#
+# PostgreSQL is the panel's only database. Unless you point PUI_DB_DSN at an
+# existing server, install.sh apt-installs PostgreSQL on the instance, creates a
+# dedicated role + database and writes the generated DSN to /etc/default/p-ui
+# (mode 600), which the p-ui systemd unit reads.
 #
 # Requires the Penhoon UI install.sh, which supports PUI_NONINTERACTIVE.
 # Edit the exported PUI_* knobs in /opt/pui-bootstrap.sh below to customise.
@@ -39,8 +46,7 @@ write_files:
       #   export PUI_SSL_MODE="domain"
       #   export PUI_DOMAIN="panel.example.com"
       #   export PUI_ACME_EMAIL="you@example.com"
-      # PostgreSQL instead of SQLite:
-      #   export PUI_DB_TYPE="postgres"
+      # Use an existing PostgreSQL server instead of installing one locally:
       #   export PUI_DB_DSN="postgres://user:pass@host:5432/db?sslmode=disable"
       # ------------------------------------------------------------------------
 
@@ -56,6 +62,7 @@ write_files:
           echo "=== Penhoon UI panel credentials (generated on first boot) ==="
           cat /etc/p-ui/install-result.env
           echo "=============================================================="
+          echo "PostgreSQL DSN: sudo cat /etc/default/p-ui"
           echo "Change the password after first login."
         } > /dev/console 2>/dev/null || true
 

@@ -1,9 +1,6 @@
 package database
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
@@ -36,34 +33,16 @@ func assertHostSchema(t *testing.T) {
 }
 
 // TestHostAutoMigrateCreatesColumns verifies the hosts table and every expected
-// column exist after initModels (SQLite).
+// column exist after initModels.
 func TestHostAutoMigrateCreatesColumns(t *testing.T) {
-	if err := InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
-	assertHostSchema(t)
-}
-
-// TestHostAutoMigrateCreatesColumns_Postgres is the dual-driver counterpart.
-func TestHostAutoMigrateCreatesColumns_Postgres(t *testing.T) {
-	if strings.TrimSpace(os.Getenv("PUI_DB_DSN")) == "" || os.Getenv("PUI_DB_TYPE") != "postgres" {
-		t.Skip("set PUI_DB_TYPE=postgres and PUI_DB_DSN to run the postgres schema test")
-	}
-	if err := InitDB(""); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 	assertHostSchema(t)
 }
 
 // TestPruneOrphanedHosts verifies a host whose inbound_id has no matching inbound
 // is removed by the prune step.
 func TestPruneOrphanedHosts(t *testing.T) {
-	if err := InitDB(filepath.Join(t.TempDir(), "p-ui.db")); err != nil {
-		t.Fatalf("InitDB: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseDB() })
+	initTestDB(t)
 	db := GetDB()
 
 	orphan := &model.Host{InboundId: 99999, Remark: "orphan"}
