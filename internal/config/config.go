@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -135,10 +136,36 @@ func GetBinFolderPath() string {
 	return binFolderPath
 }
 
+// testStateFolder is the folder GetDBFolderPath redirects to under `go test`.
+//
+// It is created on first use rather than merely named: callers write files
+// straight into this folder (os.WriteFile does not create parent directories),
+// so it has to exist before the first write. It is also private to this
+// process, so the test binaries of two packages that both touch panel state --
+// internal/web/controller and internal/web/service/panel both read and write
+// the update status file -- cannot clobber each other when `go test ./...`
+// runs them concurrently.
+var testStateFolder = sync.OnceValue(func() string {
+	dir, err := os.MkdirTemp("", "p-ui-test-state-")
+	if err != nil {
+		// The temp dir itself is unusable, which the rest of the test run is
+		// about to trip over anyway; fall back to it directly so this never
+		// hands back a path that does not exist.
+		return os.TempDir()
+	}
+	return dir
+})
+
 // GetDBFolderPath returns the panel's persistent state folder. It holds the
 // files the panel keeps outside PUI_MAIN_FOLDER so they survive an update (the
 // metrics history and the self-update status file).
 func GetDBFolderPath() string {
+	// A `go test` run has no business reading or writing /etc/p-ui (and on a
+	// CI runner cannot): redirect it to a private temp folder, so tests
+	// neither depend on nor clobber a real installation's state.
+	if testing.Testing() {
+		return testStateFolder()
+	}
 	return "/etc/p-ui"
 }
 

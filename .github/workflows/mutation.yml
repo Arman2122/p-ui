@@ -12,7 +12,16 @@ on:
 permissions:
   contents: read
 
+env:
+  CGO_ENABLED: "0"
+
 jobs:
+  # No PostgreSQL service here on purpose: gremlins re-runs a package's whole
+  # suite once per mutant and has no way to exclude the Scale benchmarks, which
+  # seed up to 200k clients per run. Until those are gated at the source, the
+  # DB-backed packages are mutated against their non-DB tests only, and their
+  # PUI_DB_DSN-gated cases report as uncovered. CI's go-test and race jobs are
+  # where the DB-backed suites actually run.
   gremlins:
     runs-on: ubuntu-latest
     timeout-minutes: 120

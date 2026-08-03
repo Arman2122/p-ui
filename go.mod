@@ -24,7 +24,6 @@ require (
 	github.com/xtls/xray-core v1.260327.1-0.20260728075948-5ca6f4b7d4dc
 	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.54.0
-	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.40.0
 	google.golang.org/grpc v1.83.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -32,6 +31,8 @@ require (
 	gorm.io/gorm v1.31.2
 	pgregory.net/rapid v1.3.0
 )
+
+require golang.org/x/sys v0.47.0 // indirect
 
 require (
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect

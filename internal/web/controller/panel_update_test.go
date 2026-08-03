@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -27,6 +28,26 @@ func newPanelUpdateTestEngine() *gin.Engine {
 	return engine
 }
 
+// isolateUpdateStatusFile gives one test exclusive, known-empty use of the
+// panel self-update status file, and returns its path.
+//
+// Under `go test`, config.GetDBFolderPath() redirects to a writable temp folder
+// private to this test binary, so the real /etc/p-ui is never read or written.
+// That folder is still shared by every test in this package, so the file is
+// removed both before the test and on cleanup: the "no update has ever run"
+// case below must not be decided by what a sibling test wrote, and
+// `go test -shuffle=on` in CI randomizes the order those run in.
+func isolateUpdateStatusFile(t *testing.T) string {
+	t.Helper()
+
+	path := config.GetUpdateStatusFilePath()
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("clear %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	return path
+}
+
 func doPanelUpdateReq(t *testing.T, engine *gin.Engine, method, path string) hostEnvelope {
 	t.Helper()
 	req := httptest.NewRequest(method, path, nil)
@@ -47,6 +68,7 @@ func doPanelUpdateReq(t *testing.T, engine *gin.Engine, method, path string) hos
 // since a missing status file is an expected, ordinary state, not a failure.
 func TestGetUpdateStatus_NoStatusFileYet(t *testing.T) {
 	newHostTestDB(t)
+	isolateUpdateStatusFile(t)
 	engine := newPanelUpdateTestEngine()
 
 	env := doPanelUpdateReq(t, engine, http.MethodGet, "/panel/api/server/getUpdateStatus")
@@ -75,9 +97,9 @@ func TestGetUpdateStatus_NoStatusFileYet(t *testing.T) {
 // so this test doubles as the wire-format check.
 func TestGetUpdateStatus_RunIdIsAlwaysAString(t *testing.T) {
 	newHostTestDB(t)
+	statusPath := isolateUpdateStatusFile(t)
 	engine := newPanelUpdateTestEngine()
 
-	statusPath := config.GetUpdateStatusFilePath()
 	body := `{"runId":"1735689600123456789","state":"success","exitCode":0,"finishedAt":1735689612}`
 	if err := os.WriteFile(statusPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)

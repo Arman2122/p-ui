@@ -1,5 +1,10 @@
 name: CI
 
+# This workflow lists itself in both paths filters, the way release.yml,
+# smoke.yml and docs-ci.yml do. Without it a PR that only edits ci.yml -- one
+# that drops PUI_DB_DSN, breaks the postgres service wiring, or deletes the
+# preflight -- would never run CI, so the change that silences the DB-backed
+# suite is exactly the change CI would not have checked.
 on:
   pull_request:
     paths:
@@ -8,6 +13,7 @@ on:
       - "go.sum"
       - "frontend/**"
       - ".nvmrc"
+      - ".github/workflows/ci.yml"
   push:
     branches:
       - main
@@ -17,13 +23,45 @@ on:
       - "go.sum"
       - "frontend/**"
       - ".nvmrc"
+      - ".github/workflows/ci.yml"
 
 permissions:
   contents: read
 
+# The panel is pure Go with no C dependency, and ships built with CGO_ENABLED=0,
+# so every job here compiles the same way the release does. The race job below is
+# the one deliberate exception: the Go race detector requires cgo.
+env:
+  CGO_ENABLED: "0"
+
 jobs:
+  # PostgreSQL is the only storage backend, so the initTestDB/initSubDB helpers in
+  # internal/database, internal/sub and internal/web t.Skip() when PUI_DB_DSN is
+  # empty. Without the service container below, the route-contract guard and the
+  # whole service/controller/job suite would "pass" by skipping every DB test.
+  # The Scale suites are excluded: they are benchmarks that seed up to 200k
+  # clients per size ladder, not correctness guards.
   go-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pui_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pui_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # URL shape, the same one install.sh writes into /etc/default/p-ui, so the
+      # suite connects the way a real install does.
+      PUI_DB_DSN: postgres://postgres:postgres@127.0.0.1:5432/pui_test?sslmode=disable
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -32,11 +70,27 @@ jobs:
           cache: true
       - name: Stub internal/web/dist for go:embed
         run: mkdir -p internal/web/dist && touch internal/web/dist/.gitkeep
+      # Also asserts the CREATE/DROP SCHEMA rights initTestDB needs, so a
+      # misconfigured DSN fails here loudly instead of skipping the suite quietly.
+      - name: Wait for PostgreSQL
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -q -d "$PUI_DB_DSN"; then
+              psql -q -v ON_ERROR_STOP=1 -d "$PUI_DB_DSN" \
+                -c 'CREATE SCHEMA pui_ci_preflight' -c 'DROP SCHEMA pui_ci_preflight'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the PostgreSQL service never became ready; every DB-backed test would skip"
+          exit 1
       - name: Test
         run: |
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
-          go test -shuffle=on -count=1 $(cat /tmp/go-packages.txt)
+          go test -shuffle=on -count=1 -skip 'Scale$' $(cat /tmp/go-packages.txt)
 
+  # Fails the build on SKIP, so this commit-failure coverage can never go quiet
+  # the way the whole DB-backed suite above did.
   postgres-durable-first:
     runs-on: ubuntu-latest
     services:
@@ -64,7 +118,7 @@ jobs:
       - name: PostgreSQL durable-first tests
         run: |
           set -o pipefail
-          PUI_DB_DSN="host=127.0.0.1 port=5432 user=postgres password=postgres dbname=pui_durable sslmode=disable" \
+          PUI_DB_DSN="postgres://postgres:postgres@127.0.0.1:5432/pui_durable?sslmode=disable" \
             go test ./internal/web/service -run 'PostgresCommitFailure' -count=1 -v | tee /tmp/postgres-durable-first.log
           if grep -q -- '--- SKIP' /tmp/postgres-durable-first.log; then
             exit 1
@@ -103,8 +157,30 @@ jobs:
         run: govulncheck ./...
 
   # Race + shuffle hygiene gate: data races and order-dependent tests fail the build.
+  # It gets its own PostgreSQL for the same reason go-test does — the concurrent
+  # code worth racing (jobs, node sync, traffic accounting) is all DB-backed.
   race:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pui_race
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pui_race"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # The race detector is the one thing in this repo that needs a C toolchain;
+      # everything else, including the shipped binaries, builds with CGO_ENABLED=0.
+      CGO_ENABLED: "1"
+      PUI_DB_DSN: postgres://postgres:postgres@127.0.0.1:5432/pui_race?sslmode=disable
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -113,10 +189,22 @@ jobs:
           cache: true
       - name: Stub internal/web/dist for go:embed
         run: mkdir -p internal/web/dist && touch internal/web/dist/.gitkeep
+      - name: Wait for PostgreSQL
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -q -d "$PUI_DB_DSN"; then
+              psql -q -v ON_ERROR_STOP=1 -d "$PUI_DB_DSN" \
+                -c 'CREATE SCHEMA pui_ci_preflight' -c 'DROP SCHEMA pui_ci_preflight'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the PostgreSQL service never became ready; every DB-backed test would skip"
+          exit 1
       - name: Race + shuffle
         run: |
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
-          go test -race -shuffle=on -count=1 $(cat /tmp/go-packages.txt)
+          go test -race -shuffle=on -count=1 -skip 'Scale$' $(cat /tmp/go-packages.txt)
 
   # Brief native-fuzz smoke on the security-/parser-critical decoders. Each runs the
   # generated corpus plus 30s of exploration; a crash here is a real input-handling bug.

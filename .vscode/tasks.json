@@ -94,22 +94,9 @@
         "./..."
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "linux": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
-        }
-      },
-      "osx": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
         }
       },
       "problemMatcher": [
@@ -125,22 +112,9 @@
         "./..."
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "linux": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
-        }
-      },
-      "osx": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
         }
       },
       "problemMatcher": [
@@ -155,22 +129,9 @@
         "run"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "linux": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
-        }
-      },
-      "osx": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
         }
       },
       "problemMatcher": [
@@ -186,22 +147,9 @@
         "--fix"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "linux": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
-        }
-      },
-      "osx": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
         }
       },
       "problemMatcher": [
@@ -217,22 +165,9 @@
         "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "linux": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
-        }
-      },
-      "osx": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
         }
       },
       "problemMatcher": []
@@ -246,22 +181,9 @@
         "golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "linux": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
-        }
-      },
-      "osx": {
-        "options": {
-          "cwd": "${workspaceFolder}",
-          "env": {
-            "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
-          }
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${userHome}/go/bin:/usr/local/go/bin:${env:PATH}"
         }
       },
       "problemMatcher": []
