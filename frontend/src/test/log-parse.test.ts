@@ -47,10 +47,10 @@ describe('parseLogLine — SysLog (journalctl) formats', () => {
 
   it('systemd line: shows the body rather than a bare timestamp', () => {
     const r = parseLogLine(
-      'Jun 08 23:56:47 ubuntu-4gb-fsn1-1 systemd[1]: Stopping p-ui.service - p-ui Service...',
+      'Jun 08 23:56:47 ubuntu-4gb-fsn1-1 systemd[1]: Stopping p-ui.service - Penhoon UI Service...',
     );
     expect(r.stamp).toBe('Jun 08 23:56:47');
-    expect(r.body).toBe('Stopping p-ui.service - p-ui Service...');
+    expect(r.body).toBe('Stopping p-ui.service - Penhoon UI Service...');
   });
 
   it('never collapses a journald entry to just its timestamp', () => {

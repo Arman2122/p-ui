@@ -1,22 +1,22 @@
 <p align="center">
-  <a href="https://docs.sanaei.dev">
+  <a href="https://github.com/Arman2122/p-ui">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="public/logo-dark.png" />
-      <img src="public/logo-light.png" alt="p-ui" width="180" />
+      <img src="public/logo-light.png" alt="Penhoon UI" width="180" />
     </picture>
   </a>
 </p>
 
-<h1 align="center">p-ui Documentation</h1>
+<h1 align="center">Penhoon UI Documentation</h1>
 
 <p align="center">
   The official documentation and product site for
-  <a href="https://github.com/Arman2122/p-ui"><b>p-ui</b></a> —
+  <a href="https://github.com/Arman2122/p-ui"><b>Penhoon UI</b></a> —
   an advanced web panel for managing Xray-core servers.
 </p>
 
 <p align="center">
-  <a href="https://docs.sanaei.dev"><img src="https://img.shields.io/badge/docs-docs.sanaei.dev-22d3ee?style=flat-square" alt="Live site" /></a>
+  <a href="https://github.com/Arman2122/p-ui/tree/main/docs"><img src="https://img.shields.io/badge/docs-Penhoon%20UI-22d3ee?style=flat-square" alt="Documentation" /></a>
   <a href="https://github.com/Arman2122/p-ui/actions/workflows/docs-ci.yml"><img src="https://github.com/Arman2122/p-ui/actions/workflows/docs-ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square" alt="License: GPL-3.0" /></a>
   <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js" alt="Next.js 16" />
@@ -24,22 +24,22 @@
 </p>
 
 <p align="center">
-  <a href="https://docs.sanaei.dev"><b>Read the docs →</b></a>
+  <a href="./content/docs"><b>Read the docs →</b></a>
 </p>
 
 ---
 
 ## Overview
 
-This directory (`docs/` in the [p-ui](https://github.com/Arman2122/p-ui) monorepo) contains
-the source for [docs.sanaei.dev](https://docs.sanaei.dev) — a static-first documentation and
+This directory (`docs/` in the [Penhoon UI](https://github.com/Arman2122/p-ui) monorepo) contains
+the source for the Penhoon UI documentation site — a static-first documentation and
 marketing site built with [Fumadocs](https://fumadocs.dev) on Next.js. It has **no backend,
 no database, and no auth**: every page is prerendered and every tool runs entirely in the
 browser.
 
 ## What's inside
 
-The documentation walks you through p-ui from first install to day-to-day operation:
+The documentation walks you through Penhoon UI from first install to day-to-day operation:
 
 - **Getting Started** — installation, first login, and updating or uninstalling the panel.
 - **Configuration** — the panel, inbounds, REALITY, transports, clients, subscriptions, and share links.
@@ -101,9 +101,9 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full list and project convent
 ```
 app/             # Next.js App Router — layouts, home, docs, OG images, search, llms.txt
 components/      # React components — interactive tools, home sections, MDX bindings
-content/docs/    # MDX documentation, one folder per locale (en · fa · ru · zh)
+content/docs/    # MDX documentation, one folder per locale (en · fa)
 lib/             # source config, i18n, GitHub stats, and the unit-tested lib/xray logic
-public/          # static assets — logos, favicon, openapi.json, CNAME
+public/          # static assets — logos, favicon, openapi.json
 scripts/         # build-time scripts (API reference generation)
 source.config.ts # Fumadocs MDX schema & collection config
 next.config.mjs  # Next.js config (static-export gating)
@@ -112,9 +112,9 @@ proxy.ts         # i18n middleware
 
 ## Internationalization
 
-Documentation is authored in **English**. Persian (`fa`, RTL), Russian (`ru`), and
-Chinese (`zh`) locales are wired up; untranslated pages fall back to English so they
-never 404. English URLs are unprefixed; other locales live under `/fa`, `/ru`, `/zh`.
+Documentation is authored in **English** and translated into Persian (`fa`, RTL) — the
+same two languages the panel itself ships. Untranslated pages fall back to English so
+they never 404. English URLs are unprefixed; Persian lives under `/fa`.
 
 ## Deployment
 
@@ -122,6 +122,11 @@ The site builds for two targets:
 
 - **Vercel / Node** — `pnpm build` (static search index + prerendered OG images).
 - **GitHub Pages (static export)** — `DEPLOY_TARGET=static pnpm build` → `out/`.
+
+`NEXT_PUBLIC_SITE_URL` sets the public origin (default:
+`https://arman2122.github.io/p-ui`, the project page). Its **path** also drives
+`basePath`/`assetPrefix` for the static export, so a custom domain such as
+`https://docs.example.com` — no path — publishes at the domain root.
 
 ## Contributing
 

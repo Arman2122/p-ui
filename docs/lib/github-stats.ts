@@ -6,11 +6,14 @@ export interface GitHubStats {
   latestVersion: string;
 }
 
-// Real, recent numbers used as a fallback when the GitHub API is unavailable
-// at build time (offline CI, rate limit). Update periodically.
+// Fallback shown when the GitHub API is unavailable (offline CI, rate limit).
+// Deliberately zero: these render on the landing page as Penhoon UI's own
+// counts, so the fallback must never overstate them. Do not copy the numbers
+// from the upstream 3x-ui repository this project was forked from — set these
+// only from the real Arman2122/p-ui counts, and only if you keep them current.
 const FALLBACK: GitHubStats = {
-  stars: 41500,
-  forks: 7700,
+  stars: 0,
+  forks: 0,
   latestVersion: 'v3.x',
 };
 
@@ -65,7 +68,7 @@ export async function getGitHubStats(): Promise<GitHubStats> {
   return { ...live, latestVersion: live.latestVersion || FALLBACK.latestVersion };
 }
 
-/** Compact display, e.g. 41523 -> "41.5k". */
+/** Compact display, e.g. 1234 -> "1.2k". */
 export function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);

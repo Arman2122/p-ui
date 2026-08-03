@@ -14,7 +14,7 @@ import (
 
 	"github.com/op/go-logging"
 
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 func TestWriteFileAtomicModeAndRenameFailure(t *testing.T) {
@@ -121,7 +121,7 @@ func TestStopKillsProcessThatIgnoresSIGTERM(t *testing.T) {
 func initProcessTestLogger(t *testing.T) {
 	t.Helper()
 	t.Setenv("PUI_LOG_FOLDER", t.TempDir())
-	xuilogger.InitLogger(logging.ERROR)
+	puilogger.InitLogger(logging.ERROR)
 }
 
 func startProcessHelper(t *testing.T, mode string) *process {

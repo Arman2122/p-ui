@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// PUIController is the main controller for the P-UI panel, serving the SPA shell.
+// PUIController is the main controller for the Penhoon UI panel, serving the SPA shell.
 type PUIController struct {
 	BaseController
 }

@@ -1,4 +1,4 @@
-# p-ui frontend
+# Penhoon UI frontend
 
 React 19 + Ant Design 6 + TypeScript + Vite 8. Three SPA bundles —
 `index.html` (admin panel SPA, all `/panel/*` routes), `login.html`
@@ -195,9 +195,11 @@ via `import.meta.glob`.
 Reusable components in `src/components/` are developed and documented in
 **Storybook** (`@storybook/react-vite`). It is a component workbench, not part
 of the shipped panel — nothing here is embedded into the Go binary. The built
-Storybook is published with the docs site at
-[docs.sanaei.dev/storybook](https://docs.sanaei.dev/storybook/) by
-`.github/workflows/docs-deploy.yml`.
+Storybook is published alongside the Penhoon UI docs site under `/storybook` by
+`.github/workflows/docs-deploy.yml` (GitHub Pages; the origin it is served from
+is the docs site's own — by default the project page
+`https://arman2122.github.io/p-ui`, overridable with the `NEXT_PUBLIC_SITE_URL`
+repository variable).
 
 ```sh
 npm run storybook        # dev server on http://localhost:6006

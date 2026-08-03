@@ -43,10 +43,10 @@ The `@` import alias maps to `src/`.
 - New `g.POST`/`g.GET` route => add it to `src/pages/api-docs/endpoints.ts`,
   then `npm run gen`.
 - i18n strings live in `internal/web/translation/<locale>.json`, NOT under
-  `frontend/`, and are shared with the Go backend. A new English key must be
-  added to every locale. Interpolation here uses single braces `{var}`, not the
-  i18next default `{{var}}`.
-- Persian/Arabic (RTL) users are first-class — isolate code identifiers on their
+  `frontend/`, and are shared with the Go backend. Two locales ship: `en-US` and
+  `fa-IR` — a new English key must also be added to `fa-IR.json`. Interpolation
+  here uses single braces `{var}`, not the i18next default `{{var}}`.
+- Persian (RTL) users are first-class — isolate code identifiers on their
   own line when writing Persian text in labels/toasts.
 - Vite is pinned to an exact version (no `^`) — bump deliberately, then verify
   `npm run dev` AND `npm run build`.

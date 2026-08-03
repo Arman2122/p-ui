@@ -1,4 +1,4 @@
-// Package logger provides logging functionality for the p-ui panel with
+// Package logger provides logging functionality for the Penhoon UI panel with
 // dual-backend logging (console/syslog and file) and buffered log storage for web UI.
 package logger
 
@@ -19,7 +19,7 @@ import (
 
 const (
 	maxLogBufferSize = 10240                 // Maximum log entries kept in memory
-	logFileName      = "pui.log"            // Log file name
+	logFileName      = "pui.log"             // Log file name
 	timeFormat       = "2006/01/02 15:04:05" // Log timestamp format
 
 	// On-disk rotation limits — single file capped, old segments pruned automatically.

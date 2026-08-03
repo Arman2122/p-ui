@@ -1,4 +1,4 @@
-// Package service provides business logic services for the p-ui web panel,
+// Package service provides business logic services for the Penhoon UI web panel,
 // including inbound/outbound management, user administration, settings, and Xray integration.
 package service
 

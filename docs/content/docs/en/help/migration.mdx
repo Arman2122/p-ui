@@ -1,6 +1,6 @@
 ---
 title: Migration
-description: Migrate to p-ui from p-ui, between servers, or between p-ui versions.
+description: Migrate to Penhoon UI from the original x-ui, between servers, or between Penhoon UI versions.
 icon: ArrowRightLeft
 ---
 
@@ -18,7 +18,7 @@ Copy the database (default `/etc/p-ui/p-ui.db`) and your certificates. See
 </Step>
 
 <Step>
-### Install p-ui on the new server
+### Install Penhoon UI on the new server
 
 Use the same install method and a compatible version. See
 [Installation](/docs/guide/installation).
@@ -33,17 +33,17 @@ panel. Update any IP/domain-specific settings.
 
 </Steps>
 
-## Between p-ui versions
+## Between Penhoon UI versions
 
 Within the same backend, upgrading is usually just re-running the installer or
 pulling a new image — the panel migrates its own database. Across **major**
 versions, read the [release notes](https://github.com/Arman2122/p-ui/releases)
 first and take a backup.
 
-## From p-ui
+## From the original x-ui
 
-Importing an older p-ui panel's database directly into p-ui is **not
-supported** — the schemas differ. Install p-ui fresh and recreate
+Importing an older x-ui panel's database directly into Penhoon UI is **not
+supported** — the schemas differ. Install Penhoon UI fresh and recreate
 inbounds/clients, exporting share links from the old panel as you go.
 
 <Callout type="warn">

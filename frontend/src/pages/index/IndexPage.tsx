@@ -51,7 +51,7 @@ export default function IndexPage() {
     updateAvailable: false,
   });
 
-  const basePath = window.X_UI_BASE_PATH || '';
+  const basePath = window.PUI_BASE_PATH || '';
 
   const [showIp, setShowIp] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -83,7 +83,7 @@ export default function IndexPage() {
   }, []);
 
   const displayVersion = useMemo(
-    () => window.X_UI_CUR_VER || panelUpdateInfo.currentVersion || '?',
+    () => window.PUI_CUR_VER || panelUpdateInfo.currentVersion || '?',
     [panelUpdateInfo.currentVersion],
   );
 

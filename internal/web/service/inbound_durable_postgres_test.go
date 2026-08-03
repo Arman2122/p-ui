@@ -10,7 +10,7 @@ import (
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 func durablePostgresDB(t *testing.T) *gorm.DB {
@@ -18,7 +18,7 @@ func durablePostgresDB(t *testing.T) *gorm.DB {
 	if os.Getenv("PUI_DB_TYPE") != "postgres" || strings.TrimSpace(os.Getenv("PUI_DB_DSN")) == "" {
 		t.Skip("set PUI_DB_TYPE=postgres and PUI_DB_DSN to run commit-failure injection")
 	}
-	portConflictLoggerOnce.Do(func() { xuilogger.InitLogger(logging.ERROR) })
+	portConflictLoggerOnce.Do(func() { puilogger.InitLogger(logging.ERROR) })
 	if err := database.InitDB(""); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}

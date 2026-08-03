@@ -3,7 +3,7 @@ import { i18n } from '@/lib/i18n';
 
 // Next 16 "proxy" (middleware). The i18n middleware detects the locale and
 // rewrites `/docs/...` -> `/en/docs/...` internally (en is the hidden default),
-// while `/fa/...`, `/ru/...`, `/zh/...` keep their prefix.
+// while every other locale keeps its prefix (today just `/fa/...`).
 export default createI18nMiddleware(i18n);
 
 export const config = {

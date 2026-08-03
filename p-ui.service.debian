@@ -1,5 +1,5 @@
 [Unit]
-Description=p-ui Service
+Description=Penhoon UI Service
 After=network.target
 Wants=network.target
 StartLimitIntervalSec=180

@@ -13,7 +13,7 @@ import (
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 // p-ui logger must be initialised once before any code path that can
@@ -28,7 +28,7 @@ func setupIntegrationDB(t *testing.T) {
 	t.Helper()
 
 	loggerInitOnce.Do(func() {
-		xuilogger.InitLogger(logging.ERROR)
+		puilogger.InitLogger(logging.ERROR)
 	})
 
 	dbDir := t.TempDir()
@@ -167,7 +167,7 @@ func TestRun_NoOpWhenOnlineApiUnavailable(t *testing.T) {
 	}
 	if info, err := os.Stat(readIpLimitLogPath()); err == nil && info.Size() > 0 {
 		body, _ := os.ReadFile(readIpLimitLogPath())
-		t.Fatalf("3xipl.log should be empty when Run no-ops, got:\n%s", body)
+		t.Fatalf("pui-ipl.log should be empty when Run no-ops, got:\n%s", body)
 	}
 	var count int64
 	if err := database.GetDB().Model(&model.InboundClientIps{}).Where("client_email = ?", email).Count(&count).Error; err != nil {
@@ -228,10 +228,10 @@ func TestUpdateInboundClientIps_LiveIpNotBannedByStillFreshHistoricals(t *testin
 		t.Errorf("live ip timestamp should match the scan timestamp %d, got %d", now, got)
 	}
 
-	// 3xipl.log must not contain a ban line.
+	// pui-ipl.log must not contain a ban line.
 	if info, err := os.Stat(readIpLimitLogPath()); err == nil && info.Size() > 0 {
 		body, _ := os.ReadFile(readIpLimitLogPath())
-		t.Fatalf("3xipl.log should be empty when no ips are banned, got:\n%s", body)
+		t.Fatalf("pui-ipl.log should be empty when no ips are banned, got:\n%s", body)
 	}
 }
 
@@ -282,14 +282,14 @@ func TestUpdateInboundClientIps_ExcessLiveIpIsStillBanned(t *testing.T) {
 		t.Errorf("banned IP 10.1.0.1 must NOT be persisted; got %v", persisted)
 	}
 
-	// 3xipl.log must contain the ban line in the exact fail2ban format.
+	// pui-ipl.log must contain the ban line in the exact fail2ban format.
 	body, err := os.ReadFile(readIpLimitLogPath())
 	if err != nil {
-		t.Fatalf("read 3xipl.log: %v", err)
+		t.Fatalf("read pui-ipl.log: %v", err)
 	}
 	wantSubstr := "[LIMIT_IP] Email = pr4091-abuse || Disconnecting OLD IP = 10.1.0.1"
 	if !contains(string(body), wantSubstr) {
-		t.Fatalf("3xipl.log missing expected ban line %q\nfull log:\n%s", wantSubstr, body)
+		t.Fatalf("pui-ipl.log missing expected ban line %q\nfull log:\n%s", wantSubstr, body)
 	}
 }
 
@@ -315,7 +315,7 @@ func TestProcessObserved_CollectsIpsWithoutLimit(t *testing.T) {
 
 	if info, err := os.Stat(readIpLimitLogPath()); err == nil && info.Size() > 0 {
 		body, _ := os.ReadFile(readIpLimitLogPath())
-		t.Fatalf("3xipl.log should be empty with no limit set, got:\n%s", body)
+		t.Fatalf("pui-ipl.log should be empty with no limit set, got:\n%s", body)
 	}
 }
 
@@ -344,7 +344,7 @@ func TestProcessObserved_StaleEmailIsSkippedAndOrphanDropped(t *testing.T) {
 	}
 }
 
-// readIpLimitLogPath reads the 3xipl.log path the same way the job
+// readIpLimitLogPath reads the pui-ipl.log path the same way the job
 // does via xray.GetIPLimitLogPath but without importing xray here
 // just for the path helper (which would pull a lot more deps into the
 // test binary). The env-derived log folder is deterministic.
@@ -353,7 +353,7 @@ func readIpLimitLogPath() string {
 	if folder == "" {
 		folder = filepath.Join(".", "log")
 	}
-	return filepath.Join(folder, "3xipl.log")
+	return filepath.Join(folder, "pui-ipl.log")
 }
 
 func contains(haystack, needle string) bool {

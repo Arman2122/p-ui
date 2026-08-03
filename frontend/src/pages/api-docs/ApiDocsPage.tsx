@@ -8,7 +8,7 @@ import { useTheme } from '@/hooks/useTheme';
 import AppSidebar from '@/layouts/AppSidebar';
 import './ApiDocsPage.css';
 
-const basePath = window.X_UI_BASE_PATH || '';
+const basePath = window.PUI_BASE_PATH || '';
 const openApiUrl = `${basePath}panel/api/openapi.json`;
 
 export default function ApiDocsPage() {

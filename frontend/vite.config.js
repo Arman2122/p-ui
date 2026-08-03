@@ -71,7 +71,7 @@ function injectBasePathPlugin() {
       const basePath = refreshBasePath();
       const escaped = basePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const version = readPanelVersion().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      const tag = `<script>window.X_UI_BASE_PATH="${escaped}";window.X_UI_CUR_VER="${version}";</script>`;
+      const tag = `<script>window.PUI_BASE_PATH="${escaped}";window.PUI_CUR_VER="${version}";</script>`;
       return html.replace('</head>', `${tag}</head>`);
     },
   };
@@ -162,7 +162,7 @@ export default defineConfig({
     renderBuiltUrl(filename, { hostType }) {
       if (hostType === 'js') {
         return {
-          runtime: `((window.X_UI_BASE_PATH||'/')+${JSON.stringify(filename)})`,
+          runtime: `((window.PUI_BASE_PATH||'/')+${JSON.stringify(filename)})`,
         };
       }
       return undefined;

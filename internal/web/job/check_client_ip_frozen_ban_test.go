@@ -16,7 +16,7 @@ func banLineCount(t *testing.T, email string) int {
 		if os.IsNotExist(err) {
 			return 0
 		}
-		t.Fatalf("read 3xipl.log: %v", err)
+		t.Fatalf("read pui-ipl.log: %v", err)
 	}
 	return strings.Count(string(body), "[LIMIT_IP] Email = "+email)
 }

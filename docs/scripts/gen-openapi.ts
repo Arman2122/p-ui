@@ -12,8 +12,10 @@ const titleBySlug = new Map(
   (spec.tags ?? []).map((t) => [t.name.toLowerCase().replace(/\s+/g, '-'), t.name]),
 );
 
-// Generate one MDX page per tag into the English reference/api folder.
-// Other locales fall back to English for the API reference.
+// Generate one MDX page per tag into the English reference/api folder. Only
+// `en` is generated; the Persian copies under content/docs/fa/reference/api are
+// maintained by hand, so re-sync them after regenerating (a locale with no copy
+// falls back to English).
 await generateFiles({
   input: openapi,
   output: './content/docs/en/reference/api',

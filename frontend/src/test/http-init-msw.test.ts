@@ -11,13 +11,13 @@ const ORIGIN = 'http://localhost';
 describe('httpRequest against the MSW-mocked network', () => {
   beforeEach(() => {
     vi.stubGlobal('document', { querySelector: () => null });
-    window.X_UI_BASE_PATH = ORIGIN;
+    window.PUI_BASE_PATH = ORIGIN;
     setupHttp();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete window.X_UI_BASE_PATH;
+    delete window.PUI_BASE_PATH;
   });
 
   it('fetches a CSRF token, then refetches and retries once after a 403', async () => {

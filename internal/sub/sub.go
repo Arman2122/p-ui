@@ -1,4 +1,4 @@
-// Package sub provides subscription server functionality for the p-ui panel,
+// Package sub provides subscription server functionality for the Penhoon UI panel,
 // including HTTP/HTTPS servers for serving subscription links and JSON configurations.
 package sub
 

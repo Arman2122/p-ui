@@ -26,7 +26,7 @@ describe('http-init fetch wrapper', () => {
   beforeEach(async () => {
     vi.resetModules();
     document.head.innerHTML = '';
-    delete (window as { X_UI_BASE_PATH?: string }).X_UI_BASE_PATH;
+    delete (window as { PUI_BASE_PATH?: string }).PUI_BASE_PATH;
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     replaceMock = vi.fn();
@@ -92,7 +92,7 @@ describe('http-init fetch wrapper', () => {
   });
 
   it('prepends the base path to request and csrf-token URLs', async () => {
-    window.X_UI_BASE_PATH = '/pui';
+    window.PUI_BASE_PATH = '/pui';
     http.setupHttp();
     fetchMock.mockImplementation((url: string) =>
       Promise.resolve(url.endsWith('/csrf-token') ? csrfResponse('fresh') : okEnvelope()),
@@ -138,7 +138,7 @@ describe('http-init fetch wrapper', () => {
   });
 
   it('redirects once on 401 and never settles', async () => {
-    window.X_UI_BASE_PATH = '/pui';
+    window.PUI_BASE_PATH = '/pui';
     document.head.innerHTML = '<meta name="csrf-token" content="tok">';
     http.setupHttp();
     fetchMock.mockResolvedValue(new Response('', { status: 401 }));

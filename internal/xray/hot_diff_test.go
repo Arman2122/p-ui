@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
 
 	"github.com/op/go-logging"
@@ -14,7 +14,7 @@ import (
 func TestMain(m *testing.M) {
 	// ComputeHotDiff logs the section that blocks a hot apply; the package
 	// logger must exist before any test exercises a blocked path.
-	xuilogger.InitLogger(logging.ERROR)
+	puilogger.InitLogger(logging.ERROR)
 	os.Exit(m.Run())
 }
 

@@ -29,7 +29,7 @@
         "PUI_LOG_FOLDER": "p-ui",
         "PUI_BIN_FOLDER": "p-ui",
         "PUI_DB_TYPE": "postgres",
-        "PUI_DB_DSN": "postgres://pui:xuipass@127.0.0.1:5432/pui?sslmode=disable"
+        "PUI_DB_DSN": "postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable"
       },
       "windows": {
         "env": {
@@ -37,7 +37,7 @@
           "PUI_LOG_FOLDER": "p-ui",
           "PUI_BIN_FOLDER": "p-ui",
           "PUI_DB_TYPE": "postgres",
-          "PUI_DB_DSN": "postgres://pui:xuipass@127.0.0.1:5432/pui?sslmode=disable",
+          "PUI_DB_DSN": "postgres://pui:puipass@127.0.0.1:5432/pui?sslmode=disable",
           "PATH": "C:\\Program Files\\PostgreSQL\\18\\bin;${env:PATH}"
         }
       },

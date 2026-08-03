@@ -1,13 +1,13 @@
-# p-ui on Hetzner Cloud
+# Penhoon UI on Hetzner Cloud
 
 Hetzner Cloud does **not** have a third-party image marketplace the way AWS does.
-Ship p-ui via **cloud-init**: each instance installs non-interactively and
+Ship Penhoon UI via **cloud-init**: each instance installs non-interactively and
 generates unique per-instance credentials (no `admin/admin`, no shared secret).
 
 ## cloud-init (no image build)
 
 Use the generic user-data from [`../../cloud-init/`](../../cloud-init/). It installs
-p-ui non-interactively and generates unique per-instance credentials.
+P-UI non-interactively and generates unique per-instance credentials.
 
 Web console: **Create Server → Cloud config** → paste
 [`deploy/cloud-init/cloud-init.yaml`](../../cloud-init/cloud-init.yaml).
@@ -16,7 +16,7 @@ CLI:
 
 ```bash
 hcloud server create \
-  --name pui-1 \
+  --name p-ui-1 \
   --type cx22 \
   --image ubuntu-24.04 \
   --user-data-from-file deploy/cloud-init/cloud-init.yaml
@@ -32,6 +32,6 @@ ssh root@<server-ip> 'cat /etc/p-ui/install-result.env'
 
 Hetzner's curated apps live in the community repo
 [`github.com/hetznercloud/apps`](https://github.com/hetznercloud/apps): each app
-is essentially a documented cloud-init config plus metadata. To propose p-ui as
-a Hetzner app, follow that repo's contribution pattern and base the app's
+is essentially a documented cloud-init config plus metadata. To propose Penhoon UI
+as a Hetzner app, follow that repo's contribution pattern and base the app's
 cloud-config on [`deploy/cloud-init/cloud-init.yaml`](../../cloud-init/cloud-init.yaml).

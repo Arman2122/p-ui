@@ -10,7 +10,7 @@ import (
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 // the panel logger is a process-wide singleton. init it once per test
@@ -22,7 +22,7 @@ var portConflictLoggerOnce sync.Once
 // doesn't refuse to remove the file.
 func setupConflictDB(t *testing.T) {
 	t.Helper()
-	portConflictLoggerOnce.Do(func() { xuilogger.InitLogger(logging.ERROR) })
+	portConflictLoggerOnce.Do(func() { puilogger.InitLogger(logging.ERROR) })
 
 	dbDir := t.TempDir()
 	t.Setenv("PUI_DB_FOLDER", dbDir)

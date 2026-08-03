@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { appName, appTagline, siteUrl } from '@/lib/shared';
+import { appName, appTagline, basePath, siteUrl } from '@/lib/shared';
 
 // Global SEO defaults. The real <html>/<body> live in `app/[lang]/layout.tsx`
 // so we can set `lang`/`dir` per locale (RTL for fa); this root layout is a
@@ -20,9 +20,12 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
   },
+  // Icon hrefs are emitted verbatim — unlike OG images they are not resolved
+  // against `metadataBase`, and Next does not apply `basePath` to them — so the
+  // subpath prefix has to be added here by hand.
   icons: {
-    icon: '/favicon.png',
-    apple: '/icon.png',
+    icon: `${basePath}/favicon.png`,
+    apple: `${basePath}/icon.png`,
   },
 };
 

@@ -1,10 +1,10 @@
 ---
 title: نصب
-description: نصب p-ui با اسکریپت رسمی (نسخهٔ پایدار، نسخهٔ مشخص یا dev-latest)، نصب خودکار/cloud-init یا Docker — و انتخاب میان SQLite و PostgreSQL.
+description: نصب Penhoon UI با اسکریپت رسمی (نسخهٔ پایدار، نسخهٔ مشخص یا dev-latest)، نصب خودکار/cloud-init یا Docker — و انتخاب میان SQLite و PostgreSQL.
 icon: Download
 ---
 
-‏p-ui روی طیف گسترده‌ای از توزیع‌های Linux اجرا می‌شود — Ubuntu، Debian، Armbian،
+‏Penhoon UI روی طیف گسترده‌ای از توزیع‌های Linux اجرا می‌شود — Ubuntu، Debian، Armbian،
 Fedora، CentOS، RHEL، AlmaLinux، Rocky Linux، Oracle Linux، Amazon Linux،
 Virtuozzo، Arch، Manjaro، openSUSE (Tumbleweed/Leap)، Alpine — و همچنین Windows،
 روی معماری‌های `amd64`، `386`، `arm64`، `armv7`، `armv6`، `armv5` و `s390x`.
@@ -24,20 +24,20 @@ Virtuozzo، Arch، Manjaro، openSUSE (Tumbleweed/Leap)، Alpine — و همچن
 دستور مدیریتی `p-ui` را نصب می‌کند.
 
 ```bash title="latest stable"
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)
 ```
 
 برای نصب یک **نسخهٔ مشخص**، تگ آن را در انتها اضافه کنید:
 
 ```bash title="pinned version"
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh) v3.4.0
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v3.4.0
 ```
 
 برای نصب نسخهٔ **dev** غلتان (آخرین پیش‌انتشار به‌ازای هر کامیت از شاخهٔ `main`
 — نه یک نسخهٔ پایدار) عبارت `dev-latest` را پاس دهید:
 
 ```bash title="rolling dev build"
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh) dev-latest
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) dev-latest
 ```
 
 پس از پایان نصب، مشخصات ورود چاپ‌شده را یادداشت کنید و دستور `p-ui` را اجرا کنید تا
@@ -122,7 +122,7 @@ docker run -d \
 `/etc/p-ui/install-result.env` بنویسد:
 
 ```bash
-PUI_NONINTERACTIVE=1 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh)
+PUI_NONINTERACTIVE=1 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)
 ```
 
 دایرکتوری [`deploy/`](https://github.com/Arman2122/p-ui/tree/main/deploy) در مخزن

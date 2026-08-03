@@ -15,7 +15,6 @@ import {
   ExportOutlined,
   GithubOutlined,
   GlobalOutlined,
-  HeartOutlined,
   ImportOutlined,
   LogoutOutlined,
   MailOutlined,
@@ -41,8 +40,7 @@ import { pauseAnimationsUntilLeave, useTheme } from '@/hooks/useTheme';
 import { useAllSettings } from '@/api/queries/useAllSettings';
 import './AppSidebar.css';
 
-const DONATE_URL = 'https://donate.sanaei.dev/';
-const DOCS_URL = 'https://docs.sanaei.dev/';
+const DOCS_URL = 'https://github.com/Arman2122/p-ui#readme';
 const REPO_URL = 'https://github.com/Arman2122/p-ui';
 const LOGOUT_KEY = '__logout__';
 const RAIL_WIDTH = 72;
@@ -67,21 +65,6 @@ const iconByName: Record<IconName, ComponentType> = {
   outbound: ExportOutlined,
   routing: SwapOutlined,
 };
-
-function DonateButton({ ariaLabel }: { ariaLabel: string }) {
-  return (
-    <a
-      href={DONATE_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="sidebar-donate"
-      aria-label={ariaLabel}
-      title={ariaLabel}
-    >
-      <HeartOutlined />
-    </a>
-  );
-}
 
 function DocsButton({ ariaLabel }: { ariaLabel: string }) {
   return (
@@ -190,7 +173,7 @@ export default function AppSidebar() {
   }, [updateHovered]);
 
   const currentTheme: 'light' | 'dark' = isDark ? 'dark' : 'light';
-  const panelVersion = window.X_UI_CUR_VER || '';
+  const panelVersion = window.PUI_CUR_VER || '';
 
   const tabs = useMemo<{ key: string; icon: IconName; title: string }[]>(() => [
     { key: '/', icon: 'dashboard', title: t('menu.dashboard') },
@@ -263,7 +246,7 @@ export default function AppSidebar() {
   const openLink = useCallback(async (key: string) => {
     if (key === LOGOUT_KEY) {
       await HttpUtil.post('/logout');
-      window.location.href = window.X_UI_BASE_PATH || '/';
+      window.location.href = window.PUI_BASE_PATH || '/';
       return;
     }
     navigate(key);
@@ -302,7 +285,7 @@ export default function AppSidebar() {
       >
         <div className="sider-brand">
           <div className="brand-block">
-            <span className="brand-text">{railCollapsed ? '3X' : 'P-UI'}</span>
+            <span className="brand-text">{railCollapsed ? 'P' : 'P-UI'}</span>
           </div>
           {!railCollapsed && (
             <div className="brand-actions">
@@ -317,7 +300,6 @@ export default function AppSidebar() {
                 {pinned ? <PushpinFilled /> : <PushpinOutlined />}
               </button>
               <DocsButton ariaLabel={t('menu.docs') || 'Documentation'} />
-              <DonateButton ariaLabel={t('menu.donate') || 'Donate'} />
               <ThemeCycleButton
                 id="theme-cycle"
                 isDark={isDark}
@@ -370,7 +352,6 @@ export default function AppSidebar() {
           </div>
           <div className="drawer-header-actions">
             <DocsButton ariaLabel={t('menu.docs') || 'Documentation'} />
-            <DonateButton ariaLabel={t('menu.donate') || 'Donate'} />
             <ThemeCycleButton
               id="theme-cycle-drawer"
               isDark={isDark}

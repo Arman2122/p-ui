@@ -6,13 +6,12 @@ import type { Locale } from './i18n';
 // can't live in MDX. English is the source; fa falls back to en.
 //
 // Convention matches the docs: translate prose only — product/protocol names
-// (p-ui, Xray, VLESS, REALITY, x25519, Docker, REST API, …) stay in Latin.
+// (Penhoon UI, Xray, VLESS, REALITY, x25519, Docker, REST API, …) stay in Latin.
 export interface SiteMessages {
   tagline: string;
   getStarted: string;
   viewOnGitHub: string;
   documentation: string;
-  donate: string;
   docs: string;
   stars: string;
   forks: string;
@@ -33,7 +32,6 @@ const en: SiteMessages = {
   getStarted: 'Get started',
   viewOnGitHub: 'View on GitHub',
   documentation: 'Documentation',
-  donate: 'Donate',
   docs: 'Docs',
   stars: 'stars',
   forks: 'forks',
@@ -84,7 +82,6 @@ const fa: SiteMessages = {
   getStarted: 'شروع کنید',
   viewOnGitHub: 'مشاهده در GitHub',
   documentation: 'مستندات',
-  donate: 'حمایت مالی',
   docs: 'مستندات',
   stars: 'ستاره',
   forks: 'فورک',

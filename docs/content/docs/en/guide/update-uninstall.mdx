@@ -1,6 +1,6 @@
 ---
 title: Update & Uninstall
-description: Manage p-ui with the p-ui menu and CLI — update (stable, dev, or legacy), change settings, and uninstall cleanly.
+description: Manage Penhoon UI with the p-ui menu and CLI — update (stable, dev, or legacy), change settings, and uninstall cleanly.
 icon: RefreshCw
 ---
 
@@ -22,7 +22,7 @@ The menu (items `0`–`28`) shows the panel/Xray status at the top, then:
 | 3     | Update to Dev Channel (latest commit)  | Update to the rolling `dev-latest` build                  |
 | 4     | Update Menu                            | Update just the `p-ui` menu script                        |
 | 5     | Legacy Version                         | Install a specific older version (prompts for a tag)      |
-| 6     | Uninstall                              | Remove p-ui (see below)                                  |
+| 6     | Uninstall                              | Remove Penhoon UI (see below)                             |
 | 7     | Reset Username & Password              | Set new credentials; optionally disable 2FA               |
 | 8     | Reset Web Base Path                    | Randomize the web base path                               |
 | 9     | Reset Settings                         | Reset panel settings (your account is preserved)          |
@@ -66,8 +66,16 @@ For scripts and quick actions, `p-ui` also takes a subcommand directly:
 | `p-ui update-dev`          | Update to the rolling `dev-latest` build            |
 | `p-ui legacy`              | Install a specific older version (prompts)          |
 | `p-ui update-all-geofiles` | Update all geo files, restart if changed            |
-| `p-ui migrate-db --dsn …`  | Migrate SQLite → PostgreSQL (see [Database](/docs/reference/database)) |
+| `p-ui migrateDB [in] [out]` | Convert the SQLite `.db` ↔ a portable `.dump` (direction auto-detected) |
+| `p-ui pgclient [ver]`      | Install/upgrade the PostgreSQL client tools (`pg_dump`/`pg_restore`) |
 | `p-ui install` / `uninstall` | Install / uninstall                               |
+
+Run `p-ui` with an unknown subcommand to print this list from the script itself.
+
+<Callout type="info">
+  Migrating an existing SQLite install to PostgreSQL is a *panel* command rather
+  than a menu subcommand — see [Database](/docs/reference/database).
+</Callout>
 
 ## Updating
 

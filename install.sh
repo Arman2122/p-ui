@@ -1656,7 +1656,7 @@ install_p-ui() {
     # works out of the box (no-op when PUI_ENABLE_FAIL2BAN=false). Never fatal.
     setup_fail2ban
 
-    echo -e "${green}p-ui ${tag_version}${plain} installation finished, it is running now..."
+    echo -e "${green}Penhoon UI ${tag_version}${plain} installation finished, it is running now..."
     echo -e ""
     echo -e "┌───────────────────────────────────────────────────────┐
 │  ${blue}p-ui control menu usages (subcommands):${plain}              │

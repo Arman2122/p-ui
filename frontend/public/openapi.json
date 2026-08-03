@@ -3,7 +3,7 @@
   "info": {
     "title": "P-UI Panel API",
     "version": "3.x",
-    "description": "Programmatic interface to a P-UI panel. Authenticate either by logging in (cookie) or with an API token from Settings → Security → API Token (Bearer). All endpoints under /panel/api/* honour both modes — an API token is a full-admin credential, so treat it like the panel password."
+    "description": "Programmatic interface to a Penhoon UI (P-UI) panel. Authenticate either by logging in (cookie) or with an API token from Settings → Security → API Token (Bearer). All endpoints under /panel/api/* honour both modes — an API token is a full-admin credential, so treat it like the panel password."
   },
   "servers": [
     {
@@ -2061,7 +2061,7 @@
         "type": "object"
       },
       "Node": {
-        "description": "Node represents a remote p-ui panel registered with the central panel.\nThe central panel polls each node's existing /panel/api/server/status\nendpoint over HTTP using the per-node ApiToken to populate the runtime\nstatus fields below.",
+        "description": "Node represents a remote Penhoon UI panel registered with the central panel.\nThe central panel polls each node's existing /panel/api/server/status\nendpoint over HTTP using the per-node ApiToken to populate the runtime\nstatus fields below.",
         "properties": {
           "activeCount": {
             "example": 23,
@@ -2806,7 +2806,7 @@
         "type": "object"
       },
       "Setting": {
-        "description": "Setting stores key-value configuration settings for the p-ui panel.",
+        "description": "Setting stores key-value configuration settings for the Penhoon UI panel.",
         "properties": {
           "id": {
             "type": "integer"
@@ -2826,7 +2826,7 @@
         "type": "object"
       },
       "User": {
-        "description": "User represents a user account in the p-ui panel.",
+        "description": "User represents a user account in the Penhoon UI panel.",
         "properties": {
           "id": {
             "type": "integer"
@@ -2874,7 +2874,7 @@
     },
     {
       "name": "Nodes",
-      "description": "Manage remote p-ui panels acting as nodes for a central panel. All endpoints under /panel/api/nodes."
+      "description": "Manage remote Penhoon UI panels acting as nodes for a central panel. All endpoints under /panel/api/nodes."
     },
     {
       "name": "Hosts",
@@ -4418,7 +4418,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "Check whether a newer p-ui release is available on GitHub.",
+        "summary": "Check whether a newer Penhoon UI release is available on GitHub.",
         "operationId": "get_panel_api_server_getPanelUpdateInfo",
         "responses": {
           "200": {

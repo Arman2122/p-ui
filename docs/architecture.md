@@ -1,4 +1,4 @@
-# p-ui — Architecture & Code Map
+# Penhoon UI — Architecture & Code Map
 
 > Navigation map for contributors and AI coding agents (referenced from `CLAUDE.md`).
 > Goal: jump to the right file in one hop instead of grepping the whole tree.
@@ -13,14 +13,14 @@
 
 ## 1. Mental model (the 30-second version)
 
-p-ui is a **web control panel for [Xray-core](https://github.com/XTLS/Xray-core)**. The Go
+Penhoon UI is a **web control panel for [Xray-core](https://github.com/XTLS/Xray-core)**. The Go
 backend is the source of truth: it stores inbounds/clients/settings in a DB, renders an
 Xray JSON config from that state, supervises the Xray child process, and exposes a REST +
 WebSocket API. A React SPA (built by Vite, embedded into the Go binary) is the UI. A second,
 separate HTTP server serves **subscription links** to end users.
 
 The panel supervises **two managed child processes**: Xray-core itself and — when MTProto
-inbounds exist — the `mtg-multi` Telegram-proxy binary (`github.com/arman2122/mtg-multi`, a
+inbounds exist — the `mtg-multi` Telegram-proxy binary (`github.com/mhsanaei/mtg-multi`, a
 multi-secret fork built from source; `internal/mtproto/`). One process per inbound serves
 every attached client's FakeTLS secret through the fork's `[secrets]` section, plus optional
 per-client sponsored-channel ad-tags via `[secret-ad-tags]`. A client or ad-tag edit is
@@ -41,7 +41,7 @@ Two key ideas that explain most of the complexity:
 1. **The DB → Xray config pipeline.** Inbounds/clients live in the DB. On every change the
    backend regenerates the Xray config and applies it — preferring a *hot diff* (live gRPC
    API mutation) over a full process restart. See §5.1.
-2. **The Runtime abstraction (multi-node).** A panel can manage remote "nodes" (other p-ui
+2. **The Runtime abstraction (multi-node).** A panel can manage remote "nodes" (other Penhoon UI
    instances). Every state-changing inbound/client operation is dispatched through a
    `runtime.Runtime` interface that is either **`Local`** (this box's Xray gRPC API) or
    **`Remote`** (HTTPS call to a child node, with `verify`/`skip`/`pin`/`mtls` TLS modes).
@@ -218,7 +218,7 @@ p-ui/
 │   │   ├── network/          # Custom net listeners (e.g. proxy-protocol aware)
 │   │   ├── session/          # Session/cookie helpers
 │   │   ├── websocket/        # WS hub implementation
-│   │   ├── locale/ + translation/  # i18n middleware + 13 locale JSON catalogs
+│   │   ├── locale/ + translation/  # i18n middleware + locale JSON catalogs (en-US, fa-IR)
 │   │   ├── entity/           # Shared request/response DTOs
 │   │   └── dist/             # ⚠️ Vite build output, embedded via go:embed (generated — do not hand-edit)
 │   │
@@ -308,7 +308,7 @@ Restart is debounced via an atomic "need restart" flag (`SetToNeedRestart` /
 
 ### 5.2 Runtime abstraction — Local vs Remote (multi-node) ⭐ most important
 
-A "node" (`model.Node`) is another p-ui instance this panel controls. Every state-changing
+A "node" (`model.Node`) is another Penhoon UI instance this panel controls. Every state-changing
 inbound/client operation goes through the `runtime.Runtime` interface so the *same service
 code* works whether the target is the local Xray or a remote node.
 
@@ -579,9 +579,9 @@ root → `go build ./...` / `go run main.go`.
   (`FetchCertFingerprint`), `service/node_mtls.go`, and `runtime/tls_client.go`.
 - **Restart is signal-driven.** `main.go` traps SIGHUP to restart panel+sub servers; the
   in-process restart hook (`global.SetRestartHook`) funnels into the same path.
-- **i18n:** backend catalogs in `internal/web/translation/` (13 locales, shared with the
-  frontend); frontend wiring in `frontend/src/i18n/`. Persian (`fa_IR`) is a first-class
-  locale (Jalali calendar via `persian-calendar-suite`).
+- **i18n:** backend catalogs in `internal/web/translation/` (two locales — `en-US` and
+  `fa-IR` — shared with the frontend); frontend wiring in `frontend/src/i18n/`. Persian
+  (`fa_IR`) is a first-class locale (Jalali calendar via `persian-calendar-suite`).
 - **Tests live next to code** (`foo.go` ↔ `foo_test.go`), plus golden snapshots in
   `frontend/src/test/golden/fixtures/` for config generation — update fixtures intentionally,
   not blindly, when output changes.
