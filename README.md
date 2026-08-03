@@ -99,7 +99,7 @@ See [`deploy/`](deploy/) for [cloud-init user-data](deploy/cloud-init/) and
 is Linux-only and expects systemd, `apt` and `iptables`; there is no Windows, Docker or
 other-distro support.
 
-**Architectures:** `amd64` · `arm64` (aarch64) · `armv7` · `s390x` — see the
+**Architectures:** `amd64` · `arm64` (aarch64) · `armv7` · `armv6` · `armv5` · `386` · `s390x` — see the
 [releases page](https://github.com/Arman2122/p-ui/releases) for the published assets.
 
 ## Database

@@ -99,7 +99,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh
 ‏Penhoon UI فقط روی Linux اجرا می‌شود و به systemd، `apt` و `iptables` نیاز دارد؛
 پشتیبانی از Windows، Docker و دیگر توزیع‌ها وجود ندارد.
 
-**معماری‌ها:** `amd64` · `arm64` (aarch64) · `armv7` · `s390x` — فهرست فایل‌های منتشرشده
+**معماری‌ها:** `amd64` · `arm64` (aarch64) · `armv7` · `armv6` · `armv5` · `386` · `s390x` — فهرست فایل‌های منتشرشده
 را در [صفحه‌ی releases](https://github.com/Arman2122/p-ui/releases) ببینید.
 
 ## پایگاه‌داده
