@@ -349,8 +349,8 @@ verify_database_dsn() {
     echo -e "${yellow}Penhoon UI stores all of its data in PostgreSQL and has no other backend.${plain}"
     echo -e "${yellow}Fix PUI_DB_DSN in ${pui_env_file} and run the installer again, for example:${plain}"
     echo -e "  ${blue}PUI_DB_DSN=postgres://p-ui:PASSWORD@127.0.0.1:5432/p-ui?sslmode=disable${plain}"
-    echo -e "${yellow}The libpq form works too (space-separated key=value pairs):${plain}"
-    echo -e "  ${blue}PUI_DB_DSN=host=127.0.0.1 port=5432 user=p-ui password=PASSWORD dbname=p-ui sslmode=disable${plain}"
+    echo -e "${yellow}Only this postgres:// URL form is accepted -- libpq key=value strings are rejected.${plain}"
+    echo -e "${yellow}Percent-encode any of : / ? # @ % that appear in the password.${plain}"
     exit 1
 }
 
@@ -408,11 +408,11 @@ setup_database() {
             if [[ "$pg_mode" == "2" ]]; then
                 while [[ -z "$pui_dsn" ]]; do
                     read -rp "Enter PostgreSQL DSN (postgres://user:pass@host:port/dbname?sslmode=disable): " pui_dsn
-                    # Trim surrounding whitespace ONLY. libpq's key=value DSN form
-                    # ("host=127.0.0.1 port=5432 user=pui ...") is accepted by
-                    # requireDSN() in internal/database/db.go and its fields are
-                    # space-separated, so squeezing out every space would silently
-                    # glue them into "host=127.0.0.1port=5432user=pui".
+                    # Trim surrounding whitespace only. requireDSN() in
+                    # internal/database/db.go takes the postgres:// URL form and
+                    # nothing else -- libpq's "host=... dbname=..." key=value
+                    # string is rejected -- and a URL never carries a literal
+                    # space, so leading/trailing padding is all there is to strip.
                     pui_dsn="${pui_dsn#"${pui_dsn%%[![:space:]]*}"}"
                     pui_dsn="${pui_dsn%"${pui_dsn##*[![:space:]]}"}"
                 done

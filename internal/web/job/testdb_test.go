@@ -26,6 +26,9 @@ func initTestDB(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set PUI_DB_DSN to run the tests that need a live PostgreSQL server")
 	}
+	if _, err := database.ParseDSN(dsn); err != nil {
+		t.Fatalf("PUI_DB_DSN=%q is not a usable PostgreSQL URL: %v", dsn, err)
+	}
 
 	schema := fmt.Sprintf("pui_job_test_%d_%d", os.Getpid(), testSchemaSeq.Add(1))
 	if err := execOnDSN(dsn, `CREATE SCHEMA "`+schema+`"`); err != nil {
@@ -59,15 +62,13 @@ func execOnDSN(dsn, statement string) error {
 	return gdb.Exec(statement).Error
 }
 
-// dsnWithSearchPath pins a DSN to one schema, in whichever of the two shapes
-// pgx accepts the caller wrote it.
+// dsnWithSearchPath pins a DSN to one schema. PUI_DB_DSN is always a postgres://
+// URL -- database.ParseDSN rejects every other shape -- so search_path rides
+// along as a query parameter.
 func dsnWithSearchPath(dsn, schema string) string {
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		separator := "?"
-		if strings.Contains(dsn, "?") {
-			separator = "&"
-		}
-		return dsn + separator + "search_path=" + schema
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
 	}
-	return dsn + " search_path=" + schema
+	return dsn + separator + "search_path=" + schema
 }

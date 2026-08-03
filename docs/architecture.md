@@ -234,8 +234,8 @@ p-ui/
 │   │   ├── remark_vars.go     #   remark variable expansion
 │   │   └── links.go           #   link helpers
 │   │
-│   ├── mtproto/              # Embedded MTProto (Telegram) proxy: manager.go + per-OS
-│   │                         #   process supervision + orphan cleanup
+│   ├── mtproto/              # Embedded MTProto (Telegram) proxy: manager.go +
+│   │                         #   process.go supervision + orphans.go cleanup
 │   ├── logger/              # App logger (op/go-logging + lumberjack rotation)
 │   └── util/                # Leaf helpers (no business logic):
 │       ├── common/          #   errors, misc

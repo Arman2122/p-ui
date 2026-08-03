@@ -16,7 +16,6 @@ import (
 	"mime/multipart"
 	stdnet "net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1363,19 +1362,15 @@ func (s *ServerService) ImportDB(file multipart.File) error {
 }
 
 // pgConnEnv turns the configured PostgreSQL DSN into the PG* environment used by
-// pg_dump/pg_restore, keeping the password out of the process argument list.
+// pg_dump/pg_restore, keeping the password out of the process argument list. It
+// validates through database.ParseDSN, the same parser that gates startup, so
+// any DSN the panel booted on is one Back Up and Import DB can take apart.
 func pgConnEnv(dsn string) (env []string, dbname string, err error) {
-	u, err := url.Parse(strings.TrimSpace(dsn))
+	u, err := database.ParseDSN(dsn)
 	if err != nil {
 		return nil, "", err
 	}
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return nil, "", common.NewErrorf("unsupported DSN scheme %q", u.Scheme)
-	}
 	dbname = strings.TrimPrefix(u.Path, "/")
-	if dbname == "" {
-		return nil, "", common.NewError("PostgreSQL DSN is missing a database name")
-	}
 	host := u.Hostname()
 	if host == "" {
 		host = "127.0.0.1"

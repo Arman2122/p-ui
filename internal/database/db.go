@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"os/exec"
 	"slices"
@@ -1789,10 +1790,43 @@ func isTableEmpty(tableName string) (bool, error) {
 // copy-pasteable PostgreSQL connection string.
 const exampleDSN = "postgres://p-ui:PASSWORD@127.0.0.1:5432/p-ui?sslmode=disable"
 
+// ParseDSN validates a PostgreSQL connection string against the single shape
+// Penhoon UI supports -- a postgres:// (or postgresql://) URL that names a
+// database -- and returns it parsed. Everything that has to take the DSN apart
+// goes through here: startup, and the pg_dump/pg_restore backup paths that need
+// the host, port, user and database as separate PG* variables. One parser means
+// a DSN the panel boots on is always a DSN Back Up and Import DB can use.
+//
+// libpq's "host=... dbname=..." keyword form is deliberately rejected: net/url
+// cannot take it apart, so accepting it at startup would leave the backup paths
+// broken. Every writer of a DSN in this repo emits the URL form.
+func ParseDSN(dsn string) (*url.URL, error) {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return nil, errors.New("the PostgreSQL DSN is empty")
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("not a valid URL: %w", err)
+	}
+	switch u.Scheme {
+	case "postgres", "postgresql":
+	case "":
+		return nil, errors.New(`missing the "postgres://" scheme -- Penhoon UI takes only URL DSNs, not file paths or libpq key=value strings`)
+	default:
+		return nil, fmt.Errorf("unsupported scheme %q (expected postgres:// or postgresql://)", u.Scheme)
+	}
+	if strings.TrimPrefix(u.Path, "/") == "" {
+		return nil, errors.New("no database name in the URL path")
+	}
+	return u, nil
+}
+
 // requireDSN resolves PUI_DB_DSN and fails fast when it is missing or is not a
-// connection string PostgreSQL could ever accept. Catching the obviously wrong
-// value here keeps a typo (or a leftover file path) from burning the whole
-// connect-retry budget before the panel reports the real problem.
+// PostgreSQL URL. Catching the obviously wrong value here keeps a typo (or a
+// leftover file path) from burning the whole connect-retry budget before the
+// panel reports the real problem, and guarantees the running panel never holds
+// a DSN its own backup tooling would choke on.
 func requireDSN() (string, error) {
 	dsn := config.GetDBDSN()
 	if dsn == "" {
@@ -1802,10 +1836,11 @@ func requireDSN() (string, error) {
 			exampleDSN,
 		)
 	}
-	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") && !strings.Contains(dsn, "=") {
+	if _, err := ParseDSN(dsn); err != nil {
 		return "", fmt.Errorf(
-			"PUI_DB_DSN=%q is not a PostgreSQL connection string: expected a postgres:// URL or space-separated key=value pairs, for example:\n  PUI_DB_DSN=%s",
-			dsn, exampleDSN,
+			"PUI_DB_DSN=%q is not a usable PostgreSQL URL: %v.\n"+
+				"Fix it in /etc/default/p-ui and restart p-ui, for example:\n  PUI_DB_DSN=%s",
+			dsn, err, exampleDSN,
 		)
 	}
 	return dsn, nil
