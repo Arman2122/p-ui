@@ -3,7 +3,7 @@ import type { Locale } from './i18n';
 // UI strings for the marketing chrome (landing page hero/features/footer + the
 // shared navbar labels). The docs *pages* are translated as MDX under
 // content/docs/{locale}; this covers the React-rendered home page and nav that
-// can't live in MDX. English is the source; fa/ru/zh fall back to en.
+// can't live in MDX. English is the source; fa falls back to en.
 //
 // Convention matches the docs: translate prose only — product/protocol names
 // (3x-ui, Xray, VLESS, REALITY, x25519, Docker, REST API, …) stay in Latin.
@@ -130,106 +130,7 @@ const fa: SiteMessages = {
   licenseAfter: ' منتشر شده است.',
 };
 
-const ru: SiteMessages = {
-  tagline: 'Продвинутая веб-панель для управления серверами Xray-core',
-  getStarted: 'Начать',
-  viewOnGitHub: 'Открыть на GitHub',
-  documentation: 'Документация',
-  donate: 'Поддержать',
-  docs: 'Документация',
-  stars: 'звёзд',
-  forks: 'форков',
-  latest: 'последняя',
-  copyCommand: 'Скопировать команду установки',
-  copied: 'Скопировано',
-  featuresHeading: 'Всё необходимое для запуска Xray',
-  featuresSubtitle:
-    'Современная и быстрая панель управления для Xray-core — создана для администраторов, которым нужна мощь без возни с командной строкой.',
-  features: [
-    {
-      title: 'Все основные протоколы',
-      description:
-        'VLESS, VMess, Trojan, Shadowsocks, WireGuard, Hysteria2, SOCKS, HTTP и Dokodemo-door — под управлением из одной панели.',
-    },
-    {
-      title: 'REALITY и XTLS-Vision',
-      description:
-        'Первоклассная поддержка VLESS + REALITY с ключами x25519, short ID и потоком xtls-rprx-vision для скрытности и скорости.',
-    },
-    {
-      title: 'Клиенты и контроль трафика',
-      description:
-        'Квоты трафика по клиентам, даты окончания, лимиты IP и статус «онлайн» в реальном времени, плюс ссылки-подписки и QR-коды в один клик.',
-    },
-    {
-      title: 'Мультинода и подписки',
-      description:
-        'Координация нескольких серверов, управляемых хостов и внешних прокси, а также выдача подписок VLESS / Clash / JSON.',
-    },
-    {
-      title: 'Telegram-бот и оповещения',
-      description:
-        'Встроенные уведомления Telegram о лимитах трафика, истечении срока и нагрузке системы, а также действия администратора.',
-    },
-    {
-      title: 'Свой хостинг и скрипты',
-      description:
-        'Один бинарный файл Go или Docker-образ, бэкенд SQLite/PostgreSQL и полноценный REST API для автоматизации.',
-    },
-  ],
-  licenseBefore: 'распространяется под лицензией ',
-  licenseAfter: '.',
-};
-
-const zh: SiteMessages = {
-  tagline: '用于管理 Xray-core 服务器的高级 Web 面板',
-  getStarted: '开始使用',
-  viewOnGitHub: '在 GitHub 上查看',
-  documentation: '文档',
-  donate: '捐赠',
-  docs: '文档',
-  stars: '星标',
-  forks: '复刻',
-  latest: '最新',
-  copyCommand: '复制安装命令',
-  copied: '已复制',
-  featuresHeading: '运行 Xray 所需的一切',
-  featuresSubtitle:
-    '为 Xray-core 打造的现代、快速控制面板 —— 专为想要强大功能又不愿折腾命令行的运维者而生。',
-  features: [
-    {
-      title: '支持所有主流协议',
-      description:
-        'VLESS、VMess、Trojan、Shadowsocks、WireGuard、Hysteria2、SOCKS、HTTP 和 Dokodemo-door —— 全部在一个面板中管理。',
-    },
-    {
-      title: 'REALITY 与 XTLS-Vision',
-      description:
-        '一流支持 VLESS + REALITY，配备 x25519 密钥、short ID 和 xtls-rprx-vision 流，兼顾隐蔽与速度。',
-    },
-    {
-      title: '客户端与流量控制',
-      description:
-        '为每个客户端设置流量配额、到期日期、IP 限制和实时在线状态，并支持一键分享链接和二维码。',
-    },
-    {
-      title: '多节点与订阅',
-      description: '协调多台服务器、托管主机和外部代理，并提供 VLESS / Clash / JSON 订阅。',
-    },
-    {
-      title: 'Telegram 机器人与告警',
-      description: '内置 Telegram 通知，覆盖流量上限、到期提醒和系统负载，并支持管理员操作。',
-    },
-    {
-      title: '自托管且可脚本化',
-      description: '单个 Go 二进制文件或 Docker 镜像、SQLite/PostgreSQL 后端，以及用于自动化的完整 REST API。',
-    },
-  ],
-  licenseBefore: '基于 ',
-  licenseAfter: ' 许可证发布。',
-};
-
-const messages: Record<Locale, SiteMessages> = { en, fa, ru, zh };
+const messages: Record<Locale, SiteMessages> = { en, fa };
 
 export function getSiteMessages(lang: string): SiteMessages {
   return messages[lang as Locale] ?? en;

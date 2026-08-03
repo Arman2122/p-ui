@@ -1,4 +1,4 @@
-[English](/README.md) | [فارسی](/README.fa_IR.md) | [العربية](/README.ar_EG.md) | [中文](/README.zh_CN.md) | [Español](/README.es_ES.md) | [Русский](/README.ru_RU.md) | [Türkçe](/README.tr_TR.md)
+[English](/README.md) | [فارسی](/README.fa_IR.md)
 
 <p align="center">
   <picture>
@@ -165,9 +165,9 @@ docker run -d --cap-add=NET_ADMIN --cap-add=NET_RAW ... ghcr.io/mhsanaei/3x-ui
 
 ## Supported Languages
 
-The panel UI is available in 13 languages:
+The panel UI is available in 2 languages:
 
-English · فارسی · العربية · 中文（简体） · 中文（繁體） · Español · Русский · Українська · Türkçe · Tiếng Việt · 日本語 · Bahasa Indonesia · Português (Brasil)
+English · فارسی
 
 ## Contributing
 
