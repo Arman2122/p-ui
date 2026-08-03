@@ -1,4 +1,4 @@
-name: Release 3X-UI
+name: Release P-UI
 
 on:
   workflow_dispatch:
@@ -13,9 +13,9 @@ on:
       - "go.sum"
       - "**.sh"
       - "frontend/**"
-      - "x-ui.service.debian"
-      - "x-ui.service.arch"
-      - "x-ui.service.rhel"
+      - "p-ui.service.debian"
+      - "p-ui.service.arch"
+      - "p-ui.service.rhel"
       - ".github/workflows/release.yml"
   pull_request:
     paths:
@@ -24,9 +24,9 @@ on:
       - "go.sum"
       - "**.sh"
       - "frontend/**"
-      - "x-ui.service.debian"
-      - "x-ui.service.arch"
-      - "x-ui.service.rhel"
+      - "p-ui.service.debian"
+      - "p-ui.service.arch"
+      - "p-ui.service.rhel"
       - ".github/workflows/release.yml"
 
 jobs:
@@ -73,7 +73,7 @@ jobs:
           npm run build
         working-directory: frontend
 
-      - name: Build 3X-UI
+      - name: Build P-UI
         run: |
           CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
           fetch() { wget -q --tries=5 --waitretry=10 --retry-on-http-error=429,500,502,503 "$@"; }
@@ -107,21 +107,21 @@ jobs:
           # stable releases stay unstamped so config.IsDevBuild() returns false.
           LDFLAGS="-w -s -linkmode external -extldflags '-static'"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            LDFLAGS="$LDFLAGS -X github.com/mhsanaei/3x-ui/v3/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/mhsanaei/3x-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/v3/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/Arman2122/p-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
-          go build -ldflags "$LDFLAGS" -o xui-release -v main.go
-          file xui-release
-          ldd xui-release || echo "Static binary confirmed"
+          go build -ldflags "$LDFLAGS" -o pui-release -v main.go
+          file pui-release
+          ldd pui-release || echo "Static binary confirmed"
 
-          mkdir x-ui
-          cp xui-release x-ui/
-          cp x-ui.service.debian x-ui/
-          cp x-ui.service.arch x-ui/
-          cp x-ui.service.rhel x-ui/
-          cp x-ui.sh x-ui/
-          mv x-ui/xui-release x-ui/x-ui
-          mkdir x-ui/bin
-          cd x-ui/bin
+          mkdir p-ui
+          cp pui-release p-ui/
+          cp p-ui.service.debian p-ui/
+          cp p-ui.service.arch p-ui/
+          cp p-ui.service.rhel p-ui/
+          cp p-ui.sh p-ui/
+          mv p-ui/pui-release p-ui/p-ui
+          mkdir p-ui/bin
+          cd p-ui/bin
 
           # Download dependencies
           Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.7.28/"
@@ -171,10 +171,10 @@ jobs:
           # has 503'd whole release runs while asset downloads kept working.
           case "${{ matrix.platform }}" in
             amd64|arm64|armv7|armv6|386)
-              MTG_MULTI_VER=$(curl -sf $CURL_RETRY -o /dev/null -w '%{redirect_url}' "https://github.com/mhsanaei/mtg-multi/releases/latest" | sed -n 's#.*/releases/tag/##p')
+              MTG_MULTI_VER=$(curl -sf $CURL_RETRY -o /dev/null -w '%{redirect_url}' "https://github.com/arman2122/mtg-multi/releases/latest" | sed -n 's#.*/releases/tag/##p')
               if [ -z "$MTG_MULTI_VER" ]; then echo "could not resolve the latest mtg-multi release tag"; exit 1; fi
               MTG_PKG="mtg-multi-${MTG_MULTI_VER#v}-linux-${{ matrix.platform }}"
-              curl -sfLRO $CURL_RETRY "https://github.com/mhsanaei/mtg-multi/releases/download/${MTG_MULTI_VER}/${MTG_PKG}.tar.gz"
+              curl -sfLRO $CURL_RETRY "https://github.com/arman2122/mtg-multi/releases/download/${MTG_MULTI_VER}/${MTG_PKG}.tar.gz"
               tar -xzf "${MTG_PKG}.tar.gz"
               mv "${MTG_PKG}/mtg-multi" "mtg-linux-${{ matrix.platform }}"
               rm -rf "${MTG_PKG}" "${MTG_PKG}.tar.gz"
@@ -183,13 +183,13 @@ jobs:
           cd ../..
 
       - name: Package
-        run: tar -zcvf x-ui-linux-${{ matrix.platform }}.tar.gz x-ui
+        run: tar -zcvf p-ui-linux-${{ matrix.platform }}.tar.gz p-ui
 
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: x-ui-linux-${{ matrix.platform }}
-          path: ./x-ui-linux-${{ matrix.platform }}.tar.gz
+          name: p-ui-linux-${{ matrix.platform }}
+          path: ./p-ui-linux-${{ matrix.platform }}.tar.gz
 
       - name: Upload files to GH release
         uses: svenstaro/upload-release-action@v2
@@ -197,8 +197,8 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
-          file: x-ui-linux-${{ matrix.platform }}.tar.gz
-          asset_name: x-ui-linux-${{ matrix.platform }}.tar.gz
+          file: p-ui-linux-${{ matrix.platform }}.tar.gz
+          asset_name: p-ui-linux-${{ matrix.platform }}.tar.gz
           overwrite: true
           prerelease: true
 
@@ -251,7 +251,7 @@ jobs:
             mingw-w64-x86_64-sqlite3
             mingw-w64-x86_64-pkg-config
 
-      - name: Build 3X-UI for Windows (CGO)
+      - name: Build P-UI for Windows (CGO)
         shell: msys2 {0}
         run: |
           export PATH="/c/hostedtoolcache/windows/go/$(ls /c/hostedtoolcache/windows/go | sort -V | tail -n1)/x64/bin:$PATH"
@@ -268,18 +268,18 @@ jobs:
           # Stamp the commit into per-commit (dev channel) builds only.
           LDFLAGS="-w -s"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            LDFLAGS="$LDFLAGS -X github.com/mhsanaei/3x-ui/v3/internal/config.buildCommit=${GITHUB_SHA:0:8} -X github.com/mhsanaei/3x-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/v3/internal/config.buildCommit=${GITHUB_SHA:0:8} -X github.com/Arman2122/p-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
-          go build -ldflags "$LDFLAGS" -o xui-release.exe -v main.go
+          go build -ldflags "$LDFLAGS" -o pui-release.exe -v main.go
 
       - name: Copy and download resources
         shell: pwsh
         run: |
           $retry = @{ MaximumRetryCount = 5; RetryIntervalSec = 10 }
-          mkdir x-ui
-          Copy-Item xui-release.exe x-ui\x-ui.exe
-          mkdir x-ui\bin
-          cd x-ui\bin
+          mkdir p-ui
+          Copy-Item pui-release.exe p-ui\p-ui.exe
+          mkdir p-ui\bin
+          cd p-ui\bin
 
           # Download Xray for Windows
           $Xray_URL = "https://github.com/XTLS/Xray-core/releases/download/v26.7.28/"
@@ -299,10 +299,10 @@ jobs:
           # download and unpack it instead of compiling. The tag comes from the
           # release-page redirect on github.com — not api.github.com, whose
           # outages have failed release runs while asset downloads kept working.
-          $MTG_MULTI_VER = (curl.exe -sf --retry 5 --retry-all-errors --retry-delay 3 -o NUL -w '%{redirect_url}' "https://github.com/mhsanaei/mtg-multi/releases/latest") -replace '^.*/releases/tag/', ''
+          $MTG_MULTI_VER = (curl.exe -sf --retry 5 --retry-all-errors --retry-delay 3 -o NUL -w '%{redirect_url}' "https://github.com/arman2122/mtg-multi/releases/latest") -replace '^.*/releases/tag/', ''
           if (-not $MTG_MULTI_VER -or $MTG_MULTI_VER -notmatch '^v[\d.]+$') { throw "could not resolve the latest mtg-multi release tag" }
           $MTG_PKG = "mtg-multi-$($MTG_MULTI_VER.TrimStart('v'))-windows-amd64"
-          curl.exe -sfLRO --retry 5 --retry-all-errors --retry-delay 3 "https://github.com/mhsanaei/mtg-multi/releases/download/$MTG_MULTI_VER/$MTG_PKG.zip"
+          curl.exe -sfLRO --retry 5 --retry-all-errors --retry-delay 3 "https://github.com/arman2122/mtg-multi/releases/download/$MTG_MULTI_VER/$MTG_PKG.zip"
           Expand-Archive -Path "$MTG_PKG.zip" -DestinationPath "mtg-tmp" -Force
           Move-Item "mtg-tmp/$MTG_PKG/mtg-multi.exe" "mtg-windows-amd64.exe"
           Remove-Item -Recurse -Force "mtg-tmp", "$MTG_PKG.zip"
@@ -314,13 +314,13 @@ jobs:
       - name: Package to Zip
         shell: pwsh
         run: |
-          Compress-Archive -Path .\x-ui -DestinationPath "x-ui-windows-amd64.zip"
+          Compress-Archive -Path .\p-ui -DestinationPath "p-ui-windows-amd64.zip"
 
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: x-ui-windows-amd64
-          path: ./x-ui-windows-amd64.zip
+          name: p-ui-windows-amd64
+          path: ./p-ui-windows-amd64.zip
 
       - name: Upload files to GH release
         uses: svenstaro/upload-release-action@v2
@@ -328,8 +328,8 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
-          file: x-ui-windows-amd64.zip
-          asset_name: x-ui-windows-amd64.zip
+          file: p-ui-windows-amd64.zip
+          asset_name: p-ui-windows-amd64.zip
           overwrite: true
           prerelease: true
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/op/go-logging"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 func TestMain(m *testing.M) {
@@ -166,13 +166,13 @@ func TestMonitorSuccessResetsFailures(t *testing.T) {
 }
 
 func TestConfigFromEnvParsesValues(t *testing.T) {
-	t.Setenv("XUI_TUNNEL_HEALTH_MONITOR", "true")
-	t.Setenv("XUI_TUNNEL_HEALTH_URL", "https://example.com/health")
-	t.Setenv("XUI_TUNNEL_HEALTH_PROXY", "socks5://127.0.0.1:1080")
-	t.Setenv("XUI_TUNNEL_HEALTH_INTERVAL", "15s")
-	t.Setenv("XUI_TUNNEL_HEALTH_TIMEOUT", "3s")
-	t.Setenv("XUI_TUNNEL_HEALTH_FAILURES", "4")
-	t.Setenv("XUI_TUNNEL_HEALTH_COOLDOWN", "2m")
+	t.Setenv("PUI_TUNNEL_HEALTH_MONITOR", "true")
+	t.Setenv("PUI_TUNNEL_HEALTH_URL", "https://example.com/health")
+	t.Setenv("PUI_TUNNEL_HEALTH_PROXY", "socks5://127.0.0.1:1080")
+	t.Setenv("PUI_TUNNEL_HEALTH_INTERVAL", "15s")
+	t.Setenv("PUI_TUNNEL_HEALTH_TIMEOUT", "3s")
+	t.Setenv("PUI_TUNNEL_HEALTH_FAILURES", "4")
+	t.Setenv("PUI_TUNNEL_HEALTH_COOLDOWN", "2m")
 
 	cfg := ConfigFromEnv()
 

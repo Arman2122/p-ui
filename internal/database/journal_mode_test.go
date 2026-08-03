@@ -15,9 +15,9 @@ func journalModeOf(t *testing.T) string {
 }
 
 func TestSqliteJournalModeDefaultsToWal(t *testing.T) {
-	t.Setenv("XUI_DB_JOURNAL_MODE", "")
+	t.Setenv("PUI_DB_JOURNAL_MODE", "")
 	dbDir := t.TempDir()
-	if err := InitDB(filepath.Join(dbDir, "x-ui.db")); err != nil {
+	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseDB() })
@@ -28,9 +28,9 @@ func TestSqliteJournalModeDefaultsToWal(t *testing.T) {
 }
 
 func TestSqliteJournalModeEnvOverrideDelete(t *testing.T) {
-	t.Setenv("XUI_DB_JOURNAL_MODE", "delete")
+	t.Setenv("PUI_DB_JOURNAL_MODE", "delete")
 	dbDir := t.TempDir()
-	if err := InitDB(filepath.Join(dbDir, "x-ui.db")); err != nil {
+	if err := InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseDB() })

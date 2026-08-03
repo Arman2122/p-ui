@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/mtproto"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/mtproto"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 )
 
 type LocalDeps struct {

@@ -1,6 +1,6 @@
 ---
 title: Panel Settings
-description: Every 3x-ui panel setting — web server, TLS, display, security, and notifications — with defaults from the source.
+description: Every p-ui panel setting — web server, TLS, display, security, and notifications — with defaults from the source.
 icon: SlidersHorizontal
 ---
 
@@ -14,7 +14,7 @@ browser in full.
 
 | Setting             | Default                 | Meaning                                                                 |
 | ------------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `webPort`           | `2053`                  | Panel port (1–65535). The `XUI_PORT` env var overrides it at runtime.   |
+| `webPort`           | `2053`                  | Panel port (1–65535). The `PUI_PORT` env var overrides it at runtime.   |
 | `webListen`         | _(all interfaces)_      | Bind the panel to a specific IP.                                        |
 | `webBasePath`       | `/`                     | URL path the panel is served under (always normalized to `/…/`).        |
 | `webCertFile` / `webKeyFile` | _(none)_       | TLS certificate + key. When both are set, the panel serves **HTTPS**.   |
@@ -24,12 +24,12 @@ browser in full.
 
 After changing the port or base path, the panel URL becomes
 `http(s)://<server>:<port><web-base-path>`. You can preset the base path on first
-launch with [`XUI_INIT_WEB_BASE_PATH`](/docs/reference/env-vars).
+launch with [`PUI_INIT_WEB_BASE_PATH`](/docs/reference/env-vars).
 
 ### TLS
 
 Serving the panel over HTTPS protects your credentials in transit. Either set
-`webCertFile` + `webKeyFile` — the [`x-ui` SSL menu](/docs/config/ssl-certificates)
+`webCertFile` + `webKeyFile` — the [`p-ui` SSL menu](/docs/config/ssl-certificates)
 can obtain a Let's Encrypt certificate for you — or terminate TLS at a
 [reverse proxy](/docs/operations/reverse-proxy).
 

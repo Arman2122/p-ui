@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
 )
 
 // inboundLinks (the "Export all inbound links" path) must render the remark

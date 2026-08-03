@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 )
 
 // statsForClient recovers a client's usage by email when the client_traffics row
@@ -16,8 +16,8 @@ import (
 // clients while the sub-info header was correct (#5567).
 func TestStatsForClient_OrphanedInboundIdFallback(t *testing.T) {
 	dbDir := t.TempDir()
-	t.Setenv("XUI_DB_FOLDER", dbDir)
-	if err := database.InitDB(filepath.Join(dbDir, "x-ui.db")); err != nil {
+	t.Setenv("PUI_DB_FOLDER", dbDir)
+	if err := database.InitDB(filepath.Join(dbDir, "p-ui.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
 	t.Cleanup(func() { _ = database.CloseDB() })

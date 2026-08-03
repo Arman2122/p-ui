@@ -7,8 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 )
 
 func TestAddTrafficCommitsDespiteDisableHelperError(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/websocket"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/v3/internal/web/websocket"
 
 	"github.com/gin-gonic/gin"
 )

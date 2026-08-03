@@ -92,7 +92,7 @@ describe('http-init fetch wrapper', () => {
   });
 
   it('prepends the base path to request and csrf-token URLs', async () => {
-    window.X_UI_BASE_PATH = '/xui';
+    window.X_UI_BASE_PATH = '/pui';
     http.setupHttp();
     fetchMock.mockImplementation((url: string) =>
       Promise.resolve(url.endsWith('/csrf-token') ? csrfResponse('fresh') : okEnvelope()),
@@ -100,8 +100,8 @@ describe('http-init fetch wrapper', () => {
 
     await http.httpRequest('POST', '/panel/api/x', { a: 1 });
 
-    expect(urlOf(0)).toBe('/xui/csrf-token');
-    expect(urlOf(1)).toBe('/xui/panel/api/x');
+    expect(urlOf(0)).toBe('/pui/csrf-token');
+    expect(urlOf(1)).toBe('/pui/panel/api/x');
   });
 
   it('refreshes the token and retries once on 403', async () => {
@@ -138,7 +138,7 @@ describe('http-init fetch wrapper', () => {
   });
 
   it('redirects once on 401 and never settles', async () => {
-    window.X_UI_BASE_PATH = '/xui';
+    window.X_UI_BASE_PATH = '/pui';
     document.head.innerHTML = '<meta name="csrf-token" content="tok">';
     http.setupHttp();
     fetchMock.mockResolvedValue(new Response('', { status: 401 }));
@@ -150,7 +150,7 @@ describe('http-init fetch wrapper', () => {
     ]);
     expect(first).toBe(pending);
     expect(replaceMock).toHaveBeenCalledTimes(1);
-    expect(replaceMock).toHaveBeenCalledWith('/xui');
+    expect(replaceMock).toHaveBeenCalledWith('/pui');
 
     const second = await Promise.race([
       http.httpRequest('POST', '/p', { a: 1 }),

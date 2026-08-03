@@ -1,4 +1,4 @@
-// Package service provides business logic services for the 3x-ui web panel,
+// Package service provides business logic services for the p-ui web panel,
 // including inbound/outbound management, user administration, settings, and Xray integration.
 package service
 
@@ -15,14 +15,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/mtproto"
-	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
-	"github.com/mhsanaei/3x-ui/v3/internal/util/netsafe"
-	wgutil "github.com/mhsanaei/3x-ui/v3/internal/util/wireguard"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/Arman2122/p-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/v3/internal/database/model"
+	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/mtproto"
+	"github.com/Arman2122/p-ui/v3/internal/util/common"
+	"github.com/Arman2122/p-ui/v3/internal/util/netsafe"
+	wgutil "github.com/Arman2122/p-ui/v3/internal/util/wireguard"
+	"github.com/Arman2122/p-ui/v3/internal/xray"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

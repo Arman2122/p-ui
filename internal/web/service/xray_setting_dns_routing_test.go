@@ -251,7 +251,7 @@ func TestEnsureDnsServerRouting_UpdatesOwnedRuleWhenServersChange(t *testing.T) 
 		"dns": {"servers": ["172.20.0.53", "10.0.0.53"]},
 		"routing": {
 			"rules": [
-				{"type":"field","ruleTag":"xui-dns-allow","ip":["172.20.0.53"],"port":"53","outboundTag":"direct"},
+				{"type":"field","ruleTag":"pui-dns-allow","ip":["172.20.0.53"],"port":"53","outboundTag":"direct"},
 				{"type":"field","outboundTag":"blocked","ip":["geoip:private"]}
 			]
 		}
@@ -277,7 +277,7 @@ func TestEnsureDnsServerRouting_RemovesOwnedRuleWhenNoLongerNeeded(t *testing.T)
 		"dns": {"servers": ["1.1.1.1"]},
 		"routing": {
 			"rules": [
-				{"type":"field","ruleTag":"xui-dns-allow","ip":["172.20.0.53"],"port":"53","outboundTag":"direct"},
+				{"type":"field","ruleTag":"pui-dns-allow","ip":["172.20.0.53"],"port":"53","outboundTag":"direct"},
 				{"type":"field","outboundTag":"blocked","ip":["geoip:private"]}
 			]
 		}

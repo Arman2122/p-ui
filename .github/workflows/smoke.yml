@@ -28,7 +28,7 @@ on:
       - "deploy/**"
       - ".github/workflows/smoke.yml"
   workflow_run:
-    workflows: ["Release 3X-UI"]
+    workflows: ["Release P-UI"]
     types: [completed]
 
 permissions:
@@ -65,5 +65,5 @@ jobs:
       - uses: actions/checkout@v7
       - name: Pinned release install smoke test
         env:
-          XUI_SMOKE_VERSION: ${{ github.event.workflow_run.head_branch }}
-        run: bash deploy/test/smoke-noninteractive.sh "$XUI_SMOKE_VERSION"
+          PUI_SMOKE_VERSION: ${{ github.event.workflow_run.head_branch }}
+        run: bash deploy/test/smoke-noninteractive.sh "$PUI_SMOKE_VERSION"

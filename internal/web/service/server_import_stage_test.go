@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/Arman2122/p-ui/v3/internal/database"
 )
 
 func TestStageSQLiteUploadRebuildsFromDump(t *testing.T) {
 	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "x-ui.db")
+	dbPath := filepath.Join(dir, "p-ui.db")
 	if err := database.InitDB(dbPath); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestStageSQLiteUploadRebuildsFromDump(t *testing.T) {
 	}
 	defer upload.Close()
 
-	staged := filepath.Join(dir, "x-ui.db.temp")
+	staged := filepath.Join(dir, "p-ui.db.temp")
 	if err := stageSQLiteUpload(upload, importKindSQLiteDump, staged); err != nil {
 		t.Fatalf("stageSQLiteUpload: %v", err)
 	}

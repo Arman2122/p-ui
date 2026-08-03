@@ -3,8 +3,8 @@
 # smoke-noninteractive.sh — verify the non-interactive install path.
 #
 # Runs install.sh inside an Ubuntu container with NO TTY (piped) and
-# XUI_NONINTERACTIVE=1, then asserts:
-#   * /etc/x-ui/install-result.env exists (mode 600) with random, non-default creds
+# PUI_NONINTERACTIVE=1, then asserts:
+#   * /etc/p-ui/install-result.env exists (mode 600) with random, non-default creds
 #   * the panel reports hasDefaultCredential: false (no admin/admin remains)
 #   * the panel HTTP server actually serves on the generated port/base path
 #   * with a [version] argument: the installed binary reports exactly that version
@@ -18,41 +18,41 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
-XUI_SMOKE_VERSION="${1:-}"
+PUI_SMOKE_VERSION="${1:-}"
 
 if ! command -v docker > /dev/null 2>&1; then
     echo "ERROR: docker is required for this smoke test." >&2
     exit 1
 fi
 
-echo "== non-interactive install smoke test (image: $IMAGE, version: ${XUI_SMOKE_VERSION:-latest}) =="
+echo "== non-interactive install smoke test (image: $IMAGE, version: ${PUI_SMOKE_VERSION:-latest}) =="
 
 docker run --rm \
     -v "${REPO_ROOT}/install.sh:/root/install.sh:ro" \
-    -e XUI_NONINTERACTIVE=1 \
-    -e XUI_SSL_MODE=none \
-    -e XUI_SMOKE_VERSION="$XUI_SMOKE_VERSION" \
+    -e PUI_NONINTERACTIVE=1 \
+    -e PUI_SSL_MODE=none \
+    -e PUI_SMOKE_VERSION="$PUI_SMOKE_VERSION" \
     -e DEBIAN_FRONTEND=noninteractive \
     "$IMAGE" bash -euo pipefail -c '
         apt-get update -qq
         apt-get install -y -qq curl tar openssl ca-certificates > /dev/null
 
-        echo "--- running install.sh piped (no TTY), version: ${XUI_SMOKE_VERSION:-latest} ---"
+        echo "--- running install.sh piped (no TTY), version: ${PUI_SMOKE_VERSION:-latest} ---"
         # Piping guarantees stdin is not a TTY, exercising the auto non-interactive path.
-        if [ -n "${XUI_SMOKE_VERSION:-}" ]; then
-            cat /root/install.sh | bash -s -- "$XUI_SMOKE_VERSION"
+        if [ -n "${PUI_SMOKE_VERSION:-}" ]; then
+            cat /root/install.sh | bash -s -- "$PUI_SMOKE_VERSION"
         else
             cat /root/install.sh | bash
         fi
 
         echo "--- assertions ---"
-        if [ -n "${XUI_SMOKE_VERSION:-}" ]; then
-            installed=$(/usr/local/x-ui/x-ui -v)
-            [ "$installed" = "${XUI_SMOKE_VERSION#v}" ] \
-                || { echo "FAIL: installed version $installed, want ${XUI_SMOKE_VERSION#v}"; exit 1; }
+        if [ -n "${PUI_SMOKE_VERSION:-}" ]; then
+            installed=$(/usr/local/p-ui/p-ui -v)
+            [ "$installed" = "${PUI_SMOKE_VERSION#v}" ] \
+                || { echo "FAIL: installed version $installed, want ${PUI_SMOKE_VERSION#v}"; exit 1; }
         fi
 
-        RESULT=/etc/x-ui/install-result.env
+        RESULT=/etc/p-ui/install-result.env
         test -f "$RESULT" || { echo "FAIL: $RESULT missing"; exit 1; }
 
         perms=$(stat -c %a "$RESULT")
@@ -60,23 +60,23 @@ docker run --rm \
 
         # shellcheck disable=SC1090
         . "$RESULT"
-        [ -n "${XUI_USERNAME:-}" ] && [ "$XUI_USERNAME" != "admin" ] \
+        [ -n "${PUI_USERNAME:-}" ] && [ "$PUI_USERNAME" != "admin" ] \
             || { echo "FAIL: username missing or still admin"; exit 1; }
-        [ -n "${XUI_PASSWORD:-}" ] && [ "$XUI_PASSWORD" != "admin" ] \
+        [ -n "${PUI_PASSWORD:-}" ] && [ "$PUI_PASSWORD" != "admin" ] \
             || { echo "FAIL: password missing or still admin"; exit 1; }
-        [ -n "${XUI_PANEL_PORT:-}" ] || { echo "FAIL: port missing"; exit 1; }
+        [ -n "${PUI_PANEL_PORT:-}" ] || { echo "FAIL: port missing"; exit 1; }
 
         # No default admin in the DB.
-        /usr/local/x-ui/x-ui setting -show | grep -q "hasDefaultCredential: false" \
+        /usr/local/p-ui/p-ui setting -show | grep -q "hasDefaultCredential: false" \
             || { echo "FAIL: hasDefaultCredential is not false"; exit 1; }
 
         echo "--- verifying the panel serves HTTP ---"
-        cd /usr/local/x-ui
-        ./x-ui > /tmp/xui.log 2>&1 &
+        cd /usr/local/p-ui
+        ./p-ui > /tmp/pui.log 2>&1 &
         xpid=$!
         for _ in $(seq 1 15); do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
-                "http://127.0.0.1:${XUI_PANEL_PORT}/${XUI_WEB_BASE_PATH}/" 2>/dev/null || true)
+                "http://127.0.0.1:${PUI_PANEL_PORT}/${PUI_WEB_BASE_PATH}/" 2>/dev/null || true)
             case "$code" in 200|301|302|307|308) break ;; esac
             sleep 1
         done
@@ -84,10 +84,10 @@ docker run --rm \
         echo "panel HTTP status: ${code:-none}"
         case "${code:-}" in
             200|301|302|307|308) : ;;
-            *) echo "FAIL: panel did not serve (status ${code:-none})"; tail -n 30 /tmp/xui.log; exit 1 ;;
+            *) echo "FAIL: panel did not serve (status ${code:-none})"; tail -n 30 /tmp/pui.log; exit 1 ;;
         esac
 
-        echo "SMOKE_PASS: user=$XUI_USERNAME port=$XUI_PANEL_PORT path=$XUI_WEB_BASE_PATH"
+        echo "SMOKE_PASS: user=$PUI_USERNAME port=$PUI_PANEL_PORT path=$PUI_WEB_BASE_PATH"
     '
 
 echo "== non-interactive smoke test PASSED =="

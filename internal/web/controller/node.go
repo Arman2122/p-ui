@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/middleware"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
+	"github.com/Arman2122/p-ui/v3/internal/logger"
+	"github.com/Arman2122/p-ui/v3/internal/web/middleware"
+	"github.com/Arman2122/p-ui/v3/internal/web/service"
 
 	"github.com/gin-gonic/gin"
 )
