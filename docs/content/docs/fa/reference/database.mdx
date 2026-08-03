@@ -1,10 +1,10 @@
 ---
 title: پایگاه داده
-description: بک‌اندهای ذخیره‌سازی p-ui — SQLite (پیش‌فرض) و PostgreSQL — مسیر پایگاه داده، استخر اتصال و مهاجرت از SQLite به PostgreSQL.
+description: بک‌اندهای ذخیره‌سازی Penhoon UI — SQLite (پیش‌فرض) و PostgreSQL — مسیر پایگاه داده، استخر اتصال و مهاجرت از SQLite به PostgreSQL.
 icon: Database
 ---
 
-p-ui همه چیز را — inboundها، کلاینت‌ها و تنظیمات — در یک پایگاه داده ذخیره می‌کند.
+Penhoon UI همه چیز را — inboundها، کلاینت‌ها و تنظیمات — در یک پایگاه داده ذخیره می‌کند.
 بک‌اند را هنگام نصب انتخاب می‌کنید؛ هر دو کاملاً پشتیبانی می‌شوند.
 
 ## SQLite (پیش‌فرض)
@@ -18,10 +18,12 @@ p-ui همه چیز را — inboundها، کلاینت‌ها و تنظیمات 
 
 برای تعداد بالای کلاینت‌ها یا راه‌اندازی‌های چندنودی توصیه می‌شود. نصب‌کننده می‌تواند
 PostgreSQL را به‌صورت محلی برای شما نصب کند، یا یک DSN به سروری موجود را بپذیرد. در زمان
-اجرا بک‌اند از طریق متغیرهای محیطی انتخاب می‌شود که نصب‌کننده آن‌ها را در
-`/etc/default/p-ui` می‌نویسد:
+اجرا بک‌اند از طریق متغیرهای محیطی انتخاب می‌شود که نصب‌کننده آن‌ها را در فایل محیطیِ
+سرویس، مخصوص توزیع شما، می‌نویسد — `/etc/default/p-ui` روی Debian/Ubuntu/Armbian،
+`/etc/conf.d/p-ui` روی Arch/Manjaro/Parch/Alpine، و `/etc/sysconfig/p-ui` روی
+میزبان‌های خانواده‌ی RHEL:
 
-```bash title="/etc/default/p-ui"
+```bash title="/etc/default/p-ui (Debian/Ubuntu)"
 PUI_DB_TYPE=postgres
 PUI_DB_DSN=postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable
 ```
@@ -41,14 +43,21 @@ docker compose --profile postgres up -d
 
 ## مهاجرت از SQLite به PostgreSQL
 
-یک نصب موجود SQLite را با دستور داخلی به PostgreSQL منتقل کنید:
+ساده‌ترین راه، اسکریپت مدیریتی است: دستور `p-ui` را اجرا کنید، گزینه‌ی
+**25) PostgreSQL Management** و سپس **2) Migrate SQLite → PostgreSQL** را انتخاب کنید.
+این گزینه داده‌ها را کپی می‌کند، `PUI_DB_TYPE` و `PUI_DB_DSN` را در فایل محیطیِ مخصوص
+توزیع شما می‌نویسد و پنل را برای شما مجدداً راه‌اندازی می‌کند.
+
+برای مهاجرت دستی، مستقیماً باینری پنل را فراخوانی کنید — `migrate-db` زیردستورِ
+`/usr/local/p-ui/p-ui` است، نه زیردستور اسکریپت مدیریتیِ `p-ui`:
 
 ```bash
-p-ui migrate-db --dsn "postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable"
+systemctl stop p-ui
+/usr/local/p-ui/p-ui migrate-db --dsn "postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable"
 ```
 
-سپس `PUI_DB_TYPE` و `PUI_DB_DSN` را در `/etc/default/p-ui` تنظیم کرده و سرویس را مجدداً
-راه‌اندازی کنید:
+سپس `PUI_DB_TYPE` و `PUI_DB_DSN` را در فایل محیطیِ مخصوص توزیع خود (بالا را ببینید)
+تنظیم کرده و سرویس را مجدداً راه‌اندازی کنید:
 
 ```bash
 systemctl restart p-ui

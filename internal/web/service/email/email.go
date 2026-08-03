@@ -195,9 +195,9 @@ func (s *EmailService) TestConnection() SMTPTestResult {
 		}
 	}
 
-	msg := buildMessage(from, fromName, recipients, "[p-ui] Test email",
+	msg := buildMessage(from, fromName, recipients, "[Penhoon UI] Test email",
 		`<html><body style="font-family:monospace;font-size:14px">
-<h2>Test email from p-ui</h2>
+<h2>Test email from Penhoon UI</h2>
 <p>If you received this, SMTP is configured correctly.</p>
 </body></html>`)
 
@@ -313,9 +313,9 @@ func (s *EmailService) sendPlain(addr string, auth smtp.Auth, from string, to []
 // SendTest sends a test email and returns any error with detail.
 func (s *EmailService) SendTest() error {
 	return s.Send(
-		"[p-ui] Test email",
+		"[Penhoon UI] Test email",
 		`<html><body style="font-family:monospace;font-size:14px">
-<h2>Test email from p-ui</h2>
+<h2>Test email from Penhoon UI</h2>
 <p>If you received this, SMTP is configured correctly.</p>
 </body></html>`,
 	)

@@ -1,5 +1,5 @@
 name: Question
-description: Ask how to do something with p-ui
+description: Ask how to do something with Penhoon UI
 title: "[Question]: "
 labels: ["question"]
 
@@ -43,7 +43,7 @@ body:
   - type: input
     id: pui-version
     attributes:
-      label: p-ui version
+      label: P-UI version
       description: Shown at the top of the panel sidebar.
       placeholder: 3.1.0
     validations:
@@ -52,7 +52,7 @@ body:
   - type: dropdown
     id: install-method
     attributes:
-      label: How did you install p-ui?
+      label: How did you install P-UI?
       options:
         - install.sh script
         - Docker / Docker Compose

@@ -1,9 +1,15 @@
 name: Docs Deploy (GitHub Pages)
 
 # Static-export deploy of docs/ to GitHub Pages. Pages must be enabled in repo
-# settings (Source: GitHub Actions) and the docs.sanaei.dev custom domain
-# attached to this repository. The site URL defaults to the production domain in
-# docs/lib/shared.ts, so NEXT_PUBLIC_SITE_URL is optional.
+# settings (Source: GitHub Actions). With no custom domain this is a *project*
+# page served from https://arman2122.github.io/p-ui/ — which is exactly what
+# docs/lib/shared.ts defaults the site URL to, and docs/next.config.mjs takes
+# basePath/assetPrefix from that URL's path, so NEXT_PUBLIC_SITE_URL is
+# optional. To publish under a custom domain instead, set the
+# NEXT_PUBLIC_SITE_URL repository variable to its origin (e.g.
+# https://docs.example.com): the empty path clears basePath. A custom domain
+# also needs the DNS record plus a CNAME file in the published output
+# (docs/public/CNAME — this repository ships none).
 on:
   push:
     branches: [main]
@@ -52,8 +58,8 @@ jobs:
         # language switcher still targets /en/... . The export emits pages only
         # under /en/, and there is no i18n middleware on a static host — so copy
         # the English build to the root (data files included) while KEEPING /en/
-        # in place. That way both /docs/... and /en/docs/... resolve. Other
-        # locales stay under /fa, /ru, /zh.
+        # in place. That way both /docs/... and /en/docs/... resolve. The other
+        # locale stays under /fa.
         run: cp -a out/en/. out/
       - name: Build the component Storybook (frontend/)
         working-directory: frontend

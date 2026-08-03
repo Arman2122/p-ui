@@ -1,4 +1,4 @@
-// Package main is the entry point for the p-ui web panel application.
+// Package main is the entry point for the Penhoon UI web panel application.
 // It initializes the database, web server, and handles command-line operations for managing the panel.
 package main
 
@@ -32,7 +32,7 @@ import (
 	"github.com/op/go-logging"
 )
 
-// runWebServer initializes and starts the web server for the p-ui panel.
+// runWebServer initializes and starts the web server for the Penhoon UI panel.
 func runWebServer() {
 	log.Printf("Starting %v %v", config.GetName(), config.GetPanelVersion())
 
@@ -474,7 +474,7 @@ func GetApiToken(getApiToken bool) {
 	fmt.Println("apiToken:", created.Token)
 }
 
-// migrateDb performs database migration operations for the p-ui panel.
+// migrateDb performs database migration operations for the Penhoon UI panel.
 func migrateDb() {
 	inboundService := service.InboundService{}
 
@@ -504,7 +504,7 @@ func loadServiceEnvFile() {
 	}
 }
 
-// main is the entry point of the p-ui application.
+// main is the entry point of the Penhoon UI application.
 // It parses command-line arguments to run the web server, migrate database, or update settings.
 func main() {
 	loadServiceEnvFile()
@@ -573,7 +573,7 @@ func main() {
 		fmt.Println()
 		fmt.Println("Commands:")
 		fmt.Println("    run            run web panel")
-		fmt.Println("    migrate        migrate from other/old p-ui")
+		fmt.Println("    migrate        migrate a database from an older x-ui/3x-ui panel")
 		fmt.Println("    migrate-db     SQLite <-> .dump (--dump/--restore) or copy into PostgreSQL (--dsn)")
 		fmt.Println("    setting        set settings")
 	}

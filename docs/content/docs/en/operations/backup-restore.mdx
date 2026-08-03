@@ -1,6 +1,6 @@
 ---
 title: Backup & Restore
-description: Back up and restore your p-ui database and certificates, manually or via the Telegram bot.
+description: Back up and restore your Penhoon UI database and certificates, manually or via the Telegram bot.
 icon: DatabaseBackup
 ---
 
@@ -41,12 +41,34 @@ can also request a backup on demand from the bot's menu.
 
 ## SQLite dump / restore
 
-The `p-ui migrate-db` command converts the SQLite database to and from a plain
-SQL text dump (handy for inspection or transferring between machines):
+The panel can convert its SQLite database to and from a plain SQL text dump
+(handy for inspection or transferring between machines). The management script
+exposes this as **`migrateDB`**, which auto-detects the direction from the input
+file — you don't pass `--dump` or `--restore`:
 
 ```bash
-p-ui migrate-db --dump /root/p-ui.sql       # SQLite -> SQL text
-p-ui migrate-db --restore /root/p-ui.sql     # SQL text -> SQLite
+p-ui migrateDB                                 # /etc/p-ui/p-ui.db -> /etc/p-ui/p-ui.dump
+p-ui migrateDB /root/p-ui.db /root/p-ui.dump   # SQLite -> SQL text
+p-ui migrateDB /root/p-ui.dump /root/p-ui.db   # SQL text -> SQLite
+```
+
+With no arguments it dumps the installed database (`/etc/p-ui/p-ui.db`). If you
+omit the output path, it's named next to the input — `.db` becomes `.dump`, and
+back. The same conversion is available from the panel menu, which prompts for
+both paths.
+
+<Callout type="warn">
+  Restoring refuses to overwrite an existing database file, and refuses to write
+  into the live `/etc/p-ui/p-ui.db` while the panel is running. Stop the panel
+  first (`p-ui stop`), or restore to a different path and move it into place.
+</Callout>
+
+If you'd rather drive the binary directly, it takes explicit flags — and
+`--restore` **requires** `--out` (it exits with an error otherwise):
+
+```bash
+/usr/local/p-ui/p-ui migrate-db --src /root/p-ui.db --dump /root/p-ui.dump
+/usr/local/p-ui/p-ui migrate-db --restore /root/p-ui.dump --out /root/p-ui.db
 ```
 
 To move to PostgreSQL instead, see [Database](/docs/reference/database).

@@ -1,6 +1,6 @@
 # Cloud deployment (unattended install)
 
-Tooling to ship the p-ui panel via unattended install, with **per-instance
+Tooling to ship the Penhoon UI panel via unattended install, with **per-instance
 credentials generated on first boot** (never `admin/admin`, never a shared
 session secret). Works on amd64 and arm64.
 

@@ -19,15 +19,28 @@ import (
 // managedDnsAllowRule) are ever stripped and rebuilt.
 const dnsAllowRuleTag = "pui-dns-allow"
 
+// legacyDnsAllowRuleTag is the marker these rules carried before the
+// panel was renamed. The tag is persisted in the admin's saved Xray
+// config, so upgrading a panel does not rewrite it: it stays recognized
+// as ours forever. Dropping it would strand the stored rule — the shape
+// fallback below rejects any rule carrying a ruleTag key, so the old rule
+// would never be stripped, and rebuildDnsAllowRules would insert a
+// freshly tagged duplicate beside it that tracks dns.servers while the
+// orphan silently does not.
+const legacyDnsAllowRuleTag = "xui-dns-allow"
+
 // managedDnsAllowRule reports whether a routing rule was created by this
-// file. Current managed rules carry dnsAllowRuleTag. Rules written before
-// the tag existed are adopted only when their shape matches AND their
-// exact ip-set/port content equals a currently configured private DNS
-// endpoint group — a hand-written rule that merely resembles the managed
-// shape (e.g. a CIDR allow for a NAS on port 5000, #6056) never matches
-// and is left untouched.
+// file. Current managed rules carry dnsAllowRuleTag, and rules persisted
+// by a pre-rename build carry legacyDnsAllowRuleTag; either is claimed as
+// ours, so a stale one is stripped and rebuilt under the current tag
+// rather than left behind. Rules written before the tag existed at all
+// are adopted only when their shape matches AND their exact ip-set/port
+// content equals a currently configured private DNS endpoint group — a
+// hand-written rule that merely resembles the managed shape (e.g. a CIDR
+// allow for a NAS on port 5000, #6056) never matches and is left
+// untouched.
 func managedDnsAllowRule(rule map[string]any, groups []dnsAllowPortGroup) bool {
-	if tag, _ := rule["ruleTag"].(string); tag == dnsAllowRuleTag {
+	if tag, _ := rule["ruleTag"].(string); tag == dnsAllowRuleTag || tag == legacyDnsAllowRuleTag {
 		return true
 	}
 	if !dnsAllowRuleShape(rule) {

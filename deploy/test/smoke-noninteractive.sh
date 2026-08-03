@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# smoke-noninteractive.sh — verify the non-interactive install path.
+# smoke-noninteractive.sh — verify the Penhoon UI non-interactive install path.
 #
 # Runs install.sh inside an Ubuntu container with NO TTY (piped) and
 # PUI_NONINTERACTIVE=1, then asserts:
@@ -13,7 +13,8 @@
 # Usage: bash deploy/test/smoke-noninteractive.sh [version]
 #   With no argument install.sh resolves releases/latest. Pass an explicit tag
 #   (e.g. v3.4.2) to verify that exact release — the tag-triggered CI run does
-#   this so it cannot silently validate the previous release (#5756).
+#   this so it cannot silently validate the previous release
+#   (upstream MHSanaei/3x-ui#5756).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -73,14 +74,14 @@ docker run --rm \
         echo "--- verifying the panel serves HTTP ---"
         cd /usr/local/p-ui
         ./p-ui > /tmp/pui.log 2>&1 &
-        xpid=$!
+        pui_pid=$!
         for _ in $(seq 1 15); do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
                 "http://127.0.0.1:${PUI_PANEL_PORT}/${PUI_WEB_BASE_PATH}/" 2>/dev/null || true)
             case "$code" in 200|301|302|307|308) break ;; esac
             sleep 1
         done
-        kill "$xpid" 2>/dev/null || true
+        kill "$pui_pid" 2>/dev/null || true
         echo "panel HTTP status: ${code:-none}"
         case "${code:-}" in
             200|301|302|307|308) : ;;

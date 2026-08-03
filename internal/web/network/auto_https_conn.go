@@ -1,4 +1,4 @@
-// Package network provides network utilities for the p-ui web panel,
+// Package network provides network utilities for the Penhoon UI web panel,
 // including automatic HTTP to HTTPS redirection functionality.
 package network
 

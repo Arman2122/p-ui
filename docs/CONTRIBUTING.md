@@ -1,6 +1,6 @@
 # Contributing to p-ui-docs
 
-Thanks for helping improve the p-ui documentation and product site!
+Thanks for helping improve the Penhoon UI documentation and product site!
 
 ## Prerequisites
 

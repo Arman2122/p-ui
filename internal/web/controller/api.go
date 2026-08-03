@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// APIController handles the main API routes for the p-ui panel, including inbounds and server management.
+// APIController handles the main API routes for the Penhoon UI panel, including inbounds and server management.
 type APIController struct {
 	BaseController
 	inboundController     *InboundController

@@ -1,10 +1,10 @@
 ---
-title: Meet p-ui
+title: Meet Penhoon UI
 description: A web panel for Xray-core — manage inbounds, protocols, clients, and subscriptions from your browser instead of editing JSON by hand.
 icon: Info
 ---
 
-**p-ui** is a web control panel that sits on top of
+**Penhoon UI** is a web control panel that sits on top of
 [Xray-core](https://github.com/XTLS/Xray-core), the proxy engine that actually
 moves your traffic. Instead of writing and reloading Xray's JSON configuration
 by hand, you manage everything — inbounds, protocols, clients, certificates,
@@ -15,7 +15,7 @@ subscriptions — from a browser dashboard.
 <Mermaid
   chart={`
 flowchart LR
-  Admin["Admin browser"] -->|HTTPS panel| Panel["p-ui panel"]
+  Admin["Admin browser"] -->|HTTPS panel| Panel["Penhoon UI panel"]
   Panel -->|writes config, reloads| Xray["Xray-core"]
   Panel --- DB[("SQLite or PostgreSQL")]
   Clients["Client apps"] -->|VLESS / VMess / Trojan / ...| Xray
@@ -58,14 +58,15 @@ on port **2053** by default. Both are configurable — see
 
 ## Who it's for
 
-p-ui is aimed at anyone running their own Xray server: from a single personal
+Penhoon UI is aimed at anyone running their own Xray server: from a single personal
 VPS to operators managing many nodes and clients. If you want the power of
 Xray-core without living in JSON config files, this is for you.
 
 <Callout type="info">
-  p-ui is an enhanced fork of the original P-UI project, adding broader protocol
-  support, improved stability, per-client traffic accounting, multi-node
-  management, and many quality-of-life features.
+  Penhoon UI is a fork of [3x-ui](https://github.com/MHSanaei/3x-ui) by MHSanaei — itself an
+  enhanced fork of the original x-ui panel. That lineage brings broader protocol support,
+  improved stability, per-client traffic accounting, and multi-node management; Penhoon UI
+  continues from there with its own changes.
 </Callout>
 
 Ready to install? Continue to [Installation](/docs/guide/installation).

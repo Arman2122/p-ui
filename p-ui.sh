@@ -95,8 +95,8 @@ fi
 pui_service="${PUI_SERVICE:=/etc/systemd/system}"
 log_folder="${PUI_LOG_FOLDER:=/var/log/p-ui}"
 mkdir -p "${log_folder}"
-iplimit_log_path="${log_folder}/3xipl.log"
-iplimit_banned_log_path="${log_folder}/3xipl-banned.log"
+iplimit_log_path="${log_folder}/pui-ipl.log"
+iplimit_banned_log_path="${log_folder}/pui-ipl-banned.log"
 
 confirm() {
     if [[ $# > 1 ]]; then
@@ -303,7 +303,7 @@ uninstall() {
     echo ""
     echo -e "Uninstalled Successfully.\n"
     echo "If you need to install this panel again, you can use below command:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -560,9 +560,9 @@ stop() {
 
 restart() {
     if [[ "${running_in_docker}" == "true" ]]; then
-        if signal_xui HUP; then
+        if signal_pui HUP; then
             sleep 1
-            signal_xui USR1
+            signal_pui USR1
             LOGI "Restart signal sent to the panel and xray-core."
         else
             LOGE "Could not find the running panel process to signal."
@@ -598,7 +598,7 @@ restart() {
 
 restart_xray() {
     if [[ "${running_in_docker}" == "true" ]]; then
-        if signal_xui USR1; then
+        if signal_pui USR1; then
             LOGI "xray-core Restart signal sent successfully, Please check the log information to confirm whether xray restarted successfully"
         else
             LOGE "Could not find the running panel process to signal."
@@ -850,7 +850,7 @@ pui_pid() {
     ps -ef 2> /dev/null | grep -F "${pui_folder}/p-ui" | grep -v grep | awk 'NR==1 {print $1}'
 }
 
-signal_xui() {
+signal_pui() {
     local sig="$1" pid
     pid="$(pui_pid)"
     if [[ -z "${pid}" ]]; then
@@ -2192,7 +2192,7 @@ iplimit_main() {
         3)
             confirm "Proceed with Unbanning everyone from IP Limit jail?" "y"
             if [[ $? == 0 ]]; then
-                fail2ban-client reload --restart --unban 3x-ipl
+                fail2ban-client reload --restart --unban p-ui-ipl
                 truncate -s 0 "${iplimit_banned_log_path}"
                 echo -e "${green}All users Unbanned successfully.${plain}"
                 iplimit_main
@@ -2209,7 +2209,7 @@ iplimit_main() {
             read -rp "Enter the IP address you want to ban: " ban_ip
             ip_validation
             if [[ $ban_ip =~ $ipv4_regex || $ban_ip =~ $ipv6_regex ]]; then
-                fail2ban-client set 3x-ipl banip "$ban_ip"
+                fail2ban-client set p-ui-ipl banip "$ban_ip"
                 echo -e "${green}IP Address ${ban_ip} has been banned successfully.${plain}"
             else
                 echo -e "${red}Invalid IP address format! Please try again.${plain}"
@@ -2220,7 +2220,7 @@ iplimit_main() {
             read -rp "Enter the IP address you want to unban: " unban_ip
             ip_validation
             if [[ $unban_ip =~ $ipv4_regex || $unban_ip =~ $ipv6_regex ]]; then
-                fail2ban-client set 3x-ipl unbanip "$unban_ip"
+                fail2ban-client set p-ui-ipl unbanip "$unban_ip"
                 echo -e "${green}IP Address ${unban_ip} has been unbanned successfully.${plain}"
             else
                 echo -e "${red}Invalid IP address format! Please try again.${plain}"
@@ -2272,7 +2272,7 @@ setup_fail2ban_iplimit() {
         # minimal server images (Debian 12+, Ubuntu 24+, fresh RHEL-family).
         # Without `nft` in PATH the default sshd jail fails to ban with
         #   stderr: '/bin/sh: 1: nft: not found'
-        # even though our own 3x-ipl jail uses iptables. Bundling the binary
+        # even though our own p-ui-ipl jail uses iptables. Bundling the binary
         # at install time prevents that confusing log spam for new installs.
         case "${release}" in
             ubuntu)
@@ -2386,9 +2386,9 @@ remove_iplimit() {
     read -rp "Choose an option: " num
     case "$num" in
         1)
-            rm -f /etc/fail2ban/filter.d/3x-ipl.conf
-            rm -f /etc/fail2ban/action.d/3x-ipl.conf
-            rm -f /etc/fail2ban/jail.d/3x-ipl.conf
+            rm -f /etc/fail2ban/filter.d/p-ui-ipl.conf
+            rm -f /etc/fail2ban/action.d/p-ui-ipl.conf
+            rm -f /etc/fail2ban/jail.d/p-ui-ipl.conf
             if [[ $release == "alpine" ]]; then
                 rc-service fail2ban restart
             else
@@ -2466,12 +2466,12 @@ show_banlog() {
 
     if [[ -f "$system_log" ]]; then
         echo -e "${green}Recent system ban activities from fail2ban.log:${plain}"
-        grep "3x-ipl" "$system_log" | grep -E "Ban|Unban" | tail -n 10 || echo -e "${yellow}No recent system ban activities found${plain}"
+        grep "p-ui-ipl" "$system_log" | grep -E "Ban|Unban" | tail -n 10 || echo -e "${yellow}No recent system ban activities found${plain}"
         echo ""
     fi
 
     if [[ -f "${iplimit_banned_log_path}" ]]; then
-        echo -e "${green}3X-IPL ban log entries:${plain}"
+        echo -e "${green}IP Limit ban log entries:${plain}"
         if [[ -s "${iplimit_banned_log_path}" ]]; then
             grep -v "INIT" "${iplimit_banned_log_path}" | tail -n 10 || echo -e "${yellow}No ban entries found${plain}"
         else
@@ -2482,7 +2482,7 @@ show_banlog() {
     fi
 
     echo -e "\n${green}Current jail status:${plain}"
-    fail2ban-client status 3x-ipl || echo -e "${yellow}Unable to get jail status${plain}"
+    fail2ban-client status p-ui-ipl || echo -e "${yellow}Unable to get jail status${plain}"
 }
 
 create_iplimit_jails() {
@@ -2497,19 +2497,19 @@ create_iplimit_jails() {
         sed -i '0,/action =/s/backend = auto/backend = systemd/' /etc/fail2ban/jail.conf
     fi
 
-    cat << EOF > /etc/fail2ban/jail.d/3x-ipl.conf
-[3x-ipl]
+    cat << EOF > /etc/fail2ban/jail.d/p-ui-ipl.conf
+[p-ui-ipl]
 enabled=true
 backend=auto
-filter=3x-ipl
-action=3x-ipl
+filter=p-ui-ipl
+action=p-ui-ipl
 logpath=${iplimit_log_path}
 maxretry=1
 findtime=32
 bantime=${bantime}m
 EOF
 
-    cat << EOF > /etc/fail2ban/filter.d/3x-ipl.conf
+    cat << EOF > /etc/fail2ban/filter.d/p-ui-ipl.conf
 [Definition]
 datepattern = ^%%Y/%%m/%%d %%H:%%M:%%S
 failregex   = \[LIMIT_IP\]\s*Email\s*=\s*<F-USER>.+</F-USER>\s*\|\|\s*Disconnecting OLD IP\s*=\s*<ADDR>\s*\|\|\s*Timestamp\s*=\s*\d+
@@ -2528,7 +2528,7 @@ EOF
     local exempt_ports="${ssh_ports}"
     [[ -n "${panel_port}" ]] && exempt_ports="${exempt_ports},${panel_port}"
 
-    cat << EOF > /etc/fail2ban/action.d/3x-ipl.conf
+    cat << EOF > /etc/fail2ban/action.d/p-ui-ipl.conf
 [INCLUDES]
 before = iptables-allports.conf
 
@@ -2567,10 +2567,10 @@ iplimit_remove_conflicts() {
     )
 
     for file in "${jail_files[@]}"; do
-        # Check for [3x-ipl] config in jail file then remove it
-        if test -f "${file}" && grep -qw '3x-ipl' ${file}; then
-            sed -i "/\[3x-ipl\]/,/^$/d" ${file}
-            echo -e "${yellow}Removing conflicts of [3x-ipl] in jail (${file})!${plain}\n"
+        # Check for [p-ui-ipl] config in jail file then remove it
+        if test -f "${file}" && grep -qw 'p-ui-ipl' ${file}; then
+            sed -i "/\[p-ui-ipl\]/,/^$/d" ${file}
+            echo -e "${yellow}Removing conflicts of [p-ui-ipl] in jail (${file})!${plain}\n"
         fi
     done
 }
@@ -3384,7 +3384,7 @@ show_usage() {
 │  ${blue}p-ui start${plain}                 - Start                            │
 │  ${blue}p-ui stop${plain}                  - Stop                             │
 │  ${blue}p-ui restart${plain}               - Restart                          │
-|  ${blue}p-ui restart-xray${plain}          - Restart Xray                     │
+│  ${blue}p-ui restart-xray${plain}          - Restart Xray                     │
 │  ${blue}p-ui status${plain}                - Current Status                   │
 │  ${blue}p-ui settings${plain}              - Current Settings                 │
 │  ${blue}p-ui enable${plain}                - Enable Autostart on OS Startup   │
@@ -3405,42 +3405,42 @@ show_usage() {
 show_menu() {
     echo -e "
 ╔────────────────────────────────────────────────╗
-│  ${green}P-UI Panel Management Script${plain}                │
-│  ${green}0.${plain} Exit Script                               │
+│  ${green}Penhoon UI Panel Management Script${plain}            │
+│  ${green}0.${plain} Exit Script                                │
 │────────────────────────────────────────────────│
-│  ${green}1.${plain} Install                                   │
-│  ${green}2.${plain} Update                                    │
-│  ${green}3.${plain} Update to Dev Channel (latest commit)     │
-│  ${green}4.${plain} Update Menu                               │
-│  ${green}5.${plain} Legacy Version                            │
-│  ${green}6.${plain} Uninstall                                 │
+│  ${green}1.${plain} Install                                    │
+│  ${green}2.${plain} Update                                     │
+│  ${green}3.${plain} Update to Dev Channel (latest commit)      │
+│  ${green}4.${plain} Update Menu                                │
+│  ${green}5.${plain} Legacy Version                             │
+│  ${green}6.${plain} Uninstall                                  │
 │────────────────────────────────────────────────│
-│  ${green}7.${plain} Reset Username & Password                 │
-│  ${green}8.${plain} Reset Web Base Path                       │
-│  ${green}9.${plain} Reset Settings                            │
-│  ${green}10.${plain} Change Port                              │
-│  ${green}11.${plain} View Current Settings                    │
+│  ${green}7.${plain} Reset Username & Password                  │
+│  ${green}8.${plain} Reset Web Base Path                        │
+│  ${green}9.${plain} Reset Settings                             │
+│  ${green}10.${plain} Change Port                               │
+│  ${green}11.${plain} View Current Settings                     │
 │────────────────────────────────────────────────│
-│  ${green}12.${plain} Start                                    │
-│  ${green}13.${plain} Stop                                     │
-│  ${green}14.${plain} Restart                                  │
-|  ${green}15.${plain} Restart Xray                             │
-│  ${green}16.${plain} Check Status                             │
-│  ${green}17.${plain} Logs Management                          │
+│  ${green}12.${plain} Start                                     │
+│  ${green}13.${plain} Stop                                      │
+│  ${green}14.${plain} Restart                                   │
+│  ${green}15.${plain} Restart Xray                              │
+│  ${green}16.${plain} Check Status                              │
+│  ${green}17.${plain} Logs Management                           │
 │────────────────────────────────────────────────│
-│  ${green}18.${plain} Enable Autostart                         │
-│  ${green}19.${plain} Disable Autostart                        │
+│  ${green}18.${plain} Enable Autostart                          │
+│  ${green}19.${plain} Disable Autostart                         │
 │────────────────────────────────────────────────│
-│  ${green}20.${plain} SSL Certificate Management               │
-│  ${green}21.${plain} Cloudflare SSL Certificate               │
-│  ${green}22.${plain} IP Limit Management                      │
-│  ${green}23.${plain} Firewall Management                      │
-│  ${green}24.${plain} SSH Port Forwarding Management           │
-│  ${green}25.${plain} PostgreSQL Management                    │
+│  ${green}20.${plain} SSL Certificate Management                │
+│  ${green}21.${plain} Cloudflare SSL Certificate                │
+│  ${green}22.${plain} IP Limit Management                       │
+│  ${green}23.${plain} Firewall Management                       │
+│  ${green}24.${plain} SSH Port Forwarding Management            │
+│  ${green}25.${plain} PostgreSQL Management                     │
 │────────────────────────────────────────────────│
-│  ${green}26.${plain} Enable BBR                               │
-│  ${green}27.${plain} Update Geo Files                         │
-│  ${green}28.${plain} Speedtest by Ookla                       │
+│  ${green}26.${plain} Enable BBR                                │
+│  ${green}27.${plain} Update Geo Files                          │
+│  ${green}28.${plain} Speedtest by Ookla                        │
 ╚────────────────────────────────────────────────╝
 "
     show_status

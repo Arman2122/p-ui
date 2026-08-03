@@ -525,7 +525,7 @@ func (j *CheckClientIpJob) updateInboundClientIps(tx *gorm.DB, inboundClientIps 
 		ipLogger := log.New(logIpFile, "", log.LstdFlags)
 
 		// log format is load-bearing: p-ui.sh create_iplimit_jails builds
-		// filter.d/3x-ipl.conf with
+		// filter.d/p-ui-ipl.conf with
 		//   failregex = \[LIMIT_IP\]\s*Email\s*=\s*<F-USER>.+</F-USER>\s*\|\|\s*Disconnecting OLD IP\s*=\s*<ADDR>\s*\|\|\s*Timestamp\s*=\s*\d+
 		// don't change the wording.
 		for _, ipTime := range actionable {

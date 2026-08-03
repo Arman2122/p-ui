@@ -1,4 +1,4 @@
-// Package model defines the database models and data structures used by the p-ui panel.
+// Package model defines the database models and data structures used by the Penhoon UI panel.
 package model
 
 import (
@@ -34,7 +34,7 @@ const (
 	MTProto     Protocol = "mtproto"
 )
 
-// User represents a user account in the p-ui panel.
+// User represents a user account in the Penhoon UI panel.
 type User struct {
 	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	Username   string `json:"username"`
@@ -748,14 +748,14 @@ func HealMtprotoClientSecrets(settings string) (string, bool) {
 	return string(out), true
 }
 
-// Setting stores key-value configuration settings for the p-ui panel.
+// Setting stores key-value configuration settings for the Penhoon UI panel.
 type Setting struct {
 	Id    int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
 	Key   string `json:"key" form:"key" gorm:"index:idx_settings_key"`
 	Value string `json:"value" form:"value"`
 }
 
-// Node represents a remote p-ui panel registered with the central panel.
+// Node represents a remote Penhoon UI panel registered with the central panel.
 // The central panel polls each node's existing /panel/api/server/status
 // endpoint over HTTP using the per-node ApiToken to populate the runtime
 // status fields below.

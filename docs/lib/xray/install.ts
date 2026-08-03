@@ -11,7 +11,7 @@ export interface InstallOptions {
   webBasePath: string;
 }
 
-const REPO_RAW = 'https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh';
+const REPO_RAW = 'https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh';
 const IMAGE = 'ghcr.io/arman2122/p-ui:latest';
 
 function isLatest(version: string): boolean {
@@ -20,7 +20,7 @@ function isLatest(version: string): boolean {
 }
 
 /**
- * The one-line script install command. The master install script reads the
+ * The one-line script install command. The install script on `main` reads the
  * version as its first argument: empty = latest stable release, a tag like
  * `v3.4.0` = that release, and `dev-latest` = the rolling per-commit dev build.
  */

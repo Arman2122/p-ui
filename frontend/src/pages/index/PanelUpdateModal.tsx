@@ -157,7 +157,7 @@ export default function PanelUpdateModal({
             {isDev ? (
               <Tag color="green">{info.currentCommit || '?'}</Tag>
             ) : (
-              <Tag color="green">{formatPanelVersion(window.X_UI_CUR_VER || info.currentVersion) || '?'}</Tag>
+              <Tag color="green">{formatPanelVersion(window.PUI_CUR_VER || info.currentVersion) || '?'}</Tag>
             )}
           </div>
           {info.updateAvailable ? (

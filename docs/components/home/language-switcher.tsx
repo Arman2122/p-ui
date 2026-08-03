@@ -13,7 +13,7 @@ import { cn } from '@/lib/cn';
 // anchors, which navigate reliably inside the navbar (like the other nav links).
 //
 // The home navbar only renders on the landing page, so the targets are simply
-// each locale's home (`/`, `/fa`, `/ru`, `/zh`).
+// each locale's home (`/` and `/fa`).
 export function HomeLanguageSwitcher({ current }: { current: string }) {
   return (
     <details className="group relative [&>summary::-webkit-details-marker]:hidden">

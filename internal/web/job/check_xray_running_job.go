@@ -1,4 +1,4 @@
-// Package job provides background job implementations for the p-ui web panel,
+// Package job provides background job implementations for the Penhoon UI web panel,
 // including traffic monitoring, system checks, and periodic maintenance tasks.
 package job
 

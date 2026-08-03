@@ -24,7 +24,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            hsanaeii/p-ui
+            arman2122/p-ui
             ghcr.io/arman2122/p-ui
           tags: |
             type=ref,event=branch

@@ -31,7 +31,7 @@ RUN go build -ldflags "-w -s" -o build/p-ui main.go
 RUN ./DockerInit.sh "$TARGETARCH"
 
 # ========================================================
-# Stage: Final Image of p-ui
+# Stage: Final Image of Penhoon UI
 # ========================================================
 FROM alpine
 ENV TZ=Asia/Tehran

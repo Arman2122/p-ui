@@ -6,9 +6,9 @@ import { siteUrl } from '@/lib/shared';
 // Required for `output: 'export'`.
 export const dynamic = 'force-static';
 
-// Locale home pages + the canonical (English) docs pages. Other locales
-// currently fall back to English content, so we don't list them separately
-// to avoid duplicate-content entries until real translations exist.
+// Locale home pages + the canonical (English) docs pages. Translated locales
+// mirror the English URL structure under their own prefix, so they are not
+// listed separately here to avoid duplicate-content entries.
 export default function sitemap(): MetadataRoute.Sitemap {
   const entries: MetadataRoute.Sitemap = [];
 

@@ -1206,7 +1206,7 @@ update_p-ui() {
     # Never fatal.
     setup_fail2ban
 
-    echo -e "${green}p-ui ${tag_version}${plain} updating finished, it is running now..."
+    echo -e "${green}Penhoon UI ${tag_version}${plain} update finished, it is running now..."
     echo -e ""
     echo -e "┌───────────────────────────────────────────────────────┐
 │  ${blue}p-ui control menu usages (subcommands):${plain}              │

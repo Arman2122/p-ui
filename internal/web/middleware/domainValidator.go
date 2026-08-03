@@ -1,4 +1,4 @@
-// Package middleware provides HTTP middleware functions for the p-ui web panel,
+// Package middleware provides HTTP middleware functions for the Penhoon UI web panel,
 // including domain validation utilities.
 package middleware
 

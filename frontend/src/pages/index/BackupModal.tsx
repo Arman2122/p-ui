@@ -19,14 +19,14 @@ interface BackupModalProps {
 
 export default function BackupModal({ open, basePath: _basePath, onClose, onBusy }: BackupModalProps) {
   const { t } = useTranslation();
-  const isPostgres = window.X_UI_DB_TYPE === 'postgres';
+  const isPostgres = window.PUI_DB_TYPE === 'postgres';
 
   function exportDb() {
-    window.location.href = (window.X_UI_BASE_PATH || '') + 'panel/api/server/getDb';
+    window.location.href = (window.PUI_BASE_PATH || '') + 'panel/api/server/getDb';
   }
 
   function exportMigration() {
-    window.location.href = (window.X_UI_BASE_PATH || '') + 'panel/api/server/getMigration';
+    window.location.href = (window.PUI_BASE_PATH || '') + 'panel/api/server/getMigration';
   }
 
   function importDb() {

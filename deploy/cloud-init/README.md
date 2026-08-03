@@ -1,8 +1,8 @@
-# p-ui via cloud-init
+# Penhoon UI via cloud-init
 
-A single [`cloud-init.yaml`](cloud-init.yaml) user-data file that installs p-ui
-non-interactively on a fresh Ubuntu/Debian VM and generates **unique random
-credentials per instance**. It works on any cloud-init platform.
+A single [`cloud-init.yaml`](cloud-init.yaml) user-data file that installs
+Penhoon UI non-interactively on a fresh Ubuntu/Debian VM and generates **unique
+random credentials per instance**. It works on any cloud-init platform.
 
 ## How it works
 
@@ -12,7 +12,8 @@ credentials per instance**. It works on any cloud-init platform.
 3. `install.sh` runs end-to-end with **zero prompts**, picking secure random
    values for any credential you didn't pin.
 4. The generated credentials are written to `/etc/p-ui/install-result.env`
-   (mode 600), echoed to the **serial console**, and appended to `/etc/motd`.
+   (mode 600) and echoed in full to the **serial console**. `/etc/motd` is
+   world-readable, so it gets only the access URL and username.
 
 Retrieve them after boot with either:
 
@@ -52,7 +53,7 @@ Edit the `export PUI_*` lines inside the `write_files` block of
 - **DigitalOcean** — *Create Droplet → Advanced options → Add Initialization
   scripts (user data)*: paste the file. Or `doctl compute droplet create --user-data-file cloud-init.yaml ...`
 - **Vultr** — *Deploy → Additional Features → Cloud-Init User-Data*: paste the file.
-- **Google Cloud (GCE)** — `gcloud compute instances create pui \
+- **Google Cloud (GCE)** — `gcloud compute instances create p-ui \
   --image-family ubuntu-2404-lts-amd64 --image-project ubuntu-os-cloud \
   --metadata-from-file user-data=cloud-init.yaml`
 - **Azure** — `az vm create --image Ubuntu2404 --custom-data cloud-init.yaml ...`

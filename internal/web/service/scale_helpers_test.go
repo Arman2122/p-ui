@@ -12,7 +12,7 @@ import (
 	"github.com/Arman2122/p-ui/v3/internal/config"
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 	"github.com/Arman2122/p-ui/v3/internal/xray"
 
 	"github.com/op/go-logging"
@@ -25,7 +25,7 @@ import (
 // cleanup. Skips the test when neither backend is configured.
 func setupScaleDB(t *testing.T) {
 	t.Helper()
-	xuilogger.InitLogger(logging.ERROR)
+	puilogger.InitLogger(logging.ERROR)
 
 	if os.Getenv("PUI_DB_TYPE") == "postgres" && strings.TrimSpace(os.Getenv("PUI_DB_DSN")) != "" {
 		if err := database.InitDB(""); err != nil {

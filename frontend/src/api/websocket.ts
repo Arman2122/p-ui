@@ -195,7 +195,7 @@ let sharedClient: WebSocketClient | null = null;
 
 export function getSharedWebSocketClient(): WebSocketClient {
   if (sharedClient) return sharedClient;
-  const basePath = (typeof window !== 'undefined' && window.X_UI_BASE_PATH) || '';
+  const basePath = (typeof window !== 'undefined' && window.PUI_BASE_PATH) || '';
   sharedClient = new WebSocketClient(basePath);
   return sharedClient;
 }

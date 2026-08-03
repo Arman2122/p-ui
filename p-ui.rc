@@ -3,7 +3,7 @@
 command="/usr/local/p-ui/p-ui"
 command_background=true
 pidfile="/run/p-ui.pid"
-description="p-ui Service"
+description="Penhoon UI Service"
 procname="p-ui"
 depend() {
     need net

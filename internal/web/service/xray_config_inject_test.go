@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 	"github.com/Arman2122/p-ui/v3/internal/util/json_util"
 	"github.com/Arman2122/p-ui/v3/internal/xray"
 
@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 	}
 	// injectPanelEgress logs when it skips injection; the package logger must
 	// exist before any test exercises a skipped path.
-	xuilogger.InitLogger(logging.ERROR)
+	puilogger.InitLogger(logging.ERROR)
 	os.Exit(m.Run())
 }
 

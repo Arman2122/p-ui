@@ -1,10 +1,10 @@
 ---
 title: Installation
-description: Install p-ui via the official script (stable, pinned, or dev-latest), unattended/cloud-init, or Docker — and choose SQLite or PostgreSQL.
+description: Install Penhoon UI via the official script (stable, pinned, or dev-latest), unattended/cloud-init, or Docker — and choose SQLite or PostgreSQL.
 icon: Download
 ---
 
-p-ui runs on a wide range of Linux distributions — Ubuntu, Debian, Armbian,
+Penhoon UI runs on a wide range of Linux distributions — Ubuntu, Debian, Armbian,
 Fedora, CentOS, RHEL, AlmaLinux, Rocky Linux, Oracle Linux, Amazon Linux,
 Virtuozzo, Arch, Manjaro, openSUSE (Tumbleweed/Leap), Alpine — and Windows,
 across `amd64`, `386`, `arm64`, `armv7`, `armv6`, `armv5`, and `s390x`.
@@ -23,20 +23,20 @@ The official script is the recommended path. During installation it generates a
 and installs the `p-ui` management command.
 
 ```bash title="latest stable"
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)
 ```
 
 Install a **specific version** by appending its tag:
 
 ```bash title="pinned version"
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh) v3.4.0
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) v3.4.0
 ```
 
 Install the rolling **dev** build (the latest per-commit pre-release from `main`
 — not a stable release) by passing `dev-latest`:
 
 ```bash title="rolling dev build"
-bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh) dev-latest
+bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh) dev-latest
 ```
 
 When it finishes, note the printed login details and run `p-ui` to open the
@@ -120,7 +120,7 @@ prompts, generating random credentials and writing them to
 `/etc/p-ui/install-result.env`:
 
 ```bash
-PUI_NONINTERACTIVE=1 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/master/install.sh)
+PUI_NONINTERACTIVE=1 bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh)
 ```
 
 The repo's [`deploy/`](https://github.com/Arman2122/p-ui/tree/main/deploy)

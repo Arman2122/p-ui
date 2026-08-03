@@ -9,12 +9,12 @@ import (
 
 	"github.com/op/go-logging"
 
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 )
 
 func TestMain(m *testing.M) {
 	_ = os.Setenv("PUI_LOG_FOLDER", os.TempDir())
-	xuilogger.InitLogger(logging.ERROR)
+	puilogger.InitLogger(logging.ERROR)
 	os.Exit(m.Run())
 }
 

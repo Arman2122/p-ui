@@ -1,4 +1,4 @@
-// Package config provides configuration management utilities for the p-ui panel,
+// Package config provides configuration management utilities for the Penhoon UI panel,
 // including version information, logging levels, database paths, and environment variable handling.
 package config
 
@@ -41,15 +41,16 @@ const (
 	Error   LogLevel = "error"
 )
 
-// GetBaseVersion returns the raw embedded release version of the p-ui panel
-// (e.g. "3.4.0"). This is the panel's own version, not the Xray version. For the
+// GetBaseVersion returns the raw embedded release version of the Penhoon UI panel
+// (e.g. "3.6.0"). This is the panel's own version, not the Xray version. For the
 // version a panel advertises/displays (which adds a "dev+<sha>" label on dev
 // builds), use GetPanelVersion.
 func GetBaseVersion() string {
 	return strings.TrimSpace(version)
 }
 
-// GetName returns the name of the p-ui application.
+// GetName returns the short application name ("p-ui") used for on-disk names
+// such as the database file.
 func GetName() string {
 	return strings.TrimSpace(name)
 }

@@ -184,7 +184,7 @@ export async function httpRequest(
   if (res.status === 401) {
     if (!sessionExpired) {
       sessionExpired = true;
-      window.location.replace(window.X_UI_BASE_PATH || basePathPrefix || '/');
+      window.location.replace(window.PUI_BASE_PATH || basePathPrefix || '/');
     }
     return new Promise<HttpResponse>(() => {});
   }
@@ -195,7 +195,7 @@ export async function httpRequest(
 }
 
 export function setupHttp(): void {
-  let basePath: string | null | undefined = window.X_UI_BASE_PATH;
+  let basePath: string | null | undefined = window.PUI_BASE_PATH;
   if (!basePath) {
     const metaTag = document.querySelector('meta[name="base-path"]');
     basePath = metaTag ? metaTag.getAttribute('content') : null;

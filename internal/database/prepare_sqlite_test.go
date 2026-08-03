@@ -28,8 +28,8 @@ func TestPrepareSQLiteForMigration(t *testing.T) {
 		if err == nil {
 			t.Fatal("PrepareSQLiteForMigration accepted a non-panel database, want error")
 		}
-		if !strings.Contains(err.Error(), "not a p-ui panel database") {
-			t.Fatalf("error = %q, want it to contain %q", err.Error(), "not a p-ui panel database")
+		if !strings.Contains(err.Error(), "not a Penhoon UI panel database") {
+			t.Fatalf("error = %q, want it to contain %q", err.Error(), "not a Penhoon UI panel database")
 		}
 	})
 

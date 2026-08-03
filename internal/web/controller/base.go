@@ -1,4 +1,4 @@
-// Package controller provides HTTP request handlers and controllers for the p-ui web management panel.
+// Package controller provides HTTP request handlers and controllers for the Penhoon UI web management panel.
 // It handles routing, authentication, and API endpoints for managing Xray inbounds, settings, and more.
 package controller
 

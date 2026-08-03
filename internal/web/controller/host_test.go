@@ -15,13 +15,13 @@ import (
 
 	"github.com/Arman2122/p-ui/v3/internal/database"
 	"github.com/Arman2122/p-ui/v3/internal/database/model"
-	xuilogger "github.com/Arman2122/p-ui/v3/internal/logger"
+	puilogger "github.com/Arman2122/p-ui/v3/internal/logger"
 	"github.com/Arman2122/p-ui/v3/internal/web/entity"
 )
 
 func newHostTestDB(t *testing.T) {
 	t.Helper()
-	xuilogger.InitLogger(logging.ERROR)
+	puilogger.InitLogger(logging.ERROR)
 	gin.SetMode(gin.TestMode)
 	dbDir := t.TempDir()
 	t.Setenv("PUI_DB_FOLDER", dbDir)

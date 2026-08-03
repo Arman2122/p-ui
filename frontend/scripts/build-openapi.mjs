@@ -10,7 +10,7 @@ import { SCHEMAS } from '../src/generated/schemas.ts';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outPath = join(__dirname, '..', 'public', 'openapi.json');
 
-const PANEL_VERSION = process.env.X_UI_VERSION || '3.x';
+const PANEL_VERSION = process.env.PUI_VERSION || '3.x';
 
 const SECURITY_SCHEMES = {
   bearerAuth: {
@@ -209,7 +209,7 @@ function buildSpec() {
       title: 'P-UI Panel API',
       version: PANEL_VERSION,
       description:
-        'Programmatic interface to a P-UI panel. Authenticate either by logging in (cookie) or with an API token from Settings → Security → API Token (Bearer). All endpoints under /panel/api/* honour both modes — an API token is a full-admin credential, so treat it like the panel password.',
+        'Programmatic interface to a Penhoon UI (P-UI) panel. Authenticate either by logging in (cookie) or with an API token from Settings → Security → API Token (Bearer). All endpoints under /panel/api/* honour both modes — an API token is a full-admin credential, so treat it like the panel password.',
     },
     servers: [
       { url: '/', description: 'Current panel (basePath aware)' },
