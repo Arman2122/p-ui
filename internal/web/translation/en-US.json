@@ -2029,5 +2029,10 @@
     "statusFailed": "FAILED",
     "statusDown": "DOWN",
     "statusUp": "UP"
+  },
+  "cores": {
+    "mtproto": {
+      "title": "MTProto"
+    }
   }
 }
