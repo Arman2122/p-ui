@@ -4,7 +4,7 @@
 > panel (OpenVPN, IKEv2/IPsec, L2TP, OpenConnect, WireGuard/AmneziaWG, SSTP, SSH, …)
 > with cross-protocol egress and one unified per-user quota.
 >
-> Status: **in progress** — P-1 through P2 are implemented; see the roadmap in §12 for what
+> Status: **in progress** — P-1 through P3 are implemented; see the roadmap in §12 for what
 > each phase landed and what is still a proposal. Companion to `docs/architecture.md`, which
 > describes the system as it is today.
 >
@@ -640,7 +640,7 @@ and *that* is the number to hold the design to.
 | **P0** ✅ | `ClientTraffic` and `InboundConfig` → `internal/core` (**precondition, done**); `internal/xray` keeps aliases so 390 call sites are untouched. `internal/core` contract + `Counter` + `internal/cores/` + `coretest` + `TestSuiteCatchesBrokenAdapters`. Nothing calls the contract yet. **Measured effect: `internal/mtproto`'s dependency graph fell from 708 packages to 205, and from 142 xray-core packages to 0.** | none | +1100 |
 | **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. `tls` and `reality` are now enforced server-side too. Dispatch ratchet **109 → 106** | low | −168 / +72 in the deduplicated files |
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
-| **P3** | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local`'s 7 MTProto branches → 0. `Remote` untouched and wire-compatible | medium | −120 |
+| **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
 | **P4** | Registry-backed validator (kills the `oneof` tag). One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1 | low | −150 |
 | **P5** | `client_credentials` + descriptor-driven UI + `GET /panel/api/cores` | medium | +700 |
 | **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it | — | ~600 |
@@ -697,6 +697,31 @@ Two obligations the port revealed, both now written down rather than discovered 
   `TrafficSource` and `OnlineReporter` share a source owes the same treatment.
 - **`Kinds()` is not `Describe().ID`.** They coincide for mtproto and will not for accel-ppp,
   which answers `l2tp`, `pptp` and `sstp` from one descriptor.
+
+### 12.2 What porting core #2 corrected, and what it found
+
+The contract itself needed one change: `Instance` carries the inbound's three JSON sections
+as **plain strings**, not one blob and not a struct of `json.RawMessage`. Both alternatives
+reformat. `encoding/json` compacts a `RawMessage` on the way out, `WireguardClientsToPeers`
+indents what it emits, and `InboundConfig.Equals` compares bytes — so a conversion that
+changes nothing semantically still reads as a config change and restarts Xray under live
+connections. The same reasoning killed the adapter's rebuild of `settings.clients` from
+`Instance.Users`: a `map[string]string` cannot hold wireguard `allowedIPs` or vless
+`testseed`, and re-marshalling sorts the keys.
+
+So for Xray the stored blob is the authority and `Users` is the read model. mtproto renders
+*from* `Users`, because its `SecretEntry` is a small typed struct that loses nothing.
+`instanceOf` keeps the two in sync, and each core reads whichever is lossless for it.
+
+**What is not done, and is not P3's to do.** `XrayService.GetXrayConfig` does not merely
+call `GenXrayInboundConfig`: it rebuilds `settings.clients` from the **clients table**,
+filtered by traffic and expiry state, and preprocesses `streamSettings` (xhttp session-key
+lifting, finalmask/REALITY stripping, XMC mask validation). So the panel has **two** inbound
+renderers that already disagree today — the per-inbound one `Local` uses and the full-config
+one — and P3 deliberately kept `Local`'s output byte-identical to what it was rather than
+widening the port to absorb ~175 lines of the most load-bearing function in the panel.
+Unifying them is a phase of its own, and it must land with golden fixtures before it lands
+with a refactor.
 
 ---
 

@@ -12,7 +12,7 @@ import (
 func TestClientCrudMtprotoAppliesImmediately(t *testing.T) {
 	setupConflictDB(t)
 	pidFile := installFakeMtg(t)
-	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }}))
+	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }, Cores: testCores(t)}))
 	t.Cleanup(func() { runtime.SetManager(nil) })
 
 	inboundSvc := &InboundService{}

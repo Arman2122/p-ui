@@ -427,12 +427,14 @@ func TestPreflightRejectsAMissingBinary(t *testing.T) {
 	}
 }
 
-// TestStoredSettingsAreRenderedVerbatim is the regression for a config that
-// restarts Xray without changing. The full-config generator passes the stored
-// sections through untouched, so this core must too; rebuilding clients from
-// Instance.Users sorts the keys and drops every non-scalar credential, and even
-// a re-marshal that changes nothing else compacts what a healer indented.
-// InboundConfig.Equals compares bytes, so any of those reads as a change.
+/*
+The regression for a config that restarts Xray without changing.
+
+The full-config generator passes the stored sections through untouched, so this
+core must too. Rebuilding clients from Instance.Users sorts the keys and drops
+every non-scalar credential, and even a re-marshal that changes nothing else
+compacts what a healer indented — and InboundConfig.Equals compares bytes.
+*/
 func TestStoredSettingsAreRenderedVerbatim(t *testing.T) {
 	stored := `{"clients":[{"id":"beef","email":"real@example.com","allowedIPs":["10.0.0.2/32"],"keepAlive":25}],"decryption":"none"}`
 	indented := "{\n  \"network\": \"tcp\"\n}"

@@ -6,12 +6,15 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
-// TestInstanceCarriesWhatTheConfigGeneratorWouldEmit is the regression for an
-// inbound that restarts Xray without changing. A core renders from the instance
-// and the full-config generator renders from GenXrayInboundConfig; if the two
-// heal differently — or if one of them reformats — the same inbound produces two
-// byte-different configs and every regeneration looks like a change. Wireguard
-// is the sharp case: healing rewrites clients into peers AND indents the result.
+/*
+The regression for an inbound that restarts Xray without changing.
+
+A core renders from the instance and the full-config generator renders from
+GenXrayInboundConfig. If the two heal differently — or if either reformats — one
+inbound produces two byte-different configs and every regeneration looks like a
+change. Wireguard is the sharp case: healing rewrites clients into peers and
+indents the result.
+*/
 func TestInstanceCarriesWhatTheConfigGeneratorWouldEmit(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -50,9 +53,8 @@ func TestInstanceCarriesWhatTheConfigGeneratorWouldEmit(t *testing.T) {
 	}
 }
 
-// TestUsersReadTheStoredClientsNotTheHealedOnes pins which blob the projection
-// comes from. Healing a wireguard inbound replaces its clients with peers, which
-// carry no email, so reading the healed settings loses every user on it.
+// Healing a wireguard inbound replaces its clients with peers, which carry no
+// email, so projecting users from the healed settings loses every user on it.
 func TestUsersReadTheStoredClientsNotTheHealedOnes(t *testing.T) {
 	ib := &model.Inbound{
 		Id: 1, Protocol: model.WireGuard, Port: 51820, Tag: "wg-in", Enable: true,

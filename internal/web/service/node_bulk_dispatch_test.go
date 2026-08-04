@@ -78,7 +78,7 @@ func (f *fakeNodeRuntime) ResetAllTraffics(context.Context) error               
 func setupNodeRuntime(t *testing.T) (int, *fakeNodeRuntime) {
 	t.Helper()
 	prev := runtime.GetManager()
-	mgr := runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }, SetNeedRestart: func() {}})
+	mgr := runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }, SetNeedRestart: func() {}, Cores: testCores(t)})
 	runtime.SetManager(mgr)
 	t.Cleanup(func() { runtime.SetManager(prev) })
 

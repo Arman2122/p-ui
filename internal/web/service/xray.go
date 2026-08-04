@@ -93,8 +93,10 @@ func RemoveIndex(s []any, index int) []any {
 	return append(s[:index], s[index+1:]...)
 }
 
-// GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
-func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+// GetXrayBaseConfig builds everything the panel owns except its own inbounds:
+// template, logging, api listener, policy, routing. The xray core adds inbounds
+// onto it, so this must stay free of them.
+func (s *XrayService) GetXrayBaseConfig() (*xray.Config, error) {
 	templateConfig, err := s.settingService.GetXrayConfigTemplate()
 	if err != nil {
 		return nil, err
@@ -113,6 +115,15 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	// still carry sessionPlacement/sessionKey; lift them too (same reason as
 	// the per-inbound lift below).
 	xrayConfig.OutboundConfigs = liftOutboundsXhttpSessionIDKeys(xrayConfig.OutboundConfigs)
+	return xrayConfig, nil
+}
+
+// GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
+func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+	xrayConfig, err := s.GetXrayBaseConfig()
+	if err != nil {
+		return nil, err
+	}
 
 	_, _, _ = s.inboundService.AddTraffic(nil, nil)
 
