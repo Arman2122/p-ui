@@ -31,9 +31,10 @@ fails; resolving the pinned one fails too, so the pin cannot outlive the fix.
 
 // knownProtocolDivergence maps a protocol value to why it is not in all three
 // sources yet. Empty this as the registry replaces the hand-maintained lists.
-var knownProtocolDivergence = map[string]string{
-	"tun": "accepted by the validator tag and offered by the frontend, but has no Go constant; decide whether tun inbounds are supported before removing this",
-}
+//
+// Empty is the goal state, not a reason to relax: the three sources now agree,
+// so any new divergence is a real failure rather than an inherited one.
+var knownProtocolDivergence = map[string]string{}
 
 func inboundProtocolTagValues(t *testing.T, root string) []string {
 	t.Helper()
