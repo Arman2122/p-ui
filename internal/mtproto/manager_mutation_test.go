@@ -41,18 +41,21 @@ func TestScrapeStats(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	users, ok := scrapeStats(serverPort(t, srv), "sesame")
+	stats, ok := scrapeStats(serverPort(t, srv), "sesame")
 	if !ok {
 		t.Fatal("scrapeStats should succeed against a valid /stats endpoint")
 	}
-	if len(users) != 2 {
-		t.Fatalf("expected 2 users, got %d: %+v", len(users), users)
+	if len(stats.Users) != 2 {
+		t.Fatalf("expected 2 users, got %d: %+v", len(stats.Users), stats.Users)
 	}
-	if users["alice"].BytesIn != 100 || users["alice"].BytesOut != 200 || users["alice"].Connections != 2 {
-		t.Fatalf("alice stats parsed wrong: %+v", users["alice"])
+	if stats.StartedAt != "2026-01-01T00:00:00Z" {
+		t.Fatalf("started_at must be parsed: it is the epoch that tells a restart from an idle scrape, got %q", stats.StartedAt)
 	}
-	if users["bob"].Connections != 0 || users["bob"].BytesIn != 5 {
-		t.Fatalf("bob stats parsed wrong: %+v", users["bob"])
+	if stats.Users["alice"].BytesIn != 100 || stats.Users["alice"].BytesOut != 200 || stats.Users["alice"].Connections != 2 {
+		t.Fatalf("alice stats parsed wrong: %+v", stats.Users["alice"])
+	}
+	if stats.Users["bob"].Connections != 0 || stats.Users["bob"].BytesIn != 5 {
+		t.Fatalf("bob stats parsed wrong: %+v", stats.Users["bob"])
 	}
 }
 

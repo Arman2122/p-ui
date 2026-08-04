@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
@@ -54,7 +55,15 @@ type XrayAPI struct {
 	RoutingServiceClient *routerService.RoutingServiceClient
 	grpcClient           *grpc.ClientConn
 	isConnected          bool
-	StatsLastValues      map[string]int64
+	counter              *core.Counter
+}
+
+// NoteCoreRestart tells the traffic counter that Xray is starting from zero, so
+// the next reading is billed in full instead of discarded as a baseline.
+func (x *XrayAPI) NoteCoreRestart() {
+	if x.counter != nil {
+		x.counter.NoteSourceRestart()
+	}
 }
 
 func getRequiredUserString(user map[string]any, key string) (string, error) {
@@ -99,8 +108,8 @@ func (x *XrayAPI) Init(apiPort int) error {
 
 	x.grpcClient = conn
 	x.isConnected = true
-	if x.StatsLastValues == nil {
-		x.StatsLastValues = make(map[string]int64)
+	if x.counter == nil {
+		x.counter = core.NewCounter()
 	}
 
 	hsClient := command.NewHandlerServiceClient(conn)
@@ -754,35 +763,19 @@ func (x *XrayAPI) GetTraffic() ([]*Traffic, []*ClientTraffic, error) {
 	tagTrafficMap := make(map[string]*Traffic)
 	emailTrafficMap := make(map[string]*ClientTraffic)
 
-	baselinePass := len(x.StatsLastValues) == 0
-
+	readings := make(map[string]int64, len(resp.GetStat()))
 	for _, stat := range resp.GetStat() {
-		lastValue, ok := x.StatsLastValues[stat.Name]
-		x.StatsLastValues[stat.Name] = stat.Value
-		if baselinePass {
-			continue
-		}
-		if !ok || stat.Value < lastValue {
-			lastValue = 0
-		}
-		value := stat.Value - lastValue
-		if matches := trafficRegex.FindStringSubmatch(stat.Name); len(matches) == 4 {
-			processTraffic(matches, value, tagTrafficMap)
-		} else if matches := clientTrafficRegex.FindStringSubmatch(stat.Name); len(matches) == 3 {
-			processClientTraffic(matches, value, emailTrafficMap)
-		}
+		readings[stat.Name] = stat.Value
 	}
 
-	// Drop delta baselines for stats that no longer exist (deleted inbounds or
-	// clients), which otherwise linger until the next Xray restart. Only rebuild
-	// when the map has drifted past 2x the live set, so the steady-state hot path
-	// stays allocation-free.
-	if n := len(resp.GetStat()); n > 0 && len(x.StatsLastValues) > 2*n {
-		pruned := make(map[string]int64, n)
-		for _, stat := range resp.GetStat() {
-			pruned[stat.Name] = x.StatsLastValues[stat.Name]
+	// Xray's stats carry no incarnation token; a restart arrives out of band
+	// through NoteCoreRestart, and a reset counter is caught by the backstop.
+	for name, value := range x.counter.Observe("", readings) {
+		if matches := trafficRegex.FindStringSubmatch(name); len(matches) == 4 {
+			processTraffic(matches, value, tagTrafficMap)
+		} else if matches := clientTrafficRegex.FindStringSubmatch(name); len(matches) == 3 {
+			processClientTraffic(matches, value, emailTrafficMap)
 		}
-		x.StatsLastValues = pruned
 	}
 
 	return mapToSlice(tagTrafficMap), mapToSlice(emailTrafficMap), nil

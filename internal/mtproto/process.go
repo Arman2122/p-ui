@@ -35,6 +35,20 @@ func GetBinaryPath() string {
 	return config.GetBinFolderPath() + "/" + GetBinaryName()
 }
 
+// CheckBinary reports whether the mtg binary is present and executable. A miss
+// disables the core at preflight instead of failing each inbound every reconcile.
+func CheckBinary() error {
+	path := GetBinaryPath()
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("mtproto: mtg binary %s: %w", path, err)
+	}
+	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("mtproto: %s is not an executable file", path)
+	}
+	return nil
+}
+
 func configDir() string {
 	return config.GetBinFolderPath() + "/mtproto"
 }

@@ -4,3 +4,10 @@ frontend/public/openapi.json text eol=lf
 frontend/src/test/__snapshots__/** text eol=lf
 *.go text eol=lf
 deploy/**/*.yaml text eol=lf
+frontend/src/test/golden/** text eol=lf
+# Stored verbatim: a fixture compared byte-for-byte must not be eol-translated,
+# and this one inherits the CRs embedded in the default Xray template below.
+**/testdata/*.golden -text
+# Embedded into the binary as the default Xray template, so its bytes reach the
+# generated config. Pinned so a Windows checkout cannot add CRs of its own.
+internal/web/service/config.json text eol=lf

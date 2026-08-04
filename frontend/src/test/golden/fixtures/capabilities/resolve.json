@@ -1,0 +1,5565 @@
+{
+  "rules": {
+    "fallbacks": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vless",
+                "trojan"
+              ]
+            },
+            {
+              "field": "stream.network",
+              "op": "in",
+              "values": [
+                "tcp"
+              ]
+            },
+            {
+              "field": "stream.security",
+              "op": "in",
+              "values": [
+                "tls",
+                "reality"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "reality": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vless",
+                "trojan"
+              ]
+            },
+            {
+              "field": "stream.network",
+              "op": "in",
+              "values": [
+                "tcp",
+                "http",
+                "grpc",
+                "xhttp"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "sniffing": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "mtproto"
+              ],
+              "not": true
+            }
+          ]
+        }
+      ]
+    },
+    "ss2022": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "shadowsocks"
+              ]
+            },
+            {
+              "field": "settings.method",
+              "op": "prefix",
+              "values": [
+                "2022"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "stream": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vmess",
+                "vless",
+                "trojan",
+                "shadowsocks",
+                "hysteria",
+                "wireguard",
+                "tunnel"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "tls": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "hysteria"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vmess",
+                "vless",
+                "trojan",
+                "shadowsocks"
+              ]
+            },
+            {
+              "field": "stream.network",
+              "op": "in",
+              "values": [
+                "tcp",
+                "ws",
+                "http",
+                "grpc",
+                "httpupgrade",
+                "xhttp"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "tlsFlow": {
+      "any": [
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vless"
+              ]
+            },
+            {
+              "field": "stream.network",
+              "op": "in",
+              "values": [
+                "tcp"
+              ]
+            },
+            {
+              "field": "stream.security",
+              "op": "in",
+              "values": [
+                "tls",
+                "reality"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vless"
+              ]
+            },
+            {
+              "field": "stream.network",
+              "op": "in",
+              "values": [
+                "xhttp"
+              ]
+            },
+            {
+              "field": "settings.encryption",
+              "op": "set"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "protocol",
+              "op": "in",
+              "values": [
+                "vless"
+              ]
+            },
+            {
+              "field": "stream.network",
+              "op": "in",
+              "values": [
+                "xhttp"
+              ]
+            },
+            {
+              "field": "settings.decryption",
+              "op": "set"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "name": "vless/tcp/tls",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless/tcp/reality",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless/tcp/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/tcp/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/ws/tls",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/ws/reality",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/ws/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/ws/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/grpc/tls",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/grpc/reality",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/grpc/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/grpc/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/xhttp/tls",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/xhttp/reality",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/xhttp/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/xhttp/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/kcp/tls",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/kcp/reality",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/kcp/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless/kcp/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless//tls",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless//reality",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless//none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless//",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/tcp/tls",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/tcp/reality",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/tcp/none",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/tcp/",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/ws/tls",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/ws/reality",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/ws/none",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/ws/",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/grpc/tls",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/grpc/reality",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/grpc/none",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/grpc/",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/xhttp/tls",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/xhttp/reality",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/xhttp/none",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/xhttp/",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/kcp/tls",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/kcp/reality",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/kcp/none",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess/kcp/",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess//tls",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess//reality",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess//none",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vmess//",
+      "facts": {
+        "protocol": "vmess",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/tcp/tls",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/tcp/reality",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/tcp/none",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/tcp/",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/ws/tls",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/ws/reality",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/ws/none",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/ws/",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/grpc/tls",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/grpc/reality",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/grpc/none",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/grpc/",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/xhttp/tls",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/xhttp/reality",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/xhttp/none",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/xhttp/",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/kcp/tls",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/kcp/reality",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/kcp/none",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan/kcp/",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan//tls",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan//reality",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan//none",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "trojan//",
+      "facts": {
+        "protocol": "trojan",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/tcp/tls",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/tcp/reality",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/tcp/none",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/tcp/",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/ws/tls",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/ws/reality",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/ws/none",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/ws/",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/grpc/tls",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/grpc/reality",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/grpc/none",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/grpc/",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/xhttp/tls",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/xhttp/reality",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/xhttp/none",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/xhttp/",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/kcp/tls",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/kcp/reality",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/kcp/none",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks/kcp/",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks//tls",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks//reality",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks//none",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "shadowsocks//",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/tcp/tls",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/tcp/reality",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/tcp/none",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/tcp/",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/ws/tls",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/ws/reality",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/ws/none",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/ws/",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/grpc/tls",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/grpc/reality",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/grpc/none",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/grpc/",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/xhttp/tls",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/xhttp/reality",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/xhttp/none",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/xhttp/",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/kcp/tls",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/kcp/reality",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/kcp/none",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria/kcp/",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria//tls",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria//reality",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria//none",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "hysteria//",
+      "facts": {
+        "protocol": "hysteria",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/tcp/tls",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/tcp/reality",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/tcp/none",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/tcp/",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/ws/tls",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/ws/reality",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/ws/none",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/ws/",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/grpc/tls",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/grpc/reality",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/grpc/none",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/grpc/",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/xhttp/tls",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/xhttp/reality",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/xhttp/none",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/xhttp/",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/kcp/tls",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/kcp/reality",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/kcp/none",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard/kcp/",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard//tls",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard//reality",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard//none",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "wireguard//",
+      "facts": {
+        "protocol": "wireguard",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/tcp/tls",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/tcp/reality",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/tcp/none",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/tcp/",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/ws/tls",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/ws/reality",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/ws/none",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/ws/",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/grpc/tls",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/grpc/reality",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/grpc/none",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/grpc/",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/xhttp/tls",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/xhttp/reality",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/xhttp/none",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/xhttp/",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/kcp/tls",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/kcp/reality",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/kcp/none",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto/kcp/",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto//tls",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto//reality",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto//none",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "mtproto//",
+      "facts": {
+        "protocol": "mtproto",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": false,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/tcp/tls",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/tcp/reality",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/tcp/none",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/tcp/",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/ws/tls",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/ws/reality",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/ws/none",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/ws/",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/grpc/tls",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/grpc/reality",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/grpc/none",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/grpc/",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/xhttp/tls",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/xhttp/reality",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/xhttp/none",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/xhttp/",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/kcp/tls",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/kcp/reality",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/kcp/none",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel/kcp/",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel//tls",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel//reality",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel//none",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "tunnel//",
+      "facts": {
+        "protocol": "tunnel",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/tcp/tls",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/tcp/reality",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/tcp/none",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/tcp/",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/ws/tls",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "ws",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/ws/reality",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "ws",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/ws/none",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "ws",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/ws/",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "ws",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/grpc/tls",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "grpc",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/grpc/reality",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "grpc",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/grpc/none",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "grpc",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/grpc/",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "grpc",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/xhttp/tls",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/xhttp/reality",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/xhttp/none",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/xhttp/",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/kcp/tls",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "kcp",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/kcp/reality",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "kcp",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/kcp/none",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "kcp",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn/kcp/",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "kcp",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn//tls",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "",
+          "security": "tls"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn//reality",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "",
+          "security": "reality"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn//none",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "",
+          "security": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "openvpn//",
+      "facts": {
+        "protocol": "openvpn",
+        "stream": {
+          "network": "",
+          "security": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": false,
+        "tls": false,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/tcp/tls/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/tls/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/tcp/tls/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/tls/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/tcp/tls/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/tls/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "tls"
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/tcp/reality/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/reality/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/tcp/reality/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/reality/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/tcp/reality/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/reality/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "reality"
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": true,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/tcp/none/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/none/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/tcp/none/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/none/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/tcp/none/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp/none/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": "none"
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/tcp//",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp//",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/tcp//none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp//none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/tcp//mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/tcp//mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp",
+          "security": ""
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/tls/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/tls/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/tls/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/tls/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/tls/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/tls/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "tls"
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/reality/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/reality/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/reality/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/reality/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/reality/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/reality/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "reality"
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/none/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/none/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/none/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/none/none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp/none/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp/none/mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": "none"
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc/xhttp//",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        },
+        "settings": {
+          "decryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp//",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        },
+        "settings": {
+          "encryption": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp//none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        },
+        "settings": {
+          "decryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp//none",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        },
+        "settings": {
+          "encryption": "none"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "vless-enc/xhttp//mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        },
+        "settings": {
+          "decryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "vless-enc-legacy/xhttp//mlkem768x25519plus.native.0rtt.KEY",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "xhttp",
+          "security": ""
+        },
+        "settings": {
+          "encryption": "mlkem768x25519plus.native.0rtt.KEY"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": true
+      }
+    },
+    {
+      "name": "method/shadowsocks/",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/shadowsocks/aes-256-gcm",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": "aes-256-gcm"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/shadowsocks/2022-blake3-aes-128-gcm",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": "2022-blake3-aes-128-gcm"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": true,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/shadowsocks/2022-blake3-chacha20-poly1305",
+      "facts": {
+        "protocol": "shadowsocks",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": "2022-blake3-chacha20-poly1305"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": false,
+        "sniffing": true,
+        "ss2022": true,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/vless/",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": ""
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/vless/aes-256-gcm",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": "aes-256-gcm"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/vless/2022-blake3-aes-128-gcm",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": "2022-blake3-aes-128-gcm"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    },
+    {
+      "name": "method/vless/2022-blake3-chacha20-poly1305",
+      "facts": {
+        "protocol": "vless",
+        "stream": {
+          "network": "tcp"
+        },
+        "settings": {
+          "method": "2022-blake3-chacha20-poly1305"
+        }
+      },
+      "expect": {
+        "fallbacks": false,
+        "reality": true,
+        "sniffing": true,
+        "ss2022": false,
+        "stream": true,
+        "tls": true,
+        "tlsFlow": false
+      }
+    }
+  ]
+}

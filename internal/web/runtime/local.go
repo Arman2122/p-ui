@@ -2,20 +2,33 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 type LocalDeps struct {
 	APIPort        func() int
 	SetNeedRestart func()
+	// Cores resolves an inbound's protocol to the core that serves it. Nil in
+	// tests that never touch an inbound; every inbound op fails loudly without it.
+	Cores *core.Registry
+	/*
+		RenderInbound produces the inbound exactly as the full config build would
+		emit it, so a hot apply and the next restart agree byte for byte.
+
+		A nil config means the local Xray does not serve this inbound and the
+		stored sections stand — that is how an mtproto inbound reaches its own
+		core untouched. Nil the field itself and every inbound falls back to
+		those stored sections, which is the pre-unification behaviour.
+	*/
+	RenderInbound func(ib *model.Inbound) (*core.InboundConfig, error)
 }
 
 type Local struct {
@@ -45,71 +58,118 @@ func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
 	return fn(&api)
 }
 
-func (l *Local) AddInbound(_ context.Context, ib *model.Inbound) error {
-	if ib.Protocol == model.MTProto {
-		inst, ok := mtproto.InstanceFromInbound(ib)
-		if !ok {
-			return nil
-		}
-		return mtproto.GetManager().Ensure(inst)
+// coreFor resolves the core serving this inbound. An unknown protocol is an
+// error, never a no-op: silence would read as "applied" and quarantine as delete.
+func (l *Local) coreFor(ib *model.Inbound) (*core.Bound, error) {
+	if l.deps.Cores == nil {
+		return nil, errors.New("local runtime has no core registry")
 	}
-	body, err := json.MarshalIndent(ib.GenXrayInboundConfig(), "", "  ")
+	bound, ok := l.deps.Cores.For(core.Kind(ib.Protocol))
+	if !ok {
+		return nil, fmt.Errorf("no core serves protocol %q", ib.Protocol)
+	}
+	if bound.Apply == nil {
+		return nil, fmt.Errorf("core %q cannot apply a single inbound", bound.Core.Describe().ID)
+	}
+	return bound, nil
+}
+
+/*
+desiredState renders the inbound the way a restart would.
+
+Without this the hot path applied the stored sections while a restart applied
+the generated ones, so an inbound edited under load kept quota-exhausted
+clients, lost its fallbacks, and carried panel-only fields Xray never should
+see. Worse, InboundConfig.Equals compares bytes, so the running inbound then
+stopped matching the generator and every restart check read a pending change.
+*/
+func (l *Local) desiredState(ib *model.Inbound) (core.Instance, error) {
+	inst := instanceOf(ib)
+	if l.deps.RenderInbound == nil {
+		return inst, nil
+	}
+	rendered, err := l.deps.RenderInbound(ib)
+	if err != nil {
+		return inst, fmt.Errorf("render inbound %q: %w", ib.Tag, err)
+	}
+	if rendered == nil {
+		return inst, nil
+	}
+	inst.Settings = string(rendered.Settings)
+	inst.StreamSettings = string(rendered.StreamSettings)
+	inst.Sniffing = string(rendered.Sniffing)
+	return inst, nil
+}
+
+func (l *Local) AddInbound(ctx context.Context, ib *model.Inbound) error {
+	bound, err := l.coreFor(ib)
 	if err != nil {
 		return err
 	}
-	return l.withAPI(func(api *xray.XrayAPI) error {
-		return api.AddInbound(body)
-	})
-}
-
-func (l *Local) DelInbound(_ context.Context, ib *model.Inbound) error {
-	if ib.Protocol == model.MTProto {
-		mtproto.GetManager().Remove(ib.Id)
-		return nil
+	inst, err := l.desiredState(ib)
+	if err != nil {
+		return err
 	}
-	return l.withAPI(func(api *xray.XrayAPI) error {
-		return api.DelInbound(ib.Tag)
-	})
+	return bound.Apply.ApplyInstance(ctx, inst)
 }
 
+// DropInstance is keyed by tag and port, so the stored sections are enough and
+// a render failure must not be able to strand a listener.
+func (l *Local) DelInbound(ctx context.Context, ib *model.Inbound) error {
+	bound, err := l.coreFor(ib)
+	if err != nil {
+		return err
+	}
+	return bound.Apply.DropInstance(ctx, instanceOf(ib))
+}
+
+/*
+UpdateInbound converges the new state in place rather than removing and re-adding.
+ApplyInstance is what lets a core keep the connections it can: mtg reloads its
+secrets without restarting, and Xray diffs the inbound down to the users that
+actually changed.
+
+The old inbound is dropped first only when applying the new one would strand it.
+The drop is not fatal here — the old core may legitimately no longer be serving it.
+*/
 func (l *Local) UpdateInbound(ctx context.Context, oldIb, newIb *model.Inbound) error {
-	if oldIb.Protocol == model.MTProto || newIb.Protocol == model.MTProto {
-		return l.updateMtprotoInbound(ctx, oldIb, newIb)
+	if l.strandsOldInbound(oldIb, newIb) {
+		_ = l.DelInbound(ctx, oldIb)
 	}
-	_ = l.DelInbound(ctx, oldIb)
 	if !newIb.Enable {
-		return nil
+		return l.DelInbound(ctx, newIb)
 	}
 	return l.AddInbound(ctx, newIb)
 }
 
-// updateMtprotoInbound applies an inbound update without the Del+Add sequence
-// the xray path uses: Remove would drop the manager's fingerprint state, which
-// is what lets Ensure keep the running mtg process (and its live connections)
-// when nothing in the generated config changed. The sidecar is only stopped
-// when the inbound is disabled, loses its last active secret, or moves to a
-// different protocol.
-func (l *Local) updateMtprotoInbound(ctx context.Context, oldIb, newIb *model.Inbound) error {
-	if oldIb.Protocol == model.MTProto && newIb.Protocol != model.MTProto {
-		mtproto.GetManager().Remove(oldIb.Id)
-		if !newIb.Enable {
-			return nil
-		}
-		return l.AddInbound(ctx, newIb)
+/*
+strandsOldInbound reports whether applying newIb would leave oldIb behind.
+
+A changed protocol hands the inbound to a different core, which cannot know to
+clean up after the old one. A changed tag only strands it in a core that keys by
+tag: Xray's config does, so the old tag would keep its listener, but mtg is keyed
+by inbound id and a rename changes nothing it can see.
+
+Asking the core beats assuming, because the assumption was wrong and expensive —
+dropping an mtproto inbound stops the sidecar, so renaming one used to kill every
+live Telegram connection on it. The question isolates the tag deliberately: a
+rename bundled with a client edit must still be judged on the rename alone.
+*/
+func (l *Local) strandsOldInbound(oldIb, newIb *model.Inbound) bool {
+	if oldIb.Protocol != newIb.Protocol {
+		return true
 	}
-	if oldIb.Protocol != model.MTProto {
-		_ = l.DelInbound(ctx, oldIb)
+	if oldIb.Tag == newIb.Tag {
+		return false
 	}
-	if !newIb.Enable {
-		mtproto.GetManager().Remove(newIb.Id)
-		return nil
+	bound, err := l.coreFor(oldIb)
+	if err != nil || bound.HotApply == nil {
+		return true
 	}
-	inst, ok := mtproto.InstanceFromInbound(newIb)
-	if !ok {
-		mtproto.GetManager().Remove(newIb.Id)
-		return nil
-	}
-	return mtproto.GetManager().Ensure(inst)
+	before := instanceOf(oldIb)
+	renamed := before
+	renamed.Tag = newIb.Tag
+	return bound.HotApply.PlanChange(before, renamed) != core.ActionNoop
 }
 
 func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string]any) error {

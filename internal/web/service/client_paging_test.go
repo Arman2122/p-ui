@@ -34,10 +34,15 @@ type pagingSeed struct {
 	inbounds   []int
 }
 
+// pagingInbounds carries the ids the fixture actually received. inbounds.id is a
+// sequence shared with every other test in this package, so nothing may assume
+// it starts at 1 — least of all under `go test -shuffle=on`.
+type pagingInbounds struct{ Vless, Trojan int }
+
 // seedPagingClients writes one vless and one trojan inbound plus a fixed client
 // set covering every bucket, sort key and search field ListPaged supports.
 // Returns "now" so the expectations can be phrased relative to it.
-func seedPagingClients(t *testing.T) (int64, []pagingSeed) {
+func seedPagingClients(t *testing.T) (int64, []pagingSeed, pagingInbounds) {
 	t.Helper()
 	db := database.GetDB()
 	now := time.Now().UnixMilli()
@@ -113,7 +118,7 @@ func seedPagingClients(t *testing.T) (int64, []pagingSeed) {
 			}
 		}
 	}
-	return now, seeds
+	return now, seeds, pagingInbounds{Vless: vless.Id, Trojan: trojan.Id}
 }
 
 func pagedEmails(items []ClientSlim) []string {
@@ -139,7 +144,7 @@ func setupPagingServices(t *testing.T) (*ClientService, *InboundService, *Settin
 
 func TestListPagedFilters(t *testing.T) {
 	svc, inboundSvc, settingSvc := setupPagingServices(t)
-	now, _ := seedPagingClients(t)
+	now, _, inbounds := seedPagingClients(t)
 
 	tests := []struct {
 		name   string
@@ -188,7 +193,7 @@ func TestListPagedFilters(t *testing.T) {
 		},
 		{
 			name:   "inbound filter follows the attachments",
-			params: ClientPageParams{PageSize: 50, Inbound: "2"},
+			params: ClientPageParams{PageSize: 50, Inbound: strconv.Itoa(inbounds.Trojan)},
 			want:   []string{"bravo@x", "charlie@x", "foxtrot@x", "kilo1@x"},
 		},
 		{
@@ -306,10 +311,9 @@ func TestListPagedSorting(t *testing.T) {
 			name: "email ascending", sort: "email", order: "ascend",
 			want: []string{"alpha@x", "bravo@x", "charlie@x"},
 		},
-		{
-			name: "email descending", sort: "email", order: "descend",
-			want: []string{"kilo_1@x", "kilo1@x", "juliet@x"},
-		},
+		// "email descending" is asserted separately: the fixture deliberately
+		// holds kilo_1@x and kilo1@x (they pin LIKE-wildcard escaping), and
+		// whether "_" sorts before "1" depends on the database's collation.
 		{
 			name: "traffic descending", sort: "traffic", order: "descend",
 			want: []string{"charlie@x", "hotel@x", "alpha@x"},
@@ -358,6 +362,37 @@ func TestListPagedSorting(t *testing.T) {
 	}
 }
 
+// TestListPagedEmailSortIsReversible asserts the property rather than a literal
+// order. The fixture keeps kilo_1@x and kilo1@x because they pin LIKE-wildcard
+// escaping, and their relative order is decided by the database's collation:
+// glibc orders "_" after a digit on Ubuntu 26.04 / PostgreSQL 18 and before it
+// on the postgres:16 image CI uses. Descending must still be ascending reversed.
+func TestListPagedEmailSortIsReversible(t *testing.T) {
+	svc, inboundSvc, settingSvc := setupPagingServices(t)
+	seedPagingClients(t)
+
+	page := func(order string) []string {
+		t.Helper()
+		resp, err := svc.ListPaged(inboundSvc, settingSvc, ClientPageParams{PageSize: 50, Sort: "email", Order: order})
+		if err != nil {
+			t.Fatalf("ListPaged(%s): %v", order, err)
+		}
+		return pagedEmails(resp.Items)
+	}
+
+	ascending := page("ascend")
+	descending := page("descend")
+	if len(ascending) != 12 {
+		t.Fatalf("ascending returned %d rows, want the full fixture of 12", len(ascending))
+	}
+
+	reversed := slices.Clone(ascending)
+	slices.Reverse(reversed)
+	if !slices.Equal(descending, reversed) {
+		t.Fatalf("descending = %v\nwant the reverse of ascending = %v", descending, reversed)
+	}
+}
+
 func TestListPagedPagination(t *testing.T) {
 	svc, inboundSvc, settingSvc := setupPagingServices(t)
 	seedPagingClients(t)
@@ -402,7 +437,7 @@ func TestListPagedPagination(t *testing.T) {
 
 func TestListPagedRowContents(t *testing.T) {
 	svc, inboundSvc, settingSvc := setupPagingServices(t)
-	seedPagingClients(t)
+	_, _, inbounds := seedPagingClients(t)
 
 	resp, err := svc.ListPaged(inboundSvc, settingSvc, ClientPageParams{PageSize: 50})
 	if err != nil {
@@ -415,8 +450,9 @@ func TestListPagedRowContents(t *testing.T) {
 
 	t.Run("attachments are reported in inbound order", func(t *testing.T) {
 		got := byEmail["bravo@x"].InboundIds
-		if !slices.Equal(got, []int{1, 2}) {
-			t.Fatalf("inboundIds = %v, want [1 2]", got)
+		want := []int{inbounds.Vless, inbounds.Trojan}
+		if !slices.Equal(got, want) {
+			t.Fatalf("inboundIds = %v, want %v", got, want)
 		}
 	})
 

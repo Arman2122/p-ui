@@ -75,9 +75,6 @@ func TestGetTrafficFirstPollIsBaselineOnly(t *testing.T) {
 	if len(clients) != 0 {
 		t.Fatalf("first poll reported %+v, want no traffic (baseline only)", clients[0])
 	}
-	if got := api.StatsLastValues["user>>>alice>>>traffic>>>uplink"]; got != 5000 {
-		t.Fatalf("baseline = %d, want 5000", got)
-	}
 }
 
 // TestGetTrafficCountsNewStatFromZero is the regression for a new client's
@@ -148,10 +145,9 @@ func TestGetTrafficCountsAfterCounterReset(t *testing.T) {
 	}
 }
 
-// TestGetTrafficSkipsAPIInboundAndPrunes checks the tag-level parsing: the api
-// inbound is the panel's own gRPC channel and is never a user-facing inbound,
-// and baselines for vanished stats are dropped once they outgrow the live set.
-func TestGetTrafficSkipsAPIInboundAndPrunes(t *testing.T) {
+// TestGetTrafficSkipsTheAPIInbound checks the tag-level parsing: the api inbound
+// is the panel's own gRPC channel and is never a user-facing inbound.
+func TestGetTrafficSkipsTheAPIInbound(t *testing.T) {
 	api := startFakeStats(t, [][]*statsService.Stat{
 		{
 			stat("inbound>>>api>>>traffic>>>uplink", 10),
@@ -186,7 +182,59 @@ func TestGetTrafficSkipsAPIInboundAndPrunes(t *testing.T) {
 	if tags[0].Up != 50 || tags[0].Down != 70 {
 		t.Fatalf("in-443 = up %d / down %d, want 50 / 70", tags[0].Up, tags[0].Down)
 	}
-	if _, stale := api.StatsLastValues["inbound>>>gone-1>>>traffic>>>uplink"]; stale {
-		t.Fatal("baselines for stats that no longer exist were not pruned")
+}
+
+// TestGetTrafficDoesNotRebillAStatThatMissedAPoll is why baselines are never
+// expired automatically. A query that returns a subset - an inbound briefly
+// absent while the config reloads - used to drop those baselines, so the next
+// poll billed each returning counter its whole lifetime total again.
+func TestGetTrafficDoesNotRebillAStatThatMissedAPoll(t *testing.T) {
+	full := []*statsService.Stat{
+		stat("user>>>alice>>>traffic>>>uplink", 900),
+		stat("user>>>bob>>>traffic>>>uplink", 900),
+		stat("user>>>carol>>>traffic>>>uplink", 900),
+		stat("user>>>dave>>>traffic>>>uplink", 900),
+	}
+	api := startFakeStats(t, [][]*statsService.Stat{
+		full,
+		{stat("user>>>alice>>>traffic>>>uplink", 900)},
+		full,
+	})
+
+	if _, _, err := api.GetTraffic(); err != nil {
+		t.Fatalf("GetTraffic (baseline): %v", err)
+	}
+	if _, _, err := api.GetTraffic(); err != nil {
+		t.Fatalf("GetTraffic (partial): %v", err)
+	}
+	_, clients, err := api.GetTraffic()
+	if err != nil {
+		t.Fatalf("GetTraffic: %v", err)
+	}
+	if len(clients) != 0 {
+		t.Fatalf("clients that missed one poll were re-billed: %+v", clientTrafficByEmail(t, clients))
+	}
+}
+
+// TestGetTrafficBillsTheFirstPollAfterACoreRestart covers what the panel knows
+// and the counters do not. The reading here is ABOVE the old baseline, which is
+// the only case the backwards-counter backstop cannot recognise: without the
+// restart signal it looks like ordinary growth and 5000 bytes go unbilled.
+func TestGetTrafficBillsTheFirstPollAfterACoreRestart(t *testing.T) {
+	api := startFakeStats(t, [][]*statsService.Stat{
+		{stat("user>>>alice>>>traffic>>>uplink", 5_000)},
+		{stat("user>>>alice>>>traffic>>>uplink", 6_000)},
+	})
+
+	if _, _, err := api.GetTraffic(); err != nil {
+		t.Fatalf("GetTraffic (baseline): %v", err)
+	}
+	api.NoteCoreRestart()
+	_, clients, err := api.GetTraffic()
+	if err != nil {
+		t.Fatalf("GetTraffic: %v", err)
+	}
+	if got := clientTrafficByEmail(t, clients)["alice"]; got == nil || got.Up != 6_000 {
+		t.Fatalf("post-restart traffic = %+v, want up 6000 - a fresh core counts from zero", got)
 	}
 }

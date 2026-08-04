@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
-	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // Protocol represents the protocol type for Xray inbounds.
@@ -32,6 +32,10 @@ const (
 	WireGuard   Protocol = "wireguard"
 	Hysteria    Protocol = "hysteria"
 	MTProto     Protocol = "mtproto"
+	// Tun had no constant for a long while despite being accepted, offered and
+	// implemented; that gap is what stopped tun inbounds being served once the
+	// runtime resolved cores by protocol.
+	Tun Protocol = "tun"
 )
 
 // User represents a user account in the Penhoon UI panel.
@@ -56,12 +60,12 @@ type Inbound struct {
 	TrafficReset         string               `json:"trafficReset" form:"trafficReset" gorm:"default:never;index:idx_enable_traffic_reset,priority:2" validate:"omitempty,oneof=never hourly daily weekly monthly"` // Traffic reset schedule
 	TrafficResetDay      int                  `json:"trafficResetDay" form:"trafficResetDay" gorm:"default:1" validate:"omitempty,gte=1,lte=31" example:"1"`                                                        // Day of month for monthly traffic resets
 	LastTrafficResetTime int64                `json:"lastTrafficResetTime" form:"lastTrafficResetTime" gorm:"default:0"`                                                                                            // Last traffic reset timestamp
-	ClientStats          []xray.ClientTraffic `gorm:"foreignKey:InboundId;references:Id" json:"clientStats" form:"clientStats"`                                                                                     // Client traffic statistics
+	ClientStats          []core.ClientTraffic `gorm:"foreignKey:InboundId;references:Id" json:"clientStats" form:"clientStats"`                                                                                     // Client traffic statistics
 
 	// Xray configuration fields
 	Listen            string   `json:"listen" form:"listen"`
 	Port              int      `json:"port" form:"port" validate:"gte=0,lte=65535" example:"443"`
-	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,oneof=vmess vless trojan shadowsocks wireguard hysteria http mixed tunnel tun mtproto" example:"vless"`
+	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,protocol" example:"vless"`
 	Settings          string   `json:"settings" form:"settings"`
 	StreamSettings    string   `json:"streamSettings" form:"streamSettings"`
 	Tag               string   `json:"tag" form:"tag" gorm:"unique" example:"in-443-tcp"`
@@ -324,15 +328,10 @@ func StripInboundXhttpClientFields(streamSettings string) (string, bool) {
 	return string(out), true
 }
 
-// GenXrayInboundConfig generates an Xray inbound configuration from the Inbound model.
-func (i *Inbound) GenXrayInboundConfig() *xray.InboundConfig {
-	listen := i.Listen
-	if listen == "" {
-		listen = "0.0.0.0"
-	}
-	listen = fmt.Sprintf("\"%v\"", listen)
-	protocol := string(i.Protocol)
-	settings := i.Settings
+// HealedConfig returns the stored settings with the fixups that repair rows from
+// older releases. Two renderers healing differently restart Xray for no reason.
+func (i *Inbound) HealedConfig() (settings, streamSettings string) {
+	settings = i.Settings
 	switch i.Protocol {
 	case Shadowsocks:
 		if healed, ok := HealShadowsocksClientMethods(settings); ok {
@@ -355,7 +354,7 @@ func (i *Inbound) GenXrayInboundConfig() *xray.InboundConfig {
 			settings = healed
 		}
 	}
-	streamSettings := i.StreamSettings
+	streamSettings = i.StreamSettings
 	if stripped, ok := StripInboundXhttpClientFields(streamSettings); ok {
 		streamSettings = stripped
 	}
@@ -364,10 +363,21 @@ func (i *Inbound) GenXrayInboundConfig() *xray.InboundConfig {
 			streamSettings = healed
 		}
 	}
-	return &xray.InboundConfig{
+	return settings, streamSettings
+}
+
+// GenXrayInboundConfig generates an Xray inbound configuration from the Inbound model.
+func (i *Inbound) GenXrayInboundConfig() *core.InboundConfig {
+	listen := i.Listen
+	if listen == "" {
+		listen = "0.0.0.0"
+	}
+	listen = fmt.Sprintf("\"%v\"", listen)
+	settings, streamSettings := i.HealedConfig()
+	return &core.InboundConfig{
 		Listen:         json_util.RawMessage(listen),
 		Port:           i.Port,
-		Protocol:       protocol,
+		Protocol:       string(i.Protocol),
 		Settings:       json_util.RawMessage(settings),
 		StreamSettings: json_util.RawMessage(streamSettings),
 		Tag:            i.Tag,

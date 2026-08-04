@@ -69,10 +69,18 @@ func run(root, outDir string) error {
 			),
 		},
 		{
-			Path: resolveRel(root, "internal/xray"),
-			StructAllow: setOf(
-				"ClientTraffic",
-			),
+			// ClientTraffic moved here from internal/xray, which now only aliases
+			// it. The walker emits a struct as a schema and anything else as an
+			// alias, and a nil AliasAllow means "every alias" — so this package
+			// must name an empty one or the core contract's own types leak out.
+			Path:        resolveRel(root, "internal/core"),
+			StructAllow: setOf("ClientTraffic"),
+			AliasAllow:  setOf(),
+		},
+		{
+			Path:        resolveRel(root, "internal/xray"),
+			StructAllow: setOf(),
+			AliasAllow:  setOf("OnlineAPISupport", "ProcessState"),
 		},
 		{
 			Path: resolveRel(root, "internal/web/service"),
@@ -95,6 +103,10 @@ func run(root, outDir string) error {
 		return err
 	}
 	schemas = flattenEmbedded(schemas)
+
+	if err := expandProtocolRules(schemas, aliasValues(aliases, "Protocol")); err != nil {
+		return err
+	}
 
 	if len(schemas) == 0 {
 		return fmt.Errorf("no schemas produced; nothing to write")
@@ -121,6 +133,10 @@ func run(root, outDir string) error {
 	if err := emitJSONSchema(schemasBuf, schemas, aliases); err != nil {
 		return err
 	}
+	capabilitiesBuf := &bytes.Buffer{}
+	if err := emitCapabilities(capabilitiesBuf); err != nil {
+		return err
+	}
 
 	if err := os.WriteFile(filepath.Join(target, "zod.ts"), zodBuf.Bytes(), 0o644); err != nil {
 		return err
@@ -132,6 +148,9 @@ func run(root, outDir string) error {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(target, "schemas.ts"), schemasBuf.Bytes(), 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(target, "capabilities.ts"), capabilitiesBuf.Bytes(), 0o644); err != nil {
 		return err
 	}
 
