@@ -6,37 +6,40 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Arman2122/p-ui/internal/cores"
 )
 
 /*
-Which protocols exist is answered in three places that nothing cross-checks:
+Which protocols exist is answered in three places:
 
-  1. the model.Protocol const block          (internal/database/model/model.go)
-  2. the Inbound.Protocol `oneof=` validator tag on the same struct
+  1. the core registry                       (internal/cores) — the authority
+  2. the model.Protocol const block          (internal/database/model/model.go)
   3. the frontend ProtocolSchema enum        (frontend/src/schemas/primitives/protocol.ts)
 
-They already disagree, and the comment in (3) explaining the disagreement is
-itself wrong — it says the Go validator "no longer accepts" tun, which it does.
-That is what an unenforced convention decays into, and it is the reason the
-refactor replaces all three with one registry.
+(1) is what request validation and codegen now read, so it cannot drift from
+what the panel can serve. The other two are mirrors of it that nothing else
+cross-checks: (2) so Go can name a protocol without a string literal, (3) so the
+form knows which fields to render. This test is what keeps them mirrors.
 
-This test pins the divergence rather than resolving it: whether p-ui supports
-Xray tun inbounds is a product decision, not a mechanical one. New divergence
-fails; resolving the pinned one fails too, so the pin cannot outlive the fix.
+There used to be a fourth — a hand-typed `oneof=` list on Inbound.Protocol —
+and it is the one that broke: it accepted tun, which no core claimed, so the
+panel stored those inbounds and then refused to apply them.
 */
 
 // knownProtocolDivergence maps a protocol value to why it is not in all three
-// sources yet. Empty this as the registry replaces the hand-maintained lists.
-//
-// Empty is the goal state, not a reason to relax: the three sources now agree,
-// so any new divergence is a real failure rather than an inherited one.
+// sources. Empty is the goal state: new divergence is a real failure.
 var knownProtocolDivergence = map[string]string{}
 
-func inboundProtocolTagValues(t *testing.T, root string) []string {
+// inboundProtocolValidation returns the rules on Inbound.Protocol. A `oneof=`
+// among them means the hand-typed allow-list grew back.
+func inboundProtocolValidation(t *testing.T, root string) string {
 	t.Helper()
 	path := filepath.Join(root, "internal", "database", "model", "model.go")
 	fset := token.NewFileSet()
@@ -44,7 +47,6 @@ func inboundProtocolTagValues(t *testing.T, root string) []string {
 	if err != nil {
 		t.Fatalf("parse model.go: %v", err)
 	}
-	oneof := regexp.MustCompile(`oneof=([a-z0-9 ]+)`)
 	for _, decl := range file.Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.TYPE {
@@ -63,16 +65,33 @@ func inboundProtocolTagValues(t *testing.T, root string) []string {
 				if len(field.Names) == 0 || field.Names[0].Name != "Protocol" || field.Tag == nil {
 					continue
 				}
-				match := oneof.FindStringSubmatch(field.Tag.Value)
-				if match == nil {
-					t.Fatal("Inbound.Protocol has no oneof= in its validate tag; the allow-list moved and this guard is vacuous")
-				}
-				return strings.Fields(match[1])
+				return reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Get("validate")
 			}
 		}
 	}
 	t.Fatal("no Inbound.Protocol field found in model.go; this guard is vacuous")
-	return nil
+	return ""
+}
+
+/*
+TestInboundProtocolIsValidatedByTheRegistry is the guard against the fourth
+source coming back.
+
+A `oneof=` here would be accepted by the validator and read by openapigen, so it
+would quietly become the allow-list again — and nothing else in the suite would
+notice until a protocol was in one list and not the other.
+*/
+func TestInboundProtocolIsValidatedByTheRegistry(t *testing.T) {
+	tag := inboundProtocolValidation(t, repoRoot(t))
+	rules := strings.Split(tag, ",")
+	if !slices.Contains(rules, "protocol") {
+		t.Errorf("Inbound.Protocol has validate:%q, which does not include the `protocol` rule — request validation must ask the core registry, not a list", tag)
+	}
+	for _, rule := range rules {
+		if strings.HasPrefix(rule, "oneof=") {
+			t.Errorf("Inbound.Protocol has validate:%q — the hand-typed allow-list is back; register the core instead and let the `protocol` rule answer", tag)
+		}
+	}
 }
 
 func frontendProtocolValues(t *testing.T, root string) []string {
@@ -105,7 +124,13 @@ func TestProtocolSourcesAgree(t *testing.T) {
 	for _, value := range protocolConstants(t, root) {
 		goValues = append(goValues, value)
 	}
-	tagValues := inboundProtocolTagValues(t, root)
+	registryValues := make([]string, 0, 16)
+	for _, kind := range cores.Kinds() {
+		registryValues = append(registryValues, string(kind))
+	}
+	if len(registryValues) == 0 {
+		t.Fatal("the core registry claims no kinds; this guard is certifying nothing")
+	}
 	frontendValues := frontendProtocolValues(t, root)
 
 	set := func(values []string) map[string]bool {
@@ -115,10 +140,10 @@ func TestProtocolSourcesAgree(t *testing.T) {
 		}
 		return out
 	}
-	goSet, tagSet, feSet := set(goValues), set(tagValues), set(frontendValues)
+	goSet, regSet, feSet := set(goValues), set(registryValues), set(frontendValues)
 
 	union := map[string]bool{}
-	for _, s := range []map[string]bool{goSet, tagSet, feSet} {
+	for _, s := range []map[string]bool{goSet, regSet, feSet} {
 		for v := range s {
 			union[v] = true
 		}
@@ -131,15 +156,15 @@ func TestProtocolSourcesAgree(t *testing.T) {
 
 	diverged := map[string]bool{}
 	for _, value := range all {
-		if goSet[value] && tagSet[value] && feSet[value] {
+		if goSet[value] && regSet[value] && feSet[value] {
 			continue
 		}
 		diverged[value] = true
 		if _, known := knownProtocolDivergence[value]; known {
 			continue
 		}
-		t.Errorf("protocol %q is missing from at least one source (go const=%t, validator tag=%t, frontend enum=%t) — all three are hand-maintained and must agree until the core registry replaces them",
-			value, goSet[value], tagSet[value], feSet[value])
+		t.Errorf("protocol %q is missing from at least one source (registry=%t, go const=%t, frontend enum=%t) — the registry is the authority and the other two are hand-maintained mirrors of it",
+			value, regSet[value], goSet[value], feSet[value])
 	}
 
 	for value, why := range knownProtocolDivergence {

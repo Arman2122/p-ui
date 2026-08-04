@@ -107,4 +107,5 @@ func init() {
 		}
 		return name
 	})
+	registerProtocolRule()
 }

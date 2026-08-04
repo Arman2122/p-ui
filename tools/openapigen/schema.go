@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -110,6 +111,32 @@ func parseValidateTag(tag string) []ValidateRule {
 		rules = append(rules, ValidateRule{Name: before, Param: after})
 	}
 	return rules
+}
+
+/*
+expandProtocolRules turns the panel's `protocol` rule into the enum the emitters
+already understand, so a registry-backed rule still generates a closed union.
+
+values come from the model.Protocol constants rather than the registry itself:
+this tool is `go run` on the developer's machine, and a core is built out of
+Linux-only pieces. TestProtocolSourcesAgree pins the constants to the registry.
+*/
+func expandProtocolRules(schemas []Schema, values []string) error {
+	expanded := ValidateRule{Name: "oneof", Param: strings.Join(values, " ")}
+	for si := range schemas {
+		for fi := range schemas[si].Fields {
+			for ri, rule := range schemas[si].Fields[fi].Validate {
+				if rule.Name != "protocol" {
+					continue
+				}
+				if len(values) == 0 {
+					return fmt.Errorf("%s.%s uses the protocol rule but no model.Protocol constants were found; the enum would generate empty", schemas[si].Name, schemas[si].Fields[fi].JSONName)
+				}
+				schemas[si].Fields[fi].Validate[ri] = expanded
+			}
+		}
+	}
+	return nil
 }
 
 func (s Schema) HasValidationOn(field string) bool {

@@ -1784,15 +1784,15 @@ export const SCHEMAS: Record<string, unknown> = {
         "enum": [
           "vmess",
           "vless",
+          "tunnel",
+          "http",
           "trojan",
           "shadowsocks",
+          "mixed",
           "wireguard",
           "hysteria",
-          "http",
-          "mixed",
-          "tunnel",
-          "tun",
-          "mtproto"
+          "mtproto",
+          "tun"
         ],
         "example": "vless",
         "type": "string"
