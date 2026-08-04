@@ -2029,5 +2029,13 @@
     "statusFailed": "ناموفق",
     "statusDown": "قطع",
     "statusUp": "وصل"
+  },
+  "cores": {
+    "mtproto": {
+      "title": "MTProto"
+    },
+    "xray": {
+      "title": "Xray"
+    }
   }
 }

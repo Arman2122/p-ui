@@ -39,7 +39,9 @@ func (j *MtprotoJob) Run() {
 	}
 
 	mgr := mtproto.GetManager()
-	mgr.Reconcile(desired)
+	if err := mgr.Reconcile(desired); err != nil {
+		logger.Warning("mtproto job: reconcile failed:", err)
+	}
 
 	deltas, onlineEmails := mgr.CollectTraffic()
 

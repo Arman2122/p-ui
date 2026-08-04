@@ -222,7 +222,7 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			// over from a transport Vision supported produces an outbound
 			// xray refuses to start.
 			newNetwork, _ := newStream["network"].(string)
-			if vc.Flow != "" && !vlessFlowAllowed(newNetwork, security, subReq.linkSettings(inbound)) {
+			if vc.Flow != "" && !vlessFlowAllowed(inbound.Protocol, newNetwork, security, subReq.linkSettings(inbound)) {
 				vc.Flow = ""
 			}
 			newOutbounds = append(newOutbounds, s.genVless(subReq, inbound, streamSettings, vc, jsonMux(mux, hostMux)))

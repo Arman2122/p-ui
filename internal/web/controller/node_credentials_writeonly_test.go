@@ -32,7 +32,9 @@ func newNodeCredentialTestEngine(t *testing.T) *gin.Engine {
 
 func TestNodeControllerResponsesDoNotLeakApiToken(t *testing.T) {
 	engine := newNodeCredentialTestEngine(t)
-	if err := database.GetDB().Create(&model.Node{
+	// Read the id back rather than assuming 1: nodes.id is a sequence, and
+	// `go test -shuffle=on` lets another test consume it first.
+	node := model.Node{
 		Name:     "stored-node",
 		Scheme:   "https",
 		Address:  "example.com",
@@ -40,11 +42,12 @@ func TestNodeControllerResponsesDoNotLeakApiToken(t *testing.T) {
 		BasePath: "/",
 		ApiToken: "stored-secret-token",
 		Enable:   true,
-	}).Error; err != nil {
+	}
+	if err := database.GetDB().Create(&node).Error; err != nil {
 		t.Fatalf("seed node: %v", err)
 	}
 
-	for _, path := range []string{"/panel/api/nodes/list", "/panel/api/nodes/get/1"} {
+	for _, path := range []string{"/panel/api/nodes/list", "/panel/api/nodes/get/" + strconv.Itoa(node.Id)} {
 		w := httptest.NewRecorder()
 		engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 		if w.Code != http.StatusOK {

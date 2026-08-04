@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -17,6 +18,11 @@ type Alias struct {
 	Name       string
 	Package    string
 	Underlying TypeRef
+	// Values are the constants declared with this type, in declaration order.
+	// A named string type with constants is a closed set, so it is emitted as a
+	// union rather than as `string` — which is what let the frontend keep its
+	// own copy of the protocol list.
+	Values []string
 }
 
 type Field struct {
@@ -112,6 +118,32 @@ func parseValidateTag(tag string) []ValidateRule {
 	return rules
 }
 
+/*
+expandProtocolRules turns the panel's `protocol` rule into the enum the emitters
+already understand, so a registry-backed rule still generates a closed union.
+
+values come from the model.Protocol constants rather than the registry itself:
+this tool is `go run` on the developer's machine, and a core is built out of
+Linux-only pieces. TestProtocolSourcesAgree pins the constants to the registry.
+*/
+func expandProtocolRules(schemas []Schema, values []string) error {
+	expanded := ValidateRule{Name: "oneof", Param: strings.Join(values, " ")}
+	for si := range schemas {
+		for fi := range schemas[si].Fields {
+			for ri, rule := range schemas[si].Fields[fi].Validate {
+				if rule.Name != "protocol" {
+					continue
+				}
+				if len(values) == 0 {
+					return fmt.Errorf("%s.%s uses the protocol rule but no model.Protocol constants were found; the enum would generate empty", schemas[si].Name, schemas[si].Fields[fi].JSONName)
+				}
+				schemas[si].Fields[fi].Validate[ri] = expanded
+			}
+		}
+	}
+	return nil
+}
+
 func (s Schema) HasValidationOn(field string) bool {
 	for _, f := range s.Fields {
 		if f.JSONName == field {
@@ -171,4 +203,38 @@ func flattenEmbedded(schemas []Schema) []Schema {
 		out = append(out, s)
 	}
 	return out
+}
+
+// aliasTypeExpr renders a named type. A string type with constants becomes the
+// union of them, which is what makes the frontend's copy of the list deletable.
+func aliasTypeExpr(a Alias) string {
+	if len(a.Values) == 0 {
+		return tsTypeExpr(a.Underlying)
+	}
+	quoted := make([]string, 0, len(a.Values))
+	for _, v := range a.Values {
+		quoted = append(quoted, fmt.Sprintf("'%s'", v))
+	}
+	return strings.Join(quoted, " | ")
+}
+
+// aliasValuesConst renders the constants as a runtime array. A TypeScript union
+// cannot be iterated, and Zod needs the values to build an enum from.
+func aliasValuesConst(a Alias) string {
+	quoted := make([]string, 0, len(a.Values))
+	for _, v := range a.Values {
+		quoted = append(quoted, fmt.Sprintf("'%s'", v))
+	}
+	return fmt.Sprintf("export const %s_VALUES = [%s] as const;\n", strings.ToUpper(a.Name), strings.Join(quoted, ", "))
+}
+
+// aliasValues returns the constants collected for a named type, or nil when the
+// tool never saw it — which expandProtocolRules turns into a loud failure.
+func aliasValues(aliases []Alias, name string) []string {
+	for _, a := range aliases {
+		if a.Name == name {
+			return a.Values
+		}
+	}
+	return nil
 }

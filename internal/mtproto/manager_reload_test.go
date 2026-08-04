@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -31,7 +32,11 @@ func TestMain(m *testing.M) {
 				time.Sleep(time.Millisecond)
 			}
 		}
-		select {}
+		// Sleep rather than select{}: a bare select{} only survives while some
+		// unrelated import happens to leave a timer pending, which it no longer does.
+		for {
+			time.Sleep(time.Hour)
+		}
 	}
 	os.Exit(m.Run())
 }
@@ -89,6 +94,63 @@ func waitSpawnCount(t *testing.T, pidFile string, want int) {
 
 func mtgInst(id int, secrets ...SecretEntry) Instance {
 	return Instance{Id: id, Tag: fmt.Sprintf("inbound-%d", id), Listen: "127.0.0.1", Port: 24000 + id, Secrets: secrets}
+}
+
+// TestCollectTrafficSurvivesAnMtgRestart is the bug this manager shipped with:
+// clamping the negative delta discarded every byte moved since an mtg restart.
+func TestCollectTrafficSurvivesAnMtgRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		bootA, bootB string
+	}{
+		{"restart announced by started_at", "boot-1", "boot-2"},
+		{"restart inferred from a counter that went backwards", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeMtg(t)
+			mgr := &Manager{procs: map[int]*managed{}, swept: true}
+			if err := mgr.Ensure(mtgInst(9, SecretEntry{Name: "alice", Secret: "ee01"})); err != nil {
+				t.Fatalf("ensure: %v", err)
+			}
+			t.Cleanup(mgr.StopAll)
+
+			var mu sync.Mutex
+			startedAt, up, down := tc.bootA, int64(1_000), int64(2_000)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				fmt.Fprintf(w, `{"started_at":%q,"users":{"alice":{"connections":1,"bytes_in":%d,"bytes_out":%d}}}`, startedAt, up, down)
+			}))
+			defer srv.Close()
+			mgr.procs[9].apiPort = serverPort(t, srv)
+
+			collect := func() int64 {
+				deltas, _ := mgr.CollectTraffic()
+				var sum int64
+				for _, d := range deltas {
+					sum += d.Up + d.Down
+				}
+				return sum
+			}
+			serve := func(started string, u, d int64) {
+				mu.Lock()
+				startedAt, up, down = started, u, d
+				mu.Unlock()
+			}
+
+			if got := collect(); got != 0 {
+				t.Fatalf("the opening scrape only sets baselines, got %d bytes billed twice across a panel restart", got)
+			}
+			serve(tc.bootA, 1_500, 2_500)
+			if got := collect(); got != 1_000 {
+				t.Fatalf("delta since the previous scrape = %d, want 1000", got)
+			}
+			serve(tc.bootB, 300, 400)
+			if got := collect(); got != 700 {
+				t.Fatalf("after an mtg restart the whole reading is unbilled traffic: got %d, want 700", got)
+			}
+		})
+	}
 }
 
 func TestEnsureActionFor(t *testing.T) {
@@ -209,7 +271,7 @@ func TestEnsureHotReloadKeepsProcess(t *testing.T) {
 	if mgr.procs[1].proc != orig {
 		t.Fatal("hot reload must keep the same process")
 	}
-	if mgr.procs[1].secretsFP != rekeyed.secretsFingerprint() {
+	if mgr.procs[1].secretsFP != rekeyed.SecretsFingerprint() {
 		t.Fatal("stored secrets fingerprint must advance after a reload")
 	}
 	cfg, err := os.ReadFile(configPathForID(1))

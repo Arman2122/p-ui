@@ -6,7 +6,9 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -65,11 +67,15 @@ func walkPackages(requests []packageRequest) ([]Schema, []Alias, error) {
 						if req.AliasAllow != nil && !req.AliasAllow[ts.Name.Name] {
 							continue
 						}
-						aliases = append(aliases, Alias{
+						alias := Alias{
 							Name:       ts.Name.Name,
 							Package:    pkg.Name,
 							Underlying: exprToType(ts.Type),
-						})
+						}
+						if alias.Underlying.Kind == KindString {
+							alias.Values = constantsOfType(pkg.Files, ts.Name.Name)
+						}
+						aliases = append(aliases, alias)
 					}
 				}
 			}
@@ -243,4 +249,35 @@ func resolveRel(base, rel string) string {
 		return rel
 	}
 	return filepath.Clean(filepath.Join(base, rel))
+}
+
+// constantsOfType returns the string constants declared with typeName, in
+// declaration order. Files are visited by name so regenerating is stable.
+func constantsOfType(files map[string]*ast.File, typeName string) []string {
+	var out []string
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		for _, decl := range files[name].Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				if ident, ok := vs.Type.(*ast.Ident); !ok || ident.Name != typeName {
+					continue
+				}
+				for _, value := range vs.Values {
+					lit, ok := value.(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING {
+						continue
+					}
+					out = append(out, strings.Trim(lit.Value, `"`))
+				}
+			}
+		}
+	}
+	return out
 }

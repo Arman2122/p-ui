@@ -13,7 +13,16 @@ func emitZod(w io.Writer, schemas []Schema, aliases []Alias) error {
 	}
 
 	for _, a := range sortAliases(aliases) {
-		if _, err := fmt.Fprintf(w, "export const %sSchema = %s;\n", a.Name, zodTypeExpr(a.Underlying)); err != nil {
+		schema := zodTypeExpr(a.Underlying)
+		if len(a.Values) > 0 {
+			// The array is exported too: a Zod enum's options are not a value the
+			// rest of the app can map over, and dropdowns need one.
+			if _, err := fmt.Fprint(w, aliasValuesConst(a)); err != nil {
+				return err
+			}
+			schema = fmt.Sprintf("z.enum(%s_VALUES)", strings.ToUpper(a.Name))
+		}
+		if _, err := fmt.Fprintf(w, "export const %sSchema = %s;\n", a.Name, schema); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "export type %s = z.infer<typeof %sSchema>;\n\n", a.Name, a.Name); err != nil {

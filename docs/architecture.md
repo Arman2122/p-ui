@@ -124,6 +124,26 @@ p-ui/
 ├── go.mod / go.sum             # Go deps (module path ends in /v3)
 │
 ├── internal/                   # ALL backend Go code (private packages)
+│   ├── arch/                   # ⭐ Architecture guards. No runtime code — every file is a
+│   │                           #   test that parses the repo and fails on erosion: the
+│   │                           #   protocol-dispatch ratchet, the core import fences, the
+│   │                           #   frozen clients columns. Pure stdlib, so it runs on any OS.
+│   ├── core/                   # ⭐ The core contract (multi-core refactor). capability.go holds
+│   │                           #   the ONE table answering "may this inbound do X" (tls, reality,
+│   │                           #   tlsFlow, fallbacks, sniffing, stream, ss2022) — generated into
+│   │                           #   frontend/src/generated/capabilities.ts and cross-checked by
+│   │                           #   frontend/src/test/capabilities.test.ts. Core is 3 methods;
+│   │                           #   caps.go holds the optional capability interfaces, resolved
+│   │                           #   once by bind.go into Bound. Also ClientTraffic (the
+│   │                           #   email-keyed cross-core usage row), InboundConfig, and
+│   │                           #   Counter — the single monotonic-counter→delta engine.
+│   │                           #   coretest/ is the conformance suite every core must pass.
+│   ├── cores/                  # Wiring only: one Register line per core, explicit not init().
+│   │                           #   Concrete cores live under cores/internal/ so the compiler
+│   │                           #   stops the service layer importing one directly.
+│   │   └── internal/mtproto/   #   First core ported to the contract: adapts internal/mtproto.
+│   │                           #   driver_test.go runs the conformance suite against a
+│   │                           #   stand-in mtg that serves the real management API.
 │   ├── config/                 # Env-var config: paths, DB DSN, log level, version
 │   │                           #   Every PUI_* env var is read here (config.go)
 │   ├── database/
@@ -565,6 +585,10 @@ root → `go build ./...` / `go run main.go`.
 - **PostgreSQL only.** `PUI_DB_DSN` is required and the panel fails fast at startup without
   it — there is no file-backed fallback. Raw SQL is PostgreSQL syntax; shared fragments live
   in `database/dialect.go`. DB-backed tests skip unless `PUI_DB_DSN` names a reachable server.
+- **`ClientTraffic` and `InboundConfig` live in `internal/core`, not `internal/xray`.**
+  `internal/xray` keeps type aliases so existing call sites compile, but the data layer must
+  not import a core — `internal/arch` fails the build if it does. `client_traffics` is
+  email-keyed and `UNIQUE`, which is what makes one quota span every core a client uses.
 - **`Inbound.Settings` / `StreamSettings` / `Sniffing` are raw JSON strings**, not structured
   columns. Parsing/validation happens in services and the `xray` package, not in GORM.
 - **Hot-reload is the default; full restart is the fallback.** Changes that look config-only

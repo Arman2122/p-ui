@@ -3,10 +3,12 @@ import { z } from 'zod';
 export const OnlineAPISupportSchema = z.number().int();
 export type OnlineAPISupport = z.infer<typeof OnlineAPISupportSchema>;
 
-export const ProcessStateSchema = z.string();
+export const PROCESSSTATE_VALUES = ['running', 'stop', 'error'] as const;
+export const ProcessStateSchema = z.enum(PROCESSSTATE_VALUES);
 export type ProcessState = z.infer<typeof ProcessStateSchema>;
 
-export const ProtocolSchema = z.string();
+export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'tun'] as const;
+export const ProtocolSchema = z.enum(PROTOCOL_VALUES);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
 export const SubLinkProviderSchema = z.unknown();
@@ -442,7 +444,7 @@ export const InboundSchema = z.object({
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
   port: z.number().int().min(0).max(65535),
-  protocol: z.enum(['vmess', 'vless', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'http', 'mixed', 'tunnel', 'tun', 'mtproto']),
+  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'tun']),
   remark: z.string(),
   settings: z.unknown(),
   shareAddr: z.string(),

@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
@@ -22,40 +24,13 @@ var (
 	lock              sync.Mutex
 	isNeedXrayRestart atomic.Bool // Indicates that restart was requested for Xray
 	isManuallyStopped atomic.Bool // Indicates that Xray was stopped manually from the panel
-	xrayState         xrayLifecycle
 )
 
-type xrayLifecycle struct {
-	mu      sync.RWMutex
-	process *xray.Process
-	result  string
-}
+// xrayState is the process owner, which lives in internal/xray so the Xray core
+// can supervise its own daemon. Panel policy above stays here.
+func xrayState() *xray.Manager { return xray.GetManager() }
 
-func (s *xrayLifecycle) snapshot() (*xray.Process, string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.process, s.result
-}
-
-func (s *xrayLifecycle) replace(process *xray.Process) {
-	s.mu.Lock()
-	s.process = process
-	s.result = ""
-	s.mu.Unlock()
-}
-
-func (s *xrayLifecycle) storeResult(process *xray.Process, result string) {
-	s.mu.Lock()
-	if s.process == process && s.result == "" {
-		s.result = result
-	}
-	s.mu.Unlock()
-}
-
-func currentXrayProcess() *xray.Process {
-	process, _ := xrayState.snapshot()
-	return process
-}
+func currentXrayProcess() *xray.Process { return xrayState().Current() }
 
 // XrayService provides business logic for Xray process management.
 // It handles starting, stopping, restarting Xray, and managing its configuration.
@@ -91,7 +66,7 @@ func (s *XrayService) GetXrayErr() error {
 
 // GetXrayResult returns the result string from the Xray process.
 func (s *XrayService) GetXrayResult() string {
-	process, cachedResult := xrayState.snapshot()
+	process, cachedResult := xrayState().Snapshot()
 	if cachedResult != "" {
 		return cachedResult
 	}
@@ -101,7 +76,7 @@ func (s *XrayService) GetXrayResult() string {
 
 	result := process.GetResult()
 
-	xrayState.storeResult(process, result)
+	xrayState().StoreResult(process, result)
 	return result
 }
 
@@ -120,8 +95,10 @@ func RemoveIndex(s []any, index int) []any {
 	return append(s[:index], s[index+1:]...)
 }
 
-// GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
-func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+// GetXrayBaseConfig builds everything the panel owns except its own inbounds:
+// template, logging, api listener, policy, routing. The xray core adds inbounds
+// onto it, so this must stay free of them.
+func (s *XrayService) GetXrayBaseConfig() (*xray.Config, error) {
 	templateConfig, err := s.settingService.GetXrayConfigTemplate()
 	if err != nil {
 		return nil, err
@@ -140,6 +117,15 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	// still carry sessionPlacement/sessionKey; lift them too (same reason as
 	// the per-inbound lift below).
 	xrayConfig.OutboundConfigs = liftOutboundsXhttpSessionIDKeys(xrayConfig.OutboundConfigs)
+	return xrayConfig, nil
+}
+
+// GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
+func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+	xrayConfig, err := s.GetXrayBaseConfig()
+	if err != nil {
+		return nil, err
+	}
 
 	_, _, _ = s.inboundService.AddTraffic(nil, nil)
 
@@ -148,180 +134,13 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		return nil, err
 	}
 	for _, inbound := range inbounds {
-		if !inbound.Enable {
+		inboundConfig, err := s.RenderInbound(inbound)
+		if err != nil {
+			return nil, err
+		}
+		if inboundConfig == nil {
 			continue
 		}
-		if inbound.NodeID != nil {
-			continue
-		}
-		if inbound.Protocol == model.MTProto {
-			continue
-		}
-		settings := map[string]any{}
-		_ = json.Unmarshal([]byte(inbound.Settings), &settings)
-
-		dbClients, listErr := s.inboundService.clientService.ListForInbound(nil, inbound.Id)
-		if listErr != nil {
-			return nil, listErr
-		}
-
-		clientStats := inbound.ClientStats
-		enableMap := make(map[string]bool, len(clientStats))
-		for _, clientTraffic := range clientStats {
-			enableMap[clientTraffic.Email] = clientTraffic.Enable
-		}
-
-		finalClients := make([]any, 0, len(dbClients))
-		var wgPeers []any
-		for i := range dbClients {
-			c := dbClients[i]
-			if enable, exists := enableMap[c.Email]; exists && !enable {
-				logger.Infof("Remove Inbound User %s due to expiration or traffic limit", c.Email)
-				continue
-			}
-			if !c.Enable {
-				continue
-			}
-			flow := c.Flow
-			if flow == "xtls-rprx-vision-udp443" {
-				flow = "xtls-rprx-vision"
-			}
-			entry := map[string]any{"email": c.Email}
-			switch inbound.Protocol {
-			case model.VLESS:
-				if c.ID != "" {
-					entry["id"] = c.ID
-				}
-				if flow != "" {
-					entry["flow"] = flow
-				}
-				if c.Reverse != nil {
-					entry["reverse"] = c.Reverse
-				}
-			case model.VMESS:
-				if c.ID != "" {
-					entry["id"] = c.ID
-				}
-				if c.Security != "" {
-					entry["security"] = c.Security
-				}
-			case model.Trojan:
-				if c.Password != "" {
-					entry["password"] = c.Password
-				}
-				if flow != "" {
-					entry["flow"] = flow
-				}
-			case model.Shadowsocks:
-				if c.Password != "" {
-					entry["password"] = c.Password
-				}
-			case model.Hysteria:
-				if c.Auth != "" {
-					entry["auth"] = c.Auth
-				}
-			case model.WireGuard:
-				wgPeers = append(wgPeers, model.WireguardPeerFromClient(c))
-				continue
-			}
-			finalClients = append(finalClients, entry)
-		}
-
-		var mutated bool
-		if inbound.Protocol == model.WireGuard {
-			delete(settings, "clients")
-			if wgPeers == nil {
-				wgPeers = []any{}
-			}
-			settings["peers"] = wgPeers
-			mutated = true
-		} else {
-			_, hadClients := settings["clients"]
-			mutated = hadClients || len(finalClients) > 0
-			if mutated {
-				settings["clients"] = finalClients
-			}
-		}
-
-		if inboundCanHostFallbacks(inbound) {
-			fallbacks, fbErr := s.inboundService.fallbackService.BuildFallbacksJSON(nil, inbound.Id)
-			if fbErr != nil {
-				return nil, fbErr
-			}
-			if len(fallbacks) > 0 {
-				generic := make([]any, 0, len(fallbacks))
-				for _, f := range fallbacks {
-					generic = append(generic, f)
-				}
-				settings["fallbacks"] = generic
-				mutated = true
-			}
-		}
-
-		if mutated {
-			modifiedSettings, err := json.MarshalIndent(settings, "", "  ")
-			if err != nil {
-				return nil, err
-			}
-			inbound.Settings = string(modifiedSettings)
-		}
-
-		if len(inbound.StreamSettings) > 0 {
-			// Unmarshal stream JSON
-			var stream map[string]any
-			_ = json.Unmarshal([]byte(inbound.StreamSettings), &stream)
-
-			// Remove the "settings" field under "tlsSettings" and "realitySettings"
-			tlsSettings, ok1 := stream["tlsSettings"].(map[string]any)
-			realitySettings, ok2 := stream["realitySettings"].(map[string]any)
-			if ok1 || ok2 {
-				if ok1 {
-					delete(tlsSettings, "settings")
-				} else if ok2 {
-					delete(realitySettings, "settings")
-				}
-			}
-
-			delete(stream, "externalProxy")
-
-			// finalmask.tcp + REALITY panics Xray-core on the first connection
-			// (XTLS/Xray-core#6453). AddInbound/UpdateInbound reject this
-			// combination at save time, but a row saved before that guard
-			// existed (upgrade, node sync, restored backup, direct DB edit)
-			// would still crash Xray on the next restart without this — drop
-			// it here too, the same way liftXhttpSessionIDKeys and
-			// HealShadowsocksClientMethods heal other legacy data in place.
-			if len(finalMaskRealityTcpMasks(stream)) > 0 {
-				logger.Warningf("Inbound %q: dropping finalmask, incompatible with REALITY security (crashes Xray-core, see XTLS/Xray-core#6453)", inbound.Tag)
-				delete(stream, "finalmask")
-			}
-
-			dropEmptyRandPackets(stream["finalmask"])
-
-			if dropped := stripIncompleteXmcMasks(stream); dropped > 0 {
-				logger.Warningf("Inbound %q: dropping %d XMC finalmask mask(s) without complete Minecraft profiles — reconfigure them to restore the obfuscation (see XTLS/Xray-core#6487)", inbound.Tag, dropped)
-			}
-
-			// xray-core v26.6.22 (#6258) renamed the XHTTP session keys and
-			// kept no fallback. Lift legacy sessionPlacement/sessionKey onto the
-			// new names here so inbounds stored before the rename keep working
-			// without the admin re-saving them.
-			liftXhttpSessionIDKeys(stream)
-
-			newStream, err := json.MarshalIndent(stream, "", "  ")
-			if err != nil {
-				return nil, err
-			}
-			inbound.StreamSettings = string(newStream)
-		}
-
-		if inbound.Protocol == model.Shadowsocks {
-			if healed, ok := model.HealShadowsocksClientMethods(inbound.Settings); ok {
-				inbound.Settings = healed
-			}
-		}
-
-		inboundConfig := inbound.GenXrayInboundConfig()
 		xrayConfig.InboundConfigs = append(xrayConfig.InboundConfigs, *inboundConfig)
 	}
 
@@ -364,6 +183,209 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	}
 
 	return xrayConfig, nil
+}
+
+/*
+RenderInbound produces one inbound exactly as Xray should receive it, and is the
+single renderer: the full config build loops over it, and runtime.Local hands
+the same bytes to the core on the hot path.
+
+A nil config with a nil error means the local Xray must not serve this inbound
+at all — disabled, owned by a node, or a protocol another core runs.
+
+The row is not mutated. It used to be, harmlessly, because only the config build
+called this; the hot path passes the caller's own row.
+*/
+func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig, error) {
+	if inbound == nil || !inbound.Enable || inbound.NodeID != nil || inbound.Protocol == model.MTProto {
+		return nil, nil
+	}
+	rendered := *inbound
+
+	settings := map[string]any{}
+	_ = json.Unmarshal([]byte(rendered.Settings), &settings)
+
+	dbClients, err := s.inboundService.clientService.ListForInbound(nil, rendered.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	depleted, err := depletedEmails(rendered.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	finalClients := make([]any, 0, len(dbClients))
+	var wgPeers []any
+	for i := range dbClients {
+		c := dbClients[i]
+		if depleted[c.Email] {
+			logger.Infof("Remove Inbound User %s due to expiration or traffic limit", c.Email)
+			continue
+		}
+		if !c.Enable {
+			continue
+		}
+		flow := c.Flow
+		if flow == "xtls-rprx-vision-udp443" {
+			flow = "xtls-rprx-vision"
+		}
+		entry := map[string]any{"email": c.Email}
+		switch rendered.Protocol {
+		case model.VLESS:
+			if c.ID != "" {
+				entry["id"] = c.ID
+			}
+			if flow != "" {
+				entry["flow"] = flow
+			}
+			if c.Reverse != nil {
+				entry["reverse"] = c.Reverse
+			}
+		case model.VMESS:
+			if c.ID != "" {
+				entry["id"] = c.ID
+			}
+			if c.Security != "" {
+				entry["security"] = c.Security
+			}
+		case model.Trojan:
+			if c.Password != "" {
+				entry["password"] = c.Password
+			}
+			if flow != "" {
+				entry["flow"] = flow
+			}
+		case model.Shadowsocks:
+			if c.Password != "" {
+				entry["password"] = c.Password
+			}
+		case model.Hysteria:
+			if c.Auth != "" {
+				entry["auth"] = c.Auth
+			}
+		case model.WireGuard:
+			wgPeers = append(wgPeers, model.WireguardPeerFromClient(c))
+			continue
+		}
+		finalClients = append(finalClients, entry)
+	}
+
+	var mutated bool
+	if rendered.Protocol == model.WireGuard {
+		delete(settings, "clients")
+		if wgPeers == nil {
+			wgPeers = []any{}
+		}
+		settings["peers"] = wgPeers
+		mutated = true
+	} else {
+		_, hadClients := settings["clients"]
+		mutated = hadClients || len(finalClients) > 0
+		if mutated {
+			settings["clients"] = finalClients
+		}
+	}
+
+	if inboundCanHostFallbacks(&rendered) {
+		fallbacks, err := s.inboundService.fallbackService.BuildFallbacksJSON(nil, rendered.Id)
+		if err != nil {
+			return nil, err
+		}
+		if len(fallbacks) > 0 {
+			generic := make([]any, 0, len(fallbacks))
+			for _, f := range fallbacks {
+				generic = append(generic, f)
+			}
+			settings["fallbacks"] = generic
+			mutated = true
+		}
+	}
+
+	if mutated {
+		modifiedSettings, err := json.MarshalIndent(settings, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		rendered.Settings = string(modifiedSettings)
+	}
+
+	if len(rendered.StreamSettings) > 0 {
+		var stream map[string]any
+		_ = json.Unmarshal([]byte(rendered.StreamSettings), &stream)
+
+		// Panel-only bookkeeping that Xray must never see.
+		tlsSettings, hasTLS := stream["tlsSettings"].(map[string]any)
+		realitySettings, hasReality := stream["realitySettings"].(map[string]any)
+		if hasTLS {
+			delete(tlsSettings, "settings")
+		} else if hasReality {
+			delete(realitySettings, "settings")
+		}
+		delete(stream, "externalProxy")
+
+		/*
+			finalmask.tcp + REALITY panics Xray-core on the first connection
+			(XTLS/Xray-core#6453). AddInbound/UpdateInbound reject the combination
+			at save time, but a row saved before that guard existed — upgrade, node
+			sync, restored backup, direct DB edit — would still crash Xray on the
+			next restart, so it is healed here as well.
+		*/
+		if len(finalMaskRealityTcpMasks(stream)) > 0 {
+			logger.Warningf("Inbound %q: dropping finalmask, incompatible with REALITY security (crashes Xray-core, see XTLS/Xray-core#6453)", rendered.Tag)
+			delete(stream, "finalmask")
+		}
+
+		dropEmptyRandPackets(stream["finalmask"])
+
+		if dropped := stripIncompleteXmcMasks(stream); dropped > 0 {
+			logger.Warningf("Inbound %q: dropping %d XMC finalmask mask(s) without complete Minecraft profiles — reconfigure them to restore the obfuscation (see XTLS/Xray-core#6487)", rendered.Tag, dropped)
+		}
+
+		// xray-core v26.6.22 (#6258) renamed the XHTTP session keys and kept no
+		// fallback, so a config stored before the rename is silently ignored.
+		liftXhttpSessionIDKeys(stream)
+
+		newStream, err := json.MarshalIndent(stream, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		rendered.StreamSettings = string(newStream)
+	}
+
+	if rendered.Protocol == model.Shadowsocks {
+		if healed, ok := model.HealShadowsocksClientMethods(rendered.Settings); ok {
+			rendered.Settings = healed
+		}
+	}
+
+	return rendered.GenXrayInboundConfig(), nil
+}
+
+/*
+depletedEmails names the clients this inbound may not serve because the
+quota/expiry job disabled their client_traffics row — the second of the two
+unrelated reasons a client leaves the config.
+
+Read here rather than off the row's preloaded ClientStats. That field is only
+populated by GetAllInbounds, so trusting it would make the render depend on how
+the caller happened to load the row, and the hot path would quietly keep serving
+clients that ran out of quota.
+*/
+func depletedEmails(inboundId int) (map[string]bool, error) {
+	var rows []core.ClientTraffic
+	err := database.GetDB().Model(&core.ClientTraffic{}).
+		Select("email").
+		Where("inbound_id = ? AND enable = ?", inboundId, false).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		out[row.Email] = true
+	}
+	return out, nil
 }
 
 // PanelEgressInboundTag is the tag of the loopback SOCKS inbound injected into
@@ -1066,8 +1088,8 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 
 	process = xray.NewProcess(xrayConfig)
-	xrayState.replace(process)
-	s.xrayAPI.StatsLastValues = nil
+	xrayState().Replace(process)
+	s.xrayAPI.NoteCoreRestart()
 	err = process.Start()
 	if err != nil {
 		return err
@@ -1083,8 +1105,7 @@ func (s *XrayService) RestartXray(isForce bool) error {
 // caller falls back to a full process restart, which cleans up whatever was
 // partially applied. Callers must hold the package-level lock.
 func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bool {
-	oldCfg := process.GetConfig()
-	diff, ok := xray.ComputeHotDiff(oldCfg, newCfg)
+	diff, ok := xray.ComputeHotDiff(process.GetConfig(), newCfg)
 	if !ok {
 		logger.Debug("hot apply: config change is not API-applicable, falling back to restart")
 		return false
@@ -1093,13 +1114,12 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bo
 		process.SetConfig(newCfg)
 		return true
 	}
-
 	apiPort := process.GetAPIPort()
 	if apiPort <= 0 {
 		return false
 	}
 	// A dedicated client: s.xrayAPI may be in use by traffic polling on other
-	// service instances and is reset around restarts.
+	// service instances and carries the delta baselines.
 	hotAPI := xray.XrayAPI{}
 	if err := hotAPI.Init(apiPort); err != nil {
 		logger.Debug("hot apply: failed to init xray api:", err)
@@ -1107,104 +1127,11 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bo
 	}
 	defer hotAPI.Close()
 
-	// Removals first so changed handlers and port swaps never collide with
-	// the additions that follow.
-	for _, u := range diff.RemovedUsers {
-		if err := hotAPI.RemoveUser(u.Tag, u.Email); err != nil && !xray.IsMissingHandlerErr(err) {
-			logger.Info("hot apply: remove user [", u.Email, "] from [", u.Tag, "] failed:", err)
-			return false
-		}
+	if !xray.ApplyHotDiff(&hotAPI, diff) {
+		return false
 	}
-	for _, tag := range diff.RemovedInboundTags {
-		if err := hotAPI.DelInbound(tag); err != nil && !xray.IsMissingHandlerErr(err) {
-			logger.Info("hot apply: remove inbound [", tag, "] failed:", err)
-			return false
-		}
-	}
-	for _, tag := range diff.RemovedOutboundTags {
-		if err := hotAPI.DelOutbound(tag); err != nil && !xray.IsMissingHandlerErr(err) {
-			logger.Info("hot apply: remove outbound [", tag, "] failed:", err)
-			return false
-		}
-	}
-	for _, ob := range diff.AddedOutbounds {
-		if err := addOutboundReconciling(&hotAPI, ob); err != nil {
-			logger.Info("hot apply: add outbound failed:", err)
-			return false
-		}
-	}
-	for _, ib := range diff.AddedInbounds {
-		if err := addInboundReconciling(&hotAPI, ib); err != nil {
-			logger.Info("hot apply: add inbound failed:", err)
-			return false
-		}
-	}
-	for _, u := range diff.AddedUsers {
-		if err := addUserReconciling(&hotAPI, u); err != nil {
-			logger.Info("hot apply: add user [", u.Email, "] to [", u.Tag, "] failed:", err)
-			return false
-		}
-	}
-	if diff.RoutingConfig != nil {
-		if err := hotAPI.ApplyRoutingConfig(diff.RoutingConfig); err != nil {
-			logger.Info("hot apply: apply routing config failed:", err)
-			return false
-		}
-	}
-
 	process.SetConfig(newCfg)
 	return true
-}
-
-// addUserReconciling adds a user, and on an email conflict (the user was
-// already applied through the runtime API) replaces the existing user instead.
-func addUserReconciling(api *xray.XrayAPI, u xray.UserOp) error {
-	err := api.AddUser(u.Protocol, u.Tag, u.User)
-	if err == nil || !xray.IsUserExistsErr(err) {
-		return err
-	}
-	if delErr := api.RemoveUser(u.Tag, u.Email); delErr != nil && !xray.IsMissingHandlerErr(delErr) {
-		return delErr
-	}
-	return api.AddUser(u.Protocol, u.Tag, u.User)
-}
-
-// addInboundReconciling adds an inbound, and on a tag conflict (the handler
-// was already created through the runtime API while the stored snapshot was
-// stale) replaces the existing handler instead.
-func addInboundReconciling(api *xray.XrayAPI, inbound []byte) error {
-	err := api.AddInbound(inbound)
-	if err == nil || !xray.IsExistingTagErr(err) {
-		return err
-	}
-	var meta struct {
-		Tag string `json:"tag"`
-	}
-	if jsonErr := json.Unmarshal(inbound, &meta); jsonErr != nil || meta.Tag == "" {
-		return err
-	}
-	if delErr := api.DelInbound(meta.Tag); delErr != nil && !xray.IsMissingHandlerErr(delErr) {
-		return delErr
-	}
-	return api.AddInbound(inbound)
-}
-
-// addOutboundReconciling mirrors addInboundReconciling for outbounds.
-func addOutboundReconciling(api *xray.XrayAPI, outbound []byte) error {
-	err := api.AddOutbound(outbound)
-	if err == nil || !xray.IsExistingTagErr(err) {
-		return err
-	}
-	var meta struct {
-		Tag string `json:"tag"`
-	}
-	if jsonErr := json.Unmarshal(outbound, &meta); jsonErr != nil || meta.Tag == "" {
-		return err
-	}
-	if delErr := api.DelOutbound(meta.Tag); delErr != nil && !xray.IsMissingHandlerErr(delErr) {
-		return delErr
-	}
-	return api.AddOutbound(outbound)
 }
 
 // StopXray stops the running Xray process.

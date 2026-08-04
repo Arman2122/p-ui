@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/mtproto"
@@ -490,9 +491,9 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 
 	// SkipIfStillRunning stops a slow job (e.g. the 5s traffic poll on a large
 	// install) from overlapping itself: two concurrent runs of the same job race
-	// the shared xrayAPI — leaking a grpc connection — and the StatsLastValues
-	// map, whose concurrent write is a fatal runtime throw cron.Recover can't
-	// catch. cron.Recover then logs any panic and keeps the scheduler alive.
+	// the shared xrayAPI and leak a grpc connection. Overlapping reads would also
+	// reach core.Counter out of order, which re-bills rather than corrupts.
+	// cron.Recover then logs any panic and keeps the scheduler alive.
 	s.cron = cron.New(
 		cron.WithLocation(loc),
 		cron.WithSeconds(),
@@ -507,9 +508,15 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	// add/update/delete to either the local xray or a remote node panel.
 	// The closures bridge into XrayService (which owns the running xray
 	// process state) without forcing the runtime package to import service.
+	registry, err := cores.Default(cores.Deps{XrayBaseConfig: s.xrayService.GetXrayBaseConfig})
+	if err != nil {
+		return err
+	}
 	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{
 		APIPort:        func() int { return s.xrayService.GetXrayAPIPort() },
 		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },
+		Cores:          registry,
+		RenderInbound:  s.xrayService.RenderInbound,
 	}))
 	runtime.GetManager().SetNodeEgressResolver(&s.settingService)
 	// Supply the master client certificate for nodes in mtls mode. Issued lazily

@@ -1265,7 +1265,7 @@ export const SCHEMAS: Record<string, unknown> = {
     "type": "object"
   },
   "ClientTraffic": {
-    "description": "ClientTraffic represents traffic statistics and limits for a specific client.\nIt tracks upload/download usage, expiry times, and online status for inbound clients.",
+    "description": "ClientTraffic is the per-client usage row. It is keyed by email and shared by\nevery inbound a client uses, which is what makes one quota span every core.",
     "properties": {
       "down": {
         "example": 2097152,
@@ -1784,15 +1784,15 @@ export const SCHEMAS: Record<string, unknown> = {
         "enum": [
           "vmess",
           "vless",
+          "tunnel",
+          "http",
           "trojan",
           "shadowsocks",
+          "mixed",
           "wireguard",
           "hysteria",
-          "http",
-          "mixed",
-          "tunnel",
-          "tun",
-          "mtproto"
+          "mtproto",
+          "tun"
         ],
         "example": "vless",
         "type": "string"
