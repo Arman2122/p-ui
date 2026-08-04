@@ -69,10 +69,18 @@ func run(root, outDir string) error {
 			),
 		},
 		{
-			Path: resolveRel(root, "internal/xray"),
-			StructAllow: setOf(
-				"ClientTraffic",
-			),
+			// ClientTraffic moved here from internal/xray, which now only aliases
+			// it. The walker emits a struct as a schema and anything else as an
+			// alias, and a nil AliasAllow means "every alias" — so this package
+			// must name an empty one or the core contract's own types leak out.
+			Path:        resolveRel(root, "internal/core"),
+			StructAllow: setOf("ClientTraffic"),
+			AliasAllow:  setOf(),
+		},
+		{
+			Path:        resolveRel(root, "internal/xray"),
+			StructAllow: setOf(),
+			AliasAllow:  setOf("OnlineAPISupport", "ProcessState"),
 		},
 		{
 			Path: resolveRel(root, "internal/web/service"),

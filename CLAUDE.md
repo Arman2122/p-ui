@@ -41,6 +41,16 @@ file locations when it can answer in one hop.
   AutoMigrate + hand-written migrations in `db.go`.
 - `internal/xray/` — Xray child-process lifecycle, config generation, gRPC API.
 - `internal/mtproto/` — MTProto inbounds via the bundled `mtg-multi` binary.
+- `internal/core/` — the multi-core contract: `Core` (3 methods) + optional
+  capability interfaces in `caps.go`, resolved once by `bind.go` into `Bound`;
+  `Counter` (the ONE cumulative→delta engine); `capability.go` (the ONE table
+  answering "may this inbound do X"); `coretest/` (the conformance suite every
+  core adapter must pass). Design: `docs/multi-core-architecture.md`.
+- `internal/cores/` — wiring only; one `Register` line per core in `cores.go`.
+  Concrete cores live in `internal/cores/internal/<name>/` so the **compiler**
+  stops the service layer importing one. `internal/mtproto` is ported (P2).
+- `internal/arch/` — architecture guards. No runtime code: each file parses the
+  repo and fails on erosion (dispatch ratchet, import fences, frozen columns).
 - `internal/sub/` — subscription server (raw / JSON / Clash).
 - `internal/eventbus/` — in-process pub/sub (outbound/node health, xray.crash,
   cpu.high, memory.high, login.attempt).
@@ -119,9 +129,12 @@ file locations when it can answer in one hop.
   pure map lookup, or inputs the function can never receive. One real test that
   drives the bug through the actual code path beats five that restate the code.
 - Code must pass `golangci-lint run` (gofumpt + goimports formatting): `make lint`.
-- DB, xray-gRPC-e2e and scale tests `t.Skip` unless `PUI_DB_DSN`,
-  `XRAY_E2E_BINARY` or `PUI_SCALE_TEST` is set — a green `go test ./...` on a
-  box with no PostgreSQL does not mean those paths ran.
+- DB and xray-gRPC-e2e tests `t.Skip` unless `PUI_DB_DSN` or `XRAY_E2E_BINARY`
+  is set — a green `go test ./...` on a box with no PostgreSQL does not mean
+  those paths ran. Scale tests have **no env gate**: they skip only without
+  `PUI_DB_DSN`, and CI excludes them with `-skip 'Scale$'` (`ci.yml:90`). Run the
+  suite the same way, or `TestAddDelClientPostgresScale/N=200000` blows Go's
+  10-minute default timeout on a small box.
 
 ## Frontend conventions (summary; full version in frontend/CLAUDE.md)
 - Ant Design 6 only — no Tailwind/shadcn. Targeted tweaks, not rewrites.

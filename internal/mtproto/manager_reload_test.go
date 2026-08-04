@@ -31,7 +31,11 @@ func TestMain(m *testing.M) {
 				time.Sleep(time.Millisecond)
 			}
 		}
-		select {}
+		// Sleep rather than select{}: a bare select{} only survives while some
+		// unrelated import happens to leave a timer pending, which it no longer does.
+		for {
+			time.Sleep(time.Hour)
+		}
 	}
 	os.Exit(m.Run())
 }
