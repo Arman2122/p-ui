@@ -745,12 +745,13 @@ with a refactor.
 3. **SoftEther vs from-source accel-ppp** for the SSTP/L2TP/PPTP family — packaged and
    opaque, versus unpackaged with a DKMS tax. Deferrable until phase 6+.
 4. **Whether SSH ships at all** without a Go SSH server to give it real accounting.
-5. **Does p-ui support Xray `tun` inbounds?** Surfaced by P-1's parity guard and currently
-   pinned in `knownProtocolDivergence`. `tun` is accepted by the `oneof=` validator tag and
-   fully offered by the frontend (enum, schema arm, `createDefaultTunInboundSettings`), but
-   has **no Go `Protocol` constant** — so every Go-side switch falls through to `default`
-   for a tun inbound. Meanwhile `frontend/src/schemas/primitives/protocol.ts:21-23` claims
-   "the Go backend's validator no longer accepts it", which is **false**. Either add the
-   constant (declare it supported) or drop `tun` from the tag and keep the frontend's
-   read-only rendering path (declare it legacy). Not a mechanical call — it changes whether
-   existing tun inbounds can be edited.
+5. ~~**Does p-ui support Xray `tun` inbounds?**~~ **RESOLVED: yes, supported.** `model.Tun`
+   now exists, the xray core claims the kind, and `knownProtocolDivergence` is empty — all
+   three protocol sources agree for the first time. P3 forced the decision by making an
+   unknown protocol an error: `tun` had no constant, so the kind list built from the
+   constants omitted it and tun inbounds stopped being served. Keeping it was the only
+   option that did not break inbounds admins had already created.
+
+   The lesson generalises: the `oneof=` validator tag is what the panel *accepts*, and the
+   Go const block is not. `TestEveryAcceptedProtocolHasACore` in `internal/cores` now reads
+   the tag by reflection and fails on any accepted protocol no core claims.

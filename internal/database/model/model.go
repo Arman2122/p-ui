@@ -32,6 +32,10 @@ const (
 	WireGuard   Protocol = "wireguard"
 	Hysteria    Protocol = "hysteria"
 	MTProto     Protocol = "mtproto"
+	// Tun had no constant for a long while despite being accepted, offered and
+	// implemented; that gap is what stopped tun inbounds being served once the
+	// runtime resolved cores by protocol.
+	Tun Protocol = "tun"
 )
 
 // User represents a user account in the Penhoon UI panel.
