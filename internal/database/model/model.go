@@ -324,10 +324,8 @@ func StripInboundXhttpClientFields(streamSettings string) (string, bool) {
 	return string(out), true
 }
 
-// HealedConfig returns the stored settings with the fixups that repair rows
-// written by older releases applied. Every renderer must go through this: two
-// callers healing differently emit different JSON for one inbound, which reads
-// as a config change and restarts Xray on top of live connections.
+// HealedConfig returns the stored settings with the fixups that repair rows from
+// older releases. Two renderers healing differently restart Xray for no reason.
 func (i *Inbound) HealedConfig() (settings, streamSettings string) {
 	settings = i.Settings
 	switch i.Protocol {

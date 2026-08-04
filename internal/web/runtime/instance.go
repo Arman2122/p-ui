@@ -8,10 +8,13 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
-// instanceOf renders one inbound row as the desired state a core reconciles
-// towards. Settings are healed first: unhealed, a core and the full-config
-// generator emit different JSON for the same inbound, and the difference reads
-// as a config change that restarts Xray on top of live connections.
+/*
+instanceOf renders one inbound row as the desired state a core reconciles towards.
+
+Settings are healed first. Unhealed, a core and the full-config generator emit
+different JSON for the same inbound, and the difference reads as a config change
+that restarts Xray on top of live connections.
+*/
 func instanceOf(ib *model.Inbound) core.Instance {
 	settings, streamSettings := ib.HealedConfig()
 	return core.Instance{
@@ -75,8 +78,7 @@ func usersOf(settings string) []core.User {
 }
 
 // scalar renders a JSON scalar as the string a credential map holds. Objects and
-// arrays are skipped rather than encoded: nothing reads them from here, and they
-// are rendered from the settings blob, which stays authoritative.
+// arrays are skipped: they render from the blob, which stays authoritative.
 func scalar(raw json.RawMessage) (string, bool) {
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {

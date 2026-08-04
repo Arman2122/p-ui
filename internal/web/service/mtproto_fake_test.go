@@ -8,11 +8,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/xray"
 )
+
+// testCores is the registry the local runtime dispatches through. Tests that
+// touch an inbound need it: without one every add, update and delete fails.
+func testCores(t *testing.T) *core.Registry {
+	t.Helper()
+	registry, err := cores.Default(cores.Deps{})
+	if err != nil {
+		t.Fatalf("build core registry: %v", err)
+	}
+	return registry
+}
 
 const (
 	mtprotoTestSecretA = "ee00112233445566778899aabbccddeeff6578616d706c652e636f6d"

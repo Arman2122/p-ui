@@ -2,20 +2,23 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 type LocalDeps struct {
 	APIPort        func() int
 	SetNeedRestart func()
+	// Cores resolves an inbound's protocol to the core that serves it. Nil in
+	// tests that never touch an inbound; every inbound op fails loudly without it.
+	Cores *core.Registry
 }
 
 type Local struct {
@@ -45,71 +48,57 @@ func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
 	return fn(&api)
 }
 
-func (l *Local) AddInbound(_ context.Context, ib *model.Inbound) error {
-	if ib.Protocol == model.MTProto {
-		inst, ok := mtproto.InstanceFromInbound(ib)
-		if !ok {
-			return nil
-		}
-		return mtproto.GetManager().Ensure(inst)
+// coreFor resolves the core serving this inbound. An unknown protocol is an
+// error, never a no-op: silence would read as "applied" and quarantine as delete.
+func (l *Local) coreFor(ib *model.Inbound) (*core.Bound, error) {
+	if l.deps.Cores == nil {
+		return nil, errors.New("local runtime has no core registry")
 	}
-	body, err := json.MarshalIndent(ib.GenXrayInboundConfig(), "", "  ")
+	bound, ok := l.deps.Cores.For(core.Kind(ib.Protocol))
+	if !ok {
+		return nil, fmt.Errorf("no core serves protocol %q", ib.Protocol)
+	}
+	if bound.Apply == nil {
+		return nil, fmt.Errorf("core %q cannot apply a single inbound", bound.Core.Describe().ID)
+	}
+	return bound, nil
+}
+
+func (l *Local) AddInbound(ctx context.Context, ib *model.Inbound) error {
+	bound, err := l.coreFor(ib)
 	if err != nil {
 		return err
 	}
-	return l.withAPI(func(api *xray.XrayAPI) error {
-		return api.AddInbound(body)
-	})
+	return bound.Apply.ApplyInstance(ctx, instanceOf(ib))
 }
 
-func (l *Local) DelInbound(_ context.Context, ib *model.Inbound) error {
-	if ib.Protocol == model.MTProto {
-		mtproto.GetManager().Remove(ib.Id)
-		return nil
+func (l *Local) DelInbound(ctx context.Context, ib *model.Inbound) error {
+	bound, err := l.coreFor(ib)
+	if err != nil {
+		return err
 	}
-	return l.withAPI(func(api *xray.XrayAPI) error {
-		return api.DelInbound(ib.Tag)
-	})
+	return bound.Apply.DropInstance(ctx, instanceOf(ib))
 }
 
+/*
+UpdateInbound converges the new state in place rather than removing and re-adding.
+ApplyInstance is what lets a core keep the connections it can: mtg reloads its
+secrets without restarting, and Xray diffs the inbound down to the users that
+actually changed.
+
+The old inbound is dropped first only when it is moving. A changed protocol hands
+it to a different core, and a changed tag means the core cannot recognise it as
+the same inbound; either way a stale listener is left behind otherwise. Neither
+drop is fatal here — the old core may legitimately no longer be serving it.
+*/
 func (l *Local) UpdateInbound(ctx context.Context, oldIb, newIb *model.Inbound) error {
-	if oldIb.Protocol == model.MTProto || newIb.Protocol == model.MTProto {
-		return l.updateMtprotoInbound(ctx, oldIb, newIb)
-	}
-	_ = l.DelInbound(ctx, oldIb)
-	if !newIb.Enable {
-		return nil
-	}
-	return l.AddInbound(ctx, newIb)
-}
-
-// updateMtprotoInbound applies an inbound update without the Del+Add sequence
-// the xray path uses: Remove would drop the manager's fingerprint state, which
-// is what lets Ensure keep the running mtg process (and its live connections)
-// when nothing in the generated config changed. The sidecar is only stopped
-// when the inbound is disabled, loses its last active secret, or moves to a
-// different protocol.
-func (l *Local) updateMtprotoInbound(ctx context.Context, oldIb, newIb *model.Inbound) error {
-	if oldIb.Protocol == model.MTProto && newIb.Protocol != model.MTProto {
-		mtproto.GetManager().Remove(oldIb.Id)
-		if !newIb.Enable {
-			return nil
-		}
-		return l.AddInbound(ctx, newIb)
-	}
-	if oldIb.Protocol != model.MTProto {
+	if oldIb.Protocol != newIb.Protocol || oldIb.Tag != newIb.Tag {
 		_ = l.DelInbound(ctx, oldIb)
 	}
 	if !newIb.Enable {
-		mtproto.GetManager().Remove(newIb.Id)
-		return nil
+		return l.DelInbound(ctx, newIb)
 	}
-	inst, ok := mtproto.InstanceFromInbound(newIb)
-	if !ok {
-		mtproto.GetManager().Remove(newIb.Id)
-		return nil
-	}
-	return mtproto.GetManager().Ensure(inst)
+	return l.AddInbound(ctx, newIb)
 }
 
 func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string]any) error {
