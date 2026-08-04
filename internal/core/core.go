@@ -54,17 +54,34 @@ func Known(v *bool) bool { return v != nil && *v }
 func Yes() *bool { t := true; return &t }
 func No() *bool  { f := false; return &f }
 
-// Instance is the desired state of one inbound under one core. It is what a
-// core reconciles towards, and it carries no DB or panel types.
+/*
+Instance is the desired state of one inbound under one core. It is what a core
+reconciles towards, and it carries no DB or panel types.
+
+The three JSON sections are the panel's own columns, handed over verbatim and
+under their own names. A core reads the ones it understands and ignores the rest
+— mtg has no stream settings, and the layer above must not know that, or the
+protocol dispatch this refactor removes grows back somewhere new. They are plain
+strings rather than a parsed or re-encoded shape because whitespace survives:
+re-marshalling compacts what a healer indented, and InboundConfig.Equals reads
+that as a change and restarts the core under live connections.
+
+Settings stays authoritative for rendering. Users is a projection of its clients
+for the paths needing a core-agnostic view of one client (hot add, quota
+pushdown, online reporting), so a credential the panel cannot express as a
+scalar is still rendered from the blob it was stored in.
+*/
 type Instance struct {
-	ID       int
-	Kind     Kind
-	Tag      string
-	Listen   string
-	Port     int
-	Enable   bool
-	Settings string
-	Users    []User
+	ID             int
+	Kind           Kind
+	Tag            string
+	Listen         string
+	Port           int
+	Enable         bool
+	Settings       string
+	StreamSettings string
+	Sniffing       string
+	Users          []User
 }
 
 // User is one client as a core sees it. Credentials are per-core and opaque

@@ -324,15 +324,12 @@ func StripInboundXhttpClientFields(streamSettings string) (string, bool) {
 	return string(out), true
 }
 
-// GenXrayInboundConfig generates an Xray inbound configuration from the Inbound model.
-func (i *Inbound) GenXrayInboundConfig() *core.InboundConfig {
-	listen := i.Listen
-	if listen == "" {
-		listen = "0.0.0.0"
-	}
-	listen = fmt.Sprintf("\"%v\"", listen)
-	protocol := string(i.Protocol)
-	settings := i.Settings
+// HealedConfig returns the stored settings with the fixups that repair rows
+// written by older releases applied. Every renderer must go through this: two
+// callers healing differently emit different JSON for one inbound, which reads
+// as a config change and restarts Xray on top of live connections.
+func (i *Inbound) HealedConfig() (settings, streamSettings string) {
+	settings = i.Settings
 	switch i.Protocol {
 	case Shadowsocks:
 		if healed, ok := HealShadowsocksClientMethods(settings); ok {
@@ -355,7 +352,7 @@ func (i *Inbound) GenXrayInboundConfig() *core.InboundConfig {
 			settings = healed
 		}
 	}
-	streamSettings := i.StreamSettings
+	streamSettings = i.StreamSettings
 	if stripped, ok := StripInboundXhttpClientFields(streamSettings); ok {
 		streamSettings = stripped
 	}
@@ -364,10 +361,21 @@ func (i *Inbound) GenXrayInboundConfig() *core.InboundConfig {
 			streamSettings = healed
 		}
 	}
+	return settings, streamSettings
+}
+
+// GenXrayInboundConfig generates an Xray inbound configuration from the Inbound model.
+func (i *Inbound) GenXrayInboundConfig() *core.InboundConfig {
+	listen := i.Listen
+	if listen == "" {
+		listen = "0.0.0.0"
+	}
+	listen = fmt.Sprintf("\"%v\"", listen)
+	settings, streamSettings := i.HealedConfig()
 	return &core.InboundConfig{
 		Listen:         json_util.RawMessage(listen),
 		Port:           i.Port,
-		Protocol:       protocol,
+		Protocol:       string(i.Protocol),
 		Settings:       json_util.RawMessage(settings),
 		StreamSettings: json_util.RawMessage(streamSettings),
 		Tag:            i.Tag,
