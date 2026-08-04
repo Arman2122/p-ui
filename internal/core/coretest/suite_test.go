@@ -33,6 +33,7 @@ type defects struct {
 	forgetsOnline       bool
 	quotaRejectsUnknown bool
 	misattributeTraffic bool
+	applyOnlyAdds       bool
 }
 
 type fakeCore struct {
@@ -90,6 +91,21 @@ func (f *fakeCore) Reconcile(_ context.Context, desired []core.Instance) error {
 			f.served[u.Email] = true
 		}
 	}
+	return nil
+}
+
+func (f *fakeCore) ApplyInstance(_ context.Context, inst core.Instance) error {
+	if !f.d.applyOnlyAdds {
+		f.served = map[string]bool{}
+	}
+	for _, u := range inst.Users {
+		f.served[u.Email] = true
+	}
+	return nil
+}
+
+func (f *fakeCore) DropInstance(context.Context, core.Instance) error {
+	f.served = map[string]bool{}
 	return nil
 }
 
@@ -319,6 +335,11 @@ func TestSuiteCatchesBrokenAdapters(t *testing.T) {
 			name:          "bills the right total to the wrong client",
 			defects:       defects{misattributeTraffic: true},
 			wantInvariant: "traffic/attribution",
+		},
+		{
+			name:          "ApplyInstance accumulates instead of converging",
+			defects:       defects{applyOnlyAdds: true},
+			wantInvariant: "apply/replaces-rather-than-adds",
 		},
 	}
 

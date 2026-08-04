@@ -199,6 +199,23 @@ func (f *fakeHandler) AlterInbound(_ context.Context, req *command.AlterInboundR
 	return &command.AlterInboundResponse{}, nil
 }
 
+// RemoveInbound drops the handler and everyone it served. The rig runs a single
+// user inbound, so clearing the set models it exactly.
+func (f *fakeHandler) RemoveInbound(_ context.Context, _ *command.RemoveInboundRequest) (*command.RemoveInboundResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.served = nil
+	writeServed(f.served)
+	return &command.RemoveInboundResponse{}, nil
+}
+
+// AddInbound is accepted but does not republish a served set: the request
+// carries a built proto rather than the JSON, and nothing in the suite reads
+// users back through this path - they arrive as AlterInbound user operations.
+func (f *fakeHandler) AddInbound(context.Context, *command.AddInboundRequest) (*command.AddInboundResponse, error) {
+	return &command.AddInboundResponse{}, nil
+}
+
 // operationOf unmarshals the operation rather than reading its printed form.
 // That form escapes the proto length prefix, so a byte in front of an email
 // parses as part of the address and provisions a client nobody asked for.

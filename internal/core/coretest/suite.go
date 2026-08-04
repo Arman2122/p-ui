@@ -97,6 +97,7 @@ func Check(rig Rig) []Failure {
 	checkTraffic(r, rig, bound)
 	checkOnline(r, bound)
 	checkUsers(r, rig, bound)
+	checkInstanceApply(r, rig, bound)
 	checkQuota(r, bound)
 	checkTeardown(r, bound)
 	return r.failures
@@ -240,6 +241,50 @@ func checkUsers(r *report, rig Rig, bound *core.Bound) {
 	}
 	if served := rig.ServedUsers(); slices.Contains(served, extra.Email) {
 		r.fail("removeuser/reaches-the-daemon", "after RemoveUser the daemon still serves %v; a revoked client keeps connecting, which is how a depleted user keeps spending", served)
+	}
+}
+
+// checkInstanceApply drives the per-instance path. It is the one every edit in
+// the panel takes, so an implementation that only ever adds - never replaces -
+// leaves a revoked client connectable while every test of the set-based path
+// still passes.
+func checkInstanceApply(r *report, rig Rig, bound *core.Bound) {
+	if bound.Apply == nil {
+		return
+	}
+	if rig.ServedUsers == nil {
+		r.fail("apply/verifiable", "unverifiable: core implements InstanceApplier but the rig supplies no ServedUsers, so an ApplyInstance that does nothing cannot be told from one that works")
+		return
+	}
+	ctx := context.Background()
+	pair := rig.Instance(2)
+	if len(pair.Users) < 2 {
+		return
+	}
+
+	if err := bound.Apply.ApplyInstance(ctx, pair); err != nil {
+		r.fail("apply/succeeds", "ApplyInstance failed: %v", err)
+		return
+	}
+	for _, u := range pair.Users {
+		if !slices.Contains(rig.ServedUsers(), u.Email) {
+			r.fail("apply/reaches-the-daemon", "after ApplyInstance the daemon serves %v, without %q", rig.ServedUsers(), u.Email)
+			return
+		}
+	}
+
+	// Applying a smaller set must remove what it left out. An apply that only
+	// ever adds keeps a revoked client connecting.
+	if err := bound.Apply.ApplyInstance(ctx, rig.Instance(1)); err != nil {
+		r.fail("apply/succeeds", "ApplyInstance with fewer users failed: %v", err)
+		return
+	}
+	if served := rig.ServedUsers(); slices.Contains(served, pair.Users[1].Email) {
+		r.fail("apply/replaces-rather-than-adds", "after applying a smaller user set the daemon still serves %v; ApplyInstance must converge on what it is given, not accumulate", served)
+	}
+
+	if err := bound.Apply.DropInstance(ctx, rig.Instance(1)); err != nil {
+		r.fail("drop/succeeds", "DropInstance failed: %v", err)
 	}
 }
 

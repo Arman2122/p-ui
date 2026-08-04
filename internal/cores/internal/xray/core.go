@@ -5,6 +5,7 @@ package xray
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -139,6 +140,61 @@ func (c *Core) PlanChange(before, after core.Instance) core.Action {
 		return core.ActionHotApply
 	}
 	return core.ActionRestart
+}
+
+// ApplyInstance converges one inbound through the same diff the reconcile path
+// uses. It is deliberately not a handler replacement: swapping the handler drops
+// that inbound's connections, while a diff that only adds and removes users
+// leaves everyone else connected.
+func (c *Core) ApplyInstance(_ context.Context, inst core.Instance) error {
+	process := c.mgr.Current()
+	if process == nil || !process.IsRunning() {
+		return errors.New("xray: core is not running")
+	}
+	next := withInbound(process.GetConfig(), inst)
+	if !c.hotApply(process, next) {
+		return fmt.Errorf("xray: inbound %q cannot be applied in place", inst.Tag)
+	}
+	return nil
+}
+
+// DropInstance removes one inbound and leaves the rest of the config alone.
+func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {
+	process := c.mgr.Current()
+	if process == nil || !process.IsRunning() {
+		return errors.New("xray: core is not running")
+	}
+	disabled := inst
+	disabled.Enable = false
+	next := withInbound(process.GetConfig(), disabled)
+	if !c.hotApply(process, next) {
+		return fmt.Errorf("xray: inbound %q cannot be removed in place", inst.Tag)
+	}
+	return nil
+}
+
+// withInbound returns cfg with inst's inbound spliced in by tag: replaced when
+// it is already there, appended when it is new, dropped when it is disabled.
+// Every other section is carried over untouched.
+func withInbound(cfg *engine.Config, inst core.Instance) *engine.Config {
+	next := *cfg
+	inbound, keep := toInbound(inst)
+	next.InboundConfigs = make([]core.InboundConfig, 0, len(cfg.InboundConfigs)+1)
+	replaced := false
+	for _, existing := range cfg.InboundConfigs {
+		if existing.Tag != inst.Tag {
+			next.InboundConfigs = append(next.InboundConfigs, existing)
+			continue
+		}
+		if keep {
+			next.InboundConfigs = append(next.InboundConfigs, inbound)
+		}
+		replaced = true
+	}
+	if !replaced && keep {
+		next.InboundConfigs = append(next.InboundConfigs, inbound)
+	}
+	return &next
 }
 
 func (c *Core) AddUser(_ context.Context, inst core.Instance, user core.User) error {
