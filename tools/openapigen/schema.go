@@ -18,6 +18,11 @@ type Alias struct {
 	Name       string
 	Package    string
 	Underlying TypeRef
+	// Values are the constants declared with this type, in declaration order.
+	// A named string type with constants is a closed set, so it is emitted as a
+	// union rather than as `string` — which is what let the frontend keep its
+	// own copy of the protocol list.
+	Values []string
 }
 
 type Field struct {
@@ -198,4 +203,38 @@ func flattenEmbedded(schemas []Schema) []Schema {
 		out = append(out, s)
 	}
 	return out
+}
+
+// aliasTypeExpr renders a named type. A string type with constants becomes the
+// union of them, which is what makes the frontend's copy of the list deletable.
+func aliasTypeExpr(a Alias) string {
+	if len(a.Values) == 0 {
+		return tsTypeExpr(a.Underlying)
+	}
+	quoted := make([]string, 0, len(a.Values))
+	for _, v := range a.Values {
+		quoted = append(quoted, fmt.Sprintf("'%s'", v))
+	}
+	return strings.Join(quoted, " | ")
+}
+
+// aliasValuesConst renders the constants as a runtime array. A TypeScript union
+// cannot be iterated, and Zod needs the values to build an enum from.
+func aliasValuesConst(a Alias) string {
+	quoted := make([]string, 0, len(a.Values))
+	for _, v := range a.Values {
+		quoted = append(quoted, fmt.Sprintf("'%s'", v))
+	}
+	return fmt.Sprintf("export const %s_VALUES = [%s] as const;\n", strings.ToUpper(a.Name), strings.Join(quoted, ", "))
+}
+
+// aliasValues returns the constants collected for a named type, or nil when the
+// tool never saw it — which expandProtocolRules turns into a loud failure.
+func aliasValues(aliases []Alias, name string) []string {
+	for _, a := range aliases {
+		if a.Name == name {
+			return a.Values
+		}
+	}
+	return nil
 }

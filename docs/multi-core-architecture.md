@@ -624,15 +624,16 @@ catches all three shapes, uses only stdlib (house rule), and needs no new `go.mo
 | `en-US.json` + `fa-IR.json` | shared | 12 + 12 |
 | `tools/openapigen/main.go` (`StructAllow`) | shared | 2 |
 | `model/model.go` (one `Protocol` constant) | shared | 1 |
-| `frontend/src/schemas/primitives/protocol.ts` | shared | 2 |
+| **TypeScript** | **0** | **0** |
 | **New API routes / DB migrations** | **0** | **0** |
 
-**7 shared files, ~39 lines.** Compare to mtproto's ~30 files. Each of the 23 eliminated
+**6 shared files, ~37 lines.** Compare to mtproto's ~30 files. Each of the 24 eliminated
 files is eliminated by a *specific* guard above — not by optimism.
 
-The last two are mirrors, not lists: `TestProtocolSourcesAgree` fails until they match the
-registry, so forgetting one is a red test rather than a protocol that half-exists. They are
-not removable — Go and TypeScript both need to *name* a protocol without a bare literal.
+The `model.Protocol` constant is a mirror, not a list: `TestProtocolSourcesAgree` fails until
+it matches the registry, so forgetting it is a red test rather than a protocol that
+half-exists. It is not removable — Go needs to *name* a protocol without a bare literal. The
+frontend's copy **was** removable and is gone: `protocol.ts` re-exports the generated union.
 
 Files explicitly **not** touched: any `.tsx`, anything else under `frontend/src/`,
 `internal/web/service/*`, `internal/sub/*`, `runtime/local.go`, `runtime/remote.go`,
@@ -787,13 +788,13 @@ or dropping a user's traffic — and it does it on live accounting.
    `wg0.conf`, `.sswan`, `.p12`), not URIs — so `Share.Kind == "file"` plus a backend
    endpoint means zero frontend link logic per core. Do not let an `.ovpn` template appear
    anywhere under `frontend/src/`.
-2. **`openapigen` drops const values.** *Half done in P4:* `namedStringConstants` now reads
-   `token.CONST`, and `InboundSchema.protocol` generates `z.enum([…])` from the
-   `model.Protocol` constants. What remains is the **alias**: `generated/types.ts` still says
-   `export type Protocol = string`, so
-   `frontend/src/schemas/primitives/protocol.ts` still hand-duplicates the list rather than
-   re-exporting it. Emitting the alias as a union and having `protocol.ts` consume it deletes
-   the duplicate and one of the two mirrors §11 charges core #11 for. **~20 lines.**
+2. ~~**`openapigen` drops const values.**~~ **RESOLVED.** A named string type with constants
+   is now emitted as a closed set everywhere: `types.ts` gets the union, `zod.ts` gets
+   `PROTOCOL_VALUES` plus `z.enum(PROTOCOL_VALUES)`. The rule is general, not a protocol
+   special case — `ProcessState` became a union in the same change.
+   `frontend/src/schemas/primitives/protocol.ts` is now a re-export, and `Protocols` is a
+   mapped type over the generated list, so it is exhaustive by construction. **Core #11
+   touches no TypeScript at all.**
 3. **SoftEther vs from-source accel-ppp** for the SSTP/L2TP/PPTP family — packaged and
    opaque, versus unpackaged with a DKMS tax. Deferrable until phase 6+.
 4. **Whether SSH ships at all** without a Go SSH server to give it real accounting.

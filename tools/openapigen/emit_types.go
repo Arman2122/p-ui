@@ -11,7 +11,7 @@ func emitTypes(w io.Writer, schemas []Schema, aliases []Alias) error {
 		return err
 	}
 	for _, a := range sortAliases(aliases) {
-		if _, err := fmt.Fprintf(w, "export type %s = %s;\n", a.Name, tsTypeExpr(a.Underlying)); err != nil {
+		if _, err := fmt.Fprintf(w, "export type %s = %s;\n", a.Name, aliasTypeExpr(a)); err != nil {
 			return err
 		}
 	}
