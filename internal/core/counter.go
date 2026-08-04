@@ -87,6 +87,15 @@ func (c *Counter) Observe(epoch string, readings map[string]int64) map[string]in
 	return deltas
 }
 
+// NoteSourceRestart records that the source has restarted from zero. It is the
+// push counterpart of the epoch, for when the panel causes the restart itself
+// rather than reading an incarnation token back out of the source.
+func (c *Counter) NoteSourceRestart() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.last = make(map[string]int64, len(c.last))
+}
+
 // Forget is the ONLY way a baseline is dropped: an absent key is ambiguous, and
 // dropping it bills a live user its whole counter. Drain before calling.
 func (c *Counter) Forget(key string) {
