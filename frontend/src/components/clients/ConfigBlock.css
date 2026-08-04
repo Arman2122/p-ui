@@ -42,8 +42,10 @@ body.light .config-block-text {
   word-break: break-all;
   white-space: pre-wrap;
   padding: 6px 8px;
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-tertiary);
+  /* A var() with no fallback resolves to nothing when the token is missing, and
+     this 11px text then inherits a grey that fails the 4.5:1 contrast rule. */
+  color: var(--ant-color-text, #595959);
+  background: var(--ant-color-fill-tertiary, #f0f0f0);
   border-radius: 4px;
   user-select: all;
 }
