@@ -5,7 +5,7 @@ import "testing"
 // TestDefaultRegistryIsCoherent guards the wiring, not any one core: a lying
 // descriptor, an unresolvable kind, or a dropped Register line all surface here.
 func TestDefaultRegistryIsCoherent(t *testing.T) {
-	reg, err := Default()
+	reg, err := Default(Deps{})
 	if err != nil {
 		t.Fatalf("the default registry must build: %v", err)
 	}
