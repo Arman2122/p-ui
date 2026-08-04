@@ -105,15 +105,16 @@ func TestUsersOf(t *testing.T) {
 			t.Errorf("quota = %d, expiry = %d", u.QuotaBytes, u.ExpiryUnixMilli)
 		}
 		if u.Credentials["id"] != "beef" {
-			t.Errorf("id credential = %q, want beef", u.Credentials["id"])
+			t.Errorf("id credential = %v, want beef", u.Credentials["id"])
 		}
-		// A number must not arrive as 3.000000: mtg's secrets and xray's ids are
-		// compared as strings, and the formatting is the value.
-		if u.Credentials["limitIp"] != "3" {
-			t.Errorf("limitIp credential = %q, want 3", u.Credentials["limitIp"])
+		// A list credential is the reason Credentials is map[string]any: wireguard
+		// cannot express allowedIPs as a scalar, and the hot-add path needs it.
+		allowed, ok := u.Credentials["allowedIPs"].([]any)
+		if !ok {
+			t.Fatalf("allowedIPs credential = %#v, want a list", u.Credentials["allowedIPs"])
 		}
-		if _, present := u.Credentials["allowedIPs"]; present {
-			t.Error("a non-scalar credential must be left to the settings blob, which renders it losslessly")
+		if len(allowed) != 1 || allowed[0] != "10.0.0.2/32" {
+			t.Errorf("allowedIPs = %v, want [10.0.0.2/32]", allowed)
 		}
 	})
 }

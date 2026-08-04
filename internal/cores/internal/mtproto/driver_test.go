@@ -275,7 +275,7 @@ func (r *rig) instance(users int) core.Instance {
 		inst.Users = append(inst.Users, core.User{
 			Email:       email,
 			Enable:      true,
-			Credentials: map[string]string{CredSecret: fmt.Sprintf("ee%02d", i)},
+			Credentials: map[string]any{CredSecret: fmt.Sprintf("ee%02d", i)},
 		})
 	}
 	return inst
@@ -324,7 +324,7 @@ func TestAddUserIsAppliedWithoutRestarting(t *testing.T) {
 		t.Fatalf("expected one daemon, got %d", got)
 	}
 
-	added := core.User{Email: "z@example.com", Enable: true, Credentials: map[string]string{CredSecret: "eeff"}}
+	added := core.User{Email: "z@example.com", Enable: true, Credentials: map[string]any{CredSecret: "eeff"}}
 	if err := c.AddUser(t.Context(), inst, added); err != nil {
 		t.Fatalf("add user: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
 		ID: 1, Tag: "in-1", Port: 443, Enable: true,
 		Settings: `{"clients":[{"email":"ghost@example.com","secret":"eedead","enable":true}]}`,
 		Users: []core.User{
-			{Email: "real@example.com", Enable: true, Credentials: map[string]string{CredSecret: "ee01"}},
+			{Email: "real@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee01"}},
 		},
 	}
 	got, ok := toEngine(inst)
@@ -363,11 +363,11 @@ func TestPlanChangeSeparatesReloadFromRestart(t *testing.T) {
 	c := New()
 	base := core.Instance{
 		ID: 1, Tag: "in-1", Listen: "127.0.0.1", Port: 443, Enable: true,
-		Users: []core.User{{Email: "a@example.com", Enable: true, Credentials: map[string]string{CredSecret: "ee01"}}},
+		Users: []core.User{{Email: "a@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee01"}}},
 	}
 
 	rekeyed := base
-	rekeyed.Users = []core.User{{Email: "a@example.com", Enable: true, Credentials: map[string]string{CredSecret: "ee02"}}}
+	rekeyed.Users = []core.User{{Email: "a@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee02"}}}
 	moved := base
 	moved.Port = 8443
 	disabled := base

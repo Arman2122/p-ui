@@ -30,14 +30,14 @@ func toEngine(inst core.Instance) (engine.Instance, bool) {
 		return out, false
 	}
 	for _, u := range inst.Users {
-		secret := u.Credentials[CredSecret]
+		secret := core.CredString(u.Credentials, CredSecret)
 		if !u.Enable || u.Email == "" || secret == "" {
 			continue
 		}
 		entry := engine.SecretEntry{
 			Name:   u.Email,
 			Secret: secret,
-			AdTag:  engine.UsableAdTag(u.Credentials[CredAdTag]),
+			AdTag:  engine.UsableAdTag(core.CredString(u.Credentials, CredAdTag)),
 		}
 		if u.QuotaBytes > 0 {
 			entry.QuotaBytes = u.QuotaBytes
