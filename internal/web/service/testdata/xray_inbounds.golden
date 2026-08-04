@@ -1,0 +1,210 @@
+=== api ===
+listen: "127.0.0.1"
+port: 62789
+protocol: tunnel
+--- settings ---
+{
+      "rewriteAddress": "127.0.0.1"
+    }
+--- streamSettings ---
+
+--- sniffing ---
+
+=== golden-vless ===
+listen: "0.0.0.0"
+port: 43301
+protocol: vless
+--- settings ---
+{
+  "clients": [
+    {
+      "email": "vless-plain@x",
+      "id": "11111111-1111-1111-1111-111111111111"
+    },
+    {
+      "email": "vless-flow@x",
+      "flow": "xtls-rprx-vision",
+      "id": "22222222-2222-2222-2222-222222222222"
+    }
+  ],
+  "decryption": "none",
+  "fallbacks": [
+    {
+      "dest": "127.0.0.1:43309"
+    }
+  ]
+}
+--- streamSettings ---
+{
+  "network": "tcp",
+  "realitySettings": {
+    "dest": "example.com:443",
+    "serverNames": [
+      "example.com"
+    ]
+  },
+  "security": "reality"
+}
+--- sniffing ---
+{"enabled":true,"destOverride":["http","tls"]}
+=== golden-vmess ===
+listen: "0.0.0.0"
+port: 43302
+protocol: vmess
+--- settings ---
+{
+  "clients": [
+    {
+      "email": "vmess-a@x",
+      "id": "55555555-5555-5555-5555-555555555555"
+    }
+  ]
+}
+--- streamSettings ---
+{
+  "network": "xhttp",
+  "xhttpSettings": {
+    "path": "/x",
+    "sessionIDKey": "sid",
+    "sessionIDPlacement": "query"
+  }
+}
+--- sniffing ---
+
+=== golden-trojan ===
+listen: "0.0.0.0"
+port: 43303
+protocol: trojan
+--- settings ---
+{
+  "clients": [
+    {
+      "email": "trojan-a@x",
+      "flow": "xtls-rprx-vision",
+      "password": "trojan-pass"
+    }
+  ],
+  "fallbacks": [
+    {
+      "dest": "127.0.0.1:43309"
+    }
+  ]
+}
+--- streamSettings ---
+{
+  "network": "tcp",
+  "security": "tls",
+  "tlsSettings": {
+    "serverName": "t.example.com"
+  }
+}
+--- sniffing ---
+
+=== golden-ss ===
+listen: "0.0.0.0"
+port: 43304
+protocol: shadowsocks
+--- settings ---
+{
+  "clients": [
+    {
+      "email": "ss-a@x",
+      "method": "chacha20-poly1305",
+      "password": "ss-pass"
+    }
+  ],
+  "method": "chacha20-poly1305",
+  "network": "tcp,udp",
+  "password": "inbound-pass"
+}
+--- streamSettings ---
+
+--- sniffing ---
+
+=== golden-hysteria ===
+listen: "0.0.0.0"
+port: 43305
+protocol: hysteria
+--- settings ---
+{
+  "clients": [
+    {
+      "auth": "hy-auth",
+      "email": "hy-a@x"
+    }
+  ],
+  "version": 2
+}
+--- streamSettings ---
+{
+  "network": "hysteria",
+  "security": "tls",
+  "tlsSettings": {
+    "serverName": "h.example.com"
+  }
+}
+--- sniffing ---
+
+=== golden-wg ===
+listen: "0.0.0.0"
+port: 43306
+protocol: wireguard
+--- settings ---
+{
+  "mtu": 1420,
+  "peers": [
+    {
+      "allowedIPs": [
+        "10.0.0.2/32"
+      ],
+      "email": "wg-a@x",
+      "level": 0,
+      "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    }
+  ],
+  "secretKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+}
+--- streamSettings ---
+
+--- sniffing ---
+
+=== golden-legacy-stream ===
+listen: "0.0.0.0"
+port: 43307
+protocol: vless
+--- settings ---
+{
+  "clients": [
+    {
+      "email": "legacy-a@x",
+      "id": "66666666-6666-6666-6666-666666666666"
+    }
+  ],
+  "decryption": "none"
+}
+--- streamSettings ---
+{
+  "network": "tcp",
+  "realitySettings": {
+    "dest": "example.com:443",
+    "serverNames": [
+      "example.com"
+    ]
+  },
+  "security": "reality"
+}
+--- sniffing ---
+
+=== golden-fallback-child ===
+listen: "0.0.0.0"
+port: 43309
+protocol: vless
+--- settings ---
+{
+  "clients": [],
+  "decryption": "none"
+}
+--- streamSettings ---
+
+--- sniffing ---
+

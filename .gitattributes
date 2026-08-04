@@ -5,3 +5,6 @@ frontend/src/test/__snapshots__/** text eol=lf
 *.go text eol=lf
 deploy/**/*.yaml text eol=lf
 frontend/src/test/golden/** text eol=lf
+# A Go test writes its golden with LF; without this a Windows checkout gets CRLF
+# and the byte comparison fails on a tree nobody touched.
+**/testdata/*.golden text eol=lf
