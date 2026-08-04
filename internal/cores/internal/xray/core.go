@@ -20,9 +20,13 @@ const ID core.Kind = "xray"
 // kinds are the protocols Xray serves. They are literals rather than model
 // constants so a core never depends on the data layer; internal/arch pins this
 // list against the Go protocol constants so a new protocol cannot be orphaned.
+//
+// "tun" has no model constant but is accepted by the validator, offered by the
+// frontend and implemented by xray-core, so leaving it out stops an inbound the
+// panel still creates. TestEveryAcceptedProtocolHasACore is what catches that.
 var kinds = []core.Kind{
 	"vmess", "vless", "trojan", "shadowsocks",
-	"wireguard", "hysteria", "http", "mixed", "tunnel",
+	"wireguard", "hysteria", "http", "mixed", "tunnel", "tun",
 }
 
 // Deps are the panel-side facts the core cannot derive. BaseConfig returns the
