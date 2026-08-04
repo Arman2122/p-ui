@@ -86,12 +86,26 @@ type Instance struct {
 
 // User is one client as a core sees it. Credentials are per-core and opaque
 // here: an OpenVPN cert, an ocserv password hash, a WireGuard public key.
+//
+// The values are `any` because they are genuinely not all scalars — wireguard
+// carries allowedIPs as a list and vless a testseed as an array of numbers, and
+// stringifying those needs an encoding convention every future core author would
+// have to know and nothing could enforce.
 type User struct {
 	Email           string
 	Enable          bool
 	QuotaBytes      int64
 	ExpiryUnixMilli int64
-	Credentials     map[string]string
+	Credentials     map[string]any
+}
+
+// CredString reads a credential a core expects to be a string. A value of any
+// other shape yields "", which callers already treat as "not supplied".
+func CredString(credentials map[string]any, key string) string {
+	if s, ok := credentials[key].(string); ok {
+		return s
+	}
+	return ""
 }
 
 // Action is how a change must be applied. Restart drops live connections, so a

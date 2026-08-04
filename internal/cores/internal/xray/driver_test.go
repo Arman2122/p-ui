@@ -392,7 +392,7 @@ func (r *rig) instance(users int) core.Instance {
 		inst.Users = append(inst.Users, core.User{
 			Email:       email,
 			Enable:      true,
-			Credentials: map[string]string{"id": id},
+			Credentials: map[string]any{"id": id},
 		})
 	}
 	inst.Settings = fmt.Sprintf(`{"clients":[%s],"decryption":"none"}`, strings.Join(clients, ","))
@@ -443,7 +443,7 @@ func TestStoredSettingsAreRenderedVerbatim(t *testing.T) {
 		Settings:       stored,
 		StreamSettings: indented,
 		Users: []core.User{
-			{Email: "real@example.com", Enable: true, Credentials: map[string]string{"id": "beef"}},
+			{Email: "real@example.com", Enable: true, Credentials: map[string]any{"id": "beef"}},
 		},
 	}
 	got, ok := toInbound(inst)
@@ -465,7 +465,7 @@ func TestPlanChangeSeparatesHotApplyFromRestart(t *testing.T) {
 		Settings:       `{"clients":[{"email":"a@example.com","id":"aaa"}],"decryption":"none"}`,
 		StreamSettings: `{"network":"tcp"}`,
 		Users: []core.User{
-			{Email: "a@example.com", Enable: true, Credentials: map[string]string{"id": "aaa"}},
+			{Email: "a@example.com", Enable: true, Credentials: map[string]any{"id": "aaa"}},
 		},
 	}
 	// The blob moves with the user list, as the runtime layer builds it: a
@@ -473,7 +473,7 @@ func TestPlanChangeSeparatesHotApplyFromRestart(t *testing.T) {
 	added := base
 	added.Settings = `{"clients":[{"email":"a@example.com","id":"aaa"},{"email":"b@example.com","id":"bbb"}],"decryption":"none"}`
 	added.Users = append(slices.Clone(base.Users), core.User{
-		Email: "b@example.com", Enable: true, Credentials: map[string]string{"id": "bbb"},
+		Email: "b@example.com", Enable: true, Credentials: map[string]any{"id": "bbb"},
 	})
 	moved := base
 	moved.Port = 8443

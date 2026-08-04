@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"encoding/json"
-	"strconv"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -47,7 +46,7 @@ func usersOf(settings string) []core.User {
 	}
 	users := make([]core.User, 0, len(parsed.Clients))
 	for _, client := range parsed.Clients {
-		user := core.User{Credentials: make(map[string]string, len(client))}
+		user := core.User{Credentials: make(map[string]any, len(client))}
 		for key, raw := range client {
 			switch key {
 			case "email":
@@ -59,7 +58,10 @@ func usersOf(settings string) []core.User {
 			case "expiryTime":
 				_ = json.Unmarshal(raw, &user.ExpiryUnixMilli)
 			default:
-				if value, ok := scalar(raw); ok {
+				// Decoded as-is: a credential is whatever its core expects, and
+				// wireguard's allowedIPs is a list, not a string.
+				var value any
+				if json.Unmarshal(raw, &value) == nil {
 					user.Credentials[key] = value
 				}
 			}
@@ -75,22 +77,4 @@ func usersOf(settings string) []core.User {
 		return nil
 	}
 	return users
-}
-
-// scalar renders a JSON scalar as the string a credential map holds. Objects and
-// arrays are skipped: they render from the blob, which stays authoritative.
-func scalar(raw json.RawMessage) (string, bool) {
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return "", false
-	}
-	switch typed := value.(type) {
-	case string:
-		return typed, true
-	case bool:
-		return strconv.FormatBool(typed), true
-	case float64:
-		return strconv.FormatFloat(typed, 'f', -1, 64), true
-	}
-	return "", false
 }
