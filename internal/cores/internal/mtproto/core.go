@@ -85,6 +85,17 @@ func (c *Core) PlanChange(before, after core.Instance) core.Action {
 	}
 }
 
+// ApplyInstance pushes one sidecar's desired state. The engine keeps the
+// process and its live connections whenever only the secrets changed.
+func (c *Core) ApplyInstance(_ context.Context, inst core.Instance) error {
+	return c.apply(inst)
+}
+
+func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {
+	c.mgr.Remove(inst.ID)
+	return nil
+}
+
 // AddUser is an upsert: re-adding an existing email replaces its credentials,
 // so a re-key and an add take the same path.
 func (c *Core) AddUser(_ context.Context, inst core.Instance, user core.User) error {

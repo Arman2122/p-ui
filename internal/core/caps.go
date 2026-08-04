@@ -22,6 +22,16 @@ type Supervisor interface {
 	StopAll(ctx context.Context) error
 }
 
+// InstanceApplier applies one instance without disturbing the others, so an
+// edit to one inbound cannot drop a different inbound's connections. A core
+// without it is converged by reconciling the whole desired set, which is
+// correct but heavier: for a single-process core that means rebuilding the
+// config every time one client changes.
+type InstanceApplier interface {
+	ApplyInstance(ctx context.Context, inst Instance) error
+	DropInstance(ctx context.Context, inst Instance) error
+}
+
 // HotApplier classifies a change so the caller can avoid dropping connections.
 // A core without it is always restarted.
 type HotApplier interface {

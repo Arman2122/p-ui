@@ -18,6 +18,7 @@ type Bound struct {
 	Core Core
 
 	Supervise Supervisor
+	Apply     InstanceApplier
 	HotApply  HotApplier
 	Users     UserProvisioner
 	Traffic   TrafficSource
@@ -31,6 +32,9 @@ func Bind(c Core) *Bound {
 	b := &Bound{Core: c}
 	if v, ok := c.(Supervisor); ok {
 		b.Supervise = v
+	}
+	if v, ok := c.(InstanceApplier); ok {
+		b.Apply = v
 	}
 	if v, ok := c.(HotApplier); ok {
 		b.HotApply = v
