@@ -4,7 +4,7 @@
 > panel (OpenVPN, IKEv2/IPsec, L2TP, OpenConnect, WireGuard/AmneziaWG, SSTP, SSH, …)
 > with cross-protocol egress and one unified per-user quota.
 >
-> Status: **in progress** — P-1 through P3 are implemented; see the roadmap in §12 for what
+> Status: **in progress** — P-1 through P3 are implemented, P4 is part done; see §12 for what
 > each phase landed and what is still a proposal. Companion to `docs/architecture.md`, which
 > describes the system as it is today.
 >
@@ -71,6 +71,11 @@ Densest files: `service/inbound.go` (15), `service/xray.go` (10),
    tunnel tun mtproto"` — **eleven** values. The `const` block at `:24-35` defines **ten**.
    There is no `TUN` constant anywhere. The tag accepts a protocol the codebase does not
    define. This is not a predicted failure at core #4; it already happened at core #10.
+
+   **RESOLVED in P4.** The tag is now `validate:"required,protocol"`, and the rule is built
+   from `cores.Kinds()` — the accepted set and the servable set are one list. Codegen reads
+   the `const` block (this tool is `go run` on a possibly-non-Linux workstation, and a core
+   is built from Linux-only pieces), which `TestProtocolSourcesAgree` pins to the registry.
 
 2. **Capability rules are triplicated and one-sided.** "May this VLESS client carry
    `flow=xtls-rprx-vision`" is implemented three times in three shapes —
@@ -582,7 +587,8 @@ A requirement nothing enforces is not a requirement. Each of these is a test in
 | **Dispatch ratchet, bidirectional** | regrowth of `switch protocol` | **109** |
 | `TestCapabilityAssertionsOnlyInBind` | assertions becoming the new switch | 0 |
 | `TestDescriptorMatchesInterfaces` | the descriptor becoming a lie | 0 |
-| `TestEveryCoreKindIsAcceptedByTheValidator` | the `oneof` tag rotting | **fails today on `tun`** |
+| `TestInboundProtocolIsValidatedByTheRegistry` | a hand-typed `oneof` allow-list growing back | 0 (P4) |
+| `TestProtocolSourcesAgree` | the const block or the frontend enum drifting from the registry | 0 |
 | `TestClientsTableHasNoPerCoreColumns` | the wide row | 0 |
 | `TestJobCountDoesNotGrowPerCore` | 11 cores × 3 cron jobs | 0 |
 | `TestUnknownCoreRoundTripsByteForByte` | downgrade data loss | 0 |
@@ -614,16 +620,20 @@ catches all three shapes, uses only stdlib (house rule), and needs no new `go.mo
 | `internal/core/requirement.go` | shared | ~8 |
 | `en-US.json` + `fa-IR.json` | shared | 12 + 12 |
 | `tools/openapigen/main.go` (`StructAllow`) | shared | 2 |
-| **TypeScript** | **0** | **0** |
+| `model/model.go` (one `Protocol` constant) | shared | 1 |
+| `frontend/src/schemas/primitives/protocol.ts` | shared | 2 |
 | **New API routes / DB migrations** | **0** | **0** |
 
-**5 shared files, ~36 lines.** Compare to mtproto's ~30 files. Each of the 25 eliminated
+**7 shared files, ~39 lines.** Compare to mtproto's ~30 files. Each of the 23 eliminated
 files is eliminated by a *specific* guard above — not by optimism.
 
-Files explicitly **not** touched: any `.tsx`, anything under `frontend/src/`,
+The last two are mirrors, not lists: `TestProtocolSourcesAgree` fails until they match the
+registry, so forgetting one is a red test rather than a protocol that half-exists. They are
+not removable — Go and TypeScript both need to *name* a protocol without a bare literal.
+
+Files explicitly **not** touched: any `.tsx`, anything else under `frontend/src/`,
 `internal/web/service/*`, `internal/sub/*`, `runtime/local.go`, `runtime/remote.go`,
-`internal/web/job/*`, `internal/database/db.go`, `model/model.go`, `endpoints.ts`,
-`release.yml`.
+`internal/web/job/*`, `internal/database/db.go`, `endpoints.ts`, `release.yml`.
 
 The soft number is `driver.go` (~250 LOC): larger for strongSwan (VICI) and accel-ppp
 (kernel preflight), smaller for SSH. **That variance is the actual difficulty of the daemon,
@@ -641,7 +651,7 @@ and *that* is the number to hold the design to.
 | **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. `tls` and `reality` are now enforced server-side too. Dispatch ratchet **109 → 106** | low | −168 / +72 in the deduplicated files |
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
-| **P4** | Registry-backed validator (kills the `oneof` tag). One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1 | low | −150 |
+| **P4** ⏳ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ⏳ One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1 | low | −150 |
 | **P5** | `client_credentials` + descriptor-driven UI + `GET /panel/api/cores` | medium | +700 |
 | **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it | — | ~600 |
 

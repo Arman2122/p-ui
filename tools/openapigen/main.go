@@ -104,6 +104,14 @@ func run(root, outDir string) error {
 	}
 	schemas = flattenEmbedded(schemas)
 
+	protocols, err := namedStringConstants(resolveRel(root, "internal/database/model"), "Protocol")
+	if err != nil {
+		return err
+	}
+	if err := expandProtocolRules(schemas, protocols); err != nil {
+		return err
+	}
+
 	if len(schemas) == 0 {
 		return fmt.Errorf("no schemas produced; nothing to write")
 	}

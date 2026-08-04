@@ -6,7 +6,9 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -243,4 +245,44 @@ func resolveRel(base, rel string) string {
 		return rel
 	}
 	return filepath.Clean(filepath.Join(base, rel))
+}
+
+// namedStringConstants returns the values of the string constants in dir typed
+// as typeName, in declaration order so regenerating is stable.
+func namedStringConstants(dir, typeName string) ([]string, error) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, dir, func(fi fs.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", dir, err)
+	}
+	var out []string
+	for _, pkg := range pkgs {
+		for _, name := range slices.Sorted(maps.Keys(pkg.Files)) {
+			for _, decl := range pkg.Files[name].Decls {
+				gen, ok := decl.(*ast.GenDecl)
+				if !ok || gen.Tok != token.CONST {
+					continue
+				}
+				for _, spec := range gen.Specs {
+					vs, ok := spec.(*ast.ValueSpec)
+					if !ok {
+						continue
+					}
+					if ident, ok := vs.Type.(*ast.Ident); !ok || ident.Name != typeName {
+						continue
+					}
+					for _, value := range vs.Values {
+						lit, ok := value.(*ast.BasicLit)
+						if !ok || lit.Kind != token.STRING {
+							continue
+						}
+						out = append(out, strings.Trim(lit.Value, `"`))
+					}
+				}
+			}
+		}
+	}
+	return out, nil
 }
