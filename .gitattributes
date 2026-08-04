@@ -4,3 +4,4 @@ frontend/public/openapi.json text eol=lf
 frontend/src/test/__snapshots__/** text eol=lf
 *.go text eol=lf
 deploy/**/*.yaml text eol=lf
+frontend/src/test/golden/** text eol=lf

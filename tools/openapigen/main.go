@@ -129,6 +129,10 @@ func run(root, outDir string) error {
 	if err := emitJSONSchema(schemasBuf, schemas, aliases); err != nil {
 		return err
 	}
+	capabilitiesBuf := &bytes.Buffer{}
+	if err := emitCapabilities(capabilitiesBuf); err != nil {
+		return err
+	}
 
 	if err := os.WriteFile(filepath.Join(target, "zod.ts"), zodBuf.Bytes(), 0o644); err != nil {
 		return err
@@ -140,6 +144,9 @@ func run(root, outDir string) error {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(target, "schemas.ts"), schemasBuf.Bytes(), 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(target, "capabilities.ts"), capabilitiesBuf.Bytes(), 0o644); err != nil {
 		return err
 	}
 
