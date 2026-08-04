@@ -129,19 +129,47 @@ ApplyInstance is what lets a core keep the connections it can: mtg reloads its
 secrets without restarting, and Xray diffs the inbound down to the users that
 actually changed.
 
-The old inbound is dropped first only when it is moving. A changed protocol hands
-it to a different core, and a changed tag means the core cannot recognise it as
-the same inbound; either way a stale listener is left behind otherwise. Neither
-drop is fatal here — the old core may legitimately no longer be serving it.
+The old inbound is dropped first only when applying the new one would strand it.
+The drop is not fatal here — the old core may legitimately no longer be serving it.
 */
 func (l *Local) UpdateInbound(ctx context.Context, oldIb, newIb *model.Inbound) error {
-	if oldIb.Protocol != newIb.Protocol || oldIb.Tag != newIb.Tag {
+	if l.strandsOldInbound(oldIb, newIb) {
 		_ = l.DelInbound(ctx, oldIb)
 	}
 	if !newIb.Enable {
 		return l.DelInbound(ctx, newIb)
 	}
 	return l.AddInbound(ctx, newIb)
+}
+
+/*
+strandsOldInbound reports whether applying newIb would leave oldIb behind.
+
+A changed protocol hands the inbound to a different core, which cannot know to
+clean up after the old one. A changed tag only strands it in a core that keys by
+tag: Xray's config does, so the old tag would keep its listener, but mtg is keyed
+by inbound id and a rename changes nothing it can see.
+
+Asking the core beats assuming, because the assumption was wrong and expensive —
+dropping an mtproto inbound stops the sidecar, so renaming one used to kill every
+live Telegram connection on it. The question isolates the tag deliberately: a
+rename bundled with a client edit must still be judged on the rename alone.
+*/
+func (l *Local) strandsOldInbound(oldIb, newIb *model.Inbound) bool {
+	if oldIb.Protocol != newIb.Protocol {
+		return true
+	}
+	if oldIb.Tag == newIb.Tag {
+		return false
+	}
+	bound, err := l.coreFor(oldIb)
+	if err != nil || bound.HotApply == nil {
+		return true
+	}
+	before := instanceOf(oldIb)
+	renamed := before
+	renamed.Tag = newIb.Tag
+	return bound.HotApply.PlanChange(before, renamed) != core.ActionNoop
 }
 
 func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string]any) error {

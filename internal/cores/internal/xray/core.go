@@ -21,9 +21,9 @@ const ID core.Kind = "xray"
 // constants so a core never depends on the data layer; internal/arch pins this
 // list against the Go protocol constants so a new protocol cannot be orphaned.
 //
-// "tun" has no model constant but is accepted by the validator, offered by the
-// frontend and implemented by xray-core, so leaving it out stops an inbound the
-// panel still creates. TestEveryAcceptedProtocolHasACore is what catches that.
+// "tun" was the one that got orphaned: no model constant, yet accepted, offered
+// and implemented, so leaving it out here stopped inbounds the panel had already
+// created. TestProtocolSourcesAgree is what catches a kind going missing now.
 var kinds = []core.Kind{
 	"vmess", "vless", "trojan", "shadowsocks",
 	"wireguard", "hysteria", "http", "mixed", "tunnel", "tun",
