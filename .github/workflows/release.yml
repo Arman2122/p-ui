@@ -72,7 +72,10 @@ jobs:
       - name: Build P-UI
         run: |
           CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
-          fetch() { wget -q --tries=5 --waitretry=10 --retry-on-http-error=429,500,502,503 "$@"; }
+          # 403 is in the retry list because that is what the release CDN answers
+          # when seven matrix legs pull the same assets at once; -nv keeps the URL
+          # and status in the log, where -q left only wget's bare exit 8.
+          fetch() { wget -nv --tries=5 --waitretry=10 --retry-on-http-error=403,408,429,500,502,503 "$@"; }
           # Pure Go, no cgo: the panel has no C dependency left, so every target
           # cross-compiles straight from the runner's toolchain and links
           # statically without an external linker or a downloaded cross-gcc.
