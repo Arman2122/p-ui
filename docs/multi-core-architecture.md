@@ -594,6 +594,9 @@ A requirement nothing enforces is not a requirement. Each of these is a test in
 | `TestUnknownCoreRoundTripsByteForByte` | downgrade data loss | 0 |
 | Capability golden fixture (Go ↔ vitest) | the fourth `canEnableTlsFlow` | 0 |
 | `TestSuiteCatchesBrokenAdapters` | the conformance suite decaying to a no-op | 0 |
+| `TestHotApplyRendersWhatARestartWouldApply` | a hot apply drifting from what a restart applies | 0 |
+| `TestLocalRuntimeIsWiredToRender` | web.go dropping an optional-at-compile-time dep | 0 |
+| `xray_inbounds.golden` + `…IsStableAcrossCalls` | a silent reformat restarting Xray on a timer | 0 |
 
 **The ratchet must fail in both directions.** If it only fails upward, slack accumulates
 every time someone deletes a site and the guard dies quietly. Failing when the count is
@@ -723,15 +726,31 @@ So for Xray the stored blob is the authority and `Users` is the read model. mtpr
 *from* `Users`, because its `SecretEntry` is a small typed struct that loses nothing.
 `instanceOf` keeps the two in sync, and each core reads whichever is lossless for it.
 
-**What is not done, and is not P3's to do.** `XrayService.GetXrayConfig` does not merely
-call `GenXrayInboundConfig`: it rebuilds `settings.clients` from the **clients table**,
-filtered by traffic and expiry state, and preprocesses `streamSettings` (xhttp session-key
-lifting, finalmask/REALITY stripping, XMC mask validation). So the panel has **two** inbound
-renderers that already disagree today — the per-inbound one `Local` uses and the full-config
-one — and P3 deliberately kept `Local`'s output byte-identical to what it was rather than
-widening the port to absorb ~175 lines of the most load-bearing function in the panel.
-Unifying them is a phase of its own, and it must land with golden fixtures before it lands
-with a refactor.
+**What P3 found and left, now RESOLVED.** `XrayService.GetXrayConfig` did not merely call
+`GenXrayInboundConfig`: it rebuilt `settings.clients` from the **clients table**, filtered by
+traffic and expiry state, attached fallbacks, and preprocessed `streamSettings` (xhttp
+session-key lifting, finalmask/REALITY stripping, XMC mask validation, `externalProxy`
+deletion). So the panel had **two** inbound renderers that disagreed, and P3 deliberately
+kept `Local`'s output byte-identical rather than widening the port mid-phase.
+
+They are one renderer now. The block is `XrayService.RenderInbound`, and `runtime.Local`
+reaches it through `LocalDeps.RenderInbound` — injected the way `XrayBaseConfig` already
+reaches the cores registry, so `runtime` still does not import the service layer. A nil
+result means the local Xray does not serve that inbound and the stored sections stand, which
+is how an mtproto inbound reaches its own core untouched.
+
+**What the divergence actually cost**, and the reason this was not cosmetic: an inbound
+edited while Xray ran kept clients the quota job had already disabled, lost its fallbacks,
+and carried a finalmask that panics Xray-core under REALITY. Then it compounded —
+`InboundConfig.Equals` compares bytes, so after any hot apply the running inbound no longer
+matched the generator and every restart check afterwards read a pending change.
+
+It landed golden-fixture-first, as required above: `testdata/xray_inbounds.golden` pinned the
+output, the extraction had to leave it unchanged, and
+`TestHotApplyRendersWhatARestartWouldApply` then compared both paths byte for byte.
+`RenderInbound` reads the quota-disabled emails itself rather than trusting the row's
+preloaded `ClientStats`, which only `GetAllInbounds` populates — otherwise the render would
+depend on how the caller loaded the row.
 
 ### 12.3 Why P4's job merge is blocked on a contract decision
 
