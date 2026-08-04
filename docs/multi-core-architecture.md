@@ -805,6 +805,6 @@ or dropping a user's traffic — and it does it on live accounting.
    constants omitted it and tun inbounds stopped being served. Keeping it was the only
    option that did not break inbounds admins had already created.
 
-   The lesson generalises: the `oneof=` validator tag is what the panel *accepts*, and the
-   Go const block is not. `TestEveryAcceptedProtocolHasACore` in `internal/cores` now reads
-   the tag by reflection and fails on any accepted protocol no core claims.
+   The lesson generalises: whenever a guard compares against "the protocols", ask *which*
+   list it is really checking. P4 removed the question — the validator asks the registry, so
+   the accepted set and the servable set are one list and cannot disagree.
