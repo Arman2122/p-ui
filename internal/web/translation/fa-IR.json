@@ -2033,6 +2033,9 @@
   "cores": {
     "mtproto": {
       "title": "MTProto"
+    },
+    "xray": {
+      "title": "Xray"
     }
   }
 }

@@ -1,6 +1,10 @@
 package xray
 
-import "sync"
+import (
+	"fmt"
+	"os"
+	"sync"
+)
 
 /*
 Ownership of the running Xray process.
@@ -64,4 +68,18 @@ func (m *Manager) StoreResult(process *Process, result string) {
 		m.result = result
 	}
 	m.mu.Unlock()
+}
+
+// CheckBinary reports whether the Xray binary is present and executable. A miss
+// disables the core at preflight instead of failing each inbound every restart.
+func CheckBinary() error {
+	path := GetBinaryPath()
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("xray: binary %s: %w", path, err)
+	}
+	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("xray: %s is not an executable file", path)
+	}
+	return nil
 }
