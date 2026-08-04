@@ -104,11 +104,7 @@ func run(root, outDir string) error {
 	}
 	schemas = flattenEmbedded(schemas)
 
-	protocols, err := namedStringConstants(resolveRel(root, "internal/database/model"), "Protocol")
-	if err != nil {
-		return err
-	}
-	if err := expandProtocolRules(schemas, protocols); err != nil {
+	if err := expandProtocolRules(schemas, aliasValues(aliases, "Protocol")); err != nil {
 		return err
 	}
 

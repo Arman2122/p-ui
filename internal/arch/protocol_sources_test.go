@@ -19,14 +19,15 @@ import (
 /*
 Which protocols exist is answered in three places:
 
-  1. the core registry                       (internal/cores) — the authority
-  2. the model.Protocol const block          (internal/database/model/model.go)
-  3. the frontend ProtocolSchema enum        (frontend/src/schemas/primitives/protocol.ts)
+  1. the core registry                (internal/cores) — the authority
+  2. the model.Protocol const block   (internal/database/model/model.go)
+  3. PROTOCOL_VALUES                  (frontend/src/generated/zod.ts)
 
-(1) is what request validation and codegen now read, so it cannot drift from
-what the panel can serve. The other two are mirrors of it that nothing else
-cross-checks: (2) so Go can name a protocol without a string literal, (3) so the
-form knows which fields to render. This test is what keeps them mirrors.
+(1) is what request validation reads, so it cannot drift from what the panel can
+serve. (2) exists so Go can name a protocol without a string literal, and is
+also what codegen reads — this tool is `go run` on a possibly-non-Linux
+workstation and a core is built from Linux-only pieces. (3) is generated from
+(2), so this arm catches a stale checked-in file rather than a hand-edit.
 
 There used to be a fourth — a hand-typed `oneof=` list on Inbound.Protocol —
 and it is the one that broke: it accepted tun, which no core claimed, so the
@@ -94,21 +95,24 @@ func TestInboundProtocolIsValidatedByTheRegistry(t *testing.T) {
 	}
 }
 
+// frontendProtocolValues reads the list the frontend actually ships. It is
+// generated now, so this catches a stale checked-in file that `make gen` would
+// have fixed — not a hand-edit, which is no longer possible.
 func frontendProtocolValues(t *testing.T, root string) []string {
 	t.Helper()
-	path := filepath.Join(root, "frontend", "src", "schemas", "primitives", "protocol.ts")
+	path := filepath.Join(root, "frontend", "src", "generated", "zod.ts")
 	source, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read protocol.ts: %v", err)
+		t.Fatalf("read generated zod.ts: %v", err)
 	}
-	enum := regexp.MustCompile(`(?s)ProtocolSchema = z\.enum\(\[(.*?)\]\)`)
+	enum := regexp.MustCompile(`(?s)PROTOCOL_VALUES = \[(.*?)\] as const`)
 	match := enum.FindStringSubmatch(string(source))
 	if match == nil {
-		t.Fatal("no ProtocolSchema z.enum found in protocol.ts; the frontend enum moved and this guard is vacuous")
+		t.Fatal("no PROTOCOL_VALUES found in frontend/src/generated/zod.ts; openapigen stopped emitting it and this guard is vacuous")
 	}
 	values := regexp.MustCompile(`'([a-z0-9]+)'`).FindAllStringSubmatch(match[1], -1)
 	if len(values) == 0 {
-		t.Fatal("ProtocolSchema parsed to zero values; the parser no longer matches the file shape")
+		t.Fatal("PROTOCOL_VALUES parsed to zero values; the parser no longer matches the file shape")
 	}
 	out := make([]string, 0, len(values))
 	for _, v := range values {
@@ -163,7 +167,7 @@ func TestProtocolSourcesAgree(t *testing.T) {
 		if _, known := knownProtocolDivergence[value]; known {
 			continue
 		}
-		t.Errorf("protocol %q is missing from at least one source (registry=%t, go const=%t, frontend enum=%t) — the registry is the authority and the other two are hand-maintained mirrors of it",
+		t.Errorf("protocol %q is missing from at least one source (registry=%t, go const=%t, generated frontend list=%t) — the registry is the authority, the const block mirrors it, and the frontend list is generated from the const block (run `make gen`)",
 			value, regSet[value], goSet[value], feSet[value])
 	}
 
