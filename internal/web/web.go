@@ -490,9 +490,9 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 
 	// SkipIfStillRunning stops a slow job (e.g. the 5s traffic poll on a large
 	// install) from overlapping itself: two concurrent runs of the same job race
-	// the shared xrayAPI — leaking a grpc connection — and the StatsLastValues
-	// map, whose concurrent write is a fatal runtime throw cron.Recover can't
-	// catch. cron.Recover then logs any panic and keeps the scheduler alive.
+	// the shared xrayAPI and leak a grpc connection. Overlapping reads would also
+	// reach core.Counter out of order, which re-bills rather than corrupts.
+	// cron.Recover then logs any panic and keeps the scheduler alive.
 	s.cron = cron.New(
 		cron.WithLocation(loc),
 		cron.WithSeconds(),
