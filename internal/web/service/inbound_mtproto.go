@@ -114,7 +114,9 @@ func (s *InboundService) resetMtprotoClientQuota(email string) {
 		return
 	}
 	s.applyLocalMtproto(id)
-	mgr.ResetQuota(email)
+	if err := mgr.ResetQuota(email); err != nil {
+		logger.Warning("mtproto: quota reset failed for", email, ":", err, "— the client may stay blocked by the sidecar until it restarts")
+	}
 }
 
 func (s *InboundService) resetAllMtprotoQuotas() {
@@ -126,10 +128,14 @@ func (s *InboundService) resetAllMtprotoQuotas() {
 	if err != nil {
 		return
 	}
-	mgr.Reconcile(desired)
+	if err := mgr.Reconcile(desired); err != nil {
+		logger.Debug("mtproto: reconcile before quota reset failed:", err)
+	}
 	for _, inst := range desired {
 		for _, sec := range inst.Secrets {
-			mgr.ResetQuota(sec.Name)
+			if err := mgr.ResetQuota(sec.Name); err != nil {
+				logger.Warning("mtproto: quota reset failed for", sec.Name, ":", err)
+			}
 		}
 	}
 }

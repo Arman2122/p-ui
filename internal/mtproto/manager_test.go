@@ -261,10 +261,10 @@ func TestFingerprintSplit(t *testing.T) {
 		t.Run("structural/"+name, func(t *testing.T) {
 			changed := base
 			mutate(&changed)
-			if base.structuralFingerprint() == changed.structuralFingerprint() {
+			if base.StructuralFingerprint() == changed.StructuralFingerprint() {
 				t.Fatalf("structural fingerprint must change when %s changes", name)
 			}
-			if base.secretsFingerprint() != changed.secretsFingerprint() {
+			if base.SecretsFingerprint() != changed.SecretsFingerprint() {
 				t.Fatalf("secrets fingerprint must stay put when %s changes", name)
 			}
 		})
@@ -285,10 +285,10 @@ func TestFingerprintSplit(t *testing.T) {
 			changed := base
 			changed.Secrets = append([]SecretEntry(nil), base.Secrets...)
 			mutate(&changed)
-			if base.secretsFingerprint() == changed.secretsFingerprint() {
+			if base.SecretsFingerprint() == changed.SecretsFingerprint() {
 				t.Fatalf("secrets fingerprint must change on a %s", name)
 			}
-			if base.structuralFingerprint() != changed.structuralFingerprint() {
+			if base.StructuralFingerprint() != changed.StructuralFingerprint() {
 				t.Fatalf("structural fingerprint must stay put on a %s", name)
 			}
 		})
@@ -297,10 +297,10 @@ func TestFingerprintSplit(t *testing.T) {
 	t.Run("orderInsensitive", func(t *testing.T) {
 		forward := Instance{Secrets: []SecretEntry{{Name: "alice", Secret: "ee11"}, {Name: "bob", Secret: "ee22"}}}
 		reversed := Instance{Secrets: []SecretEntry{{Name: "bob", Secret: "ee22"}, {Name: "alice", Secret: "ee11"}}}
-		if got, want := forward.secretsFingerprint(), "alice=ee11;tag=;q=0;exp=0|bob=ee22;tag=;q=0;exp=0"; got != want {
+		if got, want := forward.SecretsFingerprint(), "alice=ee11;tag=;q=0;exp=0|bob=ee22;tag=;q=0;exp=0"; got != want {
 			t.Fatalf("secrets fingerprint must join sorted pairs: got %q, want %q", got, want)
 		}
-		if forward.secretsFingerprint() != reversed.secretsFingerprint() {
+		if forward.SecretsFingerprint() != reversed.SecretsFingerprint() {
 			t.Fatal("secrets fingerprint must not depend on client order")
 		}
 	})
