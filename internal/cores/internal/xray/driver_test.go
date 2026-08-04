@@ -371,24 +371,31 @@ func (r *rig) starts() int {
 	return len(strings.Fields(string(data)))
 }
 
+// instance mirrors what the runtime layer builds: the clients live in the
+// settings blob and Users is the projection of them. A rig that put users in
+// only one of the two would certify a renderer that reads the other.
 func (r *rig) instance(users int) core.Instance {
 	inst := core.Instance{
-		ID:       9,
-		Kind:     "vless",
-		Tag:      "inbound-9",
-		Listen:   "127.0.0.1",
-		Port:     29900,
-		Enable:   true,
-		Settings: `{"settings":{"decryption":"none"},"streamSettings":{"network":"tcp"}}`,
+		ID:             9,
+		Kind:           "vless",
+		Tag:            "inbound-9",
+		Listen:         "127.0.0.1",
+		Port:           29900,
+		Enable:         true,
+		StreamSettings: `{"network":"tcp"}`,
 	}
+	clients := make([]string, 0, users)
 	for i := range users {
 		email := fmt.Sprintf("%c@example.com", 'a'+i)
+		id := fmt.Sprintf("00000000-0000-0000-0000-00000000000%d", i)
+		clients = append(clients, fmt.Sprintf(`{"email":%q,"id":%q,"enable":true}`, email, id))
 		inst.Users = append(inst.Users, core.User{
 			Email:       email,
 			Enable:      true,
-			Credentials: map[string]string{"id": fmt.Sprintf("00000000-0000-0000-0000-00000000000%d", i)},
+			Credentials: map[string]string{"id": id},
 		})
 	}
+	inst.Settings = fmt.Sprintf(`{"clients":[%s],"decryption":"none"}`, strings.Join(clients, ","))
 	return inst
 }
 
@@ -420,13 +427,19 @@ func TestPreflightRejectsAMissingBinary(t *testing.T) {
 	}
 }
 
-// TestUsersComeFromTheContractNotTheSettingsBlob pins where a client lives. The
-// stored settings still carry a clients array, and reading it would resurrect
-// users the contract had already removed.
-func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
+// TestStoredSettingsAreRenderedVerbatim is the regression for a config that
+// restarts Xray without changing. The full-config generator passes the stored
+// sections through untouched, so this core must too; rebuilding clients from
+// Instance.Users sorts the keys and drops every non-scalar credential, and even
+// a re-marshal that changes nothing else compacts what a healer indented.
+// InboundConfig.Equals compares bytes, so any of those reads as a change.
+func TestStoredSettingsAreRenderedVerbatim(t *testing.T) {
+	stored := `{"clients":[{"id":"beef","email":"real@example.com","allowedIPs":["10.0.0.2/32"],"keepAlive":25}],"decryption":"none"}`
+	indented := "{\n  \"network\": \"tcp\"\n}"
 	inst := core.Instance{
 		ID: 1, Kind: "vless", Tag: "in-1", Port: 443, Enable: true,
-		Settings: `{"settings":{"clients":[{"email":"ghost@example.com","id":"dead"}]}}`,
+		Settings:       stored,
+		StreamSettings: indented,
 		Users: []core.User{
 			{Email: "real@example.com", Enable: true, Credentials: map[string]string{"id": "beef"}},
 		},
@@ -435,16 +448,11 @@ func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
 	if !ok {
 		t.Fatal("an enabled instance must be serveable")
 	}
-	var settings struct {
-		Clients []struct {
-			Email string `json:"email"`
-		} `json:"clients"`
+	if string(got.Settings) != stored {
+		t.Fatalf("settings were rewritten\n got: %s\nwant: %s", got.Settings, stored)
 	}
-	if err := json.Unmarshal(got.Settings, &settings); err != nil {
-		t.Fatalf("generated settings do not parse: %v", err)
-	}
-	if len(settings.Clients) != 1 || settings.Clients[0].Email != "real@example.com" {
-		t.Fatalf("clients must come from Users alone, got %+v", settings.Clients)
+	if string(got.StreamSettings) != indented {
+		t.Fatalf("streamSettings were reformatted\n got: %q\nwant: %q", got.StreamSettings, indented)
 	}
 }
 
@@ -452,12 +460,16 @@ func TestPlanChangeSeparatesHotApplyFromRestart(t *testing.T) {
 	c := New(Deps{})
 	base := core.Instance{
 		ID: 1, Kind: "vless", Tag: "in-1", Listen: "127.0.0.1", Port: 443, Enable: true,
-		Settings: `{"settings":{"decryption":"none"},"streamSettings":{"network":"tcp"}}`,
+		Settings:       `{"clients":[{"email":"a@example.com","id":"aaa"}],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp"}`,
 		Users: []core.User{
 			{Email: "a@example.com", Enable: true, Credentials: map[string]string{"id": "aaa"}},
 		},
 	}
+	// The blob moves with the user list, as the runtime layer builds it: a
+	// client added to Users alone is not a change this core can see.
 	added := base
+	added.Settings = `{"clients":[{"email":"a@example.com","id":"aaa"},{"email":"b@example.com","id":"bbb"}],"decryption":"none"}`
 	added.Users = append(slices.Clone(base.Users), core.User{
 		Email: "b@example.com", Enable: true, Credentials: map[string]string{"id": "bbb"},
 	})
