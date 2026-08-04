@@ -146,6 +146,50 @@ func TestCounterTreatsAnEmptyEpochAsUnknown(t *testing.T) {
 	}
 }
 
+// TestCounterExpiresOnlyAfterASustainedAbsence pins both edges of the grace
+// window: too eager and a subject that missed one scrape is billed its whole
+// counter again, too lax and the baselines grow with every subject ever seen.
+func TestCounterExpiresOnlyAfterASustainedAbsence(t *testing.T) {
+	c := NewCounter()
+	full := map[string]int64{"a": 10, "b": 10}
+	only := map[string]int64{"a": 10}
+	c.Observe("e", full)
+
+	for range baselineGrace - 1 {
+		c.Observe("e", only)
+	}
+	if got := c.Tracked(); got != 2 {
+		t.Fatalf("tracking %d baselines after %d absences, want 2 — dropping one early re-bills it", got, baselineGrace-1)
+	}
+	if d := c.Observe("e", full); len(d) != 0 {
+		t.Fatalf("a subject inside the grace window was re-billed: %v", d)
+	}
+
+	for range baselineGrace {
+		c.Observe("e", only)
+	}
+	if got := c.Tracked(); got != 1 {
+		t.Fatalf("tracking %d baselines after a sustained absence, want 1 — they accumulate for the process lifetime otherwise", got)
+	}
+}
+
+// TestCounterAbsenceStreakResets covers a subject that keeps reappearing: it
+// must never accumulate its way to expiry while it is still being reported.
+func TestCounterAbsenceStreakResets(t *testing.T) {
+	c := NewCounter()
+	full := map[string]int64{"a": 10, "b": 10}
+	only := map[string]int64{"a": 10}
+	c.Observe("e", full)
+
+	for range baselineGrace * 3 {
+		c.Observe("e", only)
+		c.Observe("e", full)
+	}
+	if got := c.Tracked(); got != 2 {
+		t.Fatalf("tracking %d baselines, want 2 — an intermittent subject must not expire", got)
+	}
+}
+
 func TestCounterIsSafeUnderConcurrentObserve(t *testing.T) {
 	c := NewCounter()
 	c.Observe("b1", map[string]int64{"a": 0})

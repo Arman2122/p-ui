@@ -22,17 +22,26 @@ Undercounting is the deliberate bias. Bytes that cannot be attributed are droppe
 never estimated: an undercount costs bandwidth, an overcount costs trust.
 */
 
+// baselineGrace is how many consecutive readings a key must be absent from
+// before its baseline is dropped. One absence proves nothing — a scrape can land
+// while a daemon reloads — and dropping a live subject's baseline bills its whole
+// counter again. Ten readings is 50s at Xray's poll and 100s at mtg's, far longer
+// than any reload, and short enough that memory tracks the live set.
+const baselineGrace = 10
+
 // Counter converts successive cumulative readings into per-key deltas.
 // The zero value is not usable; call NewCounter.
 type Counter struct {
-	mu     sync.Mutex
-	last   map[string]int64
+	mu   sync.Mutex
+	last map[string]int64
+	// absent counts consecutive readings each baseline has been missing from.
+	absent map[string]int
 	epoch  string
 	primed bool
 }
 
 func NewCounter() *Counter {
-	return &Counter{last: make(map[string]int64)}
+	return &Counter{last: make(map[string]int64), absent: make(map[string]int)}
 }
 
 // Observe records one full set of cumulative readings and returns what accrued
@@ -54,6 +63,7 @@ func (c *Counter) Observe(epoch string, readings map[string]int64) map[string]in
 		// Source restarted: its counters are back at zero, so every previous
 		// baseline is stale and the whole reading is new traffic.
 		c.last = make(map[string]int64, len(readings))
+		c.absent = make(map[string]int, len(readings))
 	}
 	if epoch != "" {
 		c.epoch = epoch
@@ -84,7 +94,40 @@ func (c *Counter) Observe(epoch string, readings map[string]int64) map[string]in
 		c.primed = true
 		return map[string]int64{}
 	}
+	c.expire(readings)
 	return deltas
+}
+
+// expire drops baselines the source has stopped reporting, once it has stopped
+// reporting them for baselineGrace readings running. Without it the map grows
+// with every subject ever seen; with a grace of one it re-bills any subject that
+// missed a single scrape, which is the bug the old prune shipped.
+//
+// A reading with no subjects at all is not evidence about any particular key, so
+// it is ignored rather than counted as an absence for everything.
+func (c *Counter) expire(readings map[string]int64) {
+	if len(readings) == 0 {
+		return
+	}
+	for key := range c.last {
+		if _, present := readings[key]; present {
+			delete(c.absent, key)
+			continue
+		}
+		c.absent[key]++
+		if c.absent[key] >= baselineGrace {
+			delete(c.last, key)
+			delete(c.absent, key)
+		}
+	}
+}
+
+// Tracked reports how many baselines are held. It exists so a test can prove the
+// set follows the live subjects instead of growing without bound.
+func (c *Counter) Tracked() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.last)
 }
 
 // NoteSourceRestart records that the source has restarted from zero. It is the
@@ -94,14 +137,16 @@ func (c *Counter) NoteSourceRestart() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.last = make(map[string]int64, len(c.last))
+	c.absent = make(map[string]int, len(c.absent))
 }
 
-// Forget is the ONLY way a baseline is dropped: an absent key is ambiguous, and
-// dropping it bills a live user its whole counter. Drain before calling.
+// Forget drops a baseline immediately, for when the panel itself removes a
+// subject and need not wait out baselineGrace. Drain its final reading first.
 func (c *Counter) Forget(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.last, key)
+	delete(c.absent, key)
 }
 
 // Primed reports whether a baseline pass has happened. Before that, Observe
