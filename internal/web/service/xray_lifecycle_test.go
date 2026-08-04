@@ -7,36 +7,11 @@ import (
 	"github.com/Arman2122/p-ui/internal/xray"
 )
 
-func TestXrayLifecycleSnapshotDoesNotOverwriteNewerResult(t *testing.T) {
-	state := xrayLifecycle{}
-	first := xray.NewProcess(&xray.Config{})
-	second := xray.NewProcess(&xray.Config{})
-
-	state.replace(first)
-	state.storeResult(first, "first result")
-	process, result := state.snapshot()
-	if process != first || result != "first result" {
-		t.Fatalf("snapshot = (%p, %q), want (%p, %q)", process, result, first, "first result")
-	}
-	state.replace(second)
-	state.storeResult(first, "old result")
-
-	process, result = state.snapshot()
-	if process != second {
-		t.Fatal("snapshot returned the replaced process")
-	}
-	if result != "" {
-		t.Fatalf("snapshot result = %q, want empty", result)
-	}
-}
-
 func TestXrayLifecycleConcurrentStatusResultAndTrafficReads(t *testing.T) {
-	previousProcess, previousResult := xrayState.snapshot()
+	previousProcess, previousResult := xrayState().Snapshot()
 	t.Cleanup(func() {
-		xrayState.mu.Lock()
-		xrayState.process = previousProcess
-		xrayState.result = previousResult
-		xrayState.mu.Unlock()
+		xrayState().Replace(previousProcess)
+		xrayState().StoreResult(previousProcess, previousResult)
 	})
 
 	first := xray.NewProcess(&xray.Config{})
@@ -46,8 +21,8 @@ func TestXrayLifecycleConcurrentStatusResultAndTrafficReads(t *testing.T) {
 
 	wg.Go(func() {
 		for range 200 {
-			xrayState.replace(first)
-			xrayState.replace(second)
+			xrayState().Replace(first)
+			xrayState().Replace(second)
 		}
 	})
 

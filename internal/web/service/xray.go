@@ -22,40 +22,13 @@ var (
 	lock              sync.Mutex
 	isNeedXrayRestart atomic.Bool // Indicates that restart was requested for Xray
 	isManuallyStopped atomic.Bool // Indicates that Xray was stopped manually from the panel
-	xrayState         xrayLifecycle
 )
 
-type xrayLifecycle struct {
-	mu      sync.RWMutex
-	process *xray.Process
-	result  string
-}
+// xrayState is the process owner, which lives in internal/xray so the Xray core
+// can supervise its own daemon. Panel policy above stays here.
+func xrayState() *xray.Manager { return xray.GetManager() }
 
-func (s *xrayLifecycle) snapshot() (*xray.Process, string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.process, s.result
-}
-
-func (s *xrayLifecycle) replace(process *xray.Process) {
-	s.mu.Lock()
-	s.process = process
-	s.result = ""
-	s.mu.Unlock()
-}
-
-func (s *xrayLifecycle) storeResult(process *xray.Process, result string) {
-	s.mu.Lock()
-	if s.process == process && s.result == "" {
-		s.result = result
-	}
-	s.mu.Unlock()
-}
-
-func currentXrayProcess() *xray.Process {
-	process, _ := xrayState.snapshot()
-	return process
-}
+func currentXrayProcess() *xray.Process { return xrayState().Current() }
 
 // XrayService provides business logic for Xray process management.
 // It handles starting, stopping, restarting Xray, and managing its configuration.
@@ -91,7 +64,7 @@ func (s *XrayService) GetXrayErr() error {
 
 // GetXrayResult returns the result string from the Xray process.
 func (s *XrayService) GetXrayResult() string {
-	process, cachedResult := xrayState.snapshot()
+	process, cachedResult := xrayState().Snapshot()
 	if cachedResult != "" {
 		return cachedResult
 	}
@@ -101,7 +74,7 @@ func (s *XrayService) GetXrayResult() string {
 
 	result := process.GetResult()
 
-	xrayState.storeResult(process, result)
+	xrayState().StoreResult(process, result)
 	return result
 }
 
@@ -1066,7 +1039,7 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 
 	process = xray.NewProcess(xrayConfig)
-	xrayState.replace(process)
+	xrayState().Replace(process)
 	s.xrayAPI.NoteCoreRestart()
 	err = process.Start()
 	if err != nil {
