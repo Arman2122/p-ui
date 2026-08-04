@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/crypto"
 	"github.com/Arman2122/p-ui/internal/util/random"
-	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -40,7 +40,7 @@ func allModels() []any {
 		&model.OutboundTraffics{},
 		&model.Setting{},
 		&model.InboundClientIps{},
-		&xray.ClientTraffic{},
+		&core.ClientTraffic{},
 		&model.HistoryOfSeeders{},
 		&model.Node{},
 		&model.ApiToken{},

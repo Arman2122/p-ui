@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
-	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // Protocol represents the protocol type for Xray inbounds.
@@ -56,7 +56,7 @@ type Inbound struct {
 	TrafficReset         string               `json:"trafficReset" form:"trafficReset" gorm:"default:never;index:idx_enable_traffic_reset,priority:2" validate:"omitempty,oneof=never hourly daily weekly monthly"` // Traffic reset schedule
 	TrafficResetDay      int                  `json:"trafficResetDay" form:"trafficResetDay" gorm:"default:1" validate:"omitempty,gte=1,lte=31" example:"1"`                                                        // Day of month for monthly traffic resets
 	LastTrafficResetTime int64                `json:"lastTrafficResetTime" form:"lastTrafficResetTime" gorm:"default:0"`                                                                                            // Last traffic reset timestamp
-	ClientStats          []xray.ClientTraffic `gorm:"foreignKey:InboundId;references:Id" json:"clientStats" form:"clientStats"`                                                                                     // Client traffic statistics
+	ClientStats          []core.ClientTraffic `gorm:"foreignKey:InboundId;references:Id" json:"clientStats" form:"clientStats"`                                                                                     // Client traffic statistics
 
 	// Xray configuration fields
 	Listen            string   `json:"listen" form:"listen"`
@@ -325,7 +325,7 @@ func StripInboundXhttpClientFields(streamSettings string) (string, bool) {
 }
 
 // GenXrayInboundConfig generates an Xray inbound configuration from the Inbound model.
-func (i *Inbound) GenXrayInboundConfig() *xray.InboundConfig {
+func (i *Inbound) GenXrayInboundConfig() *core.InboundConfig {
 	listen := i.Listen
 	if listen == "" {
 		listen = "0.0.0.0"
@@ -364,7 +364,7 @@ func (i *Inbound) GenXrayInboundConfig() *xray.InboundConfig {
 			streamSettings = healed
 		}
 	}
-	return &xray.InboundConfig{
+	return &core.InboundConfig{
 		Listen:         json_util.RawMessage(listen),
 		Port:           i.Port,
 		Protocol:       protocol,
