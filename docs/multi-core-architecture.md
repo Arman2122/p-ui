@@ -651,7 +651,7 @@ and *that* is the number to hold the design to.
 | **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. `tls` and `reality` are now enforced server-side too. Dispatch ratchet **109 → 106** | low | −168 / +72 in the deduplicated files |
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
-| **P4** ⏳ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ⏳ One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1 | low | −150 |
+| **P4** ⏳ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ⛔ One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1 — **blocked on a contract decision, see §12.3** | low | −150 |
 | **P5** | `client_credentials` + descriptor-driven UI + `GET /panel/api/cores` | medium | +700 |
 | **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it | — | ~600 |
 
@@ -733,6 +733,28 @@ widening the port to absorb ~175 lines of the most load-bearing function in the 
 Unifying them is a phase of its own, and it must land with golden fixtures before it lands
 with a refactor.
 
+### 12.3 Why P4's job merge is blocked on a contract decision
+
+The two jobs look mergeable — both cores implement `Supervisor`, `TrafficSource` and
+`OnlineReporter`, so a single job could loop over `registry.Cores()`. Reading them says
+otherwise. `TrafficDelta` is **per-user only** (`Email`, `Tag`, `Up`, `Down`), and
+`xray_traffic_job` consumes something the contract cannot express: `[]*xray.Traffic` rows
+carrying **inbound and outbound totals** with an `IsInbound` flag, used by
+`outboundService.AddTraffic`, the external-inform POST, and the WebSocket frame.
+
+`activeInboundTags` is fine — it derives from the deltas' `Tag`. Outbound accounting is not.
+So the merge needs one of:
+
+- **widen `TrafficSource`** to report non-user subjects, making egress accounting a core
+  concern; or
+- **keep outbound accounting outside the core loop** as a panel-owned Xray path, and merge
+  only the per-user halves.
+
+That is the same question §5 answers for cross-protocol egress, so it should be decided
+there rather than inside a cron refactor. Until then `mtproto_job` stays. Merging it on a
+guess risks the one bug class that has already bitten twice here — silently double-billing
+or dropping a user's traffic — and it does it on live accounting.
+
 ---
 
 ## 13. Open decisions
@@ -746,12 +768,13 @@ with a refactor.
    `wg0.conf`, `.sswan`, `.p12`), not URIs — so `Share.Kind == "file"` plus a backend
    endpoint means zero frontend link logic per core. Do not let an `.ovpn` template appear
    anywhere under `frontend/src/`.
-2. **`openapigen` drops const values.** `tools/openapigen/walker.go:45,65` collects only
-   `ast.TypeSpec` and never reads `token.CONST`, so `Protocol`'s constants are dropped and
-   `generated/zod.ts` degrades to `z.string()` — which is *why*
-   `frontend/src/schemas/primitives/protocol.ts` hand-duplicates the Go constants. Harvesting
-   ValueSpecs and emitting `z.enum([…])` deletes the duplicate and gives the frontend a
-   compiler-checked core list. **~30 lines, worth its own commit before P5.**
+2. **`openapigen` drops const values.** *Half done in P4:* `namedStringConstants` now reads
+   `token.CONST`, and `InboundSchema.protocol` generates `z.enum([…])` from the
+   `model.Protocol` constants. What remains is the **alias**: `generated/types.ts` still says
+   `export type Protocol = string`, so
+   `frontend/src/schemas/primitives/protocol.ts` still hand-duplicates the list rather than
+   re-exporting it. Emitting the alias as a union and having `protocol.ts` consume it deletes
+   the duplicate and one of the two mirrors §11 charges core #11 for. **~20 lines.**
 3. **SoftEther vs from-source accel-ppp** for the SSTP/L2TP/PPTP family — packaged and
    opaque, versus unpackaged with a DKMS tax. Deferrable until phase 6+.
 4. **Whether SSH ships at all** without a Go SSH server to give it real accounting.
