@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-json"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -743,35 +744,15 @@ func normalizeVmessSecurity(security string) string {
 	return security
 }
 
-// vlessEncryptionEnabled reports whether the VLESS inbound settings enable
-// VLESS-level encryption (vlessenc / ML-KEM). When on, the encryption/decryption
-// fields hold a generated dotted string (e.g. "mlkem768x25519plus.native.0rtt.<key>");
-// "none" or empty means off. The value is never the literal "vlessenc" — that is
-// the `xray vlessenc` CLI subcommand name, not a stored value.
-func vlessEncryptionEnabled(settings map[string]any) bool {
-	for _, key := range []string{"encryption", "decryption"} {
-		if v, ok := settings[key].(string); ok && v != "" && v != "none" {
-			return true
-		}
-	}
-	return false
-}
-
 // vlessFlowAllowed reports whether a client's XTLS Vision flow belongs in
-// generated links/configs. Mirrors inboundCanEnableTlsFlow in
-// internal/web/service: Vision runs on TCP with tls/reality (classic), and on
-// XHTTP whenever VLESS encryption (vlessenc / ML-KEM) is enabled — there the
-// VLESS-level encryption stands in for the transport TLS that Vision relies
-// on, regardless of the stream security layer (so XHTTP+REALITY+vlessenc
-// keeps its flow too).
-func vlessFlowAllowed(network, security string, settings map[string]any) bool {
-	switch network {
-	case "tcp":
-		return security == "tls" || security == "reality"
-	case "xhttp":
-		return vlessEncryptionEnabled(settings)
-	}
-	return false
+// generated links/configs. The rule lives in internal/core, shared with
+// internal/web/service and the frontend; all three used to carry a copy.
+func vlessFlowAllowed(protocol model.Protocol, network, security string, settings map[string]any) bool {
+	return core.Can(core.CapTLSFlow, core.Facts{
+		Protocol: string(protocol),
+		Stream:   map[string]string{"network": network, "security": security},
+		Settings: core.Scalars(settings),
+	})
 }
 
 func (s *SubService) genVlessLink(inbound *model.Inbound, email string) string {
@@ -809,7 +790,7 @@ func (s *SubService) genVlessLink(inbound *model.Inbound, email string) string {
 	default:
 		params["security"] = "none"
 	}
-	if len(client.Flow) > 0 && vlessFlowAllowed(streamNetwork, security, settings) {
+	if len(client.Flow) > 0 && vlessFlowAllowed(inbound.Protocol, streamNetwork, security, settings) {
 		params["flow"] = client.Flow
 	}
 
