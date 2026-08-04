@@ -516,6 +516,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		APIPort:        func() int { return s.xrayService.GetXrayAPIPort() },
 		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },
 		Cores:          registry,
+		RenderInbound:  s.xrayService.RenderInbound,
 	}))
 	runtime.GetManager().SetNodeEgressResolver(&s.settingService)
 	// Supply the master client certificate for nodes in mtls mode. Issued lazily

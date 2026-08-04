@@ -19,6 +19,16 @@ type LocalDeps struct {
 	// Cores resolves an inbound's protocol to the core that serves it. Nil in
 	// tests that never touch an inbound; every inbound op fails loudly without it.
 	Cores *core.Registry
+	/*
+		RenderInbound produces the inbound exactly as the full config build would
+		emit it, so a hot apply and the next restart agree byte for byte.
+
+		A nil config means the local Xray does not serve this inbound and the
+		stored sections stand — that is how an mtproto inbound reaches its own
+		core untouched. Nil the field itself and every inbound falls back to
+		those stored sections, which is the pre-unification behaviour.
+	*/
+	RenderInbound func(ib *model.Inbound) (*core.InboundConfig, error)
 }
 
 type Local struct {
@@ -64,14 +74,47 @@ func (l *Local) coreFor(ib *model.Inbound) (*core.Bound, error) {
 	return bound, nil
 }
 
+/*
+desiredState renders the inbound the way a restart would.
+
+Without this the hot path applied the stored sections while a restart applied
+the generated ones, so an inbound edited under load kept quota-exhausted
+clients, lost its fallbacks, and carried panel-only fields Xray never should
+see. Worse, InboundConfig.Equals compares bytes, so the running inbound then
+stopped matching the generator and every restart check read a pending change.
+*/
+func (l *Local) desiredState(ib *model.Inbound) (core.Instance, error) {
+	inst := instanceOf(ib)
+	if l.deps.RenderInbound == nil {
+		return inst, nil
+	}
+	rendered, err := l.deps.RenderInbound(ib)
+	if err != nil {
+		return inst, fmt.Errorf("render inbound %q: %w", ib.Tag, err)
+	}
+	if rendered == nil {
+		return inst, nil
+	}
+	inst.Settings = string(rendered.Settings)
+	inst.StreamSettings = string(rendered.StreamSettings)
+	inst.Sniffing = string(rendered.Sniffing)
+	return inst, nil
+}
+
 func (l *Local) AddInbound(ctx context.Context, ib *model.Inbound) error {
 	bound, err := l.coreFor(ib)
 	if err != nil {
 		return err
 	}
-	return bound.Apply.ApplyInstance(ctx, instanceOf(ib))
+	inst, err := l.desiredState(ib)
+	if err != nil {
+		return err
+	}
+	return bound.Apply.ApplyInstance(ctx, inst)
 }
 
+// DropInstance is keyed by tag and port, so the stored sections are enough and
+// a render failure must not be able to strand a listener.
 func (l *Local) DelInbound(ctx context.Context, ib *model.Inbound) error {
 	bound, err := l.coreFor(ib)
 	if err != nil {

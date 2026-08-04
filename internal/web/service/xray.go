@@ -11,6 +11,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
@@ -209,11 +210,9 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 		return nil, err
 	}
 
-	// A client leaves the config for two unrelated reasons: its own row is
-	// disabled, or the quota/expiry job disabled its client_traffics row.
-	depleted := make(map[string]bool, len(rendered.ClientStats))
-	for _, clientTraffic := range rendered.ClientStats {
-		depleted[clientTraffic.Email] = !clientTraffic.Enable
+	depleted, err := depletedEmails(rendered.Id)
+	if err != nil {
+		return nil, err
 	}
 
 	finalClients := make([]any, 0, len(dbClients))
@@ -361,6 +360,32 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 	}
 
 	return rendered.GenXrayInboundConfig(), nil
+}
+
+/*
+depletedEmails names the clients this inbound may not serve because the
+quota/expiry job disabled their client_traffics row — the second of the two
+unrelated reasons a client leaves the config.
+
+Read here rather than off the row's preloaded ClientStats. That field is only
+populated by GetAllInbounds, so trusting it would make the render depend on how
+the caller happened to load the row, and the hot path would quietly keep serving
+clients that ran out of quota.
+*/
+func depletedEmails(inboundId int) (map[string]bool, error) {
+	var rows []core.ClientTraffic
+	err := database.GetDB().Model(&core.ClientTraffic{}).
+		Select("email").
+		Where("inbound_id = ? AND enable = ?", inboundId, false).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		out[row.Email] = true
+	}
+	return out, nil
 }
 
 // PanelEgressInboundTag is the tag of the loopback SOCKS inbound injected into
