@@ -35,4 +35,11 @@ func (j *MtprotoJob) Run() {
 	if err := mtproto.GetManager().Reconcile(desired); err != nil {
 		logger.Warning("mtproto job: reconcile failed:", err)
 	}
+	// The per-inbound online view gates on tags that moved bytes, which an idle
+	// sidecar never does — an mtg inbound is active by being served at all.
+	activeTags := make([]string, 0, len(desired))
+	for _, inst := range desired {
+		activeTags = append(activeTags, inst.Tag)
+	}
+	j.inboundService.RefreshLocalOnlineClients(nil, activeTags)
 }
