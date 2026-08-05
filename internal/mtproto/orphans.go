@@ -19,13 +19,15 @@ import (
 // matching our binary name at startup is an orphan and is safe to kill before we
 // start our own.
 //
-// binaryPath is the configured mtg path (e.g. "bin/mtg-linux-amd64"); matching
-// is done on the executable's base name so it is independent of the bin folder
-// and still works after an update has deleted the binary (the running process's
-// /proc/<pid>/exe then reads as "<path> (deleted)", so argv[0] is used too).
+// binaryPath is the configured mtg path (e.g. "bin/mtg-linux-amd64"), resolved
+// to an absolute path and matched in full — see matchesBinary for why the base
+// name alone is not safe.
 func killStrayMtgProcesses(binaryPath string) int {
-	base := filepath.Base(binaryPath)
-	if base == "" || base == "." || base == string(filepath.Separator) {
+	want, err := filepath.Abs(binaryPath)
+	if err != nil {
+		return 0
+	}
+	if base := filepath.Base(want); base == "." || base == string(filepath.Separator) {
 		return 0
 	}
 	self := os.Getpid()
@@ -39,7 +41,7 @@ func killStrayMtgProcesses(binaryPath string) int {
 		if err != nil || pid == self {
 			continue
 		}
-		if procExeBase(pid) != base && cmdlineArgv0Base(pid) != base {
+		if !matchesBinary(procExePath(pid), cmdlineArgv0Path(pid), want) {
 			continue
 		}
 		// os.Process.Kill is SIGKILL on Linux and, unlike syscall.Kill, compiles
@@ -55,18 +57,39 @@ func killStrayMtgProcesses(binaryPath string) int {
 	return killed
 }
 
-// procExeBase returns the base name of /proc/<pid>/exe, or "" if unreadable.
-func procExeBase(pid int) string {
+/*
+matchesBinary reports whether a process is running the binary at want.
+
+Full path, never the base name. This function's answer becomes a SIGKILL, and
+any other mtg on the host — a second install, or a test run from a source tree —
+carries the same file name under a different bin folder. Matching by name killed
+a live sidecar exactly that way.
+
+Linux appends " (deleted)" to /proc/<pid>/exe once a running binary has been
+replaced, which an update does routinely, so that suffix is stripped rather than
+read as a different file. argv[0] stays as the fallback for an unreadable exe.
+*/
+func matchesBinary(exePath, argv0Path, want string) bool {
+	for _, path := range [...]string{exePath, argv0Path} {
+		if path != "" && strings.TrimSuffix(path, " (deleted)") == want {
+			return true
+		}
+	}
+	return false
+}
+
+// procExePath returns the target of /proc/<pid>/exe, or "" if unreadable.
+func procExePath(pid int) string {
 	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
 	if err != nil {
 		return ""
 	}
-	return filepath.Base(exe)
+	return exe
 }
 
-// cmdlineArgv0Base returns the base name of argv[0] from /proc/<pid>/cmdline,
-// the reliable fallback when the binary has been replaced or exe is unreadable.
-func cmdlineArgv0Base(pid int) string {
+// cmdlineArgv0Path returns argv[0] from /proc/<pid>/cmdline as an absolute path,
+// resolving a relative argv[0] against that process's own working directory.
+func cmdlineArgv0Path(pid int) string {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 	if err != nil || len(data) == 0 {
 		return ""
@@ -78,5 +101,13 @@ func cmdlineArgv0Base(pid int) string {
 	if len(argv0) == 0 {
 		return ""
 	}
-	return filepath.Base(string(argv0))
+	path := string(argv0)
+	if filepath.IsAbs(path) {
+		return path
+	}
+	cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cwd, path)
 }
