@@ -888,7 +888,7 @@ just as well, because what that guard forbids is a job *per core*, not a second 
 
 ---
 
-## 14. Open defect: a hot-added client can go unbilled
+## 14. Open defect: a hot-added client goes unbilled — and it is the panel, not Xray
 
 Found while verifying quota enforcement end to end on a live rig (2026-08-05).
 
@@ -896,19 +896,28 @@ Found while verifying quota enforcement end to end on a live rig (2026-08-05).
 is already running served 7 MB across two rounds and was billed **zero**. Its quota was never
 consumed and it was never cut off.
 
-**Where it is not.** The panel's accounting is correct. `client_traffics` had the row, the
-attachment, `enable=true`; the traffic job polled throughout. Querying Xray's own stats
-directly is what settled it:
+**The first diagnosis was wrong, and this corrects it.** It looked like Xray never registered
+a counter for the hot-added user. It does — lazily, on first traffic — so checking straight
+after the add finds nothing and misleads:
 
 ```
-user>>>live-plain@test>>>traffic>>>uplink    = 1267072
-user>>>live-reality2@test>>>traffic>>>uplink = 832258
-user>>>shared5gb@test>>>traffic>>>downlink   = 1008633
-   (no counter of any kind for the hot-added client)
+right after the add ...... (no counter yet)
+after 1 MB ............... user>>>hotadd@x>>>traffic>>>uplink   = 1810
+                           user>>>hotadd@x>>>traffic>>>downlink = 1008655
+after another 2 MB ....... 3022289 total, growing correctly
+panel billed ............. 0, throughout
 ```
 
-Xray served that user — it accepted the UUID and passed the bytes — but registered no
-per-user counter for it, so there was nothing for the panel to read.
+**So Xray is right and the panel drops it.** Everything downstream checks out too: the client
+has a `client_traffics` row (`enable=true`, correct `inbound_id`), it is in the inbound
+settings `RenderInbound` emits, and `addClientTraffic` selects purely by email with no
+inbound filter that could exclude it. Another client on the *same* inbound bills correctly at
+the same moment, so the poll is alive.
+
+That leaves the path between `XrayAPI.GetTraffic` and the `client_traffics` UPDATE: the regex
+parsing `user>>>…` stat names, `core.Counter.Observe`, the adapter's `CollectTraffic`,
+`collectCoreTraffic`, `AddTraffic`. Reading them did not find it — and reading is what
+produced the wrong answer the first time.
 
 **What is verified around it**, so the blast radius is clear: cross-core quota summing works
 (one client on an mtproto and a vless inbound accumulates into its single `client_traffics`
@@ -920,8 +929,7 @@ the same inbound, in the same panel run, *did* get counters and *was* enforced. 
 differ in that the billed one was attached to two inbounds and the unbilled one to a single
 inbound. That is the thread to pull.
 
-**Next step, and it is one run.** Add a client to a live inbound, then immediately query
-`xray api statsquery -pattern "user>>>"`. If the counter is absent right after the add but
-present after a core restart, the defect is that `AddUser` over the handler API does not
-register the stats counter, and the fix belongs next to that call — not in the traffic job.
-Do not change the traffic job for this: it reports faithfully what Xray gives it.
+**Next step: instrument, do not reason.** Log what `collectCoreTraffic` returns for one poll
+while a hot-added client is moving bytes, and diff it against `statsquery -pattern "user>>>"`
+for the same instant. Whichever side is missing the email localises the loss to one function.
+Everything either side of that path is already verified, so it is a single run.
