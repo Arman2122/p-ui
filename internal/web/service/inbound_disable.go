@@ -159,8 +159,8 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 			err1 := s.xrayApi.RemoveUser(t.Tag, t.Email)
 			if err1 == nil {
 				logger.Debug("Client disabled by api:", t.Email)
-			} else if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", t.Email)) {
-				logger.Debug("User is already disabled. Nothing to do more...")
+			} else if restartCannotFix(err1, t.Email) {
+				logger.Debug("Nothing for xray to remove:", err1)
 			} else {
 				logger.Debug("Error in disabling client by api:", err1)
 				needRestart = true
@@ -284,4 +284,21 @@ func (s *InboundService) disableRemoteClients(tx *gorm.DB, inboundID int, emails
 		return err
 	}
 	return nil
+}
+
+/*
+restartCannotFix reports a RemoveUser failure that restarting Xray would not
+resolve, so cutting one client off never drops everyone else's connections.
+
+Two cases. The user is already gone, which is the common one. Or the tag is not
+Xray's at all: an mtproto inbound is served by an mtg sidecar, so Xray answers
+"handler not found" for every depleted MTProto client, and no restart can
+conjure a handler for another core's inbound. Such a client is cut off by its
+own core — the mtproto reconcile drops the secret once client_traffics.enable
+goes false.
+*/
+func restartCannotFix(err error, email string) bool {
+	msg := err.Error()
+	return strings.Contains(msg, fmt.Sprintf("User %s not found.", email)) ||
+		strings.Contains(msg, "handler not found:")
 }
