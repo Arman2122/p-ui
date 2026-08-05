@@ -992,3 +992,23 @@ core the admin has never used, and the UI has to render it rather than error.
 Until step 1 lands the interface has no implementer, which is the same state `LinkRenderer`
 is in: a declared slot the registry can already resolve, so adding it later is one method on
 one core rather than a change to the contract.
+
+### 14.1 Minimal reproduction
+
+Reduced to one variable after several inconclusive attempts with more moving parts:
+
+1. Add one client to an inbound that is already running, via `POST /panel/api/clients/add`.
+2. Push 1 MB through it with a single-outbound xray client.
+3. `xray api statsquery -pattern "<email>"` → the counter is there and correct (1,010,495).
+4. `client_traffics` for that email → **0**, and stays 0 across polls.
+
+Combined with the collector trace — which never sees the email at all — the loss is at or
+before `TrafficSource.CollectTraffic`, in `XrayAPI.GetTraffic`: the `user>>>` regex, or
+`core.Counter.Observe`. Everything downstream of that point is exercised in the same polls by
+another client on the same inbound, which bills correctly.
+
+One candidate worth eliminating first, because it fits the shape: Xray creates the counter
+lazily, so a poll can observe it at **0** before any traffic. `Observe` then records the
+baseline and emits nothing (`d > 0` is false). The next poll should bill the full value, and
+that is what does not appear to happen — so instrument `Observe`'s inputs and outputs for the
+two polls either side of the counter's first appearance, rather than reading it again.
