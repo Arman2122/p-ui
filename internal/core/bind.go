@@ -25,6 +25,7 @@ type Bound struct {
 	TagTraffic TagTrafficSource
 	Online     OnlineReporter
 	Quota      QuotaEnforcer
+	Versions   VersionManager
 	Link       LinkRenderer
 }
 
@@ -54,6 +55,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(QuotaEnforcer); ok {
 		b.Quota = v
+	}
+	if v, ok := c.(VersionManager); ok {
+		b.Versions = v
 	}
 	if v, ok := c.(LinkRenderer); ok {
 		b.Link = v

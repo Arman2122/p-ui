@@ -81,6 +81,30 @@ type QuotaEnforcer interface {
 	ResetQuota(ctx context.Context, email string) error
 }
 
+/*
+VersionManager lets the panel see and change which build of a core's daemon is
+installed, without knowing where that daemon comes from.
+
+Today this exists once, for Xray, hardcoded in the web layer — GitHub release
+listing, architecture mapping, download, unpack, restart. mtg has none of it and
+core #3 would need a third copy. That is the per-core cost this contract exists
+to remove: a core knows its own release channel, and the panel only asks.
+
+Installed() answers even when the binary is missing or unreadable, because "not
+installed" is a normal state the UI has to render. Available() is allowed to be
+slow and to fail — it usually crosses the network — so callers cache it and fall
+back to showing only what is installed.
+
+Install replaces the binary on disk. It does NOT restart the daemon: that is
+Supervisor's job, and keeping them separate is what lets the panel stage an
+upgrade and apply it when the traffic allows.
+*/
+type VersionManager interface {
+	Installed(ctx context.Context) (string, error)
+	Available(ctx context.Context) ([]string, error)
+	Install(ctx context.Context, version string) error
+}
+
 // LinkRenderer produces what an end user needs to connect. Kind distinguishes a
 // URI ("link") from a config file ("file") such as .ovpn or wg0.conf.
 type LinkRenderer interface {

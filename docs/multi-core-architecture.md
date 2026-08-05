@@ -938,3 +938,57 @@ users, outside the panel entirely. That separates "xray does not always register
 counter" from "something the panel does to that inbound loses it" — which no amount of
 reading the panel has settled. Until it is answered, do not change accounting code: the
 collector reports what it is given, and that is verified.
+
+---
+
+## 15. Updating a core's daemon — `VersionManager`
+
+The panel can already switch Xray builds: list GitHub releases, map the architecture,
+download, unpack, restart. All of it lives in `ServerService`, keyed to Xray, reachable at
+`POST /panel/api/server/installXray/:version`.
+
+**mtg has none of it.** Its binary arrives once, at release build time, fetched by
+`release.yml`; the panel cannot see its version or change it. Core #3 would need a third
+implementation, and each one drags a GitHub client, an arch table and an unpack routine into
+the web layer — where none of them belong. This is the per-core cost the contract exists to
+remove, and it is the capability the project needs most after accounting: a core's daemon
+outlives the panel release that shipped it, and a CVE in one should not wait for the other.
+
+`core.VersionManager` is the slot:
+
+```go
+Installed(ctx) (string, error)
+Available(ctx) ([]string, error)
+Install(ctx, version) error
+```
+
+Three properties are deliberate.
+
+**A core owns its release channel.** Xray's is `XTLS/Xray-core`, mtg's is
+`mhsanaei/mtg-multi`, and a future core's may be an apt repository or a vendor tarball. The
+panel asks *which versions* and *install this one*; it never learns where they come from. That
+is what keeps the GitHub client out of `ServerService` and stops core #11 adding a fourth
+copy.
+
+**Install does not restart.** Replacing the binary and reloading the daemon are separate
+steps, so the panel can stage an upgrade and apply it when traffic allows — and so a failed
+download never leaves a core stopped. Restarting stays `Supervisor`'s job.
+
+**`Installed` answers when the binary is missing.** "Not installed" is a normal state for a
+core the admin has never used, and the UI has to render it rather than error.
+
+### 15.1 What lands, in order
+
+1. `xray` implements it by moving the existing `ServerService` logic behind the interface —
+   behaviour-preserving, and `installXray/:version` keeps working by delegating.
+2. `mtproto` implements it against the `mtg-multi` releases the release workflow already
+   consumes, which is the first time that binary becomes updatable at all.
+3. One pair of endpoints replaces the per-core one: `GET /panel/api/cores/:id/versions` and
+   `POST /panel/api/cores/:id/install/:version`, with `Bound.Versions == nil` meaning the UI
+   hides the control for that core.
+4. `coretest` gains a conformance case, so a core that reports a version it cannot install —
+   or an `Available` list not containing `Installed` — fails its adapter suite.
+
+Until step 1 lands the interface has no implementer, which is the same state `LinkRenderer`
+is in: a declared slot the registry can already resolve, so adding it later is one method on
+one core rather than a change to the contract.
