@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -220,6 +222,8 @@ var (
 	xrayGracefulStopTimeout = 5 * time.Second
 	xrayForceStopTimeout    = 2 * time.Second
 	xrayVersionTimeout      = 5 * time.Second
+	// apiPortProbeTimeout bounds the loopback dial that checkAPIPortFree makes.
+	apiPortProbeTimeout = time.Second
 	// OnCrash is called when xray crashes unexpectedly. Set from web layer.
 	OnCrash func(err error)
 )
@@ -484,16 +488,53 @@ func (p *Process) GetUptime() uint64 {
 
 // refreshAPIPort updates the API port from the inbound configs.
 func (p *process) refreshAPIPort() {
-	port := 0
-	for _, inbound := range p.config.InboundConfigs {
-		if inbound.Tag == "api" {
-			port = inbound.Port
-			break
-		}
-	}
+	port := apiPortOf(p.config)
 	p.mu.Lock()
 	p.apiPort = port
 	p.mu.Unlock()
+}
+
+// apiPortOf returns the port of the config's Xray API inbound, or 0 when it
+// declares none. Shared so the pre-start check and the client agree on a port.
+func apiPortOf(config *Config) int {
+	if config == nil {
+		return 0
+	}
+	for _, inbound := range config.InboundConfigs {
+		if inbound.Tag == "api" {
+			return inbound.Port
+		}
+	}
+	return 0
+}
+
+/*
+checkAPIPortFree refuses to start when something already listens on the Xray
+gRPC API port.
+
+Xray sets SO_REUSEPORT on its listeners, so a second Xray binds a port another
+Xray already holds without any error, and the kernel then load-balances API
+connections across both processes. Every AddUser, RemoveUser and QueryStats
+after that lands on a coin-flip: clients are provisioned into one core while
+traffic is read from the other, so they go unbilled and quota stops being
+enforced — in both panels, silently. Two p-ui installs on one host hit this by
+default, since the config template ships a fixed API port.
+
+A non-Xray holder of the port fails the bind loudly on its own, so only this
+case needs catching. Failing here is deliberate: a panel that cannot trust
+which core it is talking to must not run.
+*/
+func checkAPIPortFree(port int) error {
+	if port <= 0 {
+		return nil
+	}
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), apiPortProbeTimeout)
+	if err != nil {
+		return nil
+	}
+	_ = conn.Close()
+	return common.NewErrorf(
+		"xray api port %d is already in use: another panel or a stale xray is running, stop it first", port)
 }
 
 // refreshVersion updates the version string by running the Xray binary with -version.
@@ -524,6 +565,10 @@ func (p *process) Start() (err error) {
 			p.setExitErr(err)
 		}
 	}()
+
+	if err = checkAPIPortFree(apiPortOf(p.config)); err != nil {
+		return err
+	}
 
 	data, err := json.MarshalIndent(p.config, "", "  ")
 	if err != nil {

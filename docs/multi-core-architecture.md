@@ -791,14 +791,18 @@ re-baselines correctly. The signal only matters when a reading comes back at or 
 baseline, which needs a subject to move more in one 5s poll than it had moved in its entire
 prior life. The backstop is doing the work, and it is sufficient.
 
-**The fix that did not work.** Detecting the restart in `connect()` — re-priming when
-`c.mgr.Current()` returns a different `*Process` — reads correctly and passes the whole suite,
-and then bills **nothing at all** on a live rig: two controlled A/B runs, zero delta with it
-and ~204 KB with it reverted. `NoteSourceRestart` only clears `last`, so the expected failure
-mode was over-billing, not silence, and that gap between the reading and the behaviour is
-exactly why it was reverted rather than shipped. Whoever picks this up should start there, and
-should delete `XrayService.GetXrayTraffic` and the `NoteCoreRestart` call in `RestartXray`
-along the way — both are wired to nothing.
+**The fix that did not work — and why its evidence is void.** Detecting the restart in
+`connect()` — re-priming when `c.mgr.Current()` returns a different `*Process` — reads
+correctly and passes the whole suite, and then billed **nothing at all** on a live rig: two
+controlled A/B runs, zero delta with it and ~204 KB with it reverted.
+
+That result proves nothing. The rig shared its Xray API port with another panel's core (§14),
+so roughly half of every run's reads were served by a process the change never touched. The
+reasoning at the time was still sound — `NoteSourceRestart` only clears `last`, so the failure
+mode should have been over-billing, not silence — and that unexplained gap is why it was
+reverted rather than shipped. Re-run the A/B on an isolated rig before concluding anything.
+Whoever picks this up should also delete `XrayService.GetXrayTraffic` and the `NoteCoreRestart`
+call in `RestartXray`; both are wired to nothing.
 
 ### 12.3 What the job merge needed from the contract
 
@@ -888,56 +892,68 @@ just as well, because what that guard forbids is a job *per core*, not a second 
 
 ---
 
-## 14. Open defect: a hot-added client goes unbilled — and it is the panel, not Xray
+## 14. Resolved: a hot-added client went unbilled — two Xray cores shared one API port
 
-Found while verifying quota enforcement end to end on a live rig (2026-08-05).
+Found while verifying quota enforcement on a live rig (2026-08-05), and resolved the same day.
+It was never an accounting defect. The collector, the delta engine and the write path were
+correct throughout; they were being fed by **two different Xray processes at random**.
 
-**Symptom.** A client created through `POST /panel/api/clients/add` against an inbound that
-is already running served 7 MB across two rounds and was billed **zero**. Its quota was never
-consumed and it was never cut off.
+**Root cause.** The config template ships a fixed Xray gRPC API port (`62789`). A second p-ui
+on the same host renders the same port, and Xray sets `SO_REUSEPORT` on its listeners — so the
+second bind **succeeds silently** and the kernel load-balances connections across both
+processes. From then on every `AddUser`, `RemoveUser` and `QueryStats` lands on a coin-flip:
+clients are provisioned into one core while traffic is read from the other.
 
-**The first diagnosis was wrong, and this corrects it.** It looked like Xray never registered
-a counter for the hot-added user. It does — lazily, on first traffic — so checking straight
-after the add finds nothing and misleads:
-
-```
-right after the add ...... (no counter yet)
-after 1 MB ............... user>>>hotadd@x>>>traffic>>>uplink   = 1810
-                           user>>>hotadd@x>>>traffic>>>downlink = 1008655
-after another 2 MB ....... 3022289 total, growing correctly
-panel billed ............. 0, throughout
-```
-
-**Then that was wrong too.** Instrumenting `collectCoreTraffic` to log every delta it
-receives, while pushing 2 MB through the affected client, produced the state below. This
-section deliberately stops at evidence: two confident causal explanations have already been
-wrong, and that is itself worth recording.
-
-What is simultaneously true, measured in one window:
+The rig and the box's production panel had both picked `62789`:
 
 ```
-xray's config for that inbound   hotadd@x present, with its email and id
-traffic pushed through it        2 MB, HTTP 200
-xray's stats counters            live-plain@test, quota-test@x, shared5gb@test
-                                 — nothing for hotadd@x
-collectCoreTraffic deltas        hotadd@x appears zero times
-client_traffics                  0
+LISTEN 127.0.0.1:62789  pid=346980   rig xray      (cwd=/root/smoke)
+LISTEN 127.0.0.1:62789  pid=52795    prod xray     (cwd=/usr/local/p-ui)
 ```
 
-Its config-siblings on that same inbound do have counters, and one of them
-(`shared5gb@test`) bills correctly in the same polls — the trace shows it arriving twice per
-poll, once per core, and being summed. So the collector, the delta engine and the write path
-are all demonstrably working on live data at the moment the affected client is invisible.
+**What settled it.** Polling the API repeatedly returned two disjoint answer-sets, alternating:
 
-The counter for the affected client also **existed earlier** (1810 / 1008655, then 3022289)
-and was gone after a panel restart. So the condition is not permanent, and it survives the
-client being in the config with a valid email.
+```
+18 counters   in-30443-tcp, live-reality2-30446, smoke-in-20001, live-plain-30445   + fresh@x, hotadd@x
+14 counters   live-reality-30443, smoke-in-20002, live-plain-30445                  + quota-test@x
+```
 
-**Next step.** Reproduce against a stock xray with a hand-written config holding the same two
-users, outside the panel entirely. That separates "xray does not always register a per-user
-counter" from "something the panel does to that inbound loses it" — which no amount of
-reading the panel has settled. Until it is answered, do not change accounting code: the
-collector reports what it is given, and that is verified.
+Production's on-disk config declared only the `api` inbound, so every inbound and user in its
+answer-set had been injected into it by the *other* panel over the shared port. Production's
+Xray was even listening on the rig's test ports, load-balancing real user connections with it.
+
+**Why three explanations were wrong.** Each was built on a measurement that silently sampled a
+different core than the one being reasoned about. A counter "vanished" (the other process
+answered), moved **backwards** (ditto), and a client's traffic was "dropped by the panel" (its
+counter only ever existed on one of the two). A restart-signal fix that "zero-billed" in an A/B
+test had half its reads served by the wrong process. The lesson is narrow and worth keeping:
+when a measurement contradicts code that reads correct, first prove the measurement addresses
+one subject.
+
+**Symptoms this explains** — all reported, none an accounting bug:
+
+| symptom | actual cause |
+| --- | --- |
+| hot-added client billed 0 | its counter exists on only one of the two cores |
+| a share link times out | half the connections reach a core without that client |
+| counters move backwards | consecutive reads answered by different cores |
+| user removed but still connects | `RemoveUser` applied to the other core |
+
+**The fix** (`internal/xray/process.go`). `Start` dials the API port before exec'ing and
+refuses when anything already answers, because Xray itself will not complain. A non-Xray holder
+of the port fails the bind loudly on its own, so only the Xray-on-Xray case needs catching.
+Failing closed is deliberate: a panel that cannot tell which core it is talking to must not run.
+The same applies to an orphaned Xray left by a crashed panel — previously the panel would
+silently share with its own zombie.
+
+Not fixed by randomising the port: that lowers the odds of a collision without removing the
+failure, and leaves every existing install on `62789`. Not fixed by identifying the core after
+connecting either — with `SO_REUSEPORT` the assignment is per connection, so a one-time check
+proves nothing about the next call.
+
+**Consequence for the accounting code: leave it alone.** `Counter`, `collectCoreTraffic` and
+`GetTraffic` were verified correct on live data throughout this investigation, including the
+cross-core sum (389.4 MB xray + 156.6 MB mtg = 546.0 MB on one row, to the byte).
 
 ---
 
@@ -993,22 +1009,3 @@ Until step 1 lands the interface has no implementer, which is the same state `Li
 is in: a declared slot the registry can already resolve, so adding it later is one method on
 one core rather than a change to the contract.
 
-### 14.1 Minimal reproduction
-
-Reduced to one variable after several inconclusive attempts with more moving parts:
-
-1. Add one client to an inbound that is already running, via `POST /panel/api/clients/add`.
-2. Push 1 MB through it with a single-outbound xray client.
-3. `xray api statsquery -pattern "<email>"` → the counter is there and correct (1,010,495).
-4. `client_traffics` for that email → **0**, and stays 0 across polls.
-
-Combined with the collector trace — which never sees the email at all — the loss is at or
-before `TrafficSource.CollectTraffic`, in `XrayAPI.GetTraffic`: the `user>>>` regex, or
-`core.Counter.Observe`. Everything downstream of that point is exercised in the same polls by
-another client on the same inbound, which bills correctly.
-
-One candidate worth eliminating first, because it fits the shape: Xray creates the counter
-lazily, so a poll can observe it at **0** before any traffic. `Observe` then records the
-baseline and emits nothing (`d > 0` is false). The next poll should bill the full value, and
-that is what does not appear to happen — so instrument `Observe`'s inputs and outputs for the
-two polls either side of the counter's first appearance, rather than reading it again.
