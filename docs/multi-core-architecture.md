@@ -908,28 +908,33 @@ after another 2 MB ....... 3022289 total, growing correctly
 panel billed ............. 0, throughout
 ```
 
-**So Xray is right and the panel drops it.** Everything downstream checks out too: the client
-has a `client_traffics` row (`enable=true`, correct `inbound_id`), it is in the inbound
-settings `RenderInbound` emits, and `addClientTraffic` selects purely by email with no
-inbound filter that could exclude it. Another client on the *same* inbound bills correctly at
-the same moment, so the poll is alive.
+**Then that was wrong too.** Instrumenting `collectCoreTraffic` to log every delta it
+receives, while pushing 2 MB through the affected client, produced the state below. This
+section deliberately stops at evidence: two confident causal explanations have already been
+wrong, and that is itself worth recording.
 
-That leaves the path between `XrayAPI.GetTraffic` and the `client_traffics` UPDATE: the regex
-parsing `user>>>…` stat names, `core.Counter.Observe`, the adapter's `CollectTraffic`,
-`collectCoreTraffic`, `AddTraffic`. Reading them did not find it — and reading is what
-produced the wrong answer the first time.
+What is simultaneously true, measured in one window:
 
-**What is verified around it**, so the blast radius is clear: cross-core quota summing works
-(one client on an mtproto and a vless inbound accumulates into its single `client_traffics`
-row), and enforcement works (`Remove Inbound User … due to expiration or traffic limit` fired
-and the client was dropped from the inbound).
+```
+xray's config for that inbound   hotadd@x present, with its email and id
+traffic pushed through it        2 MB, HTTP 200
+xray's stats counters            live-plain@test, quota-test@x, shared5gb@test
+                                 — nothing for hotadd@x
+collectCoreTraffic deltas        hotadd@x appears zero times
+client_traffics                  0
+```
 
-**What does not fit yet.** Another client added the same way, through the same endpoint, on
-the same inbound, in the same panel run, *did* get counters and *was* enforced. The two
-differ in that the billed one was attached to two inbounds and the unbilled one to a single
-inbound. That is the thread to pull.
+Its config-siblings on that same inbound do have counters, and one of them
+(`shared5gb@test`) bills correctly in the same polls — the trace shows it arriving twice per
+poll, once per core, and being summed. So the collector, the delta engine and the write path
+are all demonstrably working on live data at the moment the affected client is invisible.
 
-**Next step: instrument, do not reason.** Log what `collectCoreTraffic` returns for one poll
-while a hot-added client is moving bytes, and diff it against `statsquery -pattern "user>>>"`
-for the same instant. Whichever side is missing the email localises the loss to one function.
-Everything either side of that path is already verified, so it is a single run.
+The counter for the affected client also **existed earlier** (1810 / 1008655, then 3022289)
+and was gone after a panel restart. So the condition is not permanent, and it survives the
+client being in the config with a valid email.
+
+**Next step.** Reproduce against a stock xray with a hand-written config holding the same two
+users, outside the panel entirely. That separates "xray does not always register a per-user
+counter" from "something the panel does to that inbound loses it" — which no amount of
+reading the panel has settled. Until it is answered, do not change accounting code: the
+collector reports what it is given, and that is verified.
