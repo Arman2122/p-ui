@@ -259,6 +259,15 @@ export const ApiTokenViewSchema = z.object({
 });
 export type ApiTokenView = z.infer<typeof ApiTokenViewSchema>;
 
+export const CapabilitiesSchema = z.object({
+  onlineUsers: z.boolean().nullable().optional(),
+  perUserStats: z.boolean().nullable().optional(),
+  quotaPushdown: z.boolean().nullable().optional(),
+  shareLink: z.boolean().nullable().optional(),
+  userHotAdd: z.boolean().nullable().optional(),
+});
+export type Capabilities = z.infer<typeof CapabilitiesSchema>;
+
 export const ClientSchema = z.object({
   adTag: z.string().optional(),
   allowedIPs: z.array(z.string()).optional(),
@@ -346,6 +355,14 @@ export const ClientTrafficSchema = z.object({
   uuid: z.string(),
 });
 export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
+
+export const CoreViewSchema = z.object({
+  caps: z.lazy(() => CapabilitiesSchema),
+  id: z.string(),
+  kinds: z.array(z.string()),
+  titleKey: z.string(),
+});
+export type CoreView = z.infer<typeof CoreViewSchema>;
 
 export const FallbackParentInfoSchema = z.object({
   masterId: z.number().int(),

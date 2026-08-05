@@ -74,7 +74,7 @@ func run(root, outDir string) error {
 			// alias, and a nil AliasAllow means "every alias" — so this package
 			// must name an empty one or the core contract's own types leak out.
 			Path:        resolveRel(root, "internal/core"),
-			StructAllow: setOf("ClientTraffic"),
+			StructAllow: setOf("ClientTraffic", "Capabilities"),
 			AliasAllow:  setOf(),
 		},
 		{
@@ -85,6 +85,7 @@ func run(root, outDir string) error {
 		{
 			Path: resolveRel(root, "internal/web/service"),
 			StructAllow: setOf(
+				"CoreView",
 				"InboundOption",
 				"NodeMutationRequest",
 				"NodeView",

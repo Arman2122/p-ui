@@ -231,6 +231,13 @@ export const EXAMPLES: Record<string, unknown> = {
     "name": "central-panel-a",
     "token": "new-token-string"
   },
+  "Capabilities": {
+    "onlineUsers": null,
+    "perUserStats": null,
+    "quotaPushdown": null,
+    "shareLink": null,
+    "userHotAdd": null
+  },
   "Client": {
     "adTag": "0123456789abcdef0123456789abcdef",
     "allowedIPs": [
@@ -310,6 +317,21 @@ export const EXAMPLES: Record<string, unknown> = {
     "total": 10737418240,
     "up": 1048576,
     "uuid": "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
+  },
+  "CoreView": {
+    "caps": {
+      "onlineUsers": null,
+      "perUserStats": null,
+      "quotaPushdown": null,
+      "shareLink": null,
+      "userHotAdd": null
+    },
+    "id": "xray",
+    "kinds": [
+      "vless",
+      "vmess"
+    ],
+    "titleKey": "cores.xray.title"
   },
   "FallbackParentInfo": {
     "masterId": 0,

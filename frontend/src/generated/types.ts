@@ -241,6 +241,14 @@ export interface ApiTokenView {
   token?: string;
 }
 
+export interface Capabilities {
+  onlineUsers?: boolean | null;
+  perUserStats?: boolean | null;
+  quotaPushdown?: boolean | null;
+  shareLink?: boolean | null;
+  userHotAdd?: boolean | null;
+}
+
 export interface Client {
   adTag?: string;
   allowedIPs?: string[];
@@ -322,6 +330,13 @@ export interface ClientTraffic {
   total: number;
   up: number;
   uuid: string;
+}
+
+export interface CoreView {
+  caps: Capabilities;
+  id: string;
+  kinds: string[];
+  titleKey: string;
 }
 
 export interface FallbackParentInfo {

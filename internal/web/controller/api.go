@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/web/middleware"
+	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/panel"
 	"github.com/Arman2122/p-ui/internal/web/service/tgbot"
 	"github.com/Arman2122/p-ui/internal/web/session"
@@ -79,6 +80,7 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	api.Use(middleware.CSRFMiddleware())
 
 	api.GET("/openapi.json", ServeOpenAPISpec)
+	api.GET("/cores", a.getCores)
 
 	// Inbounds API
 	inbounds := api.Group("/inbounds")
@@ -108,6 +110,12 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 
 	// Extra routes
 	api.POST("/backuptotgbot", a.BackuptoTgbot)
+}
+
+// getCores describes what this build can serve, so the UI can render from what
+// a core declares instead of from its own protocol switch.
+func (a *APIController) getCores(c *gin.Context) {
+	jsonObj(c, service.CoreViews(), nil)
 }
 
 // BackuptoTgbot sends a backup of the panel data to Telegram bot admins.

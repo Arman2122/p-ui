@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
@@ -14,6 +15,7 @@ type NodeEgressResolver interface {
 
 type Manager struct {
 	local Runtime
+	cores *core.Registry
 
 	mu             sync.RWMutex
 	remotes        map[int]*Remote
@@ -25,9 +27,14 @@ type Manager struct {
 func NewManager(localDeps LocalDeps) *Manager {
 	return &Manager{
 		local:   NewLocal(localDeps),
+		cores:   localDeps.Cores,
 		remotes: make(map[int]*Remote),
 	}
 }
+
+// Cores is the registry the local runtime dispatches on. Taken from LocalDeps
+// rather than wired separately so the two handles cannot drift apart.
+func (m *Manager) Cores() *core.Registry { return m.cores }
 
 // SetRuntimeOverride makes RuntimeFor(nodeID) return rt instead of building a
 // real Remote. Test seam for exercising node-dispatch paths without a network
