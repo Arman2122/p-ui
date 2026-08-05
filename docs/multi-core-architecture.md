@@ -655,7 +655,7 @@ and *that* is the number to hold the design to.
 | **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. `tls` and `reality` are now enforced server-side too. Dispatch ratchet **109 → 106** | low | −168 / +72 in the deduplicated files |
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
-| **P4** ⏳ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ⛔ One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1 — **blocked on a contract decision, see §12.3** | low | −150 |
+| **P4** ⏳ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ⏳ One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1. The contract gap is closed — `TagTrafficSource` landed, see §12.3 — the job itself is next | low | −150 |
 | **P5** | `client_credentials` + descriptor-driven UI + `GET /panel/api/cores` | medium | +700 |
 | **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it | — | ~600 |
 
@@ -753,7 +753,7 @@ output, the extraction had to leave it unchanged, and
 preloaded `ClientStats`, which only `GetAllInbounds` populates — otherwise the render would
 depend on how the caller loaded the row.
 
-### 12.3 Why P4's job merge is blocked on a contract decision
+### 12.3 What the job merge needed from the contract
 
 The two jobs look mergeable — both cores implement `Supervisor`, `TrafficSource` and
 `OnlineReporter`, so a single job could loop over `registry.Cores()`. Reading them says
@@ -763,17 +763,35 @@ carrying **inbound and outbound totals** with an `IsInbound` flag, used by
 `outboundService.AddTraffic`, the external-inform POST, and the WebSocket frame.
 
 `activeInboundTags` is fine — it derives from the deltas' `Tag`. Outbound accounting is not.
-So the merge needs one of:
 
-- **widen `TrafficSource`** to report non-user subjects, making egress accounting a core
-  concern; or
-- **keep outbound accounting outside the core loop** as a panel-owned Xray path, and merge
-  only the per-user halves.
+**RESOLVED: `TrafficSource` stays per-user; a separate optional `TagTrafficSource` reports
+tagged subjects.** What settled it was reading the counters rather than the jobs. Xray's
+stats API exposes `inbound>>>`, `outbound>>>` and `user>>>` as **three independent
+families** — an inbound's total is not the sum of its users', and a `dokodemo` or `tunnel`
+inbound has no users at all. Widening `TrafficSource` would therefore have made every core
+return a heterogeneous list, and forced every consumer to filter it.
 
-That is the same question §5 answers for cross-protocol egress, so it should be decided
-there rather than inside a cron refactor. Until then `mtproto_job` stays. Merging it on a
-guess risks the one bug class that has already bitten twice here — silently double-billing
-or dropping a user's traffic — and it does it on live accounting.
+The split falls out of that:
+
+| subject | who can answer | in the contract |
+|---|---|---|
+| per-user bytes | every core | `TrafficSource` — the one universal question, and what the unified quota is built on |
+| the core's own inbounds | Xray must report them; a core whose inbound totals *are* the sum of its users' can derive them | `TagTrafficSource`, optional |
+| egress | only a core that meters its own outbounds | same interface — see below |
+
+Egress does **not** get a capability of its own. A core either meters its own outbounds
+(Xray) or routes through one that does — mtproto's `routeThroughXray` bridge — and in the
+second case the bytes are already counted by the first. That is exactly why `mtproto_job`
+skips the inbound rollup for routed tags today.
+
+mtproto deliberately does **not** implement it: its inbound totals are the sum of its
+clients', so the job derives them, which is the case the interface's doc comment describes.
+
+One trap the implementation had to dodge, and the reason this is not two calls to the same
+API: **the stats read is destructive.** Xray's tag deltas arrive on the same scrape as the
+per-user ones, so `CollectTraffic` banks them and `CollectTagTraffic` drains them —
+accumulating between drains so a caller that polls users more often than tags loses nothing,
+and clearing on drain so the same bytes are never billed twice.
 
 ---
 

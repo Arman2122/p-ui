@@ -31,3 +31,14 @@ type TrafficDelta struct {
 	Up    int64
 	Down  int64
 }
+
+// TagDelta is one collection interval's bytes for a tagged subject — an inbound
+// of this core, or an outbound it meters. Deltas only, like TrafficDelta.
+type TagDelta struct {
+	Tag string
+	// Outbound distinguishes egress from one of the core's own inbounds. The
+	// panel bills the two to different tables.
+	Outbound bool
+	Up       int64
+	Down     int64
+}

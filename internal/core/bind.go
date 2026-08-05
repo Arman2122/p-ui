@@ -17,14 +17,15 @@ capability assertion anywhere else, seeded at zero so it cannot regress.
 type Bound struct {
 	Core Core
 
-	Supervise Supervisor
-	Apply     InstanceApplier
-	HotApply  HotApplier
-	Users     UserProvisioner
-	Traffic   TrafficSource
-	Online    OnlineReporter
-	Quota     QuotaEnforcer
-	Link      LinkRenderer
+	Supervise  Supervisor
+	Apply      InstanceApplier
+	HotApply   HotApplier
+	Users      UserProvisioner
+	Traffic    TrafficSource
+	TagTraffic TagTrafficSource
+	Online     OnlineReporter
+	Quota      QuotaEnforcer
+	Link       LinkRenderer
 }
 
 // Bind resolves every optional capability of c exactly once.
@@ -44,6 +45,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(TrafficSource); ok {
 		b.Traffic = v
+	}
+	if v, ok := c.(TagTrafficSource); ok {
+		b.TagTraffic = v
 	}
 	if v, ok := c.(OnlineReporter); ok {
 		b.Online = v

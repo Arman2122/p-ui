@@ -52,6 +52,24 @@ type TrafficSource interface {
 	CollectTraffic(ctx context.Context) ([]TrafficDelta, error)
 }
 
+/*
+TagTrafficSource reports usage that belongs to a tag rather than to a user: the
+core's own inbounds, and any egress it meters itself.
+
+Separate from TrafficSource because the two answer different questions and not
+every core can answer this one. An inbound's total is not the sum of its users'
+— Xray counts inbound, outbound and user as three independent families, and a
+dokodemo or tunnel inbound has no users at all — so a core that cannot separate
+them leaves this unimplemented rather than returning a guess.
+
+Egress lives here too, not in a capability of its own: a core either meters its
+own outbounds (Xray) or routes through one that does (mtproto's routeThroughXray
+bridge), and in the second case the bytes are already counted by the first.
+*/
+type TagTrafficSource interface {
+	CollectTagTraffic(ctx context.Context) ([]TagDelta, error)
+}
+
 // OnlineReporter names the clients with a live connection right now.
 type OnlineReporter interface {
 	OnlineEmails(ctx context.Context) ([]string, error)
