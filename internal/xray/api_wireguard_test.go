@@ -24,7 +24,10 @@ func decodeWgAccount(t *testing.T, user map[string]any) *wireguard.PeerConfig {
 		t.Fatalf("buildUserAccount: %v", err)
 	}
 	if tm == nil {
+		// Fatal ends the goroutine, but staticcheck does not model that through a
+		// helper, so the return is what keeps SA5011 off the dereference below.
 		t.Fatal("buildUserAccount returned nil account for wireguard")
+		return nil
 	}
 	var pc wireguard.PeerConfig
 	if err := proto.Unmarshal(tm.Value, &pc); err != nil {
