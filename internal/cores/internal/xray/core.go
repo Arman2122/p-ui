@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -44,6 +45,12 @@ type Core struct {
 	mu      sync.Mutex
 	api     *engine.XrayAPI
 	apiPort int
+
+	// Tag deltas arrive on the same scrape as the per-user ones and would be
+	// lost if discarded, so they accumulate here until CollectTagTraffic drains
+	// them. Accumulating rather than overwriting keeps the two capabilities
+	// independent of the order and the rate the caller polls them at.
+	pendingTags map[string]core.TagDelta
 }
 
 func New(deps Deps) *Core {
@@ -222,14 +229,71 @@ func (c *Core) CollectTraffic(_ context.Context) ([]core.TrafficDelta, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, clients, err := api.GetTraffic()
+	tags, clients, err := api.GetTraffic()
 	if err != nil {
 		return nil, err
 	}
+	c.stashTagTraffic(tags)
 	out := make([]core.TrafficDelta, 0, len(clients))
 	for _, ct := range clients {
 		out = append(out, core.TrafficDelta{Email: ct.Email, Up: ct.Up, Down: ct.Down})
 	}
+	return out, nil
+}
+
+// stashTagTraffic banks the inbound and outbound deltas from a scrape. The
+// stats read is destructive — the counter advances — so this is the only
+// chance to keep them.
+func (c *Core) stashTagTraffic(tags []*engine.Traffic) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, t := range tags {
+		if t == nil || !t.IsInbound && !t.IsOutbound {
+			continue
+		}
+		key := t.Tag
+		if t.IsOutbound {
+			key = "out:" + t.Tag
+		}
+		if c.pendingTags == nil {
+			c.pendingTags = make(map[string]core.TagDelta, len(tags))
+		}
+		acc := c.pendingTags[key]
+		acc.Tag, acc.Outbound = t.Tag, t.IsOutbound
+		acc.Up += t.Up
+		acc.Down += t.Down
+		c.pendingTags[key] = acc
+	}
+}
+
+/*
+CollectTagTraffic drains what the last scrapes banked.
+
+Draining, not replaying: these are deltas, and handing the same bytes out twice
+is how a lifetime total doubles. It reports nothing of its own accord — the
+bytes only exist because CollectTraffic ran — so a caller that polls this alone
+sees zero, which is the honest answer.
+*/
+func (c *Core) CollectTagTraffic(_ context.Context) ([]core.TagDelta, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.pendingTags) == 0 {
+		return nil, nil
+	}
+	out := make([]core.TagDelta, 0, len(c.pendingTags))
+	for _, d := range c.pendingTags {
+		out = append(out, d)
+	}
+	c.pendingTags = nil
+	slices.SortFunc(out, func(a, b core.TagDelta) int {
+		if a.Outbound != b.Outbound {
+			if a.Outbound {
+				return 1
+			}
+			return -1
+		}
+		return strings.Compare(a.Tag, b.Tag)
+	})
 	return out, nil
 }
 
