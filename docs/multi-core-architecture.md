@@ -753,6 +753,33 @@ output, the extraction had to leave it unchanged, and
 preloaded `ClientStats`, which only `GetAllInbounds` populates — otherwise the render would
 depend on how the caller loaded the row.
 
+### 12.2b The Xray restart signal goes to a counter nothing bills from
+
+Found by auditing P-1..P4, **left alone deliberately** after an attempted fix broke billing.
+
+The counter that bills lives on the xray *adapter's* `XrayAPI`. The only thing that pushes a
+restart into it is `Core.noteRestart`, called from `Core.Reconcile` — which has **no
+production caller**. Real restarts go through `XrayService.RestartXray`, which calls
+`NoteCoreRestart` on `s.xrayAPI`: a different handle whose counter is read only by
+`XrayService.GetXrayTraffic`, and that method is now **dead** (the traffic job stopped calling
+it when it became registry-driven). So the out-of-band restart signal reaches nothing.
+
+**Why this is nearly harmless.** `api.go` passes an empty epoch and says so: the design is
+"NoteCoreRestart, with the backwards-counter backstop behind it". A restarted Xray counts from
+zero, so the first post-restart reading is *below* every stale baseline and the backstop
+re-baselines correctly. The signal only matters when a reading comes back at or above its old
+baseline, which needs a subject to move more in one 5s poll than it had moved in its entire
+prior life. The backstop is doing the work, and it is sufficient.
+
+**The fix that did not work.** Detecting the restart in `connect()` — re-priming when
+`c.mgr.Current()` returns a different `*Process` — reads correctly and passes the whole suite,
+and then bills **nothing at all** on a live rig: two controlled A/B runs, zero delta with it
+and ~204 KB with it reverted. `NoteSourceRestart` only clears `last`, so the expected failure
+mode was over-billing, not silence, and that gap between the reading and the behaviour is
+exactly why it was reverted rather than shipped. Whoever picks this up should start there, and
+should delete `XrayService.GetXrayTraffic` and the `NoteCoreRestart` call in `RestartXray`
+along the way — both are wired to nothing.
+
 ### 12.3 What the job merge needed from the contract
 
 The two jobs look mergeable — both cores implement `Supervisor`, `TrafficSource` and
