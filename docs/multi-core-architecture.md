@@ -885,3 +885,43 @@ just as well, because what that guard forbids is a job *per core*, not a second 
    The lesson generalises: whenever a guard compares against "the protocols", ask *which*
    list it is really checking. P4 removed the question — the validator asks the registry, so
    the accepted set and the servable set are one list and cannot disagree.
+
+---
+
+## 14. Open defect: a hot-added client can go unbilled
+
+Found while verifying quota enforcement end to end on a live rig (2026-08-05).
+
+**Symptom.** A client created through `POST /panel/api/clients/add` against an inbound that
+is already running served 7 MB across two rounds and was billed **zero**. Its quota was never
+consumed and it was never cut off.
+
+**Where it is not.** The panel's accounting is correct. `client_traffics` had the row, the
+attachment, `enable=true`; the traffic job polled throughout. Querying Xray's own stats
+directly is what settled it:
+
+```
+user>>>live-plain@test>>>traffic>>>uplink    = 1267072
+user>>>live-reality2@test>>>traffic>>>uplink = 832258
+user>>>shared5gb@test>>>traffic>>>downlink   = 1008633
+   (no counter of any kind for the hot-added client)
+```
+
+Xray served that user — it accepted the UUID and passed the bytes — but registered no
+per-user counter for it, so there was nothing for the panel to read.
+
+**What is verified around it**, so the blast radius is clear: cross-core quota summing works
+(one client on an mtproto and a vless inbound accumulates into its single `client_traffics`
+row), and enforcement works (`Remove Inbound User … due to expiration or traffic limit` fired
+and the client was dropped from the inbound).
+
+**What does not fit yet.** Another client added the same way, through the same endpoint, on
+the same inbound, in the same panel run, *did* get counters and *was* enforced. The two
+differ in that the billed one was attached to two inbounds and the unbilled one to a single
+inbound. That is the thread to pull.
+
+**Next step, and it is one run.** Add a client to a live inbound, then immediately query
+`xray api statsquery -pattern "user>>>"`. If the counter is absent right after the add but
+present after a core restart, the defect is that `AddUser` over the handler API does not
+register the stats counter, and the fix belongs next to that call — not in the traffic job.
+Do not change the traffic job for this: it reports faithfully what Xray gives it.
