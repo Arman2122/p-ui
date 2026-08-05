@@ -486,12 +486,12 @@ func (p *Process) GetUptime() uint64 {
 	return uint64(time.Since(p.startTime).Seconds())
 }
 
-// refreshAPIPort updates the API port from the inbound configs.
+// refreshAPIPort updates the API port from the inbound configs. It reads config
+// under the lock the struct doc requires: a hot apply can SetConfig concurrently.
 func (p *process) refreshAPIPort() {
-	port := apiPortOf(p.config)
 	p.mu.Lock()
-	p.apiPort = port
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	p.apiPort = apiPortOf(p.config)
 }
 
 // apiPortOf returns the port of the config's Xray API inbound, or 0 when it

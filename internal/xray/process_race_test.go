@@ -55,6 +55,37 @@ func TestProcessLifecycleFieldsRaceSafe(t *testing.T) {
 	wg.Wait()
 }
 
+/*
+TestRefreshAPIPortConfigRaceSafe drives a hot-apply SetConfig against the
+refreshAPIPort scan — the window Start leaves open while refreshVersion execs,
+which is bounded by xrayVersionTimeout rather than by anything quick.
+
+Only -race can fail this: unsynchronised or not, both orderings end on the same
+port, so the trailing assertion passes either way. `make race` is what runs it.
+*/
+func TestRefreshAPIPortConfigRaceSafe(t *testing.T) {
+	p := &Process{newProcess(&Config{InboundConfigs: []InboundConfig{{Tag: "api", Port: 10085}}})}
+	hotApplied := &Config{InboundConfigs: []InboundConfig{{Tag: "api", Port: 10086}}}
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 2000 {
+			p.SetConfig(hotApplied)
+		}
+	})
+	wg.Go(func() {
+		for range 2000 {
+			p.refreshAPIPort()
+		}
+	})
+	wg.Wait()
+
+	p.refreshAPIPort()
+	if got := p.GetAPIPort(); got != 10086 {
+		t.Fatalf("apiPort after hot apply = %d, want 10086", got)
+	}
+}
+
 // TestProcessVersionAPIPortRaceSafe writes version/apiPort the way Start's
 // refresh helpers do while GetXrayVersion/GetAPIPort read them concurrently.
 // Run with -race: an unsynchronized access to either field is reported.
