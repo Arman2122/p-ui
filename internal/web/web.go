@@ -323,7 +323,8 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 		_, _ = s.cron.AddJob(cadenceXrayTraffic, job.NewXrayTrafficJob())
 	}()
 
-	// Reconcile mtproto (mtg) sidecars and scrape their traffic
+	// Reconcile mtproto (mtg) sidecars. Their traffic is billed by the one
+	// traffic job above, which collects from every core.
 	mtJob := job.NewMtprotoJob()
 	_, _ = s.cron.AddJob(cadenceMtproto, mtJob)
 	go mtJob.Run()
@@ -518,6 +519,8 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		Cores:          registry,
 		RenderInbound:  s.xrayService.RenderInbound,
 	}))
+	// The traffic job bills every core through the same registry.
+	job.Cores = registry
 	runtime.GetManager().SetNodeEgressResolver(&s.settingService)
 	// Supply the master client certificate for nodes in mtls mode. Issued lazily
 	// from the node CA on first use; runtime stays free of a service import.
