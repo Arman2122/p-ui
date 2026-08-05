@@ -19,7 +19,10 @@ func decodeSSAccount(t *testing.T, user map[string]any) (typeURL string, legacy 
 		t.Fatalf("buildUserAccount: %v", err)
 	}
 	if tm == nil {
+		// Fatal ends the goroutine, but staticcheck does not model that through a
+		// helper, so the return is what keeps SA5011 off the dereference below.
 		t.Fatal("buildUserAccount returned no account for shadowsocks")
+		return
 	}
 	typeURL = tm.Type
 	switch {

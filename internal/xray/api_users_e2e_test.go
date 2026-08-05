@@ -423,7 +423,10 @@ func TestXrayAPI_E2E_NewClientTrafficIsCounted(t *testing.T) {
 		}
 	}
 	if got == nil {
+		// Fatalf ends the test, but staticcheck does not model that, so the return
+		// is what keeps SA5011 off the dereference below.
 		t.Fatalf("the new client's traffic was dropped; reported clients: %+v", clients)
+		return
 	}
 	if got.Down < payload {
 		t.Fatalf("downlink = %d, want at least the %d bytes that were proxied", got.Down, payload)
