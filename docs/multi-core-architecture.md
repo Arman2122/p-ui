@@ -532,19 +532,26 @@ repeat the mapping twice more.
 
 ```sql
 CREATE TABLE client_credentials (
-    client_id  int    NOT NULL,
-    core_id    text   NOT NULL,
-    version    int    NOT NULL DEFAULT 1,
-    payload    jsonb  NOT NULL,
-    PRIMARY KEY (client_id, core_id)
+    client_id  int   NOT NULL,
+    inbound_id int   NOT NULL,
+    key        text  NOT NULL,
+    value      text  NOT NULL,
+    PRIMARY KEY (client_id, inbound_id, key)
 );
 ```
 
+**Keyed per inbound, not per core — corrected 2026-08-06.** This section previously specified
+`PRIMARY KEY (client_id, core_id)`, which cannot hold the first credential it would be asked
+to hold: the paragraph below already says an MTProto secret embeds the *inbound's* FakeTLS
+domain, so a client on two mtproto inbounds needs two values. `client_inbounds.flow_override`
+(`model.go:975`) is the repo's existing precedent and is already per-(client, inbound) and
+already authoritative over the column on `clients`. Keying per core would have left the table
+with no tenant it could actually serve.
+
 No FK (the repo runs `DisableForeignKeyConstraintWhenMigrating: true` at `db.go:1872` and
-actively drops FKs). **No GIN index on `payload`, ever** — credentials are never queried by
-content; every access is by PK or `core_id`. When a core needs real uniqueness, use a partial
-expression index in that core's own migration. **The client-list endpoint must never join
-this table.**
+actively drops FKs). Credentials are never queried by content; every access is by PK or by
+`(client_id, inbound_id)`. When a core needs real uniqueness, use a partial expression index
+in that core's own migration. **The client-list endpoint must never join this table.**
 
 **Store credentials, do not derive them.** Derivation is *impossible* for ocserv (salted
 one-way hash), OpenVPN (a CA signature; revocation needs CRL state) and MTProto (the secret
