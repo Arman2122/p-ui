@@ -7,18 +7,21 @@ import (
 	engine "github.com/Arman2122/p-ui/internal/mtproto"
 )
 
+// coreServing builds a core whose engine reports these tags as routed.
+func coreServing(routed map[string]bool) *Core {
+	return &Core{routedTags: func() map[string]bool { return routed }}
+}
+
 /*
 An mtproto inbound's total is the sum of its clients', because mtg meters per
 secret and nothing else — but only when the inbound egresses directly.
 
-With routeThroughXray the bytes leave through Xray's loopback bridge, which
-meters them under the same tag. Billing them here as well doubles that inbound's
-total, which is the whole reason mtproto_job skipped routed tags.
+With routeThroughXray the bytes leave through Xray's loopback bridge, which is
+tagged with the inbound's own tag and metered there. Billing them here as well
+doubles that inbound's total.
 */
 func TestRoutedInboundsAreNotBilledTwice(t *testing.T) {
-	c := &Core{}
-	c.noteEgress(engine.Instance{Tag: "direct", RouteThroughXray: false})
-	c.noteEgress(engine.Instance{Tag: "bridged", RouteThroughXray: true})
+	c := coreServing(map[string]bool{"bridged": true})
 
 	c.stashTagTraffic([]engine.Traffic{
 		{Email: "a@x", Tag: "direct", Up: 10, Down: 20},
@@ -30,23 +33,33 @@ func TestRoutedInboundsAreNotBilledTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CollectTagTraffic: %v", err)
 	}
-	want := []core.TagDelta{{Tag: "direct", Up: 15, Down: 26}}
-	if len(got) != len(want) || got[0] != want[0] {
-		t.Fatalf("got %+v, want %+v — the bridged tag is already billed by xray", got, want)
+	want := core.TagDelta{Tag: "direct", Up: 15, Down: 26}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %+v, want only %+v — the bridged tag is already billed by xray", got, want)
 	}
 }
 
-// An inbound that flips to direct egress must start being billed here, or its
-// total silently stops moving.
-func TestUnroutingAnInboundResumesBilling(t *testing.T) {
-	c := &Core{}
-	c.noteEgress(engine.Instance{Tag: "in-1", RouteThroughXray: true})
+/*
+The routed set is read from the engine on every scrape, and this is why.
+
+It used to be a map the core filled as it applied instances. Nothing calls this
+core's Reconcile — the job drives the engine manager directly — so after a panel
+restart that map was empty until a human edited the inbound, and an empty one
+bills every routed inbound twice for as long as it lasts.
+*/
+func TestRoutedSetIsReReadEveryScrape(t *testing.T) {
+	routed := map[string]bool{}
+	c := &Core{routedTags: func() map[string]bool { return routed }}
+
+	// The engine has not reported it yet — the old bug billed here.
+	routed = map[string]bool{"in-1": true}
 	c.stashTagTraffic([]engine.Traffic{{Email: "a@x", Tag: "in-1", Up: 9, Down: 9}})
 	if got, _ := c.CollectTagTraffic(t.Context()); len(got) != 0 {
 		t.Fatalf("got %+v while routed, want nothing", got)
 	}
 
-	c.noteEgress(engine.Instance{Tag: "in-1", RouteThroughXray: false})
+	// The admin turns routing off; the next scrape must bill it again.
+	routed = map[string]bool{}
 	c.stashTagTraffic([]engine.Traffic{{Email: "a@x", Tag: "in-1", Up: 3, Down: 4}})
 	got, err := c.CollectTagTraffic(t.Context())
 	if err != nil {
@@ -59,8 +72,7 @@ func TestUnroutingAnInboundResumesBilling(t *testing.T) {
 
 // Same drain-once rule as the xray core: these are deltas.
 func TestMtprotoTagTrafficDrainsOnce(t *testing.T) {
-	c := &Core{}
-	c.noteEgress(engine.Instance{Tag: "in-1"})
+	c := coreServing(nil)
 	c.stashTagTraffic([]engine.Traffic{{Email: "a@x", Tag: "in-1", Up: 1, Down: 2}})
 
 	if got, _ := c.CollectTagTraffic(t.Context()); len(got) != 1 {

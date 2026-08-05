@@ -140,6 +140,10 @@ type managed struct {
 	secretsFP    string
 	apiPort      int
 	apiToken     string
+	// routed mirrors RouteThroughXray for the running instance. It lives with
+	// the process because that is what is actually serving, not with whoever
+	// last happened to apply it.
+	routed bool
 	// counter outlives the process it belongs to: mtg's counters restart at
 	// zero, and only a surviving baseline can tell that apart from idle.
 	counter *core.Counter
@@ -326,6 +330,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		switch ensureActionFor(cur.proc.IsRunning(), cur.structuralFP, cur.secretsFP, structFP, secFP) {
 		case ensureNoop:
 			cur.tag = inst.Tag
+			cur.routed = inst.RouteThroughXray
 			return nil
 		case ensureReload:
 			if err := writeConfig(configPathForID(inst.Id), inst, cur.apiPort, cur.apiToken); err != nil {
@@ -368,6 +373,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		secretsFP:    secFP,
 		apiPort:      apiPort,
 		apiToken:     apiToken,
+		routed:       inst.RouteThroughXray,
 		counter:      counter,
 	}
 	logger.Infof("mtproto: started mtg for inbound %d on %s", inst.Id, inst.bindTo())
@@ -762,4 +768,19 @@ func scrapeStats(port int, token string) (mtgStats, bool) {
 		return mtgStats{}, false
 	}
 	return parsed, true
+}
+
+// RoutedTags names the running instances whose egress goes out through Xray's
+// loopback bridge. Their bytes are metered there under the same tag, so a
+// caller billing per-inbound totals must not count them a second time.
+func (m *Manager) RoutedTags() map[string]bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]bool, len(m.procs))
+	for _, cur := range m.procs {
+		if cur.routed && cur.tag != "" {
+			out[cur.tag] = true
+		}
+	}
+	return out
 }
