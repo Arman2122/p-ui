@@ -528,7 +528,10 @@ func checkAPIPortFree(port int) error {
 	if port <= 0 {
 		return nil
 	}
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), apiPortProbeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), apiPortProbeTimeout)
+	defer cancel()
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		return nil
 	}
