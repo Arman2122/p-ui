@@ -793,6 +793,18 @@ per-user ones, so `CollectTraffic` banks them and `CollectTagTraffic` drains the
 accumulating between drains so a caller that polls users more often than tags loses nothing,
 and clearing on drain so the same bytes are never billed twice.
 
+**What the job merge still has to decide — the cadences differ.** `cadenceXrayTraffic` is
+`@every 5s` and `cadenceMtproto` is `@every 10s` (`web.go:289-290`), so one loop means
+picking one. Neither choice is free: 5s doubles the `/stats` scrape rate against every mtg
+sidecar, and 10s halves the dashboard's traffic resolution and doubles the window a client
+can overshoot its quota in. The per-core polling interval may need to be a fact the core
+states rather than a constant the panel picks.
+
+The second question is shape. `mtproto_job` also **reconciles** — it restarts sidecars that
+died — and that is supervision, not accounting. Folding it into the traffic job couples the
+two; keeping it separate but registry-driven satisfies `TestJobCountDoesNotGrowPerCore`
+just as well, because what that guard forbids is a job *per core*, not a second job.
+
 ---
 
 ## 13. Open decisions
