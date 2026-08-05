@@ -29,10 +29,17 @@ func collectCoreTraffic() ([]*xray.Traffic, []*xray.ClientTraffic) {
 		return nil, nil
 	}
 	ctx := context.Background()
-	var (
-		traffics []*xray.Traffic
-		clients  []*xray.ClientTraffic
-	)
+	var traffics []*xray.Traffic
+	/*
+		Summed by email, not appended, because one client can be served by more
+		than one core: the same ClientRecord mints a uuid for a vless inbound and
+		a FakeTLS secret for an mtproto one. AddTraffic indexes the slice by
+		email and keeps the last entry, so appending both would silently drop one
+		core's bytes — and the Counter has already advanced past them, so they
+		would never be offered again.
+	*/
+	byEmail := map[string]*xray.ClientTraffic{}
+	var order []string
 	for _, bound := range Cores.Cores() {
 		id := bound.Core.Describe().ID
 		if bound.Traffic != nil {
@@ -41,7 +48,13 @@ func collectCoreTraffic() ([]*xray.Traffic, []*xray.ClientTraffic) {
 				logger.Debug("core", id, "traffic collection failed:", err)
 			}
 			for _, d := range deltas {
-				clients = append(clients, &xray.ClientTraffic{Email: d.Email, Up: d.Up, Down: d.Down})
+				if existing, ok := byEmail[d.Email]; ok {
+					existing.Up += d.Up
+					existing.Down += d.Down
+					continue
+				}
+				byEmail[d.Email] = &xray.ClientTraffic{Email: d.Email, Up: d.Up, Down: d.Down}
+				order = append(order, d.Email)
 			}
 		}
 		if bound.TagTraffic == nil {
@@ -60,6 +73,10 @@ func collectCoreTraffic() ([]*xray.Traffic, []*xray.ClientTraffic) {
 				Down:       t.Down,
 			})
 		}
+	}
+	clients := make([]*xray.ClientTraffic, 0, len(order))
+	for _, email := range order {
+		clients = append(clients, byEmail[email])
 	}
 	return traffics, clients
 }

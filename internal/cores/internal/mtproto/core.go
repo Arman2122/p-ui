@@ -21,17 +21,20 @@ const Kind core.Kind = "mtproto"
 type Core struct {
 	mgr *engine.Manager
 
-	mu     sync.Mutex
-	online []string
-	// routed names the tags whose egress goes out through Xray's bridge, so
-	// their bytes are already billed there. Kept here because this core is the
-	// only thing that sees RouteThroughXray.
-	routed      map[string]bool
+	// routedTags answers which running tags egress through Xray. A field so a
+	// test can state it; in production it is always the engine's own answer.
+	routedTags func() map[string]bool
+
+	mu          sync.Mutex
+	online      []string
 	pendingTags map[string]core.TagDelta
 }
 
 // New returns a core over the process-wide mtg manager.
-func New() *Core { return &Core{mgr: engine.GetManager()} }
+func New() *Core {
+	mgr := engine.GetManager()
+	return &Core{mgr: mgr, routedTags: mgr.RoutedTags}
+}
 
 func (c *Core) Kinds() []core.Kind { return []core.Kind{Kind} }
 
@@ -62,21 +65,9 @@ func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	for _, d := range desired {
 		if inst, ok := toEngine(d); ok {
 			want = append(want, inst)
-			c.noteEgress(inst)
 		}
 	}
 	return c.mgr.Reconcile(want)
-}
-
-// noteEgress remembers whether this instance's bytes leave through Xray, which
-// is what decides if this core may bill its inbound total at all.
-func (c *Core) noteEgress(inst engine.Instance) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.routed == nil {
-		c.routed = make(map[string]bool)
-	}
-	c.routed[inst.Tag] = inst.RouteThroughXray
 }
 
 func (c *Core) StopAll(_ context.Context) error {
@@ -134,7 +125,6 @@ func (c *Core) apply(inst core.Instance) error {
 		c.mgr.Remove(inst.ID)
 		return nil
 	}
-	c.noteEgress(want)
 	return c.mgr.Ensure(want)
 }
 
@@ -168,10 +158,17 @@ of its clients'. A tag that egresses through Xray is skipped: the bridge already
 counted those bytes, and billing them here too would double them.
 */
 func (c *Core) stashTagTraffic(billed []engine.Traffic) {
+	// Asked of the engine every scrape, not remembered here: nothing calls this
+	// core's Reconcile, so a map filled on apply would still be empty after a
+	// panel restart — and an empty one bills every routed inbound twice.
+	var routed map[string]bool
+	if c.routedTags != nil {
+		routed = c.routedTags()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, t := range billed {
-		if t.Tag == "" || c.routed[t.Tag] {
+		if t.Tag == "" || routed[t.Tag] {
 			continue
 		}
 		if c.pendingTags == nil {

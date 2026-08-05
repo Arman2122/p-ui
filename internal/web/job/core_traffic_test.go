@@ -82,6 +82,32 @@ func TestOnePollBillsEveryCore(t *testing.T) {
 }
 
 /*
+One client, two cores, one row.
+
+client_traffics is email-keyed and UNIQUE — that is what makes a quota span every
+core — and AddTraffic indexes the slice it is given by email and keeps the last
+entry. So a client who is on a vless inbound and an mtproto inbound must arrive
+here summed. Appending both silently threw one core's bytes away, and because
+the Counter had already advanced past them they were never offered again.
+*/
+func TestAClientOnTwoCoresIsBilledForBoth(t *testing.T) {
+	a := &fakeCore{id: "alpha", users: []core.TrafficDelta{{Email: "alice@x", Up: 3, Down: 5}}}
+	b := &fakeCore{id: "beta", users: []core.TrafficDelta{{Email: "alice@x", Up: 10, Down: 20}}}
+	Cores = registryOf(t, a, b)
+	t.Cleanup(func() { Cores = nil })
+
+	_, clients := collectCoreTraffic()
+
+	if len(clients) != 1 {
+		t.Fatalf("clients = %+v, want one row for the one email", clients)
+	}
+	if clients[0].Up != 13 || clients[0].Down != 25 {
+		t.Errorf("alice = up %d down %d, want 13/25 — one core's bytes were dropped",
+			clients[0].Up, clients[0].Down)
+	}
+}
+
+/*
 A core whose daemon is down must not stop the others being billed. Before the
 merge each core had its own job and this was free; sharing one loop is what
 makes it a risk worth pinning.
