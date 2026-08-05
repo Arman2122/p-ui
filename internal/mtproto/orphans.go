@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // killStrayMtgProcesses terminates orphaned mtg sidecars left over from a
@@ -43,7 +42,13 @@ func killStrayMtgProcesses(binaryPath string) int {
 		if procExeBase(pid) != base && cmdlineArgv0Base(pid) != base {
 			continue
 		}
-		if err := syscall.Kill(pid, syscall.SIGKILL); err == nil {
+		// os.Process.Kill is SIGKILL on Linux and, unlike syscall.Kill, compiles
+		// off Linux — the arch guards and unit tests need that, the panel does not.
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			continue
+		}
+		if err := proc.Kill(); err == nil {
 			killed++
 		}
 	}
