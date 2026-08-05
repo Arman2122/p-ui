@@ -90,6 +90,26 @@ The comments in those files literally point at each other ("mirrors
 `canEnableTlsFlow()` from the frontend"). **No test crosses the boundary.** Discipline has
 already been tried and has already lost; only a mechanical guard changes this.
 
+**PARTLY resolved — and P1's roadmap row overclaimed it.** The triplication is gone: one
+table in `internal/core/capability.go`, generated into TypeScript, cross-checked by a golden
+fixture. But the row said `tls` and `reality` were "now enforced server-side too", and they
+are not. Repo-wide, the only non-test callers of `core.Can` evaluate `CapTLSFlow` (twice) and
+`CapFallbacks` (once):
+
+```
+internal/sub/service.go:751                  CapTLSFlow
+internal/web/service/inbound_protocol.go:30  CapTLSFlow
+internal/web/service/inbound_protocol.go:39  CapFallbacks
+```
+
+`CapTLS`, `CapReality`, `CapStream` and `CapSniffing` are in the table and evaluated by the
+frontend, and **by nothing on any write path**. So the original hole is still open: the REST
+API and the Telegram bot can still create a configuration the UI forbids.
+
+Closing it is a *behaviour* change, not a refactor — a stricter save path can reject inbounds
+an admin already has, so it needs its own phase and a survey of existing rows first. It is not
+free, which is exactly why the row should not have claimed it was already done.
+
 ### 2.2 The one coupling that blocks everything
 
 `internal/database/model/model.go:13` imports `internal/xray`, used at `:59`
@@ -652,7 +672,7 @@ and *that* is the number to hold the design to.
 |---|---|---|---|
 | **P-1** ✅ | **Guards only, zero behaviour change.** Landed in `internal/arch/`: both import fences (clean), dispatch ratchet seeded at **109**, model→core coupling pin, frozen `ClientRecord` columns, three-way protocol-source parity (`tun` pinned, see §13.5) | none | +740 |
 | **P0** ✅ | `ClientTraffic` and `InboundConfig` → `internal/core` (**precondition, done**); `internal/xray` keeps aliases so 390 call sites are untouched. `internal/core` contract + `Counter` + `internal/cores/` + `coretest` + `TestSuiteCatchesBrokenAdapters`. Nothing calls the contract yet. **Measured effect: `internal/mtproto`'s dependency graph fell from 708 packages to 205, and from 142 xray-core packages to 0.** | none | +1100 |
-| **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. `tls` and `reality` are now enforced server-side too. Dispatch ratchet **109 → 106** | low | −168 / +72 in the deduplicated files |
+| **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. Dispatch ratchet **109 → 106**. ⚠️ It moved the rule *table* into Go but **not the enforcement** — see §2.1's correction | low | −168 / +72 in the deduplicated files |
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
 | **P4** ✅ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ✅ One traffic job bills every core: it loops the registry over TrafficSource + TagTrafficSource + OnlineReporter, and mtproto_job keeps only its reconcile. Supervision deliberately did NOT merge — see §12.3 | low | −150 |
