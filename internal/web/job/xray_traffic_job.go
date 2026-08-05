@@ -72,13 +72,13 @@ func NewXrayTrafficJob() *XrayTrafficJob {
 // real-time updates over WebSocket using compact delta payloads — no REST
 // fallback, scales to 10k–20k+ clients per inbound.
 func (j *XrayTrafficJob) Run() {
-	if !j.xrayService.IsXrayRunning() {
+	traffics, clientTraffics := collectCoreTraffic()
+	// Xray running with nothing moving is still a poll worth finishing: the
+	// dashboard's online set ages out through the broadcast below.
+	if len(traffics) == 0 && len(clientTraffics) == 0 && !j.xrayService.IsXrayRunning() {
 		return
 	}
-	traffics, clientTraffics, err := j.xrayService.GetXrayTraffic()
-	if err != nil {
-		return
-	}
+	var err error
 	needRestart0, clientsDisabled, err := j.inboundService.AddTraffic(traffics, clientTraffics)
 	if err != nil {
 		logger.Warning("add inbound traffic failed:", err)
@@ -114,21 +114,13 @@ func (j *XrayTrafficJob) Run() {
 	// and would otherwise make a client active only on a remote node appear
 	// online on local inbounds.
 	movedTraffics, activeEmails, deltaActive := splitMovedClientTraffics(clientTraffics)
-	// When the core supports the online-stats API, union in connection-based
-	// onlines. Neither signal alone covers everything: an idle-but-connected
-	// client moves no bytes between polls (the delta heuristic's blind spot),
-	// while a short-lived connection can close before this poll yet still show
-	// in the delta. Older cores fall back to deltas alone.
-	if onlineUsers, apiMode, ouErr := j.xrayService.GetOnlineUsers(); ouErr != nil {
-		logger.Debug("get online users from xray api failed:", ouErr)
-	} else if apiMode {
-		idleOnline := make([]string, 0, len(onlineUsers))
-		for _, u := range onlineUsers {
-			if !deltaActive[u.Email] {
-				activeEmails = append(activeEmails, u.Email)
-				idleOnline = append(idleOnline, u.Email)
-			}
-		}
+	// Union in connection-based onlines from every core that can report them.
+	// Neither signal alone covers everything: an idle-but-connected client moves
+	// no bytes between polls (the delta heuristic's blind spot), while a
+	// short-lived connection can close before this poll yet still show in the
+	// delta. A core that cannot answer falls back to deltas alone.
+	if idleOnline := collectIdleOnline(deltaActive); len(idleOnline) > 0 {
+		activeEmails = append(activeEmails, idleOnline...)
 		// The traffic path only bumps last_online on a non-zero delta; keep the
 		// column fresh for clients kept online purely by a live connection.
 		if err := j.inboundService.BumpClientsLastOnline(idleOnline); err != nil {

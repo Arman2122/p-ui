@@ -4,7 +4,7 @@
 > panel (OpenVPN, IKEv2/IPsec, L2TP, OpenConnect, WireGuard/AmneziaWG, SSTP, SSH, …)
 > with cross-protocol egress and one unified per-user quota.
 >
-> Status: **in progress** — P-1 through P3 are implemented, P4 is part done; see §12 for what
+> Status: **in progress** — P-1 through P3 are implemented, P4 is done; see §12 for what
 > each phase landed and what is still a proposal. Companion to `docs/architecture.md`, which
 > describes the system as it is today.
 >
@@ -655,7 +655,7 @@ and *that* is the number to hold the design to.
 | **P1** ✅ | Capability rules collapsed onto one table in `internal/core/capability.go`, generated into `frontend/src/generated/capabilities.ts` by openapigen and replayed through the TS evaluator by a Go-generated golden fixture. `tls` and `reality` are now enforced server-side too. Dispatch ratchet **109 → 106** | low | −168 / +72 in the deduplicated files |
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
-| **P4** ⏳ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ⏳ One traffic job for all cores; `mtproto_job` merges in. 2 jobs → 1. The contract gap is closed — `TagTrafficSource` landed, see §12.3 — the job itself is next | low | −150 |
+| **P4** ✅ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ✅ One traffic job bills every core: it loops the registry over TrafficSource + TagTrafficSource + OnlineReporter, and mtproto_job keeps only its reconcile. Supervision deliberately did NOT merge — see §12.3 | low | −150 |
 | **P5** | `client_credentials` + descriptor-driven UI + `GET /panel/api/cores` | medium | +700 |
 | **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it | — | ~600 |
 
