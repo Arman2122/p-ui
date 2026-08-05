@@ -5,6 +5,7 @@ package mtproto
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -22,6 +23,11 @@ type Core struct {
 
 	mu     sync.Mutex
 	online []string
+	// routed names the tags whose egress goes out through Xray's bridge, so
+	// their bytes are already billed there. Kept here because this core is the
+	// only thing that sees RouteThroughXray.
+	routed      map[string]bool
+	pendingTags map[string]core.TagDelta
 }
 
 // New returns a core over the process-wide mtg manager.
@@ -56,9 +62,21 @@ func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	for _, d := range desired {
 		if inst, ok := toEngine(d); ok {
 			want = append(want, inst)
+			c.noteEgress(inst)
 		}
 	}
 	return c.mgr.Reconcile(want)
+}
+
+// noteEgress remembers whether this instance's bytes leave through Xray, which
+// is what decides if this core may bill its inbound total at all.
+func (c *Core) noteEgress(inst engine.Instance) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.routed == nil {
+		c.routed = make(map[string]bool)
+	}
+	c.routed[inst.Tag] = inst.RouteThroughXray
 }
 
 func (c *Core) StopAll(_ context.Context) error {
@@ -116,6 +134,7 @@ func (c *Core) apply(inst core.Instance) error {
 		c.mgr.Remove(inst.ID)
 		return nil
 	}
+	c.noteEgress(want)
 	return c.mgr.Ensure(want)
 }
 
@@ -137,6 +156,49 @@ func (c *Core) CollectTraffic(_ context.Context) ([]core.TrafficDelta, error) {
 	for _, t := range billed {
 		out = append(out, core.TrafficDelta{Email: t.Email, Tag: t.Tag, Up: t.Up, Down: t.Down})
 	}
+	c.stashTagTraffic(billed)
+	return out, nil
+}
+
+/*
+stashTagTraffic banks each inbound's total, rolled up from the clients on it.
+
+mtg meters per secret and nothing else, so an inbound's total is exactly the sum
+of its clients'. A tag that egresses through Xray is skipped: the bridge already
+counted those bytes, and billing them here too would double them.
+*/
+func (c *Core) stashTagTraffic(billed []engine.Traffic) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, t := range billed {
+		if t.Tag == "" || c.routed[t.Tag] {
+			continue
+		}
+		if c.pendingTags == nil {
+			c.pendingTags = make(map[string]core.TagDelta, len(billed))
+		}
+		acc := c.pendingTags[t.Tag]
+		acc.Tag = t.Tag
+		acc.Up += t.Up
+		acc.Down += t.Down
+		c.pendingTags[t.Tag] = acc
+	}
+}
+
+// CollectTagTraffic drains what CollectTraffic banked. Draining, not replaying:
+// see the xray core for why handing the same delta out twice doubles a total.
+func (c *Core) CollectTagTraffic(_ context.Context) ([]core.TagDelta, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.pendingTags) == 0 {
+		return nil, nil
+	}
+	out := make([]core.TagDelta, 0, len(c.pendingTags))
+	for _, d := range c.pendingTags {
+		out = append(out, d)
+	}
+	c.pendingTags = nil
+	slices.SortFunc(out, func(a, b core.TagDelta) int { return strings.Compare(a.Tag, b.Tag) })
 	return out, nil
 }
 
