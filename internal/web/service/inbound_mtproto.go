@@ -7,7 +7,6 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/mtproto"
-	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // DesiredMtprotoInstances derives the mtg sidecar configs this panel should be
@@ -32,24 +31,9 @@ func (s *InboundService) DesiredMtprotoInstances() ([]mtproto.Instance, error) {
 		return nil, nil
 	}
 
-	ids := make([]int, 0, len(inbounds))
-	for _, ib := range inbounds {
-		ids = append(ids, ib.Id)
-	}
-	var disabledRows []xray.ClientTraffic
-	err = db.Model(xray.ClientTraffic{}).
-		Where("inbound_id IN ? AND enable = ?", ids, false).
-		Select("inbound_id", "email").
-		Find(&disabledRows).Error
+	depleted, err := depletedEmails(db)
 	if err != nil {
 		return nil, err
-	}
-	disabled := make(map[int]map[string]struct{}, len(disabledRows))
-	for _, row := range disabledRows {
-		if disabled[row.InboundId] == nil {
-			disabled[row.InboundId] = map[string]struct{}{}
-		}
-		disabled[row.InboundId][row.Email] = struct{}{}
 	}
 
 	instances := make([]mtproto.Instance, 0, len(inbounds))
@@ -58,10 +42,10 @@ func (s *InboundService) DesiredMtprotoInstances() ([]mtproto.Instance, error) {
 		if !ok {
 			continue
 		}
-		if off := disabled[ib.Id]; len(off) > 0 {
+		if len(depleted) > 0 {
 			kept := make([]mtproto.SecretEntry, 0, len(inst.Secrets))
 			for _, sec := range inst.Secrets {
-				if _, skip := off[sec.Name]; !skip {
+				if !depleted[sec.Name] {
 					kept = append(kept, sec)
 				}
 			}

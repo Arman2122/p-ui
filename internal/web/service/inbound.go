@@ -1651,16 +1651,9 @@ func (s *InboundService) buildInboundForLocalRuntime(tx *gorm.DB, inbound *model
 		return built, nil
 	}
 
-	var clientStats []xray.ClientTraffic
-	if err := tx.Model(xray.ClientTraffic{}).
-		Where("inbound_id = ?", built.Id).
-		Select("email", "enable").
-		Find(&clientStats).Error; err != nil {
+	depleted, err := depletedEmails(tx)
+	if err != nil {
 		return nil, err
-	}
-	enableMap := make(map[string]bool, len(clientStats))
-	for _, clientTraffic := range clientStats {
-		enableMap[clientTraffic.Email] = clientTraffic.Enable
 	}
 
 	finalClients := make([]any, 0, len(clients))
@@ -1670,7 +1663,7 @@ func (s *InboundService) buildInboundForLocalRuntime(tx *gorm.DB, inbound *model
 			continue
 		}
 		email, _ := c["email"].(string)
-		if enable, exists := enableMap[email]; exists && !enable {
+		if depleted[email] {
 			continue
 		}
 		if manualEnable, ok := c["enable"].(bool); ok && !manualEnable {

@@ -108,6 +108,9 @@ func initModels() error {
 	if err := migrateTgIDIndex(); err != nil {
 		return err
 	}
+	if err := migrateDepletedEmailIndex(); err != nil {
+		return err
+	}
 	if err := migrateSyncOrphanColumns(); err != nil {
 		return err
 	}
@@ -790,6 +793,20 @@ func migrateTgIDIndex() error {
 		return nil
 	}
 	return db.Migrator().CreateIndex(&model.ClientRecord{}, "TgID")
+}
+
+/*
+migrateDepletedEmailIndex indexes only the rows a quota or expiry disabled.
+
+"Is this client depleted" is a panel-wide question — client_traffics holds one
+row per email across every core — so the lookup can no longer be narrowed by
+inbound_id, and every inbound render asks it. Unindexed that is a sequential
+scan per inbound; partial, the index covers the query and holds only the small
+disabled minority. GORM tags cannot express a partial index, hence raw SQL.
+*/
+func migrateDepletedEmailIndex() error {
+	return db.Exec(`CREATE INDEX IF NOT EXISTS idx_client_traffics_depleted ` +
+		`ON client_traffics (email) WHERE enable = false`).Error
 }
 
 // normalizeInboundSubSortIndex lifts sub_sort_index values below the 1-based

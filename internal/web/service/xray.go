@@ -18,6 +18,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/xray"
 
 	"go.uber.org/atomic"
+	"gorm.io/gorm"
 )
 
 var (
@@ -210,7 +211,7 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 		return nil, err
 	}
 
-	depleted, err := depletedEmails(rendered.Id)
+	depleted, err := depletedEmails(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -363,27 +364,34 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 }
 
 /*
-depletedEmails names the clients this inbound may not serve because the
-quota/expiry job disabled their client_traffics row — the second of the two
-unrelated reasons a client leaves the config.
+depletedEmails names every client the quota/expiry job disabled by flipping its
+client_traffics row — the second of the two unrelated reasons a client leaves
+the config. Callers intersect it with their own inbound's client list.
+
+The answer is deliberately panel-wide. client_traffics is unique per email
+across every core and inbound, so its inbound_id points at just one of the
+inbounds a client sits on; narrowing by it would let every sibling inbound keep
+serving the client the shared quota just cut off.
 
 Read here rather than off the row's preloaded ClientStats. That field is only
 populated by GetAllInbounds, so trusting it would make the render depend on how
 the caller happened to load the row, and the hot path would quietly keep serving
 clients that ran out of quota.
 */
-func depletedEmails(inboundId int) (map[string]bool, error) {
-	var rows []core.ClientTraffic
-	err := database.GetDB().Model(&core.ClientTraffic{}).
-		Select("email").
-		Where("inbound_id = ? AND enable = ?", inboundId, false).
-		Find(&rows).Error
+func depletedEmails(tx *gorm.DB) (map[string]bool, error) {
+	if tx == nil {
+		tx = database.GetDB()
+	}
+	var emails []string
+	err := tx.Model(&core.ClientTraffic{}).
+		Where("enable = ?", false).
+		Pluck("email", &emails).Error
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		out[row.Email] = true
+	out := make(map[string]bool, len(emails))
+	for _, email := range emails {
+		out[email] = true
 	}
 	return out, nil
 }
