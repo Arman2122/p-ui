@@ -1015,6 +1015,32 @@
         ],
         "type": "object"
       },
+      "Capabilities": {
+        "description": "Capabilities is what a core claims it can do. Every field is a *bool because\nnil means UNKNOWN, which is a normal state: a master talking to a node one\nrelease behind cannot distinguish \"cannot\" from \"was never asked\".",
+        "properties": {
+          "onlineUsers": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "perUserStats": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "quotaPushdown": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "shareLink": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "userHotAdd": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "Client": {
         "description": "Client represents a client configuration for Xray inbounds with traffic limits and settings.",
         "properties": {
@@ -1360,6 +1386,40 @@
           "total",
           "up",
           "uuid"
+        ],
+        "type": "object"
+      },
+      "CoreView": {
+        "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
+        "properties": {
+          "caps": {
+            "$ref": "#/components/schemas/Capabilities"
+          },
+          "id": {
+            "example": "xray",
+            "type": "string"
+          },
+          "kinds": {
+            "description": "Kinds are the inbound protocols this core serves; a core may serve many,\nso the id is not a protocol and must never be used as one.",
+            "example": [
+              "vless",
+              "vmess"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "titleKey": {
+            "example": "cores.xray.title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "caps",
+          "id",
+          "kinds",
+          "titleKey"
         ],
         "type": "object"
       },
@@ -4003,6 +4063,61 @@
                     },
                     "obj": {}
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/cores": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "List the protocol cores this build can serve, each with the inbound kinds it handles and the capabilities it declares. An id is not a protocol — one core serves many kinds. A null capability means the core did not answer; treat it as unknown, never as false.",
+        "operationId": "get_panel_api_cores",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CoreView"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "caps": {
+                        "onlineUsers": null,
+                        "perUserStats": null,
+                        "quotaPushdown": null,
+                        "shareLink": null,
+                        "userHotAdd": null
+                      },
+                      "id": "xray",
+                      "kinds": [
+                        "vless",
+                        "vmess"
+                      ],
+                      "titleKey": "cores.xray.title"
+                    }
+                  ]
                 }
               }
             }

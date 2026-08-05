@@ -989,6 +989,32 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "Capabilities": {
+    "description": "Capabilities is what a core claims it can do. Every field is a *bool because\nnil means UNKNOWN, which is a normal state: a master talking to a node one\nrelease behind cannot distinguish \"cannot\" from \"was never asked\".",
+    "properties": {
+      "onlineUsers": {
+        "nullable": true,
+        "type": "boolean"
+      },
+      "perUserStats": {
+        "nullable": true,
+        "type": "boolean"
+      },
+      "quotaPushdown": {
+        "nullable": true,
+        "type": "boolean"
+      },
+      "shareLink": {
+        "nullable": true,
+        "type": "boolean"
+      },
+      "userHotAdd": {
+        "nullable": true,
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
   "Client": {
     "description": "Client represents a client configuration for Xray inbounds with traffic limits and settings.",
     "properties": {
@@ -1334,6 +1360,40 @@ export const SCHEMAS: Record<string, unknown> = {
       "total",
       "up",
       "uuid"
+    ],
+    "type": "object"
+  },
+  "CoreView": {
+    "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
+    "properties": {
+      "caps": {
+        "$ref": "#/components/schemas/Capabilities"
+      },
+      "id": {
+        "example": "xray",
+        "type": "string"
+      },
+      "kinds": {
+        "description": "Kinds are the inbound protocols this core serves; a core may serve many,\nso the id is not a protocol and must never be used as one.",
+        "example": [
+          "vless",
+          "vmess"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "titleKey": {
+        "example": "cores.xray.title",
+        "type": "string"
+      }
+    },
+    "required": [
+      "caps",
+      "id",
+      "kinds",
+      "titleKey"
     ],
     "type": "object"
   },
