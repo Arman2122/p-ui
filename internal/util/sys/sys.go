@@ -9,10 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 )
-
-var SIGUSR1 = syscall.SIGUSR1
 
 // countConnections returns the number of entries in a /proc/net/{tcp,udp}[6]
 // file. Returns 0 if the file is absent (e.g. /proc/net/tcp6 when IPv6 is
