@@ -274,7 +274,6 @@ export const EXAMPLES: Record<string, unknown> = {
     "inboundId": 0
   },
   "ClientRecord": {
-    "adTag": "",
     "allowedIPs": "",
     "auth": "",
     "comment": "",
@@ -293,7 +292,6 @@ export const EXAMPLES: Record<string, unknown> = {
     "publicKey": "",
     "reset": 0,
     "reverse": null,
-    "secret": "",
     "security": "",
     "subId": "",
     "tgId": 0,

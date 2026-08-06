@@ -909,8 +909,6 @@ type ClientRecord struct {
 	AllowedIPs   string `json:"allowedIPs" gorm:"column:wg_allowed_ips"`
 	PreSharedKey string `json:"preSharedKey" gorm:"column:wg_pre_shared_key"`
 	KeepAlive    int    `json:"keepAlive" gorm:"column:wg_keep_alive;default:0"`
-	Secret       string `json:"secret" gorm:"column:secret"`
-	AdTag        string `json:"adTag" gorm:"column:ad_tag;default:''"`
 	LimitIP      int    `json:"limitIp" gorm:"column:limit_ip"`
 	TotalGB      int64  `json:"totalGB" gorm:"column:total_gb"`
 	ExpiryTime   int64  `json:"expiryTime" gorm:"column:expiry_time"`
@@ -978,6 +976,23 @@ type ClientInbound struct {
 }
 
 func (ClientInbound) TableName() string { return "client_inbounds" }
+
+// ClientCredential holds one core-specific credential for a client. Keyed per
+// inbound, not per core: a FakeTLS secret embeds its inbound's fronting domain.
+type ClientCredential struct {
+	ClientId  int    `json:"clientId" gorm:"primaryKey;column:client_id"`
+	InboundId int    `json:"inboundId" gorm:"primaryKey;column:inbound_id;index"`
+	Key       string `json:"key" gorm:"primaryKey;column:key"`
+	Value     string `json:"value" gorm:"column:value"`
+}
+
+func (ClientCredential) TableName() string { return "client_credentials" }
+
+// Credential keys stored in client_credentials. MTProto is the only tenant.
+const (
+	CredentialSecret = "secret"
+	CredentialAdTag  = "adTag"
+)
 
 // ClientExternalLink is a per-client entry surfaced in the client's
 // subscription. Two kinds:
@@ -1094,8 +1109,6 @@ func (c *Client) ToRecord() *ClientRecord {
 		AllowedIPs:   strings.Join(c.AllowedIPs, ","),
 		PreSharedKey: c.PreSharedKey,
 		KeepAlive:    c.KeepAlive,
-		Secret:       c.Secret,
-		AdTag:        c.AdTag,
 	}
 	if c.Reverse != nil {
 		if b, err := json.Marshal(c.Reverse); err == nil {
@@ -1147,8 +1160,6 @@ func (r *ClientRecord) ToClient() *Client {
 		AllowedIPs:   splitWireguardAllowedIPs(r.AllowedIPs),
 		PreSharedKey: r.PreSharedKey,
 		KeepAlive:    r.KeepAlive,
-		Secret:       r.Secret,
-		AdTag:        r.AdTag,
 	}
 	if r.Reverse != "" {
 		var rev ClientReverse
@@ -1299,12 +1310,6 @@ func MergeClientRecord(existing *ClientRecord, incoming *ClientRecord) []ClientM
 		if incomingNewer || existing.PreSharedKey == "" {
 			existing.PreSharedKey = incoming.PreSharedKey
 			keepSecret("preSharedKey")
-		}
-	}
-	if existing.Secret != incoming.Secret && incoming.Secret != "" {
-		if incomingNewer || existing.Secret == "" {
-			existing.Secret = incoming.Secret
-			keepSecret("secret")
 		}
 	}
 	if existing.AllowedIPs != incoming.AllowedIPs && incoming.AllowedIPs != "" {

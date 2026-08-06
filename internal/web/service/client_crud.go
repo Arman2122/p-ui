@@ -95,7 +95,11 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 			client.Auth = existing.Auth
 		}
 		if client.Secret == "" {
-			client.Secret = existing.Secret
+			stored, sErr := storedClientCredentials(nil, existing.Id)
+			if sErr != nil {
+				return false, sErr
+			}
+			client.Secret = stored[model.CredentialSecret]
 		}
 	}
 
@@ -366,7 +370,11 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		updated.Auth = existing.Auth
 	}
 	if updated.Secret == "" {
-		updated.Secret = existing.Secret
+		stored, sErr := storedClientCredentials(nil, id)
+		if sErr != nil {
+			return false, sErr
+		}
+		updated.Secret = stored[model.CredentialSecret]
 	}
 
 	if updated.Email != existing.Email {
@@ -449,7 +457,6 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 				"uuid":              merged.UUID,
 				"password":          merged.Password,
 				"auth":              merged.Auth,
-				"secret":            merged.Secret,
 				"flow":              merged.Flow,
 				"security":          merged.Security,
 				"wg_private_key":    merged.PrivateKey,
@@ -492,13 +499,12 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		return needRestart, err
 	}
 
-	// Same shape as the group write above: SyncInbound keeps a stored ad-tag
-	// when the incoming settings carry none, so clearing the override must be
-	// applied here, where the editor always round-trips the field.
-	if err := database.GetDB().Model(&model.ClientRecord{}).
-		Where("id = ?", id).
-		UpdateColumn("ad_tag", updated.AdTag).Error; err != nil {
-		return needRestart, err
+	// Same shape as the group write above: SyncInbound skips a credential the
+	// incoming settings carry empty, so clearing the ad-tag must be applied here.
+	if updated.AdTag == "" {
+		if err := deleteClientCredentials(nil, []int{id}, model.CredentialAdTag); err != nil {
+			return needRestart, err
+		}
 	}
 
 	if err := database.GetDB().Model(&model.ClientRecord{}).
@@ -581,6 +587,9 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 		if err := tx.Where("client_id = ?", id).Delete(&model.ClientExternalLink{}).Error; err != nil {
 			return err
 		}
+		if err := deleteClientCredentials(tx, []int{id}); err != nil {
+			return err
+		}
 		if !keepTraffic && existing.Email != "" {
 			if err := tx.Where("email = ?", existing.Email).Delete(&xray.ClientTraffic{}).Error; err != nil {
 				return err
@@ -640,6 +649,11 @@ func (s *ClientService) Attach(inboundSvc *InboundService, id int, inboundIds []
 			return needRestart, getErr
 		}
 		copyClient := *clientWire
+		// Recover what a previous detach left stored for this inbound, so
+		// re-attaching keeps the client's link instead of minting a new secret.
+		if hErr := hydrateClientCredentials(nil, id, ibId, &copyClient); hErr != nil {
+			return needRestart, hErr
+		}
 		if err := s.fillProtocolDefaults(&copyClient, inbound); err != nil {
 			return needRestart, err
 		}

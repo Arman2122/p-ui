@@ -44,8 +44,15 @@ func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
 		}
 	}
 
+	creds, err := readClientCredentials(db, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	credsByClient := credentialsByClient(creds)
+
 	for i := range rows {
 		client := rows[i].ToClient()
+		applyMtprotoCredentials(client, credsByClient[rows[i].Id])
 		// The per-inbound flow_override is the reliable flow for multi-inbound
 		// clients; the canonical column can be left stale by SyncInbound (#4792).
 		if flow, err := s.EffectiveFlow(db, rows[i].Id); err == nil && flow != "" {
@@ -195,6 +202,10 @@ func (s *ClientService) DeleteOrphans() (int, error) {
 				return e
 			}
 			if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientExternalLink{}).Error; e != nil {
+				return e
+			}
+			// Foreign keys are disabled repo-wide, so nothing else reaps these.
+			if e := deleteClientCredentials(tx, batch); e != nil {
 				return e
 			}
 		}

@@ -509,10 +509,12 @@ export default function ClientsPage() {
     const row = rowsByEmail.current.get(email);
     if (!row) return;
     setFormMode('edit');
-    // Paged list omits per-client secrets to keep the row payload tiny;
-    // edit needs them, so fetch the full record first.
+    /* Paged list omits per-client credentials to keep the row payload tiny;
+       edit needs them, so fetch the full record first. */
     const full = await hydrate(row.email);
-    const merged: ClientRecord = full ? { ...row, ...full.client } : { ...row };
+    const merged: ClientRecord = full
+      ? { ...row, ...full.client, ...full.credentials }
+      : { ...row };
     setEditingClient(merged);
     const ids = full?.inboundIds ?? (Array.isArray(row.inboundIds) ? row.inboundIds : []);
     setEditingAttachedIds([...ids]);

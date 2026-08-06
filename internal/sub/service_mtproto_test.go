@@ -83,12 +83,18 @@ func TestGetInboundsBySubIdIncludesMtproto(t *testing.T) {
 	if err := db.Create(in).Error; err != nil {
 		t.Fatalf("create inbound: %v", err)
 	}
-	rec := &model.ClientRecord{Email: "u@mt", SubID: "submt", Enable: true, Secret: mtprotoTestSecret}
+	rec := &model.ClientRecord{Email: "u@mt", SubID: "submt", Enable: true}
 	if err := db.Create(rec).Error; err != nil {
 		t.Fatalf("create client: %v", err)
 	}
 	if err := db.Create(&model.ClientInbound{ClientId: rec.Id, InboundId: in.Id}).Error; err != nil {
 		t.Fatalf("create link: %v", err)
+	}
+	cred := &model.ClientCredential{
+		ClientId: rec.Id, InboundId: in.Id, Key: model.CredentialSecret, Value: mtprotoTestSecret,
+	}
+	if err := db.Create(cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
 	}
 
 	s := &SubService{}

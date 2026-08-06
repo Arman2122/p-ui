@@ -23,6 +23,7 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -46,6 +47,7 @@ func allModels() []any {
 		&model.ApiToken{},
 		&model.ClientRecord{},
 		&model.ClientInbound{},
+		&model.ClientCredential{},
 		&model.ClientExternalLink{},
 		&model.ClientGroup{},
 		&model.InboundFallback{},
@@ -58,6 +60,10 @@ func allModels() []any {
 }
 
 func initModels() error {
+	// Runs before AutoMigrate so the decided composite key is the one that ships.
+	if err := migrateClientCredentialsTable(); err != nil {
+		return err
+	}
 	models := allModels()
 	for _, mdl := range models {
 		if postgresModelSettled(mdl) {
@@ -509,6 +515,138 @@ func stripMtprotoInboundSecrets() error {
 			}
 		}
 		return tx.Create(&model.HistoryOfSeeders{SeederName: "StripMtprotoInboundSecrets"}).Error
+	})
+}
+
+func migrateClientCredentialsTable() error {
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS client_credentials (
+		client_id  integer NOT NULL,
+		inbound_id integer NOT NULL,
+		key        text    NOT NULL,
+		value      text    NOT NULL,
+		PRIMARY KEY (client_id, inbound_id, key)
+	)`).Error; err != nil {
+		return err
+	}
+	return db.Exec(
+		`CREATE INDEX IF NOT EXISTS idx_client_credentials_inbound_id ON client_credentials (inbound_id)`,
+	).Error
+}
+
+// legacyClientCredentialColumn returns a SELECT expression for a clients column
+// this build no longer maps, or an empty literal on installs that never had it.
+func legacyClientCredentialColumn(column string) string {
+	if !db.Migrator().HasColumn(&model.ClientRecord{}, column) {
+		return "''"
+	}
+	return "COALESCE(clients." + column + ", '')"
+}
+
+// settingsClientCredentials indexes an inbound's settings clients array as
+// email → key → value. Unparseable settings yield nothing rather than aborting.
+func settingsClientCredentials(settings string) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	if strings.TrimSpace(settings) == "" {
+		return out
+	}
+	var parsed struct {
+		Clients []struct {
+			Email  string `json:"email"`
+			Secret string `json:"secret"`
+			AdTag  string `json:"adTag"`
+		} `json:"clients"`
+	}
+	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
+		log.Printf("ClientCredentials: skip unparseable inbound settings: %v", err)
+		return out
+	}
+	for _, c := range parsed.Clients {
+		if c.Email == "" {
+			continue
+		}
+		out[c.Email] = map[string]string{
+			model.CredentialSecret: c.Secret,
+			model.CredentialAdTag:  c.AdTag,
+		}
+	}
+	return out
+}
+
+// backfillInboundClientCredentials writes one inbound's rows. The settings blob
+// wins over the shared columns: a FakeTLS secret embeds this inbound's domain.
+func backfillInboundClientCredentials(tx *gorm.DB, inboundId int, secretCol, adTagCol string) error {
+	var settings string
+	if err := tx.Model(&model.Inbound{}).Where("id = ?", inboundId).
+		Pluck("settings", &settings).Error; err != nil {
+		return err
+	}
+	fromSettings := settingsClientCredentials(settings)
+
+	type linkedClient struct {
+		ClientId int
+		Email    string
+		Secret   string
+		AdTag    string
+	}
+	var linked []linkedClient
+	if err := tx.Table("client_inbounds ci").
+		Select("ci.client_id AS client_id, clients.email AS email, "+
+			secretCol+" AS secret, "+adTagCol+" AS ad_tag").
+		Joins("JOIN clients ON clients.id = ci.client_id").
+		Where("ci.inbound_id = ?", inboundId).
+		Scan(&linked).Error; err != nil {
+		return err
+	}
+
+	creds := make([]model.ClientCredential, 0, len(linked))
+	for _, l := range linked {
+		for _, pair := range [][2]string{
+			{model.CredentialSecret, l.Secret},
+			{model.CredentialAdTag, l.AdTag},
+		} {
+			value := fromSettings[l.Email][pair[0]]
+			if value == "" {
+				value = pair[1]
+			}
+			if value == "" {
+				continue
+			}
+			creds = append(creds, model.ClientCredential{
+				ClientId: l.ClientId, InboundId: inboundId, Key: pair[0], Value: value,
+			})
+		}
+	}
+	if len(creds) == 0 {
+		return nil
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(creds, 500).Error
+}
+
+// backfillClientCredentials copies MTProto's shipped per-client secret and ad-tag
+// onto client_credentials. One-time, self-gated on the "ClientCredentials" row.
+func backfillClientCredentials() error {
+	var history []string
+	if err := db.Model(&model.HistoryOfSeeders{}).Pluck("seeder_name", &history).Error; err != nil {
+		return err
+	}
+	if slices.Contains(history, "ClientCredentials") {
+		return nil
+	}
+
+	var inboundIds []int
+	if err := db.Model(&model.ClientInbound{}).Distinct().Pluck("inbound_id", &inboundIds).Error; err != nil {
+		return err
+	}
+	secretCol := legacyClientCredentialColumn("secret")
+	adTagCol := legacyClientCredentialColumn("ad_tag")
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, inboundId := range inboundIds {
+			if err := backfillInboundClientCredentials(tx, inboundId, secretCol, adTagCol); err != nil {
+				return err
+			}
+		}
+		return tx.Create(&model.HistoryOfSeeders{SeederName: "ClientCredentials"}).Error
 	})
 }
 
@@ -1104,6 +1242,12 @@ func runSeeders(isUsersEmpty bool) error {
 	// client (which preserves the secret) before the inbound-level copy is
 	// dropped from every mtproto inbound.
 	if err := stripMtprotoInboundSecrets(); err != nil {
+		return err
+	}
+
+	// Self-gated on the "ClientCredentials" row. Must run after the seeder above
+	// so a converted legacy inbound already has the client link it reads.
+	if err := backfillClientCredentials(); err != nil {
 		return err
 	}
 
