@@ -617,7 +617,7 @@ A requirement nothing enforces is not a requirement. Each of these is a test in
 | `TestInboundProtocolIsValidatedByTheRegistry` | a hand-typed `oneof` allow-list growing back | 0 (P4) |
 | `TestProtocolSourcesAgree` | the const block or the frontend enum drifting from the registry | 0 |
 | `TestClientsTableHasNoPerCoreColumns` | the wide row | 0 |
-| `TestJobCountDoesNotGrowPerCore` | 11 cores × 3 cron jobs | 0 |
+| `TestJobCountDoesNotGrowPerCore` | 11 cores × 3 cron jobs | 0 per core, except the 4 Xray-named jobs older than the registry (§12.3) |
 | `TestUnknownCoreRoundTripsByteForByte` | downgrade data loss | 0 |
 | Capability golden fixture (Go ↔ vitest) | the fourth `canEnableTlsFlow` | 0 |
 | `TestSuiteCatchesBrokenAdapters` | the conformance suite decaying to a no-op | 0 |
@@ -862,6 +862,27 @@ The second question is shape. `mtproto_job` also **reconciles** — it restarts 
 died — and that is supervision, not accounting. Folding it into the traffic job couples the
 two; keeping it separate but registry-driven satisfies `TestJobCountDoesNotGrowPerCore`
 just as well, because what that guard forbids is a job *per core*, not a second job.
+
+**RESOLVED for supervision, and it kept both cadences.** `mtproto_job` is gone;
+`core_supervise` loops `registry.Cores()` over `Supervisor.Reconcile` at `@every 10s`, and
+shutdown loops the same registry over `StopAll`, so a core is converged and stopped because
+it is registered. The cadence question turned out to be two questions, not one: the `@every
+1s` job is a **liveness** check (`DidXrayCrash()` is two atomic loads) while a reconcile
+rebuilds a core's desired set from the database. Merging them would either slow crash
+recovery 10x or multiply the DB work by 10, so liveness stays at 1s and convergence stays at
+the 10s the one reconciled core already ran at. No core states an interval, because no core
+needs a different one yet.
+
+**What did not merge: Xray, and it is not the job's fault.** `Deps.XrayBaseConfig` is *not*
+the whole panel-owned config — `GetXrayConfig` injects subscription outbounds, the panel
+egress, node egresses and the mtproto SOCKS bridges **after** the inbound list, and
+`Config.Equals` compares inbounds positionally while the core sorts them by tag. Calling the
+xray core's `Reconcile` from a timer would therefore restart Xray every 10 seconds *and*
+drop every node egress and mtproto bridge, and it would also resurrect a manually stopped
+Xray (`isManuallyStopped` lives in `XrayService`, not in the core). So `cores.PanelConvergedCore`
+names the one core the panel still converges itself. Removing it needs the base config to
+become complete and the manual-stop fact to move into the engine manager — real work, not
+wiring, and the last thing standing between core #11 and free supervision.
 
 ---
 

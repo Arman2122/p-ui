@@ -8,13 +8,13 @@ import (
 )
 
 /*
-instanceOf renders one inbound row as the desired state a core reconciles towards.
+InstanceOf renders one inbound row as the desired state a core reconciles towards.
 
 Settings are healed first. Unhealed, a core and the full-config generator emit
 different JSON for the same inbound, and the difference reads as a config change
 that restarts Xray on top of live connections.
 */
-func instanceOf(ib *model.Inbound) core.Instance {
+func InstanceOf(ib *model.Inbound) core.Instance {
 	inst := storedInstanceOf(ib)
 	inst.Settings, inst.StreamSettings = ib.HealedConfig()
 	// Read from the stored settings, not the healed ones: healing turns a

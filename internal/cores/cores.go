@@ -58,6 +58,17 @@ var kindOwners = sync.OnceValue(func() *core.Registry {
 	return reg
 })
 
+/*
+PanelConvergedCore is the one core the panel converges itself, through
+GetXrayConfig, rather than through Supervisor.Reconcile.
+
+Deps.XrayBaseConfig is not the whole of that config: subscription outbounds,
+node egresses and the mtproto SOCKS bridges are injected after the inbound list,
+so an instance set cannot describe it and reconciling from one would drop them.
+Delete this, and the supervision job's skip, once the base config is complete.
+*/
+const PanelConvergedCore = xray.ID
+
 // Register wires every core into reg. Cores land here as they are ported:
 // mtproto first, because it is the smaller contract and proves the interface.
 func Register(reg *core.Registry, deps Deps) error {

@@ -81,7 +81,7 @@ see. Worse, InboundConfig.Equals compares bytes, so the running inbound then
 stopped matching the generator and every restart check read a pending change.
 */
 func (l *Local) desiredState(ib *model.Inbound) (core.Instance, error) {
-	inst := instanceOf(ib)
+	inst := InstanceOf(ib)
 	if l.deps.RenderInbound == nil {
 		return inst, nil
 	}
@@ -117,7 +117,7 @@ func (l *Local) DelInbound(ctx context.Context, ib *model.Inbound) error {
 	if err != nil {
 		return err
 	}
-	return bound.Apply.DropInstance(ctx, instanceOf(ib))
+	return bound.Apply.DropInstance(ctx, InstanceOf(ib))
 }
 
 /*
@@ -163,7 +163,7 @@ func (l *Local) strandsOldInbound(oldIb, newIb *model.Inbound) bool {
 	if err != nil || bound.HotApply == nil {
 		return true
 	}
-	before := instanceOf(oldIb)
+	before := InstanceOf(oldIb)
 	renamed := before
 	renamed.Tag = newIb.Tag
 	return bound.HotApply.PlanChange(before, renamed) != core.ActionNoop
@@ -205,7 +205,7 @@ func (l *Local) userTarget(ib *model.Inbound, named string) (*core.Bound, core.I
 			current = fresh
 		}
 	}
-	return bound, instanceOf(current), nil
+	return bound, InstanceOf(current), nil
 }
 
 // AddUser hands the core the client as the inbound stores it. The credentials a

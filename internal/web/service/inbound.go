@@ -855,7 +855,7 @@ func parseRouteXrayPort(settings string) int {
 // It returns an error when an egress port cannot be allocated or persisted, so
 // the caller refuses the save rather than storing a routed-but-portless inbound,
 // which would otherwise route no traffic and have its mtg metrics skipped (see
-// mtproto_job) — silently losing its accounting.
+// the mtproto core's tag rollup) — silently losing its accounting.
 func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSettings string) error {
 	if inbound.Protocol != model.MTProto {
 		return nil
