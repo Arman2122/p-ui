@@ -135,3 +135,30 @@ describe('parseLink — errors', () => {
     expect(() => parseLink('http://example.com')).toThrow(/Unsupported/);
   });
 });
+
+describe('parseLink — XHTTP with a split download endpoint', () => {
+  const extra = JSON.stringify({
+    mode: 'stream-up',
+    downloadSettings: { address: 'download.example.com', port: 443, network: 'xhttp' },
+  });
+  const link =
+    'vless://11111111-2222-3333-4444-555555555555@upload.example.com:443'
+    + `?type=xhttp&security=tls&mode=stream-up&extra=${encodeURIComponent(extra)}#Split`;
+
+  // This parser is transport-agnostic on purpose: it carries query params
+  // through as-is, so the download endpoint survives without xhttp ever
+  // being modelled here. Pinned because the panel has two other link
+  // implementations that DO model it, and this one must not drift into a
+  // third that quietly drops half the connection.
+  it('carries the download endpoint through untouched', () => {
+    const r = parseLink(link);
+    expect(r.address).toBe('upload.example.com');
+    expect(r.params.type).toBe('xhttp');
+
+    const decoded = JSON.parse(r.params.extra) as {
+      downloadSettings?: { address?: string; port?: number };
+    };
+    expect(decoded.downloadSettings?.address).toBe('download.example.com');
+    expect(decoded.downloadSettings?.port).toBe(443);
+  });
+});
