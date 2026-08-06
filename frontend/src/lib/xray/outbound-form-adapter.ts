@@ -403,6 +403,12 @@ function hydrateStreamForm(stream: Raw): OutboundStreamFormValues {
       xhttp.enableXmux = true;
       xhttp.xmux = { ...XMUX_DEFAULTS, ...(xmux as Raw) };
     }
+    // Same contract as xmux: an imported link carrying a download endpoint
+    // opens with its box expanded rather than looking like it has none.
+    const download = xhttp.downloadSettings;
+    if (download && typeof download === 'object' && !Array.isArray(download)) {
+      xhttp.enableDownloadSettings = true;
+    }
     next.xhttpSettings = xhttp;
   }
   return next as unknown as OutboundStreamFormValues;
