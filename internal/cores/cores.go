@@ -3,6 +3,7 @@ package cores
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
@@ -31,6 +32,31 @@ one-line diff.
 Concrete cores live under internal/cores/internal/, so the Go compiler — not a
 lint rule — stops the service layer from importing one directly.
 */
+
+/*
+ServedByXray reports whether the Xray core owns this kind, so the panel's Xray
+config carries only inbounds xray-core can actually start.
+
+Answered here rather than in the service layer because this package is the one
+place already allowed to name a concrete core, and because the alternative — a
+second registry over there — would build a second Xray adapter with its own
+API client and its own pending tag deltas, which is how one measurement ends up
+with two subjects.
+*/
+func ServedByXray(kind core.Kind) bool {
+	bound, ok := kindOwners().For(kind)
+	return ok && bound.Core.Describe().ID == xray.ID
+}
+
+// kindOwners resolves the kind-to-core map once. Empty Deps are enough: the map
+// is fixed at compile time, and nothing here touches a core's runtime state.
+var kindOwners = sync.OnceValue(func() *core.Registry {
+	reg, err := Default(Deps{})
+	if err != nil {
+		panic("cores: " + err.Error())
+	}
+	return reg
+})
 
 // Register wires every core into reg. Cores land here as they are ported:
 // mtproto first, because it is the smaller contract and proves the interface.
