@@ -24,7 +24,7 @@ const CORES: CoreView[] = [
 ];
 
 describe('credentialsForKinds', () => {
-  const cases: { name: string; cores: CoreView[] | undefined; kinds: string[]; want: string[] }[] = [
+  const cases: { name: string; cores: CoreView[]; kinds: string[]; want: string[] }[] = [
     {
       name: 'a declared kind gets exactly what its core declares',
       cores: CORES,
@@ -70,8 +70,14 @@ describe('credentialsForKinds', () => {
       want: ['auth', 'password', 'uuid'],
     },
     {
-      name: 'no manifest at all still renders an editable form',
-      cores: undefined,
+      name: 'a client attached to no inbound keeps what the form has always shown',
+      cores: CORES,
+      kinds: [],
+      want: ['auth', 'password', 'uuid'],
+    },
+    {
+      name: 'an empty manifest falls back per kind rather than rendering nothing',
+      cores: [],
       kinds: ['wireguard'],
       want: ['auth', 'password', 'uuid'],
     },

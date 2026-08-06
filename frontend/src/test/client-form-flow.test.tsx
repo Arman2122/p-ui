@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -33,6 +33,9 @@ function savedFlow(save: ReturnType<typeof vi.fn>): unknown {
 }
 
 describe('ClientFormModal — Vision flow preservation', () => {
+  /* The form waits for the manifest before it will save, so these need one. */
+  beforeEach(() => serveCores({ vless: ['uuid'] }));
+
   it('keeps xtls-rprx-vision with a stable Reality inbound', async () => {
     const qc = makeQC();
     const save = vi.fn().mockResolvedValue({ success: true });
@@ -70,11 +73,17 @@ describe('ClientFormModal — Vision flow preservation', () => {
   });
 });
 
-/* One core declaring vless and one declaring nothing, as GET /panel/api/cores serves them. */
+/* GET /panel/api/cores as the panel serves it. A null declaration is a core that
+   is present but declares nothing for the kind — NOT an empty manifest, which
+   means the response was unusable and the form waits rather than guessing. */
 function serveCores(clientCredentials: Record<string, string[]> | null) {
-  const obj = clientCredentials === null
-    ? []
-    : [{ id: 'xray', titleKey: 'cores.xray.title', kinds: ['vless'], caps: {}, clientCredentials }];
+  const obj = [{
+    id: 'xray',
+    titleKey: 'cores.xray.title',
+    kinds: ['vless'],
+    caps: {},
+    clientCredentials: clientCredentials ?? {},
+  }];
   vi.spyOn(HttpUtil, 'get').mockImplementation(async (url: string) => (
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     (url === '/panel/api/cores' ? { success: true, obj } : { success: true, obj: {} }) as any

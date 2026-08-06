@@ -867,7 +867,7 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 				if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientExternalLink{}).Error; e != nil {
 					return e
 				}
-				if e := deleteClientCredentials(tx, batch); e != nil {
+				if e := deleteClientCredentials(tx, batch, nil); e != nil {
 					return e
 				}
 			}

@@ -501,8 +501,10 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 
 	// Same shape as the group write above: SyncInbound skips a credential the
 	// incoming settings carry empty, so clearing the ad-tag must be applied here.
-	if updated.AdTag == "" {
-		if err := deleteClientCredentials(nil, []int{id}, model.CredentialAdTag); err != nil {
+	/* Scoped to the inbounds this update wrote: an ad tag is per inbound, so a
+	   single-inbound edit — or a client with none left — must not clear the rest. */
+	if updated.AdTag == "" && len(inboundIds) > 0 {
+		if err := deleteClientCredentials(nil, []int{id}, inboundIds, model.CredentialAdTag); err != nil {
 			return needRestart, err
 		}
 	}
@@ -587,7 +589,7 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 		if err := tx.Where("client_id = ?", id).Delete(&model.ClientExternalLink{}).Error; err != nil {
 			return err
 		}
-		if err := deleteClientCredentials(tx, []int{id}); err != nil {
+		if err := deleteClientCredentials(tx, []int{id}, nil); err != nil {
 			return err
 		}
 		if !keepTraffic && existing.Email != "" {
