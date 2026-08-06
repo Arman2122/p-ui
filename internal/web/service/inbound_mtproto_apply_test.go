@@ -29,7 +29,7 @@ func readMtgConfig(t *testing.T, inboundId int) string {
 func TestUpdateInboundMtprotoUnchangedDoesNotRestart(t *testing.T) {
 	setupConflictDB(t)
 	pidFile := installFakeMtg(t)
-	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }, Cores: testCores(t)}))
+	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{Cores: testCores(t)}))
 	t.Cleanup(func() { runtime.SetManager(nil) })
 
 	seedInboundConflict(t, "mt-apply", "", 46101, model.MTProto,

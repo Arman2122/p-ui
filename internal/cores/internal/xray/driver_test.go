@@ -499,3 +499,59 @@ func TestPlanChangeSeparatesHotApplyFromRestart(t *testing.T) {
 		})
 	}
 }
+
+/*
+The credentials the core API takes are not the shapes the settings blob stores.
+
+Since the runtime layer stopped hand-building a per-protocol user map, a user
+arrives exactly as its inbound stores it: keepAlive as a number, and — on
+shadowsocks-2022, where the healer strips the client's own method — with no
+cipher at all. Both make buildUserAccount refuse the add, which costs a restart.
+*/
+func TestClientCredentialsAreRenderedForTheCoreAPI(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		settings string
+		user     core.User
+		want     map[string]any
+	}{
+		{
+			name:     "shadowsocks-2022 takes the cipher off its inbound",
+			settings: `{"method":"2022-blake3-aes-256-gcm","clients":[{"email":"a@x","password":"kkk"}]}`,
+			user:     core.User{Email: "a@x", Credentials: map[string]any{"password": "kkk"}},
+			want:     map[string]any{"email": "a@x", "password": "kkk", "method": "2022-blake3-aes-256-gcm"},
+		},
+		{
+			// A stale client method must lose: sending a legacy name to a 2022
+			// inbound builds the wrong account type and panics the whole core.
+			name:     "the inbound's method beats a client's stale one",
+			settings: `{"method":"2022-blake3-aes-256-gcm","clients":[{"email":"a@x","password":"pw","method":"aes-256-gcm"}]}`,
+			user:     core.User{Email: "a@x", Credentials: map[string]any{"password": "pw", "method": "aes-256-gcm"}},
+			want:     map[string]any{"email": "a@x", "password": "pw", "method": "2022-blake3-aes-256-gcm"},
+		},
+		{
+			name:     "wireguard keepAlive is stored as a number and sent as a string",
+			settings: `{"clients":[{"email":"a@x","publicKey":"pub","keepAlive":25}]}`,
+			user:     core.User{Email: "a@x", Credentials: map[string]any{"publicKey": "pub", "keepAlive": float64(25)}},
+			want:     map[string]any{"email": "a@x", "publicKey": "pub", "keepAlive": "25"},
+		},
+		{
+			name:     "an inbound with no method adds none",
+			settings: `{"clients":[{"email":"a@x","id":"uuid"}],"decryption":"none"}`,
+			user:     core.User{Email: "a@x", Credentials: map[string]any{"id": "uuid"}},
+			want:     map[string]any{"email": "a@x", "id": "uuid"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := clientOf(core.Instance{Tag: "in-1", Settings: tc.settings}, tc.user)
+			if len(got) != len(tc.want) {
+				t.Fatalf("rendered %v, want %v", got, tc.want)
+			}
+			for key, want := range tc.want {
+				if got[key] != want {
+					t.Errorf("%s = %#v, want %#v", key, got[key], want)
+				}
+			}
+		})
+	}
+}

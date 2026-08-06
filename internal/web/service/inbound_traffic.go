@@ -617,24 +617,7 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail string) (b
 					}
 					break
 				}
-				cipher := ""
-				if string(inbound.Protocol) == "shadowsocks" {
-					var oldSettings map[string]any
-					err = json.Unmarshal([]byte(inbound.Settings), &oldSettings)
-					if err != nil {
-						return false, err
-					}
-					cipher, _ = oldSettings["method"].(string)
-				}
-				err1 := rt.AddUser(context.Background(), inbound, map[string]any{
-					"email":    client.Email,
-					"id":       client.ID,
-					"auth":     client.Auth,
-					"security": client.Security,
-					"flow":     client.Flow,
-					"password": client.Password,
-					"cipher":   cipher,
-				})
+				err1 := rt.AddUser(context.Background(), inbound, client.Email)
 				if err1 == nil {
 					logger.Debug("Client enabled on", rt.Name(), "due to reset traffic:", clientEmail)
 				} else if inbound.NodeID != nil {

@@ -26,7 +26,7 @@ func TestResetAllTrafficsDoesNotBlockWriterOnNodeCall(t *testing.T) {
 	resetTrafficWriterForTest(t)
 	StartTrafficWriter()
 
-	mgr := runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }, Cores: testCores(t)})
+	mgr := runtime.NewManager(runtime.LocalDeps{Cores: testCores(t)})
 	runtime.SetManager(mgr)
 	t.Cleanup(func() { runtime.SetManager(nil) })
 

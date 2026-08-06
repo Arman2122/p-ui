@@ -507,7 +507,7 @@ func wireFingerprint(v url.Values) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (r *Remote) AddUser(ctx context.Context, ib *model.Inbound, _ map[string]any) error {
+func (r *Remote) AddUser(ctx context.Context, ib *model.Inbound, _ string) error {
 	return r.UpdateInbound(ctx, ib, ib)
 }
 

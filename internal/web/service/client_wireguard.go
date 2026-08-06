@@ -2,7 +2,6 @@ package service
 
 import (
 	"net/netip"
-	"strconv"
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -11,13 +10,6 @@ import (
 )
 
 const defaultWireguardBase = "10.0.0.0/24"
-
-func keepAliveStr(seconds int) string {
-	if seconds <= 0 {
-		return ""
-	}
-	return strconv.Itoa(seconds)
-}
 
 func wireguardHostAddr(s string) netip.Addr {
 	s = strings.TrimSpace(s)

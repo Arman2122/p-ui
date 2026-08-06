@@ -42,7 +42,7 @@ func (f *fakeNodeRuntime) UpdateInbound(context.Context, *model.Inbound, *model.
 	return nil
 }
 
-func (f *fakeNodeRuntime) AddUser(context.Context, *model.Inbound, map[string]any) error { return nil }
+func (f *fakeNodeRuntime) AddUser(context.Context, *model.Inbound, string) error { return nil }
 
 func (f *fakeNodeRuntime) RemoveUser(context.Context, *model.Inbound, string) error { return nil }
 
@@ -78,7 +78,7 @@ func (f *fakeNodeRuntime) ResetAllTraffics(context.Context) error               
 func setupNodeRuntime(t *testing.T) (int, *fakeNodeRuntime) {
 	t.Helper()
 	prev := runtime.GetManager()
-	mgr := runtime.NewManager(runtime.LocalDeps{APIPort: func() int { return 0 }, SetNeedRestart: func() {}, Cores: testCores(t)})
+	mgr := runtime.NewManager(runtime.LocalDeps{SetNeedRestart: func() {}, Cores: testCores(t)})
 	runtime.SetManager(mgr)
 	t.Cleanup(func() { runtime.SetManager(prev) })
 
