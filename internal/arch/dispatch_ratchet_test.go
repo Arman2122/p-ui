@@ -26,6 +26,13 @@ number in the same PR. TestRouteRegistryContract uses the same two-way shape.
 Detected, in non-test Go under internal/ and main.go:
   - a `model.<Const>` selector naming a declared Protocol constant
   - a string literal compared against an expression ending in `.Protocol`
+  - a literal `case` arm of a `switch` on such an expression
+
+That third shape was missed until 2026-08-06, and it is how the largest tables
+in the tree are written — sub/service.go's share-link dispatch among them. Adding
+it moved the total from 94 to 123 with nothing having regressed: 29 sites had
+always been there, and the guard was reporting a number 23% smaller than the
+thing it was guarding.
 
 Not detected: comparisons against a bare local named `protocol`. Requiring the
 field selector keeps the Xray *outbound* protocol namespace (freedom, blackhole,
@@ -35,29 +42,30 @@ dns, loopback in service/outbound/) out of a budget about *inbound* core kinds.
 // dispatchBudget is the measured count per file. Lower it as sites migrate to
 // the registry; never raise it without agreement that a new core needs the site.
 var dispatchBudget = map[string]int{
-	"internal/web/service/inbound.go":              16,
-	"internal/web/service/client_inbound_apply.go": 10,
+	"internal/web/service/inbound.go":              21,
+	"internal/web/service/client_inbound_apply.go": 20,
 	"internal/web/service/xray.go":                 9,
 	"internal/web/service/inbound_clients.go":      8,
 	"internal/web/service/tgbot/tgbot_inbound.go":  8,
-	"internal/sub/service.go":                      7,
+	"internal/sub/service.go":                      14,
 	"internal/web/service/port_conflict.go":        7,
 	"internal/sub/clash_service.go":                6,
 	"internal/web/service/client_crud.go":          6,
 	"internal/database/db.go":                      6,
 	"internal/web/service/inbound_protocol.go":     1,
 	"internal/web/service/inbound_mtproto.go":      3,
-	"internal/sub/json_service.go":                 2,
+	"internal/sub/json_service.go":                 8,
 	"internal/web/service/inbound_migration.go":    2,
 	"internal/mtproto/manager.go":                  1,
 	"internal/web/service/inbound_flow_restore.go": 1,
 	"internal/web/service/inbound_traffic.go":      1,
+	"internal/web/job/check_client_ip_job.go":      1,
 }
 
 // dispatchTotal guards the guard. If the detector stops matching the code — a
 // rename of Protocol, a moved const block — every per-file budget silently goes
 // green, and only a total that must still be met catches it.
-const dispatchTotal = 94
+const dispatchTotal = 123
 
 // frozenDispatch are sites that must NOT migrate to the registry. Historical
 // migrations are frozen facts about data written by past releases; rewriting
@@ -66,6 +74,20 @@ var frozenDispatch = map[string]string{
 	"internal/database/db.go":                   "one-off data migrations for shipped releases",
 	"internal/web/service/inbound_migration.go": "one-off data migrations for shipped releases",
 	"internal/mtproto/manager.go":               "a core naming its own kind, which stays correct after the refactor",
+}
+
+/*
+dispatchesOnProtocol reports whether an expression reads an inbound's protocol.
+
+The string() wrapper is unwrapped because it defeats a plain suffix test, and
+that is exactly how one comparison in check_client_ip_job.go was written — a
+site the guard could not see for as long as it existed.
+*/
+func dispatchesOnProtocol(expr string) bool {
+	if inner, ok := strings.CutPrefix(expr, "string("); ok {
+		expr = strings.TrimSuffix(inner, ")")
+	}
+	return strings.HasSuffix(expr, ".Protocol")
 }
 
 func countDispatchSites(t *testing.T, sources []goSource, consts map[string]string) map[string]int {
@@ -94,8 +116,25 @@ func countDispatchSites(t *testing.T, sources []goSource, consts map[string]stri
 				if !isLit || lit.Kind != token.STRING {
 					return true
 				}
-				if strings.HasSuffix(types.ExprString(other), ".Protocol") {
+				if dispatchesOnProtocol(types.ExprString(other)) {
 					counts[src.Rel]++
+				}
+			case *ast.SwitchStmt:
+				if node.Tag == nil || !dispatchesOnProtocol(types.ExprString(node.Tag)) {
+					return true
+				}
+				// Literal arms only: a model.<Const> arm is already counted by
+				// the SelectorExpr case, which Inspect reaches on its own.
+				for _, stmt := range node.Body.List {
+					clause, ok := stmt.(*ast.CaseClause)
+					if !ok {
+						continue
+					}
+					for _, expr := range clause.List {
+						if lit, ok := expr.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+							counts[src.Rel]++
+						}
+					}
 				}
 			}
 			return true
