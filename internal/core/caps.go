@@ -46,6 +46,20 @@ type UserProvisioner interface {
 }
 
 /*
+WholeSetUserProvisioner provisions by re-applying its entire user set, the way
+mtg rewrites its [secrets] section, so Instance.Users must be the set as it now
+stands: a client missing from it is a client revoked.
+
+A plain UserProvisioner alters the named user alone and reads no other client.
+The distinction is what lets the caller stop rebuilding a whole inbound — heal
+its settings, project every client — for a single client edit.
+*/
+type WholeSetUserProvisioner interface {
+	UserProvisioner
+	ProvisionsWholeUserSet()
+}
+
+/*
 CredentialDeclarer names the credential fields one kind's clients carry, so the
 client form renders from what a core declares instead of from its own protocol
 branches. Names come from the closed vocabulary in credentials.go.

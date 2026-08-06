@@ -243,7 +243,21 @@ func checkUsers(r *report, rig Rig, bound *core.Bound) {
 		r.fail("users/reconcile", "reconciling before the provisioning checks failed: %v", err)
 		return
 	}
-	if err := bound.Users.AddUser(ctx, base, extra); err != nil {
+	/*
+		A core that provisions one user is handed one user, and a removal is
+		handed none, because that is what the runtime actually passes it.
+
+		Handing over a fully projected instance here would let a core read
+		inst.Users, pass this suite, and then revoke everyone the trimmed
+		instance omits — the suite teaching the opposite of the contract.
+	*/
+	addInst, dropInst := base, pair
+	if bound.UserSet == nil {
+		addInst.Users = []core.User{extra}
+		dropInst.Users = nil
+	}
+
+	if err := bound.Users.AddUser(ctx, addInst, extra); err != nil {
 		r.fail("adduser/succeeds", "AddUser failed: %v", err)
 		return
 	}
@@ -251,7 +265,7 @@ func checkUsers(r *report, rig Rig, bound *core.Bound) {
 		r.fail("adduser/reaches-the-daemon", "after AddUser the daemon serves %v, without %q; the user cannot connect and nothing failed", served, extra.Email)
 	}
 
-	if err := bound.Users.RemoveUser(ctx, pair, extra.Email); err != nil {
+	if err := bound.Users.RemoveUser(ctx, dropInst, extra.Email); err != nil {
 		r.fail("removeuser/succeeds", "RemoveUser failed: %v", err)
 		return
 	}
