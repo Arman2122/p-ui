@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { parseVlessLink } from '@/lib/xray/outbound-link-parser';
 import { normalizeXhttpForWire } from '@/lib/xray/stream-wire-normalize';
-import { XHttpStreamSettingsSchema } from '@/schemas/protocols/stream/xhttp';
+import { XHttpStreamSettingsSchema, xhttpSplitConflictsWithMode } from '@/schemas/protocols/stream/xhttp';
 
 /*
 A split XHTTP link: upload to one address, download from another.
@@ -72,21 +72,25 @@ describe('split XHTTP: upload and download on different addresses', () => {
     expect(parsed.downloadSettings?.xhttpSettings?.path).toBe('/');
   });
 
-  it('refuses the one combination xray-core will not start with', () => {
+  it('still parses the one combination xray-core will not start with', () => {
+    /* Parsing must stay tolerant: this schema also reads rows the panel did not
+       write, and rejecting them would drop the form back to the raw object and
+       lose every default. The combination is refused where it is acted on, not
+       where it is read. */
     const streamOne = XHttpStreamSettingsSchema.safeParse({
       mode: 'stream-one',
       downloadSettings: { address: 'download.example.com', port: 443 },
     });
-    expect(streamOne.success).toBe(false);
-    expect(streamOne.error?.issues[0]?.message).toBe('xhttp.downloadSettingsNotInStreamOne');
+    expect(streamOne.success).toBe(true);
+    expect(xhttpSplitConflictsWithMode(streamOne.data!)).toBe(true);
 
-    /* stream-up is the mode the split is actually used with, so the guard must
+    /* stream-up is the mode the split is actually used with, so the check must
        not be a blanket ban on having a download endpoint at all. */
-    const streamUp = XHttpStreamSettingsSchema.safeParse({
+    const streamUp = XHttpStreamSettingsSchema.parse({
       mode: 'stream-up',
       downloadSettings: { address: 'download.example.com', port: 443 },
     });
-    expect(streamUp.success).toBe(true);
+    expect(xhttpSplitConflictsWithMode(streamUp)).toBe(false);
   });
 });
 

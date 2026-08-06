@@ -169,16 +169,20 @@ export const XHttpStreamSettingsSchema = z.preprocess(migrateLegacyXhttp, z.obje
   downloadSettings: XHttpDownloadSettingsSchema.optional(),
   // UI-only toggle, same contract as enableXmux.
   enableDownloadSettings: z.boolean().default(false),
-}).superRefine((v, ctx) => {
-  // xray-core refuses to start on this pair rather than ignoring one of them
-  // ("Can not use downloadSettings in stream-one mode"), so catching it in the
-  // form is the difference between a validation message and a dead inbound.
-  if (v.downloadSettings && v.mode === 'stream-one') {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['mode'],
-      message: 'xhttp.downloadSettingsNotInStreamOne',
-    });
-  }
 }));
+
+/*
+stream-one plus a download endpoint is a config xray-core declines to start on,
+and it is refused in three places: the form disables the toggle and says why,
+the wire normaliser drops the endpoint, and the subscription builder skips it.
+
+Deliberately NOT a schema refinement. This schema also parses rows the panel did
+not write — an import, an older build, a direct API call — and a parse that
+rejects them makes the form fall back to the raw object, losing every default it
+would otherwise apply. Describing stored data and validating operator input are
+different jobs, and only the second may fail.
+*/
+export function xhttpSplitConflictsWithMode(v: Pick<XHttpStreamSettings, 'mode' | 'downloadSettings'>): boolean {
+  return v.mode === 'stream-one' && !!v.downloadSettings;
+}
 export type XHttpStreamSettings = z.infer<typeof XHttpStreamSettingsSchema>;
