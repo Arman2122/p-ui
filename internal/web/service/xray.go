@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -187,18 +189,41 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 }
 
 /*
+servedByXrayCore reports whether the Xray config may carry this protocol.
+
+Asking which core owns the kind, instead of naming the ones to skip, is what
+stops core #11 taking Xray down: a kind Xray does not serve — another core's, or
+no core's — is quarantined, never handed to xray-core, which rejects it and dies.
+
+An unowned kind is logged rather than dropped in silence. A row naming a kind
+this build has no core for is reachable — a restored backup, a direct edit, an
+older master pushing to a newer node — and the symptom is a listener that stops
+answering, which is not something to leave a reader guessing at.
+*/
+func servedByXrayCore(protocol model.Protocol) bool {
+	kind := core.Kind(protocol)
+	if cores.ServedByXray(kind) {
+		return true
+	}
+	if !slices.Contains(cores.Kinds(), kind) {
+		logger.Warning("inbound protocol", protocol, "has no core in this build; quarantined, not started")
+	}
+	return false
+}
+
+/*
 RenderInbound produces one inbound exactly as Xray should receive it, and is the
 single renderer: the full config build loops over it, and runtime.Local hands
 the same bytes to the core on the hot path.
 
 A nil config with a nil error means the local Xray must not serve this inbound
-at all — disabled, owned by a node, or a protocol another core runs.
+at all — disabled, owned by a node, or a protocol the Xray core does not serve.
 
 The row is not mutated. It used to be, harmlessly, because only the config build
 called this; the hot path passes the caller's own row.
 */
 func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig, error) {
-	if inbound == nil || !inbound.Enable || inbound.NodeID != nil || inbound.Protocol == model.MTProto {
+	if inbound == nil || !inbound.Enable || inbound.NodeID != nil || !servedByXrayCore(inbound.Protocol) {
 		return nil, nil
 	}
 	rendered := *inbound
