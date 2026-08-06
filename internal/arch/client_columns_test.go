@@ -8,23 +8,22 @@ import (
 /*
 The clients table must stop growing a column per protocol.
 
-ClientRecord is already a union of every protocol's credentials — uuid, password,
-auth, four WireGuard columns, secret, ad_tag — and WireGuard alone cost five. The
-columns are not the real cost; the hand-written per-field code is. MergeClientRecord
-is one branch per field and runs on the node-sync path, so a field forgotten there
-does not error: the merge drops it and the client works on the master but not on
-the node. ToRecord and ToClient repeat the mapping twice more.
+ClientRecord is still a union of Xray's protocol credentials — uuid, password,
+auth, four WireGuard columns — and WireGuard alone cost five. The columns are not
+the real cost; the hand-written per-field code is. MergeClientRecord is one
+branch per field and runs on the node-sync path, so a field forgotten there does
+not error: the merge drops it and the client works on the master but not on the
+node. ToRecord and ToClient repeat the mapping twice more.
 
-Per-core credentials belong in a client_credentials side table keyed by
-(client_id, core_id). This test freezes the current column set so adding
-`ocserv_password` requires deleting a line here — which is the review signal the
-whole design depends on.
+Per-core credentials belong in the client_credentials side table keyed by
+(client_id, inbound_id, key); MTProto's secret and ad_tag already moved there.
+This test freezes the remaining column set so adding `ocserv_password` requires
+deleting a line here — which is the review signal the whole design depends on.
 */
 
 // frozenClientRecordFields is the ClientRecord field set as measured. Adding a
 // per-core credential field here is the thing this guard exists to stop.
 var frozenClientRecordFields = []string{
-	"AdTag",
 	"AllowedIPs",
 	"Auth",
 	"Comment",
@@ -43,7 +42,6 @@ var frozenClientRecordFields = []string{
 	"PublicKey",
 	"Reset",
 	"Reverse",
-	"Secret",
 	"Security",
 	"SubID",
 	"SyncOrphanedAt",
@@ -73,7 +71,7 @@ func TestClientRecordColumnsAreFrozen(t *testing.T) {
 
 	for _, f := range got {
 		if !wantSet[f] {
-			t.Errorf("ClientRecord gained field %q — per-core credentials belong in a client_credentials side table keyed by (client_id, core_id), not in a column on every client; see docs/multi-core-architecture.md §8", f)
+			t.Errorf("ClientRecord gained field %q — per-core credentials belong in the client_credentials side table keyed by (client_id, inbound_id, key), not in a column on every client; see docs/multi-core-architecture.md §8", f)
 		}
 	}
 	for _, f := range want {

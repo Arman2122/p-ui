@@ -285,7 +285,6 @@ export interface ClientInbound {
 }
 
 export interface ClientRecord {
-  adTag: string;
   allowedIPs: string;
   auth: string;
   comment: string;
@@ -304,7 +303,6 @@ export interface ClientRecord {
   publicKey: string;
   reset: number;
   reverse: unknown;
-  secret: string;
   security: string;
   subId: string;
   tgId: number;

@@ -30,6 +30,9 @@ func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email st
 	if !rec.Enable {
 		updated := rec.ToClient()
 		updated.Enable = true
+		if hErr := hydrateClientCredentials(nil, rec.Id, 0, updated); hErr != nil {
+			return false, hErr
+		}
 		nr, uErr := s.Update(inboundSvc, rec.Id, *updated)
 		if uErr != nil {
 			logger.Warning("Failed to auto-enable client during traffic reset:", uErr)
@@ -84,6 +87,10 @@ func (s *ClientService) BulkResetTraffic(inboundSvc *InboundService, emails []st
 		if err == nil && !rec.Enable {
 			updated := rec.ToClient()
 			updated.Enable = true
+			if hErr := hydrateClientCredentials(nil, rec.Id, 0, updated); hErr != nil {
+				logger.Warning("Failed to read stored credentials during bulk traffic reset:", hErr)
+				continue
+			}
 			if _, uErr := s.Update(inboundSvc, rec.Id, *updated); uErr != nil {
 				logger.Warning("Failed to auto-enable client during bulk traffic reset:", uErr)
 			}

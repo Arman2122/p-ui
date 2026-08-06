@@ -1167,9 +1167,6 @@ export const SCHEMAS: Record<string, unknown> = {
   },
   "ClientRecord": {
     "properties": {
-      "adTag": {
-        "type": "string"
-      },
       "allowedIPs": {
         "type": "string"
       },
@@ -1224,9 +1221,6 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "integer"
       },
       "reverse": {},
-      "secret": {
-        "type": "string"
-      },
       "security": {
         "type": "string"
       },
@@ -1250,7 +1244,6 @@ export const SCHEMAS: Record<string, unknown> = {
       }
     },
     "required": [
-      "adTag",
       "allowedIPs",
       "auth",
       "comment",
@@ -1269,7 +1262,6 @@ export const SCHEMAS: Record<string, unknown> = {
       "publicKey",
       "reset",
       "reverse",
-      "secret",
       "security",
       "subId",
       "tgId",

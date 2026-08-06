@@ -105,8 +105,16 @@ export const ExternalLinkSchema = z.object({
 
 export const ExternalLinkListSchema = z.array(ExternalLinkSchema).nullable().transform((v) => v ?? []);
 
+/* Credentials live in client_credentials, keyed per (client, inbound, key), so
+   they arrive beside the record rather than as columns on it. */
+export const ClientCredentialsSchema = z
+  .record(z.string(), z.string())
+  .nullable()
+  .transform((v) => v ?? {});
+
 export const ClientHydrateSchema = z.object({
   client: ClientRecordSchema,
+  credentials: ClientCredentialsSchema.optional(),
   inboundIds: nullableNumberArray,
   externalLinks: ExternalLinkListSchema.optional(),
 });

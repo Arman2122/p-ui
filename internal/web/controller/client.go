@@ -120,12 +120,17 @@ func (a *ClientController) buildClientPayload(rec *model.ClientRecord) (gin.H, e
 		return nil, err
 	}
 	rec.Flow = flow
+	credentials, err := a.clientService.CredentialsForRecord(rec.Id)
+	if err != nil {
+		return nil, err
+	}
 	var usedTraffic int64
 	if t, tErr := a.inboundService.GetClientTrafficByEmail(rec.Email); tErr == nil && t != nil {
 		usedTraffic = t.Up + t.Down
 	}
 	return gin.H{
 		"client":        rec,
+		"credentials":   credentials,
 		"inboundIds":    inboundIds,
 		"externalLinks": externalLinks,
 		"usedTraffic":   usedTraffic,

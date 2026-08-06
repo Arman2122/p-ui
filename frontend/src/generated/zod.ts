@@ -306,7 +306,6 @@ export const ClientInboundSchema = z.object({
 export type ClientInbound = z.infer<typeof ClientInboundSchema>;
 
 export const ClientRecordSchema = z.object({
-  adTag: z.string(),
   allowedIPs: z.string(),
   auth: z.string(),
   comment: z.string(),
@@ -325,7 +324,6 @@ export const ClientRecordSchema = z.object({
   publicKey: z.string(),
   reset: z.number().int(),
   reverse: z.unknown(),
-  secret: z.string(),
   security: z.string(),
   subId: z.string(),
   tgId: z.number().int(),

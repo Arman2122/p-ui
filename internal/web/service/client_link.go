@@ -28,12 +28,6 @@ func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecor
 	if incoming.Auth != "" {
 		row.Auth = incoming.Auth
 	}
-	if incoming.Secret != "" {
-		row.Secret = incoming.Secret
-	}
-	if incoming.AdTag != "" {
-		row.AdTag = incoming.AdTag
-	}
 	row.Flow = incoming.Flow
 	if incoming.Security != "" {
 		row.Security = incoming.Security
@@ -157,6 +151,7 @@ func (s *ClientService) SyncInbound(tx *gorm.DB, inboundId int, clients []model.
 	}
 
 	links := make([]model.ClientInbound, 0, len(clients))
+	creds := make([]model.ClientCredential, 0, len(clients))
 	linked := make(map[int]struct{}, len(clients))
 	for i := range clients {
 		email := strings.TrimSpace(clients[i].Email)
@@ -176,13 +171,14 @@ func (s *ClientService) SyncInbound(tx *gorm.DB, inboundId int, clients []model.
 			InboundId:    inboundId,
 			FlowOverride: clients[i].Flow,
 		})
+		creds = append(creds, mtprotoCredentialRows(id, inboundId, &clients[i])...)
 	}
 	if len(links) > 0 {
 		if err := tx.CreateInBatches(links, 200).Error; err != nil {
 			return err
 		}
 	}
-	return nil
+	return upsertClientCredentials(tx, creds)
 }
 
 func (s *ClientService) DetachInbound(tx *gorm.DB, inboundId int) error {
@@ -210,11 +206,17 @@ func (s *ClientService) ListForInbound(tx *gorm.DB, inboundId int) ([]model.Clie
 	if err != nil {
 		return nil, err
 	}
+	creds, err := readClientCredentials(tx, nil, inboundId)
+	if err != nil {
+		return nil, err
+	}
+	byClient := credentialsByClient(creds)
 
 	out := make([]model.Client, 0, len(rows))
 	for i := range rows {
 		c := rows[i].ToClient()
 		c.Flow = rows[i].FlowOverride
+		applyMtprotoCredentials(c, byClient[rows[i].Id])
 		out = append(out, *c)
 	}
 	return out, nil
@@ -241,11 +243,21 @@ func (s *ClientService) ListForInboundBySubId(tx *gorm.DB, inboundId int, subId 
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]int, 0, len(rows))
+	for i := range rows {
+		ids = append(ids, rows[i].Id)
+	}
+	creds, err := readClientCredentials(tx, ids, inboundId)
+	if err != nil {
+		return nil, err
+	}
+	byClient := credentialsByClient(creds)
 
 	out := make([]model.Client, 0, len(rows))
 	for i := range rows {
 		c := rows[i].ToClient()
 		c.Flow = rows[i].FlowOverride
+		applyMtprotoCredentials(c, byClient[rows[i].Id])
 		out = append(out, *c)
 	}
 	return out, nil

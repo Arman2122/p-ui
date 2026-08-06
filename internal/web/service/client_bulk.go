@@ -91,6 +91,10 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 			}
 			client := *rec.ToClient()
 			client.UpdatedAt = time.Now().UnixMilli()
+			if hErr := hydrateClientCredentials(nil, rec.Id, ibId, &client); hErr != nil {
+				recordErr("%s -> inbound %d: %v", rec.Email, ibId, hErr)
+				continue
+			}
 			if err := s.fillProtocolDefaults(&client, inbound); err != nil {
 				recordErr("%s -> inbound %d: %v", rec.Email, ibId, err)
 				continue
@@ -682,6 +686,9 @@ func (s *ClientService) bulkAdjustInboundClients(
 				for email := range foundEmails {
 					entry := plan[email]
 					updated := *entry.record.ToClient()
+					if hErr := hydrateClientCredentials(nil, entry.record.Id, 0, &updated); hErr != nil {
+						logger.Warning("Failed to read stored credentials for node push:", hErr)
+					}
 					if entry.applyExpiry {
 						updated.ExpiryTime = entry.newExpiry
 					}
@@ -858,6 +865,9 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 					return e
 				}
 				if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientExternalLink{}).Error; e != nil {
+					return e
+				}
+				if e := deleteClientCredentials(tx, batch); e != nil {
 					return e
 				}
 			}
@@ -1233,6 +1243,16 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 			existingByEmail[strings.ToLower(rows[i].Email)] = rows[i]
 		}
 	}
+	existingIds := make([]int, 0, len(existingByEmail))
+	for _, rec := range existingByEmail {
+		existingIds = append(existingIds, rec.Id)
+	}
+	storedCreds, e := readClientCredentials(db, existingIds, 0)
+	if e != nil {
+		return result, false, e
+	}
+	credsByClient := credentialsByClient(storedCreds)
+
 	existingSubOwner := make(map[string]string, len(subIDs))
 	for start := 0; start < len(subIDs); start += lookupChunk {
 		end := min(start+lookupChunk, len(subIDs))
@@ -1282,7 +1302,7 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 				prep[idx].client.Auth = rec.Auth
 			}
 			if prep[idx].client.Secret == "" {
-				prep[idx].client.Secret = rec.Secret
+				prep[idx].client.Secret = credsByClient[rec.Id][model.CredentialSecret]
 			}
 		}
 		if owner, ok := existingSubOwner[prep[idx].client.SubID]; ok && owner != le {

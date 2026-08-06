@@ -206,12 +206,18 @@ func seedSubMtprotoInbound(t *testing.T, subId, tag string, port int) {
 	if err := db.Create(ib).Error; err != nil {
 		t.Fatalf("seed mtproto inbound %s: %v", tag, err)
 	}
-	client := &model.ClientRecord{Email: email, SubID: subId, Secret: secret, Enable: true}
+	client := &model.ClientRecord{Email: email, SubID: subId, Enable: true}
 	if err := db.Create(client).Error; err != nil {
 		t.Fatalf("seed client %s: %v", email, err)
 	}
 	if err := db.Create(&model.ClientInbound{ClientId: client.Id, InboundId: ib.Id}).Error; err != nil {
 		t.Fatalf("seed client_inbound %s: %v", email, err)
+	}
+	cred := &model.ClientCredential{
+		ClientId: client.Id, InboundId: ib.Id, Key: model.CredentialSecret, Value: secret,
+	}
+	if err := db.Create(cred).Error; err != nil {
+		t.Fatalf("seed client_credential %s: %v", email, err)
 	}
 }
 
