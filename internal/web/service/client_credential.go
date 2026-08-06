@@ -146,8 +146,8 @@ func upsertClientCredentials(tx *gorm.DB, rows []model.ClientCredential) error {
 }
 
 // deleteClientCredentials drops the given clients' rows, narrowed to keys when
-// any are named.
-func deleteClientCredentials(tx *gorm.DB, clientIds []int, keys ...string) error {
+// any are named. A nil inboundIds means every inbound, as in readClientCredentials.
+func deleteClientCredentials(tx *gorm.DB, clientIds, inboundIds []int, keys ...string) error {
 	if len(clientIds) == 0 {
 		return nil
 	}
@@ -155,6 +155,12 @@ func deleteClientCredentials(tx *gorm.DB, clientIds []int, keys ...string) error
 		tx = database.GetDB()
 	}
 	q := tx.Where("client_id IN ?", clientIds)
+	if inboundIds != nil {
+		if len(inboundIds) == 0 {
+			return nil
+		}
+		q = q.Where("inbound_id IN ?", inboundIds)
+	}
 	if len(keys) > 0 {
 		q = q.Where("key IN ?", keys)
 	}

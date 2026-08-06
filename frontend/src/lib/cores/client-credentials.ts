@@ -17,12 +17,17 @@ const UNDECLARED: ClientCredentialName[] = ['uuid', 'password', 'auth'];
 
 const KNOWN = new Set<string>(CLIENT_CREDENTIAL_NAMES);
 
+/* Takes the manifest, never `undefined`: a caller without one cannot tell a
+   WireGuard client from a VMess one, so the compiler makes it wait for it. */
 export function credentialsForKinds(
-  cores: CoreView[] | undefined,
+  cores: CoreView[],
   kinds: string[],
 ): Set<ClientCredentialName> {
+  /* A client attached to no inbound has no kind to ask about, and is a
+     supported state, so it falls back like a kind no core declares. */
+  if (kinds.length === 0) return new Set(UNDECLARED);
   const declared = new Map<string, string[]>();
-  for (const core of cores ?? []) {
+  for (const core of cores) {
     for (const [kind, fields] of Object.entries(core.clientCredentials ?? {})) {
       if (fields.length > 0) declared.set(kind, fields);
     }

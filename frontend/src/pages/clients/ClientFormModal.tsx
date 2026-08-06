@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   AutoComplete,
   Button,
   Col,
@@ -12,6 +13,7 @@ import {
   Row,
   Select,
   Space,
+  Spin,
   Switch,
   Tabs,
   Tag,
@@ -27,6 +29,7 @@ import { FormProvider, useForm, useWatch, useFieldArray } from 'react-hook-form'
 import { HttpUtil, RandomUtil, Wireguard } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { credentialsForKinds } from '@/lib/cores/client-credentials';
+import type { ClientCredentialName } from '@/generated/capabilities';
 import { supportsMultipleClients } from '@/lib/inbounds/multi-client';
 import { generateMtprotoSecret } from '@/lib/xray/inbound-defaults';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
@@ -204,7 +207,10 @@ export default function ClientFormModal({
   const [ipsClearing, setIpsClearing] = useState(false);
   const [ipsModalOpen, setIpsModalOpen] = useState(false);
   const fail2ban = useFail2banStatusQuery();
-  const { data: cores } = useCoresQuery();
+  const coresQuery = useCoresQuery();
+  /* An empty list is not a usable manifest — every build registers at least one
+     core — so treat it as still missing rather than guessing every kind's fields. */
+  const cores = coresQuery.data?.length ? coresQuery.data : undefined;
   const limitIpDisabled = !fail2ban.usable;
   const limitIpNotice = getLimitIpNotice(fail2ban, t);
 
@@ -290,7 +296,10 @@ export default function ClientFormModal({
     return ids;
   }, [inbounds]);
 
+  /* Empty until the manifest lands. Both the Credentials tab and Save are gated
+     on it, so no field is ever rendered — or omitted from a save — on a guess. */
   const credentials = useMemo(() => {
+    if (!cores) return new Set<ClientCredentialName>();
     const kinds: string[] = [];
     for (const id of inboundIds || []) {
       const ib = (inbounds || []).find((row) => row.id === id);
@@ -599,9 +608,20 @@ export default function ClientFormModal({
             )}
             <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
               <Button onClick={close}>{t('cancel')}</Button>
-              <Button type="primary" loading={submitting} onClick={onSubmit}>
-                {isEdit ? t('save') : t('create')}
-              </Button>
+              {/* Saving without the manifest omits every field the form guessed away, so it offers a retry instead. */}
+              {cores ? (
+                <Button type="primary" loading={submitting} onClick={onSubmit}>
+                  {isEdit ? t('save') : t('create')}
+                </Button>
+              ) : (
+                <Button
+                  icon={<ReloadOutlined />}
+                  loading={coresQuery.isFetching}
+                  onClick={() => { void coresQuery.refetch(); }}
+                >
+                  {t('refresh')}
+                </Button>
+              )}
             </div>
           </div>
         }
@@ -784,7 +804,13 @@ export default function ClientFormModal({
                 {
                   key: 'config',
                   label: t('pages.clients.tabCredentials'),
-                  children: (
+                  children: !cores ? (
+                    <div style={{ textAlign: 'center', padding: 32 }}>
+                      {coresQuery.isError
+                        ? <Alert type="error" showIcon message={t('pages.clients.coresUnavailable')} />
+                        : <Spin />}
+                    </div>
+                  ) : (
                     <>
                       {credentials.has('uuid') && (
                         <Form.Item label={t('pages.clients.uuid')}>

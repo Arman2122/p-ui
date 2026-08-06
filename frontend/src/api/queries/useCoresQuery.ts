@@ -10,7 +10,9 @@ import type { CoreView } from '@/generated/zod';
 const CoreViewsSchema = z.array(CoreViewSchema);
 
 async function fetchCores(): Promise<CoreView[]> {
-  const msg = await HttpUtil.get('/panel/api/cores', undefined, { silent: true });
+  /* Only the success toast is suppressed: a form that cannot tell a WireGuard
+     client from a VMess one must say so rather than render the wrong fields. */
+  const msg = await HttpUtil.get('/panel/api/cores', undefined, { silentSuccess: true });
   if (!msg?.success) throw new Error(msg?.msg || 'Failed to fetch cores');
   const validated = parseMsg(msg, CoreViewsSchema, 'cores');
   return Array.isArray(validated.obj) ? validated.obj : [];

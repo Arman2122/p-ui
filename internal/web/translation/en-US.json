@@ -658,6 +658,7 @@
     "clients": {
       "tabBasics": "Basics",
       "tabCredentials": "Credentials",
+      "coresUnavailable": "Could not load which credentials this build supports, so this tab and Save stay closed — saving now would clear fields the form never showed.",
       "tabLinks": "Links",
       "wireguardConfig": "WireGuard config",
       "config": "Config",

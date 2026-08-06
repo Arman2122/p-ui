@@ -205,7 +205,7 @@ func (s *ClientService) DeleteOrphans() (int, error) {
 				return e
 			}
 			// Foreign keys are disabled repo-wide, so nothing else reaps these.
-			if e := deleteClientCredentials(tx, batch); e != nil {
+			if e := deleteClientCredentials(tx, batch, nil); e != nil {
 				return e
 			}
 		}
