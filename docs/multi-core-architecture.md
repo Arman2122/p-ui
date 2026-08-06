@@ -4,12 +4,13 @@
 > panel (OpenVPN, IKEv2/IPsec, L2TP, OpenConnect, WireGuard/AmneziaWG, SSTP, SSH, …)
 > with cross-protocol egress and one unified per-user quota.
 >
-> Status: **in progress** — P-1 through P3 are implemented, P4 is done; see §12 for what
-> each phase landed and what is still a proposal. Companion to `docs/architecture.md`, which
-> describes the system as it is today.
+> Status: **in progress** — P-1 through P5 are implemented; see §12 for what each phase
+> landed, what it deliberately did not, and what is still a proposal. Companion to
+> `docs/architecture.md`, which describes the system as it is today.
 >
 > Every measurement in §2 was taken against the working tree at `02bc8dcc`, before any phase
-> landed, and is kept as the baseline the refactor is judged against.
+> landed, and is kept as the baseline the refactor is judged against. Everything else was
+> re-verified against `e2478640`. §11 is the one section written as a **target**; it says so.
 
 ---
 
@@ -133,11 +134,14 @@ cheaper to freeze than it is now.
 ```
 internal/core/                    # the contract. Importable by everyone.
     core.go                       #   Core, Kind, Descriptor
-    caps.go                       #   the optional capability interfaces (7 of the 9 below)
-    bind.go                       #   Bound + bind() — the ONLY place assertions live
+    caps.go                       #   the optional capability interfaces (11 today)
+    bind.go                       #   Bound + Bind() — the ONLY place assertions live
+    counter.go                    #   the ONE cumulative→delta engine
     traffic.go                    #   ClientTraffic (moved from internal/xray), TrafficDelta
+    inbound.go                    #   InboundConfig (moved from internal/xray)
     registry.go                   #   Registry, Register, Cores()
-    requirement.go                #   per-core packaging/version facts, one table
+    capability.go                 #   the ONE rule table: may this inbound do X
+    credentials.go                #   the closed credential-name vocabulary (P5)
     coretest/                     #   RunAdapterSuite — the conformance suite
 internal/cores/                   # wiring only
     cores.go                      #   one import + one Register line per core. ONE file.
@@ -179,18 +183,21 @@ Everything else is an **optional** interface:
 | Capability | Purpose | Cores lacking it |
 |---|---|---|
 | `Supervisor` | `Reconcile(desired []Instance)`, `Spec()` | — (mandatory in practice) |
+| `InstanceApplier` | apply one inbound's desired state | — |
 | `HotApplier` | apply user changes without dropping sessions | pptpd |
 | `UserProvisioner` | add/remove/update one user live | — |
+| `CredentialDeclarer` | which credential fields a kind's clients carry (P5) | — |
 | `TrafficSource` | `CollectTraffic() ([]TrafficDelta, []string)` | ssh (no native counters) |
+| `TagTrafficSource` | inbound/outbound totals, not per user (§12.3) | — |
 | `OnlineReporter` | who is connected right now | wireguard (handshake age only) |
 | `QuotaEnforcer` | push a byte budget *into* the daemon | xray, ocserv |
-| `RateLimiter` | per-user bandwidth cap | openvpn |
-| `LinkRenderer` | produce the client's config/URI | — |
-| `EgressProvider` / `EgressConsumer` | offer / consume a tunnel | varies |
+| `VersionManager` | install/list the daemon's own releases (§15) | no implementer yet |
+| `LinkRenderer` | produce the client's config/URI | no implementer yet |
 
-Seven of these exist in `caps.go` today. `RateLimiter` and the egress pair are deliberately
-absent until a core needs them — an interface with no implementor is a guess, and adding one
-later costs a nil field, which is the whole point of `Bound`.
+All eleven exist in `caps.go` today; `VersionManager` and `LinkRenderer` are declared slots
+with no implementer. `RateLimiter` and an egress pair are deliberately **absent** until a core
+needs them — an interface with no implementor is a guess, and adding one later costs a nil
+field, which is the whole point of `Bound`.
 
 **Only `Reconcile` is genuinely mandatory.** A core that cannot reconcile desired state
 cannot self-heal after a crash, so every panel restart becomes a correctness event.
@@ -209,17 +216,19 @@ Interface segregation *alone* just relocates `switch protocol` into scattered
 ```go
 // internal/core/bind.go — the ONLY file permitted to type-assert a capability.
 type Bound struct {
-    Core      Core
-    Supervise Supervisor      // nil if unsupported
-    HotApply  HotApplier
-    Users     UserProvisioner
-    Traffic   TrafficSource
-    Online    OnlineReporter
-    Quota     QuotaEnforcer
-    Rate      RateLimiter
-    Link      LinkRenderer
-    Egress    EgressProvider
-    Ingress   EgressConsumer
+    Core Core
+
+    Supervise  Supervisor      // nil if unsupported
+    Apply      InstanceApplier
+    HotApply   HotApplier
+    Users      UserProvisioner
+    Creds      CredentialDeclarer
+    Traffic    TrafficSource
+    TagTraffic TagTrafficSource
+    Online     OnlineReporter
+    Quota      QuotaEnforcer
+    Versions   VersionManager
+    Link       LinkRenderer
 }
 ```
 
@@ -563,8 +572,8 @@ differs per inbound). Add exactly one core-agnostic `clients.secret_seed bytea` 
 re-marshalled, badged in the UI. The column is a plain varchar with no CHECK constraint, so
 an old binary can already `SELECT` a row with `protocol = 'ocserv'`; the danger is the
 *write* path, where `db.go:665-782` and `:1393-1620` do unmarshal→mutate→marshal round-trips.
-Guard: `TestUnknownCoreRoundTripsByteForByte`. **Never remove or reuse a `Kind` constant** —
-it is persisted on installs you will never see.
+Guard: `TestUnknownCoreRoundTripsByteForByte` — **proposed, not written** (§10).
+**Never remove or reuse a `Kind` constant** — it is persisted on installs you will never see.
 
 ---
 
@@ -604,26 +613,59 @@ directory name is the key both the ESLint boundary rule and the ratchet's exempt
 
 ## 10. The guards
 
-A requirement nothing enforces is not a requirement. Each of these is a test in
-`make test-go` or `npm test`.
+A requirement nothing enforces is not a requirement. Names below were re-verified against
+the tree; three had been listed under names that were never the ones in the code, and two
+were listed for four phases before anyone wrote them.
 
-| Guard | Prevents | Seeded at |
+| Guard | Where | Prevents |
 |---|---|---|
-| Nested `internal/` for cores | service layer importing a concrete core | compile error, 0 config |
-| `TestModelImportsNoCores` | the model→xray coupling returning | 0 (after §2.2 fix) |
-| **Dispatch ratchet, bidirectional** | regrowth of `switch protocol` | **109** |
-| `TestCapabilityAssertionsOnlyInBind` | assertions becoming the new switch | 0 |
-| `TestDescriptorMatchesInterfaces` | the descriptor becoming a lie | 0 |
-| `TestInboundProtocolIsValidatedByTheRegistry` | a hand-typed `oneof` allow-list growing back | 0 (P4) |
-| `TestProtocolSourcesAgree` | the const block or the frontend enum drifting from the registry | 0 |
-| `TestClientsTableHasNoPerCoreColumns` | the wide row | 0 |
-| `TestJobCountDoesNotGrowPerCore` | 11 cores × 3 cron jobs | 0 per core, except the 4 Xray-named jobs older than the registry (§12.3) |
-| `TestUnknownCoreRoundTripsByteForByte` | downgrade data loss | 0 |
-| Capability golden fixture (Go ↔ vitest) | the fourth `canEnableTlsFlow` | 0 |
-| `TestSuiteCatchesBrokenAdapters` | the conformance suite decaying to a no-op | 0 |
-| `TestHotApplyRendersWhatARestartWouldApply` | a hot apply drifting from what a restart applies | 0 |
-| `TestLocalRuntimeIsWiredToRender` | web.go dropping an optional-at-compile-time dep | 0 |
-| `xray_inbounds.golden` + `…IsStableAcrossCalls` | a silent reformat restarting Xray on a timer | 0 |
+| Nested `internal/` for cores | compile error, 0 config | service layer importing a concrete core |
+| `TestXrayCoreVendorIsFenced` | `arch/imports_test.go:48` | xray-core leaking outside `internal/xray` |
+| `TestCoreEnginesDoNotImportTheWebLayer` | `arch/imports_test.go:75` | a core reaching up into the service layer |
+| `TestDataLayerDoesNotImportACore` | `arch/imports_test.go:109` | the model→xray coupling returning (§2.2) |
+| **`TestProtocolDispatchRatchet`, bidirectional** | `arch/dispatch_ratchet_test.go` | regrowth of `switch protocol` |
+| `TestCapabilityAssertionsOnlyInBind` | `arch/capability_assertions_test.go:74` | assertions becoming the new switch |
+| `descriptor/capabilities-match` | `core/coretest/suite.go:130` | the descriptor becoming a lie |
+| `TestSuiteCatchesBrokenAdapters` | `core/coretest/suite_test.go:291` | the conformance suite decaying to a no-op |
+| `TestInboundProtocolIsValidatedByTheRegistry` | `arch/protocol_sources_test.go:85` | a hand-typed `oneof` allow-list growing back |
+| `TestProtocolSourcesAgree` | `arch/protocol_sources_test.go:124` | const block or frontend enum drifting from the registry |
+| `TestProtocolConstantNamesAreUnique` | `arch/protocol_sources_test.go:183` | two constants claiming one kind |
+| `TestClientRecordColumnsAreFrozen` | `arch/client_columns_test.go:54` | the wide row |
+| Capability golden fixture (Go ↔ vitest) | `frontend/src/test/capabilities.test.ts` | the fourth `canEnableTlsFlow` |
+| `TestHotApplyRendersWhatARestartWouldApply` | `service/xray_render_unified_test.go:46` | a hot apply drifting from what a restart applies |
+| `TestLocalRuntimeIsWiredToRender` | `arch/local_deps_test.go:25` | web.go dropping an optional-at-compile-time dep |
+| `xray_inbounds.golden` + `TestGetXrayConfigIsStableAcrossCalls` | `service/xray_config_golden_test.go:251` | a silent reformat restarting Xray on a timer |
+
+Sixteen exist. **Two more were named here long before they were written:**
+
+| Late arrival | Prevents | Landed |
+|---|---|---|
+| `TestJobCountDoesNotGrowPerCore` | 11 cores × 3 cron jobs | `arch/job_growth_test.go` |
+| `TestUnknownCoreRoundTripsByteForByte` | an unserved kind reaching Xray, or being rewritten | `arch/unknown_core_test.go` |
+
+Both were declared here for four phases while matching nothing in the tree, so §8's
+quarantine rule and §12.3's "a second job is fine" argument rested on prose alone the whole
+time. §12.3's argument turned out to be wrong, and the guard that would have said so was the
+one missing: supervision never became registry-driven until the guard was finally written.
+
+**Three renames** — the old names were never in the tree and cost a reader a grep each:
+`TestModelImportsNoCores` is `TestDataLayerDoesNotImportACore`;
+`TestClientsTableHasNoPerCoreColumns` is `TestClientRecordColumnsAreFrozen`;
+`TestDescriptorMatchesInterfaces` is not a test at all — it is the
+`descriptor/capabilities-match` invariant raised inside `RunAdapterSuite`, which every core's
+`driver_test.go` runs and `TestSuiteCatchesBrokenAdapters` keeps honest.
+
+**The ratchet's number is `dispatchTotal`, not this table.** It is **94** after P5:
+109 seeded (P-1) → 106 (P1) → 99 (P3) → 94 (`e5cc0bc5`, which took `runtime/local.go` to
+zero) → 95 (`e2478640`, a one-off migration in `db.go`, a file already frozen as historical)
+→ 94 (`6fb1f026`, `RenderInbound` asking the registry instead of naming mtproto).
+
+It measures less than it looks. The detector matches a `model.<Const>` selector and a
+comparison against an expression ending in `.Protocol`, so a `case "vless":` arm of a
+`switch inbound.Protocol` counts as **zero** — and that is how the largest tables in the
+tree are written, including `sub/service.go`'s share-link dispatch. Roughly 29 real sites
+are invisible to it. Fixing the detector re-baselines the number upward without anything
+having regressed, which is why it is worth doing before P6 rather than after.
 
 **The ratchet must fail in both directions.** If it only fails upward, slack accumulates
 every time someone deletes a site and the guard dies quietly. Failing when the count is
@@ -643,28 +685,129 @@ catches all three shapes, uses only stdlib (house rule), and needs no new `go.mo
 
 ## 11. Cost of core #11
 
+> **This section is a TARGET, not a measurement.** It was written in the present tense with
+> no marker and read as fact for four phases. §11.1 is what is achieved at `e2478640`;
+> §11.2 is what a core actually costs today; §11.3 is the target and what must land to reach
+> it. The old table was optimistic by roughly an order of magnitude and named a file,
+> `internal/core/requirement.go`, that **has never existed in this repo** —
+> `find . -name 'requirement*.go'` is empty at every commit. The nearest real thing is
+> `internal/core/capability.go`'s rule table, which answers a different question.
+
+### 11.1 ACHIEVED
+
+- **The protocol enum costs no hand-written TypeScript.** `openapigen` emits the closed union;
+  `frontend/src/schemas/primitives/protocol.ts` is a re-export and `Protocols` is a mapped
+  type over the generated list. Pinned by `TestProtocolSourcesAgree` (§13, decision 2).
+- **The client credential form costs no TypeScript** (P5, `dbcdf012`). A core declares, per
+  kind, which credentials its clients carry (`core.CredentialDeclarer`); `GET /panel/api/cores`
+  serves the manifest and `frontend/src/lib/cores/client-credentials.ts` takes the union over
+  the inbounds a client is on. A kind nothing declares falls back to `uuid/password/auth`, so
+  an unknown core stays editable. A name outside `internal/core/credentials.go`'s closed
+  vocabulary fails `RunAdapterSuite`.
+- **The clients table costs no columns.** `client_credentials (client_id, inbound_id, key)`
+  ships with MTProto as a real tenant, and `TestClientRecordColumnsAreFrozen` makes adding
+  `ocserv_password` require deleting a line from a guard.
+- **The capability rules cost one table entry**, not three implementations (P1).
+- **Registration is genuinely two lines** in `internal/cores/cores.go`, and `Kinds()` derives
+  the validator from it (P4).
+
+### 11.2 The audited cost of the next real core
+
+Counted for `ocserv` — a daemon core with its own users, its own credential, and a config
+**file** rather than a URI, i.e. the cheapest realistic non-Xray core. **24 shared files, of
+which exactly 2 are the registration lines**, plus **two** directories rather than one
+(`internal/cores/internal/ocserv/` for the adapter and `internal/ocserv/` for the daemon
+engine — the split `mtproto` already has), plus ~11 TypeScript files.
+
+**Fails loudly if forgotten — 7 files across 6 rows.** These are the ones §11.3 is already
+true for.
+
+| File | Cost | Caught by |
+|---|---|---|
+| `internal/cores/cores.go` | import + `Register` | compile |
+| `internal/database/model/model.go` | one `Protocol` constant | `TestProtocolSourcesAgree` |
+| `internal/web/translation/{en-US,fa-IR}.json` | 2 files | `i18n-dead-keys.test.ts` |
+| `tools/openapigen/main.go` | `StructAllow` entry | `build-openapi.mjs` |
+| `internal/arch/dispatch_ratchet_test.go` | budget + total, both ways | itself |
+| `internal/core/credentials.go` | only if a credential leaves the vocabulary | `RunAdapterSuite` |
+
+**Fails silently if forgotten — 17 files.** Every one still carries per-protocol logic; none
+errors when a new kind is missing from it. Site counts are mtproto-shaped branches, i.e. the
+ones a second non-Xray core must be added to; the ratchet's per-file budget is larger because
+it counts every protocol constant.
+
+| File | What it decides for a kind |
+|---|---|
+| `internal/core/capability.go` | whether the kind may use tls / reality / stream / sniffing |
+| `internal/web/service/inbound.go` | 7 sites: settings validation, desired instances, protocol change |
+| `internal/web/service/client_inbound_apply.go` | 4 sites: which core to hot-apply after a client edit |
+| `internal/web/service/xray.go` | 2 sites shaped `Protocol != model.MTProto`, i.e. "assume Xray" |
+| `internal/web/service/client_crud.go` | which credential to mint (`switch`, silent `default`) |
+| `internal/web/service/inbound_clients.go` | the same switch again, for copy-to-inbound |
+| `internal/web/service/client_credential.go` | hand-written `…CredentialRows` / `apply…Credentials` pair |
+| `internal/web/service/client_link.go`, `client_portable.go`, `client_traffic.go`, `inbound_traffic.go` | share link, node-sync payload, quota reset |
+| `internal/web/service/port_conflict.go` | TCP/UDP bits behind the inbound tag |
+| `internal/sub/service.go`, `clash_service.go`, `json_service.go` | 15 sites across the three subscription formats |
+| `internal/web/service/tgbot/tgbot_inbound.go` | 8 sites |
+| `internal/web/web.go` | cadence + `AddJob` + `StopAll` for a core with its own sidecar |
+
+Plus a per-core service file in a shared directory (`inbound_ocserv.go`, mirroring
+`inbound_mtproto.go`'s 26 references) and, until supervision merges, a per-core reconcile job
+(`job/ocserv_job.go`, mirroring `mtproto_job.go`).
+
+**TypeScript is ~11 files, not 0**, and this is the sharpest gap between §11.3 and the tree.
+The §9 `ui:`-tag descriptor renderer **does not exist anywhere**: `grep -rn 'ui:"'` over
+`--include=*.go` matches nothing, and `frontend/src/lib/cores/` holds only `capabilities.ts`
+and `client-credentials.ts`. The **inbound** form is still a hand-written ladder —
+`InboundFormModal.tsx` has 25 `protocol === Protocols.X` comparisons, 9 of them shaped
+`{protocol === Protocols.X && <XFields/>}`.
+
+| File | Kind |
+|---|---|
+| `src/schemas/protocols/inbound/ocserv.ts` | new — the settings Zod schema |
+| `src/pages/inbounds/form/protocols/ocserv.tsx` | new — the fields component |
+| `src/schemas/protocols/inbound/index.ts` | edit — the discriminated union `fillProtocolSettingsDefaults` reads |
+| `src/pages/inbounds/form/protocols/index.ts` | edit — export |
+| `src/pages/inbounds/form/InboundFormModal.tsx` | edit — ladder, picker list, transport/security gating |
+| `src/lib/xray/inbound-defaults.ts` | edit — `createDefaultInboundSettings`, ends `default: return null` |
+| `src/lib/xray/inbound-form-adapter.ts` | edit — `clientSchemaForProtocol`, ends `default: return null` |
+| `src/lib/xray/inbound-tag.ts` | edit — `inboundTransports`, the mirror of `port_conflict.go` |
+| `src/pages/inbounds/info/helpers.ts` | edit — `LINK_PROTOCOLS` / `hasShareLink` |
+| `src/pages/inbounds/list/helpers.ts` | edit — `isInboundMultiUser`, ends `default: return false` |
+| `src/models/dbinbound.ts` | edit — protocol flags |
+
+**None of them fails loudly.** Every TS dispatcher takes `protocol: string` and ends in a
+silent `default:` — `return null`, `return false`, or nothing rendered. The failure mode is a
+blank form or a missing share button on a working inbound, found by a user rather than CI.
+There is no frontend equivalent of the dispatch ratchet.
+
+### 11.3 The TARGET, and what it still needs
+
 | Where | Files | Lines |
 |---|---|---|
 | `descriptor.go`, `settings.go`, `config.go`, `driver.go`, `traffic.go`, `driver_test.go` | 6, **all new, one directory** | ~590, of which **~450 is irreducible daemon-specific logic** |
 | `internal/cores/cores.go` | shared | 2 |
-| `internal/core/requirement.go` | shared | ~8 |
 | `en-US.json` + `fa-IR.json` | shared | 12 + 12 |
 | `tools/openapigen/main.go` (`StructAllow`) | shared | 2 |
 | `model/model.go` (one `Protocol` constant) | shared | 1 |
 | **TypeScript** | **0** | **0** |
 | **New API routes / DB migrations** | **0** | **0** |
 
-**6 shared files, ~37 lines.** Compare to mtproto's ~30 files. Each of the 24 eliminated
-files is eliminated by a *specific* guard above — not by optimism.
+**5 shared files, ~29 lines.** Reaching it from §11.2's 24 needs, in rough order of payoff:
+
+1. **The §9 descriptor renderer**, which is the whole ~11-file TypeScript column. Nothing of
+   it exists; P5 built the *client* half of the same idea and proved the shape works.
+2. **The supervision merge** (§12.3), which removes `web.go` and the per-core job.
+3. **`LinkRenderer` with an implementer** (§13, decision 1), which removes the three
+   `internal/sub/` files and `tgbot_inbound.go`.
+4. **Registry-driven credential minting**, which removes the `client_crud.go` /
+   `inbound_clients.go` / `client_credential.go` trio — `CredentialDeclarer` already knows
+   the answer, and nothing on the Go side asks it yet.
 
 The `model.Protocol` constant is a mirror, not a list: `TestProtocolSourcesAgree` fails until
 it matches the registry, so forgetting it is a red test rather than a protocol that
 half-exists. It is not removable — Go needs to *name* a protocol without a bare literal. The
 frontend's copy **was** removable and is gone: `protocol.ts` re-exports the generated union.
-
-Files explicitly **not** touched: any `.tsx`, anything else under `frontend/src/`,
-`internal/web/service/*`, `internal/sub/*`, `runtime/local.go`, `runtime/remote.go`,
-`internal/web/job/*`, `internal/database/db.go`, `endpoints.ts`, `release.yml`.
 
 The soft number is `driver.go` (~250 LOC): larger for strongSwan (VICI) and accel-ppp
 (kernel preflight), smaller for SSH. **That variance is the actual difficulty of the daemon,
@@ -683,8 +826,8 @@ and *that* is the number to hold the design to.
 | **P2** ✅ | **mtproto ported.** `internal/cores/internal/mtproto/` passes `RunAdapterSuite` with every invariant intact. The contract needed **one** correction (§12.1), and the engine's delta arithmetic was replaced by `core.Counter`, which removed the restart bug in §4. Not yet wired into the service layer — that is P4 | medium | +150 |
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
 | **P4** ✅ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ✅ One traffic job bills every core: it loops the registry over TrafficSource + TagTrafficSource + OnlineReporter, and mtproto_job keeps only its reconcile. Supervision deliberately did NOT merge — see §12.3 | low | −150 |
-| **P5** | `client_credentials` + descriptor-driven UI + `GET /panel/api/cores` | medium | +700 |
-| **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it | — | ~600 |
+| **P5** ✅ | `client_credentials` keyed `(client_id, inbound_id, key)` with MTProto as its first tenant; user ops routed through `bound.Users`; per-kind credential manifest served by `GET /panel/api/cores` and rendered by the client form. Ratchet **99 → 94**, then **94 → 95** on a frozen migration file. The **inbound** form was not touched — see §12.4 | medium | +2332 / −372 excluding generated files |
+| **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it. Plan it against §11.2, not §11.3 | — | ~600 |
 
 **P-1 is the whole bet.** Three of its four guards have zero violations *today*. Land them
 while that is still true — after the refactor starts, every one becomes a negotiation.
@@ -860,8 +1003,47 @@ states rather than a constant the panel picks.
 
 The second question is shape. `mtproto_job` also **reconciles** — it restarts sidecars that
 died — and that is supervision, not accounting. Folding it into the traffic job couples the
-two; keeping it separate but registry-driven satisfies `TestJobCountDoesNotGrowPerCore`
-just as well, because what that guard forbids is a job *per core*, not a second job.
+two; keeping it separate but registry-driven would satisfy `TestJobCountDoesNotGrowPerCore`
+just as well, because what that guard forbids is a job *per core*, not a second job. **That
+guard does not exist yet** (§10), so nothing currently stops the next core shipping a third job.
+
+### 12.4 What P5 landed, and what it deliberately did not
+
+Five commits, `8afd5ed7..e2478640`:
+
+| Commit | What |
+|---|---|
+| `8afd5ed7` | `GET /panel/api/cores` — id, i18n title key, the kinds each core serves, tri-state capabilities. Both lists sorted, because `Registry.Cores` is in registration order and an unsorted view made `gen-check` flap. No UI consumed it yet |
+| `c3d17d10` | `client_credentials (client_id, inbound_id, key)`, migration in `db.go`, MTProto's `secret` and `ad_tag` moved onto it and off `ClientRecord` — so the frozen-column guard **ratcheted down by two** |
+| `e5cc0bc5` | `Local.AddUser`/`RemoveUser` resolve `bound.Users` off the registry, so `core.UserProvisioner` finally has a production caller; `local.go` no longer imports `internal/xray` (`remote.go` still does, for the `xray.ClientTraffic` alias on the mTLS wire). Five hand-built credential maps deleted. Ratchet `local.go` 2 → entry gone, `client_bulk.go` 1 → gone, `client_inbound_apply.go` 12 → 10, total **99 → 94** |
+| `dbcdf012` | `core.CredentialDeclarer` + `internal/core/credentials.go`'s closed vocabulary + the descriptor-driven **client** form. `auth` had been rendered for every client on every protocol; it is Hysteria-only |
+| `e2478640` | Backfill restricted to mtproto inbounds. Found on the live panel's real data: a client on both a VLESS and an MTProto inbound had an MTProto secret stored against the VLESS one. `db.go` 5 → 6, total **94 → 95** |
+
+Two fixes fell out of the port and are worth knowing about: `9b303d63` (bulk-add could not
+see mtproto inbounds) and `62c5b91c` (one email must be one live registration on key-indexed
+inbounds).
+
+**What P5 did NOT do.** Each was a decision, not an oversight, and P6 should plan around it:
+
+- **The other 11 per-protocol columns stay on `clients`** — `uuid`, `password`, `auth`,
+  `flow`, `security`, `reverse`, and WireGuard's five (`wg_private_key`, `wg_public_key`,
+  `wg_allowed_ips`, `wg_pre_shared_key`, `wg_keep_alive`). They are Xray's legacy debt and
+  they ride the node-sync wire format and the subscription path, so moving them buys nothing
+  today. The point was to ship the table **with a real tenant** rather than as speculative
+  architecture; `TestClientRecordColumnsAreFrozen` holds the line.
+- **Credential *storage* generalised; credential *minting* did not.**
+  `client_credential.go` still holds a hand-written `mtprotoCredentialRows` /
+  `applyMtprotoCredentials` pair, and `client_crud.go` and `inbound_clients.go` still mint
+  credentials from a `switch` with a silent `default`. `CredentialDeclarer` knows the answer
+  and no Go caller asks it — this is the cheapest remaining reduction (§11.3, item 4).
+- **Supervision did not merge.** `mtproto_job` still reconciles sidecars on its own 10s
+  cadence beside the traffic job's 5s (`web.go:289-290`), and `web.go` still calls
+  `mtproto.GetManager().StopAll()` by name. §12.3 is still the open design.
+- **The inbound form is untouched.** No P5 commit touches `frontend/src/pages/inbounds/form/`
+  or `frontend/src/lib/xray/`. The descriptor idea was proven on the *client* form only, and
+  §9's `ui:`-tag renderer remains unwritten — which is the whole of §11.2's TypeScript column.
+- **The enforcement hole from §2.1 is still open.** `CapTLS`, `CapReality`, `CapStream` and
+  `CapSniffing` are still evaluated by nothing on any write path.
 
 **RESOLVED for supervision, and it kept both cadences.** `mtproto_job` is gone;
 `core_supervise` loops `registry.Cores()` over `Supervisor.Reconcile` at `@every 10s`, and
