@@ -10,6 +10,7 @@ import {
   PartitionOutlined,
   DeploymentUnitOutlined,
   RocketOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons';
 import { Controller, FormProvider, useForm, useWatch } from 'react-hook-form';
 
@@ -21,7 +22,7 @@ import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { catTabLabel } from '@/pages/settings/catTabLabel';
-import { HostFinalMaskForm, HostMuxForm, HostSockoptForm } from './json-forms';
+import { HostDownloadForm, HostFinalMaskForm, HostMuxForm, HostSockoptForm } from './json-forms';
 
 type FormShape = Omit<BulkAddHostValues, 'isDisabled'> & {
   enable: boolean;
@@ -65,6 +66,7 @@ function defaultsFor(host: HostRecord | null): FormShape {
     muxParams: asString(host?.muxParams),
     sockoptParams: asString(host?.sockoptParams),
     finalMask: host?.finalMask ?? '',
+    downloadSettings: asString(host?.downloadSettings),
     vlessRoute: host?.vlessRoute ?? '',
     excludeFromSubTypes: (host?.excludeFromSubTypes as BulkAddHostValues['excludeFromSubTypes']) ?? [],
     nodeGuids: host?.nodeGuids ?? [],
@@ -344,6 +346,22 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                               name="finalMask"
                               render={({ field }) => (
                                 <HostFinalMaskForm value={field.value} onChange={field.onChange} />
+                              )}
+                            />
+                          </Form.Item>
+                        ),
+                      },
+                      {
+                        key: 'adv-download',
+                        forceRender: true,
+                        label: catTabLabel(<CloudDownloadOutlined />, t('pages.hosts.fields.downloadSettings'), isMobile),
+                        children: (
+                          <Form.Item noStyle>
+                            <Controller
+                              control={methods.control}
+                              name="downloadSettings"
+                              render={({ field }) => (
+                                <HostDownloadForm value={field.value} onChange={field.onChange} />
                               )}
                             />
                           </Form.Item>

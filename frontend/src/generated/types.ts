@@ -353,6 +353,7 @@ export interface Host {
   allowInsecure: boolean;
   alpn: string[];
   createdAt: number;
+  downloadSettings: string;
   echConfigList: string;
   excludeFromSubTypes: string[];
   finalMask: string;

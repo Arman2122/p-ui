@@ -107,6 +107,9 @@ func hostToExternalProxyMap(h *model.Host, defaultDest string, defaultPort int) 
 	if h.VlessRoute != "" {
 		ep["vlessRoute"] = h.VlessRoute
 	}
+	if h.DownloadSettings != "" {
+		ep["downloadSettings"] = h.DownloadSettings
+	}
 	return ep
 }
 
@@ -139,6 +142,7 @@ func applyHostStreamOverrides(ep map[string]any, stream map[string]any) {
 			}
 		}
 	}
+	applyHostDownloadOverride(ep, stream)
 	if sp, ok := ep["sockoptParams"].(string); ok && sp != "" {
 		var sockopt map[string]any
 		if json.Unmarshal([]byte(sp), &sockopt) == nil && len(sockopt) > 0 {
@@ -371,5 +375,56 @@ func applyEndpointHostPathObj(e ShareEndpoint, obj map[string]any) {
 		if _, exists := obj["path"]; exists {
 			obj["path"] = p
 		}
+	}
+}
+
+/*
+applyHostDownloadOverride keeps an XHTTP split coherent for one host.
+
+A host is another way in to the same inbound, and only the upload half moves
+with it: the address on the link becomes the host's, while downloadSettings
+still names whatever the inbound was built with. Left alone, an alternate entry
+point uploads to one server and downloads from another it was never paired
+with, which fails in the direction carrying all the bytes.
+
+Two rules. A host that names its own endpoint replaces the inbound's outright.
+A host that does not still has its path and Host header carried into the
+download half, because those came from the host and the two halves have to
+agree on them.
+
+stream-one is dropped rather than rewritten: xray-core refuses to start on that
+pair, so a subscription must not hand a client both.
+*/
+func applyHostDownloadOverride(ep map[string]any, stream map[string]any) {
+	xhttp, ok := stream["xhttpSettings"].(map[string]any)
+	if !ok || xhttp == nil {
+		return
+	}
+	if mode, _ := xhttp["mode"].(string); mode == "stream-one" {
+		delete(xhttp, "downloadSettings")
+		return
+	}
+
+	if raw, ok := ep["downloadSettings"].(string); ok && raw != "" {
+		var override map[string]any
+		if json.Unmarshal([]byte(raw), &override) == nil && len(override) > 0 {
+			xhttp["downloadSettings"] = override
+		}
+	}
+
+	download, ok := xhttp["downloadSettings"].(map[string]any)
+	if !ok || download == nil {
+		return
+	}
+	inner, ok := download["xhttpSettings"].(map[string]any)
+	if !ok || inner == nil {
+		inner = map[string]any{}
+		download["xhttpSettings"] = inner
+	}
+	if p, ok := ep["path"].(string); ok && p != "" {
+		inner["path"] = p
+	}
+	if hh, ok := ep["hostHeader"].(string); ok && hh != "" {
+		inner["host"] = hh
 	}
 }

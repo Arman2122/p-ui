@@ -1066,6 +1066,19 @@ type Host struct {
 	// merged into this host's JSON-subscription stream. Empty = no override.
 	FinalMask string `json:"finalMask" form:"finalMask" gorm:"type:text;column:final_mask"`
 
+	/*
+		DownloadSettings overrides the XHTTP split-download endpoint for this
+		host, as a JSON object of the same shape the inbound stores.
+
+		A host is a different way in to the same inbound, and only the upload
+		half moves with it: without this, the alternate entry point uploads to
+		the host's address while still downloading from the inbound's original
+		one. Empty = inherit the inbound's endpoint. Free-form JSON like the
+		three above, so a future core with its own second endpoint reuses the
+		column rather than adding one.
+	*/
+	DownloadSettings string `json:"downloadSettings" form:"downloadSettings" gorm:"type:text;column:download_settings"`
+
 	// Single VLESS route value (0-65535) baked into the subscription UUID's 3rd
 	// group (bytes 6-7), which xray reads via net.PortFromBytes(id[6:8]). Empty = none.
 	VlessRoute string `json:"vlessRoute" form:"vlessRoute" gorm:"column:vless_route" example:"443"`
