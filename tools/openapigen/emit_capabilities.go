@@ -42,6 +42,19 @@ func emitCapabilities(w io.Writer) error {
 	if _, err := fmt.Fprintf(w, "export const CAPABILITY_NAMES = %s as const;\n\n", names); err != nil {
 		return err
 	}
+	credentials, err := json.Marshal(core.ClientCredentialNames())
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprint(w, "// Source of truth: internal/core/credentials.go. A core declares a subset per kind.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "export const CLIENT_CREDENTIAL_NAMES = %s as const;\n\n", credentials); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprint(w, "export type ClientCredentialName = (typeof CLIENT_CREDENTIAL_NAMES)[number];\n\n"); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(w, "export const CAPABILITY_RULES: Record<string, CapabilityRule> = %s;\n", encoded); err != nil {
 		return err
 	}

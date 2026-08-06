@@ -324,6 +324,15 @@ export const EXAMPLES: Record<string, unknown> = {
       "shareLink": null,
       "userHotAdd": null
     },
+    "clientCredentials": {
+      "vless": [
+        "uuid"
+      ],
+      "vmess": [
+        "uuid",
+        "security"
+      ]
+    },
     "id": "xray",
     "kinds": [
       "vless",

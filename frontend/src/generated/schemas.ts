@@ -1361,6 +1361,25 @@ export const SCHEMAS: Record<string, unknown> = {
       "caps": {
         "$ref": "#/components/schemas/Capabilities"
       },
+      "clientCredentials": {
+        "additionalProperties": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": "ClientCredentials are the credential fields a client of each kind carries,\nkeyed by kind. A kind absent here declares none; the form keeps its own.",
+        "example": {
+          "vless": [
+            "uuid"
+          ],
+          "vmess": [
+            "uuid",
+            "security"
+          ]
+        },
+        "type": "object"
+      },
       "id": {
         "example": "xray",
         "type": "string"
@@ -1383,6 +1402,7 @@ export const SCHEMAS: Record<string, unknown> = {
     },
     "required": [
       "caps",
+      "clientCredentials",
       "id",
       "kinds",
       "titleKey"

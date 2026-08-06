@@ -26,6 +26,7 @@ import { FormProvider, useForm, useWatch, useFieldArray } from 'react-hook-form'
 
 import { HttpUtil, RandomUtil, Wireguard } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
+import { credentialsForKinds } from '@/lib/cores/client-credentials';
 import { supportsMultipleClients } from '@/lib/inbounds/multi-client';
 import { generateMtprotoSecret } from '@/lib/xray/inbound-defaults';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
@@ -34,6 +35,7 @@ import { FormField } from '@/components/form/rhf';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
+import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { ClientFormSchema, ClientCreateFormSchema, type ClientFormValues } from '@/schemas/client';
 
 const FLOW_OPTIONS = Object.values(TLS_FLOW_CONTROL);
@@ -202,6 +204,7 @@ export default function ClientFormModal({
   const [ipsClearing, setIpsClearing] = useState(false);
   const [ipsModalOpen, setIpsModalOpen] = useState(false);
   const fail2ban = useFail2banStatusQuery();
+  const { data: cores } = useCoresQuery();
   const limitIpDisabled = !fail2ban.usable;
   const limitIpNotice = getLimitIpNotice(fail2ban, t);
 
@@ -287,29 +290,14 @@ export default function ClientFormModal({
     return ids;
   }, [inbounds]);
 
-  const vmessIds = useMemo(() => {
-    const ids = new Set<number>();
-    for (const row of inbounds || []) {
-      if (row && row.protocol === 'vmess') ids.add(row.id);
+  const credentials = useMemo(() => {
+    const kinds: string[] = [];
+    for (const id of inboundIds || []) {
+      const ib = (inbounds || []).find((row) => row.id === id);
+      if (ib?.protocol) kinds.push(ib.protocol);
     }
-    return ids;
-  }, [inbounds]);
-
-  const wireguardIds = useMemo(() => {
-    const ids = new Set<number>();
-    for (const row of inbounds || []) {
-      if (row && row.protocol === 'wireguard') ids.add(row.id);
-    }
-    return ids;
-  }, [inbounds]);
-
-  const mtprotoIds = useMemo(() => {
-    const ids = new Set<number>();
-    for (const row of inbounds || []) {
-      if (row && row.protocol === 'mtproto') ids.add(row.id);
-    }
-    return ids;
-  }, [inbounds]);
+    return credentialsForKinds(cores, kinds);
+  }, [cores, inboundIds, inbounds]);
 
   const mtprotoDomain = useMemo(() => {
     for (const id of inboundIds || []) {
@@ -344,20 +332,9 @@ export default function ClientFormModal({
     [inboundIds, vlessLikeIds],
   );
 
-  const showSecurity = useMemo(
-    () => (inboundIds || []).some((id) => vmessIds.has(id)),
-    [inboundIds, vmessIds],
-  );
-
-  const showWireguard = useMemo(
-    () => (inboundIds || []).some((id) => wireguardIds.has(id)),
-    [inboundIds, wireguardIds],
-  );
-
-  const showMtproto = useMemo(
-    () => (inboundIds || []).some((id) => mtprotoIds.has(id)),
-    [inboundIds, mtprotoIds],
-  );
+  const showSecurity = credentials.has('security');
+  const showWireguard = credentials.has('privateKey');
+  const showMtproto = credentials.has('secret');
 
   function regenerateWireguardKeys() {
     const kp = Wireguard.generateKeypair();
@@ -510,7 +487,6 @@ export default function ClientFormModal({
       password: values.password,
       auth: values.auth,
       flow: showFlow ? (values.flow || '') : '',
-      security: showSecurity ? (values.security || 'auto') : 'auto',
       totalGB: totalBytes,
       expiryTime,
       reset: Number(values.reset) || 0,
@@ -525,12 +501,22 @@ export default function ClientFormModal({
       clientPayload.reverse = { tag: reverseTagValue };
     }
 
+    /* Core-specific credentials are sent under the same condition they are
+       rendered under, so an omitted field leaves the stored value alone rather
+       than clearing it. id, password and auth stay unconditional: the backend
+       mints a uuid only for vmess and vless, so gating id would leave every
+       other protocol's client without one. */
+    if (showSecurity) {
+      clientPayload.security = values.security || 'auto';
+    }
     if (showWireguard) {
       clientPayload.privateKey = values.wgPrivateKey;
       clientPayload.publicKey = values.wgPublicKey;
-      if (values.wgPreSharedKey) {
-        clientPayload.preSharedKey = values.wgPreSharedKey;
-      }
+    }
+    if (credentials.has('preSharedKey') && values.wgPreSharedKey) {
+      clientPayload.preSharedKey = values.wgPreSharedKey;
+    }
+    if (credentials.has('allowedIPs')) {
       const allowedIPs = values.wgAllowedIPs
         .split(',')
         .map((s) => s.trim())
@@ -541,12 +527,14 @@ export default function ClientFormModal({
     }
 
     if (showMtproto) {
+      clientPayload.secret = values.secret;
+    }
+    if (credentials.has('adTag')) {
       const adTag = values.adTag.trim();
       if (adTag !== '' && !/^[0-9a-fA-F]{32}$/.test(adTag)) {
         messageApi.error(t('pages.inbounds.form.mtgAdTagInvalid'));
         return;
       }
-      clientPayload.secret = values.secret;
       clientPayload.adTag = adTag;
     }
 
@@ -798,20 +786,25 @@ export default function ClientFormModal({
                   label: t('pages.clients.tabCredentials'),
                   children: (
                     <>
-                      <Form.Item label={t('pages.clients.uuid')}>
-                        <Space.Compact style={{ display: 'flex' }}>
-                          <Input value={uuid} style={{ flex: 1 }} onChange={(e) => methods.setValue('uuid', e.target.value)} />
-                          <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('uuid', RandomUtil.randomUUID())} />
-                        </Space.Compact>
-                      </Form.Item>
+                      {credentials.has('uuid') && (
+                        <Form.Item label={t('pages.clients.uuid')}>
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input value={uuid} style={{ flex: 1 }} onChange={(e) => methods.setValue('uuid', e.target.value)} />
+                            <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('uuid', RandomUtil.randomUUID())} />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
 
-                      <Form.Item label={t('pages.clients.password')} tooltip={t('pages.clients.passwordDesc')}>
-                        <Space.Compact style={{ display: 'flex' }}>
-                          <Input value={password} style={{ flex: 1 }} onChange={(e) => methods.setValue('password', e.target.value)} />
-                          <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regeneratePassword} />
-                        </Space.Compact>
-                      </Form.Item>
+                      {credentials.has('password') && (
+                        <Form.Item label={t('pages.clients.password')} tooltip={t('pages.clients.passwordDesc')}>
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input value={password} style={{ flex: 1 }} onChange={(e) => methods.setValue('password', e.target.value)} />
+                            <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regeneratePassword} />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
 
+                      {/* subId is the subscription link's identifier, not a credential of any core, so every client has one. */}
                       <Form.Item label={t('pages.clients.subId')}>
                         <Space.Compact style={{ display: 'flex' }}>
                           <Input value={subId} style={{ flex: 1 }} onChange={(e) => methods.setValue('subId', e.target.value)} />
@@ -819,12 +812,14 @@ export default function ClientFormModal({
                         </Space.Compact>
                       </Form.Item>
 
-                      <Form.Item label={t('pages.clients.hysteriaAuth')} tooltip={t('pages.clients.hysteriaAuthDesc')}>
-                        <Space.Compact style={{ display: 'flex' }}>
-                          <Input value={auth} style={{ flex: 1 }} onChange={(e) => methods.setValue('auth', e.target.value)} />
-                          <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('auth', RandomUtil.randomLowerAndNum(16))} />
-                        </Space.Compact>
-                      </Form.Item>
+                      {credentials.has('auth') && (
+                        <Form.Item label={t('pages.clients.hysteriaAuth')} tooltip={t('pages.clients.hysteriaAuthDesc')}>
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input value={auth} style={{ flex: 1 }} onChange={(e) => methods.setValue('auth', e.target.value)} />
+                            <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('auth', RandomUtil.randomLowerAndNum(16))} />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
 
                       {showFlow && (
                         <FormField name="flow" label={t('pages.clients.flow')}>
@@ -843,6 +838,7 @@ export default function ClientFormModal({
                           />
                         </FormField>
                       )}
+                      {/* The public key is derived from the private one, so the pair is a single input. */}
                       {showWireguard && (
                         <>
                           <Form.Item label={t('pages.clients.wireguardPrivateKey')}>
@@ -862,37 +858,41 @@ export default function ClientFormModal({
                           <FormField name="wgPublicKey" label={t('pages.clients.wireguardPublicKey')}>
                             <Input disabled />
                           </FormField>
-                          <FormField name="wgPreSharedKey" label={t('pages.clients.wireguardPreSharedKey')}>
-                            <Input />
-                          </FormField>
-                          <FormField
-                            name="wgAllowedIPs"
-                            label={t('pages.clients.wireguardAllowedIPs')}
-                            extra={t('pages.clients.wireguardAllowedIPsHint')}
-                          >
-                            <Input placeholder="10.0.0.2/32" />
-                          </FormField>
                         </>
                       )}
+                      {credentials.has('preSharedKey') && (
+                        <FormField name="wgPreSharedKey" label={t('pages.clients.wireguardPreSharedKey')}>
+                          <Input />
+                        </FormField>
+                      )}
+                      {credentials.has('allowedIPs') && (
+                        <FormField
+                          name="wgAllowedIPs"
+                          label={t('pages.clients.wireguardAllowedIPs')}
+                          extra={t('pages.clients.wireguardAllowedIPsHint')}
+                        >
+                          <Input placeholder="10.0.0.2/32" />
+                        </FormField>
+                      )}
                       {showMtproto && (
-                        <>
-                          <Form.Item label={t('pages.clients.mtprotoSecret')} extra={t('pages.clients.mtprotoSecretHint')}>
-                            <Space.Compact style={{ display: 'flex' }}>
-                              <Input value={secret} style={{ flex: 1 }} onChange={(e) => methods.setValue('secret', e.target.value)} />
-                              <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regenerateMtprotoSecret} />
-                            </Space.Compact>
-                          </Form.Item>
-                          <FormField
-                            name="adTag"
-                            label={t('pages.clients.mtprotoAdTag')}
-                            extra={t('pages.clients.mtprotoAdTagHint')}
-                          >
-                            <Input
-                              allowClear
-                              placeholder="0123456789abcdef0123456789abcdef"
-                            />
-                          </FormField>
-                        </>
+                        <Form.Item label={t('pages.clients.mtprotoSecret')} extra={t('pages.clients.mtprotoSecretHint')}>
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input value={secret} style={{ flex: 1 }} onChange={(e) => methods.setValue('secret', e.target.value)} />
+                            <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regenerateMtprotoSecret} />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
+                      {credentials.has('adTag') && (
+                        <FormField
+                          name="adTag"
+                          label={t('pages.clients.mtprotoAdTag')}
+                          extra={t('pages.clients.mtprotoAdTagHint')}
+                        >
+                          <Input
+                            allowClear
+                            placeholder="0123456789abcdef0123456789abcdef"
+                          />
+                        </FormField>
                       )}
                     </>
                   ),

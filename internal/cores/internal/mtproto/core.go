@@ -60,6 +60,15 @@ func (c *Core) Preflight(_ context.Context) error {
 	return engine.CheckBinary()
 }
 
+// ClientCredentials names what a client of this core needs: a FakeTLS secret,
+// and the optional ad tag mtg bills promoted channels against.
+func (c *Core) ClientCredentials(kind core.Kind) []string {
+	if kind != Kind {
+		return nil
+	}
+	return []string{core.CredSecret, core.CredAdTag}
+}
+
 func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	want := make([]engine.Instance, 0, len(desired))
 	for _, d := range desired {

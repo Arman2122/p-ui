@@ -77,6 +77,25 @@ func (c *Core) Describe() core.Descriptor {
 
 func (c *Core) Preflight(_ context.Context) error { return engine.CheckBinary() }
 
+// ClientCredentials names the fields a client of each kind must carry. The kinds
+// the panel gives no clients of their own answer nothing rather than an empty set.
+func (c *Core) ClientCredentials(kind core.Kind) []string {
+	switch kind {
+	case "vmess":
+		return []string{core.CredUUID, core.CredSecurity}
+	case "vless":
+		return []string{core.CredUUID}
+	case "trojan", "shadowsocks":
+		return []string{core.CredPassword}
+	case "hysteria":
+		return []string{core.CredAuth}
+	case "wireguard":
+		return []string{core.CredPrivateKey, core.CredPublicKey, core.CredPreSharedKey, core.CredAllowedIPs}
+	default:
+		return nil
+	}
+}
+
 // Reconcile converges the one Xray process on the desired inbound set. An
 // unchanged config is left alone, a change that the core API can absorb is
 // applied in place, and anything else is a restart.

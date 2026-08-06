@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import { HttpUtil } from '@/utils';
 import { ThemeProvider } from '@/hooks/useTheme';
 import ClientFormModal from '@/pages/clients/ClientFormModal';
 import type { ClientRecord, InboundOption } from '@/hooks/useClients';
@@ -66,5 +67,55 @@ describe('ClientFormModal — Vision flow preservation', () => {
     fireEvent.click(await screen.findByRole('button', { name: /save/i }));
     await waitFor(() => expect(save).toHaveBeenCalled());
     expect(savedFlow(save)).toBe('xtls-rprx-vision');
+  });
+});
+
+/* One core declaring vless and one declaring nothing, as GET /panel/api/cores serves them. */
+function serveCores(clientCredentials: Record<string, string[]> | null) {
+  const obj = clientCredentials === null
+    ? []
+    : [{ id: 'xray', titleKey: 'cores.xray.title', kinds: ['vless'], caps: {}, clientCredentials }];
+  vi.spyOn(HttpUtil, 'get').mockImplementation(async (url: string) => (
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    (url === '/panel/api/cores' ? { success: true, obj } : { success: true, obj: {} }) as any
+  ));
+}
+
+async function openCredentialsTab(inbounds: InboundOption[]) {
+  const qc = makeQC();
+  render(
+    <ThemeProvider>
+      <QueryClientProvider client={qc}>
+        <ClientFormModal open mode="edit" client={CLIENT} inbounds={inbounds} attachedIds={[4]} save={vi.fn()} onOpenChange={() => {}} />
+      </QueryClientProvider>
+    </ThemeProvider>,
+  );
+  fireEvent.click(await screen.findByRole('tab', { name: 'Credentials' }));
+  /* Every client has a subscription id, so it marks the tab as rendered. */
+  await screen.findByText('Subscription ID');
+}
+
+describe('ClientFormModal — credential fields come from what the core declares', () => {
+  afterEach(() => {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    vi.spyOn(HttpUtil, 'get').mockResolvedValue({ success: true, obj: {} } as any);
+  });
+
+  it('shows only the fields vless declares, not password and Hysteria auth', async () => {
+    serveCores({ vless: ['uuid'] });
+    await openCredentialsTab([REALITY_INBOUND]);
+
+    expect(screen.getByText('UUID')).toBeTruthy();
+    expect(screen.queryByText('Password')).toBeNull();
+    expect(screen.queryByText('Hysteria Auth')).toBeNull();
+  });
+
+  it('keeps every field the form has always shown when no core declares the kind', async () => {
+    serveCores(null);
+    await openCredentialsTab([REALITY_INBOUND]);
+
+    expect(screen.getByText('UUID')).toBeTruthy();
+    expect(screen.getByText('Password')).toBeTruthy();
+    expect(screen.getByText('Hysteria Auth')).toBeTruthy();
   });
 });

@@ -19,6 +19,15 @@ func (s stubCore) Describe() core.Descriptor         { return s.descriptor }
 func (s stubCore) Kinds() []core.Kind                { return s.kinds }
 func (s stubCore) Preflight(_ context.Context) error { return nil }
 
+// declaringCore answers per kind, the shape a real multi-kind core has: one
+// Describe, one set of credentials per protocol it serves.
+type declaringCore struct {
+	stubCore
+	credentials map[core.Kind][]string
+}
+
+func (d declaringCore) ClientCredentials(kind core.Kind) []string { return d.credentials[kind] }
+
 func registryOf(t *testing.T, cores ...core.Core) *core.Registry {
 	t.Helper()
 	reg := core.NewRegistry()
@@ -63,6 +72,16 @@ func TestCoreViews(t *testing.T) {
 		descriptor: core.Descriptor{ID: "future", TitleKey: "cores.future.title"},
 		kinds:      []core.Kind{"future"},
 	}
+	declaring := declaringCore{
+		stubCore: stubCore{
+			descriptor: core.Descriptor{ID: "multi", TitleKey: "cores.multi.title"},
+			kinds:      []core.Kind{"vmess", "vless", "tun"},
+		},
+		credentials: map[core.Kind][]string{
+			"vmess": {core.CredUUID, core.CredSecurity},
+			"vless": {core.CredUUID},
+		},
+	}
 
 	tests := []struct {
 		name string
@@ -73,15 +92,25 @@ func TestCoreViews(t *testing.T) {
 			name: "cores and their kinds are sorted, not left in declaration order",
 			reg:  registryOf(t, xray, mtproto),
 			want: `[{"id":"mtproto","titleKey":"cores.mtproto.title","kinds":["mtproto"],` +
-				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false}},` +
+				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false},` +
+				`"clientCredentials":{}},` +
 				`{"id":"xray","titleKey":"cores.xray.title","kinds":["shadowsocks","trojan","vless"],` +
-				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false}}]`,
+				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false},` +
+				`"clientCredentials":{}}]`,
 		},
 		{
 			name: "an unanswered capability stays null, never false",
 			reg:  registryOf(t, unanswered),
 			want: `[{"id":"future","titleKey":"cores.future.title","kinds":["future"],` +
-				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null}}]`,
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"clientCredentials":{}}]`,
+		},
+		{
+			name: "credentials are keyed per kind, and a kind the core skips is absent, not empty",
+			reg:  registryOf(t, declaring),
+			want: `[{"id":"multi","titleKey":"cores.multi.title","kinds":["tun","vless","vmess"],` +
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]}}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",
