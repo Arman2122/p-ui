@@ -234,9 +234,12 @@ export function normalizeXhttpForWire(
      it stays in the stored settings so subscriptions can hand it to clients,
      and the Go renderer strips it before xray sees the inbound. Dropped in
      stream-one because the core refuses to start on that pair. */
-  const enableDownload = out.enableDownloadSettings === true;
+  /* Only an explicit false clears it. An absent flag means the settings came
+     from an imported config or the API rather than the form, and treating that
+     as "off" would delete a working download endpoint on the next save. */
+  const downloadFlag = out.enableDownloadSettings;
   delete out.enableDownloadSettings;
-  if (!enableDownload || mode === 'stream-one') delete out.downloadSettings;
+  if (downloadFlag === false || mode === 'stream-one') delete out.downloadSettings;
   if (isRecord(out.downloadSettings) && out.downloadSettings.address === '') {
     delete out.downloadSettings;
   }

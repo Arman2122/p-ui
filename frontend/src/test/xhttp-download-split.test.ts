@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { parseVlessLink } from '@/lib/xray/outbound-link-parser';
+import { normalizeXhttpForWire } from '@/lib/xray/stream-wire-normalize';
 import { XHttpStreamSettingsSchema } from '@/schemas/protocols/stream/xhttp';
 
 /*
@@ -86,5 +87,44 @@ describe('split XHTTP: upload and download on different addresses', () => {
       downloadSettings: { address: 'download.example.com', port: 443 },
     });
     expect(streamUp.success).toBe(true);
+  });
+});
+
+describe('the download endpoint survives an edit', () => {
+  it('is kept when the settings never went through the form', () => {
+    /* An imported config or an API write has the endpoint but not the UI
+       toggle. Reading the absent toggle as "off" would delete a working
+       download half on the next save — the failure the xmux comment in
+       the schema describes, one field over. */
+    const wire = normalizeXhttpForWire(
+      { mode: 'stream-up', downloadSettings: { address: 'download.example.com', port: 443 } },
+      'inbound',
+    );
+    expect(wire.downloadSettings).toBeTruthy();
+  });
+
+  it('is cleared only when the operator actually turns it off', () => {
+    const off = normalizeXhttpForWire(
+      {
+        mode: 'stream-up',
+        enableDownloadSettings: false,
+        downloadSettings: { address: 'download.example.com', port: 443 },
+      },
+      'inbound',
+    );
+    expect(off.downloadSettings).toBeUndefined();
+    expect(off.enableDownloadSettings).toBeUndefined();
+  });
+
+  it('never reaches the wire alongside stream-one', () => {
+    const streamOne = normalizeXhttpForWire(
+      {
+        mode: 'stream-one',
+        enableDownloadSettings: true,
+        downloadSettings: { address: 'download.example.com', port: 443 },
+      },
+      'inbound',
+    );
+    expect(streamOne.downloadSettings).toBeUndefined();
   });
 });

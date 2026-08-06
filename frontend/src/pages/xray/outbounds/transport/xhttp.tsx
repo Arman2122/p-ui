@@ -37,6 +37,16 @@ export default function XhttpForm({ onXmuxToggle }: XhttpFormProps) {
   const seqPlacement = useWatch({ control, name: `${XH}.seqPlacement` }) as string | undefined;
   const uplinkDataPlacement = useWatch({ control, name: `${XH}.uplinkDataPlacement` }) as string | undefined;
   const enableXmux = !!useWatch({ control, name: `${XH}.enableXmux` });
+  const enableDownload = !!useWatch({ control, name: `${XH}.enableDownloadSettings` });
+  const downloadSecurity = useWatch({ control, name: `${XH}.downloadSettings.security` }) as string | undefined;
+  const splitBlockedByMode = mode === 'stream-one';
+
+  function onDownloadToggle(checked: boolean) {
+    if (!checked) return;
+    const existing = getValues(`${XH}.downloadSettings`);
+    if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) return;
+    setValue(`${XH}.downloadSettings`, { address: '', port: 443, network: 'xhttp', security: 'tls' });
+  }
 
   function onXmuxMaxConcurrencyChange(value: unknown) {
     if (int32RangeUpper(value) <= 0) return;
@@ -280,6 +290,117 @@ export default function XhttpForm({ onXmuxToggle }: XhttpFormProps) {
         </FormField>
       )}
 
+      {/* Split download: this outbound uploads to the address above and
+          downloads from a different one. Unlike the inbound side, where
+          it is metadata handed to clients, here the dialer uses it. */}
+      <FormField
+        label={t('pages.inbounds.form.splitDownload')}
+        tooltip={splitBlockedByMode
+          ? t('pages.inbounds.form.splitDownloadNotInStreamOne')
+          : t('pages.inbounds.form.splitDownloadHint')}
+        name={['streamSettings', 'xhttpSettings', 'enableDownloadSettings']}
+        valueProp="checked"
+        onAfterChange={(v) => onDownloadToggle(v as boolean)}
+      >
+        <Switch disabled={splitBlockedByMode} />
+      </FormField>
+      {enableDownload && !splitBlockedByMode && (
+        <>
+          <FormField
+            label={t('pages.inbounds.form.splitDownloadAddress')}
+            tooltip={t('pages.inbounds.form.splitDownloadAddressHint')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'address']}
+          >
+            <Input placeholder="download.example.com" />
+          </FormField>
+          <FormField
+            label={t('pages.inbounds.form.splitDownloadPort')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'port']}
+          >
+            <InputNumber min={0} max={65535} style={{ width: '100%' }} />
+          </FormField>
+          <FormField
+            label={t('pages.inbounds.form.splitDownloadSecurity')}
+            tooltip={t('pages.inbounds.form.splitDownloadSecurityHint')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'security']}
+          >
+            <Select
+              options={[
+                { value: 'none', label: 'none' },
+                { value: 'tls', label: 'tls' },
+                { value: 'reality', label: 'reality' },
+              ]}
+            />
+          </FormField>
+          {downloadSecurity === 'tls' && (
+            <>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadSni')}
+                tooltip={t('pages.inbounds.form.splitDownloadSniHint')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'tlsSettings', 'serverName']}
+              >
+                <Input placeholder="download.example.com" />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadAlpn')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'tlsSettings', 'alpn']}
+              >
+                <Select
+                  mode="multiple"
+                  allowClear
+                  options={[
+                    { value: 'h3', label: 'h3' },
+                    { value: 'h2', label: 'h2' },
+                    { value: 'http/1.1', label: 'http/1.1' },
+                  ]}
+                />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadFingerprint')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'tlsSettings', 'fingerprint']}
+              >
+                <Input placeholder="chrome" />
+              </FormField>
+            </>
+          )}
+          {downloadSecurity === 'reality' && (
+            <>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadSni')}
+                tooltip={t('pages.inbounds.form.splitDownloadSniHint')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'realitySettings', 'serverName']}
+              >
+                <Input placeholder="download.example.com" />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadPublicKey')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'realitySettings', 'publicKey']}
+              >
+                <Input />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadShortId')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'realitySettings', 'shortId']}
+              >
+                <Input />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.splitDownloadFingerprint')}
+                name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'realitySettings', 'fingerprint']}
+              >
+                <Input placeholder="chrome" />
+              </FormField>
+            </>
+          )}
+          <FormField
+            label={t('pages.inbounds.form.splitDownloadPath')}
+            tooltip={t('pages.inbounds.form.splitDownloadPathHint')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'xhttpSettings', 'path']}
+          >
+            <Input placeholder="/" />
+          </FormField>
+        </>
+      )}
       {/* XMUX is the connection-multiplexing layer
           xHTTP uses to fan out parallel requests over
           a small pool of upstream connections. UI-only
