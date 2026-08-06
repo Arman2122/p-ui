@@ -660,12 +660,16 @@ one missing: supervision never became registry-driven until the guard was finall
 zero) → 95 (`e2478640`, a one-off migration in `db.go`, a file already frozen as historical)
 → 94 (`6fb1f026`, `RenderInbound` asking the registry instead of naming mtproto).
 
-It measures less than it looks. The detector matches a `model.<Const>` selector and a
-comparison against an expression ending in `.Protocol`, so a `case "vless":` arm of a
-`switch inbound.Protocol` counts as **zero** — and that is how the largest tables in the
-tree are written, including `sub/service.go`'s share-link dispatch. Roughly 29 real sites
-are invisible to it. Fixing the detector re-baselines the number upward without anything
-having regressed, which is why it is worth doing before P6 rather than after.
+**That number was wrong until the detector was fixed.** It matched a `model.<Const>`
+selector and a comparison against an expression ending in `.Protocol`, so a `case "vless":`
+arm of a `switch inbound.Protocol` counted as **zero** — and that is how the largest tables
+in the tree are written, `sub/service.go`'s share-link dispatch among them. Twenty-nine
+sites were invisible, a 23% undercount concentrated in exactly the layer the ratchet exists
+to guard.
+
+Teaching it that shape moved the total to **123** with nothing having regressed. The honest
+reading of P5 is therefore that it removed five dispatch sites out of 123, not out of 99 —
+the direction is right and the remaining distance is larger than the old number implied.
 
 **The ratchet must fail in both directions.** If it only fails upward, slack accumulates
 every time someone deletes a site and the guard dies quietly. Failing when the count is
