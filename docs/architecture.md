@@ -382,7 +382,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation |
 | `@every 10s` | `check_client_ip_job` | Enforce per-client IP limits |
-| `@every 10s` | `mtproto_job` | Reconcile `mtg` sidecars against enabled MTProto inbounds |
+| `@every 10s` | `core_supervise` | Reconcile every registered core on its desired inbounds (Xray excepted — the panel's own config build converges it) |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
 | `@every 10m` | `clear_logs_job` (`PruneXrayLogsJob`) | Truncate Xray access/error logs once either exceeds 64 MiB |
 | `@hourly` | `warp_ip_job`, `periodic_traffic_reset_job("hourly")` | WARP IP rotation; traffic resets |
@@ -506,7 +506,7 @@ for AutoMigrate in `internal/database/db.go`.
 | **CPU / memory alerts** not firing | `job/check_cpu_usage.go`, `job/check_memory_usage.go` | `internal/eventbus/`, notifier settings in `service/setting.go` |
 | Xray auto-restart on **dead tunnel** | `internal/tunnelmonitor/` | `PUI_TUNNEL_HEALTH_*` in `internal/config/` |
 | **WARP / Nord** outbound integration | `service/integration/warp.go` / `nord.go` | `service/outbound_subscription.go` |
-| **MTProto** proxy issues | `internal/mtproto/manager.go`, `mtproto/process*.go` | `job/mtproto_job.go` |
+| **MTProto** proxy issues | `internal/mtproto/manager.go`, `mtproto/process*.go` | `job/core_supervise.go` |
 | **DB migration** / new column | `internal/database/db.go` (AutoMigrate list + hand-written migrations) | `model/model.go` |
 | **Cron schedule** changes | `web.go` → `startTask()` | the specific `job/*.go` |
 | **CORS / security headers / HTTPS** | `middleware/`, `web.go` (`initRouter`, TLS setup) | `config/` (env) |

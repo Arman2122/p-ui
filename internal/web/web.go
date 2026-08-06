@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/sys"
 	"github.com/Arman2122/p-ui/internal/web/controller"
@@ -126,6 +126,10 @@ type Server struct {
 
 	bus  *eventbus.Bus
 	cron *cron.Cron
+
+	// cores is what supervision dispatches through, so shutdown stops a core
+	// because it is registered rather than because this file names it.
+	cores *core.Registry
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -284,10 +288,12 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 // node/xray state is unchanged, and export per-job duration/skipped/error
 // counters.
 const (
-	cadenceXrayRunning   = "@every 1s"
-	cadenceXrayRestart   = "@every 30s"
-	cadenceXrayTraffic   = "@every 5s"
-	cadenceMtproto       = "@every 10s"
+	cadenceXrayRunning = "@every 1s"
+	cadenceXrayRestart = "@every 30s"
+	cadenceXrayTraffic = "@every 5s"
+	// Convergence, not liveness: it rebuilds each core's desired set from the
+	// database, so it stays at the rate the one supervised core already ran at.
+	cadenceCoreSupervise = "@every 10s"
 	cadenceClientIPScan  = "@every 10s"
 	cadenceNodeHeartbeat = "@every 5s"
 	cadenceNodeTraffic   = "@every 5s"
@@ -323,11 +329,11 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 		_, _ = s.cron.AddJob(cadenceXrayTraffic, job.NewXrayTrafficJob())
 	}()
 
-	// Reconcile mtproto (mtg) sidecars. Their traffic is billed by the one
-	// traffic job above, which collects from every core.
-	mtJob := job.NewMtprotoJob()
-	_, _ = s.cron.AddJob(cadenceMtproto, mtJob)
-	go mtJob.Run()
+	// Converge every registered core on its desired inbounds. Their traffic is
+	// billed by the one traffic job above, which collects from every core too.
+	superviseJob := job.NewCoreSuperviseJob(cores.PanelConvergedCore)
+	_, _ = s.cron.AddJob(cadenceCoreSupervise, superviseJob)
+	go superviseJob.Run()
 
 	// check client ips from log file every 10 sec
 	_, _ = s.cron.AddJob(cadenceClientIPScan, job.NewCheckClientIpJob())
@@ -519,7 +525,8 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		LoadInbound:    (&service.InboundService{}).GetInbound,
 		RenderInbound:  s.xrayService.RenderInbound,
 	}))
-	// The traffic job bills every core through the same registry.
+	// The traffic and supervision jobs both work off this one registry.
+	s.cores = registry
 	job.Cores = registry
 	runtime.GetManager().SetNodeEgressResolver(&s.settingService)
 	// Supply the master client certificate for nodes in mtls mode. Issued lazily
@@ -687,11 +694,27 @@ func (s *Server) StopPanelOnly() error {
 	return s.stop(false, true)
 }
 
+// stopCores stops the processes of every registered core. Registry-driven so a
+// core added later is stopped on shutdown without editing this file.
+func (s *Server) stopCores() {
+	if s.cores == nil {
+		return
+	}
+	for _, bound := range s.cores.Cores() {
+		if bound.Supervise == nil {
+			continue
+		}
+		if err := bound.Supervise.StopAll(context.Background()); err != nil {
+			logger.Warning("core", bound.Core.Describe().ID, "stop failed:", err)
+		}
+	}
+}
+
 func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	s.cancel()
 	if stopXray {
 		_ = s.xrayService.StopXray()
-		mtproto.GetManager().StopAll()
+		s.stopCores()
 	}
 	if s.cron != nil {
 		s.cron.Stop()

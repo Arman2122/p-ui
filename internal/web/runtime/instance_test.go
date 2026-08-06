@@ -38,7 +38,7 @@ func TestInstanceCarriesWhatTheConfigGeneratorWouldEmit(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			inst := instanceOf(tc.ib)
+			inst := InstanceOf(tc.ib)
 			want := tc.ib.GenXrayInboundConfig()
 			if inst.Settings != string(want.Settings) {
 				t.Errorf("settings differ from the generated config\n got: %s\nwant: %s", inst.Settings, want.Settings)
@@ -60,7 +60,7 @@ func TestUsersReadTheStoredClientsNotTheHealedOnes(t *testing.T) {
 		Id: 1, Protocol: model.WireGuard, Port: 51820, Tag: "wg-in", Enable: true,
 		Settings: `{"secretKey":"k","clients":[{"email":"alice@example.com","enable":true,"publicKey":"cHVi","allowedIPs":["10.0.0.2/32"]}]}`,
 	}
-	inst := instanceOf(ib)
+	inst := InstanceOf(ib)
 	if len(inst.Users) != 1 || inst.Users[0].Email != "alice@example.com" {
 		t.Fatalf("users = %+v, want the stored client", inst.Users)
 	}
