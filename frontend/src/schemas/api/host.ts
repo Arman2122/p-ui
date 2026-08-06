@@ -45,6 +45,7 @@ export const HostFormSchema = z.object({
   muxParams: z.string().default(''),
   sockoptParams: z.string().default(''),
   finalMask: z.string().default(''),
+  downloadSettings: z.string().default(''),
   vlessRoute: z
     .string()
     .trim()
@@ -95,6 +96,7 @@ export const HostRecordSchema = z.object({
   muxParams: z.unknown().optional(),
   sockoptParams: z.unknown().optional(),
   finalMask: z.string().optional(),
+  downloadSettings: z.string().optional(),
   vlessRoute: z.string().optional(),
   excludeFromSubTypes: z.array(z.string()).nullish(),
   nodeGuids: z.array(z.string()).nullish(),

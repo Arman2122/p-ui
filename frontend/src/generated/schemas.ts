@@ -1459,6 +1459,10 @@ export const SCHEMAS: Record<string, unknown> = {
         "format": "int64",
         "type": "integer"
       },
+      "downloadSettings": {
+        "description": "/*\n\t\tDownloadSettings overrides the XHTTP split-download endpoint for this\n\t\thost, as a JSON object of the same shape the inbound stores.\n\n\t\tA host is a different way in to the same inbound, and only the upload\n\t\thalf moves with it: without this, the alternate entry point uploads to\n\t\tthe host's address while still downloading from the inbound's original\n\t\tone. Empty = inherit the inbound's endpoint. Free-form JSON like the\n\t\tthree above, so a future core with its own second endpoint reuses the\n\t\tcolumn rather than adding one.\n\t*/",
+        "type": "string"
+      },
       "echConfigList": {
         "type": "string"
       },
@@ -1589,6 +1593,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "allowInsecure",
       "alpn",
       "createdAt",
+      "downloadSettings",
       "echConfigList",
       "excludeFromSubTypes",
       "finalMask",

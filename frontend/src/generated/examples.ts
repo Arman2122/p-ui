@@ -355,6 +355,7 @@ export const EXAMPLES: Record<string, unknown> = {
       ""
     ],
     "createdAt": 0,
+    "downloadSettings": "",
     "echConfigList": "",
     "excludeFromSubTypes": [
       ""

@@ -380,6 +380,7 @@ export const HostSchema = z.object({
   allowInsecure: z.boolean(),
   alpn: z.array(z.string()),
   createdAt: z.number().int(),
+  downloadSettings: z.string(),
   echConfigList: z.string(),
   excludeFromSubTypes: z.array(z.string()),
   finalMask: z.string(),
