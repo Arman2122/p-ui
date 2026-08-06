@@ -186,3 +186,50 @@ func TestBackfillClientCredentialsFallsBackToTheSharedColumns(t *testing.T) {
 		t.Errorf("ad_tag column not carried over, got %q", got[[2]any{in.Id, model.CredentialAdTag}])
 	}
 }
+
+/*
+A client on both an mtproto and a vless inbound must get a credential row for
+the mtproto one only.
+
+The legacy secret column is shared across all of a client's inbounds, and a
+vless inbound's settings carry no secret to override it, so a backfill that
+walks every attached inbound copies an MTProto secret onto a VLESS one. Caught
+on real data: the live panel's shared client had exactly that stray row.
+*/
+func TestBackfillClientCredentialsSkipsInboundsThatCannotUseThem(t *testing.T) {
+	initTestDB(t)
+	addLegacyClientColumns(t)
+
+	const email = "shared@example.com"
+	secret := model.GenerateFakeTLSSecret("mt.example.com")
+	mt := createMtprotoInbound(t, "mt-only", 8471, map[string]any{
+		"fakeTlsDomain": "mt.example.com",
+		"clients": []any{
+			map[string]any{"email": email, "secret": secret, "enable": true},
+		},
+	})
+	vless := &model.Inbound{
+		UserId: 1, Remark: "vless-sibling", Port: 8472, Protocol: model.VLESS, Tag: "vless-sibling",
+		Settings: `{"clients":[{"email":"` + email + `","id":"7c1b0f1e-0000-4000-8000-000000000001"}],"decryption":"none"}`,
+	}
+	if err := db.Create(vless).Error; err != nil {
+		t.Fatalf("create vless inbound: %v", err)
+	}
+	clientId := seedLegacyClient(t, email, secret, "", mt.Id, vless.Id)
+
+	clearSeederHistory(t, "ClientCredentials")
+	if err := backfillClientCredentials(); err != nil {
+		t.Fatalf("backfillClientCredentials: %v", err)
+	}
+
+	got := credentialRows(t, clientId)
+	if value := got[[2]any{mt.Id, model.CredentialSecret}]; value != secret {
+		t.Errorf("the mtproto inbound must carry the secret, got %q", value)
+	}
+	if _, stray := got[[2]any{vless.Id, model.CredentialSecret}]; stray {
+		t.Errorf("a vless inbound must not be given an mtproto secret; rows: %v", got)
+	}
+	if len(got) != 1 {
+		t.Errorf("backfill wrote %d rows, want exactly the mtproto secret: %v", len(got), got)
+	}
+}
