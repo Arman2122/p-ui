@@ -474,10 +474,20 @@ func collectStringSlice(value any) []string {
 	}
 }
 
-// legacyShadowsocksAccountType is the type URL serial.ToTypedMessage stamps on
-// a pre-2022 shadowsocks account, which identifies the one inbound whose user
-// list tolerates duplicate emails.
-const legacyShadowsocksAccountType = "xray.proxy.shadowsocks.Account"
+/*
+Account types whose inbound indexes its users by credential, not by email.
+
+Their AddUser accepts a second user under an email the inbound already holds,
+and the one RemoveUser that follows deletes only one of the two — so a re-keyed
+or revoked client stays connectable on its old credential. Every other inbound
+rejects the duplicate outright (IsUserExistsErr), which is why the pre-remove
+below is scoped to these instead of costing every add a round-trip.
+*/
+var duplicateEmailAccountTypes = map[string]struct{}{
+	serial.GetMessageType(&shadowsocks.Account{}):     {},
+	serial.GetMessageType(&hysteriaAccount.Account{}): {},
+	serial.GetMessageType(&wireguard.PeerConfig{}):    {},
+}
 
 // shadowsocks2022Ciphers are the methods that select xray's shadowsocks-2022
 // inbound (sing's shadowaead_2022 list). They take a different account type
@@ -669,11 +679,8 @@ func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMe
 	}
 }
 
-// AddUser adds a user to an inbound in the Xray core using the specified
-// protocol and user data. On a legacy shadowsocks inbound the add first drops
-// any existing holder of the email: that is the one inbound whose validator
-// does not reject a duplicate email, and a later removal would then drop just
-// one of the two registrations, leaving a disabled client able to connect.
+// AddUser adds a user to an inbound. For duplicateEmailAccountTypes it first
+// drops any existing holder of the email, so one email is one registration.
 func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]any) error {
 	userEmail, err := getRequiredUserString(user, "email")
 	if err != nil {
@@ -693,7 +700,7 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 	}
 	client := *x.HandlerServiceClient
 
-	if account.Type == legacyShadowsocksAccountType {
+	if _, keyedByCredential := duplicateEmailAccountTypes[account.Type]; keyedByCredential {
 		_ = x.RemoveUser(inboundTag, userEmail)
 	}
 
