@@ -121,6 +121,7 @@ exports[`inbound transport forms > XhttpForm field structure is stable 1`] = `
   "Session ID Table",
   "Sequence Placement",
   "No SSE Header",
+  "Split download endpoint",
   "XMUX",
 ]
 `;

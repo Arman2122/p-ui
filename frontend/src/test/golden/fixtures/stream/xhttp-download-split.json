@@ -1,0 +1,23 @@
+{
+  "network": "xhttp",
+  "xhttpSettings": {
+    "path": "/",
+    "mode": "auto",
+    "xPaddingBytes": "100-1000",
+    "scMaxEachPostBytes": "1000000",
+    "downloadSettings": {
+      "address": "download.example.com",
+      "port": 443,
+      "network": "xhttp",
+      "security": "tls",
+      "tlsSettings": {
+        "serverName": "download.example.com",
+        "alpn": ["h2", "http/1.1"],
+        "fingerprint": "chrome"
+      },
+      "xhttpSettings": {
+        "path": "/"
+      }
+    }
+  }
+}

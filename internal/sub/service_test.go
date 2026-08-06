@@ -1189,3 +1189,33 @@ func TestGenHysteriaLinkOmitsFinalMaskQueryParam(t *testing.T) {
 		t.Fatalf("missing standard obfs-password: %s", got)
 	}
 }
+
+/*
+A split download endpoint must not reach a client in stream-one mode.
+
+xray-core rejects the pair outright ("Can not use downloadSettings in
+stream-one mode"), so a link carrying both does not degrade — the client
+refuses to start. The panel strips the combination on save, but an inbound
+written by an older build or straight through the API can still hold it.
+*/
+func TestBuildXhttpExtraDropsDownloadSettingsInStreamOne(t *testing.T) {
+	download := map[string]any{"address": "download.example.com", "port": float64(443)}
+
+	streamOne := buildXhttpExtra(map[string]any{
+		"mode":             "stream-one",
+		"downloadSettings": download,
+	})
+	if _, ok := streamOne["downloadSettings"]; ok {
+		t.Errorf("stream-one link carries a download endpoint xray-core will not start with: %#v", streamOne)
+	}
+
+	// The guard must be about the pair, not about download endpoints at all:
+	// stream-up is the mode the split is actually deployed with.
+	streamUp := buildXhttpExtra(map[string]any{
+		"mode":             "stream-up",
+		"downloadSettings": download,
+	})
+	if _, ok := streamUp["downloadSettings"]; !ok {
+		t.Errorf("stream-up must keep the download endpoint, got %#v", streamUp)
+	}
+}

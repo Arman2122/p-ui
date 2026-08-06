@@ -230,6 +230,17 @@ export function normalizeXhttpForWire(
   const enableXmux = out.enableXmux === true;
   delete out.enableXmux;
 
+  /* The download endpoint is client-facing, like scMinPostsIntervalMs below:
+     it stays in the stored settings so subscriptions can hand it to clients,
+     and the Go renderer strips it before xray sees the inbound. Dropped in
+     stream-one because the core refuses to start on that pair. */
+  const enableDownload = out.enableDownloadSettings === true;
+  delete out.enableDownloadSettings;
+  if (!enableDownload || mode === 'stream-one') delete out.downloadSettings;
+  if (isRecord(out.downloadSettings) && out.downloadSettings.address === '') {
+    delete out.downloadSettings;
+  }
+
   if (side === 'inbound') {
     if (!enableXmux) delete out.xmux;
     // scMinPostsIntervalMs is a client-only tuning knob that subscriptions
