@@ -1,9 +1,62 @@
 import { z } from 'zod';
 
+import { AlpnSchema, TlsFingerprintSchema, UtlsFingerprintSchema } from '@/schemas/protocols/security/tls';
 import { WsHeaderMapSchema } from '@/schemas/protocols/stream/ws';
 
 export const XHttpModeSchema = z.enum(['auto', 'packet-up', 'stream-up', 'stream-one']);
 export type XHttpMode = z.infer<typeof XHttpModeSchema>;
+
+/*
+The download half of a split XHTTP connection.
+
+xray-core's SplitHTTPConfig.DownloadSettings is a whole StreamConfig, so the
+download leg carries its own address, port, security and transport: the client
+uploads to the inbound's own host and downloads from a different server
+entirely. One panel inbound describes both halves, because only the upload half
+is a listener — the download endpoint is a fact about the peer, which the panel
+propagates to clients through share links and subscriptions and strips from the
+config it hands xray.
+
+Parsing stays permissive so a link written by another panel round-trips intact;
+the form is what is opinionated about which combinations to offer.
+*/
+export const XHttpDownloadTlsSchema = z.object({
+  serverName: z.string().default(''),
+  alpn: z.array(AlpnSchema).default([]),
+  fingerprint: TlsFingerprintSchema.default(''),
+});
+export type XHttpDownloadTls = z.infer<typeof XHttpDownloadTlsSchema>;
+
+export const XHttpDownloadRealitySchema = z.object({
+  serverName: z.string().default(''),
+  publicKey: z.string().default(''),
+  shortId: z.string().default(''),
+  spiderX: z.string().default(''),
+  fingerprint: UtlsFingerprintSchema.default('chrome'),
+});
+export type XHttpDownloadReality = z.infer<typeof XHttpDownloadRealitySchema>;
+
+// One level deep on purpose: the core would parse downloadSettings inside
+// downloadSettings, but nothing uses it and the form would not render it.
+export const XHttpDownloadXhttpSchema = z.object({
+  path: z.string().default('/'),
+  host: z.string().default(''),
+  mode: XHttpModeSchema.default('auto'),
+});
+export type XHttpDownloadXhttp = z.infer<typeof XHttpDownloadXhttpSchema>;
+
+export const XHttpDownloadSettingsSchema = z.object({
+  address: z.string().default(''),
+  port: z.number().int().min(0).max(65535).default(443),
+  // A string rather than an enum: the core accepts any transport here, and
+  // rejecting one on import would lose a working config the panel did not write.
+  network: z.string().default('xhttp'),
+  security: z.string().default('tls'),
+  tlsSettings: XHttpDownloadTlsSchema.optional(),
+  realitySettings: XHttpDownloadRealitySchema.optional(),
+  xhttpSettings: XHttpDownloadXhttpSchema.optional(),
+});
+export type XHttpDownloadSettings = z.infer<typeof XHttpDownloadSettingsSchema>;
 
 // xHTTP (SplitHTTPConfig) is xray-core's modern stream-multiplexed transport.
 // The field set is large because the schema mirrors what the server-side
@@ -113,5 +166,19 @@ export const XHttpStreamSettingsSchema = z.preprocess(migrateLegacyXhttp, z.obje
   // Never present on the wire — outbound modal strips it via the
   // form-to-wire adapter.
   enableXmux: z.boolean().default(false),
+  downloadSettings: XHttpDownloadSettingsSchema.optional(),
+  // UI-only toggle, same contract as enableXmux.
+  enableDownloadSettings: z.boolean().default(false),
+}).superRefine((v, ctx) => {
+  // xray-core refuses to start on this pair rather than ignoring one of them
+  // ("Can not use downloadSettings in stream-one mode"), so catching it in the
+  // form is the difference between a validation message and a dead inbound.
+  if (v.downloadSettings && v.mode === 'stream-one') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['mode'],
+      message: 'xhttp.downloadSettingsNotInStreamOne',
+    });
+  }
 }));
 export type XHttpStreamSettings = z.infer<typeof XHttpStreamSettingsSchema>;

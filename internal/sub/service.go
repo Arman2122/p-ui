@@ -2021,9 +2021,18 @@ func buildXhttpExtra(xhttp map[string]any) map[string]any {
 	}
 
 	for _, field := range []string{"xmux", "downloadSettings"} {
-		if v, ok := nonEmptyShareObject(xhttp[field]); ok {
-			extra[field] = v
+		v, ok := nonEmptyShareObject(xhttp[field])
+		if !ok {
+			continue
 		}
+		// A split download endpoint in stream-one is a config xray-core refuses
+		// to start on, so a link carrying it would break the client rather than
+		// degrade. The panel strips the pair on save; an older row or a direct
+		// API write can still reach here.
+		if field == "downloadSettings" && extra["mode"] == "stream-one" {
+			continue
+		}
+		extra[field] = v
 	}
 
 	// Headers — emitted as the {name: value} map upstream's struct

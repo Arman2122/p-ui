@@ -94,6 +94,14 @@ function buildXhttpExtra(xhttp: XHttpStreamSettings | undefined): Record<string,
     extra.sessionKey = extra.sessionIDKey;
   }
 
+  /* The download half of a split connection, which is the whole point of the
+     `extra` blob for this transport: the URL authority is the upload address,
+     so the second address has nowhere else to live. Omitted in stream-one mode
+     because xray-core refuses to start on that pair rather than ignoring it. */
+  if (xhttp.downloadSettings && xhttp.downloadSettings.address && xhttp.mode !== 'stream-one') {
+    extra.downloadSettings = xhttp.downloadSettings;
+  }
+
   // Headers on the wire are a record; emit them as a map upstream's
   // SplitHTTPConfig.headers expects, dropping Host (already on the URL).
   if (xhttp.headers && Object.keys(xhttp.headers).length > 0) {

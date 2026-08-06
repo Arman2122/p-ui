@@ -39,6 +39,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-basic byte-stably 1`] = `
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {},
     "host": "edge.example.test",
@@ -71,10 +72,67 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-basic byte-stably 1`] = `
 }
 `;
 
+exports[`NetworkSettingsSchema fixtures > parses xhttp-download-split byte-stably 1`] = `
+{
+  "network": "xhttp",
+  "xhttpSettings": {
+    "downloadSettings": {
+      "address": "download.example.com",
+      "network": "xhttp",
+      "port": 443,
+      "security": "tls",
+      "tlsSettings": {
+        "alpn": [
+          "h2",
+          "http/1.1",
+        ],
+        "fingerprint": "chrome",
+        "serverName": "download.example.com",
+      },
+      "xhttpSettings": {
+        "host": "",
+        "mode": "auto",
+        "path": "/",
+      },
+    },
+    "enableDownloadSettings": false,
+    "enableXmux": false,
+    "headers": {},
+    "host": "",
+    "mode": "auto",
+    "noGRPCHeader": false,
+    "noSSEHeader": false,
+    "path": "/",
+    "scMaxBufferedPosts": 30,
+    "scMaxEachPostBytes": "1000000",
+    "scMinPostsIntervalMs": "",
+    "scStreamUpServerSecs": "20-80",
+    "seqKey": "",
+    "seqPlacement": "",
+    "serverMaxHeaderBytes": 0,
+    "sessionIDKey": "",
+    "sessionIDLength": "",
+    "sessionIDPlacement": "",
+    "sessionIDTable": "",
+    "uplinkChunkSize": 0,
+    "uplinkDataKey": "",
+    "uplinkDataPlacement": "",
+    "uplinkHTTPMethod": "",
+    "xPaddingBytes": "100-1000",
+    "xPaddingHeader": "",
+    "xPaddingKey": "",
+    "xPaddingMethod": "",
+    "xPaddingObfsMode": false,
+    "xPaddingPlacement": "",
+  },
+}
+`;
+
 exports[`NetworkSettingsSchema fixtures > parses xhttp-extra-padding byte-stably 1`] = `
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {},
     "host": "edge.example.test",
@@ -111,6 +169,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-extra-placement byte-stab
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {},
     "host": "edge.example.test",
@@ -147,6 +206,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-extra-tuning byte-stably 
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {
       "X-Forwarded-For": "10.0.0.1",
