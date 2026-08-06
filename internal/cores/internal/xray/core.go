@@ -213,7 +213,7 @@ func (c *Core) AddUser(_ context.Context, inst core.Instance, user core.User) er
 	if err != nil {
 		return err
 	}
-	return api.AddUser(string(inst.Kind), inst.Tag, clientOf(user))
+	return api.AddUser(string(inst.Kind), inst.Tag, clientOf(inst, user))
 }
 
 func (c *Core) RemoveUser(_ context.Context, inst core.Instance, email string) error {

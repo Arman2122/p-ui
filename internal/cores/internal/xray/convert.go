@@ -1,7 +1,9 @@
 package xray
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
@@ -37,13 +39,46 @@ func toInbound(inst core.Instance) (core.InboundConfig, bool) {
 	return out, inst.Enable
 }
 
-// clientOf renders one user the way its protocol expects. The credential names
-// are the core's own; nothing above it knows whether a client carries an id, a
-// password or a public key.
-func clientOf(u core.User) map[string]any {
+/*
+clientOf renders one user the way the core API expects. The credential names are
+this core's own; nothing above it knows whether a client carries an id, a
+password or a public key.
+
+Two values do not survive the settings blob as the API wants them: keepAlive is
+stored as a number and sent as a string, and a shadowsocks-2022 client keeps no
+method of its own, so the inbound's stands in — without it the account is built
+for the wrong cipher, or for none at all.
+*/
+func clientOf(inst core.Instance, u core.User) map[string]any {
 	client := map[string]any{"email": u.Email}
 	for key, value := range u.Credentials {
 		client[key] = value
 	}
+	if seconds, ok := client["keepAlive"].(float64); ok {
+		client["keepAlive"] = strconv.Itoa(int(seconds))
+	}
+	/*
+		The inbound's method wins, never the client's own.
+
+		Users come from the raw settings blob, which keeps a client-level method
+		forever — the healer that reconciles them runs at render time and nothing
+		persists its output. So an inbound switched from aes-256-gcm to
+		2022-blake3-aes-256-gcm still has clients carrying the old name, and
+		sending that builds a legacy account for a 2022 inbound. xray-core casts
+		it unchecked and panics inside AlterInbound, taking the whole core down.
+	*/
+	if inboundMethod := methodOf(inst.Settings); inboundMethod != "" {
+		client["method"] = inboundMethod
+	}
 	return client
+}
+
+func methodOf(settings string) string {
+	var parsed struct {
+		Method string `json:"method"`
+	}
+	if json.Unmarshal([]byte(settings), &parsed) != nil {
+		return ""
+	}
+	return parsed.Method
 }

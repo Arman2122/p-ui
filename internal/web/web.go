@@ -514,9 +514,9 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		return err
 	}
 	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{
-		APIPort:        func() int { return s.xrayService.GetXrayAPIPort() },
 		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },
 		Cores:          registry,
+		LoadInbound:    (&service.InboundService{}).GetInbound,
 		RenderInbound:  s.xrayService.RenderInbound,
 	}))
 	// The traffic job bills every core through the same registry.

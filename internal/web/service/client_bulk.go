@@ -1561,11 +1561,6 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 		wanted[email] = struct{}{}
 	}
 
-	cipher := ""
-	if oldInbound.Protocol == model.Shadowsocks {
-		cipher, _ = settings["method"].(string)
-	}
-
 	type changedClient struct {
 		email     string
 		wasEnable bool
@@ -1666,15 +1661,7 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 		} else {
 			for _, ch := range changed {
 				if enable {
-					err1 := rt.AddUser(context.Background(), oldInbound, map[string]any{
-						"email":    ch.client.Email,
-						"id":       ch.client.ID,
-						"security": ch.client.Security,
-						"flow":     ch.client.Flow,
-						"auth":     ch.client.Auth,
-						"password": ch.client.Password,
-						"cipher":   cipher,
-					})
+					err1 := rt.AddUser(context.Background(), oldInbound, ch.client.Email)
 					if err1 != nil {
 						logger.Debug("Error in adding client on", rt.Name(), ":", err1)
 						res.needRestart = true

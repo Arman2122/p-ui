@@ -13,7 +13,9 @@ type Runtime interface {
 	DelInbound(ctx context.Context, ib *model.Inbound) error
 	UpdateInbound(ctx context.Context, oldIb, newIb *model.Inbound) error
 
-	AddUser(ctx context.Context, ib *model.Inbound, userMap map[string]any) error
+	// The client is named, never described: its credentials live in the inbound
+	// and only the core serving it knows which of them a protocol needs.
+	AddUser(ctx context.Context, ib *model.Inbound, email string) error
 	RemoveUser(ctx context.Context, ib *model.Inbound, email string) error
 
 	// Per-client operations that route through the node's clients API on

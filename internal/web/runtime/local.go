@@ -4,21 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
-	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 type LocalDeps struct {
-	APIPort        func() int
 	SetNeedRestart func()
 	// Cores resolves an inbound's protocol to the core that serves it. Nil in
 	// tests that never touch an inbound; every inbound op fails loudly without it.
 	Cores *core.Registry
+	/*
+		LoadInbound re-reads the row a user op names.
+
+		A core that provisions users by re-applying its whole set rebuilds that
+		set from Instance.Users, so it revokes every client missing from the row
+		it is handed — and callers hand Local the copy they were editing. Nil
+		leaves that copy standing, which is what a runtime test wires; the
+		production wiring is pinned by internal/arch.
+	*/
+	LoadInbound func(id int) (*model.Inbound, error)
 	/*
 		RenderInbound produces the inbound exactly as the full config build would
 		emit it, so a hot apply and the next restart agree byte for byte.
@@ -33,7 +39,6 @@ type LocalDeps struct {
 
 type Local struct {
 	deps LocalDeps
-	mu   sync.Mutex
 }
 
 func NewLocal(deps LocalDeps) *Local {
@@ -41,22 +46,6 @@ func NewLocal(deps LocalDeps) *Local {
 }
 
 func (l *Local) Name() string { return "local" }
-
-func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	port := l.deps.APIPort()
-	if port <= 0 {
-		return errors.New("local xray is not running")
-	}
-	var api xray.XrayAPI
-	if err := api.Init(port); err != nil {
-		return err
-	}
-	defer api.Close()
-	return fn(&api)
-}
 
 // coreFor resolves the core serving this inbound. An unknown protocol is an
 // error, never a no-op: silence would read as "applied" and quarantine as delete.
@@ -67,6 +56,14 @@ func (l *Local) coreFor(ib *model.Inbound) (*core.Bound, error) {
 	bound, ok := l.deps.Cores.For(core.Kind(ib.Protocol))
 	if !ok {
 		return nil, fmt.Errorf("no core serves protocol %q", ib.Protocol)
+	}
+	return bound, nil
+}
+
+func (l *Local) applierFor(ib *model.Inbound) (*core.Bound, error) {
+	bound, err := l.coreFor(ib)
+	if err != nil {
+		return nil, err
 	}
 	if bound.Apply == nil {
 		return nil, fmt.Errorf("core %q cannot apply a single inbound", bound.Core.Describe().ID)
@@ -102,7 +99,7 @@ func (l *Local) desiredState(ib *model.Inbound) (core.Instance, error) {
 }
 
 func (l *Local) AddInbound(ctx context.Context, ib *model.Inbound) error {
-	bound, err := l.coreFor(ib)
+	bound, err := l.applierFor(ib)
 	if err != nil {
 		return err
 	}
@@ -116,7 +113,7 @@ func (l *Local) AddInbound(ctx context.Context, ib *model.Inbound) error {
 // DropInstance is keyed by tag and port, so the stored sections are enough and
 // a render failure must not be able to strand a listener.
 func (l *Local) DelInbound(ctx context.Context, ib *model.Inbound) error {
-	bound, err := l.coreFor(ib)
+	bound, err := l.applierFor(ib)
 	if err != nil {
 		return err
 	}
@@ -172,41 +169,62 @@ func (l *Local) strandsOldInbound(oldIb, newIb *model.Inbound) bool {
 	return bound.HotApply.PlanChange(before, renamed) != core.ActionNoop
 }
 
-func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string]any) error {
-	if ib.Protocol == model.MTProto {
-		return nil
+/*
+userTarget resolves the core and the state a user op acts on.
+
+The instance is rebuilt from the current row rather than the caller's copy,
+because a whole-set core reads every other client out of it: the copy is as old
+as the caller's own read, and on such a core "absent" means "revoked".
+*/
+func (l *Local) userTarget(ib *model.Inbound) (*core.Bound, core.Instance, error) {
+	bound, err := l.coreFor(ib)
+	if err != nil {
+		return nil, core.Instance{}, err
 	}
-	return l.withAPI(func(api *xray.XrayAPI) error {
-		return api.AddUser(string(ib.Protocol), ib.Tag, userMap)
-	})
+	if bound.Users == nil {
+		return nil, core.Instance{}, fmt.Errorf("core %q cannot provision a single user", bound.Core.Describe().ID)
+	}
+	current := ib
+	if l.deps.LoadInbound != nil {
+		fresh, loadErr := l.deps.LoadInbound(ib.Id)
+		if loadErr != nil {
+			return nil, core.Instance{}, fmt.Errorf("reload inbound %d: %w", ib.Id, loadErr)
+		}
+		if fresh != nil {
+			current = fresh
+		}
+	}
+	return bound, instanceOf(current), nil
 }
 
-func (l *Local) RemoveUser(_ context.Context, ib *model.Inbound, email string) error {
-	if ib.Protocol == model.MTProto {
-		return nil
+// AddUser hands the core the client as the inbound stores it. The credentials a
+// protocol needs are the core's business, so nothing here names one.
+func (l *Local) AddUser(ctx context.Context, ib *model.Inbound, email string) error {
+	bound, inst, err := l.userTarget(ib)
+	if err != nil {
+		return err
 	}
-	return l.withAPI(func(api *xray.XrayAPI) error {
-		return api.RemoveUser(ib.Tag, email)
-	})
+	for _, user := range inst.Users {
+		if user.Email == email {
+			return bound.Users.AddUser(ctx, inst, user)
+		}
+	}
+	return fmt.Errorf("inbound %q carries no client %q to add", inst.Tag, email)
+}
+
+func (l *Local) RemoveUser(ctx context.Context, ib *model.Inbound, email string) error {
+	bound, inst, err := l.userTarget(ib)
+	if err != nil {
+		return err
+	}
+	return bound.Users.RemoveUser(ctx, inst, email)
 }
 
 func (l *Local) AddClient(ctx context.Context, ib *model.Inbound, client model.Client) error {
 	if !client.Enable {
 		return nil
 	}
-	user := map[string]any{
-		"email":        client.Email,
-		"id":           client.ID,
-		"security":     client.Security,
-		"flow":         client.Flow,
-		"auth":         client.Auth,
-		"password":     client.Password,
-		"publicKey":    client.PublicKey,
-		"allowedIPs":   client.AllowedIPs,
-		"preSharedKey": client.PreSharedKey,
-		"keepAlive":    wgKeepAlive(client.KeepAlive),
-	}
-	return l.AddUser(ctx, ib, user)
+	return l.AddUser(ctx, ib, client.Email)
 }
 
 func (l *Local) DeleteUser(ctx context.Context, ib *model.Inbound, email string) error {
@@ -235,26 +253,7 @@ func (l *Local) UpdateUser(ctx context.Context, ib *model.Inbound, oldEmail stri
 	if !payload.Enable {
 		return nil
 	}
-	user := map[string]any{
-		"email":        payload.Email,
-		"id":           payload.ID,
-		"security":     payload.Security,
-		"flow":         payload.Flow,
-		"auth":         payload.Auth,
-		"password":     payload.Password,
-		"publicKey":    payload.PublicKey,
-		"allowedIPs":   payload.AllowedIPs,
-		"preSharedKey": payload.PreSharedKey,
-		"keepAlive":    wgKeepAlive(payload.KeepAlive),
-	}
-	return l.AddUser(ctx, ib, user)
-}
-
-func wgKeepAlive(seconds int) string {
-	if seconds <= 0 {
-		return ""
-	}
-	return strconv.Itoa(seconds)
+	return l.AddUser(ctx, ib, payload.Email)
 }
 
 func (l *Local) RestartXray(_ context.Context) error {

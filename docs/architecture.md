@@ -331,7 +331,8 @@ code* works whether the target is the local Xray or a remote node.
 - **Interface:** `internal/web/runtime/runtime.go` — `Name`, `AddInbound`, `DelInbound`,
   `UpdateInbound`, `AddUser`, `RemoveUser`, `UpdateUser`, `DeleteUser`, `AddClient`,
   `RestartXray`, `ResetClientTraffic`, `ResetInboundTraffic`, `ResetAllTraffics`.
-- **`Local`** (`local.go`): calls this box's Xray gRPC API directly.
+- **`Local`** (`local.go`): resolves the inbound's core from the registry and applies through
+  it — no protocol branch of its own, and no direct `internal/xray` call.
 - **`Remote`** (`remote.go`): serializes the operation and sends it over HTTPS to the child
   node's API.
 - **TLS modes** (`tls_client.go`, per-node `TlsVerifyMode`):

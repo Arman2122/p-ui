@@ -11,14 +11,16 @@ every field on it is optional at compile time.
 
 That is deliberate — a runtime test builds a Local without a database — but it
 means dropping a field from the production literal degrades silently rather than
-failing to build. RenderInbound is the sharp one: without it a hot apply falls
-back to the stored sections, so an inbound edited under load keeps
-quota-exhausted clients and loses its fallbacks, while every test that wires its
-own deps still passes.
+failing to build. Two are sharp. Without RenderInbound a hot apply falls back to
+the stored sections, so an inbound edited under load keeps quota-exhausted
+clients and loses its fallbacks. Without LoadInbound a user op is applied against
+the caller's own copy of the row, and a core that re-applies its whole user set
+revokes every client that copy predates. Every test wiring its own deps passes
+either way.
 
 Add a field here when a new one is load-bearing; leave the optional ones out.
 */
-var requiredLocalDeps = []string{"Cores", "RenderInbound"}
+var requiredLocalDeps = []string{"Cores", "LoadInbound", "RenderInbound"}
 
 func TestLocalRuntimeIsWiredToRender(t *testing.T) {
 	root := repoRoot(t)
