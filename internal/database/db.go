@@ -633,8 +633,12 @@ func backfillClientCredentials() error {
 		return nil
 	}
 
+	// MTProto only: these are the credentials that moved, and the legacy columns
+	// are shared, so any other protocol would copy a secret it cannot use.
 	var inboundIds []int
-	if err := db.Model(&model.ClientInbound{}).Distinct().Pluck("inbound_id", &inboundIds).Error; err != nil {
+	if err := db.Model(&model.Inbound{}).
+		Where("protocol = ?", model.MTProto).
+		Pluck("id", &inboundIds).Error; err != nil {
 		return err
 	}
 	secretCol := legacyClientCredentialColumn("secret")
