@@ -34,6 +34,7 @@ type defects struct {
 	quotaRejectsUnknown bool
 	misattributeTraffic bool
 	applyOnlyAdds       bool
+	inventCredential    bool
 }
 
 type fakeCore struct {
@@ -75,6 +76,13 @@ func (f *fakeCore) Describe() core.Descriptor {
 }
 
 func (f *fakeCore) Preflight(context.Context) error { return nil }
+
+func (f *fakeCore) ClientCredentials(core.Kind) []string {
+	if f.d.inventCredential {
+		return []string{"fakePassphrase"}
+	}
+	return []string{core.CredUUID}
+}
 
 func (f *fakeCore) Reconcile(_ context.Context, desired []core.Instance) error {
 	changed := !slices.EqualFunc(f.desired, desired, func(a, b core.Instance) bool {
@@ -340,6 +348,11 @@ func TestSuiteCatchesBrokenAdapters(t *testing.T) {
 			name:          "ApplyInstance accumulates instead of converging",
 			defects:       defects{applyOnlyAdds: true},
 			wantInvariant: "apply/replaces-rather-than-adds",
+		},
+		{
+			name:          "declares a credential field no form can render",
+			defects:       defects{inventCredential: true},
+			wantInvariant: "credentials/known-vocabulary",
 		},
 	}
 

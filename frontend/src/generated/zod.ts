@@ -356,6 +356,7 @@ export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
 
 export const CoreViewSchema = z.object({
   caps: z.lazy(() => CapabilitiesSchema),
+  clientCredentials: z.record(z.string(), z.array(z.string())),
   id: z.string(),
   kinds: z.array(z.string()),
   titleKey: z.string(),

@@ -16,6 +16,9 @@ type CoreView struct {
 	// so the id is not a protocol and must never be used as one.
 	Kinds []string          `json:"kinds" example:"[\"vless\",\"vmess\"]"`
 	Caps  core.Capabilities `json:"caps"`
+	// ClientCredentials are the credential fields a client of each kind carries,
+	// keyed by kind. A kind absent here declares none; the form keeps its own.
+	ClientCredentials map[string][]string `json:"clientCredentials" example:"{\"vless\":[\"uuid\"],\"vmess\":[\"uuid\",\"security\"]}"`
 }
 
 // CoreViews describes the cores this build can serve. The registry is read per
@@ -40,17 +43,25 @@ func coreViews(reg *core.Registry) []CoreView {
 		described := bound.Core.Describe()
 		kinds := bound.Core.Kinds()
 		names := make([]string, 0, len(kinds))
+		credentials := make(map[string][]string, len(kinds))
 		for _, kind := range kinds {
 			names = append(names, string(kind))
+			if bound.Creds == nil {
+				continue
+			}
+			if fields := bound.Creds.ClientCredentials(kind); len(fields) > 0 {
+				credentials[string(kind)] = fields
+			}
 		}
 		// Both sources are declaration order — registration order here, the
 		// core's own slice for kinds — and an unstable order makes gen-check flap.
 		sort.Strings(names)
 		views = append(views, CoreView{
-			ID:       string(described.ID),
-			TitleKey: described.TitleKey,
-			Kinds:    names,
-			Caps:     described.Caps,
+			ID:                string(described.ID),
+			TitleKey:          described.TitleKey,
+			Kinds:             names,
+			Caps:              described.Caps,
+			ClientCredentials: credentials,
 		})
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })

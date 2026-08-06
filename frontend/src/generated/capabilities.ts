@@ -20,6 +20,11 @@ export interface CapabilityRule {
 
 export const CAPABILITY_NAMES = ["fallbacks","reality","sniffing","ss2022","stream","tls","tlsFlow"] as const;
 
+// Source of truth: internal/core/credentials.go. A core declares a subset per kind.
+export const CLIENT_CREDENTIAL_NAMES = ["adTag","allowedIPs","auth","password","preSharedKey","privateKey","publicKey","secret","security","uuid"] as const;
+
+export type ClientCredentialName = (typeof CLIENT_CREDENTIAL_NAMES)[number];
+
 export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
   "fallbacks": {
     "any": [

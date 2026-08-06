@@ -332,6 +332,7 @@ export interface ClientTraffic {
 
 export interface CoreView {
   caps: Capabilities;
+  clientCredentials: Record<string, string[]>;
   id: string;
   kinds: string[];
   titleKey: string;

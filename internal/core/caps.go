@@ -45,6 +45,20 @@ type UserProvisioner interface {
 	RemoveUser(ctx context.Context, inst Instance, email string) error
 }
 
+/*
+CredentialDeclarer names the credential fields one kind's clients carry, so the
+client form renders from what a core declares instead of from its own protocol
+branches. Names come from the closed vocabulary in credentials.go.
+
+It is per-kind and not part of Descriptor because Descriptor is core-grained:
+Xray is one core answering ten kinds, and vless, wireguard and shadowsocks need
+different fields. Returning nil for a kind declares nothing, and the form keeps
+the fields it has always shown, so an unknown inbound stays editable.
+*/
+type CredentialDeclarer interface {
+	ClientCredentials(kind Kind) []string
+}
+
 // TrafficSource reports per-user usage. Deltas only: a core normalises its own
 // counter semantics — cumulative, per-session, or reset-on-read — before
 // returning, using Counter where the source is cumulative.

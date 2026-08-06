@@ -91,6 +91,7 @@ func Check(rig Rig) []Failure {
 
 	checkIdentity(r, c)
 	checkDescriptor(r, bound)
+	checkCredentials(r, bound)
 	checkRegistry(r, rig)
 	checkSupervisor(r, rig, bound)
 	checkHotApply(r, rig, bound)
@@ -127,6 +128,21 @@ func checkIdentity(r *report, c core.Core) {
 func checkDescriptor(r *report, bound *core.Bound) {
 	for _, problem := range bound.DeclaredMatchesImplemented() {
 		r.fail("descriptor/capabilities-match", "%s", problem)
+	}
+}
+
+// checkCredentials holds a declaring core to the closed vocabulary: a name
+// outside it renders as nothing, so that field can never be filled in.
+func checkCredentials(r *report, bound *core.Bound) {
+	if bound.Creds == nil {
+		return
+	}
+	for _, kind := range bound.Core.Kinds() {
+		for _, name := range bound.Creds.ClientCredentials(kind) {
+			if !core.IsClientCredential(name) {
+				r.fail("credentials/known-vocabulary", "kind %q declares credential %q, which is outside the vocabulary in internal/core/credentials.go; no form renders it, so the operator has no way to set it", kind, name)
+			}
+		}
 	}
 }
 
