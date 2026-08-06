@@ -114,6 +114,10 @@ func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {
 	return nil
 }
 
+// ProvisionsWholeUserSet: both user ops push the whole [secrets] section, so a
+// client missing from the instance they are handed is a client revoked.
+func (c *Core) ProvisionsWholeUserSet() {}
+
 // AddUser is an upsert: re-adding an existing email replaces its credentials,
 // so a re-key and an add take the same path.
 func (c *Core) AddUser(_ context.Context, inst core.Instance, user core.User) error {

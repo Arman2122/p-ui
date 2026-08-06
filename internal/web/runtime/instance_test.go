@@ -85,15 +85,15 @@ func TestUsersOf(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := usersOf(tc.settings); got != nil {
+			if got := usersOf(tc.settings, ""); got != nil {
 				t.Fatalf("usersOf(%s) = %+v, want none", tc.settings, got)
 			}
 		})
 	}
 
 	t.Run("fields and scalar credentials", func(t *testing.T) {
-		users := usersOf(`{"clients":[{"email":"a@example.com","enable":true,"totalGB":1024,` +
-			`"expiryTime":1700000000000,"id":"beef","limitIp":3,"allowedIPs":["10.0.0.2/32"]}]}`)
+		users := usersOf(`{"clients":[{"email":"a@example.com","enable":true,"totalGB":1024,`+
+			`"expiryTime":1700000000000,"id":"beef","limitIp":3,"allowedIPs":["10.0.0.2/32"]}]}`, "")
 		if len(users) != 1 {
 			t.Fatalf("got %d users, want 1", len(users))
 		}
@@ -115,6 +115,22 @@ func TestUsersOf(t *testing.T) {
 		}
 		if len(allowed) != 1 || allowed[0] != "10.0.0.2/32" {
 			t.Errorf("allowedIPs = %v, want [10.0.0.2/32]", allowed)
+		}
+	})
+
+	// Naming one client projects that client and no other, credentials included:
+	// the whole projection is what costs a second per edit on a huge inbound.
+	t.Run("only one client", func(t *testing.T) {
+		settings := `{"clients":[{"email":"a@example.com","id":"aaa"},{"email":"b@example.com","id":"bbb"}]}`
+		users := usersOf(settings, "b@example.com")
+		if len(users) != 1 {
+			t.Fatalf("got %d users, want only the one named", len(users))
+		}
+		if users[0].Email != "b@example.com" || users[0].Credentials["id"] != "bbb" {
+			t.Errorf("user = %q id=%v, want b@example.com/bbb", users[0].Email, users[0].Credentials["id"])
+		}
+		if got := usersOf(settings, "ghost@example.com"); got != nil {
+			t.Errorf("usersOf named a client the inbound does not carry = %+v, want none", got)
 		}
 	})
 }

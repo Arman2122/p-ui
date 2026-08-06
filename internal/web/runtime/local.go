@@ -16,7 +16,7 @@ type LocalDeps struct {
 	// tests that never touch an inbound; every inbound op fails loudly without it.
 	Cores *core.Registry
 	/*
-		LoadInbound re-reads the row a user op names.
+		LoadInbound re-reads the row a user op names, for the cores that need it.
 
 		A core that provisions users by re-applying its whole set rebuilds that
 		set from Instance.Users, so it revokes every client missing from the row
@@ -170,19 +170,30 @@ func (l *Local) strandsOldInbound(oldIb, newIb *model.Inbound) bool {
 }
 
 /*
-userTarget resolves the core and the state a user op acts on.
+userTarget resolves the core and the state a user op acts on. named is the one
+client the op provisions, "" when it only has to name one.
 
-The instance is rebuilt from the current row rather than the caller's copy,
-because a whole-set core reads every other client out of it: the copy is as old
-as the caller's own read, and on such a core "absent" means "revoked".
+A whole-set core reads every other client out of the instance, so it is rebuilt
+from the current row rather than the caller's copy: the copy is as old as the
+caller's own read, and on such a core "absent" means "revoked". Every other core
+touches the named client alone, and re-reading the row and re-projecting its
+clients for it cost O(inbound size) — 1.3s on a 200k-client inbound — per edit,
+which callers pay once per client in a fan-out.
 */
-func (l *Local) userTarget(ib *model.Inbound) (*core.Bound, core.Instance, error) {
+func (l *Local) userTarget(ib *model.Inbound, named string) (*core.Bound, core.Instance, error) {
 	bound, err := l.coreFor(ib)
 	if err != nil {
 		return nil, core.Instance{}, err
 	}
 	if bound.Users == nil {
 		return nil, core.Instance{}, fmt.Errorf("core %q cannot provision a single user", bound.Core.Describe().ID)
+	}
+	if bound.UserSet == nil {
+		inst := storedInstanceOf(ib)
+		if named != "" {
+			inst.Users = usersOf(ib.Settings, named)
+		}
+		return bound, inst, nil
 	}
 	current := ib
 	if l.deps.LoadInbound != nil {
@@ -200,7 +211,7 @@ func (l *Local) userTarget(ib *model.Inbound) (*core.Bound, core.Instance, error
 // AddUser hands the core the client as the inbound stores it. The credentials a
 // protocol needs are the core's business, so nothing here names one.
 func (l *Local) AddUser(ctx context.Context, ib *model.Inbound, email string) error {
-	bound, inst, err := l.userTarget(ib)
+	bound, inst, err := l.userTarget(ib, email)
 	if err != nil {
 		return err
 	}
@@ -212,8 +223,10 @@ func (l *Local) AddUser(ctx context.Context, ib *model.Inbound, email string) er
 	return fmt.Errorf("inbound %q carries no client %q to add", inst.Tag, email)
 }
 
+// RemoveUser names the client; it never has to describe one, so no core but a
+// whole-set one is handed a projection of the inbound's clients here.
 func (l *Local) RemoveUser(ctx context.Context, ib *model.Inbound, email string) error {
-	bound, inst, err := l.userTarget(ib)
+	bound, inst, err := l.userTarget(ib, "")
 	if err != nil {
 		return err
 	}

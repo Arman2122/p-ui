@@ -21,6 +21,7 @@ type Bound struct {
 	Apply      InstanceApplier
 	HotApply   HotApplier
 	Users      UserProvisioner
+	UserSet    WholeSetUserProvisioner
 	Creds      CredentialDeclarer
 	Traffic    TrafficSource
 	TagTraffic TagTrafficSource
@@ -44,6 +45,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(UserProvisioner); ok {
 		b.Users = v
+	}
+	if v, ok := c.(WholeSetUserProvisioner); ok {
+		b.UserSet = v
 	}
 	if v, ok := c.(CredentialDeclarer); ok {
 		b.Creds = v
