@@ -1,7 +1,9 @@
 package xray
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,8 +14,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/xtls/xray-core/app/proxyman/command"
+	hysteriaAccount "github.com/xtls/xray-core/proxy/hysteria/account"
+	wireguard "github.com/xtls/xray-core/proxy/wireguard"
 )
 
 // e2eCore is a real xray-core process plus a connected panel API client.
@@ -112,6 +119,47 @@ func startE2ECore(t *testing.T, inbounds []any) *e2eCore {
 	}
 	t.Cleanup(api.Close)
 	return &e2eCore{api: api, cmd: cmd, port: apiPort}
+}
+
+// credentialsOf reports the credential of every user the running inbound holds
+// under email, read back from the core rather than from the panel's own view.
+func (c *e2eCore) credentialsOf(t *testing.T, tag, email string) []string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := (*c.api.HandlerServiceClient).GetInboundUsers(ctx, &command.GetInboundUserRequest{Tag: tag})
+	if err != nil {
+		t.Fatalf("GetInboundUsers(%q): %v", tag, err)
+	}
+	creds := make([]string, 0, 2)
+	for _, user := range resp.GetUsers() {
+		if user.GetEmail() != email {
+			continue
+		}
+		account, err := user.GetAccount().GetInstance()
+		if err != nil {
+			t.Fatalf("decoding the account of %q on %q: %v", email, tag, err)
+		}
+		switch a := account.(type) {
+		case *hysteriaAccount.Account:
+			creds = append(creds, a.GetAuth())
+		case *wireguard.PeerConfig:
+			creds = append(creds, a.GetPublicKey())
+		default:
+			t.Fatalf("unexpected account type %T for %q on %q", account, email, tag)
+		}
+	}
+	return creds
+}
+
+// wgKey builds a distinct 32-byte WireGuard key in both encodings: base64 as
+// the panel stores it, hex as the running inbound reports it back.
+func wgKey(seed byte) (b64, hexed string) {
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = seed + byte(i)
+	}
+	return base64.StdEncoding.EncodeToString(raw), hex.EncodeToString(raw)
 }
 
 // ssKey builds a base64 shadowsocks-2022 key of the given byte length.
@@ -358,6 +406,100 @@ func TestXrayAPI_E2E_ShadowsocksAddIsIdempotent(t *testing.T) {
 	}
 	if !IsMissingHandlerErr(err) {
 		t.Fatalf("missing-user error not matched by IsMissingHandlerErr: %q", err)
+	}
+}
+
+/*
+Re-keying must revoke the old credential, not add a second one.
+
+WireGuard indexes its peers by public key and hysteria its accounts by auth, so
+both accept a second user under an email they already hold and the one
+RemoveUser the panel issues on revoke then deletes only one of the two — the
+old key kept connecting. Neither reports a missing user on removal, so the count
+is read back off the core instead of probed with a second RemoveUser.
+*/
+func TestXrayAPI_E2E_RekeyRevokesTheOldCredential(t *testing.T) {
+	wgSecret, _ := wgKey(100)
+	wgSeed, _ := wgKey(150)
+	wgOld, wgOldHex := wgKey(200)
+	wgNew, wgNewHex := wgKey(250)
+
+	c := startE2ECore(t, []any{
+		map[string]any{
+			"listen": "127.0.0.1", "port": freePort(t), "protocol": "wireguard", "tag": "wg-in",
+			"settings": map[string]any{
+				"secretKey": wgSecret, "mtu": 1420,
+				"peers": []any{map[string]any{
+					"publicKey": wgSeed, "allowedIPs": []string{"10.0.0.9/32"}, "email": "seed-wg",
+				}},
+			},
+		},
+		map[string]any{
+			"listen": "127.0.0.1", "port": freePort(t), "protocol": "hysteria", "tag": "hy-in",
+			"settings": map[string]any{
+				"version": 2,
+				"clients": []any{map[string]any{"auth": "seed-auth", "email": "seed-hy"}},
+			},
+			"streamSettings": map[string]any{
+				"network": "hysteria", "security": "tls",
+				"tlsSettings": map[string]any{"serverName": "h.example.com"},
+			},
+		},
+	})
+
+	tests := []struct {
+		name     string
+		protocol string
+		tag      string
+		email    string
+		before   map[string]any
+		after    map[string]any
+		oldCred  string
+		newCred  string
+	}{
+		{
+			name: "wireguard", protocol: "wireguard", tag: "wg-in", email: "e2e-wg",
+			before:  panelUser("e2e-wg", map[string]any{"publicKey": wgOld, "allowedIPs": []string{"10.0.0.2/32"}}),
+			after:   panelUser("e2e-wg", map[string]any{"publicKey": wgNew, "allowedIPs": []string{"10.0.0.2/32"}}),
+			oldCred: wgOldHex, newCred: wgNewHex,
+		},
+		{
+			name: "hysteria", protocol: "hysteria", tag: "hy-in", email: "e2e-hy",
+			before:  panelUser("e2e-hy", map[string]any{"auth": "e2e-auth-old"}),
+			after:   panelUser("e2e-hy", map[string]any{"auth": "e2e-auth-new"}),
+			oldCred: "e2e-auth-old", newCred: "e2e-auth-new",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := c.api.AddUser(tt.protocol, tt.tag, tt.before); err != nil {
+				t.Fatalf("AddUser: %v", err)
+			}
+			if !c.alive() {
+				t.Fatal("core died on AddUser: the account type does not match the running inbound")
+			}
+			if got := c.credentialsOf(t, tt.tag, tt.email); !slices.Equal(got, []string{tt.oldCred}) {
+				t.Fatalf("after the add %q holds %v, want exactly [%s]", tt.email, got, tt.oldCred)
+			}
+
+			if err := c.api.AddUser(tt.protocol, tt.tag, tt.after); err != nil {
+				t.Fatalf("AddUser (re-key): %v", err)
+			}
+			if !c.alive() {
+				t.Fatal("core died on the re-key")
+			}
+			if got := c.credentialsOf(t, tt.tag, tt.email); !slices.Equal(got, []string{tt.newCred}) {
+				t.Fatalf("after the re-key %q holds %v, want exactly [%s]: the old credential still connects", tt.email, got, tt.newCred)
+			}
+
+			if err := c.api.RemoveUser(tt.tag, tt.email); err != nil {
+				t.Fatalf("RemoveUser: %v", err)
+			}
+			if got := c.credentialsOf(t, tt.tag, tt.email); len(got) != 0 {
+				t.Fatalf("one RemoveUser left %q holding %v: a revoked client keeps connecting", tt.email, got)
+			}
+		})
 	}
 }
 
