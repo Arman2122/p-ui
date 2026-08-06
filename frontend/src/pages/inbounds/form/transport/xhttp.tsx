@@ -64,12 +64,17 @@ export default function XhttpForm() {
       });
     }
     if (security === 'reality' && reality) {
+      /* The client-facing half of REALITY lives under realitySettings.settings;
+         only serverNames and shortIds are top-level. Reading the wrong level
+         copies an empty public key, which is the silent mismatch this button
+         exists to prevent. */
+      const client = (reality.settings ?? {}) as Record<string, unknown>;
       setValue('streamSettings.xhttpSettings.downloadSettings.realitySettings', {
-        serverName: (reality.serverNames as string[] | undefined)?.[0] ?? '',
-        publicKey: (reality.publicKey as string) ?? '',
+        serverName: (client.serverName as string) || (reality.serverNames as string[] | undefined)?.[0] || '',
+        publicKey: (client.publicKey as string) ?? '',
         shortId: (reality.shortIds as string[] | undefined)?.[0] ?? '',
-        spiderX: (reality.spiderX as string) ?? '',
-        fingerprint: (reality.fingerprint as string) ?? 'chrome',
+        spiderX: (client.spiderX as string) ?? '',
+        fingerprint: (client.fingerprint as string) ?? 'chrome',
       });
     }
     setValue('streamSettings.xhttpSettings.downloadSettings.xhttpSettings', { path: path || '/' });
