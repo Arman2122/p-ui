@@ -84,4 +84,62 @@ describe('copy from upload side', () => {
     const inner = download().xhttpSettings as Record<string, unknown>;
     expect(inner.path).toBe('/up');
   });
+
+  /* The port was the one field the button did not copy, so the box filled in
+     complete while the seeded 443 pointed at nothing. A second address on one
+     server reaches the same listener, so it has to be this inbound's port. */
+  it('copies the inbound port over a seeded one that nothing serves', () => {
+    renderWithProviders(
+      <Harness
+        defaultValues={{
+          port: 8080,
+          streamSettings: {
+            security: 'none',
+            xhttpSettings: {
+              path: '/',
+              mode: 'auto',
+              enableDownloadSettings: true,
+              downloadSettings: { address: 'download.example.com', port: 443, network: 'xhttp', security: 'none' },
+            },
+          },
+        }}
+      >
+        <XhttpForm />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByText('Copy from upload side'));
+
+    expect(download().port).toBe(8080);
+  });
+
+  it('drops a security block the upload side does not use', () => {
+    renderWithProviders(
+      <Harness
+        defaultValues={{
+          port: 8080,
+          streamSettings: {
+            security: 'none',
+            xhttpSettings: {
+              path: '/',
+              mode: 'auto',
+              enableDownloadSettings: true,
+              downloadSettings: {
+                address: 'download.example.com',
+                port: 8080,
+                security: 'none',
+                tlsSettings: { serverName: '', alpn: [], fingerprint: '' },
+              },
+            },
+          },
+        }}
+      >
+        <XhttpForm />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByText('Copy from upload side'));
+
+    expect(download().tlsSettings).toBeUndefined();
+  });
 });
