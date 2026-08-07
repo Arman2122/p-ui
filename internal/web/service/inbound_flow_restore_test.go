@@ -29,7 +29,8 @@ func TestStripVisionFlowForIneligibleInbound(t *testing.T) {
 		{"xhttp without vlessenc loses Vision", withFlow(""), `{"network":"xhttp","security":"reality"}`, model.VLESS, true, ""},
 		{"xhttp with vlessenc keeps Vision", withFlow(enc), `{"network":"xhttp","security":"reality"}`, model.VLESS, false, vision},
 		{"raw tcp over reality keeps Vision", withFlow(""), `{"network":"tcp","security":"reality"}`, model.VLESS, false, vision},
-		{"non-VLESS is untouched", withFlow(""), `{"network":"xhttp","security":"reality"}`, model.VMESS, false, vision},
+		// VMess has no flow concept at all, so the table refuses it the same way.
+		{"non-VLESS cannot carry Vision either", withFlow(""), `{"network":"xhttp","security":"reality"}`, model.VMESS, true, ""},
 	}
 
 	for _, tc := range tests {

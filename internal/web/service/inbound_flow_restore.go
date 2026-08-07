@@ -13,9 +13,8 @@ const visionFlow = "xtls-rprx-vision"
 // Inverse of restoreVisionFlowForEligibleInbound. An inbound write stores its
 // settings verbatim, so clientWithInboundFlow never gates clients on this path.
 func stripVisionFlowForIneligibleInbound(settings, streamSettings string, protocol model.Protocol) (string, bool) {
-	if protocol != model.VLESS {
-		return settings, false
-	}
+	// No protocol test of its own: the capability table already answers "may this
+	// carry a flow", for every protocol, and is the one place that should.
 	if inboundCanEnableTlsFlow(string(protocol), streamSettings, settings) {
 		return settings, false
 	}
