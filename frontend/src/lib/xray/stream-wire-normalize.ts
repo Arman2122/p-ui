@@ -243,6 +243,14 @@ export function normalizeXhttpForWire(
   if (isRecord(out.downloadSettings) && out.downloadSettings.address === '') {
     delete out.downloadSettings;
   }
+  /* A block left behind by switching the security dropdown still travels to
+     clients in their link, where an empty serverName reads as "verify against
+     no name" rather than as "no TLS". */
+  if (isRecord(out.downloadSettings)) {
+    const download = out.downloadSettings;
+    if (download.security !== 'tls') delete download.tlsSettings;
+    if (download.security !== 'reality') delete download.realitySettings;
+  }
 
   if (side === 'inbound') {
     if (!enableXmux) delete out.xmux;

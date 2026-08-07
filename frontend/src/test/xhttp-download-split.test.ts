@@ -131,4 +131,28 @@ describe('the download endpoint survives an edit', () => {
     );
     expect(streamOne.downloadSettings).toBeUndefined();
   });
+
+  /* Switching the dropdown back to none leaves the old block behind, and it
+     travels to clients in the link, where an empty serverName is read as a
+     name to verify against rather than as "no TLS". */
+  it('does not carry a security block the endpoint no longer uses', () => {
+    const wire = normalizeXhttpForWire(
+      {
+        mode: 'auto',
+        enableDownloadSettings: true,
+        downloadSettings: {
+          address: 'download.example.com',
+          port: 8080,
+          security: 'none',
+          tlsSettings: { serverName: '', alpn: [], fingerprint: '' },
+          realitySettings: { publicKey: '' },
+        },
+      },
+      'inbound',
+    );
+    const download = wire.downloadSettings as Record<string, unknown>;
+    expect(download.tlsSettings).toBeUndefined();
+    expect(download.realitySettings).toBeUndefined();
+    expect(download.address).toBe('download.example.com');
+  });
 });

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { AutoComplete, Button, Input, InputNumber, Select, Switch } from 'antd';
+import { AutoComplete, Button, Input, InputNumber, Select, Switch, Typography } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { HeaderMapEditor } from '@/components/form';
@@ -31,6 +31,14 @@ export default function XhttpForm() {
   const enableXmux = !!useWatch({ control, name: 'streamSettings.xhttpSettings.enableXmux' });
   const enableDownload = !!useWatch({ control, name: 'streamSettings.xhttpSettings.enableDownloadSettings' });
   const downloadSecurity = useWatch({ control, name: 'streamSettings.xhttpSettings.downloadSettings.security' }) as string | undefined;
+  const inboundPort = useWatch({ control, name: 'port' }) as number | undefined;
+  const downloadPort = useWatch({ control, name: 'streamSettings.xhttpSettings.downloadSettings.port' }) as number | undefined;
+
+  /* Legitimate only when a second inbound listens on the download address at
+     that port, which is rarer than the typo it usually is. */
+  const downloadPortUnserved = typeof inboundPort === 'number' && inboundPort > 0
+    && typeof downloadPort === 'number' && downloadPort > 0
+    && downloadPort !== inboundPort;
 
   /* stream-one is the one mode xray-core refuses to start with alongside a
      download endpoint, so the toggle says why rather than failing on save. */
@@ -40,8 +48,15 @@ export default function XhttpForm() {
     if (!checked) return;
     const existing = getValues('streamSettings.xhttpSettings.downloadSettings');
     if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) return;
+    /* Seeded from this inbound, not from a constant: the usual split is one
+       listener reached by a second address, so a fixed 443 seeds a port that
+       nothing serves and only the download direction fails. */
+    const port = getValues('port');
     setValue('streamSettings.xhttpSettings.downloadSettings', {
-      address: '', port: 443, network: 'xhttp', security: 'tls',
+      address: '',
+      port: typeof port === 'number' && port > 0 ? port : 443,
+      network: 'xhttp',
+      security: (getValues('streamSettings.security') as string) || 'none',
     });
   }
 
@@ -54,8 +69,22 @@ export default function XhttpForm() {
     const tls = stream?.tlsSettings as Record<string, unknown> | undefined;
     const reality = stream?.realitySettings as Record<string, unknown> | undefined;
     const path = getValues('streamSettings.xhttpSettings.path') as string | undefined;
+    const host = getValues('streamSettings.xhttpSettings.host') as string | undefined;
+    const port = getValues('port') as number | undefined;
 
+    /* The port is the half that has to be copied. A second IP on this server
+       reaches the same listener, so a download port that is not this inbound's
+       port has nothing behind it and only the download direction fails. */
+    if (typeof port === 'number' && port > 0) {
+      setValue('streamSettings.xhttpSettings.downloadSettings.port', port);
+    }
     setValue('streamSettings.xhttpSettings.downloadSettings.security', security);
+    if (security !== 'tls') {
+      setValue('streamSettings.xhttpSettings.downloadSettings.tlsSettings', undefined);
+    }
+    if (security !== 'reality') {
+      setValue('streamSettings.xhttpSettings.downloadSettings.realitySettings', undefined);
+    }
     if (security === 'tls' && tls) {
       setValue('streamSettings.xhttpSettings.downloadSettings.tlsSettings', {
         serverName: (tls.serverName as string) ?? '',
@@ -77,7 +106,10 @@ export default function XhttpForm() {
         fingerprint: (client.fingerprint as string) ?? 'chrome',
       });
     }
-    setValue('streamSettings.xhttpSettings.downloadSettings.xhttpSettings', { path: path || '/' });
+    setValue('streamSettings.xhttpSettings.downloadSettings.xhttpSettings', {
+      path: path || '/',
+      ...(host ? { host } : {}),
+    });
   }
 
   function onXmuxToggle(checked: boolean) {
@@ -372,7 +404,15 @@ export default function XhttpForm() {
           </FormField>
           <FormField
             label={t('pages.inbounds.form.splitDownloadPort')}
+            tooltip={t('pages.inbounds.form.splitDownloadPortHint')}
             name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'port']}
+            extra={downloadPortUnserved
+              ? (
+                <Typography.Text type="warning">
+                  {t('pages.inbounds.form.splitDownloadPortMismatch', { port: inboundPort })}
+                </Typography.Text>
+              )
+              : undefined}
           >
             <InputNumber min={0} max={65535} style={{ width: '100%' }} />
           </FormField>
