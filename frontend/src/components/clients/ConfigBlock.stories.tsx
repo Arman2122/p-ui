@@ -41,6 +41,14 @@ export const Collapsed: Story = {
     await userEvent.click(canvas.getByText('vless'));
     const configText = await canvas.findByText(/vless:\/\/11112222/);
     await waitFor(() => expect(configText).toBeVisible());
+    /* Settled, not merely visible. The a11y pass runs after this play function
+       and measures rendered colour, so a panel still fading in is scored at its
+       blended opacity — #595959 halfway to white reads as #a6a6a6 and fails the
+       contrast rule. toBeVisible() is true from the first frame of that fade,
+       which is why this only failed on slower machines. */
+    await waitFor(() => {
+      expect(document.getAnimations().filter((a) => a.playState === 'running')).toHaveLength(0);
+    });
     await expect(canvas.getByRole('button', { name: 'Copy' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Download' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'QR Code' })).toBeVisible();
