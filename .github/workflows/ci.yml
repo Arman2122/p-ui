@@ -6,6 +6,10 @@ name: CI
 # preflight -- would never run CI, so the change that silences the DB-backed
 # suite is exactly the change CI would not have checked.
 on:
+  # Manual trigger, the way release.yml already has one. A push during a GitHub
+  # Actions outage never queues a run, and without this there is no way to ask
+  # for one afterwards short of an empty commit.
+  workflow_dispatch:
   pull_request:
     paths:
       - "**.go"
