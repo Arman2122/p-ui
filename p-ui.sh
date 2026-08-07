@@ -2008,7 +2008,11 @@ setup_fail2ban_iplimit() {
                 apt-get install -y python3-systemd
                 ;;
         esac
-        apt-get install -y fail2ban nftables
+        # Ubuntu's fail2ban 1.0.2 ships test files written before Python 3.12
+        # started warning on "\s"-style escapes, so byte-compiling them prints a
+        # screen of SyntaxWarnings that reads as a failed install. Scoped to this
+        # command and to that one warning class, so apt's own errors still show.
+        PYTHONWARNINGS=ignore::SyntaxWarning apt-get install -y fail2ban nftables
 
         if ! command -v fail2ban-client &> /dev/null; then
             echo -e "${red}Fail2ban installation failed.${plain}\n"
