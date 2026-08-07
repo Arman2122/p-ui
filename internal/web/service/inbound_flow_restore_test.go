@@ -8,6 +8,52 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
+// An inbound written with Vision on a transport that cannot carry it leaves xray
+// expecting Vision while the generated link never sends it, so the client the
+// panel just handed out connects to nothing.
+func TestStripVisionFlowForIneligibleInbound(t *testing.T) {
+	const vision = "xtls-rprx-vision"
+	const enc = `"decryption":"mlkem768x25519plus.native.0rtt.KEY","encryption":"mlkem768x25519plus.native.0rtt.KEY",`
+	withFlow := func(extra string) string {
+		return `{` + extra + `"clients":[{"id":"u1","email":"a@x","flow":"` + vision + `","subId":"s1","enable":true}]}`
+	}
+
+	tests := []struct {
+		name        string
+		settings    string
+		stream      string
+		protocol    model.Protocol
+		wantChanged bool
+		wantFlow    string
+	}{
+		{"xhttp without vlessenc loses Vision", withFlow(""), `{"network":"xhttp","security":"reality"}`, model.VLESS, true, ""},
+		{"xhttp with vlessenc keeps Vision", withFlow(enc), `{"network":"xhttp","security":"reality"}`, model.VLESS, false, vision},
+		{"raw tcp over reality keeps Vision", withFlow(""), `{"network":"tcp","security":"reality"}`, model.VLESS, false, vision},
+		{"non-VLESS is untouched", withFlow(""), `{"network":"xhttp","security":"reality"}`, model.VMESS, false, vision},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, changed := stripVisionFlowForIneligibleInbound(tc.settings, tc.stream, tc.protocol)
+			if changed != tc.wantChanged {
+				t.Fatalf("changed = %v, want %v", changed, tc.wantChanged)
+			}
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+				t.Fatalf("parse out: %v", err)
+			}
+			client, ok := parsed["clients"].([]any)[0].(map[string]any)
+			if !ok {
+				t.Fatal("client 0 is not an object")
+			}
+			got, _ := client["flow"].(string)
+			if got != tc.wantFlow {
+				t.Errorf("flow = %q, want %q", got, tc.wantFlow)
+			}
+		})
+	}
+}
+
 // restoreVisionFlowForEligibleInbound must re-add Vision to a client whose flow
 // was stripped while the XHTTP inbound was not yet vlessenc-encrypted, but only
 // when the client's intended flow (its flow_override on a sibling) is Vision,

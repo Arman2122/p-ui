@@ -943,6 +943,13 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, err
 	}
 
+	// xray would expect Vision while the generated link, which vlessFlowAllowed
+	// strips, never sends it, so the client connects to nothing.
+	if stripped, changed := stripVisionFlowForIneligibleInbound(inbound.Settings, inbound.StreamSettings, inbound.Protocol); changed {
+		inbound.Settings = stripped
+		logger.Warning("inbound on port", inbound.Port, "cannot carry XTLS Vision; cleared the flow on its client(s)")
+	}
+
 	clients, err := s.GetClients(inbound)
 	if err != nil {
 		return inbound, false, err
@@ -1450,6 +1457,12 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		// but was stripped while the inbound was ineligible.
 		if restored, changed := s.restoreVisionFlowForEligibleInbound(tx, inbound.Settings, inbound.StreamSettings, inbound.Protocol); changed {
 			inbound.Settings = restored
+		}
+		// The other direction: an edit that moves a flow-bearing inbound onto a
+		// transport that cannot carry Vision must clear it, or the link stops working.
+		if stripped, changed := stripVisionFlowForIneligibleInbound(inbound.Settings, inbound.StreamSettings, inbound.Protocol); changed {
+			inbound.Settings = stripped
+			logger.Warning("inbound", inbound.Id, "no longer supports XTLS Vision; cleared the flow on its client(s)")
 		}
 
 		oldInbound.Total = inbound.Total
