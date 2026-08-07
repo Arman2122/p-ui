@@ -10,6 +10,46 @@ import (
 
 const visionFlow = "xtls-rprx-vision"
 
+// Inverse of restoreVisionFlowForEligibleInbound. An inbound write stores its
+// settings verbatim, so clientWithInboundFlow never gates clients on this path.
+func stripVisionFlowForIneligibleInbound(settings, streamSettings string, protocol model.Protocol) (string, bool) {
+	if protocol != model.VLESS {
+		return settings, false
+	}
+	if inboundCanEnableTlsFlow(string(protocol), streamSettings, settings) {
+		return settings, false
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
+		return settings, false
+	}
+	clients, ok := parsed["clients"].([]any)
+	if !ok || len(clients) == 0 {
+		return settings, false
+	}
+	changed := false
+	for i := range clients {
+		cm, ok := clients[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		if flow, _ := cm["flow"].(string); flow == "" {
+			continue
+		}
+		cm["flow"] = ""
+		clients[i] = cm
+		changed = true
+	}
+	if !changed {
+		return settings, false
+	}
+	out, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return settings, false
+	}
+	return string(out), true
+}
+
 // restoreVisionFlowForEligibleInbound re-adds the XTLS Vision flow to a VLESS
 // inbound's clients that lost it earlier.
 //
