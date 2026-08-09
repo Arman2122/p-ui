@@ -30,6 +30,7 @@ const (
 var coreEnginePrefixes = []string{
 	"internal/xray/",
 	"internal/mtproto/",
+	"internal/wireguard/",
 	"internal/cores/",
 }
 
