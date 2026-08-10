@@ -17,6 +17,11 @@ type Plane interface {
 	// when the interface is simply not there.
 	Snapshot(ctx context.Context, name string) (Snapshot, error)
 
+	// Links names every WireGuard interface on the host, so a device the panel
+	// created in an earlier process can be found again. Only that type: the panel
+	// must never adopt, or delete, an interface it did not create.
+	Links(ctx context.Context) ([]string, error)
+
 	// EnsureLink creates the device when it is missing and brings it up. Created
 	// reports that the device is new, so every setting has to be pushed again.
 	EnsureLink(ctx context.Context, spec LinkSpec) (LinkState, error)

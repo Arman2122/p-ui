@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -466,9 +468,12 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 		} else if oldInbound.Protocol == model.MTProto {
 			inboundSvc.applyLocalMtproto(oldInbound.Id)
 		} else {
+			// Restarting Xray cannot apply a client to an inbound it does not serve;
+			// the core's own reconcile does, and the restart only drops everyone else.
+			xrayServes := cores.ServedByXray(core.Kind(oldInbound.Protocol))
 			for _, client := range clients {
 				if len(client.Email) == 0 {
-					needRestart = true
+					needRestart = needRestart || xrayServes
 					continue
 				}
 				if !client.Enable {
@@ -479,7 +484,7 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 					logger.Debug("Client added on", rt.Name(), ":", client.Email)
 				} else {
 					logger.Debug("Error in adding client on", rt.Name(), ":", err1)
-					needRestart = true
+					needRestart = needRestart || xrayServes
 				}
 			}
 		}
@@ -590,6 +595,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		}
 		if clients[0].PublicKey == "" {
 			clients[0].PublicKey = old.PublicKey
+		}
+		if other := wireguardKeyCollision(clients[0].PublicKey, oldClients, clientIndex); other != "" {
+			return false, common.NewError("wireguard: public key already used by client:", other)
 		}
 		if len(clients[0].AllowedIPs) == 0 {
 			clients[0].AllowedIPs = old.AllowedIPs

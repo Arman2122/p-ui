@@ -21,6 +21,10 @@ func (unsupportedPlane) Snapshot(context.Context, string) (Snapshot, error) {
 	return Snapshot{}, ErrPlatformUnsupported
 }
 
+func (unsupportedPlane) Links(context.Context) ([]string, error) {
+	return nil, ErrPlatformUnsupported
+}
+
 func (unsupportedPlane) EnsureLink(context.Context, LinkSpec) (LinkState, error) {
 	return LinkState{}, ErrPlatformUnsupported
 }

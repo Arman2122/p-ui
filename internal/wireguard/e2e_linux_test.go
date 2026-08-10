@@ -4,10 +4,10 @@ package wireguard
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +81,92 @@ func inst(id int, priv string, peers ...Peer) Instance {
 	return Instance{
 		ID: id, Tag: "e2e", Port: 51820, PrivateKey: priv,
 		Address: []string{"10.123.0.1/24"}, MTU: 1420, Peers: peers,
+	}
+}
+
+// peerBytes is the kernel's own cumulative total for one peer, read outside the
+// engine so a test can compare what moved against what the panel billed.
+func peerBytes(t *testing.T, name, pub string) int64 {
+	t.Helper()
+	for _, p := range liveDevice(t, name).Peers {
+		if p.PublicKey.String() == pub {
+			return p.ReceiveBytes + p.TransmitBytes
+		}
+	}
+	return 0
+}
+
+func billedTo(deltas []Traffic, email string) int64 {
+	var sum int64
+	for _, d := range deltas {
+		if d.Email == email {
+			sum += d.Up + d.Down
+		}
+	}
+	return sum
+}
+
+// liveTunnel puts a real WireGuard client in its own namespace, reached over a
+// veth pair, and returns a function that drives real traffic through it.
+func liveTunnel(t *testing.T, tag, name, srvPub, cliPriv string) func() {
+	t.Helper()
+	ns := "puiwg" + tag
+	host, client := "pwg"+tag+"-h", "pwg"+tag+"-c"
+	sh := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	_ = exec.Command("ip", "netns", "del", ns).Run()
+	_ = exec.Command("ip", "link", "del", host).Run()
+	t.Cleanup(func() {
+		_ = exec.Command("ip", "netns", "del", ns).Run()
+		_ = exec.Command("ip", "link", "del", host).Run()
+	})
+
+	sh("ip", "link", "set", name, "up")
+	sh("ip", "netns", "add", ns)
+	sh("ip", "link", "add", host, "type", "veth", "peer", "name", client)
+	sh("ip", "link", "set", client, "netns", ns)
+	sh("ip", "addr", "add", "192.168.66.1/24", "dev", host)
+	sh("ip", "link", "set", host, "up")
+	sh("ip", "netns", "exec", ns, "ip", "addr", "add", "192.168.66.2/24", "dev", client)
+	sh("ip", "netns", "exec", ns, "ip", "link", "set", client, "up")
+	sh("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up")
+
+	kf := t.TempDir() + "/cli.key"
+	if err := os.WriteFile(kf, []byte(cliPriv), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	sh("ip", "netns", "exec", ns, "ip", "link", "add", "wgc", "type", "wireguard")
+	sh("ip", "netns", "exec", ns, "ip", "addr", "add", "10.123.0.2/24", "dev", "wgc")
+	sh("ip", "netns", "exec", ns, "wg", "set", "wgc", "private-key", kf)
+	sh("ip", "netns", "exec", ns, "wg", "set", "wgc", "peer", srvPub,
+		"allowed-ips", "10.123.0.0/24", "endpoint", "192.168.66.1:51820", "persistent-keepalive", "5")
+	sh("ip", "netns", "exec", ns, "ip", "link", "set", "wgc", "up")
+
+	return func() {
+		t.Helper()
+		_ = exec.Command("ip", "netns", "exec", ns, "ping", "-c", "20", "-i", "0.1", "-s", "1200", "-W", "2", "10.123.0.1").Run()
+		time.Sleep(600 * time.Millisecond)
+	}
+}
+
+// awaitTraffic drives the tunnel until the peer's counters move. A device the
+// panel rebuilt breaks the client's session, and WireGuard backs off for several
+// seconds before it tries a new handshake.
+func awaitTraffic(t *testing.T, name, pub string, drive func()) int64 {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		drive()
+		if got := peerBytes(t, name, pub); got > 0 {
+			return got
+		}
+		if time.Now().After(deadline) {
+			return 0
+		}
 	}
 }
 
@@ -218,17 +304,23 @@ func TestLiveEnsureRepairsOutOfBandDamage(t *testing.T) {
 }
 
 // A link destroyed and rebuilt zeroes every kernel counter. The epoch exists so
-// that reset is observed rather than billed as a delta.
+// that reset is observed and the whole new reading billed, not measured against
+// a baseline the kernel no longer holds.
 func TestLiveLinkRecreateIsObservedAsAReset(t *testing.T) {
 	m, name := liveManager(t)
-	srv, _ := genKey(t)
-	_, pubA := genKey(t)
+	srv, srvPub := genKey(t)
+	cliPriv, cliPub := genKey(t)
 	id := 9000 + (os.Getpid() % 500)
-	in := inst(id, srv, Peer{Email: "a@x", PublicKey: pubA, AllowedIPs: []string{"10.123.0.2/32"}})
+	in := inst(id, srv, Peer{Email: "a@x", PublicKey: cliPub, AllowedIPs: []string{"10.123.0.2/32"}})
 	if err := m.Ensure(context.Background(), in); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
+	drive := liveTunnel(t, "reset", name, srvPub, cliPriv)
 	m.CollectTraffic(context.Background())
+	drive()
+	if billed := billedTo(collect(m), "a@x"); billed <= 0 {
+		t.Fatalf("nothing was billed before the recreate; the rig is broken, not the engine")
+	}
 
 	if out, err := exec.Command("ip", "link", "del", name).CombinedOutput(); err != nil {
 		t.Fatalf("link del: %v: %s", err, out)
@@ -240,12 +332,19 @@ func TestLiveLinkRecreateIsObservedAsAReset(t *testing.T) {
 		t.Fatalf("peers = %d after recreate, want 1", got)
 	}
 
-	deltas, _ := m.CollectTraffic(context.Background())
-	for _, d := range deltas {
-		if d.Up < 0 || d.Down < 0 {
-			t.Errorf("negative delta after a counter reset: %+v", d)
-		}
+	onDevice := awaitTraffic(t, name, cliPub, drive)
+	if onDevice <= 0 {
+		t.Fatalf("the rebuilt device counted nothing; the client never re-handshook, so this proves nothing about the epoch")
 	}
+	billed := billedTo(collect(m), "a@x")
+	if billed < onDevice {
+		t.Errorf("the rebuilt device holds %d bytes and the panel billed %d; a recreate restarts the counters at zero, so the whole reading is unbilled traffic", onDevice, billed)
+	}
+}
+
+func collect(m *Manager) []Traffic {
+	deltas, _ := m.CollectTraffic(context.Background())
+	return deltas
 }
 
 // Real traffic through a real tunnel, attributed to the right peer. Note a peer
@@ -266,44 +365,10 @@ func TestLiveTrafficIsAttributedPerPeer(t *testing.T) {
 	if err := m.Ensure(context.Background(), in); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	if out, err := exec.Command("ip", "link", "set", name, "up").CombinedOutput(); err != nil {
-		t.Fatalf("link up: %v: %s", err, out)
-	}
-
-	// a client in its own namespace, reached over a veth pair
-	ns := "puiwge2e"
-	_ = exec.Command("ip", "netns", "del", ns).Run()
-	t.Cleanup(func() { _ = exec.Command("ip", "netns", "del", ns).Run() })
-	sh := func(args ...string) {
-		t.Helper()
-		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v: %s", strings.Join(args, " "), err, out)
-		}
-	}
-	sh("ip", "netns", "add", ns)
-	sh("ip", "link", "add", "pwge2e-h", "type", "veth", "peer", "name", "pwge2e-c")
-	sh("ip", "link", "set", "pwge2e-c", "netns", ns)
-	sh("ip", "addr", "add", "192.168.66.1/24", "dev", "pwge2e-h")
-	sh("ip", "link", "set", "pwge2e-h", "up")
-	sh("ip", "netns", "exec", ns, "ip", "addr", "add", "192.168.66.2/24", "dev", "pwge2e-c")
-	sh("ip", "netns", "exec", ns, "ip", "link", "set", "pwge2e-c", "up")
-	sh("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up")
-	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", "pwge2e-h").Run() })
-
-	kf := t.TempDir() + "/cli.key"
-	if err := os.WriteFile(kf, []byte(cliPriv), 0o600); err != nil {
-		t.Fatalf("write key: %v", err)
-	}
-	sh("ip", "netns", "exec", ns, "ip", "link", "add", "wgc", "type", "wireguard")
-	sh("ip", "netns", "exec", ns, "ip", "addr", "add", "10.123.0.2/24", "dev", "wgc")
-	sh("ip", "netns", "exec", ns, "wg", "set", "wgc", "private-key", kf)
-	sh("ip", "netns", "exec", ns, "wg", "set", "wgc", "peer", srvPub,
-		"allowed-ips", "10.123.0.0/24", "endpoint", "192.168.66.1:51820", "persistent-keepalive", "5")
-	sh("ip", "netns", "exec", ns, "ip", "link", "set", "wgc", "up")
+	drive := liveTunnel(t, "attr", name, srvPub, cliPriv)
 
 	m.CollectTraffic(context.Background())
-	_ = exec.Command("ip", "netns", "exec", ns, "ping", "-c", "20", "-i", "0.05", "-s", "1200", "-W", "2", "10.123.0.1").Run()
-	time.Sleep(600 * time.Millisecond)
+	drive()
 
 	deltas, online := m.CollectTraffic(context.Background())
 	byEmail := map[string]int64{}
@@ -322,9 +387,105 @@ func TestLiveTrafficIsAttributedPerPeer(t *testing.T) {
 	t.Logf("attributed: busy=%d idle=%d", byEmail["busy@x"], byEmail["idle@x"])
 }
 
-// Removing a peer zeroes its kernel counters, so the engine must bank the final
-// reading before it issues the Remove or those bytes are lost.
-func TestLiveRemoveDrainsBeforeDeleting(t *testing.T) {
+// Removing a peer zeroes its kernel counters, so the engine banks the final
+// reading before it issues the Remove or those bytes are spent for free. This is
+// every client edit, not only a revocation: Local.UpdateUser is remove + add.
+func TestLiveRemoveBanksTheFinalReading(t *testing.T) {
+	m, name := liveManager(t)
+	srv, srvPub := genKey(t)
+	cliPriv, cliPub := genKey(t)
+	id := 9000 + (os.Getpid() % 500)
+	in := inst(id, srv, Peer{Email: "a@x", PublicKey: cliPub, AllowedIPs: []string{"10.123.0.2/32"}})
+	if err := m.Ensure(context.Background(), in); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	drive := liveTunnel(t, "drain", name, srvPub, cliPriv)
+
+	m.CollectTraffic(context.Background())
+	// read after the baseline scrape, so this can only understate what moved
+	banked := peerBytes(t, name, cliPub)
+	drive()
+	moved := peerBytes(t, name, cliPub) - banked
+	if moved <= 0 {
+		t.Fatalf("no traffic reached the peer; the rig is broken, not the engine")
+	}
+
+	if err := m.RemovePeer(context.Background(), in, "a@x", cliPub); err != nil {
+		t.Fatalf("RemovePeer: %v", err)
+	}
+	if got := len(liveDevice(t, name).Peers); got != 0 {
+		t.Fatalf("peers = %d, want 0", got)
+	}
+
+	if billed := billedTo(collect(m), "a@x"); billed < moved {
+		t.Errorf("at least %d bytes were on the peer when it was removed and the panel billed %d; the kernel zeroes a removed peer, so anything not banked first is gone", moved, billed)
+	}
+}
+
+// The two halves of the preflight answer, on a host where the module is present
+// but not yet loaded: nothing else on the box will load it, so Probe must.
+func TestLiveProbeLoadsTheModule(t *testing.T) {
+	e2e(t)
+	if out, err := exec.Command("modprobe", "-r", "wireguard").CombinedOutput(); err != nil {
+		t.Skipf("wireguard.ko is in use here, so the not-yet-loaded case cannot be staged: %s", out)
+	}
+	t.Cleanup(func() { _ = exec.Command("modprobe", "wireguard").Run() })
+	if _, err := os.Stat("/sys/module/wireguard"); err == nil {
+		t.Skip("the module reloaded before the probe could run")
+	}
+
+	if err := hostPlane().Probe(context.Background()); err != nil {
+		t.Fatalf("Probe = %v on a host whose kernel supports WireGuard; the picker greys the core out and nothing the operator can do from the UI ever loads the module", err)
+	}
+}
+
+// An absent mtu means the kernel's own default, which is what a device created
+// without one gets. Pins the constant against the kernel rather than recall.
+func TestLiveClearingTheMTUReturnsTheKernelDefault(t *testing.T) {
+	m, name := liveManager(t)
+	srv, _ := genKey(t)
+	id := 9000 + (os.Getpid() % 500)
+	in := inst(id, srv)
+	in.MTU = 1280
+	if err := m.Ensure(context.Background(), in); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if got := deviceMTU(t, name); got != 1280 {
+		t.Fatalf("mtu = %d, want the 1280 the operator set", got)
+	}
+
+	in.MTU = 0
+	if err := m.Ensure(context.Background(), in); err != nil {
+		t.Fatalf("Ensure after clearing the mtu: %v", err)
+	}
+	if got := deviceMTU(t, name); got != defaultMTU {
+		t.Fatalf("mtu = %d after the operator cleared the field, want the kernel default %d", got, defaultMTU)
+	}
+
+	t.Run("that default is the kernel's own", func(t *testing.T) {
+		probe := "pwgmtu" + strconv.Itoa(os.Getpid()%500)
+		t.Cleanup(func() { _ = exec.Command("ip", "link", "del", probe).Run() })
+		if out, err := exec.Command("ip", "link", "add", probe, "type", "wireguard").CombinedOutput(); err != nil {
+			t.Fatalf("ip link add: %v: %s", err, out)
+		}
+		if got := deviceMTU(t, probe); got != defaultMTU {
+			t.Fatalf("a plain `ip link add type wireguard` gives mtu %d, but the engine writes %d back when the field is cleared", got, defaultMTU)
+		}
+	})
+}
+
+func deviceMTU(t *testing.T, name string) int {
+	t.Helper()
+	l, err := net.InterfaceByName(name)
+	if err != nil {
+		t.Fatalf("InterfaceByName(%s): %v", name, err)
+	}
+	return l.MTU
+}
+
+// A device whose inbound left the desired set while the panel was not running is
+// in no in-memory map, so only the host itself can name it.
+func TestLiveReconcileDeletesADeviceStrandedByARestart(t *testing.T) {
 	m, name := liveManager(t)
 	srv, _ := genKey(t)
 	_, pubA := genKey(t)
@@ -333,18 +494,20 @@ func TestLiveRemoveDrainsBeforeDeleting(t *testing.T) {
 	if err := m.Ensure(context.Background(), in); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	m.CollectTraffic(context.Background())
-	if err := m.RemovePeer(context.Background(), in, "a@x", pubA); err != nil {
-		t.Fatalf("RemovePeer: %v", err)
+	foreign := "wgstray" + strconv.Itoa(os.Getpid()%500)
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", foreign).Run() })
+	if out, err := exec.Command("ip", "link", "add", foreign, "type", "wireguard").CombinedOutput(); err != nil {
+		t.Fatalf("ip link add: %v: %s", err, out)
 	}
-	if got := len(liveDevice(t, name).Peers); got != 0 {
-		t.Fatalf("peers = %d, want 0", got)
+
+	restarted := NewManager(hostPlane())
+	if err := restarted.Reconcile(context.Background(), nil); err != nil {
+		t.Fatalf("Reconcile after a restart: %v", err)
 	}
-	deltas, _ := m.CollectTraffic(context.Background())
-	for _, d := range deltas {
-		if d.Up < 0 || d.Down < 0 {
-			t.Errorf("negative delta after remove: %+v", d)
-		}
+	if _, err := net.InterfaceByName(name); err == nil {
+		t.Errorf("%s outlived its inbound across a panel restart: it still serves every peer with a valid key, is never billed, and no UI action removes it", name)
 	}
-	_ = fmt.Sprint(deltas)
+	if _, err := net.InterfaceByName(foreign); err != nil {
+		t.Errorf("the panel deleted %s, an interface it did not create", foreign)
+	}
 }

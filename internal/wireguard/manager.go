@@ -52,11 +52,17 @@ type managed struct {
 	counter *core.Counter
 	byEmail map[string]wgtypes.Key
 	byKey   map[wgtypes.Key]string
+	// pending holds deltas banked outside a scrape — a peer's final reading, taken
+	// before a write the kernel answers by zeroing its counters.
+	pending map[string]*Traffic
 }
 
 // reindex rebuilds the email/public-key mapping. The kernel counts per key and
 // the panel bills per email, so a stale entry bills the wrong client.
-func (rec *managed) reindex(peers []Peer) {
+//
+// held are the peers the device still carries because a write was refused; they
+// keep their owner rather than becoming keys nothing can be billed to.
+func (rec *managed) reindex(peers []Peer, held []wgtypes.Peer) {
 	byEmail := make(map[string]wgtypes.Key, len(peers))
 	byKey := make(map[wgtypes.Key]string, len(peers))
 	for _, p := range peers {
@@ -71,6 +77,19 @@ func (rec *managed) reindex(peers []Peer) {
 		}
 		byEmail[p.Email] = key
 		byKey[key] = p.Email
+	}
+	for _, p := range held {
+		email, known := rec.byKey[p.PublicKey]
+		if !known {
+			continue
+		}
+		if _, claimed := byKey[p.PublicKey]; claimed {
+			continue
+		}
+		byKey[p.PublicKey] = email
+		if _, mapped := byEmail[email]; !mapped {
+			byEmail[email] = p.PublicKey
+		}
 	}
 	rec.byEmail, rec.byKey = byEmail, byKey
 }
@@ -91,6 +110,72 @@ func (rec *managed) forget(email string, key wgtypes.Key) {
 	delete(rec.byKey, key)
 	rec.counter.Forget(key.String() + upKey)
 	rec.counter.Forget(key.String() + downKey)
+}
+
+// attribute folds one Observe's deltas into per-client totals. A key no client
+// owns is a peer added outside the panel: its bytes are dropped, never guessed.
+func (rec *managed) attribute(deltas map[string]int64, into map[string]*Traffic) {
+	for key, delta := range deltas {
+		raw, direction, _ := strings.Cut(key, keySep)
+		parsed, err := wgtypes.ParseKey(raw)
+		if err != nil {
+			continue
+		}
+		email, known := rec.byKey[parsed]
+		if !known {
+			continue
+		}
+		acc, seen := into[email]
+		if !seen {
+			acc = &Traffic{Tag: rec.tag, Email: email}
+			into[email] = acc
+		}
+		if direction == "up" {
+			acc.Up += delta
+		} else {
+			acc.Down += delta
+		}
+	}
+}
+
+// takePending removes the banked deltas so they are handed out exactly once;
+// replaying them would double every drained interval.
+func (rec *managed) takePending() map[string]*Traffic {
+	out := rec.pending
+	rec.pending = nil
+	if out == nil {
+		return map[string]*Traffic{}
+	}
+	return out
+}
+
+// deviceReadings turns one snapshot into the cumulative readings the counter
+// takes and the epoch they belong to. Both halves come from the same snapshot,
+// or a recreate lands in two epochs and the bytes between them are billed twice.
+func deviceReadings(snap Snapshot, generation int) (map[string]int64, string) {
+	readings := make(map[string]int64, 2*len(snap.Device.Peers))
+	for _, peer := range snap.Device.Peers {
+		pub := peer.PublicKey.String()
+		readings[pub+upKey] = peer.ReceiveBytes
+		readings[pub+downKey] = peer.TransmitBytes
+	}
+	return readings, strconv.Itoa(snap.Link.Index) + ":" + strconv.Itoa(generation)
+}
+
+// drainLocked banks every peer's reading before a write destroys some of them:
+// the kernel zeroes a removed peer's counters, so an unbanked interval is lost.
+//
+// This is not the pending-removal map the design rejected — nothing here defers
+// a write. Unprimed there is no baseline, so observing would only prime early.
+func (m *Manager) drainLocked(rec *managed, snap Snapshot) {
+	if !rec.counter.Primed() {
+		return
+	}
+	readings, epoch := deviceReadings(snap, rec.generation)
+	if rec.pending == nil {
+		rec.pending = make(map[string]*Traffic)
+	}
+	rec.attribute(rec.counter.Observe(epoch, readings), rec.pending)
 }
 
 // Manager owns the kernel devices the panel serves, keyed by inbound id.
@@ -181,14 +266,27 @@ func (m *Manager) ensureLocked(ctx context.Context, inst Instance) error {
 	if created {
 		rec.generation++
 	}
-	rec.reindex(inst.Peers)
 
 	failures := []error{rejected}
-	if changes := diffPeers(snap.Device.Peers, peers, created); len(changes) > 0 {
-		if cfgErr := m.configure(ctx, name, deviceDelta{}, changes); cfgErr != nil {
+	changes := diffPeers(snap.Device.Peers, peers, created)
+	// Banked while the old index still names the owners, because the removals in
+	// this pass are how a revoked or depleted client leaves the device.
+	if slices.ContainsFunc(changes, func(c wgtypes.PeerConfig) bool { return c.Remove }) {
+		m.drainLocked(rec, snap)
+	}
+	var cfgErr error
+	if len(changes) > 0 {
+		if cfgErr = m.configure(ctx, name, deviceDelta{}, changes); cfgErr != nil {
 			failures = append(failures, cfgErr)
 		}
 	}
+	// The index narrows only once the kernel has agreed; a refused pass leaves
+	// every peer it still holds attributed to the client who owns it.
+	held := []wgtypes.Peer(nil)
+	if cfgErr != nil {
+		held = snap.Device.Peers
+	}
+	rec.reindex(inst.Peers, held)
 	dropped, addrFailures := m.syncAddrs(ctx, name, snap.Addrs, addrs)
 	failures = append(failures, addrFailures...)
 	failures = append(failures, m.syncRoutes(ctx, name, snap.Routes, desiredRoutes(addrs, peers), addrs, dropped)...)
@@ -199,7 +297,7 @@ func (m *Manager) ensureLocked(ctx context.Context, inst Instance) error {
 // the snapshot the peer diff is computed from and whether the link is new.
 func (m *Manager) ensureDeviceLocked(ctx context.Context, inst Instance, key wgtypes.Key) (Snapshot, bool, error) {
 	name := inst.Interface()
-	state, err := m.plane.EnsureLink(ctx, LinkSpec{Name: name, MTU: inst.MTU})
+	state, err := m.plane.EnsureLink(ctx, LinkSpec{Name: name, MTU: linkMTU(inst.MTU)})
 	if err != nil {
 		return Snapshot{}, false, m.note(err)
 	}
@@ -276,10 +374,28 @@ func (m *Manager) Reconcile(ctx context.Context, desired []Instance, retain ...i
 		want[id] = struct{}{}
 	}
 	var failures []error
+	unwanted := make(map[int]struct{}, len(m.devices))
 	for id := range m.devices {
-		if _, ok := want[id]; ok {
+		if _, ok := want[id]; !ok {
+			unwanted[id] = struct{}{}
+		}
+	}
+	// m.devices is empty in every new process, so a device whose inbound left the
+	// desired set while the panel was down is only findable on the host itself.
+	names, err := m.plane.Links(ctx)
+	if err != nil {
+		failures = append(failures, m.note(err))
+	}
+	for _, name := range names {
+		id, mine := ownedID(name)
+		if !mine {
 			continue
 		}
+		if _, keep := want[id]; !keep {
+			unwanted[id] = struct{}{}
+		}
+	}
+	for id := range unwanted {
 		if err := m.removeLocked(ctx, id); err != nil {
 			failures = append(failures, err)
 		}
@@ -387,6 +503,10 @@ func (m *Manager) RemovePeer(ctx context.Context, inst Instance, email, fallback
 		rec.forget(email, key)
 		return nil
 	}
+	if inst.Tag != "" {
+		rec.tag = inst.Tag
+	}
+	m.drainLocked(rec, snap)
 	if err := m.configure(ctx, name, deviceDelta{}, []wgtypes.PeerConfig{{PublicKey: key, Remove: true}}); err != nil {
 		return err
 	}
@@ -395,6 +515,11 @@ func (m *Manager) RemovePeer(ctx context.Context, inst Instance, email, fallback
 	addrs, err := parsePrefixes(inst.Address)
 	if err != nil {
 		return err
+	}
+	// A caller that cannot name the device's addresses cannot tell a connected
+	// route from a surplus one, and deleting one black-holes every client on it.
+	if len(addrs) == 0 {
+		return nil
 	}
 	remaining := make([]wgtypes.PeerConfig, 0, len(snap.Device.Peers))
 	for _, peer := range snap.Device.Peers {
@@ -483,52 +608,30 @@ func (m *Manager) scrapeDevice(ctx context.Context, id int) ([]Traffic, []string
 	if !ok {
 		return nil, nil
 	}
+	// Taken before the read can fail: a peer drained and then deleted with its
+	// device would otherwise have its final reading dropped on the floor.
+	billed := rec.takePending()
 	snap, err := m.plane.Snapshot(ctx, InterfaceName(id))
 	if err != nil || !snap.Exists {
-		return nil, nil
+		return flatten(billed), nil
 	}
-	readings := make(map[string]int64, 2*len(snap.Device.Peers))
 	var online []string
 	for _, peer := range snap.Device.Peers {
-		pub := peer.PublicKey.String()
-		readings[pub+upKey] = peer.ReceiveBytes
-		readings[pub+downKey] = peer.TransmitBytes
 		if email, known := rec.byKey[peer.PublicKey]; known && isOnline(peer.LastHandshakeTime) {
 			online = append(online, email)
 		}
 	}
-	// The epoch's halves come from one critical section. Read apart, a recreate
-	// lands in two epochs and every byte between them is billed twice.
-	epoch := strconv.Itoa(snap.Link.Index) + ":" + strconv.Itoa(rec.generation)
-	billed := make(map[string]*Traffic)
-	for key, delta := range rec.counter.Observe(epoch, readings) {
-		raw, direction, _ := strings.Cut(key, keySep)
-		parsed, parseErr := wgtypes.ParseKey(raw)
-		if parseErr != nil {
-			continue
-		}
-		// A key no client owns is a peer added outside the panel. Its bytes are
-		// dropped rather than billed to whoever happens to be nearby.
-		email, known := rec.byKey[parsed]
-		if !known {
-			continue
-		}
-		acc, seen := billed[email]
-		if !seen {
-			acc = &Traffic{Tag: rec.tag, Email: email}
-			billed[email] = acc
-		}
-		if direction == "up" {
-			acc.Up += delta
-		} else {
-			acc.Down += delta
-		}
-	}
+	readings, epoch := deviceReadings(snap, rec.generation)
+	rec.attribute(rec.counter.Observe(epoch, readings), billed)
+	return flatten(billed), online
+}
+
+func flatten(billed map[string]*Traffic) []Traffic {
 	out := make([]Traffic, 0, len(billed))
 	for _, acc := range billed {
 		out = append(out, *acc)
 	}
-	return out, online
+	return out
 }
 
 func isOnline(handshake time.Time) bool {

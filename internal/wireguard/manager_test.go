@@ -470,6 +470,99 @@ func TestCollectTrafficBillsTheClientBehindTheKey(t *testing.T) {
 	})
 }
 
+// billedTo sums one client's share of a collection.
+func billedTo(deltas []wireguard.Traffic, email string) int64 {
+	var sum int64
+	for _, d := range deltas {
+		if d.Email == email {
+			sum += d.Up + d.Down
+		}
+	}
+	return sum
+}
+
+// TestRemovePeerBanksItsFinalReading is drain-before-destroy: the kernel zeroes a
+// removed peer's counters, so bytes moved since the last scrape are billable only
+// if the engine banks them before it issues the removal.
+func TestRemovePeerBanksItsFinalReading(t *testing.T) {
+	k := wgtest.New()
+	m := wireguard.NewManager(k)
+	a := peer(t, 1, "a@example.com", "10.0.0.11/32")
+	if err := m.Ensure(t.Context(), instance(t, a)); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	k.FeedTraffic(iface, key(t, 1), 1_000, 2_000)
+	m.CollectTraffic(t.Context())
+
+	k.FeedTraffic(iface, key(t, 1), 6_000, 9_000)
+	if err := m.RemovePeer(t.Context(), instance(t), a.Email, ""); err != nil {
+		t.Fatalf("RemovePeer: %v", err)
+	}
+
+	got, _ := m.CollectTraffic(t.Context())
+	if total := totalBytes(got); total != 12_000 {
+		t.Fatalf("the client moved 12000 bytes and was billed %d; the removal zeroed the kernel counters before anything read them, so a quota revoke or any client edit spends the interval for free", total)
+	}
+	if got[0].Email != a.Email || got[0].Tag != "inbound-7" {
+		t.Fatalf("banked delta is %+v, want it attributed to %s on inbound-7", got[0], a.Email)
+	}
+	if again, _ := m.CollectTraffic(t.Context()); totalBytes(again) != 0 {
+		t.Fatalf("the next collection billed %d bytes again; a banked delta handed out twice doubles every removal", totalBytes(again))
+	}
+}
+
+// TestBankedBytesSurviveTheDeviceGoingAway: the client whose peer was drained is
+// the one most likely to be on an inbound that is being torn down.
+func TestBankedBytesSurviveTheDeviceGoingAway(t *testing.T) {
+	k := wgtest.New()
+	m := wireguard.NewManager(k)
+	a := peer(t, 1, "a@example.com", "10.0.0.11/32")
+	if err := m.Ensure(t.Context(), instance(t, a)); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	k.FeedTraffic(iface, key(t, 1), 1_000, 1_000)
+	m.CollectTraffic(t.Context())
+
+	k.FeedTraffic(iface, key(t, 1), 4_000, 4_000)
+	if err := m.RemovePeer(t.Context(), instance(t), a.Email, ""); err != nil {
+		t.Fatalf("RemovePeer: %v", err)
+	}
+	if err := k.DeleteLink(t.Context(), iface); err != nil {
+		t.Fatalf("out-of-band delete: %v", err)
+	}
+
+	got, _ := m.CollectTraffic(t.Context())
+	if total := totalBytes(got); total != 6_000 {
+		t.Fatalf("billed %d bytes, want the 6000 already banked; a scrape that gives up on an unreadable device drops them on the floor", total)
+	}
+}
+
+// TestEnsureBanksThePeersItRevokes covers the other destroy: quota exhaustion and
+// expiry drop the client from the desired set, and the 10s supervise pass removes
+// the peer through Ensure rather than through RemovePeer.
+func TestEnsureBanksThePeersItRevokes(t *testing.T) {
+	k := wgtest.New()
+	m := wireguard.NewManager(k)
+	a := peer(t, 1, "a@example.com", "10.0.0.11/32")
+	b := peer(t, 2, "b@example.com", "10.0.0.12/32")
+	if err := m.Ensure(t.Context(), instance(t, a, b)); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	k.FeedTraffic(iface, key(t, 1), 1_000, 1_000)
+	k.FeedTraffic(iface, key(t, 2), 1_000, 1_000)
+	m.CollectTraffic(t.Context())
+
+	k.FeedTraffic(iface, key(t, 2), 500_000, 1_500_000)
+	if err := m.Ensure(t.Context(), instance(t, a)); err != nil {
+		t.Fatalf("revoking Ensure: %v", err)
+	}
+
+	got, _ := m.CollectTraffic(t.Context())
+	if billed := billedTo(got, b.Email); billed != 1_998_000 {
+		t.Fatalf("the depleted client moved 1998000 bytes and was billed %d; the pass that revokes a client is exactly the pass that must bank its last reading", billed)
+	}
+}
+
 // TestCollectTrafficDropsAnUnownedKey holds the accounting to its stated bias:
 // bytes that cannot be attributed are dropped, never billed to whoever is near.
 func TestCollectTrafficDropsAnUnownedKey(t *testing.T) {
@@ -670,6 +763,149 @@ func TestReconcileDropsAnInboundNoLongerDesired(t *testing.T) {
 	}
 	if k.Exists(iface) {
 		t.Fatal("a disabled inbound kept its device, so its clients keep connecting")
+	}
+}
+
+// TestReconcileDeletesADeviceStrandedByARestart: m.devices is empty in every new
+// process, so a device whose inbound left the desired set while the panel was
+// down is invisible to the reconcile loop unless the host itself is asked.
+func TestReconcileDeletesADeviceStrandedByARestart(t *testing.T) {
+	k := wgtest.New()
+	before := wireguard.NewManager(k)
+	if err := before.Ensure(t.Context(), instance(t, peer(t, 1, "a@example.com", "10.0.0.11/32"))); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	// interfaces the panel did not create: someone else's tunnel, and the name
+	// just outside its own scheme, since inbound ids start at 1
+	for _, name := range []string{"wg0", "pwg0"} {
+		if _, err := k.EnsureLink(t.Context(), wireguard.LinkSpec{Name: name, MTU: 1420}); err != nil {
+			t.Fatalf("seeding %s: %v", name, err)
+		}
+	}
+
+	restarted := wireguard.NewManager(k)
+	if err := restarted.Reconcile(t.Context(), nil); err != nil {
+		t.Fatalf("Reconcile after a restart: %v", err)
+	}
+	if k.Exists(iface) {
+		t.Fatal("the device outlived the inbound across a panel restart: it keeps serving revoked clients with valid keys, is never billed, and no UI action removes it")
+	}
+	for _, name := range []string{"wg0", "pwg0"} {
+		if !k.Exists(name) {
+			t.Fatalf("the panel deleted %s, an interface it did not create", name)
+		}
+	}
+
+	t.Run("a desired inbound is adopted, not deleted", func(t *testing.T) {
+		inst := instance(t, peer(t, 1, "a@example.com", "10.0.0.11/32"))
+		if err := restarted.Reconcile(t.Context(), []wireguard.Instance{inst}); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		if !k.Exists(iface) || len(k.PeerKeys(iface)) != 1 {
+			t.Fatal("an inbound the panel still wants lost its device")
+		}
+		if err := restarted.Reconcile(t.Context(), []wireguard.Instance{inst}, 7); err != nil {
+			t.Fatalf("Reconcile with the id retained: %v", err)
+		}
+		if !k.Exists(iface) {
+			t.Fatal("a retained id was deleted; a device is dropped on an answer, never on a failure to read one")
+		}
+	})
+}
+
+// TestRemovePeerWithoutTheDeviceAddressesKeepsTheRoutes covers the revocation the
+// adapter drives when the inbound's settings will not parse: it hands over the id
+// and nothing else, and a route diff against no addresses cannot tell the
+// kernel's own connected route from a surplus one.
+func TestRemovePeerWithoutTheDeviceAddressesKeepsTheRoutes(t *testing.T) {
+	k := wgtest.New()
+	m := wireguard.NewManager(k)
+	a := peer(t, 1, "a@example.com", "10.0.0.11/32")
+	b := peer(t, 2, "b@example.com", "10.0.0.12/32")
+	if err := m.Ensure(t.Context(), instance(t, a, b)); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+
+	blind := wireguard.Instance{ID: 7, Tag: "inbound-7", Port: 51820}
+	if err := m.RemovePeer(t.Context(), blind, a.Email, ""); err != nil {
+		t.Fatalf("RemovePeer: %v", err)
+	}
+	if got := routes(t, k); !slices.Equal(got, []string{"10.0.0.0/24"}) {
+		t.Fatalf("routes = %v, want [10.0.0.0/24]; the connected route was deleted, so every client left on the device black-holes and no later reconcile puts it back", got)
+	}
+	if got := served(t, k); !slices.Equal(got, []string{key(t, 2).String()}) {
+		t.Fatalf("device serves %v, want the other client alone; the revocation itself must still land", got)
+	}
+}
+
+// TestClearingTheMTUReturnsTheDeviceToTheKernelDefault: mtu is optional, so an
+// absent one means the kernel's own value, not whatever the device last held.
+func TestClearingTheMTUReturnsTheDeviceToTheKernelDefault(t *testing.T) {
+	k := wgtest.New()
+	m := wireguard.NewManager(k)
+	inst := instance(t, peer(t, 1, "a@example.com", "10.0.0.11/32"))
+	inst.MTU = 1280
+	if err := m.Ensure(t.Context(), inst); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if got := k.MTU(iface); got != 1280 {
+		t.Fatalf("mtu = %d, want the 1280 the operator set", got)
+	}
+
+	cleared := inst
+	cleared.MTU = 0
+	if cleared.DeviceFingerprint() == inst.DeviceFingerprint() {
+		t.Fatal("clearing the mtu left the device fingerprint unchanged, so PlanChange would not even call this an edit")
+	}
+	if err := m.Ensure(t.Context(), cleared); err != nil {
+		t.Fatalf("Ensure after clearing the mtu: %v", err)
+	}
+	if got := k.MTU(iface); got != 1420 {
+		t.Fatalf("mtu = %d after the operator cleared the field, want the kernel default 1420; PlanChange reported the edit applied and nothing wrote it", got)
+	}
+}
+
+// refusingPlane fails every push that carries peers, which is what EPERM after a
+// lost CAP_NET_ADMIN or a link torn out mid-pass looks like.
+type refusingPlane struct {
+	wireguard.Plane
+	refuse bool
+}
+
+func (p *refusingPlane) Configure(ctx context.Context, name string, cfg wgtypes.Config) error {
+	if p.refuse && len(cfg.Peers) > 0 {
+		return errors.New("configure refused")
+	}
+	return p.Plane.Configure(ctx, name, cfg)
+}
+
+// TestAPeerTheKernelRefusedToDropStaysBillable: the device still holds it and it
+// is still moving bytes, so narrowing the index first makes it an unowned key.
+func TestAPeerTheKernelRefusedToDropStaysBillable(t *testing.T) {
+	k := wgtest.New()
+	plane := &refusingPlane{Plane: k}
+	m := wireguard.NewManager(plane)
+	a := peer(t, 1, "a@example.com", "10.0.0.11/32")
+	b := peer(t, 2, "b@example.com", "10.0.0.12/32")
+	if err := m.Ensure(t.Context(), instance(t, a, b)); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	k.FeedTraffic(iface, key(t, 1), 1_000, 1_000)
+	k.FeedTraffic(iface, key(t, 2), 1_000, 1_000)
+	m.CollectTraffic(t.Context())
+
+	plane.refuse = true
+	if err := m.Ensure(t.Context(), instance(t, a)); err == nil {
+		t.Fatal("Ensure = nil though the kernel refused the peer push")
+	}
+	if got := served(t, k); len(got) != 2 {
+		t.Fatalf("device serves %v, want both: the refused push left the peer in place", got)
+	}
+
+	k.FeedTraffic(iface, key(t, 2), 9_000, 9_000)
+	got, _ := m.CollectTraffic(t.Context())
+	if billed := billedTo(got, b.Email); billed != 16_000 {
+		t.Fatalf("the peer the kernel would not drop moved 16000 more bytes and was billed %d; it is still serving its client and the panel cannot even see the overage", billed)
 	}
 }
 

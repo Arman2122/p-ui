@@ -24,9 +24,10 @@ type fakeNodeRuntime struct {
 	updateInbound atomic.Int32
 	updateUser    atomic.Int32
 
-	// updateInboundErr drives the caller's failure handling; zero value keeps
-	// every existing test on the success path.
+	// updateInboundErr and addUserErr drive the caller's failure handling; the
+	// zero values keep every existing test on the success path.
 	updateInboundErr error
+	addUserErr       error
 }
 
 func (f *fakeNodeRuntime) Name() string { return "fake-node" }
@@ -46,7 +47,9 @@ func (f *fakeNodeRuntime) UpdateInbound(context.Context, *model.Inbound, *model.
 	return f.updateInboundErr
 }
 
-func (f *fakeNodeRuntime) AddUser(context.Context, *model.Inbound, string) error { return nil }
+func (f *fakeNodeRuntime) AddUser(context.Context, *model.Inbound, string) error {
+	return f.addUserErr
+}
 
 func (f *fakeNodeRuntime) RemoveUser(context.Context, *model.Inbound, string) error { return nil }
 

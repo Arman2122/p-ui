@@ -1,6 +1,8 @@
 package wireguard
 
 import (
+	"errors"
+
 	"github.com/Arman2122/p-ui/internal/core"
 	engine "github.com/Arman2122/p-ui/internal/wireguard"
 )
@@ -25,7 +27,12 @@ func toEngine(inst core.Instance) (engine.Instance, bool, error) {
 		}
 		out.Peers = append(out.Peers, peer)
 	}
-	return out, inst.Enable && out.PrivateKey != "", nil
+	// serve is "must serve nobody", which the caller answers by deleting the
+	// device. An enabled inbound that lost its key is a broken edit, not that.
+	if inst.Enable && out.PrivateKey == "" {
+		return out, false, errors.New("the inbound carries no secretKey")
+	}
+	return out, inst.Enable, nil
 }
 
 // toPeer renders one client as the kernel holds it. ok is false without a public
