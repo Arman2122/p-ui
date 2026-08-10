@@ -9,6 +9,8 @@ const CORES: CoreView[] = [
     titleKey: 'cores.xray.title',
     kinds: ['vless', 'wireguard', 'tun'],
     caps: {},
+    available: true,
+    unavailable: '',
     clientCredentials: {
       vless: ['uuid'],
       wireguard: ['privateKey', 'publicKey', 'preSharedKey', 'allowedIPs'],
@@ -19,6 +21,8 @@ const CORES: CoreView[] = [
     titleKey: 'cores.mtproto.title',
     kinds: ['mtproto'],
     caps: {},
+    available: true,
+    unavailable: '',
     clientCredentials: { mtproto: ['secret', 'adTag'] },
   },
 ];
@@ -51,11 +55,31 @@ describe('credentialsForKinds', () => {
           titleKey: 'cores.future.title',
           kinds: ['future'],
           caps: {},
+          available: true,
+          unavailable: '',
           clientCredentials: { future: ['uuid', 'somethingThisBuildCannotRender'] },
         },
       ],
       kinds: ['future'],
       want: ['uuid'],
+    },
+    {
+      /* Preflight can mark a core unavailable on a host whose kernel lacks the
+         module. Its stored clients must stay editable, keys and all. */
+      name: 'an unavailable core still declares, so its stored clients stay editable',
+      cores: [
+        {
+          id: 'wgkernel',
+          titleKey: 'cores.wgkernel.title',
+          kinds: ['wgkernel'],
+          caps: {},
+          available: false,
+          unavailable: 'kernel WireGuard is not available on this host',
+          clientCredentials: { wgkernel: ['privateKey', 'publicKey', 'preSharedKey', 'allowedIPs'] },
+        },
+      ],
+      kinds: ['wgkernel'],
+      want: ['allowedIPs', 'preSharedKey', 'privateKey', 'publicKey'],
     },
     {
       name: 'a kind no core declares keeps what the form has always shown',

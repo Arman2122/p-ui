@@ -1358,6 +1358,11 @@ export const SCHEMAS: Record<string, unknown> = {
   "CoreView": {
     "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
     "properties": {
+      "available": {
+        "description": "Available is this host's Preflight answer and Unavailable is why not, so a\ncore the host cannot run is explained rather than silently offered.",
+        "example": true,
+        "type": "boolean"
+      },
       "caps": {
         "$ref": "#/components/schemas/Capabilities"
       },
@@ -1398,14 +1403,20 @@ export const SCHEMAS: Record<string, unknown> = {
       "titleKey": {
         "example": "cores.xray.title",
         "type": "string"
+      },
+      "unavailable": {
+        "example": "wireguard: no kernel support on this host",
+        "type": "string"
       }
     },
     "required": [
+      "available",
       "caps",
       "clientCredentials",
       "id",
       "kinds",
-      "titleKey"
+      "titleKey",
+      "unavailable"
     ],
     "type": "object"
   },
@@ -1869,6 +1880,7 @@ export const SCHEMAS: Record<string, unknown> = {
           "wireguard",
           "hysteria",
           "mtproto",
+          "wgkernel",
           "tun"
         ],
         "example": "vless",

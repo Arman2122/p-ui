@@ -124,6 +124,37 @@ describe('inboundFromDb', () => {
     expect(links).toMatch(/^wireguard:\/\//);
   });
 
+  /* Guards the discriminated-union arm, not the renderer: without it the parse
+     fails, the raw blob passes straight through and no client default is filled. */
+  it('fills WireGuard client defaults for a wgkernel row, then renders its .conf', () => {
+    const raw = {
+      ...BASE_DB_FIELDS,
+      protocol: 'wgkernel',
+      settings: JSON.stringify({
+        address: ['10.0.0.1/24'],
+        secretKey: 'QGVlb2dXc1ZTWGw0ZXBzZndsWmtMaUM5MUlNYjBHWFdYbz0=',
+        mtu: 1420,
+        clients: [
+          {
+            email: 'alice@test',
+            privateKey: 'iJ2cBkrSGqRwIfYIDIxk7hr5RXfdR93MfJUL7yqkkH8=',
+            publicKey: 'DGSYIcEKAUkA7HhzGSjxLZuV67BR3LeyU0BMLJzNVHQ=',
+            allowedIPs: ['10.0.0.2/32'],
+          },
+        ],
+      }),
+      streamSettings: '',
+    };
+    const inbound = inboundFromDb(raw);
+    const clients = (inbound.settings as { clients: Record<string, unknown>[] }).clients;
+    expect(clients[0].enable).toBe(true);
+    expect(clients[0].limitIp).toBe(0);
+    const configs = genWireguardConfigs({ inbound, remark: 'wgk', fallbackHostname: FALLBACK_HOST });
+    expect(configs).toContain('[Interface]');
+    expect(configs).toContain('[Peer]');
+    expect(genWireguardLinks({ inbound, remark: 'wgk', fallbackHostname: FALLBACK_HOST })).toMatch(/^wireguard:\/\//);
+  });
+
   it('feeds genAllLinks per client', () => {
     const raw = {
       ...BASE_DB_FIELDS,
@@ -228,6 +259,22 @@ describe('getInboundClients with schema-shaped inbound', () => {
       protocol: 'shadowsocks',
       settings: { method: '2022-blake3-chacha20-poly1305', password: 'pw', clients: [] },
       streamSettings: { network: 'tcp', security: 'none' },
+    });
+    expect(getInboundClients(inbound)).toBeNull();
+  });
+
+  /* wgkernel has clients but no share link: an arm here would route its export
+     through genLink, which returns '' for it, instead of the .conf builder. */
+  it('returns null for wgkernel so its export stays on the .conf path', () => {
+    const inbound = inboundFromDb({
+      ...BASE_DB_FIELDS,
+      protocol: 'wgkernel',
+      settings: {
+        address: ['10.0.0.1/24'],
+        secretKey: 'QGVlb2dXc1ZTWGw0ZXBzZndsWmtMaUM5MUlNYjBHWFdYbz0=',
+        clients: [{ email: 'alice@test', allowedIPs: ['10.0.0.2/32'] }],
+      },
+      streamSettings: '',
     });
     expect(getInboundClients(inbound)).toBeNull();
   });

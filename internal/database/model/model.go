@@ -32,6 +32,9 @@ const (
 	WireGuard   Protocol = "wireguard"
 	Hysteria    Protocol = "hysteria"
 	MTProto     Protocol = "mtproto"
+	// WGKernel is kernel WireGuard, converged over netlink. WireGuard above is
+	// xray's userspace tunnel and keeps that name; the two are separate cores.
+	WGKernel Protocol = "wgkernel"
 	// Tun had no constant for a long while despite being accepted, offered and
 	// implemented; that gap is what stopped tun inbounds being served once the
 	// runtime resolved cores by protocol.

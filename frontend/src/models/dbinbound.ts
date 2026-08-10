@@ -162,8 +162,10 @@ export class DBInbound {
         return this.protocol === Protocols.HTTP;
     }
 
+    /* Both WireGuard cores: xray's userspace tunnel and the kernel device.
+       Callers ask this to mean "UDP listener whose product is a .conf". */
     get isWireguard() {
-        return this.protocol === Protocols.WIREGUARD;
+        return this.protocol === Protocols.WIREGUARD || this.protocol === Protocols.WGKERNEL;
     }
 
     get isHysteria() {

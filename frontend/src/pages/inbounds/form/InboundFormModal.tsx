@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -39,6 +39,8 @@ import {
   type InboundFormValues,
 } from '@/schemas/forms/inbound-form';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
+import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { unavailableKinds } from '@/lib/cores/core-availability';
 import { Protocols } from '@/schemas/primitives';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
 import { HysteriaStreamSettingsSchema } from '@/schemas/protocols/stream/hysteria';
@@ -66,6 +68,7 @@ import {
   TunFields,
   TunnelFields,
   VlessFields,
+  WgkernelFields,
   WireguardFields,
 } from './protocols';
 import {
@@ -97,7 +100,7 @@ const labelWithHint = (label: string, hint: string) => (
   </span>
 );
 
-const PROTOCOL_OPTIONS = Object.values(Protocols).map((p) => ({ value: p, label: p }));
+const PROTOCOL_NAMES = Object.values(Protocols);
 const TRAFFIC_RESETS = ['never', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const SHARE_ADDR_STRATEGIES = ['node', 'listen', 'custom'] as const;
 const SHARE_ADDR_HOSTNAME_RE = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
@@ -213,6 +216,19 @@ export default function InboundFormModal({
     moveFallback,
     addAllFallbacks,
   } = useInboundFallbacks(dbInbound, dbInbounds);
+
+  const coresQuery = useCoresQuery();
+  /* A kind whose core fails Preflight here can still be edited — only creating
+     a new one is offered, because nothing downstream would ever serve it. */
+  const protocolOptions = useMemo(() => {
+    const blocked = unavailableKinds(coresQuery.data);
+    return PROTOCOL_NAMES.map((p) => ({
+      value: p,
+      label: p,
+      disabled: blocked.has(p),
+      title: blocked.get(p) || undefined,
+    }));
+  }, [coresQuery.data]);
 
   const selectableNodes = (availableNodes || []).filter((n) => n.enable);
   const protocol = (useWatch({ control, name: 'protocol' }) ?? '') as string;
@@ -542,7 +558,7 @@ export default function InboundFormModal({
       )}
 
       <FormField name="protocol" label={t('pages.inbounds.protocol')}>
-        <Select id="protocol" disabled={mode === 'edit'} options={PROTOCOL_OPTIONS} />
+        <Select id="protocol" disabled={mode === 'edit'} options={protocolOptions} />
       </FormField>
 
       <FormField
@@ -661,6 +677,8 @@ export default function InboundFormModal({
   const protocolTab = (
     <>
       {protocol === Protocols.WIREGUARD && <WireguardFields wgPubKey={wgPubKey} regenInboundWg={regenInboundWg} />}
+
+      {protocol === Protocols.WGKERNEL && <WgkernelFields wgPubKey={wgPubKey} regenInboundWg={regenInboundWg} />}
 
       {protocol === Protocols.TUN && <TunFields />}
 
@@ -963,6 +981,7 @@ export default function InboundFormModal({
                 Protocols.TUNNEL,
                 Protocols.TUN,
                 Protocols.WIREGUARD,
+                Protocols.WGKERNEL,
                 Protocols.MTPROTO,
               ] as string[]).includes(protocol) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]

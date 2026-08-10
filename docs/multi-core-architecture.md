@@ -691,8 +691,9 @@ catches all three shapes, uses only stdlib (house rule), and needs no new `go.mo
 
 > **This section is a TARGET, not a measurement.** It was written in the present tense with
 > no marker and read as fact for four phases. §11.1 is what is achieved at `e2478640`;
-> §11.2 is what a core actually costs today; §11.3 is the target and what must land to reach
-> it. The old table was optimistic by roughly an order of magnitude and named a file,
+> §11.2 audits what a core costs today and **§11.2a is the compiled measurement from P6**;
+> §11.3 is the target and what must land to reach it. The old table was optimistic by roughly
+> an order of magnitude and named a file,
 > `internal/core/requirement.go`, that **has never existed in this repo** —
 > `find . -name 'requirement*.go'` is empty at every commit. The nearest real thing is
 > `internal/core/capability.go`'s rule table, which answers a different question.
@@ -716,6 +717,10 @@ catches all three shapes, uses only stdlib (house rule), and needs no new `go.mo
   the validator from it (P4).
 
 ### 11.2 The audited cost of the next real core
+
+> This section is an **audit, read from source**. §11.2a is the **measurement, compiled** —
+> what core #3 actually cost. Where they disagree, §11.2a wins; it found three sites this
+> enumeration missed and twice the TypeScript.
 
 Counted for `ocserv` — a daemon core with its own users, its own credential, and a config
 **file** rather than a URI, i.e. the cheapest realistic non-Xray core. **24 shared files, of
@@ -785,6 +790,70 @@ silent `default:` — `return null`, `return false`, or nothing rendered. The fa
 blank form or a missing share button on a working inbound, found by a user rather than CI.
 There is no frontend equivalent of the dispatch ratchet.
 
+### 11.2a MEASURED: what core #3 actually cost (P6, `wgkernel`)
+
+The audit above is an estimate. This is the count, taken from the tree, for a core with a
+**client-side artefact** — kernel WireGuard, whose product is a `.conf` file rather than a
+URI. It is the first number in this document that was compiled rather than read.
+
+**Ratchet: 123 → 116 → 126.** P6-2a's abstraction fix removed 7 sites; registering the kind
+added 10. **Net +3 across all of P6**, against a plan that estimated +2. The residual the
+fix could not absorb is **+10, not the estimated +8**:
+
+| File | Budget | Why it could not be absorbed |
+|---|---|---|
+| `internal/web/service/client_inbound_apply.go` | 17 → **19** | two keyless-ID arms, not one: the add-time credential switch *and* `UpdateInboundClient`'s `newClientId` |
+| `internal/web/service/tgbot/tgbot_inbound.go` | 8 → **10** | two copies of the same `excludedProtocols` map |
+| `internal/sub/service.go` | 14 → **16** | `GetLink` arm + `genWireguardLink` guard |
+| `internal/web/service/inbound.go` | 17 → **18** | `AddInbound`'s own copy of the credential switch |
+| `internal/web/service/port_conflict.go` | 7 → **8** | UDP, per §11.2's row |
+| `internal/sub/clash_service.go` | 6 → **7** | `buildProxy` |
+| `internal/sub/json_service.go` | 8 → **9** | `getConfig` outbound switch |
+
+**Three sites §11.2's enumeration missed**, all found by hand after the plan called the
+enumeration complete: `inbound.go`'s `AddInbound` credential switch, `client_inbound_apply.go`'s
+`UpdateInboundClient` id resolution — both `default:` arms that demand `client.ID != ""` from a
+kind that has no id — and `json_service.go`'s `"protocol": string(inbound.Protocol)`, which
+emitted a kind name Xray has no outbound for. Budget core #4 for arms of that shape wherever a
+`default:` assumes a UUID.
+
+**Files, counted.** Registering the kind edited **12 shared Go files and added none**, and
+needed 5 Go test files. The core itself is the two directories §11.2 predicts —
+`internal/wireguard/` (8 files incl. the `wgtest` fake, 2 test files) and
+`internal/cores/internal/wireguard/` (2 files, 2 test files) — which is the irreducible
+daemon-specific half and is not the architecture's cost. Then **10 i18n entries** (5 English
+keys × 2 locales), **21 TypeScript files — 3 new and 18 edited** — 11 frontend test files, and
+6 generated files that `make gen` rewrote.
+
+**TypeScript was supposed to be 0.** §11.3 budgets **zero** TS files for a new core; the
+measured cost is 21, roughly double §11.2's own ~11-file estimate, because a core with a
+client-side artefact also pays the `.conf` renderer, the QR modal, the info modal, the three
+`INBOUND_PROTOCOL_COLORS` copies and the online-rollup list. **The §9 descriptor renderer is
+the single largest unpaid debt in this document, and P6 raised its price rather than lowering
+it.** Nothing here is close to §11.3's "5 shared files, ~29 lines".
+
+**Which guards actually fired.** Honestly split, because the ratio is the finding:
+
+- **Fired, and could not be silenced:** `TestProtocolSourcesAgree` (the `model.Protocol`
+  constant, the registry and the generated TS union must agree three ways), the compile error
+  from `cores.Register`, `i18n-dead-keys.test.ts` in both directions, `gen-check` on the
+  regenerated `frontend/src/generated/` + `openapi.json`, and `capabilities.test.ts` via the
+  Go-generated golden fixture.
+- **Fired only as a count.** `TestProtocolDispatchRatchet` reports "*… has 17 protocol
+  dispatch sites but the budget still says 19 — lower it in this PR*", which is the message an
+  author silences by lowering the number. Measured, before the tests below existed: collapsing all three
+  `case "wireguard", "wgkernel":` arms left every package test green and the ratchet was the
+  only complaint. It guards the count, not the behaviour.
+- **Did not fire at all.** `internal/sub/service.go:474`'s hardcoded
+  `protocol in ('vmess',…)` SQL list — a string literal the detector cannot see, and without
+  the kind in it every subscription in all three formats returns an empty body. And **every**
+  TypeScript dispatcher, all of which end in a silent `default:`.
+
+The three unguarded classes each now have a test that fails without its arm
+(`TestGetInboundsBySubIdIncludesWireguard`, `TestWgkernelClientSurvivesTheCredentialSwitches`,
+`wgkernel-inbound.test.ts`), but writing one per site per core does not scale — that is the
+argument for items 1 and 3 of §11.3, not a substitute for them.
+
 ### 11.3 The TARGET, and what it still needs
 
 | Where | Files | Lines |
@@ -797,10 +866,13 @@ There is no frontend equivalent of the dispatch ratchet.
 | **TypeScript** | **0** | **0** |
 | **New API routes / DB migrations** | **0** | **0** |
 
-**5 shared files, ~29 lines.** Reaching it from §11.2's 24 needs, in rough order of payoff:
+**5 shared files, ~29 lines.** The measured figure for core #3 is 12 shared Go files plus 21
+TypeScript ones (§11.2a), so this target is off by roughly an order of magnitude in the
+direction that matters. Reaching it from §11.2's 24 needs, in rough order of payoff:
 
-1. **The §9 descriptor renderer**, which is the whole ~11-file TypeScript column. Nothing of
-   it exists; P5 built the *client* half of the same idea and proved the shape works.
+1. **The §9 descriptor renderer**, which is the whole TypeScript column — estimated at ~11
+   files, measured at 21 for core #3. Nothing of it exists; P5 built the *client* half of the
+   same idea and proved the shape works.
 2. **The supervision merge** (§12.3), which removes `web.go` and the per-core job.
 3. **`LinkRenderer` with an implementer** (§13, decision 1), which removes the three
    `internal/sub/` files and `tgbot_inbound.go`.
@@ -831,7 +903,7 @@ and *that* is the number to hold the design to.
 | **P3** ✅ | Port **xray** (stresses the contract in the opposite direction: one process, many inbounds, hot-apply via gRPC). `runtime.Local` dispatches every inbound add/update/delete through the registry; its MTProto branches went **9 → 2** (the two left are the per-user calls, see P4). Ratchet **106 → 99**. `Remote` untouched and wire-compatible. What the port found: §12.2 | medium | −120 |
 | **P4** ✅ | ✅ Registry-backed validator: `Inbound.Protocol` carries `validate:"required,protocol"` and the rule is built from `cores.Kinds()`, so the accepted set *is* the servable set. The `oneof=` list is gone and `TestInboundProtocolIsValidatedByTheRegistry` stops it coming back. ✅ One traffic job bills every core: it loops the registry over TrafficSource + TagTrafficSource + OnlineReporter, and mtproto_job keeps only its reconcile. Supervision deliberately did NOT merge — see §12.3 | low | −150 |
 | **P5** ✅ | `client_credentials` keyed `(client_id, inbound_id, key)` with MTProto as its first tenant; user ops routed through `bound.Users`; per-kind credential manifest served by `GET /panel/api/cores` and rendered by the client form. Ratchet **99 → 94**, then **94 → 95** on a frozen migration file. The **inbound** form was not touched — see §12.4 | medium | +2332 / −372 excluding generated files |
-| **P6** | **WireGuard — the measurement, not a step.** If its diff touches `internal/web/service/`, **stop and fix the abstraction** before cores #4–#11 land on it. Plan it against §11.2, not §11.3 | — | ~600 |
+| **P6** ✅ | **Kernel WireGuard — the measurement, not a step.** Landed as three commits: the engine + adapter unregistered, then the abstraction fix alone (ratchet **123 → 116**, six protocol-string gates replaced by two registry questions), then the kind registered (**116 → 126**). **Net +3, worse than the +2 planned, and the residual was +10 against an estimated +8.** Its diff touches `internal/web/service/` in 5 files, so the roadmap's own trigger fired — the fix landed first and separately, which is why the reduction is measurable at all. Cost, in full: **21 TypeScript files against §11.3's budget of 0**, 12 shared Go files, 10 i18n entries, and 3 dispatch sites §11.2's audit had missed. Numbers and which guards fired: **§11.2a** | medium | +3702 core, +839 / −97 shared |
 
 **P-1 is the whole bet.** Three of its four guards have zero violations *today*. Land them
 while that is still true — after the refactor starts, every one becomes a negotiation.

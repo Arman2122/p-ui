@@ -380,7 +380,7 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 			if client.Auth == "" {
 				return false, common.NewError("empty client ID")
 			}
-		case "wireguard":
+		case "wireguard", "wgkernel":
 			if client.PublicKey == "" {
 				return false, common.NewError("wireguard client requires a key")
 			}
@@ -540,7 +540,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		newClientId = clients[0].Email
 	case "hysteria":
 		newClientId = clients[0].Auth
-	case "wireguard":
+	case "wireguard", "wgkernel":
 		newClientId = clients[0].Email
 	case "mtproto":
 		newClientId = clients[0].Email

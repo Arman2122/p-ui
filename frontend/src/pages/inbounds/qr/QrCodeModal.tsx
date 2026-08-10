@@ -58,7 +58,7 @@ export default function QrCodeModal({
     if (!open || !dbInbound) return;
     const inbound = inboundFromDb(dbInbound);
     const fallbackHostname = preferPublicHost(window.location.hostname, subSettings?.publicHost ?? '');
-    if (inbound.protocol === Protocols.WIREGUARD) {
+    if (inbound.protocol === Protocols.WIREGUARD || inbound.protocol === Protocols.WGKERNEL) {
       const peerRemark = client?.email
         ? `${dbInbound.remark}-${client.email}`
         : dbInbound.remark || '';

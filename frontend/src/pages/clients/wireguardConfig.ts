@@ -13,7 +13,7 @@ export function findWireguardInbound(
 ): InboundOption | undefined {
   return (client?.inboundIds || [])
     .map((id) => inboundsById[id])
-    .find((ib) => ib?.protocol === 'wireguard');
+    .find((ib) => ib?.protocol === 'wireguard' || ib?.protocol === 'wgkernel');
 }
 
 export function buildWireguardClientConfig(

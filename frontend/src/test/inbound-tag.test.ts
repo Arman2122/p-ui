@@ -23,6 +23,7 @@ describe('composeInboundTag transport suffix parity', () => {
     ['trojan grpc is tcp', base({ protocol: 'trojan', streamSettings: { network: 'grpc' } }), 'in-443-tcp'],
     ['hysteria forced udp', base({ protocol: 'hysteria', streamSettings: { network: 'tcp' } }), 'in-443-udp'],
     ['wireguard forced udp', base({ protocol: 'wireguard' }), 'in-443-udp'],
+    ['wgkernel forced udp', base({ protocol: 'wgkernel' }), 'in-443-udp'],
     ['shadowsocks tcp,udp', base({ protocol: 'shadowsocks', settings: { network: 'tcp,udp' } }), 'in-443-tcpudp'],
     ['shadowsocks udp only', base({ protocol: 'shadowsocks', settings: { network: 'udp' } }), 'in-443-udp'],
     ['shadowsocks tcp only', base({ protocol: 'shadowsocks', settings: { network: 'tcp' } }), 'in-443-tcp'],

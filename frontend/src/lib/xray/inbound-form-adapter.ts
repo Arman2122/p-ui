@@ -260,6 +260,7 @@ function clientSchemaForProtocol(protocol: string): z.ZodType | null {
     case 'shadowsocks': return ShadowsocksClientSchema;
     case 'hysteria': return HysteriaClientSchema;
     case 'wireguard': return WireguardClientSchema;
+    case 'wgkernel': return WireguardClientSchema;
     case 'mtproto': return MtprotoClientSchema;
     default: return null;
   }
@@ -360,8 +361,8 @@ export function formValuesToWirePayload(values: InboundFormValues): WireInboundP
     protocol: values.protocol,
     settings: JSON.stringify(settingsPruned),
     streamSettings: streamPruned ? JSON.stringify(streamPruned) : '',
-    // mtproto is mtg-served, not Xray, so sniffing never applies — emit empty
-    // rather than the default { enabled: false } so the row carries no sniffing.
+    /* Kinds Xray does not serve (mtproto, wgkernel) have no sniffing block —
+       emit empty rather than { enabled: false } so the row carries none. */
     sniffing: canEnableSniffing({ protocol: values.protocol }) ? JSON.stringify(normalizeSniffing(values.sniffing)) : '',
     tag: values.tag,
     shareAddrStrategy: values.shareAddrStrategy,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
+	"github.com/Arman2122/p-ui/internal/cores/internal/wireguard"
 	"github.com/Arman2122/p-ui/internal/cores/internal/xray"
 	engine "github.com/Arman2122/p-ui/internal/xray"
 )
@@ -86,6 +87,9 @@ func Register(reg *core.Registry, deps Deps) error {
 		return fmt.Errorf("cores: Register(nil registry)")
 	}
 	if err := reg.Register(mtproto.New()); err != nil {
+		return err
+	}
+	if err := reg.Register(wireguard.New()); err != nil {
 		return err
 	}
 	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))

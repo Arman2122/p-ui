@@ -69,6 +69,30 @@ const vlessRow: RawInboundRow = {
   },
 } as RawInboundRow & { id: number };
 
+const WG_SECRET = 'QGVlb2dXc1ZTWGw0ZXBzZndsWmtMaUM5MUlNYjBHWFdYbz0=';
+
+/* A stored wgkernel row: no streamSettings, and a client carrying a foreign
+   `flow` the WireGuard client schema must project away on re-save. */
+const wgkernelRow: RawInboundRow = {
+  ...vlessRow,
+  protocol: 'wgkernel',
+  port: 51820,
+  settings: {
+    address: ['10.0.0.1/24'],
+    secretKey: WG_SECRET,
+    mtu: 1420,
+    clients: [{
+      email: 'alice@example.test',
+      privateKey: 'iJ2cBkrSGqRwIfYIDIxk7hr5RXfdR93MfJUL7yqkkH8=',
+      publicKey: 'DGSYIcEKAUkA7HhzGSjxLZuV67BR3LeyU0BMLJzNVHQ=',
+      allowedIPs: ['10.0.0.2/32'],
+      keepAlive: 25,
+      flow: 'xtls-rprx-vision',
+    }],
+  },
+  streamSettings: '',
+};
+
 const cases: FixtureCase[] = [
   { name: 'vless tcp none', row: vlessRow, expectedProtocol: 'vless' },
   {
@@ -221,6 +245,32 @@ describe('formValuesToWirePayload', () => {
     const payload = formValuesToWirePayload(values);
     expect(payload.protocol).toBe('mtproto');
     expect(payload.sniffing).toBe('');
+  });
+
+  /* wgkernel is a kernel netlink device, so Xray's sniffing block applies to it
+     exactly as little as it does to mtproto's sidecar. */
+  it('emits empty sniffing for wgkernel (kernel-served, not Xray)', () => {
+    const values = rawInboundToFormValues(wgkernelRow);
+    const payload = formValuesToWirePayload(values);
+    expect(payload.protocol).toBe('wgkernel');
+    expect(payload.sniffing).toBe('');
+  });
+
+  it('keeps sniffing for the xray wireguard inbound sitting next to it', () => {
+    const values = rawInboundToFormValues({
+      ...vlessRow,
+      protocol: 'wireguard',
+      settings: { secretKey: WG_SECRET, peers: [] },
+    });
+    expect(JSON.parse(formValuesToWirePayload(values).sniffing)).toEqual({ enabled: false });
+  });
+
+  it('projects wgkernel clients through the WireGuard client schema', () => {
+    const payload = formValuesToWirePayload(rawInboundToFormValues(wgkernelRow));
+    const settings = JSON.parse(payload.settings) as { clients: Record<string, unknown>[] };
+    expect(settings.clients[0].enable).toBe(true);
+    expect(settings.clients[0].allowedIPs).toEqual(['10.0.0.2/32']);
+    expect(settings.clients[0]).not.toHaveProperty('flow');
   });
 
   it('omits nodeId when null', () => {

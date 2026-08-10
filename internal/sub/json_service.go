@@ -230,7 +230,7 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			newOutbounds = append(newOutbounds, s.genServer(subReq, inbound, streamSettings, client, jsonMux(mux, hostMux)))
 		case "hysteria":
 			newOutbounds = append(newOutbounds, s.genHy(inbound, newStream, client, jsonMux(mux, hostMux)))
-		case "wireguard":
+		case "wireguard", "wgkernel":
 			wgOutbound := s.genWireguard(inbound, client)
 			if wgOutbound == nil {
 				continue
@@ -575,8 +575,10 @@ func (s *SubJsonService) genWireguard(inbound *model.Inbound, client model.Clien
 		settings["mtu"] = int(mtu)
 	}
 
+	// The client runs xray either way, and xray's outbound protocol is named
+	// "wireguard" — a wgkernel inbound has no outbound name of its own.
 	outbound := map[string]any{
-		"protocol": string(inbound.Protocol),
+		"protocol": "wireguard",
 		"tag":      "proxy",
 		"settings": settings,
 	}

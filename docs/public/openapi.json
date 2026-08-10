@@ -1384,6 +1384,11 @@
       "CoreView": {
         "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
         "properties": {
+          "available": {
+            "description": "Available is this host's Preflight answer and Unavailable is why not, so a\ncore the host cannot run is explained rather than silently offered.",
+            "example": true,
+            "type": "boolean"
+          },
           "caps": {
             "$ref": "#/components/schemas/Capabilities"
           },
@@ -1424,14 +1429,20 @@
           "titleKey": {
             "example": "cores.xray.title",
             "type": "string"
+          },
+          "unavailable": {
+            "example": "wireguard: no kernel support on this host",
+            "type": "string"
           }
         },
         "required": [
+          "available",
           "caps",
           "clientCredentials",
           "id",
           "kinds",
-          "titleKey"
+          "titleKey",
+          "unavailable"
         ],
         "type": "object"
       },
@@ -1895,6 +1906,7 @@
               "wireguard",
               "hysteria",
               "mtproto",
+              "wgkernel",
               "tun"
             ],
             "example": "vless",
@@ -4120,6 +4132,7 @@
                   "success": true,
                   "obj": [
                     {
+                      "available": true,
                       "caps": {
                         "onlineUsers": null,
                         "perUserStats": null,
@@ -4141,7 +4154,8 @@
                         "vless",
                         "vmess"
                       ],
-                      "titleKey": "cores.xray.title"
+                      "titleKey": "cores.xray.title",
+                      "unavailable": "wireguard: no kernel support on this host"
                     }
                   ]
                 }

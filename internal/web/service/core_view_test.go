@@ -3,21 +3,24 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/core"
 )
 
-// stubCore is a core with no capabilities: coreViews reads only the descriptor
-// and the kinds, so binding real ones would test Bind rather than the view.
+// stubCore is a core with no capabilities: coreViews reads only the descriptor,
+// the kinds and Preflight, so binding real ones would test Bind rather than the
+// view. unusable is the Preflight error a host that cannot run this core gets.
 type stubCore struct {
 	descriptor core.Descriptor
 	kinds      []core.Kind
+	unusable   error
 }
 
 func (s stubCore) Describe() core.Descriptor         { return s.descriptor }
 func (s stubCore) Kinds() []core.Kind                { return s.kinds }
-func (s stubCore) Preflight(_ context.Context) error { return nil }
+func (s stubCore) Preflight(_ context.Context) error { return s.unusable }
 
 // declaringCore answers per kind, the shape a real multi-kind core has: one
 // Describe, one set of credentials per protocol it serves.
@@ -82,6 +85,11 @@ func TestCoreViews(t *testing.T) {
 			"vless": {core.CredUUID},
 		},
 	}
+	unusable := stubCore{
+		descriptor: core.Descriptor{ID: "wgkernel", TitleKey: "cores.wgkernel.title"},
+		kinds:      []core.Kind{"wgkernel"},
+		unusable:   errors.New("wireguard: no kernel support on this host"),
+	}
 
 	tests := []struct {
 		name string
@@ -93,24 +101,31 @@ func TestCoreViews(t *testing.T) {
 			reg:  registryOf(t, xray, mtproto),
 			want: `[{"id":"mtproto","titleKey":"cores.mtproto.title","kinds":["mtproto"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false},` +
-				`"clientCredentials":{}},` +
+				`"clientCredentials":{},"available":true,"unavailable":""},` +
 				`{"id":"xray","titleKey":"cores.xray.title","kinds":["shadowsocks","trojan","vless"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false},` +
-				`"clientCredentials":{}}]`,
+				`"clientCredentials":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "an unanswered capability stays null, never false",
 			reg:  registryOf(t, unanswered),
 			want: `[{"id":"future","titleKey":"cores.future.title","kinds":["future"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{}}]`,
+				`"clientCredentials":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "credentials are keyed per kind, and a kind the core skips is absent, not empty",
 			reg:  registryOf(t, declaring),
 			want: `[{"id":"multi","titleKey":"cores.multi.title","kinds":["tun","vless","vmess"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]}}]`,
+				`"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"available":true,"unavailable":""}]`,
+		},
+		{
+			name: "a core this host cannot run says so, and says why, instead of being offered",
+			reg:  registryOf(t, unusable),
+			want: `[{"id":"wgkernel","titleKey":"cores.wgkernel.title","kinds":["wgkernel"],` +
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"clientCredentials":{},"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",
@@ -121,7 +136,7 @@ func TestCoreViews(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			encoded, err := json.Marshal(coreViews(tc.reg))
+			encoded, err := json.Marshal(coreViews(t.Context(), tc.reg))
 			if err != nil {
 				t.Fatalf("marshal views: %v", err)
 			}

@@ -63,12 +63,69 @@ The inbound editor accepts these protocols:
 | **Mixed (SOCKS/HTTP)** | A combined SOCKS + HTTP listener.                                        |
 | **Dokodemo-door / Tunnel** | Port forwarding / traffic redirect.                                 |
 | **MTProto**            | Telegram MTProto proxy, served by a bundled `mtg` process (not Xray).    |
+| **Kernel WireGuard**   | Selected as `wgkernel`. Served by the host kernel over netlink, not Xray. Needs host setup — see below. |
 
 <Callout type="info">
   Hysteria2 isn't a separate protocol internally — it's the `hysteria` protocol
   with the transport version set to 2, and the panel generates `hysteria2://`
   share links for it.
 </Callout>
+
+## Kernel WireGuard (`wgkernel`)
+
+`wgkernel` is a second, separate WireGuard implementation. Instead of Xray's
+userspace tunnel, the panel creates a real kernel interface named `pwg<id>` and
+programs its keys, addresses and peers directly. Each client is a peer, and the
+`.conf` file the panel generates for it is the whole product.
+
+<Callout type="warn">
+  There is **no migration path** from a `wireguard` inbound to a `wgkernel` one,
+  and the protocol cannot be changed after an inbound is created. Moving means a
+  new inbound with a new server key and a new port, which invalidates every
+  `.conf` file already handed out. Create `wgkernel` fresh, or stay on
+  `wireguard`.
+</Callout>
+
+### Requirements
+
+The host kernel must have the `wireguard` module, and the panel must be able to
+create network interfaces (`CAP_NET_ADMIN`). Most VPS kernels have both;
+OpenVZ and many LXC containers have neither. Where they are missing, the panel
+reports the core as unavailable and the inbound editor greys `wgkernel` out with
+the reason, so you cannot create one **from the form** — the API still accepts
+one, so a scripted deploy or a restored backup can still produce an inbound that
+never comes up. The `wireguard` protocol works on those hosts either way,
+because Xray tunnels it in userspace.
+
+### Forwarding and NAT are yours to configure
+
+This is the one real difference in day-to-day operation. An Xray `wireguard`
+inbound egresses through Xray, so it needs nothing from the host. A `wgkernel`
+device completes handshakes and then **routes nothing** until the host is told
+to forward and masquerade its traffic. Run as root, matching the range to the
+inbound's interface address:
+
+```bash
+sysctl -w net.ipv4.ip_forward=1
+iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+```
+
+Neither survives a reboot on its own. Persist the first in
+`/etc/sysctl.d/`, and the second with `iptables-persistent` or your firewall's
+own rules. The panel deliberately does not write firewall rules for you.
+
+### Other things to know
+
+- **`limitIp` does nothing** for this protocol. The per-client IP limit is
+  enforced by reading Xray's access log, and a kernel device produces none. The
+  field is still stored; it simply is not applied.
+- **Stopping the panel leaves the devices up.** That is intentional — tunnels
+  survive a panel restart or upgrade. A permanently removed panel leaves its
+  interfaces behind; delete them with `ip link del pwg<id>`.
+  Traffic that moves while the panel is down is not billed.
+- **Do not add your own routes on a `pwg<id>` device.** Reconciliation owns that
+  device's route table and removes routes it did not install. Put extra routes
+  on another interface.
 
 ## Fallbacks — multiple protocols on one port
 

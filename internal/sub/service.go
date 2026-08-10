@@ -471,7 +471,7 @@ func (s *SubService) getInboundsBySubId(subId string) ([]*model.Inbound, error) 
 		JOIN client_inbounds ON client_inbounds.inbound_id = inbounds.id
 		JOIN clients ON clients.id = client_inbounds.client_id
 		WHERE
-			inbounds.protocol in ('vmess','vless','trojan','shadowsocks','hysteria','wireguard','mtproto')
+			inbounds.protocol in ('vmess','vless','trojan','shadowsocks','hysteria','wireguard','wgkernel','mtproto')
 			AND clients.sub_id = ? AND inbounds.enable = ?
 	)`, subId, true).Order("sub_sort_index ASC").Order("id ASC").Find(&inbounds).Error
 	if err != nil {
@@ -620,7 +620,7 @@ func (s *SubService) GetLink(inbound *model.Inbound, email string) string {
 		return s.genHysteriaLink(inbound, email)
 	case "mtproto":
 		return s.genMtprotoLink(inbound, email)
-	case "wireguard":
+	case "wireguard", "wgkernel":
 		return s.genWireguardLink(inbound, email)
 	}
 	return ""
@@ -631,7 +631,7 @@ func (s *SubService) GetLink(inbound *model.Inbound, email string) string {
 // server public key (derived from the inbound secretKey) and the client's
 // tunnel address ride in the query. Returns "" when the client has no key.
 func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) string {
-	if inbound.Protocol != model.WireGuard {
+	if inbound.Protocol != model.WireGuard && inbound.Protocol != model.WGKernel {
 		return ""
 	}
 	settings := s.linkSettings(inbound)

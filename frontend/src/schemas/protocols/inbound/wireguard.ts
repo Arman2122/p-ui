@@ -12,7 +12,7 @@ export type WireguardDomainStrategy = z.infer<typeof WireguardDomainStrategySche
 // AntD InputNumber emits null (not undefined) when the user clears it, and
 // the form store hands that null straight to safeParse on submit — a bare
 // .optional() would reject it and block the save.
-const optionalClearedInt = (schema: z.ZodNumber) =>
+export const optionalClearedInt = (schema: z.ZodNumber) =>
   z.preprocess((v) => (v == null ? undefined : v), schema.optional());
 
 // Wireguard inbound is peer-based (no clients). Each peer is a client device

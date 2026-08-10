@@ -221,7 +221,7 @@ func (s *SubClashService) buildProxy(subReq *SubService, inbound *model.Inbound,
 	if inbound.Protocol == model.Hysteria {
 		return s.buildHysteriaProxy(subReq, inbound, client, ep)
 	}
-	if inbound.Protocol == model.WireGuard {
+	if inbound.Protocol == model.WireGuard || inbound.Protocol == model.WGKernel {
 		return s.buildWireguardProxy(subReq, inbound, client, ep)
 	}
 
