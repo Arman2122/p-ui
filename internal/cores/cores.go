@@ -48,6 +48,16 @@ func ServedByXray(kind core.Kind) bool {
 	return ok && bound.Core.Describe().ID == xray.ID
 }
 
+// ClientCredentials names the credential fields one kind's clients carry, so a
+// caller asks the registry instead of naming a protocol. Deps-free, as above.
+func ClientCredentials(kind core.Kind) []string {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Creds == nil {
+		return nil
+	}
+	return bound.Creds.ClientCredentials(kind)
+}
+
 // kindOwners resolves the kind-to-core map once. Empty Deps are enough: the map
 // is fixed at compile time, and nothing here touches a core's runtime state.
 var kindOwners = sync.OnceValue(func() *core.Registry {
