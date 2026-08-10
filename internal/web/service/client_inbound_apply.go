@@ -357,7 +357,7 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 		interfaceClients = keptWire
 	}
 
-	if oldInbound.Protocol == model.WireGuard {
+	if clientCarriesWireguardKeys(oldInbound.Protocol) {
 		if dErr := defaultWireguardClients(existingClients, clients, interfaceClients); dErr != nil {
 			return false, dErr
 		}
@@ -583,7 +583,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	// WireGuard keys are never rotated by an edit: when the incoming payload omits
 	// them (a metadata-only change), carry the stored credentials forward so the
 	// settings JSON and the running peer keep the client's identity.
-	if oldInbound.Protocol == model.WireGuard && clientIndex >= 0 && clientIndex < len(oldClients) {
+	if clientCarriesWireguardKeys(oldInbound.Protocol) && clientIndex >= 0 && clientIndex < len(oldClients) {
 		old := oldClients[clientIndex]
 		if clients[0].PrivateKey == "" {
 			clients[0].PrivateKey = old.PrivateKey
@@ -660,7 +660,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			if v, ok2 := newMap["subId"].(string); ok2 {
 				clients[0].SubID = v
 			}
-			if oldInbound.Protocol == model.WireGuard {
+			if clientCarriesWireguardKeys(oldInbound.Protocol) {
 				newMap["privateKey"] = clients[0].PrivateKey
 				newMap["publicKey"] = clients[0].PublicKey
 				newMap["allowedIPs"] = clients[0].AllowedIPs

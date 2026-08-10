@@ -15,6 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -386,7 +388,7 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 }
 
 func inboundWireguardHints(protocol string, settings string) (string, int, string) {
-	if protocol != string(model.WireGuard) || strings.TrimSpace(settings) == "" {
+	if !clientCarriesWireguardKeys(model.Protocol(protocol)) || strings.TrimSpace(settings) == "" {
 		return "", 0, ""
 	}
 	var parsed struct {
@@ -1506,7 +1508,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			}
 			if !push {
 				needRestart = true
-			} else if oldProtocol == model.MTProto || oldInbound.Protocol == model.MTProto {
+			} else if !cores.ServedByXray(core.Kind(oldProtocol)) || !cores.ServedByXray(core.Kind(oldInbound.Protocol)) {
 				oldSnapshot := *oldInbound
 				oldSnapshot.Tag = tag
 				oldSnapshot.Protocol = oldProtocol
@@ -1520,14 +1522,14 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 						pushable = false
 					}
 				}
-				newProtocolIsMtproto := oldInbound.Protocol == model.MTProto
+				newProtocolServedByXray := cores.ServedByXray(core.Kind(oldInbound.Protocol))
 				if pushable {
 					postCommitApply = func() {
 						if err2 := rt.UpdateInbound(context.Background(), &oldSnapshot, payload); err2 == nil {
 							logger.Debug("Updated inbound applied on", rt.Name(), ":", oldInbound.Tag)
 						} else {
 							logger.Debug("Unable to update inbound on", rt.Name(), ":", err2)
-							if !newProtocolIsMtproto {
+							if newProtocolServedByXray {
 								needRestart = true
 							}
 						}

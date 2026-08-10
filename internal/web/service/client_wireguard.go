@@ -2,14 +2,23 @@ package service
 
 import (
 	"net/netip"
+	"slices"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
 const defaultWireguardBase = "10.0.0.0/24"
+
+// clientCarriesWireguardKeys asks the kind's core whether its clients hold
+// WireGuard key material, so a second core answering yes needs no edit here.
+func clientCarriesWireguardKeys(protocol model.Protocol) bool {
+	return slices.Contains(cores.ClientCredentials(core.Kind(protocol)), core.CredAllowedIPs)
+}
 
 func wireguardHostAddr(s string) netip.Addr {
 	s = strings.TrimSpace(s)
