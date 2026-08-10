@@ -1038,8 +1038,9 @@ inbounds).
 - **Credential *storage* generalised; credential *minting* did not.**
   `client_credential.go` still holds a hand-written `mtprotoCredentialRows` /
   `applyMtprotoCredentials` pair, and `client_crud.go` and `inbound_clients.go` still mint
-  credentials from a `switch` with a silent `default`. `CredentialDeclarer` knows the answer
-  and no Go caller asks it — this is the cheapest remaining reduction (§11.3, item 4).
+  credentials from a `switch` with a silent `default`. **Partly RESOLVED in P6-2a:**
+  `cores.ClientCredentials` now backs the four WireGuard key gates, so `CredentialDeclarer`
+  has a Go caller; minting itself still switches on the protocol string.
 - **Supervision did not merge.** `mtproto_job` still reconciles sidecars on its own 10s
   cadence beside the traffic job's 5s (`web.go:289-290`), and `web.go` still calls
   `mtproto.GetManager().StopAll()` by name. §12.3 is still the open design.
