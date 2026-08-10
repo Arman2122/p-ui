@@ -116,6 +116,19 @@ func (l *link) device(name string) wgtypes.Device {
 	return dev
 }
 
+// Links names every interface on the stand-in. All of them are WireGuard links,
+// so the type filter the real one applies has nothing to exclude here.
+func (k *Kernel) Links(context.Context) ([]string, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	out := make([]string, 0, len(k.links))
+	for name := range k.links {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 func (k *Kernel) EnsureLink(_ context.Context, spec wireguard.LinkSpec) (wireguard.LinkState, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()

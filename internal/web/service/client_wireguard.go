@@ -1,12 +1,15 @@
 package service
 
 import (
+	"encoding/json"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
@@ -18,6 +21,104 @@ const defaultWireguardBase = "10.0.0.0/24"
 // WireGuard key material, so a second core answering yes needs no edit here.
 func clientCarriesWireguardKeys(protocol model.Protocol) bool {
 	return slices.Contains(cores.ClientCredentials(core.Kind(protocol)), core.CredAllowedIPs)
+}
+
+// ownsHostWireguardDevice reports a kind that puts a real WireGuard interface on
+// this host: WireGuard clients, and no Xray config the panel converges instead.
+func ownsHostWireguardDevice(protocol model.Protocol) bool {
+	return clientCarriesWireguardKeys(protocol) && !cores.ServedByXray(core.Kind(protocol))
+}
+
+// hostWireguardProtocols are the kinds whose devices share the one host routing
+// table, and so are the only ones a tunnel address can collide with.
+func hostWireguardProtocols() []string {
+	out := make([]string, 0, 1)
+	for _, kind := range cores.Kinds() {
+		if ownsHostWireguardDevice(model.Protocol(kind)) {
+			out = append(out, string(kind))
+		}
+	}
+	return out
+}
+
+// wireguardDeviceAddresses reads the tunnel addresses an inbound puts on its own
+// device. An entry that will not parse is skipped; the engine rejects it loudly.
+func wireguardDeviceAddresses(settings string) []netip.Prefix {
+	var parsed struct {
+		Address []string `json:"address"`
+	}
+	if settings == "" || json.Unmarshal([]byte(settings), &parsed) != nil {
+		return nil
+	}
+	out := make([]netip.Prefix, 0, len(parsed.Address))
+	for _, v := range parsed.Address {
+		if p, err := netip.ParsePrefix(strings.TrimSpace(v)); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// checkWireguardAddressConflict rejects two host devices sharing a tunnel subnet.
+// Both install the same connected route into one routing table, so one inbound's
+// client is answered over the other's device and encrypted to the wrong peer.
+func (s *InboundService) checkWireguardAddressConflict(inbound *model.Inbound, ignoreId int) error {
+	if !ownsHostWireguardDevice(inbound.Protocol) {
+		return nil
+	}
+	want := wireguardDeviceAddresses(inbound.Settings)
+	if len(want) == 0 {
+		return nil
+	}
+	q := database.GetDB().Model(model.Inbound{}).Where("protocol IN ?", hostWireguardProtocols())
+	if ignoreId > 0 {
+		q = q.Where("id != ?", ignoreId)
+	}
+	var candidates []*model.Inbound
+	if err := q.Find(&candidates).Error; err != nil {
+		return err
+	}
+	for _, c := range candidates {
+		if !sameNode(c.NodeID, inbound.NodeID) {
+			continue
+		}
+		for _, taken := range wireguardDeviceAddresses(c.Settings) {
+			for _, p := range want {
+				if taken.Overlaps(p) {
+					return common.NewError("wireguard: address", p.String(), "overlaps", taken.String(), "already served by inbound", inboundName(c))
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// inboundName is how an inbound is named back to the operator in a conflict.
+func inboundName(in *model.Inbound) string {
+	if in.Remark != "" {
+		return in.Remark
+	}
+	if in.Tag != "" {
+		return in.Tag
+	}
+	return "#" + strconv.Itoa(in.Id)
+}
+
+// wireguardKeyCollision names the other client already authorised by this public
+// key. The kernel serves one peer per key, so a second claimant has no peer of
+// its own and is billed the first one's traffic.
+func wireguardKeyCollision(publicKey string, others []model.Client, skip int) string {
+	publicKey = strings.TrimSpace(publicKey)
+	if publicKey == "" {
+		return ""
+	}
+	for i := range others {
+		if i == skip || strings.TrimSpace(others[i].PublicKey) != publicKey {
+			continue
+		}
+		return others[i].Email
+	}
+	return ""
 }
 
 func wireguardHostAddr(s string) netip.Addr {
@@ -130,8 +231,14 @@ func wireguardAllowedIPsCollision(entries, used []string) string {
 // overwritten, so editing a client never rotates its keys.
 func defaultWireguardClients(existing, clients []model.Client, interfaceClients []any) error {
 	used := make([]string, 0)
+	owners := make(map[string]string, len(existing)+len(clients))
 	for i := range existing {
 		used = append(used, existing[i].AllowedIPs...)
+		if key := strings.TrimSpace(existing[i].PublicKey); key != "" {
+			if _, taken := owners[key]; !taken {
+				owners[key] = existing[i].Email
+			}
+		}
 	}
 	base := wireguardAllocationBase(used, defaultWireguardBase)
 	for i := range clients {
@@ -150,6 +257,10 @@ func defaultWireguardClients(existing, clients []model.Client, interfaceClients 
 			}
 			c.PublicKey = pub
 		}
+		if other, taken := owners[strings.TrimSpace(c.PublicKey)]; taken {
+			return common.NewError("wireguard: public key already used by client:", other)
+		}
+		owners[strings.TrimSpace(c.PublicKey)] = c.Email
 		if len(c.AllowedIPs) == 0 {
 			addr, err := allocateWireguardAddress(used, base)
 			if err != nil {

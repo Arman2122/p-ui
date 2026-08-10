@@ -939,6 +939,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if conflict != nil {
 		return inbound, false, common.NewError(conflict.String())
 	}
+	if err := s.checkWireguardAddressConflict(inbound, 0); err != nil {
+		return inbound, false, err
+	}
 
 	inbound.Tag, err = s.resolveInboundTag(inbound, 0)
 	if err != nil {
@@ -1363,6 +1366,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	}
 	if conflict != nil {
 		return inbound, false, common.NewError(conflict.String())
+	}
+	if err := s.checkWireguardAddressConflict(inbound, inbound.Id); err != nil {
+		return inbound, false, err
 	}
 
 	// Capture the pre-edit protocol and routing state before oldInbound is

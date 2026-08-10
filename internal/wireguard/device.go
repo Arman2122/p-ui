@@ -40,9 +40,40 @@ type Instance struct {
 	Peers      []Peer
 }
 
+// interfacePrefix marks a device as this panel's. It is deliberately not "wg":
+// an operator's own tunnel must never look like something the panel may delete.
+const interfacePrefix = "pwg"
+
 // InterfaceName is the kernel device an inbound is served by. It is derived from
 // the id so two inbounds can never claim one device.
-func InterfaceName(id int) string { return "pwg" + strconv.Itoa(id) }
+func InterfaceName(id int) string { return interfacePrefix + strconv.Itoa(id) }
+
+// ownedID reads the inbound id back out of a device name. It round-trips through
+// InterfaceName, so a near miss like pwg007 or pwg0 is somebody else's.
+func ownedID(name string) (int, bool) {
+	rest, ok := strings.CutPrefix(name, interfacePrefix)
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.Atoi(rest)
+	if err != nil || id <= 0 || InterfaceName(id) != name {
+		return 0, false
+	}
+	return id, true
+}
+
+// defaultMTU is what the wireguard module gives a new link: 1500 less its own
+// 32-byte header, 8 for UDP and 40 for the outer IPv6 header.
+const defaultMTU = 1420
+
+// linkMTU resolves an absent MTU into the kernel's own default rather than
+// leaving whatever the device holds, so clearing the field is an edit that lands.
+func linkMTU(mtu int) int {
+	if mtu <= 0 {
+		return defaultMTU
+	}
+	return mtu
+}
 
 // Interface names the device this instance owns.
 func (inst Instance) Interface() string { return InterfaceName(inst.ID) }

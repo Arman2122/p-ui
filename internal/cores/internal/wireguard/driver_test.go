@@ -428,17 +428,107 @@ func TestUnreadableSettingsNeverDeleteTheDevice(t *testing.T) {
 }
 
 // TestAnInboundWithNoServerKeyIsNotServed keeps a half-configured inbound off the
-// host: a device with no private key completes no handshake and reports no error.
+// host: a device with no private key completes no handshake, and the operator is
+// told rather than shown an inbound that is up.
 func TestAnInboundWithNoServerKeyIsNotServed(t *testing.T) {
 	k := wgtest.New()
 	c := &Core{mgr: engine.NewManager(k)}
 	inst := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 	inst.Settings = `{"address":["10.0.0.1/24"]}`
 
-	if err := c.Reconcile(t.Context(), []core.Instance{inst}); err != nil {
-		t.Fatalf("Reconcile: %v", err)
+	err := c.Reconcile(t.Context(), []core.Instance{inst})
+	if err == nil || !strings.Contains(err.Error(), "secretKey") {
+		t.Fatalf("Reconcile = %v, want an error naming the missing secretKey", err)
 	}
 	if k.Exists(iface) {
 		t.Fatal("an inbound with no secretKey was given a device; it authenticates nobody, and the panel would show the inbound up")
+	}
+}
+
+// TestLosingTheServerKeyNeverDeletesTheDevice is the edit arm of the same rule as
+// TestUnreadableSettingsNeverDeleteTheDevice: an enabled inbound whose secretKey
+// went missing is a broken edit, never an instruction to destroy a live device.
+func TestLosingTheServerKeyNeverDeletesTheDevice(t *testing.T) {
+	k := wgtest.New()
+	c := &Core{mgr: engine.NewManager(k)}
+	live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
+	if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	broken := live
+	broken.Settings = `{"address":["10.0.0.1/24"],"clients":[]}`
+	for _, pass := range []struct {
+		name string
+		run  func() error
+	}{
+		{"ApplyInstance", func() error { return c.ApplyInstance(t.Context(), broken) }},
+		{"Reconcile", func() error { return c.Reconcile(t.Context(), []core.Instance{broken}) }},
+	} {
+		if err := pass.run(); err == nil {
+			t.Fatalf("%s = nil; the panel reports the edit succeeded", pass.name)
+		}
+		if !k.Exists(iface) {
+			t.Fatalf("%s deleted the device: every client on the inbound is disconnected over a settings edit", pass.name)
+		}
+		if got := k.PeerKeys(iface); !slices.Equal(got, []wgtypes.Key{fill(1)}) {
+			t.Fatalf("after %s the device serves %v, want the client left exactly as it was", pass.name, got)
+		}
+	}
+	if k.LinkDeletes != 0 {
+		t.Fatalf("the device was deleted %d times over a missing secretKey", k.LinkDeletes)
+	}
+}
+
+// TestADisabledClientIsNotAuthorised: every production caller gates on Enable, so
+// this is the contract holding for a caller that trusts it instead.
+func TestADisabledClientIsNotAuthorised(t *testing.T) {
+	k := wgtest.New()
+	c := &Core{mgr: engine.NewManager(k)}
+	live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
+	if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	blocked := client("b@example.com", fill(2), "10.0.0.12/32", "", 0)
+	blocked.Enable = false
+	if err := c.AddUser(t.Context(), live, blocked); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if got := k.PeerKeys(iface); !slices.Equal(got, []wgtypes.Key{fill(1)}) {
+		t.Fatalf("device serves %v; a disabled client's key was authorised, so a depleted or expired client keeps its tunnel", got)
+	}
+}
+
+// TestAnInboundsOwnTotalIsBilled: without it inbounds.up/down never move, so an
+// inbound-level traffic limit is never reached and the row reports 0 B forever.
+func TestAnInboundsOwnTotalIsBilled(t *testing.T) {
+	k := wgtest.New()
+	c := &Core{mgr: engine.NewManager(k)}
+	live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
+	if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	k.FeedTraffic(iface, fill(1), 1_000, 1_000)
+	if _, err := c.CollectTraffic(t.Context()); err != nil {
+		t.Fatalf("baseline CollectTraffic: %v", err)
+	}
+	k.FeedTraffic(iface, fill(1), 4_000, 6_000)
+	if _, err := c.CollectTraffic(t.Context()); err != nil {
+		t.Fatalf("CollectTraffic: %v", err)
+	}
+
+	tags, err := c.CollectTagTraffic(t.Context())
+	if err != nil {
+		t.Fatalf("CollectTagTraffic: %v", err)
+	}
+	if len(tags) != 1 || tags[0].Tag != live.Tag || tags[0].Up != 3_000 || tags[0].Down != 5_000 {
+		t.Fatalf("tag deltas = %+v, want inbound %q billed 3000/5000", tags, live.Tag)
+	}
+	if tags[0].Outbound {
+		t.Fatal("the inbound's own bytes were reported as egress")
+	}
+	if again, _ := c.CollectTagTraffic(t.Context()); len(again) != 0 {
+		t.Fatalf("draining twice returned %+v; replaying a delta doubles the inbound's total", again)
 	}
 }

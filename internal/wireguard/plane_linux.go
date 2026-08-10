@@ -16,10 +16,6 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-// kernelModulePath is the only evidence that separates a kernel device from the
-// userspace fallback wgctrl silently offers when the module is absent.
-const kernelModulePath = "/sys/module/wireguard"
-
 // kernelPlane drives the host through netlink and wgctrl. Every operation is one
 // syscall round trip, so the manager keeps no cached view of the result.
 type kernelPlane struct{}
@@ -27,14 +23,16 @@ type kernelPlane struct{}
 func hostPlane() Plane { return kernelPlane{} }
 
 func (kernelPlane) Probe(context.Context) error {
-	if _, err := os.Stat(kernelModulePath); err != nil {
-		return fmt.Errorf("%w: %s is absent", ErrNoKernelSupport, kernelModulePath)
-	}
-	client, err := wgctrl.New()
-	if err != nil {
-		return classify(err)
-	}
-	return classify(client.Close())
+	return probeKernel(func() error {
+		client, err := wgctrl.New()
+		if err != nil {
+			return classify(err)
+		}
+		return classify(client.Close())
+	}, func() bool {
+		_, err := os.Stat(kernelModulePath)
+		return err == nil
+	})
 }
 
 func (kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
@@ -88,6 +86,20 @@ func (kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
 }
 
 const wireguardLinkType = "wireguard"
+
+func (kernelPlane) Links(context.Context) ([]string, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make([]string, 0, len(links))
+	for _, l := range links {
+		if l.Type() == wireguardLinkType {
+			out = append(out, l.Attrs().Name)
+		}
+	}
+	return out, nil
+}
 
 func (kernelPlane) EnsureLink(_ context.Context, spec LinkSpec) (LinkState, error) {
 	link, err := netlink.LinkByName(spec.Name)
@@ -209,11 +221,11 @@ func classify(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, os.ErrPermission):
-		return fmt.Errorf("%w: %v", ErrPermission, err)
+		return fmt.Errorf("%w: %w", ErrPermission, err)
 	case errors.Is(err, syscall.EOPNOTSUPP), errors.Is(err, syscall.EAFNOSUPPORT):
-		return fmt.Errorf("%w: %v", ErrNoKernelSupport, err)
+		return fmt.Errorf("%w: %w", ErrNoKernelSupport, err)
 	case errors.Is(err, syscall.ENODEV), errors.Is(err, syscall.ENXIO), errors.Is(err, os.ErrNotExist):
-		return fmt.Errorf("%w: %v", ErrNoDevice, err)
+		return fmt.Errorf("%w: %w", ErrNoDevice, err)
 	}
 	return err
 }

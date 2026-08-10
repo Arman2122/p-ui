@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -22,8 +23,9 @@ const Kind core.Kind = "wgkernel"
 type Core struct {
 	mgr *engine.Manager
 
-	mu     sync.Mutex
-	online []string
+	mu          sync.Mutex
+	online      []string
+	pendingTags map[string]core.TagDelta
 }
 
 // New returns a core over the process-wide device manager.
@@ -133,6 +135,11 @@ func (c *Core) AddUser(ctx context.Context, inst core.Instance, user core.User) 
 		// dispatches this for a client added to a disabled one.
 		return nil
 	}
+	// The same filter toEngine applies to the set: a disabled client the kernel
+	// holds a key for is a client the panel believes it revoked.
+	if !user.Enable {
+		return nil
+	}
 	peer, ok := toPeer(user)
 	if !ok {
 		return fmt.Errorf("wgkernel: client %q carries no public key", user.Email)
@@ -153,12 +160,48 @@ func (c *Core) CollectTraffic(ctx context.Context) ([]core.TrafficDelta, error) 
 	billed, online := c.mgr.CollectTraffic(ctx)
 	c.mu.Lock()
 	c.online = online
+	c.stashTagTraffic(billed)
 	c.mu.Unlock()
 
 	out := make([]core.TrafficDelta, 0, len(billed))
 	for _, t := range billed {
 		out = append(out, core.TrafficDelta{Email: t.Email, Tag: t.Tag, Up: t.Up, Down: t.Down})
 	}
+	return out, nil
+}
+
+// stashTagTraffic banks each inbound's total, rolled up from the clients on it.
+// The kernel meters per peer only, so the total is exactly that sum.
+func (c *Core) stashTagTraffic(billed []engine.Traffic) {
+	for _, t := range billed {
+		if t.Tag == "" {
+			continue
+		}
+		if c.pendingTags == nil {
+			c.pendingTags = make(map[string]core.TagDelta, len(billed))
+		}
+		acc := c.pendingTags[t.Tag]
+		acc.Tag = t.Tag
+		acc.Up += t.Up
+		acc.Down += t.Down
+		c.pendingTags[t.Tag] = acc
+	}
+}
+
+// CollectTagTraffic drains what CollectTraffic banked. Draining, not replaying:
+// handing the same delta out twice doubles the inbound's total.
+func (c *Core) CollectTagTraffic(_ context.Context) ([]core.TagDelta, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.pendingTags) == 0 {
+		return nil, nil
+	}
+	out := make([]core.TagDelta, 0, len(c.pendingTags))
+	for _, d := range c.pendingTags {
+		out = append(out, d)
+	}
+	c.pendingTags = nil
+	slices.SortFunc(out, func(a, b core.TagDelta) int { return strings.Compare(a.Tag, b.Tag) })
 	return out, nil
 }
 
