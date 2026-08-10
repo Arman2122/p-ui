@@ -10,6 +10,7 @@ import type { TunInboundSettings } from '@/schemas/protocols/inbound/tun';
 import type { TunnelInboundSettings } from '@/schemas/protocols/inbound/tunnel';
 import type { VlessClient, VlessInboundSettings } from '@/schemas/protocols/inbound/vless';
 import type { VmessClient, VmessInboundSettings } from '@/schemas/protocols/inbound/vmess';
+import type { WgkernelInboundSettings } from '@/schemas/protocols/inbound/wgkernel';
 import type { WireguardInboundSettings } from '@/schemas/protocols/inbound/wireguard';
 
 // Plain-object factories for protocol clients. Each returns a Zod-parsable
@@ -274,6 +275,18 @@ export function createDefaultWireguardInboundSettings(
   };
 }
 
+/* Kernel WireGuard: same empty-client start as the xray tunnel above, plus the
+   device's own address. 10.0.0.1/24 covers the /24 allocateWireguardAddress
+   hands clients out of, so the kernel installs one route for the whole pool. */
+export function createDefaultWgkernelInboundSettings(): WgkernelInboundSettings {
+  return {
+    address: ['10.0.0.1/24'],
+    secretKey: Wireguard.generateKeypair().privateKey,
+    mtu: 1420,
+    clients: [],
+  };
+}
+
 // Protocol-aware dispatch over every inbound-settings factory. Mirrors
 // the legacy `Inbound.Settings.getSettings(protocol)` dispatcher, but
 // returns a plain Zod-parsable object instead of a class instance.
@@ -290,6 +303,7 @@ export type AnyInboundSettings =
   | TunInboundSettings
   | TunnelInboundSettings
   | WireguardInboundSettings
+  | WgkernelInboundSettings
   | MtprotoInboundSettings;
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
@@ -304,6 +318,7 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
     case 'tunnel':      return createDefaultTunnelInboundSettings();
     case 'tun':         return createDefaultTunInboundSettings();
     case 'wireguard':   return createDefaultWireguardInboundSettings();
+    case 'wgkernel':    return createDefaultWgkernelInboundSettings();
     case 'mtproto':     return createDefaultMtprotoInboundSettings();
     default:            return null;
   }

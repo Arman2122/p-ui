@@ -185,10 +185,10 @@ var capabilityRules = map[string]Rule{
 	CapStream: {Any: []Term{
 		{All: []Clause{in("protocol", "vmess", "vless", "trojan", "shadowsocks", "hysteria", "wireguard", "tunnel")}},
 	}},
-	// mtproto is served by the mtg sidecar, not Xray, so Xray's sniffing block
-	// does not apply. Negated so a new core does not have to be listed here.
+	// Sniffing is an Xray inbound block, so it applies to no kind Xray does not
+	// serve: mtproto runs in mtg, wgkernel in the kernel. List each new such core.
 	CapSniffing: {Any: []Term{
-		{All: []Clause{{Field: "protocol", Op: OpIn, Values: []string{"mtproto"}, Not: true}}},
+		{All: []Clause{{Field: "protocol", Op: OpIn, Values: []string{"mtproto", "wgkernel"}, Not: true}}},
 	}},
 	// Fallbacks are raw-TCP only — stricter than tlsFlow, which also allows XHTTP.
 	CapFallbacks: {Any: []Term{

@@ -1239,10 +1239,17 @@ export function genInboundLinks(input: GenInboundLinksInput): string {
   if (inbound.protocol === 'shadowsocks') {
     return genShadowsocksLink({ inbound, address: addr, port: inbound.port, forceTls: 'same', remark });
   }
-  if (inbound.protocol === 'wireguard') {
+  if (isWireguardFamily(inbound.protocol)) {
     return genWireguardConfigs({ inbound, remark, hostOverride, fallbackHostname });
   }
   return '';
+}
+
+/* Both WireGuard cores hand the subscriber the same artefact — the .conf IS the
+   product — so every renderer below serves them alike. wgkernel carries no
+   `peers` key at all; only `clients`. */
+function isWireguardFamily(protocol: string): boolean {
+  return protocol === 'wireguard' || protocol === 'wgkernel';
 }
 
 // Per-peer wireguard fanout. Each peer gets its own link (or .conf
@@ -1265,12 +1272,12 @@ function wgRenderPeers(settings: WireguardInboundSettings): WireguardInboundPeer
   if (clients.length > 0) {
     return clients.map((c) => ({ ...c, publicKey: c.publicKey ?? '' }));
   }
-  return settings.peers;
+  return settings.peers ?? [];
 }
 
 export function genWireguardLinks(input: GenWireguardFanoutInput): string {
   const { inbound, remark = '', hostOverride = '', fallbackHostname } = input;
-  if (inbound.protocol !== 'wireguard') return '';
+  if (!isWireguardFamily(inbound.protocol)) return '';
   const addr = resolveAddr(inbound, hostOverride, fallbackHostname);
   const sep = '-';
   const baseSettings = inbound.settings as WireguardInboundSettings;
@@ -1289,7 +1296,7 @@ export function genWireguardLinks(input: GenWireguardFanoutInput): string {
 
 export function genWireguardConfigs(input: GenWireguardFanoutInput): string {
   const { inbound, remark = '', hostOverride = '', fallbackHostname } = input;
-  if (inbound.protocol !== 'wireguard') return '';
+  if (!isWireguardFamily(inbound.protocol)) return '';
   const addr = resolveAddr(inbound, hostOverride, fallbackHostname);
   const sep = '-';
   const baseSettings = inbound.settings as WireguardInboundSettings;

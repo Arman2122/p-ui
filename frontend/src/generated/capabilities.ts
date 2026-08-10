@@ -91,7 +91,8 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
             "field": "protocol",
             "op": "in",
             "values": [
-              "mtproto"
+              "mtproto",
+              "wgkernel"
             ],
             "not": true
           }

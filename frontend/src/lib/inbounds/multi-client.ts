@@ -4,7 +4,7 @@
  * bulk-add modal was missing mtproto and silently hid those inbounds.
  */
 const MULTI_CLIENT_PROTOCOLS = new Set([
-  'shadowsocks', 'vless', 'vmess', 'trojan', 'hysteria', 'wireguard', 'mtproto',
+  'shadowsocks', 'vless', 'vmess', 'trojan', 'hysteria', 'wireguard', 'wgkernel', 'mtproto',
 ]);
 
 export function supportsMultipleClients(protocol?: string): boolean {

@@ -10,6 +10,7 @@ import { TunInboundSettingsSchema } from './tun';
 import { TunnelInboundSettingsSchema } from './tunnel';
 import { VlessInboundSettingsSchema } from './vless';
 import { VmessInboundSettingsSchema } from './vmess';
+import { WgkernelInboundSettingsSchema } from './wgkernel';
 import { WireguardInboundSettingsSchema } from './wireguard';
 
 export * from './http';
@@ -22,6 +23,7 @@ export * from './tun';
 export * from './tunnel';
 export * from './vless';
 export * from './vmess';
+export * from './wgkernel';
 export * from './wireguard';
 
 // Tagged-wrapper discriminated union. The discriminator (`protocol`) lives on
@@ -35,6 +37,7 @@ export const InboundSettingsSchema = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('trojan'),      settings: TrojanInboundSettingsSchema }),
   z.object({ protocol: z.literal('shadowsocks'), settings: ShadowsocksInboundSettingsSchema }),
   z.object({ protocol: z.literal('wireguard'),   settings: WireguardInboundSettingsSchema }),
+  z.object({ protocol: z.literal('wgkernel'),    settings: WgkernelInboundSettingsSchema }),
   z.object({ protocol: z.literal('hysteria'),    settings: HysteriaInboundSettingsSchema }),
   z.object({ protocol: z.literal('http'),        settings: HttpInboundSettingsSchema }),
   z.object({ protocol: z.literal('mixed'),       settings: MixedInboundSettingsSchema }),

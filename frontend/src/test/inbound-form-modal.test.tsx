@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { screen, act, render, cleanup } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import InboundFormModal from '@/pages/inbounds/form/InboundFormModal';
 import { DBInbound } from '@/models/dbinbound';
 import { ThemeProvider } from '@/hooks/useTheme';
 import {
   renderWithProviders,
+  makeTestQueryClient,
   fieldLabels,
   listSelectOptions,
   chooseSelectOption,
@@ -110,19 +112,24 @@ describe('InboundFormModal', () => {
     const flush = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
     const strategyItem = (title: string) =>
       document.querySelector(`.ant-select-content[title="${title}"]`);
+    /* The protocol picker asks the cores manifest which kinds this host can
+       run, so the modal needs a query client as well as a theme. */
+    const queryClient = makeTestQueryClient();
     const modal = (nodes: never[], fetched: boolean) => (
-      <ThemeProvider>
-        <InboundFormModal
-          open
-          mode="edit"
-          dbInbound={buildInbound()}
-          dbInbounds={[]}
-          availableNodes={nodes}
-          availableNodesFetched={fetched}
-          onClose={() => {}}
-          onSaved={() => {}}
-        />
-      </ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <InboundFormModal
+            open
+            mode="edit"
+            dbInbound={buildInbound()}
+            dbInbounds={[]}
+            availableNodes={nodes}
+            availableNodesFetched={fetched}
+            onClose={() => {}}
+            onSaved={() => {}}
+          />
+        </ThemeProvider>
+      </QueryClientProvider>
     );
 
     // Baseline: nodes already loaded, so the node option is offered and selected.

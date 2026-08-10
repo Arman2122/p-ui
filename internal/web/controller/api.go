@@ -115,7 +115,7 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 // getCores describes what this build can serve, so the UI can render from what
 // a core declares instead of from its own protocol switch.
 func (a *APIController) getCores(c *gin.Context) {
-	jsonObj(c, service.CoreViews(), nil)
+	jsonObj(c, service.CoreViews(c.Request.Context()), nil)
 }
 
 // BackuptoTgbot sends a backup of the panel data to Telegram bot admins.

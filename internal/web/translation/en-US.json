@@ -459,6 +459,10 @@
         "mtgRouteOutboundHint": "Optional. Force Telegram traffic out through this outbound (or balancer). Leave empty to let your routing rules decide.",
         "mtgRouteOutboundPlaceholder": "Use routing rules",
         "mtprotoFakeTlsDomainHint": "Default FakeTLS domain used to generate a new client's secret. Each client can front its own domain.",
+        "wgkernelAddress": "Interface Address",
+        "wgkernelAddressHint": "The tunnel address the server's own device answers on. Cover the pool clients are allocated from, so the kernel routes the whole range.",
+        "wgkernelForwardingTitle": "Kernel WireGuard needs host forwarding",
+        "wgkernelForwardingHint": "The kernel device completes handshakes but routes nothing until the host forwards and masquerades. Run as root, adjusting the range to match the interface address:",
         "mtgThrottleMaxConnections": "Max connections",
         "mtgThrottleMaxConnectionsHint": "Cap concurrent connections across all users with a fair-share limit. 0 disables throttling.",
         "mtgAdTagInvalid": "Ad-tag must be exactly 32 hexadecimal characters.",
@@ -2057,6 +2061,9 @@
   "cores": {
     "mtproto": {
       "title": "MTProto"
+    },
+    "wgkernel": {
+      "title": "Kernel WireGuard"
     },
     "xray": {
       "title": "Xray"

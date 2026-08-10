@@ -115,7 +115,7 @@ export default function InboundInfoModal({
 
     const inboundForLinks = inboundFromDb(dbInbound);
     const fallbackHostname = preferPublicHost(window.location.hostname, subSettings?.publicHost ?? '');
-    if (info.protocol === Protocols.WIREGUARD) {
+    if (info.protocol === Protocols.WIREGUARD || info.protocol === Protocols.WGKERNEL) {
       setWireguardConfigs(
         genWireguardConfigs({
           inbound: inboundForLinks,
@@ -783,14 +783,27 @@ export default function InboundInfoModal({
               <dt>{t('pages.inbounds.info.mtu')}</dt>
               <dd><Tag>{inbound.settings.mtu as number}</Tag></dd>
             </div>
-            <div className="info-row">
-              <dt>{t('pages.inbounds.info.noKernelTun')}</dt>
-              <dd>
-                <Tag color={inbound.settings.noKernelTun ? 'green' : 'default'}>
-                  {String(inbound.settings.noKernelTun)}
-                </Tag>
-              </dd>
-            </div>
+            {/* noKernelTun is xray's TUN emulation; the kernel device answers on
+                an address of its own instead. Neither field exists on the other. */}
+            {dbInbound.protocol === Protocols.WGKERNEL ? (
+              <div className="info-row">
+                <dt>{t('pages.inbounds.form.wgkernelAddress')}</dt>
+                <dd>
+                  {((inbound.settings.address as string[] | undefined) ?? []).map((addr, i) => (
+                    <Tag key={`wgk-addr-${i}`} className="value-tag">{addr}</Tag>
+                  ))}
+                </dd>
+              </div>
+            ) : (
+              <div className="info-row">
+                <dt>{t('pages.inbounds.info.noKernelTun')}</dt>
+                <dd>
+                  <Tag color={inbound.settings.noKernelTun ? 'green' : 'default'}>
+                    {String(inbound.settings.noKernelTun)}
+                  </Tag>
+                </dd>
+              </div>
+            )}
           </dl>
           {Array.isArray(inbound.settings.peers) && (inbound.settings.peers as { privateKey: string; publicKey: string; psk: string; allowedIPs?: string[]; keepAlive?: number }[]).map((peer, idx) => (
             <Fragment key={idx}>

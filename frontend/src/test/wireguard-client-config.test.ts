@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildWireguardClientConfig } from '@/pages/clients/wireguardConfig';
+import { buildWireguardClientConfig, findWireguardInbound } from '@/pages/clients/wireguardConfig';
 import type { ClientRecord, InboundOption } from '@/hooks/useClients';
 
 const client: ClientRecord = {
@@ -21,6 +21,28 @@ const inbound: InboundOption = {
   wgPublicKey: 'DGSYIcEKAUkA7HhzGSjxLZuV67BR3LeyU0BMLJzNVHQ=',
   wgMtu: 1420,
 };
+
+/* The client card asks this which of its inbounds owns the tunnel. Two cores
+   answer to it now, so a check on either string alone hides the other's .conf. */
+describe('findWireguardInbound', () => {
+  const vless: InboundOption = { ...inbound, id: 88, protocol: 'vless' };
+  const cases: [string, string, number | undefined][] = [
+    ['xray wireguard', 'wireguard', 90],
+    ['kernel wgkernel', 'wgkernel', 90],
+    ['neither', 'trojan', undefined],
+  ];
+
+  for (const [name, protocol, want] of cases) {
+    it(`finds the ${name} inbound`, () => {
+      const tunnel: InboundOption = { ...inbound, protocol };
+      const found = findWireguardInbound(
+        { ...client, inboundIds: [88, 90] },
+        { 88: vless, 90: tunnel },
+      );
+      expect(found?.id).toBe(want);
+    });
+  }
+});
 
 describe('buildWireguardClientConfig', () => {
   it('emits the canonical PresharedKey key, not PreSharedKey', () => {

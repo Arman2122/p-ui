@@ -14,6 +14,7 @@ import {
   createDefaultVlessInboundSettings,
   createDefaultVmessClient,
   createDefaultVmessInboundSettings,
+  createDefaultWgkernelInboundSettings,
   createDefaultWireguardInboundSettings,
 } from '@/lib/xray/inbound-defaults';
 import { createHysteriaTlsSettingsWithDefaultCert } from '@/lib/xray/inbound-tls-defaults';
@@ -25,6 +26,7 @@ import { TrojanClientSchema, TrojanInboundSettingsSchema } from '@/schemas/proto
 import { TunnelInboundSettingsSchema } from '@/schemas/protocols/inbound/tunnel';
 import { VlessClientSchema, VlessInboundSettingsSchema } from '@/schemas/protocols/inbound/vless';
 import { VmessClientSchema, VmessInboundSettingsSchema } from '@/schemas/protocols/inbound/vmess';
+import { WgkernelInboundSettingsSchema } from '@/schemas/protocols/inbound/wgkernel';
 import { WireguardInboundSettingsSchema } from '@/schemas/protocols/inbound/wireguard';
 
 // Tests pass explicit seeds for every random field so the assertions don't
@@ -147,6 +149,21 @@ describe('createDefault*InboundSettings factories', () => {
     expect(WireguardInboundSettingsSchema.parse(s)).toEqual(s);
     expect(s.peers).toEqual([]);
     expect(s.clients).toEqual([]);
+  });
+
+  /* No snapshot: the server keypair is generated per call and the factory takes
+     no seed, so the shape is asserted through the schema round-trip instead. */
+  it('wgkernel', () => {
+    const s = createDefaultWgkernelInboundSettings();
+    expect(WgkernelInboundSettingsSchema.parse(s)).toEqual(s);
+    /* The device must own the prefix allocateWireguardAddress hands clients out
+       of, or every peer past the first black-holes on the return path. */
+    expect(s.address).toEqual(['10.0.0.1/24']);
+    expect(s.mtu).toBe(1420);
+    expect(s.clients).toEqual([]);
+    expect(s.secretKey.length).toBeGreaterThan(0);
+    expect(s).not.toHaveProperty('peers');
+    expect(s).not.toHaveProperty('noKernelTun');
   });
 });
 

@@ -317,6 +317,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "uuid": "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
   },
   "CoreView": {
+    "available": true,
     "caps": {
       "onlineUsers": null,
       "perUserStats": null,
@@ -338,7 +339,8 @@ export const EXAMPLES: Record<string, unknown> = {
       "vless",
       "vmess"
     ],
-    "titleKey": "cores.xray.title"
+    "titleKey": "cores.xray.title",
+    "unavailable": "wireguard: no kernel support on this host"
   },
   "FallbackParentInfo": {
     "masterId": 0,

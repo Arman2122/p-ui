@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"sort"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -19,21 +20,25 @@ type CoreView struct {
 	// ClientCredentials are the credential fields a client of each kind carries,
 	// keyed by kind. A kind absent here declares none; the form keeps its own.
 	ClientCredentials map[string][]string `json:"clientCredentials" example:"{\"vless\":[\"uuid\"],\"vmess\":[\"uuid\",\"security\"]}"`
+	// Available is this host's Preflight answer and Unavailable is why not, so a
+	// core the host cannot run is explained rather than silently offered.
+	Available   bool   `json:"available" example:"true"`
+	Unavailable string `json:"unavailable" example:"wireguard: no kernel support on this host"`
 }
 
 // CoreViews describes the cores this build can serve. The registry is read per
 // call because the router is built before the panel wires one.
-func CoreViews() []CoreView {
+func CoreViews(ctx context.Context) []CoreView {
 	manager := runtime.GetManager()
 	if manager == nil {
 		return []CoreView{}
 	}
-	return coreViews(manager.Cores())
+	return coreViews(ctx, manager.Cores())
 }
 
 // coreViews joins each core's descriptor with the kinds it claims — the one
 // question the registry cannot answer on its own.
-func coreViews(reg *core.Registry) []CoreView {
+func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 	if reg == nil {
 		return []CoreView{}
 	}
@@ -56,12 +61,18 @@ func coreViews(reg *core.Registry) []CoreView {
 		// Both sources are declaration order — registration order here, the
 		// core's own slice for kinds — and an unstable order makes gen-check flap.
 		sort.Strings(names)
+		unavailable := ""
+		if err := bound.Core.Preflight(ctx); err != nil {
+			unavailable = err.Error()
+		}
 		views = append(views, CoreView{
 			ID:                string(described.ID),
 			TitleKey:          described.TitleKey,
 			Kinds:             names,
 			Caps:              described.Caps,
 			ClientCredentials: credentials,
+			Available:         unavailable == "",
+			Unavailable:       unavailable,
 		})
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })
