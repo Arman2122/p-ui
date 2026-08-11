@@ -41,13 +41,14 @@ export default function WgkernelFields({
               ? 'pages.inbounds.form.wgkernelForwardingHint'
               : 'pages.inbounds.form.wgkernelForwardingHintEgress')}
             </div>
-            <div><code>sysctl -w net.ipv4.ip_forward=1</code></div>
+            <div><code>printf &apos;net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\n&apos; &gt; /etc/sysctl.d/99-wgkernel.conf</code></div>
+            <div><code>sysctl --system</code></div>
             {egressId == null && (
-              <div><code>iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE</code></div>
-            )}
-            <div><code>sysctl -w net.ipv6.conf.all.forwarding=1</code></div>
-            {egressId == null && (
-              <div><code>ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE</code></div>
+              <>
+                <div><code>nft add table ip pui_nat</code></div>
+                <div><code>nft &apos;add chain ip pui_nat postrouting {'{'} type nat hook postrouting priority srcnat; policy accept; {'}'}&apos;</code></div>
+                <div><code>nft add rule ip pui_nat postrouting iifname &quot;pwg*&quot; oifname != &quot;pwg*&quot; masquerade</code></div>
+              </>
             )}
           </>
         )}
