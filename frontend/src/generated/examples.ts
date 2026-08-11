@@ -342,6 +342,16 @@ export const EXAMPLES: Record<string, unknown> = {
     "titleKey": "cores.xray.title",
     "unavailable": "wireguard: no kernel support on this host"
   },
+  "Egress": {
+    "createdAt": 1700000000000,
+    "enable": true,
+    "id": 1,
+    "remark": "warp exit",
+    "settings": "",
+    "target": "warp",
+    "type": "xray-tun",
+    "updatedAt": 1700000000000
+  },
   "FallbackParentInfo": {
     "masterId": 0,
     "path": ""
@@ -462,6 +472,7 @@ export const EXAMPLES: Record<string, unknown> = {
       }
     ],
     "down": 0,
+    "egressId": null,
     "enable": true,
     "expiryTime": 0,
     "fallbackParent": null,

@@ -15,6 +15,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/egress"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -183,6 +184,14 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		logger.Warning("read nodes for egress injection failed:", err)
 	} else {
 		injectNodeEgresses(xrayConfig, nodes)
+	}
+
+	// The front an egress row needs Xray to create. Its lifecycle follows the row,
+	// not any attachment, so attaching an inbound never touches this config.
+	if egresses, err := (&EgressService{}).GetAll(); err != nil {
+		logger.Warning("read egresses for front injection failed:", err)
+	} else {
+		injectEgressFronts(xrayConfig, egresses, egressDriverRegistry)
 	}
 
 	return xrayConfig, nil
@@ -697,6 +706,90 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound) {
 	})
 }
 
+/*
+injectEgressFronts appends the front device each enabled egress's driver wants
+Xray to create, and prepends the one routing rule that sends the flows arriving
+on it to the egress's target.
+
+Same skip-and-log discipline as the three bridges above, with the opposite
+consequence: an egress whose front is skipped stays DARK, because the panel's
+own blackhole still contains its inbounds. That is intended — the alternative is
+silently egressing those users with the server's identity. Generated state only:
+the stored template is untouched and the change set stays hot-appliable.
+*/
+func injectEgressFronts(cfg *xray.Config, rows []*model.Egress, drivers *egress.Registry) {
+	routing := map[string]any{}
+	if len(cfg.RouterConfig) > 0 {
+		if err := json.Unmarshal(cfg.RouterConfig, &routing); err != nil {
+			logger.Warning("egress front: routing section is unparsable, skipping injection:", err)
+			return
+		}
+	}
+	usedTags := make(map[string]struct{}, len(cfg.InboundConfigs))
+	for i := range cfg.InboundConfigs {
+		usedTags[cfg.InboundConfigs[i].Tag] = struct{}{}
+	}
+
+	newRules := make([]any, 0)
+	for _, row := range rows {
+		if row == nil || !row.Enable {
+			continue
+		}
+		driver, known := drivers.For(row.Type)
+		if !known {
+			logger.Warning("egress front: no driver for type [", row.Type, "], skipping egress [", row.Id, "]")
+			continue
+		}
+		injector, injects := driver.(egress.Injector)
+		if !injects {
+			continue
+		}
+		if !routingTargetExists(routing, cfg.OutboundConfigs, row.Target) {
+			logger.Warning("egress front: target tag [", row.Target, "] not found, skipping egress [", row.Id, "]")
+			continue
+		}
+		injection, err := injector.Inject(egressRow(row))
+		if err != nil {
+			logger.Warning("egress front: could not build the front for egress [", row.Id, "]:", err)
+			continue
+		}
+		if _, taken := usedTags[injection.Tag]; taken {
+			logger.Warning("egress front: inbound tag [", injection.Tag, "] already exists, skipping egress [", row.Id, "]")
+			continue
+		}
+		front := xray.InboundConfig{}
+		if err := json.Unmarshal(injection.Inbound, &front); err != nil {
+			logger.Warning("egress front: front for egress [", row.Id, "] is not a valid inbound, skipping:", err)
+			continue
+		}
+		usedTags[injection.Tag] = struct{}{}
+
+		rule := map[string]any{
+			"type":       "field",
+			"inboundTag": []any{injection.Tag},
+		}
+		if routingTagIsBalancer(routing, row.Target) {
+			rule["balancerTag"] = row.Target
+		} else {
+			rule["outboundTag"] = row.Target
+		}
+		newRules = append(newRules, rule)
+		cfg.InboundConfigs = append(cfg.InboundConfigs, front)
+	}
+
+	if len(newRules) == 0 {
+		return
+	}
+	rules, _ := routing["rules"].([]any)
+	routing["rules"] = append(newRules, rules...)
+	newRouting, err := json.Marshal(routing)
+	if err != nil {
+		logger.Warning("egress front: failed to rebuild routing section, skipping injection:", err)
+		return
+	}
+	cfg.RouterConfig = json_util.RawMessage(newRouting)
+}
+
 // mergeSubscriptionOutbounds appends the subscription outbounds to the
 // OutboundConfigs array of the xray config. It works on the already-unmarshaled
 // template so that manually configured outbounds are never overwritten.
@@ -1128,6 +1221,9 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		return err
 	}
 
+	// The fronts died with the old process and the kernel does not restore the
+	// route into them, so every egress table holds only its blackhole until now.
+	kickEgressAfterCoreRestart()
 	return nil
 }
 
@@ -1164,6 +1260,9 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bo
 		return false
 	}
 	process.SetConfig(newCfg)
+	// A hot-added front is a device the core just created, and the route into it
+	// is restored by nobody else — the same debt a restart leaves behind.
+	kickEgressAfterCoreRestart()
 	return true
 }
 

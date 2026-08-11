@@ -412,9 +412,27 @@ aggregate-only and must never back a quota.
 |---|---|---|
 | **A — L7 chain** | xray → {xray, ocserv, wireguard, ssh, shadowsocks} | egress daemon exposes a local SOCKS port (or none: Xray's native `wireguard` outbound with `noKernelTun`); emit one outbound + routing rule. **Zero kernel state.** This is the majority of real demand and it is the pattern `injectMtprotoEgress` already implements. |
 | **B — marked egress** | xray → {openvpn, ikev2, amneziawg, ppp} | allocate `(mark, table)`; run the client daemon with `route-noexec`; install `default dev X` + `blackhole default` in the table from the daemon's up-hook; set `sockopt.mark` on the Xray outbound. |
-| **C — L3 bridge** | any L3 inbound → anything | `ip rule from <pool-or-/32> table T`; T's default is another kernel tunnel, or a tun2socks / Xray-`tun` device fronting an L7 proxy. Plus MASQUERADE and MSS clamp. |
+| **C — L3 bridge** | any L3 inbound → anything | `ip rule iif <ingress-dev> table T` (`from <pool-or-/32>` where the core gives an inbound no device of its own); T holds `default dev <front>` over `blackhole default`. The front is another kernel tunnel, or a tun2socks / Xray-`tun` device fronting an L7 proxy. |
 
 Everything else in the matrix is a parameterisation of A, B or C.
+
+Three corrections to that table, each measured on 6.8.0-111:
+
+- **MASQUERADE and MSS clamp are front-dependent, not part of Pattern C.** They are needed
+  only by a front that *forwards* packets. A front that terminates L4 — Xray `tun` on
+  gVisor, tun2socks — re-originates the flow from the host, so the tunnel's inner source
+  address never reaches the wire and the path MTU is the host's. `xray-tun` needs neither.
+- **A Pattern C table needs `blackhole default` at least as much as a Pattern B one.** Its
+  front can be absent at any moment *by design*: a TUN fd carries no `TUNSETPERSIST`, so the
+  device dies with the process that made it and the kernel purges the only route out of the
+  table. Without the blackhole the `ip rule`'s lookup misses, falls through to `main`, and
+  every tunnel user egresses with the server's own address. Install it strictly before any
+  rule points at the table and remove it strictly after the last one.
+- **A WireGuard device's `FirewallMark` cannot select egress for its own users.** Measured:
+  it marks the device's own encapsulated outer UDP (9 marked / 0 unmarked) and never the
+  decrypted inner traffic in either direction (0 of 8 each way). That is precisely why
+  `wgkernel` → Xray is Pattern C and not Pattern B — there is no mark to match on, which is
+  what makes the ingress device the selector.
 
 Two neat details worth knowing: strongSwan's `set_mark_in` (≥5.7.0) stamps inbound-decrypted
 packets with a netfilter mark, making it **the cleanest per-inbound hook of any L3 core**;
@@ -423,20 +441,105 @@ root and no routing at all, which makes xray→ocserv trivially Pattern A.
 
 ### 5.3 Resource allocation (put in the DB; nothing else touches these ranges)
 
-| Resource | Range | Formula |
-|---|---|---|
-| Egress id | 1…999 | DB primary key |
-| fwmark (data) | `0x0e000001`… | `0x0e000000 \| id` |
-| fwmark (tunnel's own outer socket) | `0x0e0f0001`… | `0x0e0f0000 \| id` |
-| fwmark mask | `0xff00ffff` | constant |
-| Routing table | 30001…30999 | `30000 + id` |
-| `ip rule` priority | 31001…31999 (data), 30001…30999 (outer) | |
-| Tunnel device | `peg1`…`peg999` | ≤15 chars |
-| Local SOCKS port | 21001…21999 | bound to `127.0.0.1` only |
+| Resource | Range | Formula | Built? |
+|---|---|---|---|
+| Egress id | 1…999 | DB primary key | yes |
+| Routing table | 30001…30999 | `30000 + id` | yes |
+| `ip rule` priority (data) | 31001…31999 | `31000 + id` | yes |
+| Tunnel device | `peg1`…`peg999` | `"peg" + id`, ≤15 chars | yes |
+| fwmark (data) | `0x0e000001`… | `0x0e000000 \| id` | no — no driver marks |
+| fwmark (tunnel's own outer socket) | `0x0e0f0001`… | `0x0e0f0000 \| id` | no |
+| fwmark mask | `0xff0fffff` | constant | no |
+| `ip rule` priority (outer) | 30001…30999 | `30000 + id` | no |
+| Local SOCKS port | 21001…21999 | bound to `127.0.0.1` only | no — Pattern A owns its own ports |
 
 All marks are ≤ `0x7FFFFFFF` so they fit Xray's `int32` `mark` field. Assert at startup
 that the band is unused and that tables 30001–30999 are empty; check for collisions with
 `wg-quick`'s 51820+ and sing-box's defaults.
+
+**The mask was wrong and is corrected above: it is `0xff0fffff`, not `0xff00ffff`.**
+`0xff00ffff` zeroes the `0x0f0000` nibble that is the only thing separating the two mark
+bands, so `0x0e000000|id` and `0x0e0f0000|id` mask to the same value. Because the outer
+rule sits at the *lower* priority it is evaluated first, so it would have swallowed every
+data-marked packet into the tunnel's own underlay table — a silent routing loop for the
+first Pattern B type. The four unbuilt rows are deliberate: `xray-tun` marks nothing and
+opens no SOCKS port, and deriving constants no driver consumes means writing tests that
+certify dead code. Build them with the first Pattern B driver, against its real need.
+
+### 5.4 What P6-3 decided (the `xray-tun` type)
+
+**Data model.** One table whose `type` column is the whole generalisation seam:
+
+```
+egresses(id PK, type, enable, remark, target, settings JSON, created_at, updated_at)
+inbounds.egress_id INT NULL
+```
+
+`id` is the only allocation ever stored — `Table`, `Prio`, `Device` and `Gateway` are pure
+functions of it (`internal/egress/alloc.go`), and `ownedEgressID` round-trips a device name
+back through `Device` so `peg007` is somebody else's. `target` is the outbound-or-balancer
+tag, resolved by the same `routingTargetExists`/`routingTagIsBalancer` the three Pattern A
+bridges use. `settings` buys the next driver zero migrations.
+
+`egress_id` is a **column, not a settings key**, for three reasons and the third decides it:
+it is a relation; the reconciler enumerates it to compute desired kernel state; and anything
+rendered into an inbound's `settings`/`streamSettings` drags a REALITY inbound through
+`hot_diff.go`'s REALITY rule into a **full process restart**, so re-selecting an egress would
+drop every connection on the box. The id sequence is exempt from `resyncPostgresSequences`
+(`internal/database/db.go`): the resync sets a sequence back to `MAX(id)`, which after
+deleting the newest egress would hand the same id — and whatever of its kernel state
+survived — to the next one created.
+
+**Selection is `iif`, not `from <pool>`.** Cryptokey routing has already proven the peer's
+identity by the time the packet appears on `pwg<inboundID>`, so the ingress device is a
+stronger claim than a source prefix, needs no pool parsing, and survives an AllowedIPs edit.
+`from <pool-or-/32>` stays the documented fallback for a core that gives an inbound no device
+of its own. Locally generated traffic has no `iif`, so the front's own uplink sockets can
+never match the rule — the loop hazard upstream's `proxy/tun/README.md` warns about is
+structurally impossible here rather than avoided by careful metrics.
+
+**Lifecycle follows the row, not the attachment count.** The front and its routing rule exist
+while the egress row is enabled, so attach/detach is exactly one `ip rule` per family and
+makes no core call at all. That removes the ordering hazard of tearing a front down while a
+rule still points at it. Attach is **synchronous** — a tick that caught up later would leave a
+just-attached inbound egressing with the server's own identity. A rule whose device is absent
+installs, lists as `[detached]` and reattaches by itself, so an attached-but-disabled inbound
+keeps its rule and boot is fail-closed by *ordering*: one reconcile pass runs before any core
+is started. Add order is blackhole → rules → core config → the one `default dev peg<id>`
+route; remove order is the exact reverse, because removing the rule is what stops traffic.
+
+**An unresolvable target means dark, not direct.** Inheriting the three bridges' skip-and-log
+means no front is injected while the rules and blackhole stay, so the egress's clients are
+*contained*. That is intended, and stated here so nobody "fixes" it into a leak.
+
+**IPv6 is a peer of IPv4, not a follow-up.** The v4 and v6 rule and table namespaces are
+wholly independent, so a v4-only implementation leaks every v6 flow silently. Every rule,
+blackhole and front route has a twin. Reverse-path filtering is the one v4-only knob —
+`/proc/sys/net/ipv6/conf/<dev>/rp_filter` does not exist.
+
+**Two host globals the panel reports and never owns.** `net.ipv4.conf.all.rp_filter` — the
+effective value is `max(all, dev)`, so a strict global cannot be lowered per device and an
+attach is refused naming the sysctl; and `net.ipv4.ip_forward`, which is a precondition of
+any L3 core reaching the internet at all, egress or not.
+
+**Master-local in v1.** Attaching an inbound with `NodeID != nil` is refused: the id is a
+global DB key while every resource it derives is per-host. Multi-node egress is its own
+phase, gated behind node sync carrying egress rows.
+
+**No per-user accounting is added.** By §5.1's invariant the `wgkernel` core's per-peer
+counters already bill correctly whatever egress the traffic took. The front's tag `peg<id>`
+deliberately matches no inbound row, so the core's `inbound>>>peg<id>>>>traffic` counters are
+discarded rather than rolled into an inbound whose bytes were already counted at ingress.
+The mtproto bridge made the opposite choice — it reuses the inbound's own tag — and had to
+add rollup suppression to stop double-billing.
+
+**Known costs, accepted.** A fourth injection deepens the §12.4 debt: everything
+`GetXrayConfig` injects after the inbound list is invisible to the Xray core's own
+`Reconcile`. gVisor termination changes observable client behaviour — a connection to a dead
+host still completes a handshake and then RSTs — and ICMP is echo-only and answered locally,
+so traceroute through the egress is meaningless. Every kernel fact in §5.2 and §5.3 was
+measured on 6.8.0-111 / iproute2 6.1.0 while §6 verifies against Ubuntu 26.04 / kernel 7.0 /
+iproute2 6.19; the semantics are long-stable but the gap travels with the numbers.
 
 ---
 

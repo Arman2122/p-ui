@@ -365,6 +365,18 @@ export const CoreViewSchema = z.object({
 });
 export type CoreView = z.infer<typeof CoreViewSchema>;
 
+export const EgressSchema = z.object({
+  createdAt: z.number().int(),
+  enable: z.boolean(),
+  id: z.number().int(),
+  remark: z.string(),
+  settings: z.string(),
+  target: z.string(),
+  type: z.string(),
+  updatedAt: z.number().int(),
+});
+export type Egress = z.infer<typeof EgressSchema>;
+
 export const FallbackParentInfoSchema = z.object({
   masterId: z.number().int(),
   path: z.string().optional(),
@@ -454,6 +466,7 @@ export type HostGroup = z.infer<typeof HostGroupSchema>;
 export const InboundSchema = z.object({
   clientStats: z.array(z.lazy(() => ClientTrafficSchema)),
   down: z.number().int(),
+  egressId: z.number().int().nullable().optional(),
   enable: z.boolean(),
   expiryTime: z.number().int(),
   fallbackParent: z.lazy(() => FallbackParentInfoSchema).nullable().optional(),

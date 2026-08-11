@@ -1420,6 +1420,57 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "Egress": {
+    "description": "/*\nEgress is one policy-routed exit an L3 inbound's traffic can be sent out through.\n\nId is the only allocation this row stores: the routing table, the ip rule\npriority, the front device and its gateway are all pure functions of it, so a\nfreed id must never come back while any of that kernel state can still exist.\nType is the whole generalisation seam — one driver per value — and Settings is\nthe per-type column that buys the next driver zero migrations.\n*/",
+    "properties": {
+      "createdAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "enable": {
+        "description": "Enable carries no column default on purpose: GORM omits a false from the\nINSERT when one exists, so \"create it disabled\" would silently enable it.",
+        "example": true,
+        "type": "boolean"
+      },
+      "id": {
+        "example": 1,
+        "type": "integer"
+      },
+      "remark": {
+        "example": "warp exit",
+        "type": "string"
+      },
+      "settings": {
+        "type": "string"
+      },
+      "target": {
+        "description": "Target is the outbound or balancer tag the front sends traffic to. An\nunresolvable one leaves the egress dark — contained, never silently direct.",
+        "example": "warp",
+        "type": "string"
+      },
+      "type": {
+        "example": "xray-tun",
+        "type": "string"
+      },
+      "updatedAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "createdAt",
+      "enable",
+      "id",
+      "remark",
+      "settings",
+      "target",
+      "type",
+      "updatedAt"
+    ],
+    "type": "object"
+  },
   "FallbackParentInfo": {
     "description": "FallbackParentInfo carries everything the frontend needs to rewrite a\nchild inbound's client link: where to connect (the master's address\nand port) and which path matched on the master's fallbacks array.\nThe frontend already has the master inbound in its dbInbounds list,\nso we only ship identifiers + the match path here.",
     "properties": {
@@ -1819,6 +1870,11 @@ export const SCHEMAS: Record<string, unknown> = {
       "down": {
         "description": "Download traffic in bytes",
         "format": "int64",
+        "type": "integer"
+      },
+      "egressId": {
+        "description": "EgressID selects the Egress this inbound leaves through. A column, not a\nsettings key: settings-borne selection forces a REALITY inbound to restart.",
+        "nullable": true,
         "type": "integer"
       },
       "enable": {

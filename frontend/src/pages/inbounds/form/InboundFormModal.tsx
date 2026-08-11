@@ -40,6 +40,7 @@ import {
 } from '@/schemas/forms/inbound-form';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { useEgressesQuery } from '@/api/queries/useEgressesQuery';
 import { unavailableKinds } from '@/lib/cores/core-availability';
 import { Protocols } from '@/schemas/primitives';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
@@ -319,6 +320,13 @@ export default function InboundFormModal({
     ? Wireguard.generateKeypair(wgSecretKey).publicKey
     : '';
 
+  /* The egress is one ip rule behind its own endpoint, not part of the inbound
+     payload, so it sits beside the form store and posts after the save. */
+  const egressesQuery = useEgressesQuery({ enabled: open && protocol === Protocols.WGKERNEL });
+  const attachableEgresses = (egressesQuery.data ?? []).filter((e) => e.enable);
+  const [egressId, setEgressId] = useState<number | null>(null);
+  const attachedEgressIdRef = useRef<number | null>(null);
+
   const regenInboundWg = () => {
     const kp = Wireguard.generateKeypair();
     setV('settings.secretKey', kp.privateKey);
@@ -379,6 +387,9 @@ export default function InboundFormModal({
       : buildAddModeValues();
     methods.reset(initial);
     setScanResult(null);
+    const attached = mode === 'edit' && dbInbound ? (dbInbound.egressId ?? null) : null;
+    setEgressId(attached);
+    attachedEgressIdRef.current = attached;
     const initialTag = (initial.tag ?? '') as string;
     autoTagRef.current = isAutoInboundTag(initialTag, {
       port: initial.port ?? 0,
@@ -453,6 +464,9 @@ export default function InboundFormModal({
       if (!NODE_ELIGIBLE_PROTOCOLS.has(next)) {
         setV('nodeId', null);
       }
+      /* Only an L3 ingress has a device to select on, so a selection made under
+         wgkernel would post an attach the server refuses on a saved inbound. */
+      setEgressId(null);
       if (next === Protocols.HYSTERIA) {
         setV('streamSettings', {
           network: 'hysteria',
@@ -508,12 +522,15 @@ export default function InboundFormModal({
         : '/panel/api/inbounds/add';
       const msg = await HttpUtil.post(url, payload);
       if (msg?.success) {
-        if (isFallbackHost) {
-          const obj = msg.obj as { id?: number; Id?: number } | null;
-          const masterId = mode === 'edit'
-            ? dbInbound!.id
-            : (obj?.id ?? obj?.Id ?? 0);
-          if (masterId) await saveFallbacks(masterId);
+        const obj = msg.obj as { id?: number; Id?: number } | null;
+        const savedId = mode === 'edit' ? dbInbound!.id : (obj?.id ?? obj?.Id ?? 0);
+        if (isFallbackHost && savedId) {
+          await saveFallbacks(savedId);
+        }
+        /* A refused attach still leaves the inbound saved — the endpoint's own
+           error names the refusal, and reopening the form retries just this. */
+        if (savedId && egressId !== attachedEgressIdRef.current) {
+          await HttpUtil.post('/panel/api/egresses/attach', { inboundId: savedId, egressId: egressId ?? 0 });
         }
         onSaved();
         onClose();
@@ -678,7 +695,16 @@ export default function InboundFormModal({
     <>
       {protocol === Protocols.WIREGUARD && <WireguardFields wgPubKey={wgPubKey} regenInboundWg={regenInboundWg} />}
 
-      {protocol === Protocols.WGKERNEL && <WgkernelFields wgPubKey={wgPubKey} regenInboundWg={regenInboundWg} />}
+      {protocol === Protocols.WGKERNEL && (
+        <WgkernelFields
+          wgPubKey={wgPubKey}
+          regenInboundWg={regenInboundWg}
+          egresses={attachableEgresses}
+          egressId={egressId}
+          onEgressChange={setEgressId}
+          nodeOwned={wNodeId != null}
+        />
+      )}
 
       {protocol === Protocols.TUN && <TunFields />}
 

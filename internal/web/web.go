@@ -294,13 +294,16 @@ const (
 	// Convergence, not liveness: it rebuilds each core's desired set from the
 	// database, so it stays at the rate the one supervised core already ran at.
 	cadenceCoreSupervise = "@every 10s"
-	cadenceClientIPScan  = "@every 10s"
-	cadenceNodeHeartbeat = "@every 5s"
-	cadenceNodeTraffic   = "@every 5s"
-	cadenceOutboundSub   = "@every 5m"
-	cadenceReapOrphans   = "@every 5m"
-	cadenceXrayLogPrune  = "@every 10m"
-	cadenceCheckHash     = "@every 2m"
+	// Drift repair for the egress band. Its real job is the one route that needs
+	// the front device, which a core restart recreates without restoring.
+	cadenceEgressReconcile = "@every 10s"
+	cadenceClientIPScan    = "@every 10s"
+	cadenceNodeHeartbeat   = "@every 5s"
+	cadenceNodeTraffic     = "@every 5s"
+	cadenceOutboundSub     = "@every 5m"
+	cadenceReapOrphans     = "@every 5m"
+	cadenceXrayLogPrune    = "@every 10m"
+	cadenceCheckHash       = "@every 2m"
 	// cpu.Percent samples over a full minute (blocking), so a finer cadence just
 	// stacks overlapping samplers; subscribers rate-limit alerts to 1/min anyway.
 	cadenceCPUAlarm    = "@every 1m"
@@ -310,6 +313,11 @@ const (
 // startTask schedules background jobs (Xray checks, traffic jobs, cron
 // jobs) which the panel relies on for periodic maintenance and monitoring.
 func (s *Server) startTask(restartXray bool, loc *time.Location) {
+	// Egress containment installs with its devices absent and reattaches when they
+	// appear, so running it before any core starts makes boot fail-closed by order.
+	egressJob := job.NewEgressReconcileJob()
+	egressJob.Run()
+
 	if restartXray {
 		err := s.xrayService.RestartXray(true)
 		if err != nil {
@@ -334,6 +342,8 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	superviseJob := job.NewCoreSuperviseJob(cores.PanelConvergedCore)
 	_, _ = s.cron.AddJob(cadenceCoreSupervise, superviseJob)
 	go superviseJob.Run()
+
+	_, _ = s.cron.AddJob(cadenceEgressReconcile, egressJob)
 
 	// check client ips from log file every 10 sec
 	_, _ = s.cron.AddJob(cadenceClientIPScan, job.NewCheckClientIpJob())

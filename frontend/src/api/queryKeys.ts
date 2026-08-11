@@ -43,4 +43,9 @@ export const keys = {
     config: () => ['xray', 'config'] as const,
     outboundsTraffic: () => ['xray', 'outboundsTraffic'] as const,
   },
+  egresses: {
+    root: () => ['egresses'] as const,
+    list: () => ['egresses', 'list'] as const,
+    preflight: () => ['egresses', 'preflight'] as const,
+  },
 } as const;

@@ -1039,6 +1039,68 @@ export const sections: readonly Section[] = [
   },
 
   {
+    id: 'egresses',
+    title: 'Egresses',
+    description:
+      "A policy-routed exit an L3 inbound's traffic leaves through. The panel owns one ip rule per attached inbound, a private routing table and its blackhole; the front device belongs to the core the egress type names. Everything the kernel needs is derived from the egress id, so an id is never reused. Master-local: an inbound assigned to a node cannot be attached yet. All endpoints under /panel/api/egresses.",
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/egresses/list',
+        summary: 'List every egress in id order.',
+        responseSchema: 'Egress',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/egresses/get/:id',
+        summary: 'Fetch a single egress by ID.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Egress ID.' }],
+        responseSchema: 'Egress',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/egresses/preflight',
+        summary:
+          "What stops this host carrying an egress: a foreign rule in the reserved 31001-31999 priority band, a foreign route in tables 30001-30999, a gateway prefix already on the box, or net.ipv4.conf.all.rp_filter=1 (the effective value is max(all, dev), so the panel cannot lower it per device). Notes report host facts the panel does not own, such as net.ipv4.ip_forward being off.",
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "ok": true,\n    "refusals": [],\n    "notes": ["net.ipv4.ip_forward is 0, so no L3 inbound on this host forwards a packet at all, egress or not"]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/egresses/add',
+        summary:
+          'Create an egress. type must be a driver this build serves (xray-tun) and target must already name an outbound or a balancer — an unresolvable target is refused rather than stored, because a stored one would leave the egress dark.',
+        body: '{\n  "type": "xray-tun",\n  "remark": "warp exit",\n  "target": "warp",\n  "enable": true,\n  "settings": ""\n}',
+        responseSchema: 'Egress',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/egresses/update/:id',
+        summary:
+          'Replace the editable half of an egress. The id, and so the routing table, rule priority, front device and gateway derived from it, are fixed for the row’s life. Disabling a row that inbounds still select is refused: it would move them to direct.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Egress ID.' }],
+        body: '{\n  "type": "xray-tun",\n  "remark": "warp exit",\n  "target": "warp",\n  "enable": true,\n  "settings": ""\n}',
+        responseSchema: 'Egress',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/egresses/del/:id',
+        summary:
+          'Delete an egress and bring down the kernel state its id owns. Refused while an inbound still selects it.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Egress ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/egresses/attach',
+        summary:
+          'Point one inbound at an egress, or detach it with egressId 0. Synchronous: the ip rule is installed before the call returns, so there is no window where the inbound egresses with the server’s own identity. Only a kernel WireGuard inbound has an ingress device to select on, and only one hosted by this panel.',
+        body: '{\n  "inboundId": 3,\n  "egressId": 1\n}',
+      },
+    ],
+  },
+
+  {
     id: 'hosts',
     title: 'Hosts',
     description:

@@ -3,16 +3,31 @@ import { Alert, Button, Form, Input, InputNumber, Select, Space } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 
 import { FormField } from '@/components/form/rhf';
+import type { EgressRecord } from '@/schemas/api/egress';
 
 interface WgkernelFieldsProps {
   wgPubKey: string;
   regenInboundWg: () => void;
+  egresses: EgressRecord[];
+  egressId: number | null;
+  onEgressChange: (egressId: number | null) => void;
+  nodeOwned: boolean;
 }
 
 /* Kernel WireGuard has no streamSettings and no TUN emulation, so this form is
    the device itself: its keypair, the address it answers on, MTU and DNS. */
-export default function WgkernelFields({ wgPubKey, regenInboundWg }: WgkernelFieldsProps) {
+export default function WgkernelFields({
+  wgPubKey,
+  regenInboundWg,
+  egresses,
+  egressId,
+  onEgressChange,
+  nodeOwned,
+}: WgkernelFieldsProps) {
   const { t } = useTranslation();
+  const egressHelp = nodeOwned
+    ? t('pages.inbounds.form.egressNodeOwned')
+    : (egresses.length === 0 ? t('pages.inbounds.form.egressNone') : t('pages.inbounds.form.egressHint'));
   return (
     <>
       <Alert
@@ -52,6 +67,25 @@ export default function WgkernelFields({ wgPubKey, regenInboundWg }: WgkernelFie
       <FormField name={['settings', 'dns']} label={t('pages.inbounds.info.dns')}>
         <Input placeholder="1.1.1.1, 1.0.0.1" />
       </FormField>
+      <Form.Item label={t('pages.inbounds.form.egress')} htmlFor="egress" extra={egressHelp}>
+        <Select
+          id="egress"
+          allowClear
+          disabled={nodeOwned || egresses.length === 0}
+          value={egressId ?? undefined}
+          placeholder={t('pages.inbounds.form.egressDirect')}
+          onChange={(value) => onEgressChange(typeof value === 'number' ? value : null)}
+          options={egresses.map((egress) => ({
+            value: egress.id,
+            label: (
+              <span>
+                {egress.remark || `#${egress.id}`}
+                <span dir="ltr" style={{ marginInlineStart: 8, opacity: 0.65 }}>{egress.target}</span>
+              </span>
+            ),
+          }))}
+        />
+      </Form.Item>
     </>
   );
 }

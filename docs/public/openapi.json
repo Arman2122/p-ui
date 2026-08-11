@@ -1446,6 +1446,57 @@
         ],
         "type": "object"
       },
+      "Egress": {
+        "description": "/*\nEgress is one policy-routed exit an L3 inbound's traffic can be sent out through.\n\nId is the only allocation this row stores: the routing table, the ip rule\npriority, the front device and its gateway are all pure functions of it, so a\nfreed id must never come back while any of that kernel state can still exist.\nType is the whole generalisation seam — one driver per value — and Settings is\nthe per-type column that buys the next driver zero migrations.\n*/",
+        "properties": {
+          "createdAt": {
+            "example": 1700000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "enable": {
+            "description": "Enable carries no column default on purpose: GORM omits a false from the\nINSERT when one exists, so \"create it disabled\" would silently enable it.",
+            "example": true,
+            "type": "boolean"
+          },
+          "id": {
+            "example": 1,
+            "type": "integer"
+          },
+          "remark": {
+            "example": "warp exit",
+            "type": "string"
+          },
+          "settings": {
+            "type": "string"
+          },
+          "target": {
+            "description": "Target is the outbound or balancer tag the front sends traffic to. An\nunresolvable one leaves the egress dark — contained, never silently direct.",
+            "example": "warp",
+            "type": "string"
+          },
+          "type": {
+            "example": "xray-tun",
+            "type": "string"
+          },
+          "updatedAt": {
+            "example": 1700000000000,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdAt",
+          "enable",
+          "id",
+          "remark",
+          "settings",
+          "target",
+          "type",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "FallbackParentInfo": {
         "description": "FallbackParentInfo carries everything the frontend needs to rewrite a\nchild inbound's client link: where to connect (the master's address\nand port) and which path matched on the master's fallbacks array.\nThe frontend already has the master inbound in its dbInbounds list,\nso we only ship identifiers + the match path here.",
         "properties": {
@@ -1845,6 +1896,11 @@
           "down": {
             "description": "Download traffic in bytes",
             "format": "int64",
+            "type": "integer"
+          },
+          "egressId": {
+            "description": "EgressID selects the Egress this inbound leaves through. A column, not a\nsettings key: settings-borne selection forces a REALITY inbound to restart.",
+            "nullable": true,
             "type": "integer"
           },
           "enable": {
@@ -2966,6 +3022,10 @@
       "description": "Manage remote Penhoon UI panels acting as nodes for a central panel. All endpoints under /panel/api/nodes."
     },
     {
+      "name": "Egresses",
+      "description": "A policy-routed exit an L3 inbound's traffic leaves through. The panel owns one ip rule per attached inbound, a private routing table and its blackhole; the front device belongs to the core the egress type names. Everything the kernel needs is derived from the egress id, so an id is never reused. Master-local: an inbound assigned to a node cannot be attached yet. All endpoints under /panel/api/egresses."
+    },
+    {
       "name": "Hosts",
       "description": "Per-inbound override endpoints. Each enabled host renders one extra subscription link/proxy with its own address/port/TLS, superseding the legacy externalProxy array. All endpoints under /panel/api/hosts."
     },
@@ -3236,6 +3296,7 @@
                         }
                       ],
                       "down": 0,
+                      "egressId": null,
                       "enable": true,
                       "expiryTime": 0,
                       "fallbackParent": null,
@@ -8895,6 +8956,372 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/list": {
+      "get": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "List every egress in id order.",
+        "operationId": "get_panel_api_egresses_list",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Egress"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "createdAt": 1700000000000,
+                      "enable": true,
+                      "id": 1,
+                      "remark": "warp exit",
+                      "settings": "",
+                      "target": "warp",
+                      "type": "xray-tun",
+                      "updatedAt": 1700000000000
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/get/{id}": {
+      "get": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Fetch a single egress by ID.",
+        "operationId": "get_panel_api_egresses_get_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Egress ID.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/Egress"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "createdAt": 1700000000000,
+                    "enable": true,
+                    "id": 1,
+                    "remark": "warp exit",
+                    "settings": "",
+                    "target": "warp",
+                    "type": "xray-tun",
+                    "updatedAt": 1700000000000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/preflight": {
+      "get": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "What stops this host carrying an egress: a foreign rule in the reserved 31001-31999 priority band, a foreign route in tables 30001-30999, a gateway prefix already on the box, or net.ipv4.conf.all.rp_filter=1 (the effective value is max(all, dev), so the panel cannot lower it per device). Notes report host facts the panel does not own, such as net.ipv4.ip_forward being off.",
+        "operationId": "get_panel_api_egresses_preflight",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "ok": true,
+                    "refusals": [],
+                    "notes": [
+                      "net.ipv4.ip_forward is 0, so no L3 inbound on this host forwards a packet at all, egress or not"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/add": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Create an egress. type must be a driver this build serves (xray-tun) and target must already name an outbound or a balancer — an unresolvable target is refused rather than stored, because a stored one would leave the egress dark.",
+        "operationId": "post_panel_api_egresses_add",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "type": "xray-tun",
+                "remark": "warp exit",
+                "target": "warp",
+                "enable": true,
+                "settings": ""
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/Egress"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "createdAt": 1700000000000,
+                    "enable": true,
+                    "id": 1,
+                    "remark": "warp exit",
+                    "settings": "",
+                    "target": "warp",
+                    "type": "xray-tun",
+                    "updatedAt": 1700000000000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/update/{id}": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Replace the editable half of an egress. The id, and so the routing table, rule priority, front device and gateway derived from it, are fixed for the row’s life. Disabling a row that inbounds still select is refused: it would move them to direct.",
+        "operationId": "post_panel_api_egresses_update_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Egress ID.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "type": "xray-tun",
+                "remark": "warp exit",
+                "target": "warp",
+                "enable": true,
+                "settings": ""
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/Egress"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "createdAt": 1700000000000,
+                    "enable": true,
+                    "id": 1,
+                    "remark": "warp exit",
+                    "settings": "",
+                    "target": "warp",
+                    "type": "xray-tun",
+                    "updatedAt": 1700000000000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/del/{id}": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Delete an egress and bring down the kernel state its id owns. Refused while an inbound still selects it.",
+        "operationId": "post_panel_api_egresses_del_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Egress ID.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/attach": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Point one inbound at an egress, or detach it with egressId 0. Synchronous: the ip rule is installed before the call returns, so there is no window where the inbound egresses with the server’s own identity. Only a kernel WireGuard inbound has an ingress device to select on, and only one hosted by this panel.",
+        "operationId": "post_panel_api_egresses_attach",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "inboundId": 3,
+                "egressId": 1
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful response",

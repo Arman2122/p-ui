@@ -60,12 +60,16 @@ var dispatchBudget = map[string]int{
 	"internal/web/service/inbound_flow_restore.go": 1,
 	"internal/web/service/inbound_traffic.go":      1,
 	"internal/web/job/check_client_ip_job.go":      1,
+	// The ingress-device resolver: the one place an inbound becomes an `iif`
+	// selector. Agreed in the P6-3 plan; it becomes a registry lookup when a
+	// second L3 ingress core lands and can shape the interface for real.
+	"internal/web/service/egress.go": 1,
 }
 
 // dispatchTotal guards the guard. If the detector stops matching the code — a
 // rename of Protocol, a moved const block — every per-file budget silently goes
 // green, and only a total that must still be met catches it.
-const dispatchTotal = 126
+const dispatchTotal = 127
 
 // frozenDispatch are sites that must NOT migrate to the registry. Historical
 // migrations are frozen facts about data written by past releases; rewriting
