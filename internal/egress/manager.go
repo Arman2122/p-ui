@@ -150,9 +150,29 @@ type want struct {
 	sysctls    map[string]string
 }
 
+/*
+frontIsUp reports whether the device the table's route would point at really is
+this driver's front.
+
+A name is not evidence: peg<N> is a name anything on the host can take, and a
+default route into a squatter's device sends every attached inbound's traffic
+wherever that device goes. A driver that can name the address its front must
+carry — every Xray tun front does, because its return path needs one — is held
+to it, and a device that fails is treated as absent: contained, not routed.
+*/
+func frontIsUp(fill Fill, snap Snapshot) bool {
+	if fill.Device == "" || !slices.Contains(snap.Links, fill.Device) {
+		return false
+	}
+	if !fill.Addr.IsValid() {
+		return true
+	}
+	return slices.Contains(snap.Addrs, AddrSpec{Prefix: fill.Addr, Device: fill.Device})
+}
+
 // plan derives the objects one row wants. An unresolvable row still gets its
 // blackhole and its rules: containment is the safe failure, release is not.
-func (m *Manager) plan(e Egress, links map[string]struct{}) (want, error) {
+func (m *Manager) plan(e Egress, snap Snapshot) (want, error) {
 	if !e.Enable {
 		return want{}, nil
 	}
@@ -166,7 +186,7 @@ func (m *Manager) plan(e Egress, links map[string]struct{}) (want, error) {
 	}
 
 	w := want{device: fill.Device}
-	_, present := links[fill.Device]
+	present := frontIsUp(fill, snap)
 	for _, family := range Families {
 		w.blackholes = append(w.blackholes, RouteSpec{
 			Family: family, Table: Table(e.ID), Type: RouteBlackhole,
@@ -199,6 +219,9 @@ type have struct {
 	fronts     []RouteSpec
 	rules      []RuleSpec
 	foreign    []string
+	// shadowing is the foreign subset that defeats this id's own containment: a
+	// rule at its priority pointing elsewhere, or a route out of its table.
+	shadowing []string
 }
 
 func ownedView(snap Snapshot, id int, device string) have {
@@ -209,6 +232,9 @@ func ownedView(snap Snapshot, id int, device string) have {
 		}
 		if rule.Table != Table(id) {
 			h.foreign = append(h.foreign, rule.String())
+			// Measured: while this id's own rule is absent, a foreign rule at its
+			// priority is what the lookup finds, and the flow leaves via main.
+			h.shadowing = append(h.shadowing, rule.String())
 			continue
 		}
 		h.rules = append(h.rules, rule)
@@ -224,6 +250,11 @@ func ownedView(snap Snapshot, id int, device string) have {
 			h.fronts = append(h.fronts, route)
 		default:
 			h.foreign = append(h.foreign, route.String())
+			// A unicast route out of this table beats the blackhole by metric or by
+			// prefix length; anything else in there only ever tightens containment.
+			if route.Type == RouteUnicast {
+				h.shadowing = append(h.shadowing, route.String())
+			}
 		}
 	}
 	return h
@@ -246,11 +277,7 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 	if err := checkID(e.ID); err != nil {
 		return err
 	}
-	links := make(map[string]struct{}, len(snap.Links))
-	for _, name := range snap.Links {
-		links[name] = struct{}{}
-	}
-	w, planErr := m.plan(e, links)
+	w, planErr := m.plan(e, snap)
 	h := ownedView(snap, e.ID, w.device)
 
 	addRules, delRules := diff(w.rules, h.rules)
@@ -325,10 +352,13 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 	}
 
 	failures = append(failures, m.applySysctls(ctx, w.sysctls)...)
-	// Foreign objects are named at debug because drift repair runs on a tick;
-	// Preflight is where they refuse a boot or an attach, once and loudly.
+	// Left alone either way — the ownership rule is what stops a reconciler
+	// guessing — but one that defeats containment is reported, not just logged.
 	for _, object := range h.foreign {
 		logger.Debugf("egress %d: %s is in the reserved band and is not this panel's, leaving it alone", e.ID, object)
+	}
+	for _, object := range h.shadowing {
+		failures = append(failures, fmt.Errorf("%w: %s defeats egress %d's own containment", ErrForeignResource, object, e.ID))
 	}
 	return errors.Join(failures...)
 }

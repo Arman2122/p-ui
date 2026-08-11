@@ -256,3 +256,73 @@ func TestInjectEgressFrontsStayHotAppliable(t *testing.T) {
 		})
 	}
 }
+
+// shippedTemplate is the default template the panel actually installs, not a
+// fixture: the ordering this pins only matters against the rules it really ships.
+func shippedTemplate(t *testing.T) *xray.Config {
+	t.Helper()
+	cfg := &xray.Config{}
+	if err := json.Unmarshal([]byte(xrayTemplateConfig), cfg); err != nil {
+		t.Fatalf("the shipped template is unparsable: %v", err)
+	}
+	return cfg
+}
+
+// blockRules is the routing section with the fields the template's own block
+// rules carry, so a rule's position relative to them can be asserted.
+type blockRules struct {
+	Rules []struct {
+		InboundTag  []string `json:"inboundTag"`
+		IP          []string `json:"ip"`
+		Protocol    []string `json:"protocol"`
+		OutboundTag string   `json:"outboundTag"`
+	} `json:"rules"`
+}
+
+/*
+Xray takes the FIRST matching rule and the front's rule is prepended, so without
+a companion rule ahead of it an egress-attached L3 inbound is the one class of
+traffic Xray forwards that is exempt from the template's own geoip:private block
+— and it is the class whose destination is a raw client-chosen IP the panel's
+outbound then dials from the host: 169.254.169.254, the provider's management
+LAN, RFC1918.
+*/
+func TestAnEgressFrontDoesNotOutrankTheTemplatesPrivateBlock(t *testing.T) {
+	cfg := shippedTemplate(t)
+	injectEgressFronts(cfg, egressRows(enabledEgress(1, "direct")), egressDriverRegistry)
+
+	var routing blockRules
+	if err := json.Unmarshal(cfg.RouterConfig, &routing); err != nil {
+		t.Fatalf("routing section is unparsable after injection: %v", err)
+	}
+	if len(routing.Rules) < 2 {
+		t.Fatalf("rules = %+v, want the front's pair prepended to the template's own", routing.Rules)
+	}
+	guard, front := routing.Rules[0], routing.Rules[1]
+	if len(guard.InboundTag) != 1 || guard.InboundTag[0] != "peg1" ||
+		len(guard.IP) != 1 || guard.IP[0] != "geoip:private" || guard.OutboundTag != "blocked" {
+		t.Fatalf("rule 0 = %+v, want peg1's private destinations sent to the blackhole", guard)
+	}
+	if len(front.InboundTag) != 1 || front.InboundTag[0] != "peg1" || front.OutboundTag != "direct" {
+		t.Fatalf("rule 1 = %+v, want the front's own rule immediately behind its guard", front)
+	}
+	// And the template's own rules still follow, in their original order.
+	if got := routing.Rules[2].InboundTag; len(got) != 1 || got[0] != "api" {
+		t.Fatalf("rule 2 = %+v, want the template's api rule", routing.Rules[2])
+	}
+}
+
+// A template with nothing to send blocked traffic to gets no guard rule rather
+// than a rule naming an outbound that does not exist, which Xray refuses to load.
+func TestNoPrivateGuardWithoutABlackholeOutbound(t *testing.T) {
+	cfg := egressTestConfig()
+	injectEgressFronts(cfg, egressRows(enabledEgress(1, "warp")), egressDriverRegistry)
+
+	routing := parseFrontRules(t, cfg)
+	if len(routing.Rules) != 2 {
+		t.Fatalf("rules = %+v, want the front rule and the template's own alone", routing.Rules)
+	}
+	if routing.Rules[0].OutboundTag != "warp" {
+		t.Fatalf("rule 0 = %+v, want the front's own rule", routing.Rules[0])
+	}
+}

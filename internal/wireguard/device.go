@@ -253,6 +253,7 @@ func desiredPeer(p Peer) (wgtypes.PeerConfig, error) {
 func desiredPeers(peers []Peer) ([]wgtypes.PeerConfig, error) {
 	out := make([]wgtypes.PeerConfig, 0, len(peers))
 	seen := make(map[wgtypes.Key]string, len(peers))
+	claimed := make(map[string]string, len(peers))
 	var rejected []error
 	for _, p := range peers {
 		cfg, err := desiredPeer(p)
@@ -266,10 +267,28 @@ func desiredPeers(peers []Peer) ([]wgtypes.PeerConfig, error) {
 			rejected = append(rejected, fmt.Errorf("wireguard: clients %q and %q share one public key", other, p.Email))
 			continue
 		}
+		if prefix, other := claimedAllowedIP(claimed, cfg.AllowedIPs); other != "" {
+			rejected = append(rejected, fmt.Errorf("wireguard: clients %q and %q share allowed-IP %s", other, p.Email, prefix))
+			continue
+		}
 		seen[cfg.PublicKey] = p.Email
+		for _, n := range cfg.AllowedIPs {
+			claimed[n.String()] = p.Email
+		}
 		out = append(out, cfg)
 	}
 	return out, errors.Join(rejected...)
+}
+
+// claimedAllowedIP names the client already allowed one of these prefixes. The
+// kernel MOVES a shared prefix to the later peer, so pushing both never converges.
+func claimedAllowedIP(claimed map[string]string, allowed []net.IPNet) (string, string) {
+	for _, n := range allowed {
+		if other, taken := claimed[n.String()]; taken {
+			return n.String(), other
+		}
+	}
+	return "", ""
 }
 
 // peerEqual reports whether the kernel already holds exactly this peer. Endpoint

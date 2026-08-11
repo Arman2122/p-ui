@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -360,7 +361,11 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 	}
 
 	if clientCarriesWireguardKeys(oldInbound.Protocol) {
-		if dErr := defaultWireguardClients(existingClients, clients, interfaceClients); dErr != nil {
+		pool, pErr := inboundSvc.wireguardPoolFor(oldInbound)
+		if pErr != nil {
+			return false, pErr
+		}
+		if dErr := defaultWireguardClients(existingClients, clients, interfaceClients, pool); dErr != nil {
 			return false, dErr
 		}
 	}
@@ -483,7 +488,9 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 				if err1 == nil {
 					logger.Debug("Client added on", rt.Name(), ":", client.Email)
 				} else {
-					logger.Debug("Error in adding client on", rt.Name(), ":", err1)
+					// A kind Xray does not serve gets no restart out of this, so the
+					// failure has no other surface: its own core reconcile is the repair.
+					logger.Warning("Error in adding client on", rt.Name(), ":", err1)
 					needRestart = needRestart || xrayServes
 				}
 			}
@@ -596,8 +603,13 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		if clients[0].PublicKey == "" {
 			clients[0].PublicKey = old.PublicKey
 		}
-		if other := wireguardKeyCollision(clients[0].PublicKey, oldClients, clientIndex); other != "" {
-			return false, common.NewError("wireguard: public key already used by client:", other)
+		// Only an edit that CHANGES the key is checked. A metadata-only edit carries
+		// the stored key forward, and refusing it strands the client on a duplicate
+		// an older build let in: the edit introduces no collision, it just keeps one.
+		if strings.TrimSpace(clients[0].PublicKey) != strings.TrimSpace(old.PublicKey) {
+			if other := wireguardKeyCollision(clients[0].PublicKey, oldClients, clientIndex); other != "" {
+				return false, common.NewError("wireguard: public key already used by client:", other)
+			}
 		}
 		if len(clients[0].AllowedIPs) == 0 {
 			clients[0].AllowedIPs = old.AllowedIPs
@@ -609,7 +621,13 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			if len(normalized) == 0 {
 				clients[0].AllowedIPs = old.AllowedIPs
 			} else {
-				peers := make([]string, 0, len(oldClients))
+				pool, pErr := inboundSvc.wireguardPoolFor(oldInbound)
+				if pErr != nil {
+					return false, pErr
+				}
+				// Every host device's clients, not just this inbound's: they share one
+				// routing table, so a hand-entered prefix collides across inbounds too.
+				peers := append(slices.Clone(pool.taken), make([]string, 0, len(oldClients))...)
 				for i := range oldClients {
 					if i == clientIndex {
 						continue

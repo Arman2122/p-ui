@@ -1042,7 +1042,7 @@ export const sections: readonly Section[] = [
     id: 'egresses',
     title: 'Egresses',
     description:
-      "A policy-routed exit an L3 inbound's traffic leaves through. The panel owns one ip rule per attached inbound, a private routing table and its blackhole; the front device belongs to the core the egress type names. Everything the kernel needs is derived from the egress id, so an id is never reused. Master-local: an inbound assigned to a node cannot be attached yet. All endpoints under /panel/api/egresses.",
+      "A policy-routed exit an L3 inbound's traffic leaves through. The panel owns one ip rule per attached inbound, a private routing table and its blackhole; the front device belongs to the core the egress type names. Everything the kernel needs is derived from the egress id, so an id is never reused. ICMP is answered by the front itself, so a ping or traceroute through an egress succeeds for any destination whatsoever, including one nothing could reach — test an egress with a TCP or UDP request instead. Master-local: an inbound assigned to a node cannot be attached yet. All endpoints under /panel/api/egresses.",
     endpoints: [
       {
         method: 'GET',
@@ -1062,9 +1062,9 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/egresses/preflight',
         summary:
-          "What stops this host carrying an egress: a foreign rule in the reserved 31001-31999 priority band, a foreign route in tables 30001-30999, a gateway prefix already on the box, or net.ipv4.conf.all.rp_filter=1 (the effective value is max(all, dev), so the panel cannot lower it per device). Notes report host facts the panel does not own, such as net.ipv4.ip_forward being off.",
+          "What stops this host carrying an egress: a foreign rule in the reserved 31001-31999 priority band, a foreign route in tables 30001-30999, a gateway prefix already on the box, net.ipv4.conf.all.rp_filter=1 (the effective value is max(all, dev), so the panel cannot lower it per device), or no permission to write a routing rule at all. Notes report host facts the panel does not own: either forwarding knob being off, and any enabled egress whose front device is not on this host, which leaves everything attached to it contained rather than routed.",
         response:
-          '{\n  "success": true,\n  "obj": {\n    "ok": true,\n    "refusals": [],\n    "notes": ["net.ipv4.ip_forward is 0, so no L3 inbound on this host forwards a packet at all, egress or not"]\n  }\n}',
+          '{\n  "success": true,\n  "obj": {\n    "ok": true,\n    "refusals": [],\n    "notes": ["net.ipv6.conf.all.forwarding is 0, so no L3 inbound on this host forwards a packet of that family at all, egress or not"]\n  }\n}',
       },
       {
         method: 'POST',

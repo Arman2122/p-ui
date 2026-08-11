@@ -3,6 +3,7 @@ package egress
 import (
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"sort"
 	"sync"
 )
@@ -29,6 +30,9 @@ type Fill struct {
 	// Device is the front the table's default route points at. It may legitimately be
 	// absent: an Xray-owned tun exists only while Xray does, which is what fails closed.
 	Device string
+	// Addr is the address the front must carry to be this driver's. A name is not
+	// evidence — anything on the host can take peg<N> — and the zero value accepts one.
+	Addr netip.Prefix
 	// Sysctls are the knobs the front's return path needs, applied once the device
 	// exists. Keyed by the full dotted name so the plane stays device-agnostic.
 	Sysctls map[string]string

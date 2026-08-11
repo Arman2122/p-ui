@@ -8,16 +8,19 @@ import (
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/egress"
+	"github.com/Arman2122/p-ui/internal/egress/drivers/xraytun"
 	"github.com/Arman2122/p-ui/internal/egress/egtest"
 )
 
 // cleanHost is a box an egress can run on: loose reverse-path filtering,
-// forwarding already on for the L3 core, and nothing in the reserved band.
+// forwarding already on for the L3 core in both families, and nothing in the
+// reserved band.
 func cleanHost(t *testing.T) *egtest.Kernel {
 	t.Helper()
 	k := egtest.New()
 	k.SetSysctlValue(egress.AllRPFilterKey, "2")
 	k.SetSysctlValue(egress.IPForwardKey, "1")
+	k.SetSysctlValue(egress.IPForward6Key, "1")
 	return k
 }
 
@@ -197,5 +200,64 @@ func TestPreflightSurvivesAnUnreadableKnob(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(report.Notes, "\n"), egress.AllRPFilterKey) {
 		t.Fatalf("notes = %v, want one naming %s", report.Notes, egress.AllRPFilterKey)
+	}
+}
+
+/*
+An enabled row whose front never came up reads as perfectly healthy everywhere
+else: the row says enabled, Selects still answers "routed" because the rules are
+there, and the traffic is contained by the blackhole. So preflight is the one
+surface that can say it, and it says it as a note — the front belongs to the core
+and is legitimately absent between a restart and the next reconcile.
+*/
+func TestPreflightNamesARowWhoseFrontIsNotOnThisHost(t *testing.T) {
+	rows := []egress.Egress{
+		{ID: 1, Type: xraytun.Type, Enable: true, Target: "direct"},
+		{ID: 2, Type: xraytun.Type, Enable: true, Target: "direct"},
+		{ID: 3, Type: xraytun.Type, Target: "direct"},
+	}
+	registry := egress.NewRegistry()
+	if err := registry.Register(xraytun.New()); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	k := cleanHost(t)
+	k.AddLink(egress.Device(1))
+	k.AddAddr(egress.Device(1), mustGateway(t, 1))
+	// Present by name only, which is exactly what a squatter looks like.
+	k.AddLink(egress.Device(2))
+
+	report := egress.New(k, registry).Preflight(context.Background(), egress.DefaultGatewayBase, rows...)
+	if !report.OK() {
+		t.Fatalf("Preflight refused: %v — an absent front is normal, never a refusal", report.Err())
+	}
+	notes := strings.Join(report.Notes, "\n")
+	if !strings.Contains(notes, "egress 2 has no front on this host yet: peg2") {
+		t.Fatalf("notes = %v, want egress 2 named", report.Notes)
+	}
+	for _, quiet := range []string{"egress 1 has no front", "egress 3 has no front"} {
+		if strings.Contains(notes, quiet) {
+			t.Fatalf("notes = %v, want no note for a healthy front or a disabled row", report.Notes)
+		}
+	}
+}
+
+// The .conf the panel hands a client routes ::/0 into the tunnel, so a host that
+// forwards v4 and not v6 drops every v6 flow and reports nothing.
+func TestPreflightNamesBothForwardingKnobs(t *testing.T) {
+	k := cleanHost(t)
+	k.SetSysctlValue(egress.IPForwardKey, "1")
+	k.SetSysctlValue(egress.IPForward6Key, "0")
+
+	report := egress.New(k, nil).Preflight(context.Background(), egress.DefaultGatewayBase)
+	if !report.OK() {
+		t.Fatalf("Preflight refused: %v — forwarding is reported, never owned", report.Err())
+	}
+	notes := strings.Join(report.Notes, "\n")
+	if !strings.Contains(notes, egress.IPForward6Key+" is 0") {
+		t.Fatalf("notes = %v, want one naming %s", report.Notes, egress.IPForward6Key)
+	}
+	if strings.Contains(notes, egress.IPForwardKey+" is 0") {
+		t.Fatalf("notes = %v, want nothing said about a knob that is on", report.Notes)
 	}
 }

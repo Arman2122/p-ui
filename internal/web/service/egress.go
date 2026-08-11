@@ -239,7 +239,9 @@ func (s *EgressService) Attach(inboundID, egressID int) error {
 		// inbound would egress with the server's own identity and nobody would know.
 		_ = database.GetDB().Model(&model.Inbound{}).Where("id = ?", inboundID).
 			Update("egress_id", inbound.EgressID).Error
-		return errors.Join(err, converged)
+		// Reconcile has already installed the rejected attachment, so the revert has
+		// to reach the host too, or the kernel routes what the database denies.
+		return errors.Join(err, converged, s.Reconcile(ctx))
 	}
 	if converged != nil {
 		logger.Warning("egress: inbound", inboundID, "is attached, but another row on this host has not converged:", converged)
@@ -319,9 +321,18 @@ func kickEgressAfterCoreRestart() {
 }
 
 // Preflight answers whether this host can carry an egress at all, naming the
-// exact resource and remedy for anything it refuses.
+// exact resource and remedy for anything it refuses. The rows go with it so a
+// row whose front never came up is named rather than left reading as healthy.
 func (s *EgressService) Preflight(ctx context.Context) egress.Report {
-	return egressManager.Preflight(ctx, egressGatewayBase())
+	rows, err := s.GetAll()
+	if err != nil {
+		return egress.Report{Refusals: []error{err}}
+	}
+	converted := make([]egress.Egress, 0, len(rows))
+	for _, row := range rows {
+		converted = append(converted, egressRow(row))
+	}
+	return egressManager.Preflight(ctx, egressGatewayBase(), converted...)
 }
 
 /*
@@ -390,13 +401,13 @@ func (s *EgressService) validate(row *model.Egress) error {
 // checkNotReferenced refuses to delete or disable a row inbounds still select.
 // Both would move those inbounds to direct without anybody asking for it.
 func checkNotReferenced(tx *gorm.DB, id int) error {
-	var attached int64
-	err := tx.Model(&model.Inbound{}).Where("egress_id = ?", id).Count(&attached).Error
+	var attached []int
+	err := tx.Model(&model.Inbound{}).Where("egress_id = ?", id).Order("id").Pluck("id", &attached).Error
 	if err != nil {
 		return err
 	}
-	if attached > 0 {
-		return fmt.Errorf("%w: egress %d still serves %d inbound(s) — detach them first", ErrEgressInUse, id, attached)
+	if len(attached) > 0 {
+		return fmt.Errorf("%w: egress %d still serves inbound(s) %v — detach them first", ErrEgressInUse, id, attached)
 	}
 	return nil
 }
@@ -412,7 +423,7 @@ func (s *EgressService) checkAttachable(inbound *model.Inbound, row *model.Egres
 	if !row.Enable {
 		return fmt.Errorf("%w: egress %d is disabled, so attaching to it would egress direct", ErrEgressDisabled, row.Id)
 	}
-	report := egressManager.Preflight(context.Background(), egressGatewayBase())
+	report := egressManager.Preflight(context.Background(), egressGatewayBase(), egressRow(row))
 	for _, note := range report.Notes {
 		logger.Warning("egress preflight:", note)
 	}

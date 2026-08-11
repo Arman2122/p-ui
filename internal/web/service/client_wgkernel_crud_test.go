@@ -222,3 +222,109 @@ func clientNamed(t *testing.T, list []model.Client, email string) model.Client {
 	t.Fatalf("client %q not attached, have %v", email, emailsOf(list))
 	return model.Client{}
 }
+
+/*
+Two wgkernel inbounds on non-overlapping subnets must not hand their first
+clients the same address.
+
+Every wgkernel client address is a real route in the ONE host routing table:
+measured on 6.8.0-111, `ip route add 10.0.0.2/32 dev wgB` after the same route
+exists on wgA answers EEXIST and `ip route get 10.0.0.2` keeps resolving to wgA,
+so the second customer's return traffic is encrypted into the first's tunnel.
+*/
+func TestTwoInboundsDoNotHandTheirFirstClientOneAddress(t *testing.T) {
+	setupBulkDB(t)
+	inboundSvc := &InboundService{}
+	clientSvc := &ClientService{}
+
+	first, _, err := inboundSvc.AddInbound(wgkernelInbound(51971, "10.20.0.1/24"))
+	if err != nil {
+		t.Fatalf("first AddInbound: %v", err)
+	}
+	second, _, err := inboundSvc.AddInbound(wgkernelInbound(51972, "10.21.0.1/24"))
+	if err != nil {
+		t.Fatalf("second AddInbound: %v", err)
+	}
+
+	addClient := func(t *testing.T, inbound *model.Inbound, email string) string {
+		t.Helper()
+		add := &model.Inbound{Id: inbound.Id, Protocol: model.WGKernel, Settings: clientsSettings(t, []model.Client{
+			{Email: email, Enable: true},
+		})}
+		if _, err := clientSvc.AddInboundClient(inboundSvc, add); err != nil {
+			t.Fatalf("AddInboundClient(%s): %v", email, err)
+		}
+		client := clientNamed(t, listForInbound(t, clientSvc, inbound.Id), email)
+		if len(client.AllowedIPs) != 1 {
+			t.Fatalf("%s allowedIPs = %v, want exactly one", email, client.AllowedIPs)
+		}
+		return client.AllowedIPs[0]
+	}
+
+	alice := addClient(t, first, "alice@wgk")
+	bob := addClient(t, second, "bob@wgk")
+	if alice != "10.20.0.2/32" || bob != "10.21.0.2/32" {
+		t.Fatalf("alice got %q and bob got %q; each first client must come out of its own inbound's subnet", alice, bob)
+	}
+
+	// And the other way in: a hand-entered address another inbound's client holds.
+	greedy := &model.Inbound{Id: first.Id, Protocol: model.WGKernel, Settings: clientsSettings(t, []model.Client{
+		{Email: "greedy@wgk", Enable: true, AllowedIPs: []string{bob}},
+	})}
+	if _, err := clientSvc.AddInboundClient(inboundSvc, greedy); err == nil {
+		t.Fatalf("an address inbound %d's client already holds was accepted on inbound %d", second.Id, first.Id)
+	}
+}
+
+/*
+A metadata-only edit must not be refused by a duplicate the edit did not create.
+
+Before P6 the add path accepted a client reusing an existing public key, so live
+installs hold pairs like this; the guard added with the kernel core then rejects
+every quota renewal on those clients, because the carried-forward key collides
+with the sibling that already had it.
+*/
+func TestAMetadataEditIsNotRefusedByAPreExistingDuplicateKey(t *testing.T) {
+	setupBulkDB(t)
+	inboundSvc := &InboundService{}
+	clientSvc := &ClientService{}
+
+	_, shared, err := wgutil.GenerateWireguardKeypair()
+	if err != nil {
+		t.Fatalf("keypair: %v", err)
+	}
+	in := &model.Inbound{
+		Tag: "wg-dup", Enable: true, Listen: "0.0.0.0", Port: 51981, Protocol: model.WireGuard,
+		Settings: `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.30.0.1/24"],"clients":[` +
+			`{"email":"wg-one","enable":true,"publicKey":"` + shared + `","allowedIPs":["10.30.0.2/32"]},` +
+			`{"email":"wg-two","enable":true,"publicKey":"` + shared + `","allowedIPs":["10.30.0.3/32"]}]}`,
+	}
+	created, _, err := inboundSvc.AddInbound(in)
+	if err != nil {
+		t.Fatalf("AddInbound: %v", err)
+	}
+
+	renew := &model.Inbound{Id: created.Id, Protocol: model.WireGuard, Settings: clientsSettings(t, []model.Client{
+		{Email: "wg-one", Enable: true, TotalGB: 10 << 30, Comment: "renewed"},
+	})}
+	if _, err := clientSvc.UpdateInboundClient(inboundSvc, renew, "wg-one"); err != nil {
+		t.Fatalf("UpdateInboundClient = %v; the edit changes no key, it only fails to remove a duplicate that was already there", err)
+	}
+	after := clientNamed(t, listForInbound(t, clientSvc, created.Id), "wg-one")
+	if after.Comment != "renewed" || after.TotalGB != 10<<30 {
+		t.Fatalf("the edit did not land: comment=%q totalGB=%d", after.Comment, after.TotalGB)
+	}
+
+	// Changing a key ONTO a sibling's is still refused: that edit creates the collision.
+	steal := &model.Inbound{Id: created.Id, Protocol: model.WireGuard, Settings: clientsSettings(t, []model.Client{
+		{Email: "wg-one", Enable: true, PublicKey: publicKeyOf(t, listForInbound(t, clientSvc, created.Id), "wg-two")},
+	})}
+	if _, err := clientSvc.UpdateInboundClient(inboundSvc, steal, "wg-one"); err == nil {
+		t.Fatal("an edit that moves a client onto a sibling's public key must still be refused")
+	}
+}
+
+func publicKeyOf(t *testing.T, list []model.Client, email string) string {
+	t.Helper()
+	return clientNamed(t, list, email).PublicKey
+}

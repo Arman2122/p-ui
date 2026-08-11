@@ -717,6 +717,30 @@ own blackhole still contains its inbounds. That is intended — the alternative 
 silently egressing those users with the server's identity. Generated state only:
 the stored template is untouched and the change set stays hot-appliable.
 */
+/*
+blackholeOutboundTag names the outbound that drops traffic, found by protocol
+rather than by the "blocked" the default template happens to call it.
+
+An egress front's rule is prepended, so without a companion rule ahead of it the
+front is the one class of forwarded traffic exempt from the template's own
+geoip:private block — and it is the class whose destination is a raw
+client-chosen IP the panel's outbound then dials from the host: cloud metadata at
+169.254.169.254, the provider's management LAN, RFC1918.
+*/
+func blackholeOutboundTag(raw json_util.RawMessage) (string, bool) {
+	var outbounds []map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &outbounds) != nil {
+		return "", false
+	}
+	for _, outbound := range outbounds {
+		tag, _ := outbound["tag"].(string)
+		if kind, _ := outbound["protocol"].(string); kind == "blackhole" && tag != "" {
+			return tag, true
+		}
+	}
+	return "", false
+}
+
 func injectEgressFronts(cfg *xray.Config, rows []*model.Egress, drivers *egress.Registry) {
 	routing := map[string]any{}
 	if len(cfg.RouterConfig) > 0 {
@@ -729,6 +753,7 @@ func injectEgressFronts(cfg *xray.Config, rows []*model.Egress, drivers *egress.
 	for i := range cfg.InboundConfigs {
 		usedTags[cfg.InboundConfigs[i].Tag] = struct{}{}
 	}
+	blocked, blocks := blackholeOutboundTag(cfg.OutboundConfigs)
 
 	newRules := make([]any, 0)
 	for _, row := range rows {
@@ -772,6 +797,16 @@ func injectEgressFronts(cfg *xray.Config, rows []*model.Egress, drivers *egress.
 			rule["balancerTag"] = row.Target
 		} else {
 			rule["outboundTag"] = row.Target
+		}
+		// Strictly ahead of the front's own rule, because Xray takes the first match
+		// and every rule the template ships sits behind both.
+		if blocks {
+			newRules = append(newRules, map[string]any{
+				"type":        "field",
+				"inboundTag":  []any{injection.Tag},
+				"ip":          []any{"geoip:private"},
+				"outboundTag": blocked,
+			})
 		}
 		newRules = append(newRules, rule)
 		cfg.InboundConfigs = append(cfg.InboundConfigs, front)
