@@ -1,6 +1,7 @@
 package arch
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -133,6 +134,50 @@ func TestPolicyRulesImportOnlyStdlib(t *testing.T) {
 	sort.Strings(violations)
 	for _, v := range violations {
 		t.Errorf("%s — internal/policy is stdlib only; convert to its own value types at the service layer instead of importing the thing that has them", v)
+	}
+}
+
+// shapingAllowed is everything the mechanism package may reach for: the kernel,
+// the log, and itself. x/sys carries the ETH_P_* constants netlink does not, and
+// is the same dependency internal/egress's own plane already has.
+var shapingAllowed = []string{
+	"github.com/vishvananda/netlink",
+	"github.com/vishvananda/netns",
+	"golang.org/x/sys/unix",
+	modulePrefix + "/internal/logger",
+	modulePrefix + "/internal/shaping",
+}
+
+/*
+TestShapingImportsAreFenced keeps the mechanism ignorant.
+
+internal/shaping drives qdiscs, classes and filters and must never learn what an
+email, a Kind, a tier or a quota is — so it may not import internal/core,
+internal/database, internal/web, or internal/policy, which holds the rules it
+exists to be the mechanism for. Seeded at zero while that is still free.
+*/
+func TestShapingImportsAreFenced(t *testing.T) {
+	root := repoRoot(t)
+	var violations []string
+	checked := 0
+	for _, src := range parseNonTestGo(t, root) {
+		if !strings.HasPrefix(src.Rel, "internal/shaping/") {
+			continue
+		}
+		checked++
+		for _, path := range importPaths(src.File) {
+			if isStdlib(path) || slices.Contains(shapingAllowed, path) {
+				continue
+			}
+			violations = append(violations, src.Rel+" imports "+path)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("parsed no files under internal/shaping; the mechanism fence is vacuous")
+	}
+	sort.Strings(violations)
+	for _, v := range violations {
+		t.Errorf("%s — internal/shaping is the mechanism and knows only devices, selectors and bits per second; take the value as an argument instead of importing the thing that has it", v)
 	}
 }
 
