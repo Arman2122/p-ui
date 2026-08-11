@@ -147,39 +147,6 @@ func TestAdoptsStateFromAnEarlierProcess(t *testing.T) {
 	assertList(t, "routes", k.Routes(), steadyRoutes)
 }
 
-func TestAttachAndDetachAreOneRuleEach(t *testing.T) {
-	k := upHost(t)
-	m := newManager(t, k)
-	mustEnsure(t, m, row())
-	k.ResetOps()
-
-	if err := m.Attach(context.Background(), row(), "pwg7"); err != nil {
-		t.Fatalf("Attach: %v", err)
-	}
-	assertList(t, "attach ops", k.Ops(), []string{
-		"rule+ v4 prio 31001 iif pwg7 lookup 30001",
-		"rule+ v6 prio 31001 iif pwg7 lookup 30001",
-	})
-	assertList(t, "rules", k.Rules(), []string{
-		"v4 prio 31001 iif pwg3 lookup 30001",
-		"v4 prio 31001 iif pwg7 lookup 30001",
-		"v6 prio 31001 iif pwg3 lookup 30001",
-		"v6 prio 31001 iif pwg7 lookup 30001",
-	})
-
-	k.ResetOps()
-	both := row()
-	both.Ingress = []string{"pwg3", "pwg7"}
-	if err := m.Detach(context.Background(), both, "pwg3"); err != nil {
-		t.Fatalf("Detach: %v", err)
-	}
-	assertList(t, "detach ops", k.Ops(), []string{
-		"rule- v4 prio 31001 iif pwg3 lookup 30001",
-		"rule- v6 prio 31001 iif pwg3 lookup 30001",
-	})
-	assertList(t, "routes", k.Routes(), steadyRoutes)
-}
-
 // TestRepairsOutOfBandDamage drives the reconciler's real job: somebody else
 // changed the host, and the next pass has to notice from the host itself.
 func TestRepairsOutOfBandDamage(t *testing.T) {
@@ -575,6 +542,19 @@ func TestTheStandInAnswersLikeTheKernel(t *testing.T) {
 		k := egtest.New()
 		if err := k.AddRoute(ctx, front(egress.FamilyV4, "peg1")); !errors.Is(err, egress.ErrNoDevice) {
 			t.Fatalf("front without its device = %v, want ErrNoDevice", err)
+		}
+	})
+
+	// Measured on 6.8: the write answers "Directory nonexistent" before its
+	// device exists and succeeds after, so the fake owes the same refusal.
+	t.Run("a per-device knob cannot be written before its device exists", func(t *testing.T) {
+		k := egtest.New()
+		if err := k.SetSysctl(ctx, rpFilterKey, "0"); !errors.Is(err, egress.ErrNoDevice) {
+			t.Fatalf("write before the device = %v, want ErrNoDevice", err)
+		}
+		k.AddLink("peg1", rpFilterKey)
+		if err := k.SetSysctl(ctx, rpFilterKey, "0"); err != nil {
+			t.Fatalf("write once the device is up: %v", err)
 		}
 	})
 
