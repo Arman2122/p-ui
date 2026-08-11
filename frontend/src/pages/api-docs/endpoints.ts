@@ -1101,6 +1101,68 @@ export const sections: readonly Section[] = [
   },
 
   {
+    id: 'policies',
+    title: 'Policies',
+    description:
+      'A speed ladder and who is on it. A plan is a list of tiers, each naming the usage at which it starts and the rate it grants from there; the panel evaluates the last tier a client has reached against the same usage figure their quota is enforced against, so a client cannot be over quota by one number and under a threshold by another. A plain speed limit is a one-tier plan starting at zero, so there is no separate concept. Zero bits per second means unlimited in that direction, never blocked, and an empty or unreadable ladder leaves the client unlimited — a malformed plan must never throttle. Assignment is keyed by client email, so it survives a client being deleted and re-synced under a new id. Rate limits are enforced in the kernel and only for protocols whose core can give each client a distinguishable kernel identity; GET /panel/api/cores reports which those are, and a client on any other protocol keeps quota, expiry and IP limits in full. Nothing here touches a core’s configuration, so a plan edit cannot restart a daemon or drop a connection. All endpoints under /panel/api/policies.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/policies/list',
+        summary: 'List every plan in id order.',
+        responseSchema: 'Policy',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/policies/get/:id',
+        summary: 'Fetch a single plan by ID.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Policy ID.' }],
+        responseSchema: 'Policy',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/policies/enforced/:email',
+        summary:
+          'What one client’s rules currently work out to, beside what the kernel is actually holding for them. The enforced figures are read back out of the kernel rather than echoed from what the panel pushed, so a limit that never landed is visible instead of merely claimed. shapeable is false when no core can distinguish this client in the kernel, in which case the want figures are advisory and no rate is enforced. unresolved means the client is assigned a plan that no longer exists, which never throttles.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+        responseSchema: 'EnforcedLimits',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/policies/add',
+        summary:
+          'Create a plan. tiers is sorted by fromBytes and de-duplicated on write, so the stored ladder is canonical; two tiers starting at the same usage keep the first. upBps and downBps are bits per second from the client’s point of view.',
+        body: '{\n  "name": "fair use",\n  "tiers": [\n    { "fromBytes": 0, "upBps": 0, "downBps": 0 },\n    { "fromBytes": 53687091200, "upBps": 10000000, "downBps": 10000000 },\n    { "fromBytes": 107374182400, "upBps": 2000000, "downBps": 2000000 }\n  ]\n}',
+        responseSchema: 'Policy',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/policies/update/:id',
+        summary:
+          'Replace a plan’s name and ladder. Every client on it moves to their new tier on the next pass, which costs one kernel class change per direction and drops nothing.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Policy ID.' }],
+        body: '{\n  "name": "fair use",\n  "tiers": [\n    { "fromBytes": 0, "upBps": 0, "downBps": 0 },\n    { "fromBytes": 53687091200, "upBps": 10000000, "downBps": 10000000 }\n  ]\n}',
+        responseSchema: 'Policy',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/policies/del/:id',
+        summary:
+          'Delete a plan. Every client assigned to it keeps their assignment row with no plan attached, so the operator can see who lost one; those clients are unlimited until they are reassigned.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Policy ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/policies/assign',
+        summary:
+          'Put one client on a plan, or take them off it with policyId 0. Keyed by email, like the client’s quota, so the assignment survives a delete-and-resync that mints the client a new id.',
+        body: '{\n  "email": "user1",\n  "policyId": 1\n}',
+      },
+    ],
+  },
+
+  {
     id: 'hosts',
     title: 'Hosts',
     description:

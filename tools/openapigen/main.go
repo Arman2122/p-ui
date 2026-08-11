@@ -40,6 +40,8 @@ func run(root, outDir string) error {
 				"InboundFallback",
 				"Host",
 				"Egress",
+				"Policy",
+				"ClientPolicy",
 			),
 			AliasAllow: setOf("Protocol"),
 			Overrides: map[string][]walkOverride{
@@ -53,6 +55,11 @@ func run(root, outDir string) error {
 				},
 				"InboundClientIps": {
 					{Field: "Ips", Kind: KindAny},
+				},
+				// The tier ladder is a JSON array in a column, so it crosses the API
+				// as the value it is rather than as the string it is stored in.
+				"Policy": {
+					{Field: "Tiers", Kind: KindAny},
 				},
 				"Host": {
 					{Field: "MuxParams", Kind: KindAny},
@@ -87,6 +94,7 @@ func run(root, outDir string) error {
 			Path: resolveRel(root, "internal/web/service"),
 			StructAllow: setOf(
 				"CoreView",
+				"EnforcedLimits",
 				"InboundOption",
 				"NodeMutationRequest",
 				"NodeView",

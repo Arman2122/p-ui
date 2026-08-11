@@ -284,6 +284,12 @@ export interface ClientInbound {
   inboundId: number;
 }
 
+export interface ClientPolicy {
+  email: string;
+  policyId?: number | null;
+  updatedAt: number;
+}
+
 export interface ClientRecord {
   allowedIPs: string;
   auth: string;
@@ -336,6 +342,7 @@ export interface CoreView {
   clientCredentials: Record<string, string[]>;
   id: string;
   kinds: string[];
+  shaping: Record<string, string>;
   titleKey: string;
   unavailable: string;
 }
@@ -349,6 +356,18 @@ export interface Egress {
   target: string;
   type: string;
   updatedAt: number;
+}
+
+export interface EnforcedLimits {
+  email: string;
+  enforcedDownBps: number;
+  enforcedUpBps: number;
+  policyId: number;
+  shapeable: boolean;
+  unresolved: boolean;
+  usedBytes: number;
+  wantDownBps: number;
+  wantUpBps: number;
 }
 
 export interface FallbackParentInfo {
@@ -624,6 +643,14 @@ export interface PanelUpdateStatus {
   finishedAt: number;
   runId: string;
   state: string;
+}
+
+export interface Policy {
+  createdAt: number;
+  id: number;
+  name: string;
+  tiers: unknown;
+  updatedAt: number;
 }
 
 export interface ProbeResultUI {

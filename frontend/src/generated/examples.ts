@@ -273,6 +273,11 @@ export const EXAMPLES: Record<string, unknown> = {
     "flowOverride": "",
     "inboundId": 0
   },
+  "ClientPolicy": {
+    "email": "user1",
+    "policyId": 1,
+    "updatedAt": 1700000000000
+  },
   "ClientRecord": {
     "allowedIPs": "",
     "auth": "",
@@ -339,6 +344,9 @@ export const EXAMPLES: Record<string, unknown> = {
       "vless",
       "vmess"
     ],
+    "shaping": {
+      "wgkernel": "innerIP"
+    },
     "titleKey": "cores.xray.title",
     "unavailable": "wireguard: no kernel support on this host"
   },
@@ -351,6 +359,17 @@ export const EXAMPLES: Record<string, unknown> = {
     "target": "warp",
     "type": "xray-tun",
     "updatedAt": 1700000000000
+  },
+  "EnforcedLimits": {
+    "email": "user1",
+    "enforcedDownBps": 10000000,
+    "enforcedUpBps": 10000000,
+    "policyId": 1,
+    "shapeable": true,
+    "unresolved": false,
+    "usedBytes": 53687091200,
+    "wantDownBps": 10000000,
+    "wantUpBps": 10000000
   },
   "FallbackParentInfo": {
     "masterId": 0,
@@ -657,6 +676,19 @@ export const EXAMPLES: Record<string, unknown> = {
     "finishedAt": 1735689612,
     "runId": "1735689600123456789",
     "state": "success"
+  },
+  "Policy": {
+    "createdAt": 1700000000000,
+    "id": 1,
+    "name": "fair use",
+    "tiers": [
+      {
+        "downBps": 0,
+        "fromBytes": 0,
+        "upBps": 0
+      }
+    ],
+    "updatedAt": 1700000000000
   },
   "ProbeResultUI": {
     "cpuPct": 12.5,

@@ -57,6 +57,8 @@ func allModels() []any {
 		&model.ClientGlobalTraffic{},
 		&model.OutboundSubscription{},
 		&model.Egress{},
+		&model.Policy{},
+		&model.ClientPolicy{},
 	}
 }
 
@@ -80,6 +82,9 @@ func initModels() error {
 		}
 	}
 	if err := migrateHostVerifyPeerCertByNameColumn(); err != nil {
+		return err
+	}
+	if err := migratePolicyAssignmentForeignKey(); err != nil {
 		return err
 	}
 	if err := normalizeApiTokenCreatedAtSeconds(); err != nil {
@@ -201,6 +206,38 @@ func dropLegacyForeignKeys() error {
 		return err
 	}
 	return nil
+}
+
+const policyAssignmentFK = "fk_client_policies_policy"
+
+/*
+migratePolicyAssignmentForeignKey adds the constraint AutoMigrate cannot express.
+
+ON DELETE SET NULL and not CASCADE: deleting a plan must leave every assignment
+row behind, visible and unresolved, so the UI can report which clients lost their
+plan. A cascade would vaporise the evidence and the operator would only learn
+from a customer that the throttle stopped.
+*/
+func migratePolicyAssignmentForeignKey() error {
+	if !db.Migrator().HasTable(&model.ClientPolicy{}) || !db.Migrator().HasTable(&model.Policy{}) {
+		return nil
+	}
+	var present int64
+	err := db.Raw(`SELECT COUNT(*) FROM pg_constraint WHERE conname = ?`, policyAssignmentFK).Scan(&present).Error
+	if err != nil {
+		return err
+	}
+	if present > 0 {
+		return nil
+	}
+	// A row naming a plan that never existed would refuse the constraint; clearing
+	// it leaves the assignment unresolved, which is what the FK itself would do.
+	if err := db.Exec(`UPDATE client_policies SET policy_id = NULL
+		WHERE policy_id IS NOT NULL AND policy_id NOT IN (SELECT id FROM policies)`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`ALTER TABLE client_policies ADD CONSTRAINT ` + policyAssignmentFK +
+		` FOREIGN KEY (policy_id) REFERENCES policies(id) ON DELETE SET NULL`).Error
 }
 
 // AutoMigrate adds the column; this only backfills the NULLs the ALTER TABLE on
