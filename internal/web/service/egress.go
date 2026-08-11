@@ -332,7 +332,26 @@ func (s *EgressService) Preflight(ctx context.Context) egress.Report {
 	for _, row := range rows {
 		converted = append(converted, egressRow(row))
 	}
-	return egressManager.Preflight(ctx, egressGatewayBase(), converted...)
+	report := egressManager.Preflight(ctx, egressGatewayBase(), converted...)
+	report.Notes = append(report.Notes, deadTargets(rows)...)
+	return report
+}
+
+// deadTargets names every enabled row whose target stopped resolving. validate()
+// checks it once at save, so without this nothing ever says it again.
+func deadTargets(rows []*model.Egress) []string {
+	var notes []string
+	for _, row := range rows {
+		if !row.Enable {
+			continue
+		}
+		if resolves, err := egressTargetResolves(row.Target); err == nil && !resolves {
+			notes = append(notes, fmt.Sprintf(
+				"egress %d targets %q, which is no longer an outbound or a balancer tag, so everything attached to it is contained rather than routed",
+				row.Id, row.Target))
+		}
+	}
+	return notes
 }
 
 /*
