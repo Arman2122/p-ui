@@ -29,6 +29,8 @@ type Bound struct {
 	Quota      QuotaEnforcer
 	Versions   VersionManager
 	Link       LinkRenderer
+	Shape      ShapingHost
+	Sessions   SessionReporter
 }
 
 // Bind resolves every optional capability of c exactly once.
@@ -70,6 +72,12 @@ func Bind(c Core) *Bound {
 	if v, ok := c.(LinkRenderer); ok {
 		b.Link = v
 	}
+	if v, ok := c.(ShapingHost); ok {
+		b.Shape = v
+	}
+	if v, ok := c.(SessionReporter); ok {
+		b.Sessions = v
+	}
 	return b
 }
 
@@ -93,7 +101,23 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	check("QuotaPushdown", d.Caps.QuotaPushdown, b.Quota != nil)
 	check("OnlineUsers", d.Caps.OnlineUsers, b.Online != nil)
 	check("ShareLink", d.Caps.ShareLink, b.Link != nil)
+	// ShapingHost declares per kind rather than in Caps, because Descriptor is
+	// core-grained and one core answers ten kinds; so its claim is read from those.
+	if b.Shape != nil && !shapesSomeKind(b.Core, b.Shape) {
+		problems = append(problems, "ShapingHost: implemented, but every kind answers SelectorNone; a core that can shape nothing declares nothing")
+	}
 	return problems
+}
+
+// shapesSomeKind reports whether any kind this core serves carries a kernel
+// identity, which is the whole of what implementing ShapingHost claims.
+func shapesSomeKind(c Core, h ShapingHost) bool {
+	for _, kind := range c.Kinds() {
+		if h.ShapingSelector(kind) != SelectorNone {
+			return true
+		}
+	}
+	return false
 }
 
 func boolWord(v bool) string {

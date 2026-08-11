@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"net/netip"
+)
 
 /*
 Optional capability interfaces.
@@ -101,6 +104,85 @@ type TagTrafficSource interface {
 // OnlineReporter names the clients with a live connection right now.
 type OnlineReporter interface {
 	OnlineEmails(ctx context.Context) ([]string, error)
+}
+
+// Selector is the kind of kernel key a core's users carry. A closed vocabulary,
+// like credentials.go's: an unknown selector reads as "cannot shape", not as "fine".
+type Selector string
+
+const (
+	// SelectorNone is the honest answer for every L7 proxy: its users share one
+	// process and one socket set, so no kernel hook can tell them apart.
+	SelectorNone Selector = ""
+	// SelectorInnerIP is a post-decap host prefix on the core's own device.
+	SelectorInnerIP Selector = "innerIP"
+	// SelectorFwmark is a mark a core stamps on its own sockets. Declared and
+	// unimplemented: nothing in this tree stamps one yet.
+	SelectorFwmark Selector = "fwmark"
+)
+
+// SubjectKey is one user's kernel identity on one device: Prefixes or Mark,
+// never both.
+type SubjectKey struct {
+	// Prefixes are EVERY host prefix this user answers to, one per family: a v4-only
+	// key leaves that user's v6 flows unshaped. Each must hold a single address.
+	Prefixes []netip.Prefix
+	Mark     uint32
+}
+
+// ShapingTarget is one instance's shapeable surface as it stands right now.
+type ShapingTarget struct {
+	// Device is the interface this instance's decrypted traffic crosses. Empty means
+	// the core is not hosting it now — shaping goes quiet and retries, it does not fail.
+	Device   string
+	Selector Selector
+	// Keys maps email to kernel identity. An email absent from it is a client this
+	// core cannot distinguish; it is left unshaped rather than shaped as a guess.
+	Keys map[string]SubjectKey
+}
+
+/*
+ShapingHost declares that this core puts a user's traffic on a kernel device
+under an identity the kernel can match, so the panel can attach a limit to it.
+
+It is an enforcement PRIMITIVE and never a policy: a core answers "a@x is
+10.8.0.4 on pwg7" and never learns what limit that user has, what tier they are
+in, or that tiers exist. A core whose users share one socket set answers
+SelectorNone, and that is a correct answer rather than a gap.
+*/
+type ShapingHost interface {
+	// ShapingSelector is per-kind and static, so a form can gate a field before any
+	// instance exists. Per-kind for CredentialDeclarer's reason: one core, ten kinds.
+	ShapingSelector(kind Kind) Selector
+
+	// ShapingTargets is per-instance and dynamic, because the device is per-instance
+	// and can be absent at any moment by design.
+	ShapingTargets(ctx context.Context, inst Instance) (ShapingTarget, error)
+}
+
+// Session is one client's live connection as its core can see it.
+type Session struct {
+	Email string
+	// Source is where the client connected FROM: for an L7 core its own address, for
+	// an L3 core the peer's outer endpoint — the one that roams when a key is shared.
+	Source netip.Addr
+	// LastSeenUnixMilli is load-bearing. A core refreshes it only on new activity, so
+	// a frozen value is a dead connection, not a reconnect. Zero means it cannot say.
+	LastSeenUnixMilli int64
+}
+
+/*
+SessionReporter names each live connection together with the source it came from.
+
+Separate from OnlineReporter because the two answer different questions and not
+every core can answer this one: mtg reports a secret in use and no address at
+all, and widening OnlineReporter would force it to invent one.
+
+A snapshot of now: no history, no closed sessions, no aggregation. Deduplication,
+recency and the cap itself are the panel's rules and never travel here.
+*/
+type SessionReporter interface {
+	Sessions(ctx context.Context) ([]Session, error)
 }
 
 // QuotaEnforcer pushes a byte budget into the daemon so overshoot is bounded by
