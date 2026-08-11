@@ -482,8 +482,15 @@ func TestLiveRemoveBanksTheFinalReading(t *testing.T) {
 
 // The two halves of the preflight answer, on a host where the module is present
 // but not yet loaded: nothing else on the box will load it, so Probe must.
+//
+// Gated separately because a kernel module is global. A network namespace
+// confines devices, not modules, so unloading it here would drop every
+// WireGuard tunnel on the machine -- including a live panel's inbounds.
 func TestLiveProbeLoadsTheModule(t *testing.T) {
 	e2e(t)
+	if os.Getenv("PUI_WG_E2E_UNLOAD_MODULE") != "1" {
+		t.Skip("set PUI_WG_E2E_UNLOAD_MODULE=1 only on a host with no WireGuard traffic: this unloads the module machine-wide, which no namespace can contain")
+	}
 	if out, err := exec.Command("modprobe", "-r", "wireguard").CombinedOutput(); err != nil {
 		t.Skipf("wireguard.ko is in use here, so the not-yet-loaded case cannot be staged: %s", out)
 	}
@@ -552,21 +559,31 @@ func TestLiveReconcileDeletesADeviceStrandedByARestart(t *testing.T) {
 	if err := m.Ensure(context.Background(), in); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	foreign := "wgstray" + strconv.Itoa(os.Getpid()%500)
-	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", foreign).Run() })
-	if out, err := exec.Command("ip", "link", "add", foreign, "type", "wireguard").CombinedOutput(); err != nil {
-		t.Fatalf("ip link add: %v: %s", err, out)
+	// A second wgkernel inbound, inside the panel's own pwg namespace. A bystander
+	// named anything else proves nothing: the panel would never claim it.
+	keptID := id + 1
+	kept := InterfaceName(keptID)
+	keptSrv, _ := genKey(t)
+	keptInst := inst(keptID, keptSrv)
+	keptInst.Port = 51821
+	keptInst.Address = []string{"10.124.0.1/24"}
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", kept).Run() })
+	if err := m.Ensure(context.Background(), keptInst); err != nil {
+		t.Fatalf("Ensure the second inbound: %v", err)
 	}
 
+	// The desired set production passes: the surviving inbound's row is still in
+	// the database, this test's is not. Never nil -- an empty desired set means
+	// "no inbound owns a device" and deletes every pwg<N> the host can see.
 	restarted := NewManager(hostPlane())
-	if err := restarted.Reconcile(context.Background(), nil); err != nil {
+	if err := restarted.Reconcile(context.Background(), []Instance{keptInst}); err != nil {
 		t.Fatalf("Reconcile after a restart: %v", err)
 	}
 	if _, err := net.InterfaceByName(name); err == nil {
 		t.Errorf("%s outlived its inbound across a panel restart: it still serves every peer with a valid key, is never billed, and no UI action removes it", name)
 	}
-	if _, err := net.InterfaceByName(foreign); err != nil {
-		t.Errorf("the panel deleted %s, an interface it did not create", foreign)
+	if _, err := net.InterfaceByName(kept); err != nil {
+		t.Errorf("the panel deleted %s, a wgkernel inbound still present in the desired set", kept)
 	}
 }
 

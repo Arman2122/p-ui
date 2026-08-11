@@ -37,6 +37,23 @@ func e2e(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("needs root")
 	}
+	if !confinedToOwnNetns("/proc/self/ns/net", "/proc/1/ns/net") {
+		t.Skip("run inside a private network namespace: these tests write ip rules and routing tables in the reserved band")
+	}
+}
+
+// confinedToOwnNetns reports whether this process left init's network namespace.
+// Unreadable is not confined: the only safe answer is the one that skips.
+func confinedToOwnNetns(selfPath, initPath string) bool {
+	self, err := os.Readlink(selfPath)
+	if err != nil {
+		return false
+	}
+	init, err := os.Readlink(initPath)
+	if err != nil {
+		return false
+	}
+	return self != init
 }
 
 type e2eDriver struct{}
