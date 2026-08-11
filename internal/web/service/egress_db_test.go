@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -127,9 +128,14 @@ func TestEgressAttachInstallsTheRuleBeforeItReturns(t *testing.T) {
 		t.Fatalf("rules after attach = %v, want %v", got, wantRules)
 	}
 	// The blackhole is part of the table's identity: a rule pointing at a table
-	// with no match falls through to main and out with the server's address.
+	// with no match falls through to main and out with the server's address. The
+	// preflight probe's own reversible rule points at no egress table, so it is
+	// not one of the rules this ordering is about.
 	ops := kernel.Ops()
-	firstRule := slices.IndexFunc(ops, func(op string) bool { return strings.HasPrefix(op, "rule+") })
+	pointsAtTheTable := func(op string) bool {
+		return strings.HasPrefix(op, "rule+") && strings.HasSuffix(op, "lookup "+strconv.Itoa(table))
+	}
+	firstRule := slices.IndexFunc(ops, pointsAtTheTable)
 	firstRoute := slices.IndexFunc(ops, func(op string) bool { return strings.HasPrefix(op, "route+") })
 	if firstRule < 0 || firstRoute < 0 || firstRoute > firstRule {
 		t.Fatalf("containment must be installed before any rule points at it, ops were %v", ops)
@@ -200,6 +206,7 @@ func TestEgressAttachSurvivesAnUnrelatedRowFailing(t *testing.T) {
 	broken := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
 	healthy := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
 	kernel.AddLink(egress.Device(healthy.Id))
+	kernel.AddAddr(egress.Device(healthy.Id), mustEgressGateway(t, healthy.Id))
 	kernel.Fail = map[string]error{
 		"route+ v4 table " + strconv.Itoa(30000+broken.Id) + " blackhole default metric 4096": errors.New("the host refused it"),
 	}
@@ -288,6 +295,7 @@ func TestEgressRestartKickWaitsForTheFrontDevice(t *testing.T) {
 	// is a short ladder and not one immediate call.
 	waitFor(t, "a reconcile pass with the front still absent", func() bool { return kernel.Snapshots() > passes })
 	kernel.AddLink(device, "net.ipv4.conf."+device+".rp_filter")
+	kernel.AddAddr(device, mustEgressGateway(t, row.Id))
 
 	waitFor(t, "the front route restored after the core came back", func() bool {
 		return slices.Contains(kernel.Routes(), front)
@@ -297,6 +305,17 @@ func TestEgressRestartKickWaitsForTheFrontDevice(t *testing.T) {
 	waitFor(t, "the kick to run out of passes", func() bool {
 		return kernel.Snapshots() >= passes+len(sped)
 	})
+}
+
+// mustEgressGateway is the /32 the core puts on the front it creates. A device
+// without it is one the kernel never produces, and never the panel's front.
+func mustEgressGateway(t *testing.T, id int) netip.Prefix {
+	t.Helper()
+	gateway, err := egress.Gateway(egress.DefaultGatewayBase, id)
+	if err != nil {
+		t.Fatalf("gateway for egress %d: %v", id, err)
+	}
+	return gateway
 }
 
 func waitFor(t *testing.T, what string, done func() bool) {

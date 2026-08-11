@@ -293,11 +293,16 @@ func TestAMetadataEditIsNotRefusedByAPreExistingDuplicateKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("keypair: %v", err)
 	}
+	_, ownKey, err := wgutil.GenerateWireguardKeypair()
+	if err != nil {
+		t.Fatalf("keypair: %v", err)
+	}
 	in := &model.Inbound{
 		Tag: "wg-dup", Enable: true, Listen: "0.0.0.0", Port: 51981, Protocol: model.WireGuard,
 		Settings: `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.30.0.1/24"],"clients":[` +
 			`{"email":"wg-one","enable":true,"publicKey":"` + shared + `","allowedIPs":["10.30.0.2/32"]},` +
-			`{"email":"wg-two","enable":true,"publicKey":"` + shared + `","allowedIPs":["10.30.0.3/32"]}]}`,
+			`{"email":"wg-two","enable":true,"publicKey":"` + shared + `","allowedIPs":["10.30.0.3/32"]},` +
+			`{"email":"wg-three","enable":true,"publicKey":"` + ownKey + `","allowedIPs":["10.30.0.4/32"]}]}`,
 	}
 	created, _, err := inboundSvc.AddInbound(in)
 	if err != nil {
@@ -317,14 +322,9 @@ func TestAMetadataEditIsNotRefusedByAPreExistingDuplicateKey(t *testing.T) {
 
 	// Changing a key ONTO a sibling's is still refused: that edit creates the collision.
 	steal := &model.Inbound{Id: created.Id, Protocol: model.WireGuard, Settings: clientsSettings(t, []model.Client{
-		{Email: "wg-one", Enable: true, PublicKey: publicKeyOf(t, listForInbound(t, clientSvc, created.Id), "wg-two")},
+		{Email: "wg-one", Enable: true, PublicKey: ownKey},
 	})}
 	if _, err := clientSvc.UpdateInboundClient(inboundSvc, steal, "wg-one"); err == nil {
 		t.Fatal("an edit that moves a client onto a sibling's public key must still be refused")
 	}
-}
-
-func publicKeyOf(t *testing.T, list []model.Client, email string) string {
-	t.Helper()
-	return clientNamed(t, list, email).PublicKey
 }
