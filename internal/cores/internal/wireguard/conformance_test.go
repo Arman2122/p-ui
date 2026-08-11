@@ -72,13 +72,19 @@ func (r *rig) instance(users int) core.Instance {
 	}
 	for i := range users {
 		email := clients[i]
+		// []any, not []string: this is what a settings blob decodes to.
+		allowed := []any{fmt.Sprintf("10.0.0.%d/32", 11+i)}
+		if i == 1 {
+			// One client also routes a subnet, so the suite sees both halves: an
+			// address that is an identity, and a prefix that is somebody else's too.
+			allowed = append(allowed, "10.9.0.0/24")
+		}
 		inst.Users = append(inst.Users, core.User{
 			Email:  email,
 			Enable: true,
 			Credentials: map[string]any{
-				core.CredPublicKey: r.keys[email].String(),
-				// []any, not []string: this is what a settings blob decodes to.
-				core.CredAllowedIPs: []any{fmt.Sprintf("10.0.0.%d/32", 11+i)},
+				core.CredPublicKey:  r.keys[email].String(),
+				core.CredAllowedIPs: allowed,
 			},
 		})
 	}
