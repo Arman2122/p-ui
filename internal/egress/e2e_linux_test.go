@@ -322,11 +322,6 @@ func TestLivePreflightAcceptsItsOwnFronts(t *testing.T) {
 	m := liveManager(t)
 	ctx := context.Background()
 	addFront(t)
-	gateway, err := Gateway(DefaultGatewayBase, e2eID)
-	if err != nil {
-		t.Fatalf("gateway: %v", err)
-	}
-	run(t, "ip", "addr", "add", gateway.String(), "dev", Device(e2eID))
 
 	if refused := gatewayRefusals(m.Preflight(ctx, DefaultGatewayBase)); len(refused) != 0 {
 		t.Fatalf("preflight refused the panel's own front: %v", refused)
@@ -399,12 +394,22 @@ func TestLiveForeignObjectsSurvive(t *testing.T) {
 	run(t, "ip", "rule", "add", "iif", "pwg99", "lookup", "30777", "priority", "31905")
 	run(t, "ip", "route", "add", "prohibit", "192.168.77.0/24", "table", "30906")
 
-	if err := m.Reconcile(ctx, nil); err != nil {
-		t.Fatalf("Reconcile: %v", err)
+	// Left alone, and reported: a rule at an id's own priority pointing somewhere
+	// else is what the lookup finds while that id's own rule is absent. The
+	// prohibit route only tightens containment, so it stays a debug line.
+	err := m.Reconcile(ctx, nil)
+	if !errors.Is(err, ErrForeignResource) {
+		t.Fatalf("Reconcile = %v, want ErrForeignResource", err)
 	}
-	snap, err := m.plane.Snapshot(ctx)
-	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
+	if !strings.Contains(err.Error(), "v4 prio 31905 iif pwg99 lookup 30777 defeats egress 905's own containment") {
+		t.Fatalf("error = %v, want it to name the rule that defeats egress 905's containment", err)
+	}
+	if strings.Contains(err.Error(), "192.168.77.0/24") {
+		t.Fatalf("error = %v, want an object that cannot leak left unreported", err)
+	}
+	snap, snapErr := m.plane.Snapshot(ctx)
+	if snapErr != nil {
+		t.Fatalf("Snapshot: %v", snapErr)
 	}
 	var survived []string
 	for _, rule := range snap.Rules {
