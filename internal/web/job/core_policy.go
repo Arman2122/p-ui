@@ -29,9 +29,8 @@ the next tick with no special case.
 type CorePolicyJob struct {
 	policyService service.PolicyService
 
-	// bannedSeen carries each banned pair's last timestamp across passes. A core
-	// refreshes lastSeen only on new activity, so a frozen value is a dead
-	// connection it has not reaped, and re-reporting it would ban forever.
+	// bannedSeen carries each banned pair's last timestamp across passes: a frozen
+	// lastSeen is a dead connection, and re-reporting one would ban forever.
 	bannedSeen map[string]int64
 }
 
@@ -43,9 +42,8 @@ func (j *CorePolicyJob) Run() {
 	j.enforceIPLimits(ctx)
 }
 
-// convergeShaping brings the kernel to the rate every client's ladder currently
-// entitles them to. Fail-open: a throttle that did not land costs bandwidth,
-// while a throttle applied to everyone is a support storm.
+// convergeShaping brings the kernel to the rate each ladder entitles a client to.
+// Fail-open: a missed throttle costs bandwidth, a universal one is a support storm.
 func (j *CorePolicyJob) convergeShaping(ctx context.Context) {
 	err := j.policyService.ConvergeShaping(ctx)
 	switch {

@@ -20,10 +20,8 @@ type CoreView struct {
 	// ClientCredentials are the credential fields a client of each kind carries,
 	// keyed by kind. A kind absent here declares none; the form keeps its own.
 	ClientCredentials map[string][]string `json:"clientCredentials" example:"{\"vless\":[\"uuid\"],\"vmess\":[\"uuid\",\"security\"]}"`
-	// Shaping names the kernel key each kind's clients carry, so the client form
-	// gates the speed-limit fields on what a core declares rather than on a
-	// protocol ladder of its own. A kind absent here cannot be rate limited at
-	// all, and the form says so instead of offering a field that does nothing.
+	// Shaping names the kernel key each kind's clients carry, so a form gates its
+	// speed fields on this. A kind absent here cannot be rate limited at all.
 	Shaping map[string]string `json:"shaping" example:"{\"wgkernel\":\"innerIP\"}"`
 	// Available is this host's Preflight answer and Unavailable is why not, so a
 	// core the host cannot run is explained rather than silently offered.

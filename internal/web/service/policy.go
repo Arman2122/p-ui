@@ -32,9 +32,8 @@ It asks the registry what a core can do and never asks what protocol it serves,
 which is why an arch guard forbids this file naming one.
 */
 
-// shapingManager owns every qdisc, class and filter the ladders install. One
-// instance for egressManager's reason: two writers to one host's kernel state
-// is how two reconcilers start disagreeing about who owns what.
+// shapingManager owns every qdisc, class and filter the ladders install. One,
+// for egressManager's reason: two writers to one host's kernel state disagree.
 var shapingManager = shaping.NewManager(shaping.HostPlane())
 
 // PolicyService evaluates the panel's product rules against what the cores
@@ -175,6 +174,11 @@ ShapingWants turns what the cores report into what the kernel should hold.
 Every shapeable device is listed even when nothing on it is limited: a device
 missing from the want is a device whose stranded tree is never torn down, and
 the mirror GC only sees the devices it is handed.
+
+A NIL answer means no core here can shape at all, so nothing is converged. An
+EMPTY one is a different statement — something could shape and nothing is wanted
+— and it must still be converged, because that is precisely when the mirror of a
+deleted inbound is the thing left to collect.
 */
 func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant, error) {
 	reg := registry()
@@ -184,11 +188,13 @@ func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant,
 
 	var failures []error
 	var targets []deviceSubjects
+	shapeable := false
 	for _, bound := range reg.Cores() {
 		kinds := shapeableKinds(bound)
 		if len(kinds) == 0 {
 			continue
 		}
+		shapeable = true
 		instances, err := s.inboundService.DesiredInstances(kinds)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("policy: desired state for %s: %w", bound.Core.Describe().ID, err))
@@ -208,8 +214,13 @@ func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant,
 			targets = append(targets, deviceSubjects{device: target.Device, keys: target.Keys})
 		}
 	}
-	if len(targets) == 0 {
+	if !shapeable {
 		return nil, errors.Join(failures...)
+	}
+	if len(targets) == 0 {
+		// Wanting nothing is still an answer, and it is the one that reaps the
+		// mirror device a deleted inbound leaves behind.
+		return []shaping.DeviceWant{}, errors.Join(failures...)
 	}
 
 	emails := make([]string, 0)
@@ -286,7 +297,9 @@ func (s *PolicyService) ConvergeShaping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(wants) == 0 {
+	// nil, not empty: no core here can shape, so nothing was ever installed and
+	// there is nothing to collect. See ShapingWants on why the two differ.
+	if wants == nil {
 		return nil
 	}
 	return shapingManager.Converge(ctx, wants)
@@ -405,9 +418,8 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			continue
 		}
 
-		// A live observation carries the connection's own start time, so
-		// attribution is stamped now: the stale cutoff would otherwise evict an
-		// address that is connected right this second.
+		// Stamped now, not at the connection's start: the stale cutoff would
+		// otherwise evict an address that is connected this second.
 		entries := make([]model.ClientIpEntry, 0, len(observed))
 		for _, obs := range observed {
 			entries = append(entries, model.ClientIpEntry{IP: obs.IP, Timestamp: nowSeconds})
@@ -509,9 +521,8 @@ func (s *PolicyService) BounceClient(ctx context.Context, inbound *model.Inbound
 	return rt.AddUser(ctx, inbound, email)
 }
 
-// recordAttribution stores this pass's local observations under this panel's own
-// guid so a master can say which node an address is on. Advisory: it must never
-// block enforcement.
+// recordAttribution files this pass's observations under this panel's guid, so a
+// master can say which node an address is on. Advisory: it never blocks a ban.
 func (s *PolicyService) recordAttribution(attribution map[string][]model.ClientIpEntry) {
 	if len(attribution) == 0 {
 		return

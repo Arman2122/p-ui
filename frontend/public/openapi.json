@@ -1455,7 +1455,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Shaping names the kernel key each kind's clients carry, so the client form\ngates the speed-limit fields on what a core declares rather than on a\nprotocol ladder of its own. A kind absent here cannot be rate limited at\nall, and the form says so instead of offering a field that does nothing.",
+            "description": "Shaping names the kernel key each kind's clients carry, so a form gates its\nspeed fields on this. A kind absent here cannot be rate limited at all.",
             "example": {
               "wgkernel": "innerIP"
             },

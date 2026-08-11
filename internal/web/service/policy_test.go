@@ -652,9 +652,8 @@ func TestATierCrossingCostsExactlyOneClassChange(t *testing.T) {
 		if err := svc.ConvergeShaping(context.Background()); err != nil {
 			t.Fatalf("converge after the crossing: %v", err)
 		}
-		// One change per direction and nothing else. A ladder that limits both ways
-		// is two independent trees, so two retunes is the whole cost of a crossing;
-		// any add or delete here would take the client's counters and window with it.
+		// One change per direction and nothing else: a ladder limiting both ways is
+		// two trees, and an add or delete would take the client's counters with it.
 		changed := map[string]int{}
 		for _, op := range kernel.Ops() {
 			if !strings.HasPrefix(op, "class~") {
@@ -795,6 +794,43 @@ func TestADualStackClientGetsOneBudgetAndBothFamilies(t *testing.T) {
 	}
 	if filters != 2 {
 		t.Errorf("each family needs its own filter, got %d in %v", filters, kernel.Ops())
+	}
+}
+
+/*
+TestTheMirrorOfADeletedInboundIsCollected closes the leak the GC exists for.
+
+Measured on the kernel: deleting the core's device takes its ingress hook and
+mirred filters with it while the mirror device SURVIVES. So the pass that reaps
+it is the one where nothing is wanted at all — and a join that skips converging
+when it has no subjects is exactly the join that never reaps anything.
+*/
+func TestTheMirrorOfADeletedInboundIsCollected(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+	kernel := installKernel(t, "pwg7")
+	_, inbound := tunnelWithClients(t, "pwg7", "leaver")
+	seedPlan(t, "capped both ways", []policy.Tier{{FromBytes: 0, UpBps: 5_000_000, DownBps: 5_000_000}}, "leaver")
+
+	if err := svc.ConvergeShaping(context.Background()); err != nil {
+		t.Fatalf("first converge: %v", err)
+	}
+	if !slices.Contains(kernel.Devices(), "pifb7") {
+		t.Fatalf("the upload tree needs its mirror device, devices are %v", kernel.Devices())
+	}
+
+	// The inbound goes away. Its own device dies with it; the mirror does not.
+	if err := database.GetDB().Delete(&model.Inbound{}, inbound.Id).Error; err != nil {
+		t.Fatalf("delete inbound: %v", err)
+	}
+	kernel.DelLink("pwg7")
+	kernel.ResetOps()
+
+	if err := svc.ConvergeShaping(context.Background()); err != nil {
+		t.Fatalf("converge after the deletion: %v", err)
+	}
+	if slices.Contains(kernel.Devices(), "pifb7") {
+		t.Fatalf("the mirror outlived the inbound that derived it: one leaked interface per deleted inbound, forever. ops: %v", kernel.Ops())
 	}
 }
 

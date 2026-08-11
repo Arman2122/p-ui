@@ -219,15 +219,8 @@ plan. A cascade would vaporise the evidence and the operator would only learn
 from a customer that the throttle stopped.
 */
 func migratePolicyAssignmentForeignKey() error {
-	if !db.Migrator().HasTable(&model.ClientPolicy{}) || !db.Migrator().HasTable(&model.Policy{}) {
-		return nil
-	}
-	var present int64
-	err := db.Raw(`SELECT COUNT(*) FROM pg_constraint WHERE conname = ?`, policyAssignmentFK).Scan(&present).Error
-	if err != nil {
-		return err
-	}
-	if present > 0 {
+	migrator := db.Migrator()
+	if !migrator.HasTable(&model.ClientPolicy{}) || !migrator.HasTable(&model.Policy{}) {
 		return nil
 	}
 	// A row naming a plan that never existed would refuse the constraint; clearing
@@ -236,8 +229,8 @@ func migratePolicyAssignmentForeignKey() error {
 		WHERE policy_id IS NOT NULL AND policy_id NOT IN (SELECT id FROM policies)`).Error; err != nil {
 		return err
 	}
-	return db.Exec(`ALTER TABLE client_policies ADD CONSTRAINT ` + policyAssignmentFK +
-		` FOREIGN KEY (policy_id) REFERENCES policies(id) ON DELETE SET NULL`).Error
+	return addConstraintOnce("client_policies", policyAssignmentFK,
+		`FOREIGN KEY (policy_id) REFERENCES policies(id) ON DELETE SET NULL`)
 }
 
 // AutoMigrate adds the column; this only backfills the NULLs the ALTER TABLE on
