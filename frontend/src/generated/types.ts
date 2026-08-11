@@ -340,6 +340,17 @@ export interface CoreView {
   unavailable: string;
 }
 
+export interface Egress {
+  createdAt: number;
+  enable: boolean;
+  id: number;
+  remark: string;
+  settings: string;
+  target: string;
+  type: string;
+  updatedAt: number;
+}
+
 export interface FallbackParentInfo {
   masterId: number;
   path?: string;
@@ -425,6 +436,7 @@ export interface HostGroup {
 export interface Inbound {
   clientStats: ClientTraffic[];
   down: number;
+  egressId?: number | null;
   enable: boolean;
   expiryTime: number;
   fallbackParent?: FallbackParentInfo | null;

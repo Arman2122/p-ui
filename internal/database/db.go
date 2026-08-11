@@ -56,6 +56,7 @@ func allModels() []any {
 		&model.NodeClientIp{},
 		&model.ClientGlobalTraffic{},
 		&model.OutboundSubscription{},
+		&model.Egress{},
 	}
 }
 
@@ -120,6 +121,9 @@ func initModels() error {
 	if err := migrateSyncOrphanColumns(); err != nil {
 		return err
 	}
+	if err := migrateEgressConstraints(); err != nil {
+		return err
+	}
 	if err := resyncPostgresSequences(db, models); err != nil {
 		log.Printf("Error resyncing postgres sequences: %v", err)
 		return err
@@ -129,10 +133,20 @@ func initModels() error {
 
 // resyncPostgresSequences sets each model's id sequence to MAX(id); idempotent. Id-less
 // composite-PK tables are skipped — Postgres rejects MAX(id) at parse time and logs it (#5665).
+/*
+sequenceMustNotRewind are the tables whose id must never be handed out twice.
+
+An egress id is not a label: it names host-global kernel state (routing table
+30000+id, ip rule priority 31000+id, device peg<id>). Deleting the newest egress
+and rebooting would otherwise set the sequence back to MAX(id) and hand the same
+id — and whatever of that state still exists — to the next egress created.
+*/
+var sequenceMustNotRewind = map[string]bool{"egresses": true}
+
 func resyncPostgresSequences(gdb *gorm.DB, models []any) error {
 	for _, m := range models {
 		t, ok := tableWithIdColumn(gdb, m)
-		if !ok {
+		if !ok || sequenceMustNotRewind[t] {
 			continue
 		}
 		// t comes from the trusted model set parsed by GORM, not user input, so
@@ -197,6 +211,56 @@ func migrateSyncOrphanColumns() error {
 		return nil
 	}
 	return db.Exec("UPDATE clients SET sync_orphaned_at = 0 WHERE sync_orphaned_at IS NULL").Error
+}
+
+/*
+migrateEgressConstraints pins the two egress invariants the service layer checks
+but, being two un-transacted statements apart, cannot enforce by itself.
+
+The FK is what closes a delete racing an attach: without it the inbound is left
+pointing at a row that is gone, desired() emits no rule for an id it never read,
+and that inbound egresses with the server's own identity while the panel still
+reports it attached. RESTRICT rather than SET NULL because a silent detach is
+that same leak with the database agreeing to it.
+*/
+func migrateEgressConstraints() error {
+	if !db.Migrator().HasTable(&model.Egress{}) || !db.Migrator().HasColumn(&model.Inbound{}, "egress_id") {
+		return nil
+	}
+	// A reference to a row that is gone already converges to no rule, so clearing
+	// it makes the column say what the kernel has been doing — as pruneOrphanedHosts does.
+	err := db.Exec(
+		`UPDATE inbounds SET egress_id = NULL WHERE egress_id IS NOT NULL AND egress_id NOT IN (SELECT id FROM egresses)`,
+	).Error
+	if err != nil {
+		return err
+	}
+	if err := addConstraintOnce("inbounds", "fk_inbounds_egress",
+		`FOREIGN KEY (egress_id) REFERENCES egresses(id) ON DELETE RESTRICT`); err != nil {
+		return err
+	}
+	// NOT VALID so an out-of-band row that somehow reached the table cannot turn
+	// this into a panel that refuses to boot; every write after it is still checked.
+	return addConstraintOnce("egresses", "ck_egresses_id_band", `CHECK (id BETWEEN 1 AND 999) NOT VALID`)
+}
+
+// addConstraintOnce is the idempotent half: pg_constraint is asked by table and
+// name rather than GORM's migrator, which guesses the name from the model. The
+// namespace filter is load-bearing — every test runs in a schema of its own.
+func addConstraintOnce(table, name, definition string) error {
+	var count int64
+	err := db.Raw(
+		`SELECT count(*) FROM pg_constraint c
+		 JOIN pg_class t ON t.oid = c.conrelid
+		 JOIN pg_namespace n ON n.oid = t.relnamespace
+		 WHERE n.nspname = current_schema() AND t.relname = ? AND c.conname = ?`,
+		table, name,
+	).Scan(&count).Error
+	if err != nil || count > 0 {
+		return err
+	}
+	// table, name and definition are literals from this file, never user input.
+	return db.Exec(`ALTER TABLE ` + table + ` ADD CONSTRAINT ` + name + ` ` + definition).Error
 }
 
 func migrateHostVerifyPeerCertByNameColumn() error {

@@ -41,6 +41,7 @@ export type DBInboundInit = Partial<{
     sniffing: RawJsonField;
     clientStats: ClientStats[];
     nodeId: number | null;
+    egressId: number | null;
     shareAddrStrategy: string;
     shareAddr: string;
     subSortIndex: number;
@@ -89,6 +90,9 @@ export class DBInbound {
     sniffing: RawJsonField;
     clientStats: ClientStats[];
     nodeId: number | null;
+    /* Which egress this inbound leaves through. Written by the egress attach
+       endpoint, never by an inbound save, so it is read-only on this side. */
+    egressId: number | null;
     shareAddrStrategy: string;
     shareAddr: string;
     subSortIndex: number;
@@ -119,6 +123,7 @@ export class DBInbound {
         this.sniffing = "";
         this.clientStats = [];
         this.nodeId = null;
+        this.egressId = null;
         this.shareAddrStrategy = "node";
         this.shareAddr = "";
         this.subSortIndex = 1;

@@ -66,16 +66,19 @@ type Inbound struct {
 	ClientStats          []core.ClientTraffic `gorm:"foreignKey:InboundId;references:Id" json:"clientStats" form:"clientStats"`                                                                                     // Client traffic statistics
 
 	// Xray configuration fields
-	Listen            string   `json:"listen" form:"listen"`
-	Port              int      `json:"port" form:"port" validate:"gte=0,lte=65535" example:"443"`
-	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,protocol" example:"vless"`
-	Settings          string   `json:"settings" form:"settings"`
-	StreamSettings    string   `json:"streamSettings" form:"streamSettings"`
-	Tag               string   `json:"tag" form:"tag" gorm:"unique" example:"in-443-tcp"`
-	Sniffing          string   `json:"sniffing" form:"sniffing"`
-	NodeID            *int     `json:"nodeId,omitempty" form:"nodeId" gorm:"index"`
-	ShareAddrStrategy string   `json:"shareAddrStrategy" form:"shareAddrStrategy" gorm:"column:share_addr_strategy;default:node" validate:"omitempty,oneof=node listen custom"`
-	ShareAddr         string   `json:"shareAddr" form:"shareAddr" gorm:"column:share_addr"`
+	Listen         string   `json:"listen" form:"listen"`
+	Port           int      `json:"port" form:"port" validate:"gte=0,lte=65535" example:"443"`
+	Protocol       Protocol `json:"protocol" form:"protocol" validate:"required,protocol" example:"vless"`
+	Settings       string   `json:"settings" form:"settings"`
+	StreamSettings string   `json:"streamSettings" form:"streamSettings"`
+	Tag            string   `json:"tag" form:"tag" gorm:"unique" example:"in-443-tcp"`
+	Sniffing       string   `json:"sniffing" form:"sniffing"`
+	NodeID         *int     `json:"nodeId,omitempty" form:"nodeId" gorm:"index"`
+	// EgressID selects the Egress this inbound leaves through. A column, not a
+	// settings key: settings-borne selection forces a REALITY inbound to restart.
+	EgressID          *int   `json:"egressId,omitempty" form:"-" gorm:"index"`
+	ShareAddrStrategy string `json:"shareAddrStrategy" form:"shareAddrStrategy" gorm:"column:share_addr_strategy;default:node" validate:"omitempty,oneof=node listen custom"`
+	ShareAddr         string `json:"shareAddr" form:"shareAddr" gorm:"column:share_addr"`
 
 	// OriginNodeGuid is the panelGuid of the node that physically hosts this
 	// inbound, propagated up across hops (#4983). Empty for an inbound that
@@ -101,6 +104,30 @@ type Inbound struct {
 type FallbackParentInfo struct {
 	MasterId int    `json:"masterId"`
 	Path     string `json:"path,omitempty"`
+}
+
+/*
+Egress is one policy-routed exit an L3 inbound's traffic can be sent out through.
+
+Id is the only allocation this row stores: the routing table, the ip rule
+priority, the front device and its gateway are all pure functions of it, so a
+freed id must never come back while any of that kernel state can still exist.
+Type is the whole generalisation seam — one driver per value — and Settings is
+the per-type column that buys the next driver zero migrations.
+*/
+type Egress struct {
+	Id   int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement" example:"1"`
+	Type string `json:"type" form:"type" validate:"required" example:"xray-tun"`
+	// Enable carries no column default on purpose: GORM omits a false from the
+	// INSERT when one exists, so "create it disabled" would silently enable it.
+	Enable bool   `json:"enable" form:"enable" example:"true"`
+	Remark string `json:"remark" form:"remark" example:"warp exit"`
+	// Target is the outbound or balancer tag the front sends traffic to. An
+	// unresolvable one leaves the egress dark — contained, never silently direct.
+	Target    string `json:"target" form:"target" example:"warp"`
+	Settings  string `json:"settings" form:"settings"`
+	CreatedAt int64  `json:"createdAt" gorm:"autoCreateTime:milli" example:"1700000000000"`
+	UpdatedAt int64  `json:"updatedAt" gorm:"autoUpdateTime:milli" example:"1700000000000"`
 }
 
 // OutboundTraffics tracks traffic statistics for Xray outbound connections.

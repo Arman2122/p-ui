@@ -383,6 +383,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation |
 | `@every 10s` | `check_client_ip_job` | Enforce per-client IP limits |
 | `@every 10s` | `core_supervise` | Reconcile every registered core on its desired inbounds (Xray excepted — the panel's own config build converges it) |
+| `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
 | `@every 10m` | `clear_logs_job` (`PruneXrayLogsJob`) | Truncate Xray access/error logs once either exceeds 64 MiB |
 | `@hourly` | `warp_ip_job`, `periodic_traffic_reset_job("hourly")` | WARP IP rotation; traffic resets |

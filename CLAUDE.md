@@ -49,6 +49,10 @@ file locations when it can answer in one hop.
 - `internal/cores/` — wiring only; one `Register` line per core in `cores.go`.
   Concrete cores live in `internal/cores/internal/<name>/` so the **compiler**
   stops the service layer importing one. `internal/mtproto` is ported (P2).
+- `internal/egress/` — policy-routed egress for L3 inbounds: the `ip rule`,
+  private table and blackhole the panel owns, all derived from the egress id
+  (`alloc.go`), converged by `manager.go` over the `Plane` seam. One driver per
+  egress type in `drivers/`. Design: `docs/multi-core-architecture.md` §5.
 - `internal/arch/` — architecture guards. No runtime code: each file parses the
   repo and fails on erosion (dispatch ratchet, import fences, frozen columns).
 - `internal/sub/` — subscription server (raw / JSON / Clash).
@@ -60,7 +64,7 @@ file locations when it can answer in one hop.
   - `controller/` — panel + REST API handlers; OpenAPI at /panel/api/openapi.json.
   - `service/` — business logic (InboundService, SettingService, XrayService,
     node sync); subpackages tgbot/, email/, outbound/, panel/, integration/.
-  - `job/` — 17 cron jobs (traffic, fail2ban IP-limit, node heartbeat/sync, LDAP,
+  - `job/` — 18 cron jobs (traffic, fail2ban IP-limit, node heartbeat/sync, LDAP,
     CPU/memory watchdogs, …); full table in `docs/architecture.md` §5.4.
   - `middleware/`, `entity/`, `global/`, `session/` (CSRF), `network/`,
     `runtime/` (master/sub-node over mTLS), `websocket/`.
