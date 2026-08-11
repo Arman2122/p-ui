@@ -124,14 +124,37 @@ type fakeStats struct {
 // GetUsersStats reports whoever the stats file names as having moved bytes,
 // which is what the core treats as connected right now.
 func (f *fakeStats) GetUsersStats(context.Context, *statsService.GetUsersStatsRequest) (*statsService.GetUsersStatsResponse, error) {
+	sessions := sessionsFed()
 	resp := &statsService.GetUsersStatsResponse{}
 	for _, email := range emailsInStats() {
-		resp.Users = append(resp.Users, &statsService.UserStat{
-			Email: email,
-			Ips:   []*statsService.OnlineIPEntry{{Ip: "127.0.0.1", LastSeen: 1}},
-		})
+		entry := &statsService.OnlineIPEntry{Ip: "127.0.0.1", LastSeen: 1}
+		if fed, ok := sessions[email]; ok {
+			// Seconds, as the real core reports them: the adapter is what has to
+			// know that a Session carries milliseconds.
+			entry = &statsService.OnlineIPEntry{Ip: fed.IP, LastSeen: fed.LastSeenUnixMilli / 1000}
+		}
+		resp.Users = append(resp.Users, &statsService.UserStat{Email: email, Ips: []*statsService.OnlineIPEntry{entry}})
 	}
 	return resp, nil
+}
+
+// fedSession is one connection the rig put on the wire, exchanged through a file
+// because the stand-in core is a separate process.
+type fedSession struct {
+	IP                string `json:"ip"`
+	LastSeenUnixMilli int64  `json:"lastSeen"`
+}
+
+func sessionsFed() map[string]fedSession {
+	data, err := os.ReadFile(os.Getenv("XRAY_FAKE_SESSIONS"))
+	if err != nil {
+		return nil
+	}
+	var out map[string]fedSession
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil
+	}
+	return out
 }
 
 func emailsInStats() []string {
@@ -232,12 +255,13 @@ func operationOf(req *command.AlterInboundRequest) proto.Message {
 }
 
 type rig struct {
-	t       *testing.T
-	pidFile string
-	ready   string
-	stats   string
-	servedF string
-	apiPort int
+	t        *testing.T
+	pidFile  string
+	ready    string
+	stats    string
+	servedF  string
+	sessions string
+	apiPort  int
 }
 
 func newRig(t *testing.T) *rig {
@@ -259,12 +283,13 @@ func newRig(t *testing.T) *rig {
 		t.Fatalf("reserve api port: %v", err)
 	}
 	r := &rig{
-		t:       t,
-		pidFile: filepath.Join(binDir, "xray-pids.txt"),
-		ready:   filepath.Join(binDir, "xray-ready.txt"),
-		stats:   filepath.Join(binDir, "xray-stats.json"),
-		servedF: filepath.Join(binDir, "xray-served.txt"),
-		apiPort: port,
+		t:        t,
+		pidFile:  filepath.Join(binDir, "xray-pids.txt"),
+		ready:    filepath.Join(binDir, "xray-ready.txt"),
+		stats:    filepath.Join(binDir, "xray-stats.json"),
+		servedF:  filepath.Join(binDir, "xray-served.txt"),
+		sessions: filepath.Join(binDir, "xray-sessions.json"),
+		apiPort:  port,
 	}
 	r.writeStats(map[string]int64{})
 	t.Setenv("PUI_BIN_FOLDER", binDir)
@@ -273,6 +298,7 @@ func newRig(t *testing.T) *rig {
 	t.Setenv("XRAY_FAKE_READY", r.ready)
 	t.Setenv("XRAY_FAKE_STATS", r.stats)
 	t.Setenv("XRAY_FAKE_SERVED", r.servedF)
+	t.Setenv("XRAY_FAKE_SESSIONS", r.sessions)
 	t.Cleanup(func() {
 		if p := engine.GetManager().Current(); p != nil && p.IsRunning() {
 			_ = p.Stop()
@@ -338,6 +364,20 @@ func (r *rig) feed(email string, up, down int64) {
 }
 
 func (r *rig) restart() { r.writeStats(map[string]int64{}) }
+
+// feedSession publishes one connection for the running stand-in to report. It
+// leaves the stats file alone: rewriting it would re-baseline the byte counters.
+func (r *rig) feedSession(email, source string, lastSeenUnixMilli int64) {
+	r.t.Helper()
+	body, err := json.Marshal(map[string]fedSession{email: {IP: source, LastSeenUnixMilli: lastSeenUnixMilli}})
+	if err != nil {
+		r.t.Fatalf("encode sessions: %v", err)
+	}
+	if err := os.WriteFile(r.sessions, body, 0o600); err != nil {
+		r.t.Fatalf("write sessions: %v", err)
+	}
+	r.waitReady()
+}
 
 func (r *rig) served() []string {
 	r.t.Helper()
@@ -407,6 +447,7 @@ func (r *rig) asRig() coretest.Rig {
 		FeedTraffic:   r.feed,
 		RestartSource: r.restart,
 		ServedUsers:   r.served,
+		FeedSession:   r.feedSession,
 	}
 }
 

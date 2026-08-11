@@ -3,6 +3,8 @@ package coretest
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -35,6 +37,17 @@ type defects struct {
 	misattributeTraffic bool
 	applyOnlyAdds       bool
 	inventCredential    bool
+	// The identity defects, driven by shapingCore. They are separated only
+	// because a core that implements neither new interface must stay provable.
+	shapeNothing        bool
+	hideTheDevice       bool
+	inventSelector      bool
+	disagreeOnSelector  bool
+	shapeAWholeSubnet   bool
+	shareOnePrefix      bool
+	shapeAStranger      bool
+	zeroSessionLastSeen bool
+	misattributeSession bool
 }
 
 type fakeCore struct {
@@ -253,6 +266,120 @@ func (f *fakeCore) restartSource() {
 	}
 }
 
+/*
+shapingCore is a fakeCore that also carries a kernel identity and reports
+sessions.
+
+A second type on purpose: Go interfaces are static, so one fake implementing
+both would leave nothing proving the nil gates skip a core that implements
+neither — which is the whole "a new core costs nothing" claim.
+*/
+type shapingCore struct {
+	*fakeCore
+	host     map[string]netip.Prefix
+	sessions map[string]core.Session
+}
+
+func newShapingFake(d defects) *shapingCore {
+	return &shapingCore{
+		fakeCore: newFake(d),
+		host:     map[string]netip.Prefix{},
+		sessions: map[string]core.Session{},
+	}
+}
+
+// Reconcile puts each user on the host at a fixed address. That placement is
+// what hostSubjects reports, and what ShapingTargets has to agree with.
+func (s *shapingCore) Reconcile(ctx context.Context, desired []core.Instance) error {
+	for _, inst := range desired {
+		for i, u := range inst.Users {
+			if _, placed := s.host[u.Email]; !placed {
+				s.host[u.Email] = netip.MustParsePrefix(fmt.Sprintf("10.0.0.%d/32", 11+i))
+			}
+		}
+	}
+	return s.fakeCore.Reconcile(ctx, desired)
+}
+
+func (s *shapingCore) hostSubjects() map[string][]string {
+	out := make(map[string][]string, len(s.host))
+	for email, prefix := range s.host {
+		out[email] = []string{prefix.String()}
+	}
+	return out
+}
+
+func (s *shapingCore) ShapingSelector(core.Kind) core.Selector {
+	switch {
+	case s.d.shapeNothing:
+		return core.SelectorNone
+	case s.d.inventSelector:
+		return core.Selector("everyThirdPacket")
+	default:
+		return core.SelectorInnerIP
+	}
+}
+
+func (s *shapingCore) ShapingTargets(_ context.Context, inst core.Instance) (core.ShapingTarget, error) {
+	target := core.ShapingTarget{
+		Device:   "fake0",
+		Selector: s.ShapingSelector(inst.Kind),
+		Keys:     map[string]core.SubjectKey{},
+	}
+	if s.d.hideTheDevice {
+		target.Device = ""
+	}
+	if s.d.disagreeOnSelector {
+		target.Selector = core.SelectorFwmark
+	}
+	for _, u := range inst.Users {
+		prefix, placed := s.host[u.Email]
+		if !placed {
+			continue
+		}
+		if s.d.shapeAWholeSubnet {
+			prefix = netip.MustParsePrefix("10.0.0.0/24")
+		}
+		target.Keys[u.Email] = core.SubjectKey{Prefixes: []netip.Prefix{prefix}}
+	}
+	if s.d.shareOnePrefix && len(inst.Users) > 1 {
+		target.Keys[inst.Users[1].Email] = target.Keys[inst.Users[0].Email]
+	}
+	if s.d.shapeAStranger {
+		target.Keys["nobody@example.com"] = core.SubjectKey{Prefixes: []netip.Prefix{netip.MustParsePrefix("10.0.0.99/32")}}
+	}
+	return target, nil
+}
+
+func (s *shapingCore) feedSession(email, source string, lastSeenUnixMilli int64) {
+	s.sessions[email] = core.Session{
+		Email:             email,
+		Source:            netip.MustParseAddr(source),
+		LastSeenUnixMilli: lastSeenUnixMilli,
+	}
+}
+
+func (s *shapingCore) Sessions(context.Context) ([]core.Session, error) {
+	out := make([]core.Session, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		if s.d.zeroSessionLastSeen {
+			session.LastSeenUnixMilli = 0
+		}
+		if s.d.misattributeSession {
+			session.Email = "someone-else@example.com"
+		}
+		out = append(out, session)
+	}
+	return out, nil
+}
+
+func shapingRig(s *shapingCore) Rig {
+	rig := rigFor(s.fakeCore, func() (core.Core, error) { return s, nil })
+	rig.HostSubjects = s.hostSubjects
+	rig.FeedSession = s.feedSession
+	return rig
+}
+
 func rigFor(f *fakeCore, asCore func() (core.Core, error)) Rig {
 	return Rig{
 		NewCore:  asCore,
@@ -367,6 +494,112 @@ func TestSuiteCatchesBrokenAdapters(t *testing.T) {
 			}
 			t.Errorf("suite did not catch %q: wanted invariant %q, got %v", tc.name, tc.wantInvariant, failures)
 		})
+	}
+}
+
+func TestConformingShapingAdapterPasses(t *testing.T) {
+	shared := newShapingFake(defects{})
+	for _, f := range Check(shapingRig(shared)) {
+		t.Errorf("conforming shaping adapter reported %s", f)
+	}
+}
+
+// TestACoreWithoutTheNewCapabilitiesIsUntouched pins both nil gates: a core that
+// declares no identity passes with neither hook, so a new core costs nothing.
+func TestACoreWithoutTheNewCapabilitiesIsUntouched(t *testing.T) {
+	shared := newFake(defects{})
+	rig := rigFor(shared, func() (core.Core, error) { return shared, nil })
+	if rig.HostSubjects != nil || rig.FeedSession != nil {
+		t.Fatal("the plain rig must supply neither identity hook, or the nil gates are not what this test drives")
+	}
+	for _, f := range Check(rig) {
+		t.Errorf("a core implementing neither new capability reported %s", f)
+	}
+}
+
+func TestSuiteCatchesBrokenIdentities(t *testing.T) {
+	tests := []struct {
+		name          string
+		defects       defects
+		wantInvariant string
+	}{
+		{
+			name:          "implements ShapingHost while every kind shapes nothing",
+			defects:       defects{shapeNothing: true},
+			wantInvariant: "descriptor/capabilities-match",
+		},
+		{
+			name:          "never names the device it shapes on",
+			defects:       defects{hideTheDevice: true},
+			wantInvariant: "shaping/names-the-device",
+		},
+		{
+			name:          "declares a selector nothing can key on",
+			defects:       defects{inventSelector: true},
+			wantInvariant: "shaping/selector-vocabulary",
+		},
+		{
+			name:          "shapes by one key while the form gates on another",
+			defects:       defects{disagreeOnSelector: true},
+			wantInvariant: "shaping/selector-agrees",
+		},
+		{
+			name:          "keys a client by a whole subnet",
+			defects:       defects{shapeAWholeSubnet: true},
+			wantInvariant: "shaping/keys-are-host-prefixes",
+		},
+		{
+			name:          "gives two clients the same address",
+			defects:       defects{shareOnePrefix: true},
+			wantInvariant: "shaping/keys-are-unique",
+		},
+		{
+			name:          "keys a client the instance does not serve",
+			defects:       defects{shapeAStranger: true},
+			wantInvariant: "shaping/keys-match-users",
+		},
+		{
+			name:          "reports a session with no last-seen time",
+			defects:       defects{zeroSessionLastSeen: true},
+			wantInvariant: "sessions/lastseen-advances",
+		},
+		{
+			name:          "attributes a session to the wrong client",
+			defects:       defects{misattributeSession: true},
+			wantInvariant: "sessions/reports-what-the-host-sees",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			shared := newShapingFake(tc.defects)
+			failures := Check(shapingRig(shared))
+			for _, f := range failures {
+				if f.Invariant == tc.wantInvariant {
+					return
+				}
+			}
+			t.Errorf("suite did not catch %q: wanted invariant %q, got %v", tc.name, tc.wantInvariant, failures)
+		})
+	}
+}
+
+// TestIdentityRigWithoutTheHostReportsUnverifiable is the ServedUsers rule for
+// the new checks: what the adapter says is worth nothing without the host's word.
+func TestIdentityRigWithoutTheHostReportsUnverifiable(t *testing.T) {
+	shared := newShapingFake(defects{})
+	rig := shapingRig(shared)
+	rig.HostSubjects = nil
+	rig.FeedSession = nil
+
+	var got []string
+	for _, f := range Check(rig) {
+		got = append(got, f.Invariant)
+	}
+	for _, want := range []string{"shaping/verifiable", "sessions/verifiable"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("a rig that cannot verify %s must say so rather than pass silently; got %v", want, got)
+		}
 	}
 }
 

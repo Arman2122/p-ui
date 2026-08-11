@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -330,6 +331,43 @@ func (c *Core) OnlineEmails(_ context.Context) ([]string, error) {
 	out := make([]string, 0, len(users))
 	for _, u := range users {
 		out = append(out, u.Email)
+	}
+	return out, nil
+}
+
+/*
+Sessions names each live connection and the address it came from, which is the
+same read OnlineEmails takes and the one an IP cap is decided on.
+
+ShapingHost is deliberately absent: xray-core has no per-user rate limit anywhere
+in its tree, and every user leaves one process over one socket set, so there is
+nothing per-client for a kernel hook to key on. Declaring a selector here would
+be a limit the panel offers and nothing enforces.
+*/
+func (c *Core) Sessions(_ context.Context) ([]core.Session, error) {
+	api, err := c.connect()
+	if err != nil {
+		return nil, err
+	}
+	users, err := api.GetOnlineUsers()
+	if err != nil {
+		return nil, err
+	}
+	var out []core.Session
+	for _, u := range users {
+		for _, entry := range u.IPs {
+			source, err := netip.ParseAddr(entry.IP)
+			if err != nil {
+				continue
+			}
+			// The core dates a connection in seconds; a session carries milliseconds,
+			// and a zero stays zero because that means it could not say.
+			out = append(out, core.Session{
+				Email:             u.Email,
+				Source:            source,
+				LastSeenUnixMilli: entry.LastSeen * 1000,
+			})
+		}
 	}
 	return out, nil
 }

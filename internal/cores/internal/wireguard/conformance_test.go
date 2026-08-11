@@ -2,8 +2,10 @@ package wireguard
 
 import (
 	"fmt"
+	"net/netip"
 	"slices"
 	"testing"
+	"time"
 
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
@@ -110,6 +112,33 @@ func (r *rig) served() []string {
 	return out
 }
 
+// hostSubjects reads the allowed-IPs off the device and names the client behind
+// each key, which is the only view the adapter cannot have invented.
+func (r *rig) hostSubjects() map[string][]string {
+	out := map[string][]string{}
+	for _, key := range r.kernel.PeerKeys(iface) {
+		for email, known := range r.keys {
+			if known != key {
+				continue
+			}
+			for _, allowed := range r.kernel.AllowedIPs(iface, key) {
+				out[email] = append(out[email], allowed.String())
+			}
+		}
+	}
+	return out
+}
+
+// feedSession is a handshake arriving from one outer address: the peer is on the
+// wire, and the kernel keeps exactly that address until it moves.
+func (r *rig) feedSession(email, source string, lastSeenUnixMilli int64) {
+	addr, err := netip.ParseAddr(source)
+	if err != nil {
+		return
+	}
+	r.kernel.FeedSession(iface, r.keys[email], addr, time.UnixMilli(lastSeenUnixMilli))
+}
+
 func (r *rig) asRig() coretest.Rig {
 	return coretest.Rig{
 		NewCore:       func() (core.Core, error) { return &Core{mgr: r.mgr}, nil },
@@ -118,6 +147,8 @@ func (r *rig) asRig() coretest.Rig {
 		FeedTraffic:   r.feed,
 		RestartSource: r.restart,
 		ServedUsers:   r.served,
+		HostSubjects:  r.hostSubjects,
+		FeedSession:   r.feedSession,
 	}
 }
 

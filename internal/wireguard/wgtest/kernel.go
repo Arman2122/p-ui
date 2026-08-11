@@ -25,6 +25,9 @@ type counter struct {
 	up        int64
 	down      int64
 	handshake time.Time
+	// endpoint is the outer address the peer last spoke from. The kernel keeps
+	// exactly one, which is why two devices sharing a key make it roam.
+	endpoint *net.UDPAddr
 }
 
 type link struct {
@@ -96,6 +99,7 @@ func (l *link) device(name string) wgtypes.Device {
 		peer.AllowedIPs = slices.Clone(p.AllowedIPs)
 		if c := l.counters[key]; c != nil {
 			peer.ReceiveBytes, peer.TransmitBytes, peer.LastHandshakeTime = c.up, c.down, c.handshake
+			peer.Endpoint = c.endpoint
 		}
 		dev.Peers = append(dev.Peers, peer)
 	}
@@ -108,6 +112,7 @@ func (l *link) device(name string) wgtypes.Device {
 			ReceiveBytes:      c.up,
 			TransmitBytes:     c.down,
 			LastHandshakeTime: c.handshake,
+			Endpoint:          c.endpoint,
 		})
 	}
 	slices.SortFunc(dev.Peers, func(a, b wgtypes.Peer) int {
@@ -305,7 +310,35 @@ func (k *Kernel) FeedTraffic(name string, key wgtypes.Key, up, down int64) {
 	if !ok {
 		return
 	}
-	l.counters[key] = &counter{up: up, down: down, handshake: time.Now()}
+	// The endpoint survives: moving bytes is not what tells the kernel where a
+	// peer is, and clearing it here would make the two feeds order-dependent.
+	c := l.counter(key)
+	c.up, c.down, c.handshake = up, down, time.Now()
+}
+
+// FeedSession puts a peer on the wire from one outer address at one time, which
+// is the pair a session report is built from.
+func (k *Kernel) FeedSession(name string, key wgtypes.Key, source netip.Addr, handshake time.Time) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	l, ok := k.links[name]
+	if !ok {
+		return
+	}
+	c := l.counter(key)
+	c.endpoint = &net.UDPAddr{IP: source.AsSlice(), Port: 51820}
+	c.handshake = handshake
+}
+
+// counter returns this peer's counters, creating them on first sight so a
+// reading lands on a key the device carries no configuration for.
+func (l *link) counter(key wgtypes.Key) *counter {
+	c, ok := l.counters[key]
+	if !ok {
+		c = &counter{}
+		l.counters[key] = c
+	}
+	return c
 }
 
 // RecreateLink models `ip link del` followed by `ip link add`: a new ifindex and

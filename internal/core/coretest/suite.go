@@ -4,7 +4,10 @@ package coretest
 import (
 	"context"
 	"fmt"
+	"maps"
+	"net/netip"
 	"slices"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
 )
@@ -47,11 +50,23 @@ type Rig struct {
 	// ServedUsers reports the emails the daemon is serving, read from the daemon
 	// not the adapter. Without it, a no-op AddUser looks like a working one.
 	ServedUsers func() []string
+
+	// HostSubjects reports the kernel identity per email as the HOST holds it, read
+	// off the device. Without it, a map the adapter invented cannot be told apart.
+	HostSubjects func() map[string][]string
+
+	// FeedSession makes one session observable, so Sessions can be checked against
+	// something the suite controls rather than whatever happens to be live.
+	FeedSession func(email, source string, lastSeenUnixMilli int64)
 }
 
 // Subject is the client the traffic and provisioning checks operate on. It is
 // fixed so a rig can pre-register it if its daemon needs users declared.
 const Subject = "a@example.com"
+
+// SessionSource is the address the session checks drive. RFC 5737 documentation
+// space, so it can never collide with a real endpoint a rig's daemon reports.
+const SessionSource = "203.0.113.7"
 
 // Failure is one violated invariant.
 type Failure struct {
@@ -97,6 +112,10 @@ func Check(rig Rig) []Failure {
 	checkHotApply(r, rig, bound)
 	checkTraffic(r, rig, bound)
 	checkOnline(r, bound)
+	// Both run here and not later: checkInstanceApply ends in DropInstance, which
+	// takes the device with it, and neither identity is observable without one.
+	checkShaping(r, rig, bound)
+	checkSessions(r, rig, bound)
 	checkUsers(r, rig, bound)
 	checkInstanceApply(r, rig, bound)
 	checkQuota(r, bound)
@@ -215,6 +234,181 @@ func checkOnline(r *report, bound *core.Bound) {
 	if !slices.Contains(emails, Subject) {
 		r.fail("online/reports-a-connected-client", "OnlineEmails returned %v, without %q, which has just moved bytes over a live connection; a core declaring OnlineUsers and returning nothing reads as everyone being offline", emails, Subject)
 	}
+}
+
+/*
+checkShaping holds a shaping core to an identity the HOST agrees with.
+
+Read back from Rig.HostSubjects rather than trusted, for the reason ServedUsers
+exists: an adapter returning a plausible map it invented is indistinguishable
+from one that works. The kernel is the authority — it moves a shared address to
+the later peer — so an identity that disagrees with it shapes the wrong client.
+*/
+func checkShaping(r *report, rig Rig, bound *core.Bound) {
+	if bound.Shape == nil {
+		return
+	}
+	for _, kind := range bound.Core.Kinds() {
+		switch selector := bound.Shape.ShapingSelector(kind); selector {
+		case core.SelectorNone, core.SelectorInnerIP, core.SelectorFwmark:
+		default:
+			r.fail("shaping/selector-vocabulary", "kind %q declares selector %q, which is outside the vocabulary in internal/core/caps.go; nothing can key on it, and an unknown selector must read as \"cannot shape\" rather than \"probably fine\"", kind, selector)
+		}
+	}
+	if rig.HostSubjects == nil {
+		r.fail("shaping/verifiable", "unverifiable: core implements ShapingHost but the rig supplies no HostSubjects, so a map the adapter invented cannot be told from what the host holds")
+		return
+	}
+	ctx := context.Background()
+	// The traffic checks end with the daemon restarted and its state wiped, and an
+	// identity is only observable while the instance is actually being served.
+	inst := rig.Instance(2)
+	if bound.Supervise != nil {
+		if err := bound.Supervise.Reconcile(ctx, []core.Instance{inst}); err != nil {
+			r.fail("shaping/reconcile", "reconciling before the identity checks failed: %v", err)
+			return
+		}
+	}
+
+	target, err := bound.Shape.ShapingTargets(ctx, inst)
+	if err != nil {
+		r.fail("shaping/targets-succeed", "ShapingTargets failed: %v", err)
+		return
+	}
+	if target.Device == "" {
+		r.fail("shaping/names-the-device", "ShapingTargets named no device for an instance this core is serving; an empty Device means \"not hosting it right now\", so a core that always answers that is never shaped and nothing ever fails")
+		return
+	}
+	if declared := bound.Shape.ShapingSelector(inst.Kind); target.Selector != declared {
+		r.fail("shaping/selector-agrees", "kind %q declares selector %q but its instance reports %q; the client form gates on the first and the shaper keys on the second, so a limit is offered that nothing enforces", inst.Kind, declared, target.Selector)
+	}
+	compareSubjects(r, inst, target, rig.HostSubjects())
+}
+
+// compareSubjects checks the target against the instance it belongs to and
+// against the host, which is the only source that cannot be invented.
+func compareSubjects(r *report, inst core.Instance, target core.ShapingTarget, host map[string][]string) {
+	served := make(map[string]bool, len(inst.Users))
+	for _, u := range inst.Users {
+		served[u.Email] = true
+	}
+
+	// Sorted, so a real adapter's failure reads the same on every run: which of two
+	// clients sharing an address is named "first" is otherwise map order.
+	owner := map[netip.Prefix]string{}
+	got := map[string][]string{}
+	for _, email := range slices.Sorted(maps.Keys(target.Keys)) {
+		key := target.Keys[email]
+		if !served[email] {
+			r.fail("shaping/keys-match-users", "the target keys %q, who is not a user of instance %d; a stale map shapes a deleted client's successor", email, inst.ID)
+		}
+		if len(key.Prefixes) == 0 {
+			r.fail("shaping/keys-are-host-prefixes", "%q is keyed by no prefix at all; a client the core cannot distinguish belongs outside Keys, not inside it with an empty identity", email)
+		}
+		for _, prefix := range key.Prefixes {
+			switch other, taken := owner[prefix]; {
+			case !prefix.IsSingleIP():
+				r.fail("shaping/keys-are-host-prefixes", "%q is keyed by %s, which is not a single address; a wider prefix shapes everyone inside it as this one client", email, prefix)
+			case taken:
+				r.fail("shaping/keys-are-unique", "%s is claimed by both %q and %q; one of them is shaped as the other, which is the one failure a customer cannot detect for themselves", prefix, other, email)
+			default:
+				owner[prefix] = email
+				got[email] = append(got[email], prefix.String())
+			}
+		}
+	}
+
+	want := map[string][]string{}
+	for _, email := range slices.Sorted(maps.Keys(host)) {
+		if !served[email] {
+			continue
+		}
+		for _, raw := range host[email] {
+			prefix, err := netip.ParsePrefix(raw)
+			if err != nil {
+				r.fail("shaping/verifiable", "the rig reports %q as %q's identity on the host, which is not a prefix", raw, email)
+				continue
+			}
+			if prefix.IsSingleIP() {
+				want[email] = append(want[email], prefix.String())
+			}
+		}
+	}
+	for _, set := range []map[string][]string{got, want} {
+		for _, prefixes := range set {
+			slices.Sort(prefixes)
+		}
+	}
+
+	for _, email := range slices.Sorted(maps.Keys(want)) {
+		if !slices.Equal(got[email], want[email]) {
+			r.fail("shaping/verifiable", "the host holds %v for %q and the core reports %v; a limit is attached to what the core says, so the two disagreeing means somebody else is shaped", want[email], email, got[email])
+		}
+	}
+	for _, email := range slices.Sorted(maps.Keys(got)) {
+		if _, known := want[email]; !known {
+			r.fail("shaping/verifiable", "the core reports %v for %q, which the host holds no address for; an invented key shapes an address nobody answers to", got[email], email)
+		}
+	}
+}
+
+// checkSessions drives one session the rig controls, because a core answering
+// with whatever is live cannot be told from one answering a plausible constant.
+func checkSessions(r *report, rig Rig, bound *core.Bound) {
+	if bound.Sessions == nil {
+		return
+	}
+	if rig.FeedSession == nil {
+		r.fail("sessions/verifiable", "unverifiable: core implements SessionReporter but the rig supplies no FeedSession, so nothing it reports can be checked against a session the suite put there")
+		return
+	}
+	ctx := context.Background()
+	if bound.Supervise != nil {
+		if err := bound.Supervise.Reconcile(ctx, []core.Instance{rig.Instance(2)}); err != nil {
+			r.fail("sessions/reconcile", "reconciling before the session checks failed: %v", err)
+			return
+		}
+	}
+	// Whole seconds, and inside the last minute: a core whose source keeps seconds
+	// round-trips these exactly, and a liveness window still counts them live.
+	seen := time.Now().Add(-time.Minute).Truncate(time.Second)
+	later := seen.Add(30 * time.Second)
+
+	rig.FeedSession(Subject, SessionSource, seen.UnixMilli())
+	first := subjectSession(r, bound)
+	if first == nil {
+		return
+	}
+	if got := first.LastSeenUnixMilli; got != seen.UnixMilli() {
+		r.fail("sessions/lastseen-advances", "the session was last seen at %d and Sessions reports %d; the value is what the ban dedup compares, so one the core made up bans a client that never reconnected", seen.UnixMilli(), got)
+		return
+	}
+
+	rig.FeedSession(Subject, SessionSource, later.UnixMilli())
+	second := subjectSession(r, bound)
+	if second == nil {
+		return
+	}
+	if got := second.LastSeenUnixMilli; got != later.UnixMilli() {
+		r.fail("sessions/lastseen-advances", "the session was seen again at %d and Sessions still reports %d; a core that cannot advance it makes every re-ban fire forever or never", later.UnixMilli(), got)
+	}
+}
+
+// subjectSession returns the reported session for the subject at SessionSource,
+// or nil after reporting why the one the rig put on the wire is not there.
+func subjectSession(r *report, bound *core.Bound) *core.Session {
+	got, err := bound.Sessions.Sessions(context.Background())
+	if err != nil {
+		r.fail("sessions/succeeds", "Sessions failed: %v", err)
+		return nil
+	}
+	for i, s := range got {
+		if s.Email == Subject && s.Source.String() == SessionSource {
+			return &got[i]
+		}
+	}
+	r.fail("sessions/reports-what-the-host-sees", "Sessions returned %v, without %q from %s, which the rig has just put on the wire; an unreported session is a cap nobody is held to, and one attributed to the wrong client bans somebody who was inside it", got, Subject, SessionSource)
+	return nil
 }
 
 // checkUsers exercises live provisioning against what the daemon serves: an

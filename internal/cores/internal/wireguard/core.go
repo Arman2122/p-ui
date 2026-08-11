@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -211,4 +212,74 @@ func (c *Core) OnlineEmails(_ context.Context) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.online), nil
+}
+
+// ShapingSelector answers for this core's own kind alone. A peer's allowed-IP is
+// unforgeable: cryptokey routing drops a spoofed inner source at decap.
+func (c *Core) ShapingSelector(kind core.Kind) core.Selector {
+	if kind != Kind {
+		return core.SelectorNone
+	}
+	return core.SelectorInnerIP
+}
+
+/*
+ShapingTargets reads each client's identity off the device, never out of the
+panel's own settings: the kernel moves a shared allowed-IP to the later peer, so
+it is the only thing that knows who currently answers to an address.
+
+A client with no single-address prefix is left out rather than keyed by a guess —
+a wider prefix would shape everyone inside it as that one client.
+*/
+func (c *Core) ShapingTargets(ctx context.Context, inst core.Instance) (core.ShapingTarget, error) {
+	held, err := c.mgr.PeerAllowedIPs(ctx, inst.ID)
+	if err != nil {
+		if errors.Is(err, engine.ErrNoDevice) {
+			// Not hosting it at this moment; the caller goes quiet and retries.
+			return core.ShapingTarget{}, nil
+		}
+		return core.ShapingTarget{}, fmt.Errorf("wgkernel: inbound %d: %w", inst.ID, err)
+	}
+	target := core.ShapingTarget{Device: engine.InterfaceName(inst.ID), Selector: core.SelectorInnerIP}
+	for _, u := range inst.Users {
+		hosts := hostPrefixes(held[u.Email])
+		if len(hosts) == 0 {
+			continue
+		}
+		if target.Keys == nil {
+			target.Keys = make(map[string]core.SubjectKey, len(inst.Users))
+		}
+		target.Keys[u.Email] = core.SubjectKey{Prefixes: hosts}
+	}
+	return target, nil
+}
+
+// hostPrefixes keeps the prefixes holding a single address. A site-to-site peer's
+// /24 is a real configuration, and it is not an identity anything may be keyed on.
+func hostPrefixes(held []netip.Prefix) []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(held))
+	for _, prefix := range held {
+		if prefix.IsSingleIP() {
+			out = append(out, prefix)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// Sessions names each live tunnel and the outer address it handshook from: the
+// address that roams when two devices share one key, which is the sharing signal.
+func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
+	live := c.mgr.Endpoints(ctx)
+	out := make([]core.Session, 0, len(live))
+	for _, e := range live {
+		out = append(out, core.Session{
+			Email:             e.Email,
+			Source:            e.Source,
+			LastSeenUnixMilli: e.Handshake.UnixMilli(),
+		})
+	}
+	return out, nil
 }
