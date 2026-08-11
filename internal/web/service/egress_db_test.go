@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"net/netip"
 	"slices"
@@ -396,6 +397,48 @@ UPDATE landing between them leaves an inbound referencing a row that is gone —
 desired() then emits no rule for an id it never read, and that inbound egresses
 with the server's own identity while the panel still reports it attached.
 */
+/*
+An egress target is resolved once, inside validate(), and never again. Delete the
+outbound behind a live egress and the row still reads enabled, Selects still
+answers "routed", and everything attached to it is quietly contained.
+
+Preflight is the surface that already carries host facts to the operator, so the
+answer goes there rather than into a new column and a new response field.
+*/
+func TestEgressPreflightNamesARowWhoseTargetDied(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+	service := &EgressService{}
+
+	healthy := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+	dead := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "warp-since-deleted"})
+	off := seedEgress(t, &model.Egress{Type: "xray-tun", Target: "warp-since-deleted"})
+
+	report := service.Preflight(context.Background())
+	var named []string
+	for _, note := range report.Notes {
+		if strings.Contains(note, "warp-since-deleted") {
+			named = append(named, note)
+		}
+	}
+	if len(named) != 1 {
+		t.Fatalf("notes naming the dead target = %v, want exactly one; every note was %v", named, report.Notes)
+	}
+	want := "egress " + strconv.Itoa(dead.Id) + ` targets "warp-since-deleted", which is no longer an outbound or a balancer tag, so everything attached to it is contained rather than routed`
+	if named[0] != want {
+		t.Fatalf("note = %q, want %q", named[0], want)
+	}
+	// A disabled row installs nothing, which is why validate() lets a dead-target
+	// egress still be switched off. Reporting it would be noise, not news.
+	for _, note := range report.Notes {
+		for _, quiet := range []int{healthy.Id, off.Id} {
+			if strings.Contains(note, "egress "+strconv.Itoa(quiet)+" targets") {
+				t.Fatalf("egress %d must not be reported: %q", quiet, note)
+			}
+		}
+	}
+}
+
 func TestEgressSchemaConstraints(t *testing.T) {
 	initTestDB(t)
 	db := database.GetDB()
