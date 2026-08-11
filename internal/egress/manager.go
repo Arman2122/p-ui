@@ -39,23 +39,6 @@ func (m *Manager) Ensure(ctx context.Context, e Egress) error {
 	return m.converge(ctx, snap, e)
 }
 
-// Attach claims one more ingress device. It is synchronous by design: a tick that
-// caught up later leaves a just-attached inbound on the server's own identity.
-func (m *Manager) Attach(ctx context.Context, e Egress, iif string) error {
-	if iif == "" {
-		return fmt.Errorf("egress: attach to egress %d needs an ingress device", e.ID)
-	}
-	e.Ingress = append(slices.Clone(e.Ingress), iif)
-	return m.Ensure(ctx, e)
-}
-
-// Detach drops one ingress device. Everything else about the egress stays up, so
-// the next attach costs one rule and never touches the core's config.
-func (m *Manager) Detach(ctx context.Context, e Egress, iif string) error {
-	e.Ingress = slices.DeleteFunc(slices.Clone(e.Ingress), func(name string) bool { return name == iif })
-	return m.Ensure(ctx, e)
-}
-
 /*
 Selects reports whether the band routes iif into egress id in every family, and
 an id of 0 asks the opposite: that nothing in the band selects iif at all.
