@@ -10,6 +10,7 @@ function core(over: Partial<CoreView>): CoreView {
     kinds: [],
     caps: {},
     clientCredentials: {},
+    shaping: {},
     available: true,
     unavailable: '',
     ...over,

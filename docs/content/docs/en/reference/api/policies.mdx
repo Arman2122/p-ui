@@ -1,0 +1,107 @@
+---
+title: Policies
+description: A speed ladder and who is on it. A plan is a list of tiers, each
+  naming the usage at which it starts and the rate it grants from there; the
+  panel evaluates the last tier a client has reached against the same usage
+  figure their quota is enforced against, so a client cannot be over quota by
+  one number and under a threshold by another. A plain speed limit is a one-tier
+  plan starting at zero, so there is no separate concept. Zero bits per second
+  means unlimited in that direction, never blocked, and an empty or unreadable
+  ladder leaves the client unlimited — a malformed plan must never throttle.
+  Assignment is keyed by client email, so it survives a client being deleted and
+  re-synced under a new id. Rate limits are enforced in the kernel and only for
+  protocols whose core can give each client a distinguishable kernel identity;
+  GET /panel/api/cores reports which those are, and a client on any other
+  protocol keeps quota, expiry and IP limits in full. Nothing here touches a
+  core’s configuration, so a plan edit cannot restart a daemon or drop a
+  connection. All endpoints under /panel/api/policies.
+full: true
+_openapi:
+  preload:
+    - ./public/openapi.json
+  toc:
+    - depth: 2
+      title: List every plan in id order.
+      url: '#list-every-plan-in-id-order'
+    - depth: 2
+      title: Fetch a single plan by ID.
+      url: '#fetch-a-single-plan-by-id'
+    - depth: 2
+      title: What one client’s rules currently work out to, beside what the kernel is
+        actually holding for them. The enforced figures are read back out of the
+        kernel rather than echoed from what the panel pushed, so a limit that
+        never landed is visible instead of merely claimed. shapeable is false
+        when no core can distinguish this client in the kernel, in which case
+        the want figures are advisory and no rate is enforced. unresolved means
+        the client is assigned a plan that no longer exists, which never
+        throttles.
+      url: '#what-one-clients-rules-currently-work-out-to-beside-what-the-kernel-is-actually-holding-for-them-the-enforced-figures-are-read-back-out-of-the-kernel-rather-than-echoed-from-what-the-panel-pushed-so-a-limit-that-never-landed-is-visible-instead-of-merely-claimed-shapeable-is-false-when-no-core-can-distinguish-this-client-in-the-kernel-in-which-case-the-want-figures-are-advisory-and-no-rate-is-enforced-unresolved-means-the-client-is-assigned-a-plan-that-no-longer-exists-which-never-throttles'
+    - depth: 2
+      title: Create a plan. tiers is sorted by fromBytes and de-duplicated on write,
+        so the stored ladder is canonical; two tiers starting at the same usage
+        keep the first. upBps and downBps are bits per second from the client’s
+        point of view.
+      url: '#create-a-plan-tiers-is-sorted-by-frombytes-and-de-duplicated-on-write-so-the-stored-ladder-is-canonical-two-tiers-starting-at-the-same-usage-keep-the-first-upbps-and-downbps-are-bits-per-second-from-the-clients-point-of-view'
+    - depth: 2
+      title: Replace a plan’s name and ladder. Every client on it moves to their new
+        tier on the next pass, which costs one kernel class change per direction
+        and drops nothing.
+      url: '#replace-a-plans-name-and-ladder-every-client-on-it-moves-to-their-new-tier-on-the-next-pass-which-costs-one-kernel-class-change-per-direction-and-drops-nothing'
+    - depth: 2
+      title: Delete a plan. Every client assigned to it keeps their assignment row
+        with no plan attached, so the operator can see who lost one; those
+        clients are unlimited until they are reassigned.
+      url: '#delete-a-plan-every-client-assigned-to-it-keeps-their-assignment-row-with-no-plan-attached-so-the-operator-can-see-who-lost-one-those-clients-are-unlimited-until-they-are-reassigned'
+    - depth: 2
+      title: Put one client on a plan, or take them off it with policyId 0. Keyed by
+        email, like the client’s quota, so the assignment survives a
+        delete-and-resync that mints the client a new id.
+      url: '#put-one-client-on-a-plan-or-take-them-off-it-with-policyid-0-keyed-by-email-like-the-clients-quota-so-the-assignment-survives-a-delete-and-resync-that-mints-the-client-a-new-id'
+  structuredData:
+    headings:
+      - content: List every plan in id order.
+        id: list-every-plan-in-id-order
+      - content: Fetch a single plan by ID.
+        id: fetch-a-single-plan-by-id
+      - content: What one client’s rules currently work out to, beside what the kernel
+          is actually holding for them. The enforced figures are read back out
+          of the kernel rather than echoed from what the panel pushed, so a
+          limit that never landed is visible instead of merely claimed.
+          shapeable is false when no core can distinguish this client in the
+          kernel, in which case the want figures are advisory and no rate is
+          enforced. unresolved means the client is assigned a plan that no
+          longer exists, which never throttles.
+        id: what-one-clients-rules-currently-work-out-to-beside-what-the-kernel-is-actually-holding-for-them-the-enforced-figures-are-read-back-out-of-the-kernel-rather-than-echoed-from-what-the-panel-pushed-so-a-limit-that-never-landed-is-visible-instead-of-merely-claimed-shapeable-is-false-when-no-core-can-distinguish-this-client-in-the-kernel-in-which-case-the-want-figures-are-advisory-and-no-rate-is-enforced-unresolved-means-the-client-is-assigned-a-plan-that-no-longer-exists-which-never-throttles
+      - content: Create a plan. tiers is sorted by fromBytes and de-duplicated on write,
+          so the stored ladder is canonical; two tiers starting at the same
+          usage keep the first. upBps and downBps are bits per second from the
+          client’s point of view.
+        id: create-a-plan-tiers-is-sorted-by-frombytes-and-de-duplicated-on-write-so-the-stored-ladder-is-canonical-two-tiers-starting-at-the-same-usage-keep-the-first-upbps-and-downbps-are-bits-per-second-from-the-clients-point-of-view
+      - content: Replace a plan’s name and ladder. Every client on it moves to their new
+          tier on the next pass, which costs one kernel class change per
+          direction and drops nothing.
+        id: replace-a-plans-name-and-ladder-every-client-on-it-moves-to-their-new-tier-on-the-next-pass-which-costs-one-kernel-class-change-per-direction-and-drops-nothing
+      - content: Delete a plan. Every client assigned to it keeps their assignment row
+          with no plan attached, so the operator can see who lost one; those
+          clients are unlimited until they are reassigned.
+        id: delete-a-plan-every-client-assigned-to-it-keeps-their-assignment-row-with-no-plan-attached-so-the-operator-can-see-who-lost-one-those-clients-are-unlimited-until-they-are-reassigned
+      - content: Put one client on a plan, or take them off it with policyId 0. Keyed by
+          email, like the client’s quota, so the assignment survives a
+          delete-and-resync that mints the client a new id.
+        id: put-one-client-on-a-plan-or-take-them-off-it-with-policyid-0-keyed-by-email-like-the-clients-quota-so-the-assignment-survives-a-delete-and-resync-that-mints-the-client-a-new-id
+    contents: []
+---
+
+{/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}
+
+export default function Layout(props) {
+  const { APIPage, OpenAPIPage } = props.components ?? {};
+  // "APIPage" is the old name from v10, this allows both for backward compatibility
+  const Comp = OpenAPIPage ?? APIPage;
+  return (
+    <>
+      {props.children}
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"}]} showTitle />
+    </>
+  );
+}

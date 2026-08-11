@@ -101,31 +101,31 @@ func TestCoreViews(t *testing.T) {
 			reg:  registryOf(t, xray, mtproto),
 			want: `[{"id":"mtproto","titleKey":"cores.mtproto.title","kinds":["mtproto"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false},` +
-				`"clientCredentials":{},"available":true,"unavailable":""},` +
+				`"clientCredentials":{},"shaping":{},"available":true,"unavailable":""},` +
 				`{"id":"xray","titleKey":"cores.xray.title","kinds":["shadowsocks","trojan","vless"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false},` +
-				`"clientCredentials":{},"available":true,"unavailable":""}]`,
+				`"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "an unanswered capability stays null, never false",
 			reg:  registryOf(t, unanswered),
 			want: `[{"id":"future","titleKey":"cores.future.title","kinds":["future"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{},"available":true,"unavailable":""}]`,
+				`"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "credentials are keyed per kind, and a kind the core skips is absent, not empty",
 			reg:  registryOf(t, declaring),
 			want: `[{"id":"multi","titleKey":"cores.multi.title","kinds":["tun","vless","vmess"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"available":true,"unavailable":""}]`,
+				`"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "a core this host cannot run says so, and says why, instead of being offered",
 			reg:  registryOf(t, unusable),
 			want: `[{"id":"wgkernel","titleKey":"cores.wgkernel.title","kinds":["wgkernel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{},"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
+				`"clientCredentials":{},"shaping":{},"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",

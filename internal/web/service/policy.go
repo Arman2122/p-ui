@@ -747,11 +747,11 @@ func (s *PolicyService) Get(id int) (*model.Policy, error) {
 func canonicalTiers(row *model.Policy) error {
 	plan, err := ParsePlan(row.Tiers)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrPolicyBadLadder, err)
+		return fmt.Errorf("%w: %w", ErrPolicyBadLadder, err)
 	}
 	blob, err := json.Marshal(SortTiers(plan.Tiers))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrPolicyBadLadder, err)
+		return fmt.Errorf("%w: %w", ErrPolicyBadLadder, err)
 	}
 	row.Tiers = string(blob)
 	return nil
