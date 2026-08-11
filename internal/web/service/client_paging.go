@@ -146,14 +146,10 @@ func newClientQuery(db *gorm.DB, nowMs, expireDiffMs, trafficDiffBytes int64) cl
 		joins:            []clientQueryJoin{{sql: "LEFT JOIN client_traffics ct ON ct.email = c.email"}},
 		usedExpr:         "(COALESCE(ct.up, 0) + COALESCE(ct.down, 0))",
 	}
-	freshSince := globalTrafficFreshSince()
-	var probe int64
-	err := db.Model(&model.ClientGlobalTraffic{}).
-		Where("updated_at >= ?", freshSince).
-		Limit(1).Count(&probe).Error
-	if err != nil || probe == 0 {
+	if !crossPanelTrafficIsLive(db) {
 		return q
 	}
+	freshSince := globalTrafficFreshSince()
 	// A master still pushes cross-panel usage here, so the predicates have to
 	// see the same raised counters overlayGlobalTraffic applies on read.
 	q.joins = append(q.joins, clientQueryJoin{

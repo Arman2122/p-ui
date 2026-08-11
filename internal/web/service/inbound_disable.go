@@ -55,43 +55,66 @@ func globalTrafficFreshSince() int64 {
 	return time.Now().Add(-globalTrafficFreshWindow).UnixMilli()
 }
 
-// depletedClientsCond matches clients that exhausted their quota or expired.
-// Besides the local counters it also trips on the cross-panel usage a master
-// pushed into client_global_traffics — that's what lets a node cut a client
-// whose combined usage exceeds the quota even though the local share doesn't.
-// Only rows a master refreshed recently count (placeholders: now, freshSince).
-const depletedClientsCond = `((total > 0 AND up + down >= total)
-	OR (expiry_time > 0 AND expiry_time <= ?)
-	OR (total > 0 AND EXISTS (
-		SELECT 1 FROM client_global_traffics g
+// usedBytesLocal is a client's usage as this panel's own counters hold it.
+// Columns are qualified because the tier pass reads the same expression from a
+// query that joins other tables.
+const usedBytesLocal = `(client_traffics.up + client_traffics.down)`
+
+// usedBytesCrossPanel raises that to the highest combined figure any master
+// still refreshes, which is what makes one quota count across panels. Only rows
+// a master refreshed recently are folded in. Placeholders: freshSince.
+const usedBytesCrossPanel = `GREATEST(client_traffics.up + client_traffics.down, COALESCE((
+		SELECT MAX(g.up + g.down) FROM client_global_traffics g
 		WHERE g.email = client_traffics.email
 			AND g.updated_at >= ?
-			AND g.up + g.down >= client_traffics.total
-	)))`
+	), 0))`
 
-// depletedClientsCondLocal is depletedClientsCond without the cross-panel
-// client_global_traffics check. The EXISTS branch is a correlated subquery that
-// turns every traffic poll into a full client_traffics scan; on a panel no
-// master pushes to (the common case) client_global_traffics is empty, so the
-// branch can never match and is pure CPU cost (#5392). Placeholders: now.
-const depletedClientsCondLocal = `((total > 0 AND up + down >= total)
-	OR (expiry_time > 0 AND expiry_time <= ?))`
+/*
+UsedBytesExpr is the ONE SQL definition of how much a client has used, together
+with the arguments it binds.
 
-// depletedCond returns the predicate matching depleted clients together with
-// the arguments it binds. The local-only variant is used unless this panel
-// holds a global-traffic row a master still refreshes, in which case the
-// cross-panel EXISTS check is needed to enforce combined quota.
-func depletedCond(tx *gorm.DB) (string, []any) {
-	now := time.Now().UnixMilli()
-	freshSince := globalTrafficFreshSince()
+Depletion and tier evaluation both read it, so a client cannot be over quota by
+one definition and under a threshold by another — which is exactly what happens
+when the cross-panel rows are folded into only one of them, and it is invisible
+until a customer on a node a master pushes to complains.
+*/
+func UsedBytesExpr(tx *gorm.DB) (string, []any) {
+	if crossPanelTrafficIsLive(tx) {
+		return usedBytesCrossPanel, []any{globalTrafficFreshSince()}
+	}
+	return usedBytesLocal, nil
+}
+
+// crossPanelTrafficIsLive reports whether a master still pushes usage here. The
+// cross-panel expression is a correlated subquery that turns every poll into a
+// full client_traffics scan, and on a panel with no master it can never match (#5392).
+func crossPanelTrafficIsLive(tx *gorm.DB) bool {
 	var probe int64
 	err := tx.Model(&model.ClientGlobalTraffic{}).
-		Where("updated_at >= ?", freshSince).
+		Where("updated_at >= ?", globalTrafficFreshSince()).
 		Limit(1).Count(&probe).Error
-	if err == nil && probe > 0 {
-		return depletedClientsCond, []any{now, freshSince}
-	}
-	return depletedClientsCondLocal, []any{now}
+	return err == nil && probe > 0
+}
+
+// depletedCondFrom wraps one usage expression in the quota and expiry test, so
+// the predicate cannot carry a second opinion about what a client has used.
+// Placeholders: whatever used binds, then now.
+func depletedCondFrom(used string) string {
+	return `((total > 0 AND ` + used + ` >= total)
+	OR (expiry_time > 0 AND expiry_time <= ?))`
+}
+
+// The two depletion predicates, each built from the matching usage expression.
+var (
+	depletedClientsCond      = depletedCondFrom(usedBytesCrossPanel)
+	depletedClientsCondLocal = depletedCondFrom(usedBytesLocal)
+)
+
+// depletedCond returns the predicate matching depleted clients together with the
+// arguments it binds, around whichever usage expression this panel is using.
+func depletedCond(tx *gorm.DB) (string, []any) {
+	used, args := UsedBytesExpr(tx)
+	return depletedCondFrom(used), append(args, time.Now().UnixMilli())
 }
 
 func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error) {
