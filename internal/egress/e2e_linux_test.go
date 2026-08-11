@@ -5,11 +5,15 @@ package egress
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 /*
@@ -41,7 +45,15 @@ func (e2eDriver) Type() string { return "e2e" }
 
 func (e2eDriver) Fill(e Egress) (Fill, error) {
 	device := Device(e.ID)
-	return Fill{Device: device, Sysctls: map[string]string{"net.ipv4.conf." + device + ".rp_filter": "0"}}, nil
+	gateway, err := Gateway(DefaultGatewayBase, e.ID)
+	if err != nil {
+		return Fill{}, err
+	}
+	return Fill{
+		Device:  device,
+		Addr:    gateway,
+		Sysctls: map[string]string{"net.ipv4.conf." + device + ".rp_filter": "0"},
+	}, nil
 }
 
 func liveManager(t *testing.T) *Manager {
@@ -63,11 +75,17 @@ func liveRow() Egress {
 	return Egress{ID: e2eID, Type: "e2e", Enable: true, Ingress: []string{"pwg77"}}
 }
 
-// addFront creates the device the row's table points at. A dummy routes exactly
-// as the tun does; what is under test here is netlink, not gVisor.
+// addFront creates the device the row's table points at, carrying the gateway
+// /32 the driver derives — a front without it is one the kernel never produces.
+// A dummy routes exactly as the tun does; what is under test is netlink, not gVisor.
 func addFront(t *testing.T) {
 	t.Helper()
+	gateway, err := Gateway(DefaultGatewayBase, e2eID)
+	if err != nil {
+		t.Fatalf("gateway: %v", err)
+	}
 	run(t, "ip", "link", "add", Device(e2eID), "type", "dummy")
+	run(t, "ip", "addr", "add", gateway.String(), "dev", Device(e2eID))
 	run(t, "ip", "link", "set", Device(e2eID), "up")
 }
 
@@ -241,8 +259,13 @@ func TestLiveTwoEgressesDoNotCollide(t *testing.T) {
 		_ = m.Remove(context.Background(), second)
 		_ = exec.Command("ip", "link", "del", Device(second)).Run()
 	})
+	secondGateway, err := Gateway(DefaultGatewayBase, second)
+	if err != nil {
+		t.Fatalf("gateway: %v", err)
+	}
 	addFront(t)
 	run(t, "ip", "link", "add", Device(second), "type", "dummy")
+	run(t, "ip", "addr", "add", secondGateway.String(), "dev", Device(second))
 	run(t, "ip", "link", "set", Device(second), "up")
 
 	rows := []Egress{liveRow(), {ID: second, Type: "e2e", Enable: true, Ingress: []string{"pwg78"}}}
@@ -395,4 +418,90 @@ func TestLiveForeignObjectsSurvive(t *testing.T) {
 		"v4 prio 31905 iif pwg99 lookup 30777",
 		"v4 table 30906 192.168.77.0/24 dev  metric 0",
 	})
+}
+
+/*
+peg<N> is a name anything on the host can take, and the panel never creates the
+front itself. Measured on 6.8.0-111: `ip link add peg901 type veth peer name
+notmine` was enough to have the manager install `default dev peg901` and route
+every attached inbound into whatever namespace or bridge the squatter owns.
+*/
+func TestLiveADeviceHoldingTheNameIsNotTheFront(t *testing.T) {
+	m := liveManager(t)
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", Device(e2eID)).Run() })
+	run(t, "ip", "link", "add", Device(e2eID), "type", "veth", "peer", "name", "phnotmine")
+	run(t, "ip", "link", "set", Device(e2eID), "up")
+
+	if err := m.Ensure(context.Background(), liveRow()); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	assertBand(t, band(t, m), containedBand())
+}
+
+/*
+The front the panel routes into is a gVisor tun the CORE creates, and this is the
+only place its address is read back through netlink instead of written by the
+test. If a real front's /32 did not compare equal to the one its id derives,
+every egress on every host would be contained forever and nothing else would say so.
+*/
+func TestLiveARealCoreFrontIsRecognised(t *testing.T) {
+	m := liveManager(t)
+	binary := os.Getenv("XRAY_E2E_BINARY")
+	if binary == "" {
+		t.Skip("set XRAY_E2E_BINARY to the core binary to drive a real front")
+	}
+	device := Device(e2eID)
+	gateway, err := Gateway(DefaultGatewayBase, e2eID)
+	if err != nil {
+		t.Fatalf("gateway: %v", err)
+	}
+	config := fmt.Sprintf(`{"log":{"loglevel":"warning"},
+		"inbounds":[{"listen":"127.0.0.1","port":0,"protocol":"tun","tag":%q,
+			"settings":{"name":%q,"mtu":1420,"gateway":[%q]}}],
+		"outbounds":[{"protocol":"freedom","tag":"direct"}],
+		"routing":{"rules":[{"type":"field","inboundTag":[%q],"outboundTag":"direct"}]}}`,
+		device, device, gateway.String(), device)
+	path := filepath.Join(t.TempDir(), "front.json")
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	core := exec.Command(binary, "run", "-c", path)
+	if err := core.Start(); err != nil {
+		t.Fatalf("start the core: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = core.Process.Kill()
+		_, _ = core.Process.Wait()
+	})
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := net.InterfaceByName(device); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never appeared; the core did not create its front", device)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err := m.Ensure(context.Background(), liveRow()); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	assertBand(t, band(t, m), fullBand())
+}
+
+// The probe has to leave the host exactly as it found it: a rule it forgot would
+// be the foreign object the next preflight refuses.
+func TestLivePreflightLeavesNoProbeRuleBehind(t *testing.T) {
+	m := liveManager(t)
+	if report := m.Preflight(context.Background(), DefaultGatewayBase); !report.OK() {
+		t.Fatalf("Preflight refused this host: %v", report.Err())
+	}
+	out, err := exec.Command("ip", "rule", "list").CombinedOutput()
+	if err != nil {
+		t.Fatalf("ip rule list: %v: %s", err, out)
+	}
+	if strings.Contains(string(out), probeDevice) {
+		t.Fatalf("the probe rule survived preflight:\n%s", out)
+	}
 }

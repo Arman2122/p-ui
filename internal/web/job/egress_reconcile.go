@@ -25,14 +25,22 @@ type EgressReconcileJob struct {
 func NewEgressReconcileJob() *EgressReconcileJob { return &EgressReconcileJob{} }
 
 // Run converges once. A host that cannot be policy-routed at all says so on
-// every tick, so those two answers are logged at debug and never as an alarm.
+// every tick, so those answers are logged at debug and never as an alarm.
 func (j *EgressReconcileJob) Run() {
 	err := j.egressService.Reconcile(context.Background())
 	switch {
 	case err == nil:
-	case errors.Is(err, egress.ErrPlatformUnsupported), errors.Is(err, egress.ErrPermission):
+	case egressReconcileIsAHostFact(err):
 		logger.Debug("egress reconcile is not available on this host:", err)
 	default:
 		logger.Warning("egress reconcile failed:", err)
 	}
+}
+
+// egressReconcileIsAHostFact separates a host that cannot carry this feature —
+// the same answer on every tick, forever — from drift the next pass may repair.
+func egressReconcileIsAHostFact(err error) bool {
+	return errors.Is(err, egress.ErrPlatformUnsupported) ||
+		errors.Is(err, egress.ErrPermission) ||
+		errors.Is(err, egress.ErrFamilyUnsupported)
 }

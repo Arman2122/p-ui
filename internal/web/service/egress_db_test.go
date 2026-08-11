@@ -242,6 +242,11 @@ func TestEgressAttachRevertsWhenItsOwnRuleIsRefused(t *testing.T) {
 	if stored.EgressID != nil {
 		t.Fatalf("a half-installed attachment must be reverted, egressId is %d", *stored.EgressID)
 	}
+	// The v4 rule installed before v6 was refused, so the revert has to reach the
+	// host too: "detached but routed" is the mirror of what the revert prevents.
+	if got := kernel.Rules(); len(got) != 0 {
+		t.Fatalf("kernel rules = %v, want none — the database says this inbound is attached to nothing", got)
+	}
 }
 
 /*
@@ -448,5 +453,147 @@ func TestEgressDesiredSkipsInboundsWithoutALocalDevice(t *testing.T) {
 	want := []string{"pwg" + strconv.Itoa(local.Id)}
 	if !slices.Equal(desired[0].Ingress, want) {
 		t.Fatalf("ingress devices = %v, want %v", desired[0].Ingress, want)
+	}
+}
+
+/*
+An inbound edited off wgkernel has no ingress device, so desired() drops it from
+the egress and the reconciler withdraws its rule — but the column it is counted
+by is still set, and checkNotReferenced counts by column alone. The egress is
+then refused for delete AND for disable, and the UI offers no way to detach.
+*/
+func TestAProtocolChangeReleasesTheEgress(t *testing.T) {
+	initTestDB(t)
+	kernel := withFakeEgressKernel(t)
+	egressSvc := &EgressService{}
+	inboundSvc := &InboundService{}
+
+	row := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+	inbound := seedInbound(t, wgKernelInbound("in-morphing", 30090))
+	if err := egressSvc.Attach(inbound.Id, row.Id); err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	if len(kernel.Rules()) == 0 {
+		t.Fatal("the attachment installed no rule")
+	}
+
+	edited := &model.Inbound{
+		Id: inbound.Id, UserId: 1, Tag: inbound.Tag, Remark: inbound.Remark, Enable: true,
+		Listen: inbound.Listen, Port: inbound.Port, Protocol: model.VLESS,
+		Settings: `{"clients":[]}`,
+	}
+	if _, _, err := inboundSvc.UpdateInbound(edited); err != nil {
+		t.Fatalf("UpdateInbound: %v", err)
+	}
+	stored := &model.Inbound{}
+	if err := database.GetDB().First(stored, inbound.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.EgressID != nil {
+		t.Fatalf("egressId = %d after the inbound stopped being selectable", *stored.EgressID)
+	}
+	if err := egressSvc.Del(row.Id); err != nil {
+		t.Fatalf("Del = %v; nothing selects this egress any more", err)
+	}
+}
+
+// The error has to name the inbounds, or an operator has no way to find them:
+// the picker only renders for a protocol that still has an ingress device.
+func TestAReferencedEgressNamesTheInboundsHoldingIt(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+	egressSvc := &EgressService{}
+
+	row := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+	inbound := seedInbound(t, wgKernelInbound("in-named", 30091))
+	if err := egressSvc.Attach(inbound.Id, row.Id); err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	err := egressSvc.Del(row.Id)
+	if !errors.Is(err, ErrEgressInUse) || !strings.Contains(err.Error(), "["+strconv.Itoa(inbound.Id)+"]") {
+		t.Fatalf("Del = %v, want it to name inbound %d", err, inbound.Id)
+	}
+}
+
+/*
+A refused attach reverts the row, and the host has to come back with it.
+
+Reconcile has already installed the rejected attachment by then, so without a
+second pass the panel reports one state and the kernel routes another: "detached
+but routed" is the mirror image of the thing verifyAttachment exists to prevent.
+*/
+func TestARefusedAttachTakesItsKernelStateBackToo(t *testing.T) {
+	initTestDB(t)
+	kernel := withFakeEgressKernel(t)
+	service := &EgressService{}
+
+	first := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+	second := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+	inbound := seedInbound(t, wgKernelInbound("in-moving", 30092))
+	if err := service.Attach(inbound.Id, second.Id); err != nil {
+		t.Fatalf("Attach to the second egress: %v", err)
+	}
+
+	device := "pwg" + strconv.Itoa(inbound.Id)
+	kernel.Fail = map[string]error{
+		"rule+ v6 prio " + strconv.Itoa(31000+first.Id) + " iif " + device + " lookup " + strconv.Itoa(30000+first.Id): errors.New("the host refused it"),
+	}
+	if err := service.Attach(inbound.Id, first.Id); !errors.Is(err, ErrEgressNotRouted) {
+		t.Fatalf("Attach = %v, want %v", err, ErrEgressNotRouted)
+	}
+
+	stored := &model.Inbound{}
+	if err := database.GetDB().First(stored, inbound.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.EgressID == nil || *stored.EgressID != second.Id {
+		t.Fatalf("egressId = %v, want the attachment reverted to %d", stored.EgressID, second.Id)
+	}
+	want := []string{
+		"v4 prio " + strconv.Itoa(31000+second.Id) + " iif " + device + " lookup " + strconv.Itoa(30000+second.Id),
+		"v6 prio " + strconv.Itoa(31000+second.Id) + " iif " + device + " lookup " + strconv.Itoa(30000+second.Id),
+	}
+	if got := kernel.Rules(); !slices.Equal(got, want) {
+		t.Fatalf("kernel rules = %v, want %v — the database says egress %d and the host must agree", got, want, second.Id)
+	}
+}
+
+/*
+An egress id names host-global kernel state — routing table 30000+id, ip rule
+priority 31000+id and device peg<id> — so it must never be handed out twice.
+
+The guard is a boot-time one: resyncPostgresSequences rewinds every sequence to
+MAX(id), which would re-issue the id of a row somebody deleted, together with
+whatever kernel state EgressService.Del could not take down.
+*/
+func TestAnEgressIDIsNeverHandedOutTwice(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+	service := &EgressService{}
+
+	issued := make([]int, 0, 4)
+	for range 3 {
+		row, err := service.Add(&model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+		if err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+		issued = append(issued, row.Id)
+	}
+	newest := issued[len(issued)-1]
+	if err := service.Del(newest); err != nil {
+		t.Fatalf("Del(%d): %v", newest, err)
+	}
+
+	// The reboot: InitDB replays initModels, and with it the sequence resync.
+	if err := database.InitDB(); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	row, err := service.Add(&model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
+	if err != nil {
+		t.Fatalf("Add after the reboot: %v", err)
+	}
+	if slices.Contains(issued, row.Id) {
+		t.Fatalf("egress id %d was handed out twice (already issued %v) — it names routing table %d, rule priority %d and device %s",
+			row.Id, issued, 30000+row.Id, 31000+row.Id, egress.Device(row.Id))
 	}
 }

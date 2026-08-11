@@ -297,6 +297,7 @@ func TestFrontIsRetryableWhileItsDeviceIsAbsent(t *testing.T) {
 	})
 
 	k.AddLink("peg1", rpFilterKey)
+	k.AddAddr("peg1", mustGateway(t, 1))
 	k.ResetOps()
 	mustEnsure(t, m, row())
 	assertList(t, "ops once the front is up", k.Ops(), []string{
@@ -405,8 +406,24 @@ func TestForeignObjectsAreNeverTouched(t *testing.T) {
 	k.SeedRoute(foreignRoute, nearMiss, prohibit)
 
 	m := newManager(t, k)
-	if err := m.Reconcile(context.Background(), nil); err != nil {
-		t.Fatalf("Reconcile: %v", err)
+	err := m.Reconcile(context.Background(), nil)
+	// Left alone, and said out loud: each of these three defeats the containment
+	// of the id whose band slot it sits in, and the reconciler cannot repair it.
+	if !errors.Is(err, egress.ErrForeignResource) {
+		t.Fatalf("Reconcile = %v, want ErrForeignResource", err)
+	}
+	for _, named := range []string{
+		"v4 prio 31005 iif pwg9 lookup 30777 defeats egress 5's own containment",
+		"v4 table 30005 10.0.0.0/8 dev eth0 metric 0 defeats egress 5's own containment",
+		"v4 table 30007 default dev peg007 metric 100 defeats egress 7's own containment",
+	} {
+		if !strings.Contains(err.Error(), named) {
+			t.Fatalf("error = %v, want it to name %q", err, named)
+		}
+	}
+	// A prohibit route only ever tightens containment, so it stays a debug line.
+	if strings.Contains(err.Error(), "192.168.77.0/24") {
+		t.Fatalf("error = %v, want an object that cannot leak left unreported", err)
 	}
 	if writes := k.Writes(); writes != 0 {
 		t.Fatalf("reconcile touched %d foreign objects: %v", writes, k.Ops())
@@ -662,7 +679,9 @@ func TestReconcileIsOrderIndependent(t *testing.T) {
 	build := func(rows []egress.Egress) []string {
 		k := egtest.New()
 		k.AddLink("peg1", rpFilterKey)
+		k.AddAddr("peg1", mustGateway(t, 1))
 		k.AddLink("peg2", "net.ipv4.conf.peg2.rp_filter")
+		k.AddAddr("peg2", mustGateway(t, 2))
 		m := newManager(t, k)
 		if err := m.Reconcile(context.Background(), rows); err != nil {
 			t.Fatalf("Reconcile: %v", err)
@@ -858,4 +877,52 @@ func indexOf(list []string, want string) int {
 		}
 	}
 	return -1
+}
+
+/*
+peg<N> is a name anything on the host can take, and the panel never creates the
+front itself — so a device holding the name is not evidence that it is the front.
+
+Measured on 6.8.0-111: `ip link add peg901 type veth peer name notmine` is enough
+to have the panel route every attached inbound into somebody else's namespace.
+*/
+func TestADeviceHoldingTheNameButNotTheAddressIsNotTheFront(t *testing.T) {
+	k := egtest.New()
+	k.AddLink("peg1", rpFilterKey)
+	m := newManager(t, k)
+
+	mustEnsure(t, m, row())
+	assertList(t, "rules", k.Rules(), steadyRules)
+	assertList(t, "routes", k.Routes(), []string{
+		"v4 table 30001 blackhole default metric 4096",
+		"v6 table 30001 blackhole default metric 4096",
+	})
+
+	// And once the real front comes up carrying its own /32, it is routed into.
+	k.AddAddr("peg1", mustGateway(t, 1))
+	mustEnsure(t, m, row())
+	assertList(t, "routes once the real front is up", k.Routes(), steadyRoutes)
+}
+
+// A route into a squatter that a previous pass installed is withdrawn, not kept:
+// containment is what the table falls back to, and it is already there.
+func TestAFrontRouteIntoASquatterIsWithdrawn(t *testing.T) {
+	k := upHost(t)
+	m := newManager(t, k)
+	mustEnsure(t, m, row())
+
+	k.DelLink("peg1")
+	k.AddLink("peg1", rpFilterKey)
+	k.SeedRoute(egress.RouteSpec{
+		Family: egress.FamilyV4, Table: 30001, Type: egress.RouteUnicast,
+		Dst: egress.FamilyV4.DefaultRoute(), Device: "peg1", Metric: 100,
+	})
+	k.ResetOps()
+
+	mustEnsure(t, m, row())
+	assertList(t, "ops", k.Ops(), []string{"route- v4 table 30001 default dev peg1 metric 100"})
+	assertList(t, "routes", k.Routes(), []string{
+		"v4 table 30001 blackhole default metric 4096",
+		"v6 table 30001 blackhole default metric 4096",
+	})
 }

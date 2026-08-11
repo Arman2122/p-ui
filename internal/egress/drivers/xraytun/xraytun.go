@@ -40,17 +40,32 @@ func New() Driver { return Driver{GatewayBase: egress.DefaultGatewayBase} }
 
 func (Driver) Type() string { return Type }
 
-// Fill names the device Xray will create and the one knob its return path needs.
-// Reverse-path filtering is v4-only — /proc has no ipv6 conf.<dev>.rp_filter.
+// Fill names the device Xray will create, the address that proves the device is
+// that front, and the one knob its return path needs. Reverse-path filtering is
+// v4-only — /proc has no ipv6 conf.<dev>.rp_filter.
 func (d Driver) Fill(e egress.Egress) (egress.Fill, error) {
 	device, err := device(e.ID)
 	if err != nil {
 		return egress.Fill{}, err
 	}
+	gateway, err := egress.Gateway(d.base(), e.ID)
+	if err != nil {
+		return egress.Fill{}, err
+	}
 	return egress.Fill{
 		Device:  device,
+		Addr:    gateway,
 		Sysctls: map[string]string{"net.ipv4.conf." + device + ".rp_filter": "0"},
 	}, nil
+}
+
+// base is the configured gateway base, or the default when the driver was built
+// as a zero value rather than through New.
+func (d Driver) base() netip.Prefix {
+	if d.GatewayBase.IsValid() {
+		return d.GatewayBase
+	}
+	return egress.DefaultGatewayBase
 }
 
 // tunInbound is the generated inbound, field for field as it was proven on the
@@ -85,11 +100,7 @@ func (d Driver) Inject(e egress.Egress) (egress.Injection, error) {
 	if err != nil {
 		return egress.Injection{}, err
 	}
-	base := d.GatewayBase
-	if !base.IsValid() {
-		base = egress.DefaultGatewayBase
-	}
-	gateway, err := egress.Gateway(base, e.ID)
+	gateway, err := egress.Gateway(d.base(), e.ID)
 	if err != nil {
 		return egress.Injection{}, err
 	}

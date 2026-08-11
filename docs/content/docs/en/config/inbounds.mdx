@@ -110,9 +110,24 @@ sysctl -w net.ipv4.ip_forward=1
 iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
 ```
 
-Neither survives a reboot on its own. Persist the first in
-`/etc/sysctl.d/`, and the second with `iptables-persistent` or your firewall's
-own rules. The panel deliberately does not write firewall rules for you.
+**IPv6 needs its own pair.** The `.conf` the panel generates carries
+`AllowedIPs = 0.0.0.0/0, ::/0`, so the client installs a v6 default route into
+the tunnel whether or not the host can carry it — and a host that forwards only
+IPv4 then drops every v6 flow in silence. Either add the v6 twins, matching the
+range to a v6 address on the interface:
+
+```bash
+sysctl -w net.ipv6.conf.all.forwarding=1
+ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE
+```
+
+or, with a routed v6 prefix instead of NAT, forwarding alone is enough. If the
+host has no IPv6 at all, tell your users the tunnel is v4-only.
+`GET /panel/api/egresses/preflight` reports both forwarding knobs.
+
+None of these survive a reboot on their own. Persist the sysctls in
+`/etc/sysctl.d/`, and the firewall rules with `iptables-persistent` or your
+firewall's own rules. The panel deliberately does not write firewall rules for you.
 
 ### Other things to know
 

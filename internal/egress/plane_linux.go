@@ -30,9 +30,9 @@ func netlinkFamily(f Family) int {
 	return netlink.FAMILY_V4
 }
 
+// Probe is the read half only: RuleList is unprivileged, so it proves the
+// netlink socket and nothing about writing. probeHost proves the rest.
 func (kernelPlane) Probe(context.Context) error {
-	// Listing rules needs the same netlink socket and the same capability every
-	// write does, so a host that refuses this refuses everything after it.
 	if _, err := netlink.RuleList(netlink.FAMILY_V4); err != nil {
 		return classify(err)
 	}
@@ -264,6 +264,10 @@ func classify(err error) error {
 		return fmt.Errorf("%w: %w", ErrPermission, err)
 	case errors.Is(err, syscall.ENODEV), errors.Is(err, syscall.ENXIO):
 		return fmt.Errorf("%w: %w", ErrNoDevice, err)
+	// A kernel booted with ipv6.disable=1 registers no fib rules for the family,
+	// so every object in it answers this and none of them will ever install.
+	case errors.Is(err, syscall.EAFNOSUPPORT), errors.Is(err, syscall.EOPNOTSUPP):
+		return fmt.Errorf("%w: %w", ErrFamilyUnsupported, err)
 	}
 	return err
 }

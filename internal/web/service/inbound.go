@@ -1486,6 +1486,11 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		oldInbound.Listen = inbound.Listen
 		oldInbound.Port = inbound.Port
 		oldInbound.Protocol = inbound.Protocol
+		// A protocol with no ingress device cannot be selected on, so keeping the
+		// reference would pin the egress against every delete and disable forever.
+		if _, selectable := egressIngressDevice(oldInbound); !selectable {
+			oldInbound.EgressID = nil
+		}
 		oldInbound.Settings = inbound.Settings
 		oldInbound.StreamSettings = inbound.StreamSettings
 		oldInbound.Sniffing = inbound.Sniffing

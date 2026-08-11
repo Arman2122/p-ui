@@ -2,6 +2,8 @@ package service
 
 import (
 	"fmt"
+	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -26,7 +28,7 @@ func TestAllocateWireguardAddress(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := allocateWireguardAddress(tt.used, tt.base)
+			got, err := allocateWireguardAddress(tt.used, tt.base, nil)
 			if tt.err {
 				if err == nil {
 					t.Fatalf("expected error, got %q", got)
@@ -46,7 +48,7 @@ func TestAllocateWireguardAddress(t *testing.T) {
 func TestDefaultWireguardClientsGeneratesKeypair(t *testing.T) {
 	clients := []model.Client{{Email: "a@wg"}}
 	ifaces := []any{map[string]any{"email": "a@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients(nil, clients, ifaces, wireguardPool{base: defaultWireguardBase}); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	c := clients[0]
@@ -73,7 +75,7 @@ func TestDefaultWireguardClientsDerivesPublicKey(t *testing.T) {
 	}
 	clients := []model.Client{{Email: "b@wg", PrivateKey: priv}}
 	ifaces := []any{map[string]any{"email": "b@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients(nil, clients, ifaces, wireguardPool{base: defaultWireguardBase}); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if clients[0].PublicKey != wantPub {
@@ -89,7 +91,7 @@ func TestDefaultWireguardClientsPreservesProvided(t *testing.T) {
 		AllowedIPs: []string{"10.0.0.50/32"},
 	}}
 	ifaces := []any{map[string]any{"email": "c@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients(nil, clients, ifaces, wireguardPool{base: defaultWireguardBase}); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if clients[0].PrivateKey != "keep-priv" || clients[0].PublicKey != "keep-pub" {
@@ -124,7 +126,7 @@ func TestDefaultWireguardClientsHonorsExistingSubnet(t *testing.T) {
 	existing := []model.Client{{Email: "old@wg", AllowedIPs: []string{"172.16.0.2/32"}}}
 	clients := []model.Client{{Email: "new@wg"}}
 	ifaces := []any{map[string]any{"email": "new@wg"}}
-	if err := defaultWireguardClients(existing, clients, ifaces); err != nil {
+	if err := defaultWireguardClients(existing, clients, ifaces, wireguardPool{base: defaultWireguardBase}); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if got := clients[0].AllowedIPs[0]; got != "172.16.0.3/32" {
@@ -138,7 +140,7 @@ func TestAllocateWireguardAddressWidensPastFullSlash24(t *testing.T) {
 		used = append(used, fmt.Sprintf("10.0.0.%d/32", i))
 	}
 
-	got, err := allocateWireguardAddress(used, "10.0.0.0/24")
+	got, err := allocateWireguardAddress(used, "10.0.0.0/24", nil)
 	if err != nil {
 		t.Fatalf("allocate with a full /24: %v", err)
 	}
@@ -147,7 +149,7 @@ func TestAllocateWireguardAddressWidensPastFullSlash24(t *testing.T) {
 	}
 
 	used = append(used, got)
-	next, err := allocateWireguardAddress(used, "10.0.0.0/24")
+	next, err := allocateWireguardAddress(used, "10.0.0.0/24", nil)
 	if err != nil {
 		t.Fatalf("allocate after widening: %v", err)
 	}
@@ -157,7 +159,7 @@ func TestAllocateWireguardAddressWidensPastFullSlash24(t *testing.T) {
 }
 
 func TestAllocateWireguardAddressFillsItsOwnSlash24First(t *testing.T) {
-	got, err := allocateWireguardAddress([]string{"172.16.0.2/32"}, "172.16.0.0/24")
+	got, err := allocateWireguardAddress([]string{"172.16.0.2/32"}, "172.16.0.0/24", nil)
 	if err != nil {
 		t.Fatalf("allocateWireguardAddress: %v", err)
 	}
@@ -169,7 +171,7 @@ func TestAllocateWireguardAddressFillsItsOwnSlash24First(t *testing.T) {
 func TestDefaultWireguardClientsAllocatesDistinctIPs(t *testing.T) {
 	clients := []model.Client{{Email: "x@wg"}, {Email: "y@wg"}}
 	ifaces := []any{map[string]any{"email": "x@wg"}, map[string]any{"email": "y@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients(nil, clients, ifaces, wireguardPool{base: defaultWireguardBase}); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if clients[0].AllowedIPs[0] == clients[1].AllowedIPs[0] {
@@ -222,7 +224,7 @@ func TestDefaultWireguardClientsHonorsAndValidatesSuppliedAllowedIPs(t *testing.
 
 	clients := []model.Client{{Email: "c@wg", AllowedIPs: []string{"10.0.0.9"}}}
 	ifaces := []any{map[string]any{"email": "c@wg"}}
-	if err := defaultWireguardClients(existing, clients, ifaces); err != nil {
+	if err := defaultWireguardClients(existing, clients, ifaces, wireguardPool{base: defaultWireguardBase}); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if len(clients[0].AllowedIPs) != 1 || clients[0].AllowedIPs[0] != "10.0.0.9/32" {
@@ -230,13 +232,67 @@ func TestDefaultWireguardClientsHonorsAndValidatesSuppliedAllowedIPs(t *testing.
 	}
 
 	dup := []model.Client{{Email: "d@wg", AllowedIPs: []string{"10.0.0.2/32"}}}
-	err := defaultWireguardClients(existing, dup, []any{map[string]any{"email": "d@wg"}})
+	err := defaultWireguardClients(existing, dup, []any{map[string]any{"email": "d@wg"}}, wireguardPool{base: defaultWireguardBase})
 	if err == nil {
 		t.Fatal("duplicate allowedIPs across clients must be rejected")
 	}
 
 	bad := []model.Client{{Email: "e@wg", AllowedIPs: []string{"not-an-ip"}}}
-	if err := defaultWireguardClients(existing, bad, []any{map[string]any{"email": "e@wg"}}); err == nil {
+	if err := defaultWireguardClients(existing, bad, []any{map[string]any{"email": "e@wg"}}, wireguardPool{base: defaultWireguardBase}); err == nil {
 		t.Fatal("invalid allowedIPs entry must be rejected")
+	}
+}
+
+/*
+Two inbounds allocating their first client out of one package-global pool hand
+two customers the same tunnel address. On a kernel device those addresses are
+real routes in the one host routing table, so the second customer's return
+traffic is encrypted into the first customer's tunnel.
+*/
+func TestTheFirstClientComesFromItsOwnInboundsSubnet(t *testing.T) {
+	alloc := func(t *testing.T, base string) string {
+		t.Helper()
+		clients := []model.Client{{Email: "first@wg"}}
+		ifaces := []any{map[string]any{"email": "first@wg"}}
+		if err := defaultWireguardClients(nil, clients, ifaces, wireguardPool{base: base}); err != nil {
+			t.Fatalf("defaultWireguardClients: %v", err)
+		}
+		return clients[0].AllowedIPs[0]
+	}
+	a := alloc(t, "10.20.0.0/24")
+	b := alloc(t, "10.21.0.0/24")
+	if a != "10.20.0.2/32" || b != "10.21.0.2/32" {
+		t.Fatalf("first clients got %q and %q, want each inside its own inbound's subnet", a, b)
+	}
+}
+
+// The widened /16 reaches past this inbound's own /24, so it has to step over
+// anything another host device already answers for.
+func TestAllocationStepsOverAnotherHostDevicesSubnet(t *testing.T) {
+	used := make([]string, 0, 254)
+	for i := 2; i <= 255; i++ {
+		used = append(used, fmt.Sprintf("10.0.0.%d/32", i))
+	}
+	blocked := []netip.Prefix{netip.MustParsePrefix("10.0.1.0/24")}
+
+	got, err := allocateWireguardAddress(used, "10.0.0.0/24", blocked)
+	if err != nil {
+		t.Fatalf("allocate with a full /24: %v", err)
+	}
+	if got != "10.0.2.0/32" {
+		t.Fatalf("address after a full /24 = %q, want 10.0.2.0/32 — 10.0.1.0/24 is another device's", got)
+	}
+}
+
+// A hand-entered allowedIPs entry is the other way one inbound reaches into
+// another's tunnel, and it is checked against every host device's clients.
+func TestAHandEnteredAddressCollidesAcrossInbounds(t *testing.T) {
+	pool := wireguardPool{base: "10.20.0.0/24", taken: []string{"10.21.0.5/32"}}
+	clients := []model.Client{{Email: "greedy@wg", AllowedIPs: []string{"10.21.0.5/32"}}}
+	ifaces := []any{map[string]any{"email": "greedy@wg"}}
+
+	err := defaultWireguardClients(nil, clients, ifaces, pool)
+	if err == nil || !strings.Contains(err.Error(), "10.21.0.5/32") {
+		t.Fatalf("defaultWireguardClients = %v, want the address another inbound's client holds refused by name", err)
 	}
 }

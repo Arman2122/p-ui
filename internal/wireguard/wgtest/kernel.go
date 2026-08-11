@@ -215,6 +215,18 @@ func (k *Kernel) Configure(_ context.Context, name string, cfg wgtypes.Config) e
 		if pc.ReplaceAllowedIPs {
 			cur.AllowedIPs = nil
 		}
+		// One owner per prefix: the kernel MOVES a prefix a later peer claims off
+		// whoever held it, so a shared allowed-IP never settles on both.
+		for _, n := range pc.AllowedIPs {
+			for key, held := range l.peers {
+				if key == pc.PublicKey {
+					continue
+				}
+				held.AllowedIPs = slices.DeleteFunc(held.AllowedIPs, func(have net.IPNet) bool {
+					return have.String() == n.String()
+				})
+			}
+		}
 		cur.AllowedIPs = append(cur.AllowedIPs, pc.AllowedIPs...)
 	}
 	return nil

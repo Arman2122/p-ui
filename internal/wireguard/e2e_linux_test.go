@@ -511,3 +511,90 @@ func TestLiveReconcileDeletesADeviceStrandedByARestart(t *testing.T) {
 		t.Errorf("the panel deleted %s, an interface it did not create", foreign)
 	}
 }
+
+// The device-level twin of TestLiveRemoveBanksTheFinalReading. Deleting the link
+// zeroes every peer counter, so the whole interval since the last scrape is lost
+// unless it is banked first.
+func TestLiveDeviceRemovalBanksTheFinalReading(t *testing.T) {
+	m, name := liveManager(t)
+	srv, srvPub := genKey(t)
+	cliPriv, cliPub := genKey(t)
+	id := 9000 + (os.Getpid() % 500)
+	in := inst(id, srv, Peer{Email: "a@x", PublicKey: cliPub, AllowedIPs: []string{"10.123.0.2/32"}})
+	if err := m.Ensure(context.Background(), in); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	drive := liveTunnel(t, "wipe", name, srvPub, cliPriv)
+
+	m.CollectTraffic(context.Background())
+	// read after the baseline scrape, so this can only understate what moved
+	banked := peerBytes(t, name, cliPub)
+	drive()
+	moved := peerBytes(t, name, cliPub) - banked
+	if moved <= 0 {
+		t.Fatalf("no traffic reached the peer; the rig is broken, not the engine")
+	}
+
+	if err := m.Remove(context.Background(), id); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := net.InterfaceByName(name); err == nil {
+		t.Fatalf("%s survived Remove", name)
+	}
+	if billed := billedTo(collect(m), "a@x"); billed < moved {
+		t.Errorf("at least %d bytes were on the device when its link was deleted and the panel billed %d", moved, billed)
+	}
+}
+
+// countingPlane counts the pushes that carry peers, so a test can prove a pass
+// wrote nothing rather than infer it from the device's end state.
+type countingPlane struct {
+	Plane
+	peerWrites int
+}
+
+func (p *countingPlane) Configure(ctx context.Context, name string, cfg wgtypes.Config) error {
+	if len(cfg.Peers) > 0 {
+		p.peerWrites++
+	}
+	return p.Plane.Configure(ctx, name, cfg)
+}
+
+// The kernel MOVES an allowed-IP two peers claim to the later one, so a pass that
+// pushes both is undone by its own last write and rewrites the device forever.
+func TestLiveASharedAllowedIPConvergesInsteadOfOscillating(t *testing.T) {
+	e2e(t)
+	id := 9000 + (os.Getpid() % 500)
+	name := InterfaceName(id)
+	_ = exec.Command("ip", "link", "del", name).Run()
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", name).Run() })
+
+	plane := &countingPlane{Plane: hostPlane()}
+	m := NewManager(plane)
+	srv, _ := genKey(t)
+	_, pubA := genKey(t)
+	_, pubB := genKey(t)
+	in := inst(id, srv,
+		Peer{Email: "a@x", PublicKey: pubA, AllowedIPs: []string{"10.123.0.2/32"}},
+		Peer{Email: "b@x", PublicKey: pubB, AllowedIPs: []string{"10.123.0.2/32"}},
+	)
+
+	perPass := make([]int, 0, 4)
+	for range 4 {
+		before := plane.peerWrites
+		if err := m.Ensure(context.Background(), in); err == nil {
+			t.Fatalf("Ensure = nil, want the later claimant refused by name")
+		}
+		perPass = append(perPass, plane.peerWrites-before)
+	}
+	if perPass[1] != 0 || perPass[2] != 0 || perPass[3] != 0 {
+		t.Fatalf("peer writes per pass = %v, want no write after the first pass", perPass)
+	}
+	d := liveDevice(t, name)
+	if len(d.Peers) != 1 || d.Peers[0].PublicKey.String() != pubA {
+		t.Fatalf("device serves %d peer(s), want the first claimant alone", len(d.Peers))
+	}
+	if got := d.Peers[0].AllowedIPs[0].String(); got != "10.123.0.2/32" {
+		t.Fatalf("the surviving peer holds %q, want 10.123.0.2/32", got)
+	}
+}

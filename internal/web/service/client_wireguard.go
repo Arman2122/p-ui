@@ -93,6 +93,69 @@ func (s *InboundService) checkWireguardAddressConflict(inbound *model.Inbound, i
 	return nil
 }
 
+// wireguardClientAddresses reads the tunnel addresses an inbound's clients hold.
+// On a kernel device each one is a real route in the ONE host routing table.
+func wireguardClientAddresses(settings string) []string {
+	var parsed struct {
+		Clients []struct {
+			AllowedIPs []string `json:"allowedIPs"`
+		} `json:"clients"`
+	}
+	if settings == "" || json.Unmarshal([]byte(settings), &parsed) != nil {
+		return nil
+	}
+	var out []string
+	for _, c := range parsed.Clients {
+		out = append(out, c.AllowedIPs...)
+	}
+	return out
+}
+
+/*
+wireguardPool is where one inbound may allocate its clients' tunnel addresses.
+
+A kernel WireGuard inbound's client addresses are host-global: every one is a
+route in the same table, so an address two inbounds both hand out sends the
+second customer's return traffic into the first customer's tunnel. The pool is
+therefore this inbound's own subnet minus everything another host device owns,
+never a package-wide default two inbounds would allocate from independently.
+*/
+type wireguardPool struct {
+	base string
+	// taken are the addresses other host inbounds' clients already hold.
+	taken []string
+	// blocked are the subnets other host devices already answer for.
+	blocked []netip.Prefix
+}
+
+func (s *InboundService) wireguardPoolFor(inbound *model.Inbound) (wireguardPool, error) {
+	pool := wireguardPool{base: defaultWireguardBase}
+	if own := wireguardDeviceAddresses(inbound.Settings); len(own) > 0 {
+		pool.base = own[0].Masked().String()
+	}
+	if !ownsHostWireguardDevice(inbound.Protocol) {
+		return pool, nil
+	}
+	q := database.GetDB().Model(model.Inbound{}).Where("protocol IN ?", hostWireguardProtocols())
+	if inbound.Id > 0 {
+		q = q.Where("id != ?", inbound.Id)
+	}
+	var candidates []*model.Inbound
+	if err := q.Find(&candidates).Error; err != nil {
+		return pool, err
+	}
+	for _, c := range candidates {
+		if !sameNode(c.NodeID, inbound.NodeID) {
+			continue
+		}
+		for _, device := range wireguardDeviceAddresses(c.Settings) {
+			pool.blocked = append(pool.blocked, device.Masked())
+		}
+		pool.taken = append(pool.taken, wireguardClientAddresses(c.Settings)...)
+	}
+	return pool, nil
+}
+
 // inboundName is how an inbound is named back to the operator in a conflict.
 func inboundName(in *model.Inbound) string {
 	if in.Remark != "" {
@@ -150,7 +213,7 @@ func wireguardAllocationBase(used []string, fallback string) string {
 
 const wireguardPoolFloorBits = 16
 
-func allocateWireguardAddress(used []string, base string) (string, error) {
+func allocateWireguardAddress(used []string, base string, blocked []netip.Prefix) (string, error) {
 	if base == "" {
 		base = defaultWireguardBase
 	}
@@ -173,13 +236,24 @@ func allocateWireguardAddress(used []string, base string) (string, error) {
 	for _, scope := range scopes {
 		addr := scope.Masked().Addr().Next().Next()
 		for scope.Contains(addr) {
-			if _, ok := taken[addr]; !ok {
+			// The widened scope reaches past this inbound's own subnet, so an address
+			// another host device already answers for has to be stepped over.
+			if _, ok := taken[addr]; !ok && !insideAny(addr, blocked) {
 				return addr.String() + "/32", nil
 			}
 			addr = addr.Next()
 		}
 	}
 	return "", common.NewError("wireguard: no free address available in", scopes[len(scopes)-1].String())
+}
+
+func insideAny(addr netip.Addr, blocked []netip.Prefix) bool {
+	for _, p := range blocked {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeWireguardAllowedIPs validates user-supplied allowedIPs entries and
@@ -229,18 +303,21 @@ func wireguardAllowedIPsCollision(entries, used []string) string {
 // inbound's subnet. It mutates both the typed clients and the parallel raw client
 // maps that get persisted into the inbound settings. Existing values are never
 // overwritten, so editing a client never rotates its keys.
-func defaultWireguardClients(existing, clients []model.Client, interfaceClients []any) error {
-	used := make([]string, 0)
+func defaultWireguardClients(existing, clients []model.Client, interfaceClients []any, pool wireguardPool) error {
+	own := make([]string, 0)
 	owners := make(map[string]string, len(existing)+len(clients))
 	for i := range existing {
-		used = append(used, existing[i].AllowedIPs...)
+		own = append(own, existing[i].AllowedIPs...)
 		if key := strings.TrimSpace(existing[i].PublicKey); key != "" {
 			if _, taken := owners[key]; !taken {
 				owners[key] = existing[i].Email
 			}
 		}
 	}
-	base := wireguardAllocationBase(used, defaultWireguardBase)
+	// The base follows this inbound's own clients, then its own device subnet:
+	// derived from the whole host set it would follow whichever inbound sorted first.
+	base := wireguardAllocationBase(own, pool.base)
+	used := append(slices.Clone(pool.taken), own...)
 	for i := range clients {
 		c := &clients[i]
 		if c.PrivateKey == "" && c.PublicKey == "" {
@@ -262,7 +339,7 @@ func defaultWireguardClients(existing, clients []model.Client, interfaceClients 
 		}
 		owners[strings.TrimSpace(c.PublicKey)] = c.Email
 		if len(c.AllowedIPs) == 0 {
-			addr, err := allocateWireguardAddress(used, base)
+			addr, err := allocateWireguardAddress(used, base, pool.blocked)
 			if err != nil {
 				return err
 			}

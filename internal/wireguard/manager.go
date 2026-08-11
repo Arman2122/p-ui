@@ -112,6 +112,18 @@ func (rec *managed) forget(email string, key wgtypes.Key) {
 	rec.counter.Forget(key.String() + downKey)
 }
 
+// forgetRemoved drops the baselines of the peers a push has just revoked. The
+// kernel gives a re-added peer fresh counters, so a kept baseline under-bills it.
+func (rec *managed) forgetRemoved(changes []wgtypes.PeerConfig) {
+	for _, c := range changes {
+		if !c.Remove {
+			continue
+		}
+		rec.counter.Forget(c.PublicKey.String() + upKey)
+		rec.counter.Forget(c.PublicKey.String() + downKey)
+	}
+}
+
 // attribute folds one Observe's deltas into per-client totals. A key no client
 // owns is a peer added outside the panel: its bytes are dropped, never guessed.
 func (rec *managed) attribute(deltas map[string]int64, into map[string]*Traffic) {
@@ -278,6 +290,8 @@ func (m *Manager) ensureLocked(ctx context.Context, inst Instance) error {
 	if len(changes) > 0 {
 		if cfgErr = m.configure(ctx, name, deviceDelta{}, changes); cfgErr != nil {
 			failures = append(failures, cfgErr)
+		} else {
+			rec.forgetRemoved(changes)
 		}
 	}
 	// The index narrows only once the kernel has agreed; a refused pass leaves
@@ -421,8 +435,21 @@ func (m *Manager) Remove(ctx context.Context, id int) error {
 // tries again rather than leaving a device nothing is tracking.
 func (m *Manager) removeLocked(ctx context.Context, id int) error {
 	name := InterfaceName(id)
+	rec, tracked := m.devices[id]
+	// Deleting the link zeroes every peer counter, so this device's last interval
+	// is banked first and handed out by the scrape that follows.
+	if tracked {
+		if snap, err := m.plane.Snapshot(ctx, name); err == nil && snap.Exists {
+			m.drainLocked(rec, snap)
+		}
+	}
 	if err := m.plane.DeleteLink(ctx, name); err != nil {
 		return m.note(fmt.Errorf("wireguard: delete %s: %w", name, err))
+	}
+	// The record outlives its device until a scrape has taken what was banked;
+	// dropping it here would throw that final interval away.
+	if tracked && len(rec.pending) > 0 {
+		return nil
 	}
 	delete(m.devices, id)
 	logger.Infof("wireguard: removed device %s", name)

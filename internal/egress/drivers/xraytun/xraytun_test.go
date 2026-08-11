@@ -85,6 +85,11 @@ func TestFillNamesTheDeviceAndItsKnob(t *testing.T) {
 	if fill.Device != "peg12" {
 		t.Fatalf("device = %q, want peg12", fill.Device)
 	}
+	// The same /32 Inject puts on the front, so a device holding the name but not
+	// the address is somebody else's and is never routed into.
+	if got := fill.Addr.String(); got != "100.127.0.12/32" {
+		t.Fatalf("addr = %q, want 100.127.0.12/32 — the front's own gateway is what proves the device is this driver's", got)
+	}
 	// Reverse-path filtering is v4-only: /proc has no ipv6 conf.<dev>.rp_filter,
 	// so asking for one would fail every pass on a device that is perfectly fine.
 	want := map[string]string{"net.ipv4.conf.peg12.rp_filter": "0"}
