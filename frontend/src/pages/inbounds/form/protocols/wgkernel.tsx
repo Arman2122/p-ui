@@ -37,11 +37,18 @@ export default function WgkernelFields({
         title={t('pages.inbounds.form.wgkernelForwardingTitle')}
         description={(
           <>
-            <div>{t('pages.inbounds.form.wgkernelForwardingHint')}</div>
+            <div>{t(egressId == null
+              ? 'pages.inbounds.form.wgkernelForwardingHint'
+              : 'pages.inbounds.form.wgkernelForwardingHintEgress')}
+            </div>
             <div><code>sysctl -w net.ipv4.ip_forward=1</code></div>
-            <div><code>iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE</code></div>
+            {egressId == null && (
+              <div><code>iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE</code></div>
+            )}
             <div><code>sysctl -w net.ipv6.conf.all.forwarding=1</code></div>
-            <div><code>ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE</code></div>
+            {egressId == null && (
+              <div><code>ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE</code></div>
+            )}
           </>
         )}
       />
