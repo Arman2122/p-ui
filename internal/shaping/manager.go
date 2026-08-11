@@ -569,8 +569,8 @@ func ownedView(snap Snapshot, device string, match MatchField) (devices, error) 
 	}
 	want := rootQdisc(device)
 	for _, qdisc := range snap.Qdiscs {
-		switch {
-		case qdisc.Parent == rootParent:
+		switch qdisc.Parent {
+		case rootParent:
 			switch {
 			case qdisc == want:
 				view.rooted = true
@@ -581,7 +581,7 @@ func ownedView(snap Snapshot, device string, match MatchField) (devices, error) 
 				return devices{}, fmt.Errorf("%w: %s is the root qdisc on %s and this panel did not write it",
 					ErrForeignObject, qdisc, device)
 			}
-		case qdisc.Parent == clsactParent:
+		case clsactParent:
 		default:
 			view.leaves[qdisc.Parent] = qdisc
 		}

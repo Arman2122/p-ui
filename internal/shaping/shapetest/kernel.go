@@ -197,7 +197,7 @@ func (k *Kernel) AddQdisc(_ context.Context, spec shaping.QdiscSpec) error {
 	})
 	// Measured: a root add over the implicit qdisc succeeds and replaces it, while
 	// one over a qdisc somebody wrote answers EEXIST.
-	if at >= 0 && !(k.qdiscs[at].Parent == rootParent && k.qdiscs[at].Handle == 0) {
+	if at >= 0 && (k.qdiscs[at].Parent != rootParent || k.qdiscs[at].Handle != 0) {
 		return fmt.Errorf("%w: %s", shaping.ErrAlreadyInstalled, spec)
 	}
 	if at >= 0 {
