@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,6 +21,10 @@ import (
 Drives the real engine against a real kernel device. Everything else in this
 package tests against wgtest, and a fake can be wrong in exactly the ways the
 kernel is surprising -- allowed-IP ownership, counter lifetime, ifindex reuse.
+
+Run it inside a private network namespace -- `ip netns exec <ns> ./wireguard.test`
+-- because a stranded-device pass deletes every pwg<N> link it can see, which on
+a live panel host is every wgkernel inbound. The gate below enforces that.
 */
 
 func e2e(t *testing.T) {
@@ -29,6 +34,59 @@ func e2e(t *testing.T) {
 	}
 	if os.Geteuid() != 0 {
 		t.Skip("needs root")
+	}
+	if !confinedToOwnNetns("/proc/self/ns/net", "/proc/1/ns/net") {
+		t.Skip("run inside a private network namespace: these tests delete every pwg<N> device they can see")
+	}
+}
+
+// confinedToOwnNetns reports whether this process left init's network namespace.
+// Unreadable is not confined: the only safe answer is the one that skips.
+func confinedToOwnNetns(selfPath, initPath string) bool {
+	self, err := os.Readlink(selfPath)
+	if err != nil {
+		return false
+	}
+	init, err := os.Readlink(initPath)
+	if err != nil {
+		return false
+	}
+	return self != init
+}
+
+// The gate is the only thing between a live panel host and a Reconcile that
+// deletes every wgkernel inbound's device, so every unknown must skip.
+func TestTheLiveGateRefusesTheHostNamespace(t *testing.T) {
+	dir := t.TempDir()
+	link := func(name, target string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.Symlink(target, path); err != nil {
+			t.Fatalf("symlink %s: %v", name, err)
+		}
+		return path
+	}
+	host := link("host", "net:[4026531840]")
+	private := link("private", "net:[4026532567]")
+	absent := filepath.Join(dir, "gone")
+
+	cases := []struct {
+		name string
+		self string
+		init string
+		want bool
+	}{
+		{"init's own namespace is not confined", host, host, false},
+		{"a namespace init is not in is confined", private, host, true},
+		{"an unreadable self is not confined", absent, host, false},
+		{"an unreadable init is not confined", private, absent, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := confinedToOwnNetns(tc.self, tc.init); got != tc.want {
+				t.Fatalf("confinedToOwnNetns(%s, %s) = %v, want %v", tc.self, tc.init, got, tc.want)
+			}
+		})
 	}
 }
 
