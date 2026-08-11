@@ -11,6 +11,7 @@ const CORES: CoreView[] = [
     caps: {},
     available: true,
     unavailable: '',
+    shaping: {},
     clientCredentials: {
       vless: ['uuid'],
       wireguard: ['privateKey', 'publicKey', 'preSharedKey', 'allowedIPs'],
@@ -23,6 +24,7 @@ const CORES: CoreView[] = [
     caps: {},
     available: true,
     unavailable: '',
+    shaping: {},
     clientCredentials: { mtproto: ['secret', 'adTag'] },
   },
 ];
@@ -57,6 +59,7 @@ describe('credentialsForKinds', () => {
           caps: {},
           available: true,
           unavailable: '',
+          shaping: {},
           clientCredentials: { future: ['uuid', 'somethingThisBuildCannotRender'] },
         },
       ],
@@ -75,6 +78,7 @@ describe('credentialsForKinds', () => {
           caps: {},
           available: false,
           unavailable: 'kernel WireGuard is not available on this host',
+          shaping: {},
           clientCredentials: { wgkernel: ['privateKey', 'publicKey', 'preSharedKey', 'allowedIPs'] },
         },
       ],
