@@ -291,6 +291,10 @@ Level-triggered: the tier is recomputed from committed usage every pass and
 diffed against what the kernel reports, never against a panel-side cursor. That
 is what makes a traffic reset, a plan edit and usage arriving from a remote node
 all land without any of them having a hook.
+
+ANY failure to read the wanted state aborts the whole pass. A device left out
+because its core could not be asked is indistinguishable from a device nobody
+wants shaped, and converging on that view would reap its mirror.
 */
 func (s *PolicyService) ConvergeShaping(ctx context.Context) error {
 	wants, err := s.ShapingWants(ctx)
