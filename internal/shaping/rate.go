@@ -1,14 +1,15 @@
 package shaping
 
 /*
-UnlimitedBps is what the explicit default class is created at. It sits above the
-measured ~10.3-10.4 Gbit/s single-qdisc ceiling, so it can never bind.
+UnlimitedBps is what the explicit default class is created at. It must clear real
+hardware by a wide margin, because a default class that binds throttles a user
+with NO policy at all — the opposite of shaping's fail-open rule.
 
-Leaving `htb default` pointing at a guessed rate was measured to throttle an
-UNSHAPED peer from 4608 to 960 Mbit/s — a 4.8x penalty on a user with no policy
-at all, which is the opposite of what shaping's fail-open rule requires.
+Measured, not assumed: at 10 Gbit this class BOUND, holding an unshaped user to
+9434 Mbit/s on a device that carried 12256 bare. Raising it recovered 11931 at
+100 Gbit and 11749 at 1 Tbit, and the kernel round-trips every one of them exactly.
 */
-const UnlimitedBps int64 = 10_000_000_000
+const UnlimitedBps int64 = 1_000_000_000_000
 
 /*
 KernelBytesPerSec canonicalises a rate into the unit HTB actually stores.
