@@ -27,7 +27,7 @@ var (
 // built shows up here rather than in a customer's throughput.
 const (
 	rootIn      = "qdisc+ qdisc pwg7 htb handle 1:0 parent ffff:ffff"
-	defaultIn   = "class+ class pwg7 1:ffff rate 1250000000 ceil 1250000000"
+	defaultIn   = "class+ class pwg7 1:ffff rate 125000000000 ceil 125000000000"
 	defaultLeaf = "qdisc+ qdisc pwg7 fq_codel handle none parent 1:ffff"
 )
 
@@ -97,7 +97,7 @@ func TestUploadOnlySubjectBuildsTheMirrorAndNoDownloadClass(t *testing.T) {
 	assertOps(t, kernel, []string{
 		"ifb+ pifb7",
 		"qdisc+ qdisc pifb7 htb handle 1:0 parent ffff:ffff",
-		"class+ class pifb7 1:ffff rate 1250000000 ceil 1250000000",
+		"class+ class pifb7 1:ffff rate 125000000000 ceil 125000000000",
 		"qdisc+ qdisc pifb7 fq_codel handle none parent 1:ffff",
 		"class+ class pifb7 1:10 rate 1250000 ceil 1250000",
 		"qdisc+ qdisc pifb7 fq_codel handle none parent 1:10",
@@ -634,7 +634,7 @@ func TestZeroSubjectsTearsTheDeviceDown(t *testing.T) {
 		"qdisc- qdisc pwg7 fq_codel handle none parent 1:10",
 		"class- class pwg7 1:10 rate 1250000 ceil 1250000",
 		"qdisc- qdisc pwg7 fq_codel handle none parent 1:ffff",
-		"class- class pwg7 1:ffff rate 1250000000 ceil 1250000000",
+		"class- class pwg7 1:ffff rate 125000000000 ceil 125000000000",
 		"qdisc- qdisc pwg7 htb handle 1:0 parent ffff:ffff",
 	})
 	for _, object := range kernel.Tree() {

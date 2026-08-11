@@ -20,7 +20,7 @@ func TestKernelBytesPerSecTruncates(t *testing.T) {
 		{"a negative rate is not a rate", -1, 0},
 		{"ten megabit", 10_000_000, 1_250_000},
 		{"the rate that churns if it is not truncated once", 12_345_678, 1_543_209},
-		{"unlimited sits above the measured single-qdisc ceiling", UnlimitedBps, 1_250_000_000},
+		{"unlimited canonicalises like any other rate", UnlimitedBps, 125_000_000_000},
 		{"a rate below one byte per second floors to zero", 7, 0},
 	}
 	for _, tc := range cases {
@@ -60,7 +60,7 @@ func TestQuantumStaysInsideTheKernelsOwnClamp(t *testing.T) {
 	}{
 		{"a tiny rate floors at the kernel's own minimum", 100, 1000},
 		{"ten megabit divides by r2q", 1_250_000, 125_000},
-		{"unlimited clamps at the kernel's own ceiling", 1_250_000_000, 200_000},
+		{"unlimited clamps at the kernel's own ceiling", KernelBytesPerSec(UnlimitedBps), 200_000},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,5 +68,23 @@ func TestQuantumStaysInsideTheKernelsOwnClamp(t *testing.T) {
 				t.Fatalf("quantumFor(%d) = %d, want %d", tc.bytes, got, tc.want)
 			}
 		})
+	}
+}
+
+/*
+TestUnlimitedClearsRealHardware is the regression for a default class that
+throttles a user with no policy at all.
+
+Measured on 6.8.0-111: an unshaped user on a device whose default class sat at
+10 Gbit achieved 9434 Mbit/s where the bare device carried 12256 — the explicit
+default was binding, a 23% penalty on somebody with no limit. The bound is stated
+against shipping hardware rather than against the box it was measured on, because
+the value that bound was itself chosen against one machine's ceiling.
+*/
+func TestUnlimitedClearsRealHardware(t *testing.T) {
+	const fastestShippingNIC = 400_000_000_000
+	if UnlimitedBps <= fastestShippingNIC {
+		t.Fatalf("UnlimitedBps = %d does not clear %d bit/s hardware, so the default class binds and throttles an unshaped user",
+			UnlimitedBps, fastestShippingNIC)
 	}
 }
