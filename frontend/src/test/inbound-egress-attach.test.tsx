@@ -111,6 +111,11 @@ function selectedEgressText(): string {
   return select?.querySelector('.ant-select-content-has-value')?.textContent ?? '';
 }
 
+/* The host commands the form tells the operator to run, in order. */
+function alertCommands(): string[] {
+  return Array.from(document.querySelectorAll('.ant-alert code')).map((c) => c.textContent ?? '');
+}
+
 function egressItem(): HTMLElement {
   const label = Array.from(document.querySelectorAll('.ant-form-item-label label'))
     .find((el) => (el.textContent ?? '').trim() === enUS.pages.inbounds.form.egress);
@@ -138,6 +143,24 @@ describe('kernel WireGuard egress attachment', () => {
     expect(item.querySelector('.ant-select-disabled')).not.toBeNull();
     expect(item.querySelector('.ant-form-item-extra')?.textContent)
       .toBe(enUS.pages.inbounds.form.egressNodeOwned);
+  });
+
+  /* The egress terminates the connection itself, and the form already says so
+     one field below -- while the alert above kept prescribing a NAT rule. */
+  it('stops prescribing a masquerade rule once an egress is attached', async () => {
+    await renderForm(null);
+    expect(alertCommands()).toContain('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE');
+    expect(alertCommands()).toContain('ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE');
+
+    pickEgress(EGRESS.remark);
+    await flush();
+    expect(alertCommands().filter((c) => c.includes('MASQUERADE'))).toEqual([]);
+    expect(alertCommands()).toEqual([
+      'sysctl -w net.ipv4.ip_forward=1',
+      'sysctl -w net.ipv6.conf.all.forwarding=1',
+    ]);
+    expect(document.querySelector('.ant-alert')?.textContent)
+      .toContain(enUS.pages.inbounds.form.wgkernelForwardingHintEgress);
   });
 
   /* Only an L3 ingress has a device to select on, so a selection left over from

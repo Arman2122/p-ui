@@ -129,6 +129,43 @@ None of these survive a reboot on their own. Persist the sysctls in
 `/etc/sysctl.d/`, and the firewall rules with `iptables-persistent` or your
 firewall's own rules. The panel deliberately does not write firewall rules for you.
 
+An inbound attached to an **Egress** (below) still needs the forwarding sysctls,
+but not the NAT rules.
+
+### Egress
+
+An **egress** sends one `wgkernel` inbound's decrypted traffic out through a
+named Xray outbound or balancer instead of the server's own address — a warp
+exit, a chained proxy, another VPS. Create one under **Xray Configs → Egresses**,
+then attach an inbound from that inbound's own form. The panel owns one `ip rule`
+per attached inbound, a private routing table and its blackhole; the front device
+belongs to Xray. Everything the kernel needs is derived from the egress id, so an
+id is never reused.
+
+- **The MASQUERADE rules above are not needed for an attached inbound.** Xray
+  terminates the connection and dials the destination itself, so there is nothing
+  to NAT. Forwarding is still required — it is a precondition of any L3 inbound
+  reaching anything at all — so keep `net.ipv4.ip_forward` and its v6 twin on.
+- **It is master-local.** An inbound deployed to a node cannot be attached: the
+  egress id is a global database key while the routing table, rule and front
+  device it derives all live on one host.
+- **A dark egress contains; it never leaks.** If the target names no outbound, if
+  the egress is switched off, or if Xray has not yet created the front device, the
+  private table holds only its blackhole and the attached traffic is dropped. It
+  does not fall back to the server's own identity — that is the whole point of the
+  feature, and it is why the panel refuses to disable or delete an egress that
+  still serves inbounds.
+- **Do not test one with `ping` or `traceroute`.** ICMP is echo-only and answered
+  by the front device itself, so a ping through an egress succeeds for a
+  destination that exists nowhere — including when the egress is completely dark.
+  Termination also changes what a TCP connection looks like: one to a dead host
+  completes its handshake and only then RSTs. Test with a real request from a
+  connected client instead, e.g. `curl https://ifconfig.co`.
+- **`GET /panel/api/egresses/preflight`** reports what stops this host carrying an
+  egress: a foreign object in the reserved band (routing tables 30001-30999, rule
+  priorities 31001-31999), strict reverse-path filtering, forwarding left off, and
+  any enabled egress whose front device is not up yet.
+
 ### Other things to know
 
 - **`limitIp` does nothing** for this protocol. The per-client IP limit is
