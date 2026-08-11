@@ -78,8 +78,8 @@ func TestUsedBytesExprAndDepletionPickTheSameBranch(t *testing.T) {
 		if len(condArgs) != len(usedArgs)+1 {
 			t.Fatalf("depletedCond bound %d args around a usage expression binding %d", len(condArgs), len(usedArgs))
 		}
-		// Each caller samples the clock for itself, so the two cutoffs differ by the
-		// milliseconds between the calls; what must match is the window they name.
+		// Each caller samples the clock for itself, so the cutoffs differ by the
+		// milliseconds between calls; what must match is the window they name.
 		for i := range usedArgs {
 			depletion, ok := condArgs[i].(int64)
 			if !ok {
@@ -162,8 +162,8 @@ func TestDepletionRewriteMatchesTheHistoricalPredicate(t *testing.T) {
 	if cond != depletedClientsCond {
 		t.Fatalf("the seeded globals should have selected the cross-panel predicate, got %s", cond)
 	}
-	// The historical form binds now first and freshSince second; the rewrite folds
-	// freshSince into the usage expression, so it binds them the other way round.
+	// The historical form binds now first; the rewrite folds freshSince into the
+	// usage expression, so it binds them the other way round.
 	historicalArgs := []any{condArgs[1], condArgs[0]}
 
 	got := selected(t, cond, condArgs)

@@ -98,8 +98,7 @@ func TestIPLimitLogLineMatchesTheInstallerRegex(t *testing.T) {
 				t.Errorf("fail2ban would ban %q, the client connected from %q", got, tc.ip)
 			}
 			// The installer's <F-USER>.+</F-USER> is greedy, so fail2ban's own capture
-			// keeps the space before the separator. Trimmed here rather than fixed:
-			// the shipped filters are the contract and the user tag only names a ban.
+			// keeps the trailing space. The shipped filter is the contract, not this.
 			if got := strings.TrimSpace(groups[matcher.SubexpIndex("user")]); got != tc.email {
 				t.Errorf("fail2ban would attribute the ban to %q, want %q", got, tc.email)
 			}

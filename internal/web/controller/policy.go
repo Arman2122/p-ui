@@ -61,9 +61,8 @@ func (a *PolicyController) get(c *gin.Context) {
 	jsonObj(c, row, nil)
 }
 
-// enforced answers with what the KERNEL currently holds for one client, never
-// with the value the panel pushed: only the readback can show a limit that did
-// not land.
+// enforced answers with what the KERNEL holds for one client, never with what the
+// panel pushed: only a readback can show a limit that never landed.
 func (a *PolicyController) enforced(c *gin.Context) {
 	view, err := a.policyService.EnforcedFor(c.Request.Context(), c.Param("email"))
 	if err != nil {
