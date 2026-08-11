@@ -103,6 +103,39 @@ func TestCoreEnginesDoNotImportTheWebLayer(t *testing.T) {
 	}
 }
 
+// isStdlib reports whether an import path is a standard library package: every
+// external path starts with a domain, so its first segment carries a dot.
+func isStdlib(path string) bool {
+	first, _, _ := strings.Cut(path, "/")
+	return !strings.Contains(first, ".")
+}
+
+// TestPolicyRulesImportOnlyStdlib makes "the rules cannot name a protocol" structural
+// rather than a convention: a package that imports nothing with one cannot name one.
+func TestPolicyRulesImportOnlyStdlib(t *testing.T) {
+	root := repoRoot(t)
+	var violations []string
+	checked := 0
+	for _, src := range parseNonTestGo(t, root) {
+		if !strings.HasPrefix(src.Rel, "internal/policy/") {
+			continue
+		}
+		checked++
+		for _, path := range importPaths(src.File) {
+			if !isStdlib(path) {
+				violations = append(violations, src.Rel+" imports "+path)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("parsed no files under internal/policy; the rules fence is vacuous")
+	}
+	sort.Strings(violations)
+	for _, v := range violations {
+		t.Errorf("%s — internal/policy is stdlib only; convert to its own value types at the service layer instead of importing the thing that has them", v)
+	}
+}
+
 // TestDataLayerDoesNotImportACore is the fence P0 unlocked. internal/database
 // imported internal/xray for ClientTraffic and InboundConfig, so every future core
 // transitively depended on Xray through the model layer and no fence was
