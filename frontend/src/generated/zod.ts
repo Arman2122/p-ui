@@ -305,6 +305,13 @@ export const ClientInboundSchema = z.object({
 });
 export type ClientInbound = z.infer<typeof ClientInboundSchema>;
 
+export const ClientPolicySchema = z.object({
+  email: z.string(),
+  policyId: z.number().int().nullable().optional(),
+  updatedAt: z.number().int(),
+});
+export type ClientPolicy = z.infer<typeof ClientPolicySchema>;
+
 export const ClientRecordSchema = z.object({
   allowedIPs: z.string(),
   auth: z.string(),
@@ -360,6 +367,7 @@ export const CoreViewSchema = z.object({
   clientCredentials: z.record(z.string(), z.array(z.string())),
   id: z.string(),
   kinds: z.array(z.string()),
+  shaping: z.record(z.string(), z.string()),
   titleKey: z.string(),
   unavailable: z.string(),
 });
@@ -376,6 +384,19 @@ export const EgressSchema = z.object({
   updatedAt: z.number().int(),
 });
 export type Egress = z.infer<typeof EgressSchema>;
+
+export const EnforcedLimitsSchema = z.object({
+  email: z.string(),
+  enforcedDownBps: z.number().int(),
+  enforcedUpBps: z.number().int(),
+  policyId: z.number().int(),
+  shapeable: z.boolean(),
+  unresolved: z.boolean(),
+  usedBytes: z.number().int(),
+  wantDownBps: z.number().int(),
+  wantUpBps: z.number().int(),
+});
+export type EnforcedLimits = z.infer<typeof EnforcedLimitsSchema>;
 
 export const FallbackParentInfoSchema = z.object({
   masterId: z.number().int(),
@@ -665,6 +686,15 @@ export const PanelUpdateStatusSchema = z.object({
   state: z.string(),
 });
 export type PanelUpdateStatus = z.infer<typeof PanelUpdateStatusSchema>;
+
+export const PolicySchema = z.object({
+  createdAt: z.number().int(),
+  id: z.number().int(),
+  name: z.string(),
+  tiers: z.unknown(),
+  updatedAt: z.number().int(),
+});
+export type Policy = z.infer<typeof PolicySchema>;
 
 export const ProbeResultUISchema = z.object({
   cpuPct: z.number(),

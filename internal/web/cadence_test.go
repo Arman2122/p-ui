@@ -19,7 +19,7 @@ func TestJobCadencesAreValidCronSpecs(t *testing.T) {
 		"cadenceXrayRestart":   cadenceXrayRestart,
 		"cadenceXrayTraffic":   cadenceXrayTraffic,
 		"cadenceCoreSupervise": cadenceCoreSupervise,
-		"cadenceClientIPScan":  cadenceClientIPScan,
+		"cadenceCorePolicy":    cadenceCorePolicy,
 		"cadenceNodeHeartbeat": cadenceNodeHeartbeat,
 		"cadenceNodeTraffic":   cadenceNodeTraffic,
 		"cadenceOutboundSub":   cadenceOutboundSub,

@@ -21,6 +21,7 @@ type APIController struct {
 	nodeController        *NodeController
 	hostController        *HostController
 	egressController      *EgressController
+	policyController      *PolicyController
 	settingController     *SettingController
 	xraySettingController *XraySettingController
 	userService           panel.UserService
@@ -106,6 +107,10 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// Egresses API — policy-routed exits an L3 inbound can be sent out through
 	egresses := api.Group("/egresses")
 	a.egressController = NewEgressController(egresses)
+
+	// Policies API — the speed ladders clients are assigned to
+	policies := api.Group("/policies")
+	a.policyController = NewPolicyController(policies)
 
 	// Settings + Xray config management live under the API surface too, so the
 	// same API token drives them. Paths are /panel/api/setting/* and

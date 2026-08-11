@@ -104,6 +104,51 @@ func TestCoreEnginesDoNotImportTheWebLayer(t *testing.T) {
 	}
 }
 
+/*
+TestCoresDoNotImportPolicy is the reverse fence, and the central invariant of the
+policy layer expressed as a compile-time fact rather than a review convention.
+
+A core declares what its users ARE — a device, a kernel identity, a live session
+— and is never told what any of them is allowed. The moment one core imports the
+rules, the next core's author reads that as the pattern and product policy is
+per-core again. internal/egress joins the engines here: it is panel-owned kernel
+plumbing that a core's traffic crosses, and it has the same reason to stay
+ignorant of what a tier is.
+*/
+func TestCoresDoNotImportPolicy(t *testing.T) {
+	root := repoRoot(t)
+	// Its own list: the engine fences above key off coreEnginePrefixes and must
+	// not start covering egress as a side effect of widening it here.
+	fenced := append(slices.Clone(coreEnginePrefixes), "internal/egress/")
+	forbidden := []string{
+		modulePrefix + "/internal/policy",
+		modulePrefix + "/internal/shaping",
+	}
+
+	var violations []string
+	checked := 0
+	for _, src := range parseNonTestGo(t, root) {
+		if !slices.ContainsFunc(fenced, func(prefix string) bool { return strings.HasPrefix(src.Rel, prefix) }) {
+			continue
+		}
+		checked++
+		for _, path := range importPaths(src.File) {
+			for _, bad := range forbidden {
+				if path == bad || strings.HasPrefix(path, bad+"/") {
+					violations = append(violations, src.Rel+" imports "+path)
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatalf("found no files under %v to check; the reverse fence is vacuous", fenced)
+	}
+	sort.Strings(violations)
+	for _, v := range violations {
+		t.Errorf("%s — a core declares an identity and never learns what anyone is allowed; the rules and the mechanism belong to the panel, joined only in internal/web/service/policy.go", v)
+	}
+}
+
 // isStdlib reports whether an import path is a standard library package: every
 // external path starts with a domain, so its first segment carries a dot.
 func isStdlib(path string) bool {

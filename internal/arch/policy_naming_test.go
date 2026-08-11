@@ -11,12 +11,32 @@ import (
 )
 
 // policedPackages must answer every product question without naming a core.
-// internal/shaping lands in a later step: absence is fine, emptiness is not.
 var policedPackages = []string{"internal/policy/", "internal/shaping/"}
+
+/*
+policedFiles are the generic halves that live inside packages full of legitimate
+protocol dispatch, so they are policed one file at a time.
+
+The join and the pass are where a shortcut is most tempting and most expensive:
+one `case "wgkernel":` here and the whole capability seam becomes decoration,
+because the next core would need the same edit in the same file.
+*/
+var policedFiles = []string{
+	"internal/web/service/policy.go",
+	"internal/web/job/core_policy.go",
+}
 
 func isPoliced(rel string) bool {
 	for _, prefix := range policedPackages {
 		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	// Both separators, because the parsed paths are compared on every platform
+	// this repo is developed on.
+	normalized := strings.ReplaceAll(rel, "\\", "/")
+	for _, file := range policedFiles {
+		if normalized == file {
 			return true
 		}
 	}
@@ -44,11 +64,13 @@ func TestPolicyNamesNoProtocol(t *testing.T) {
 
 	var violations []string
 	checked := 0
+	seen := map[string]bool{}
 	for _, src := range parseNonTestGo(t, root) {
 		if !isPoliced(src.Rel) {
 			continue
 		}
 		checked++
+		seen[strings.ReplaceAll(src.Rel, "\\", "/")] = true
 		// Relative path, like every other guard here: an absolute one differs per
 		// machine and per OS, and these messages are read in CI logs.
 		report := func(pos token.Pos, what string) {
@@ -86,6 +108,13 @@ func TestPolicyNamesNoProtocol(t *testing.T) {
 
 	if checked == 0 {
 		t.Fatalf("parsed no files under %v; this guard is certifying nothing", policedPackages)
+	}
+	// A renamed file would leave the package half green and stop policing the join
+	// entirely, which is the failure mode this whole guard exists to prevent.
+	for _, file := range policedFiles {
+		if !seen[file] {
+			t.Fatalf("%s is policed but was not parsed; point policedFiles at wherever the join moved to", file)
+		}
 	}
 	sort.Strings(violations)
 	for _, v := range violations {

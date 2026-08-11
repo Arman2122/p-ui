@@ -297,13 +297,15 @@ const (
 	// Drift repair for the egress band. Its real job is the one route that needs
 	// the front device, which a core restart recreates without restoring.
 	cadenceEgressReconcile = "@every 10s"
-	cadenceClientIPScan    = "@every 10s"
-	cadenceNodeHeartbeat   = "@every 5s"
-	cadenceNodeTraffic     = "@every 5s"
-	cadenceOutboundSub     = "@every 5m"
-	cadenceReapOrphans     = "@every 5m"
-	cadenceXrayLogPrune    = "@every 10m"
-	cadenceCheckHash       = "@every 2m"
+	// Product rules against what the cores report: speed ladders and IP limits.
+	// The cadence the retired IP scan ran at, and the one supervision converges at.
+	cadenceCorePolicy    = "@every 10s"
+	cadenceNodeHeartbeat = "@every 5s"
+	cadenceNodeTraffic   = "@every 5s"
+	cadenceOutboundSub   = "@every 5m"
+	cadenceReapOrphans   = "@every 5m"
+	cadenceXrayLogPrune  = "@every 10m"
+	cadenceCheckHash     = "@every 2m"
 	// cpu.Percent samples over a full minute (blocking), so a finer cadence just
 	// stacks overlapping samplers; subscribers rate-limit alerts to 1/min anyway.
 	cadenceCPUAlarm    = "@every 1m"
@@ -345,8 +347,8 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 
 	_, _ = s.cron.AddJob(cadenceEgressReconcile, egressJob)
 
-	// check client ips from log file every 10 sec
-	_, _ = s.cron.AddJob(cadenceClientIPScan, job.NewCheckClientIpJob())
+	// Evaluate every client's tier and IP cap against what the cores report.
+	_, _ = s.cron.AddJob(cadenceCorePolicy, job.NewCorePolicyJob())
 
 	_, _ = s.cron.AddJob(cadenceNodeHeartbeat, job.NewNodeHeartbeatJob())
 

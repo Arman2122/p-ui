@@ -1165,6 +1165,31 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientPolicy": {
+    "description": "/*\nClientPolicy assigns one client a policy, keyed by EMAIL and not by client id.\n\nclient_credentials is client-id keyed and dies with its client, which is right\nfor a credential: a recreated client legitimately gets a fresh UUID. It is wrong\nfor a plan. Deleting a client hard-deletes the row and a node re-sync mints a new\nid for the same email, so an id-keyed assignment would silently vanish and drop a\npaying customer back to no plan. client_traffics is email-keyed for exactly this\nreason — a quota survives a re-sync because of it — and an assignment has a\nquota's lifetime, not a UUID's.\n*/",
+    "properties": {
+      "email": {
+        "example": "user1",
+        "type": "string"
+      },
+      "policyId": {
+        "description": "PolicyId is nullable and the FK is ON DELETE SET NULL, not CASCADE: deleting\na plan must leave the assignment visible-and-unresolved for the UI to report.",
+        "example": 1,
+        "nullable": true,
+        "type": "integer"
+      },
+      "updatedAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "email",
+      "updatedAt"
+    ],
+    "type": "object"
+  },
   "ClientRecord": {
     "properties": {
       "allowedIPs": {
@@ -1400,6 +1425,16 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "shaping": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "Shaping names the kernel key each kind's clients carry, so the client form\ngates the speed-limit fields on what a core declares rather than on a\nprotocol ladder of its own. A kind absent here cannot be rate limited at\nall, and the form says so instead of offering a field that does nothing.",
+        "example": {
+          "wgkernel": "innerIP"
+        },
+        "type": "object"
+      },
       "titleKey": {
         "example": "cores.xray.title",
         "type": "string"
@@ -1415,6 +1450,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "clientCredentials",
       "id",
       "kinds",
+      "shaping",
       "titleKey",
       "unavailable"
     ],
@@ -1468,6 +1504,67 @@ export const SCHEMAS: Record<string, unknown> = {
       "target",
       "type",
       "updatedAt"
+    ],
+    "type": "object"
+  },
+  "EnforcedLimits": {
+    "description": "EnforcedLimits is one client's answer: the plan the rules derive, and what the\nkernel is actually holding. They differ exactly when something did not land.",
+    "properties": {
+      "email": {
+        "example": "user1",
+        "type": "string"
+      },
+      "enforcedDownBps": {
+        "example": 10000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "enforcedUpBps": {
+        "example": 10000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "policyId": {
+        "description": "PolicyId is 0 when the client is on no plan; Unresolved means the row names\na plan that no longer exists, which never throttles and must be reported.",
+        "example": 1,
+        "type": "integer"
+      },
+      "shapeable": {
+        "description": "Shapeable is false when no core can give this client a kernel identity, so\nthe UI says speed limits are unavailable rather than showing a dead field.",
+        "example": true,
+        "type": "boolean"
+      },
+      "unresolved": {
+        "example": false,
+        "type": "boolean"
+      },
+      "usedBytes": {
+        "description": "UsedBytes is the same number the quota is enforced against.",
+        "example": 53687091200,
+        "format": "int64",
+        "type": "integer"
+      },
+      "wantDownBps": {
+        "example": 10000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "wantUpBps": {
+        "example": 10000000,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "email",
+      "enforcedDownBps",
+      "enforcedUpBps",
+      "policyId",
+      "shapeable",
+      "unresolved",
+      "usedBytes",
+      "wantDownBps",
+      "wantUpBps"
     ],
     "type": "object"
   },
@@ -2767,6 +2864,47 @@ export const SCHEMAS: Record<string, unknown> = {
       "finishedAt",
       "runId",
       "state"
+    ],
+    "type": "object"
+  },
+  "Policy": {
+    "description": "/*\nPolicy is one named ladder of speed tiers, the whole product rule as a value.\n\nTiers is a JSON column rather than a table of its own because a tier has no\nidentity any caller needs: the ladder is read, sorted and evaluated as one\nthing, and splitting it would buy a join on every pass for nothing. A plain\nspeed limit is a one-tier ladder starting at zero, so there is no second shape.\n*/",
+    "properties": {
+      "createdAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "id": {
+        "example": 1,
+        "type": "integer"
+      },
+      "name": {
+        "example": "fair use",
+        "type": "string"
+      },
+      "tiers": {
+        "description": "Tiers is a policy.Tier array. Sorted and de-duplicated on write, so the\nevaluation on every pass is a scan and never a sort.",
+        "example": [
+          {
+            "downBps": 0,
+            "fromBytes": 0,
+            "upBps": 0
+          }
+        ]
+      },
+      "updatedAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "createdAt",
+      "id",
+      "name",
+      "tiers",
+      "updatedAt"
     ],
     "type": "object"
   },

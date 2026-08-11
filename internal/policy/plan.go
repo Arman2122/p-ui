@@ -3,8 +3,9 @@ package policy
 // Tier is one rung of a rate ladder; it binds once usage reaches FromBytes.
 // UpBps and DownBps are bits per second from the CLIENT's side; 0 is unlimited.
 type Tier struct {
-	FromBytes      int64
-	UpBps, DownBps int64
+	FromBytes int64 `json:"fromBytes"`
+	UpBps     int64 `json:"upBps"`
+	DownBps   int64 `json:"downBps"`
 }
 
 // Plan is one client's whole ladder. A plain speed limit is a one-tier plan
