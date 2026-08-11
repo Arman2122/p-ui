@@ -37,6 +37,7 @@ type declaredCore struct {
 	keys     map[string]core.SubjectKey
 	sessions []core.Session
 	failWith error
+	shapeErr error
 }
 
 func (c *declaredCore) Describe() core.Descriptor {
@@ -56,6 +57,9 @@ func (c shapingCore) ShapingSelector(kind core.Kind) core.Selector {
 }
 
 func (c shapingCore) ShapingTargets(context.Context, core.Instance) (core.ShapingTarget, error) {
+	if c.shapeErr != nil {
+		return core.ShapingTarget{}, c.shapeErr
+	}
 	return core.ShapingTarget{Device: c.device, Selector: c.selector, Keys: c.keys}, nil
 }
 
@@ -831,6 +835,41 @@ func TestTheMirrorOfADeletedInboundIsCollected(t *testing.T) {
 	}
 	if slices.Contains(kernel.Devices(), "pifb7") {
 		t.Fatalf("the mirror outlived the inbound that derived it: one leaked interface per deleted inbound, forever. ops: %v", kernel.Ops())
+	}
+}
+
+/*
+TestAnUnreadableIdentityAbortsTheWholePass is the other half of the GC decision.
+
+A device left out because its core could not be asked looks exactly like a device
+nobody wants shaped, and the collector cannot tell them apart. Converging on that
+view would reap the mirror of a perfectly healthy inbound, so the pass changes
+nothing at all until it can see the whole picture again.
+*/
+func TestAnUnreadableIdentityAbortsTheWholePass(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+	kernel := installKernel(t, "pwg7")
+	base, _ := tunnelWithClients(t, "pwg7", "steady")
+	seedPlan(t, "capped both ways", []policy.Tier{{FromBytes: 0, UpBps: 5_000_000, DownBps: 5_000_000}}, "steady")
+
+	if err := svc.ConvergeShaping(context.Background()); err != nil {
+		t.Fatalf("first converge: %v", err)
+	}
+	if !slices.Contains(kernel.Devices(), "pifb7") {
+		t.Fatalf("the upload tree needs its mirror, devices are %v", kernel.Devices())
+	}
+
+	base.shapeErr = errors.New("the interface could not be read")
+	kernel.ResetOps()
+	if err := svc.ConvergeShaping(context.Background()); err == nil {
+		t.Fatal("an unreadable identity must be reported, not treated as nobody wanting to be shaped")
+	}
+	if kernel.Writes() != 0 {
+		t.Fatalf("the pass changed the kernel from a partial view: %v", kernel.Ops())
+	}
+	if !slices.Contains(kernel.Devices(), "pifb7") {
+		t.Fatal("a healthy inbound lost its mirror because its core could not be asked once")
 	}
 }
 
