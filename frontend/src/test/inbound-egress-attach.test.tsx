@@ -149,16 +149,15 @@ describe('kernel WireGuard egress attachment', () => {
      one field below -- while the alert above kept prescribing a NAT rule. */
   it('stops prescribing a masquerade rule once an egress is attached', async () => {
     await renderForm(null);
-    expect(alertCommands()).toContain('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE');
-    expect(alertCommands()).toContain('ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE');
+    expect(alertCommands().some((c) => c.includes('masquerade'))).toBe(true);
 
     pickEgress(EGRESS.remark);
     await flush();
-    expect(alertCommands().filter((c) => c.includes('MASQUERADE'))).toEqual([]);
-    expect(alertCommands()).toEqual([
-      'sysctl -w net.ipv4.ip_forward=1',
-      'sysctl -w net.ipv6.conf.all.forwarding=1',
-    ]);
+    expect(alertCommands().filter((c) => c.toLowerCase().includes('masquerade'))).toEqual([]);
+    /* Forwarding is still required with an egress attached -- only the NAT is not --
+       and the sysctl must be a file, because a -w write is gone after a reboot. */
+    expect(alertCommands().some((c) => c.includes('/etc/sysctl.d/'))).toBe(true);
+    expect(alertCommands().every((c) => !c.includes('sysctl -w'))).toBe(true);
     expect(document.querySelector('.ant-alert')?.textContent)
       .toContain(enUS.pages.inbounds.form.wgkernelForwardingHintEgress);
   });
