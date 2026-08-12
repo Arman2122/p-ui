@@ -841,6 +841,17 @@ export const sections: readonly Section[] = [
         ],
       },
       {
+        method: 'GET',
+        path: '/panel/api/clients/localAddresses/:email',
+        summary:
+          'Where this client sits inside each core’s tunnel, which is the address other clients on the same inbound reach it at. Read live from the cores rather than from stored history, so only a live tunnel on a local inbound appears, and a core whose users share the host’s stack — Xray — honestly reports none.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email.' },
+        ],
+        responseSchema: 'ClientLocalAddress',
+        responseSchemaArray: true,
+      },
+      {
         method: 'POST',
         path: '/panel/api/clients/clearIps/:email',
         summary: 'Reset the recorded IP list for a client.',

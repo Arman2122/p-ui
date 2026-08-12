@@ -50,6 +50,7 @@ func (a *ClientController) initRouter(g *gin.RouterGroup) {
 	g.GET("/get/:email", a.get)
 	g.GET("/get/tgId/:tgId", a.getByTgId)
 	g.GET("/traffic/:email", a.getTrafficByEmail)
+	g.GET("/localAddresses/:email", a.localAddresses)
 	g.GET("/subLinks/:subId", a.getSubLinks)
 	g.GET("/links/:email", a.getClientLinks)
 
@@ -529,6 +530,12 @@ func (a *ClientController) getIps(c *gin.Context) {
 	email := c.Param("email")
 	infos, err := a.inboundService.GetClientIpsWithNodes(email)
 	jsonObj(c, infos, err)
+}
+
+// localAddresses is separate from getIps and not a field on it: an in-tunnel
+// address is current state read from the cores, not the stored outer history.
+func (a *ClientController) localAddresses(c *gin.Context) {
+	jsonObj(c, service.ClientLocalAddresses(c.Request.Context(), c.Param("email")), nil)
 }
 
 func (a *ClientController) clientIpsByGuid(c *gin.Context) {

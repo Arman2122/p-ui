@@ -168,6 +168,9 @@ type Session struct {
 	// Source is where the client connected FROM: for an L7 core its own address, for
 	// an L3 core the peer's outer endpoint — the one that roams when a key is shared.
 	Source netip.Addr
+	// Local is what the client answers to INSIDE the tunnel, one per family. Empty is
+	// honest for an L7 core; a routed subnet behind a peer is somebody else's network.
+	Local []netip.Addr
 	// LastSeenUnixMilli is load-bearing. A core refreshes it only on new activity, so
 	// a frozen value is a dead connection, not a reconnect. Zero means it cannot say.
 	LastSeenUnixMilli int64

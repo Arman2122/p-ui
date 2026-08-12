@@ -273,6 +273,10 @@ export const EXAMPLES: Record<string, unknown> = {
     "flowOverride": "",
     "inboundId": 0
   },
+  "ClientLocalAddress": {
+    "address": "10.0.0.11",
+    "core": "wgkernel"
+  },
   "ClientPolicy": {
     "email": "user1",
     "policyId": 1,

@@ -305,6 +305,12 @@ export const ClientInboundSchema = z.object({
 });
 export type ClientInbound = z.infer<typeof ClientInboundSchema>;
 
+export const ClientLocalAddressSchema = z.object({
+  address: z.string(),
+  core: z.string(),
+});
+export type ClientLocalAddress = z.infer<typeof ClientLocalAddressSchema>;
+
 export const ClientPolicySchema = z.object({
   email: z.string(),
   policyId: z.number().int().nullable().optional(),

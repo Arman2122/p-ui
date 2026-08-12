@@ -282,6 +282,7 @@ func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
 		out = append(out, core.Session{
 			Email:             e.Email,
 			Source:            e.Source,
+			Local:             e.Local,
 			LastSeenUnixMilli: e.Handshake.UnixMilli(),
 		})
 	}
