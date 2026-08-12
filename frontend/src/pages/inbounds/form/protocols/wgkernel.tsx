@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Button, Form, Input, InputNumber, Select, Space, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
@@ -5,6 +6,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { FormField } from '@/components/form/rhf';
 import type { EgressRecord } from '@/schemas/api/egress';
 import type { WireguardPoolUsage } from '@/lib/xray/wireguard-pool';
+import { normalizeInterfaceAddresses } from '@/lib/xray/interface-address';
 
 interface WgkernelFieldsProps {
   wgPubKey: string;
@@ -33,6 +35,7 @@ export default function WgkernelFields({
   poolUsage,
 }: WgkernelFieldsProps) {
   const { t } = useTranslation();
+  const [rejected, setRejected] = useState<{ reason: string; values: string[] } | null>(null);
   const egressHelp = nodeOwned
     ? t('pages.inbounds.form.egressNodeOwned')
     : (egresses.length === 0 ? t('pages.inbounds.form.egressNone') : t('pages.inbounds.form.egressHint'));
@@ -83,9 +86,23 @@ export default function WgkernelFields({
       <FormField
         name={['settings', 'address']}
         label={t('pages.inbounds.form.wgkernelAddress')}
+        transform={{
+          output: (raw) => {
+            const result = normalizeInterfaceAddresses((raw as string[]) ?? []);
+            setRejected(result.rejected.length > 0 && result.reason
+              ? { reason: result.reason, values: result.rejected }
+              : null);
+            return result.values;
+          },
+        }}
         extra={(
           <>
             <div>{t('pages.inbounds.form.wgkernelAddressHint')}</div>
+            {rejected && (
+              <Typography.Text type="danger">
+                {t(rejected.reason, { value: rejected.values.join(', ') })}
+              </Typography.Text>
+            )}
             {poolUsage && (
               <div>
                 <Typography.Text type={poolUsage.outside > 0 ? 'warning' : undefined}>
@@ -102,7 +119,7 @@ export default function WgkernelFields({
           </>
         )}
       >
-        <Select mode="tags" tokenSeparators={[',']} style={{ width: '100%' }} placeholder="10.0.0.1/24" />
+        <Select id="wgkernelAddress" mode="tags" tokenSeparators={[',']} style={{ width: '100%' }} placeholder="10.0.0.1/24" />
       </FormField>
       <FormField name={['settings', 'mtu']} label="MTU">
         <InputNumber />

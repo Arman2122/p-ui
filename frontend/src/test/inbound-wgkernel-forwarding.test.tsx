@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, fireEvent } from '@testing-library/react';
 
 import InboundFormModal from '@/pages/inbounds/form/InboundFormModal';
 import { DBInbound } from '@/models/dbinbound';
@@ -160,5 +160,56 @@ describe('wgkernel pool capacity', () => {
     await renderPoolForm(['fd00::1/64'], []);
 
     expect(document.body.textContent).not.toContain('addresses used in');
+  });
+});
+
+function addressSelect(): HTMLElement {
+  const select = document.getElementById('wgkernelAddress')?.closest('.ant-select') as HTMLElement | null;
+  if (!select) throw new Error('the interface address field is not rendered');
+  return select;
+}
+
+async function typeAddress(value: string) {
+  const input = addressSelect().querySelector('input') as HTMLInputElement;
+  await act(async () => {
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 13 });
+  });
+  for (let i = 0; i < 3; i += 1) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  }
+}
+
+/*
+The server parses each interface address and drops what fails IN SILENCE, so a
+typo does not error — the device answers on nothing and no screen says why.
+*/
+describe('wgkernel interface address entry', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('completes a bare address instead of leaving it to be dropped', async () => {
+    await renderPoolForm(['10.0.0.1/24'], []);
+    await typeAddress('10.9.0.1');
+
+    expect(addressSelect().textContent).toContain('10.9.0.1/24');
+  });
+
+  it('says why a typo was not added, and keeps what was already good', async () => {
+    await renderPoolForm(['10.0.0.1/24'], []);
+    await typeAddress('10.0.0.300');
+
+    expect(document.body.textContent).toContain(enUS.pages.inbounds.form.wgkernelAddressInvalid.split('{')[0].trim());
+    expect(addressSelect().textContent).toContain('10.0.0.1/24');
+    expect(addressSelect().textContent).not.toContain('10.0.0.300');
+  });
+
+  // A /32 device address routes nobody: every client would land on a per-peer
+  // route, which is the cost P9-A exists to keep an operator away from.
+  it('refuses a device address with no room for a client', async () => {
+    await renderPoolForm(['10.0.0.1/24'], []);
+    await typeAddress('10.9.0.1/32');
+
+    expect(document.body.textContent).toContain(enUS.pages.inbounds.form.wgkernelAddressNoRoom.split('{')[0].trim());
+    expect(addressSelect().textContent).not.toContain('10.9.0.1/32');
   });
 });
