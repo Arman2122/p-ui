@@ -52,7 +52,7 @@ export function IpLimitControl({ value, onChange, disabled, notice, addon }: IpL
       )}
       {!limited && addon && <Space.Compact style={{ display: 'flex' }}>{addon}</Space.Compact>}
       {disabled && notice && (
-        <Typography.Text type="warning" style={{ fontSize: 12 }}>{notice}</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{notice}</Typography.Text>
       )}
     </Space>
   );
