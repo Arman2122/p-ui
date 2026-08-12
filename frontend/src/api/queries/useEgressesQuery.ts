@@ -31,14 +31,20 @@ async function fetchEgressPreflight(): Promise<EgressPreflight> {
   const validated = parseMsg(msg, EgressPreflightSchema, 'egresses/preflight');
   const report = validated.obj;
   if (!report || typeof report.ok !== 'boolean') throw new Error('Malformed egress preflight report');
-  return { ok: report.ok, refusals: report.refusals ?? [], notes: report.notes ?? [] };
+  return {
+    ok: report.ok,
+    refusals: report.refusals ?? [],
+    notes: report.notes ?? [],
+    forwardingNotes: report.forwardingNotes ?? [],
+  };
 }
 
 /* Host state, not row state: it changes when someone edits a sysctl on the box,
    so it is refetched with the list rather than cached for the session. */
-export function useEgressPreflightQuery() {
+export function useEgressPreflightQuery(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: keys.egresses.preflight(),
     queryFn: fetchEgressPreflight,
+    enabled: options.enabled ?? true,
   });
 }

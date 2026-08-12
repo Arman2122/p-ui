@@ -28,8 +28,11 @@ _openapi:
         device), or no permission to write a routing rule at all. Notes report
         host facts the panel does not own: either forwarding knob being off, and
         any enabled egress whose front device is not on this host, which leaves
-        everything attached to it contained rather than routed.'
-      url: '#what-stops-this-host-carrying-an-egress-a-foreign-rule-in-the-reserved-31001-31999-priority-band-a-foreign-route-in-tables-30001-30999-a-gateway-prefix-already-on-the-box-netipv4confallrp_filter1-the-effective-value-is-maxall-dev-so-the-panel-cannot-lower-it-per-device-or-no-permission-to-write-a-routing-rule-at-all-notes-report-host-facts-the-panel-does-not-own-either-forwarding-knob-being-off-and-any-enabled-egress-whose-front-device-is-not-on-this-host-which-leaves-everything-attached-to-it-contained-rather-than-routed'
+        everything attached to it contained rather than routed. forwardingNotes
+        repeats just the forwarding half, because a kernel WireGuard inbound
+        needs it whether or not any egress exists — without it that inbound
+        completes handshakes and routes nothing.'
+      url: '#what-stops-this-host-carrying-an-egress-a-foreign-rule-in-the-reserved-31001-31999-priority-band-a-foreign-route-in-tables-30001-30999-a-gateway-prefix-already-on-the-box-netipv4confallrp_filter1-the-effective-value-is-maxall-dev-so-the-panel-cannot-lower-it-per-device-or-no-permission-to-write-a-routing-rule-at-all-notes-report-host-facts-the-panel-does-not-own-either-forwarding-knob-being-off-and-any-enabled-egress-whose-front-device-is-not-on-this-host-which-leaves-everything-attached-to-it-contained-rather-than-routed-forwardingnotes-repeats-just-the-forwarding-half-because-a-kernel-wireguard-inbound-needs-it-whether-or-not-any-egress-exists--without-it-that-inbound-completes-handshakes-and-routes-nothing'
     - depth: 2
       title: Create an egress. type must be a driver this build serves (xray-tun) and
         target must already name an outbound or a balancer — an unresolvable
@@ -67,8 +70,11 @@ _openapi:
           routing rule at all. Notes report host facts the panel does not own:
           either forwarding knob being off, and any enabled egress whose front
           device is not on this host, which leaves everything attached to it
-          contained rather than routed.'
-        id: what-stops-this-host-carrying-an-egress-a-foreign-rule-in-the-reserved-31001-31999-priority-band-a-foreign-route-in-tables-30001-30999-a-gateway-prefix-already-on-the-box-netipv4confallrp_filter1-the-effective-value-is-maxall-dev-so-the-panel-cannot-lower-it-per-device-or-no-permission-to-write-a-routing-rule-at-all-notes-report-host-facts-the-panel-does-not-own-either-forwarding-knob-being-off-and-any-enabled-egress-whose-front-device-is-not-on-this-host-which-leaves-everything-attached-to-it-contained-rather-than-routed
+          contained rather than routed. forwardingNotes repeats just the
+          forwarding half, because a kernel WireGuard inbound needs it whether
+          or not any egress exists — without it that inbound completes
+          handshakes and routes nothing.'
+        id: what-stops-this-host-carrying-an-egress-a-foreign-rule-in-the-reserved-31001-31999-priority-band-a-foreign-route-in-tables-30001-30999-a-gateway-prefix-already-on-the-box-netipv4confallrp_filter1-the-effective-value-is-maxall-dev-so-the-panel-cannot-lower-it-per-device-or-no-permission-to-write-a-routing-rule-at-all-notes-report-host-facts-the-panel-does-not-own-either-forwarding-knob-being-off-and-any-enabled-egress-whose-front-device-is-not-on-this-host-which-leaves-everything-attached-to-it-contained-rather-than-routed-forwardingnotes-repeats-just-the-forwarding-half-because-a-kernel-wireguard-inbound-needs-it-whether-or-not-any-egress-exists--without-it-that-inbound-completes-handshakes-and-routes-nothing
       - content: Create an egress. type must be a driver this build serves (xray-tun)
           and target must already name an outbound or a balancer — an
           unresolvable target is refused rather than stored, because a stored

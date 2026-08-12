@@ -13,6 +13,9 @@ export const EgressPreflightSchema = z.object({
   ok: z.boolean(),
   refusals: z.array(z.string()),
   notes: z.array(z.string()),
+  /* The host-forwarding half on its own, because a wgkernel inbound needs it and
+     has no egress whose report it could read it out of. Defaulted for old panels. */
+  forwardingNotes: z.array(z.string()).default([]),
 });
 export type EgressPreflight = z.infer<typeof EgressPreflightSchema>;
 

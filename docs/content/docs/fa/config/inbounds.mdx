@@ -167,9 +167,32 @@ nft add rule ip pui_nat postrouting iifname "pwg*" oifname != "pwg*" masquerade
 `GET /panel/api/egresses/preflight`
 وضعیت هر دو کلید فورواردینگ را گزارش می‌کند.
 
-قانون‌های nftables به‌تنهایی پس از راه‌اندازی مجدد باقی نمی‌مانند — فایل را از یک
-یونیت کوچک systemd بار کنید یا از سازوکار پایداری دیوار آتش خودتان استفاده کنید.
-پنل عمداً قانون دیوار آتش برای شما نمی‌نویسد.
+قانون‌های nftables به‌تنهایی پس از راه‌اندازی مجدد باقی نمی‌مانند. پنل عمداً قانون
+دیوار آتش برای شما نمی‌نویسد، پس خودتان پایدارشان کنید — یا با سازوکار خود دیوار
+آتش، یا با یک یونیت حدوداً شش‌خطی:
+
+```bash
+nft list table ip pui_nat > /etc/p-ui/nat.nft
+cat > /etc/systemd/system/p-ui-nat.service <<'EOF'
+[Unit]
+Description=p-ui wgkernel NAT
+After=network-pre.target
+Wants=network-pre.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/p-ui/nat.nft
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now p-ui-nat.service
+```
+
+هدف
+`network-pre.target`
+و نه
+`network-online.target`:
+قانون‌ها باید پیش از آنکه رابطی بسته‌ای را حمل کند سر جایشان باشند، نه پس از آن.
 
 ورودی‌ای که به یک **مسیر خروج** (پایین‌تر) وصل شده باشد، همچنان به کلیدهای
 فورواردینگ نیاز دارد اما به قواعد NAT نه.

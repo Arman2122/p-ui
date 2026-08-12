@@ -77,16 +77,28 @@ func (m *Manager) Preflight(ctx context.Context, gatewayBase netip.Prefix, rows 
 			ErrStrictRPFilter, AllRPFilterKey))
 	}
 
-	// Forwarding is a precondition of any L3 core that reaches the internet, so
-	// it is reported and never owned: turning it on is not this feature's call.
+	report.Notes = append(report.Notes, m.ForwardingNotes(ctx)...)
+	report.Notes = append(report.Notes, m.darkFronts(snap, rows)...)
+	return report
+}
+
+/*
+ForwardingNotes reports the host forwarding knobs that are off.
+
+Split out of Preflight because it is the one half of it that has nothing to do
+with an egress: a plain wgkernel inbound needs forwarding just as much, and
+without this it completes handshakes and routes nothing with no word anywhere.
+Reported and never owned — turning it on is not this panel's call.
+*/
+func (m *Manager) ForwardingNotes(ctx context.Context) []string {
+	var notes []string
 	for _, key := range []string{IPForwardKey, IPForward6Key} {
 		if value, err := m.plane.Sysctl(ctx, key); err == nil && value == "0" {
-			report.Notes = append(report.Notes, fmt.Sprintf(
+			notes = append(notes, fmt.Sprintf(
 				"%s is 0, so no L3 inbound on this host forwards a packet of that family at all, egress or not", key))
 		}
 	}
-	report.Notes = append(report.Notes, m.darkFronts(snap, rows)...)
-	return report
+	return notes
 }
 
 /*
