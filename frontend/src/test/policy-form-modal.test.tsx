@@ -86,6 +86,35 @@ describe('PolicyFormModal', () => {
     expect(document.body.textContent).toContain(enUS.pages.policies.thresholdDuplicate);
   });
 
+  /* Save is blocked by the schema either way; what matters is that the operator
+     is told which field, next to that field, rather than seeing nothing happen. */
+  it('says which rate is missing when a direction is capped but left blank', async () => {
+    const post = mockWrites();
+    await renderModal({ ...PLAN, tiers: [LADDER[0]] });
+
+    const capped = Array.from(document.querySelectorAll('.ant-segmented-item'))
+      .find((el) => el.textContent === enUS.pages.policies.capped);
+    await act(async () => { fireEvent.click(capped!); });
+    await save();
+
+    expect(post).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain(enUS.pages.policies.rateRequired);
+  });
+
+  /* A rate field that has never been set must not show a zero under a label
+     that says the direction is capped. */
+  it('shows no number in a capped direction until one is entered', async () => {
+    await renderModal({ ...PLAN, tiers: [LADDER[0]] });
+
+    const capped = Array.from(document.querySelectorAll('.ant-segmented-item'))
+      .find((el) => el.textContent === enUS.pages.policies.capped);
+    await act(async () => { fireEvent.click(capped!); });
+
+    const rates = Array.from(document.querySelectorAll<HTMLInputElement>('.ant-input-number input'))
+      .map((el) => el.value);
+    expect(rates).not.toContain('0');
+  });
+
   it('refuses a nameless plan', async () => {
     const post = mockWrites();
     await renderModal(null);
