@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Button, Card, Col, Form, Input, InputNumber, Modal, Row, Segmented, Select, Space, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { FormProvider, useFieldArray, useWatch } from 'react-hook-form';
+import { FormProvider, useFieldArray, useFormState, useWatch } from 'react-hook-form';
 
 import { FormField, useZodForm } from '@/components/form/rhf';
 import { usePolicyMutations } from '@/api/queries/usePolicyMutations';
@@ -35,6 +35,10 @@ function defaultValues(): PolicyFormValues {
 function DirectionFields({ index, dir, label }: { index: number; dir: 'up' | 'down'; label: string }) {
   const { t } = useTranslation();
   const limited = useWatch({ name: `tiers.${index}.${dir}Limited` }) as boolean | undefined;
+  /* The rate field is noStyle so the unit picker sits beside it, and a noStyle
+     Form.Item renders no help text — so the message is placed by hand. */
+  const { errors } = useFormState<PolicyFormValues>({ name: `tiers.${index}.${dir}Value` });
+  const error = errors.tiers?.[index]?.[`${dir}Value`]?.message;
 
   return (
     <Space direction="vertical" size={4} style={{ width: '100%' }}>
@@ -55,18 +59,21 @@ function DirectionFields({ index, dir, label }: { index: number; dir: 'up' | 'do
         />
       </FormField>
       {limited && (
-        <Space.Compact style={{ display: 'flex' }}>
-          <FormField
-            name={`tiers.${index}.${dir}Value`}
-            noStyle
-            transform={{ output: (v) => Number(v) || 0 }}
-          >
-            <InputNumber min={0} step={1} style={{ flex: 1 }} placeholder={t('pages.policies.ratePlaceholder')} />
-          </FormField>
-          <FormField name={`tiers.${index}.${dir}Unit`} noStyle>
-            <Select options={UNIT_OPTIONS} style={{ width: 96 }} />
-          </FormField>
-        </Space.Compact>
+        <>
+          <Space.Compact style={{ display: 'flex' }}>
+            <FormField
+              name={`tiers.${index}.${dir}Value`}
+              noStyle
+              transform={{ input: (v) => (v ? v : undefined), output: (v) => Number(v) || 0 }}
+            >
+              <InputNumber min={0} step={1} style={{ flex: 1 }} placeholder={t('pages.policies.ratePlaceholder')} />
+            </FormField>
+            <FormField name={`tiers.${index}.${dir}Unit`} noStyle>
+              <Select options={UNIT_OPTIONS} style={{ width: 96 }} />
+            </FormField>
+          </Space.Compact>
+          {error && <Typography.Text type="danger">{t(error)}</Typography.Text>}
+        </>
       )}
     </Space>
   );
@@ -147,13 +154,20 @@ export default function PolicyFormModal({ open, policy, onClose }: PolicyFormMod
             >
               <Row gutter={16}>
                 <Col xs={24} md={8}>
+                  {/* An empty threshold is the first byte, and the placeholder says so rather than leaving a bare 0. */}
                   <FormField
                     name={`tiers.${index}.fromGB`}
                     label={t('pages.policies.threshold')}
                     tooltip={t('pages.policies.thresholdHint')}
-                    transform={{ output: (v) => Number(v) || 0 }}
+                    transform={{ input: (v) => (v ? v : undefined), output: (v) => Number(v) || 0 }}
                   >
-                    <InputNumber min={0} step={1} addonAfter="GB" style={{ width: '100%' }} />
+                    <InputNumber
+                      min={0}
+                      step={1}
+                      addonAfter="GB"
+                      style={{ width: '100%' }}
+                      placeholder={t('pages.policies.fromStart')}
+                    />
                   </FormField>
                 </Col>
                 <Col xs={24} md={8}>
