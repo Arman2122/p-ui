@@ -363,7 +363,7 @@ func (s *RoutingService) PruneInbound(ctx context.Context, inboundID int) (bool,
 		}
 		changed = true
 	}
-	if err := (&EgressService{}).Reconcile(ctx); err != nil {
+	if err := s.converge(ctx); err != nil {
 		return changed, err
 	}
 	return changed, nil
@@ -472,9 +472,17 @@ func (s *RoutingService) Reorder(ctx context.Context, ids []int) error {
 	return s.converge(ctx)
 }
 
-// converge hands the compile's kernel half to the one manager that owns kernel
-// state. The generated config half is picked up by the next GetXrayConfig.
+/*
+converge hands the compile's kernel half to the one manager that owns kernel
+state, and arms the config half.
+
+Arming here rather than in each controller is deliberate: a rule change alters
+the generated rules array, and every path that writes a rule passes through this
+one function. The old attach control changed only kernel state and so never armed
+a restart — leaving that would make an attach report success and route nothing.
+*/
 func (s *RoutingService) converge(ctx context.Context) error {
+	(&XrayService{}).SetToNeedRestart()
 	return (&EgressService{}).Reconcile(ctx)
 }
 
@@ -521,4 +529,44 @@ func normalizeRule(rule *model.RoutingRule) error {
 		return fmt.Errorf("routing: %q is not a destination kind", rule.DestKind)
 	}
 	return nil
+}
+
+// ReplaceInboundRule expresses "send this whole inbound there" as one rule,
+// replacing whatever single-subject rules that inbound already had.
+func (s *RoutingService) ReplaceInboundRule(ctx context.Context, inboundID int, destTag string) error {
+	if err := s.ClearInbound(ctx, inboundID); err != nil {
+		return err
+	}
+	ids, err := json.Marshal([]int{inboundID})
+	if err != nil {
+		return err
+	}
+	_, err = s.Add(ctx, &model.RoutingRule{
+		Enable: true, IngressScope: model.RoutingScopeSelected, IngressIds: string(ids),
+		DestKind: model.RoutingDestOutbound, DestTag: destTag, Criteria: "{}",
+	})
+	return err
+}
+
+// ClearInbound drops the rules that name ONLY this inbound, which is what
+// detaching used to mean. A rule naming others keeps them.
+func (s *RoutingService) ClearInbound(ctx context.Context, inboundID int) error {
+	rules, err := s.Rules()
+	if err != nil {
+		return err
+	}
+	db := database.GetDB()
+	for _, rule := range rules {
+		var ids []int
+		if json.Unmarshal([]byte(rule.IngressIds), &ids) != nil {
+			continue
+		}
+		if len(ids) != 1 || ids[0] != inboundID {
+			continue
+		}
+		if err := db.Delete(&model.RoutingRule{}, rule.Id).Error; err != nil {
+			return err
+		}
+	}
+	return s.converge(ctx)
 }
