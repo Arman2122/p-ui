@@ -336,12 +336,13 @@ func (m *Manager) ensureClass(ctx context.Context, view devices, minor uint16, r
 	}
 	view.classes[minor] = want
 
-	// Measured at a 50ms base RTT: fq_codel holds a saturating class to +0.4ms of
-	// added delay where a pfifo adds 7.7ms. It is under EVERY class, default included.
+	// Per-flow queueing under EVERY class, default included, so one greedy download
+	// cannot starve the same client's interactive traffic. NOT fq_codel — see
+	// TestTheLeafIsNotCodel for the measurement that ruled it out.
 	if _, leafed := view.leaves[want.Handle]; leafed {
 		return nil
 	}
-	leaf := QdiscSpec{Device: view.device, Type: QdiscFqCodel, Parent: want.Handle}
+	leaf := QdiscSpec{Device: view.device, Type: QdiscSfq, Parent: want.Handle}
 	if err := m.plane.AddQdisc(ctx, leaf); err != nil {
 		return []error{fmt.Errorf("shaping: install %s: %w", leaf, err)}
 	}
@@ -356,7 +357,7 @@ func (m *Manager) dropClass(ctx context.Context, view devices, minor uint16) []e
 	if _, ok := view.leaves[handle]; ok {
 		// Deleted by parent rather than by the handle the readback carries: the
 		// parent is a leaf's stable identity and the handle is the kernel's to pick.
-		leaf := QdiscSpec{Device: view.device, Type: QdiscFqCodel, Parent: handle}
+		leaf := QdiscSpec{Device: view.device, Type: QdiscSfq, Parent: handle}
 		if err := m.plane.DelQdisc(ctx, leaf); err != nil && !settledDel(err) {
 			failures = append(failures, fmt.Errorf("shaping: remove %s: %w", leaf, err))
 		}

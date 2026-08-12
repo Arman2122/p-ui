@@ -30,7 +30,7 @@ var (
 const (
 	rootIn      = "qdisc+ qdisc pwg7 htb handle 1:0 parent ffff:ffff"
 	defaultIn   = "class+ class pwg7 1:ffff rate 125000000000 ceil 125000000000"
-	defaultLeaf = "qdisc+ qdisc pwg7 fq_codel handle none parent 1:ffff"
+	defaultLeaf = "qdisc+ qdisc pwg7 sfq handle none parent 1:ffff"
 )
 
 func want(subjects ...shaping.Subject) []shaping.DeviceWant {
@@ -82,7 +82,7 @@ func TestDownloadOnlySubjectTouchesNoMirror(t *testing.T) {
 	assertOps(t, kernel, []string{
 		rootIn, defaultIn, defaultLeaf,
 		"class+ class pwg7 1:10 rate 1250000 ceil 1250000",
-		"qdisc+ qdisc pwg7 fq_codel handle none parent 1:10",
+		"qdisc+ qdisc pwg7 sfq handle none parent 1:10",
 		"filter+ filter pwg7 parent 1:0 prio 100 dst_ip 10.8.0.4/32 classid 1:10",
 	})
 	if devices := kernel.Devices(); slices.Contains(devices, mirror) {
@@ -100,9 +100,9 @@ func TestUploadOnlySubjectBuildsTheMirrorAndNoDownloadClass(t *testing.T) {
 		"ifb+ pifb7",
 		"qdisc+ qdisc pifb7 htb handle 1:0 parent ffff:ffff",
 		"class+ class pifb7 1:ffff rate 125000000000 ceil 125000000000",
-		"qdisc+ qdisc pifb7 fq_codel handle none parent 1:ffff",
+		"qdisc+ qdisc pifb7 sfq handle none parent 1:ffff",
 		"class+ class pifb7 1:10 rate 1250000 ceil 1250000",
-		"qdisc+ qdisc pifb7 fq_codel handle none parent 1:10",
+		"qdisc+ qdisc pifb7 sfq handle none parent 1:10",
 		"filter+ filter pifb7 parent 1:0 prio 100 src_ip 10.8.0.4/32 classid 1:10",
 		"qdisc+ qdisc pwg7 clsact handle ffff:0 parent ffff:fff1",
 		"filter+ filter pwg7 parent ffff:fff2 prio 100 src_ip 10.8.0.4/32 redirect pifb7",
@@ -206,7 +206,7 @@ func TestATrafficResetReleasesOnlyThatClient(t *testing.T) {
 	))
 	assertOps(t, kernel, []string{
 		"filter- filter pwg7 parent 1:0 prio 100 dst_ip 10.8.0.4/32 classid 1:10",
-		"qdisc- qdisc pwg7 fq_codel handle none parent 1:10",
+		"qdisc- qdisc pwg7 sfq handle none parent 1:10",
 		"class- class pwg7 1:10 rate 250000 ceil 250000",
 	})
 	if !slices.Contains(kernel.Tree(), "class pwg7 1:11 rate 1250000 ceil 1250000") {
@@ -232,7 +232,7 @@ func TestTeardownRunsFilterThenLeafThenClass(t *testing.T) {
 	converge(t, m, want(subject("bob", 10_000_000, 0, bob4)))
 	assertOps(t, kernel, []string{
 		"filter- filter pwg7 parent 1:0 prio 100 dst_ip 10.8.0.4/32 classid 1:10",
-		"qdisc- qdisc pwg7 fq_codel handle none parent 1:10",
+		"qdisc- qdisc pwg7 sfq handle none parent 1:10",
 		"class- class pwg7 1:10 rate 1250000 ceil 1250000",
 	})
 	if tree := kernel.Tree(); slices.Contains(tree, "class pwg7 1:10 rate 1250000 ceil 1250000") {
@@ -256,7 +256,7 @@ func TestDualStackSharesOneClass(t *testing.T) {
 	assertOps(t, kernel, []string{
 		rootIn, defaultIn, defaultLeaf,
 		"class+ class pwg7 1:10 rate 1250000 ceil 1250000",
-		"qdisc+ qdisc pwg7 fq_codel handle none parent 1:10",
+		"qdisc+ qdisc pwg7 sfq handle none parent 1:10",
 		"filter+ filter pwg7 parent 1:0 prio 100 dst_ip 10.8.0.4/32 classid 1:10",
 		"filter+ filter pwg7 parent 1:0 prio 101 dst_ip fd00::4/128 classid 1:10",
 	})
@@ -633,9 +633,9 @@ func TestZeroSubjectsTearsTheDeviceDown(t *testing.T) {
 	converge(t, m, want())
 	assertOps(t, kernel, []string{
 		"filter- filter pwg7 parent 1:0 prio 100 dst_ip 10.8.0.4/32 classid 1:10",
-		"qdisc- qdisc pwg7 fq_codel handle none parent 1:10",
+		"qdisc- qdisc pwg7 sfq handle none parent 1:10",
 		"class- class pwg7 1:10 rate 1250000 ceil 1250000",
-		"qdisc- qdisc pwg7 fq_codel handle none parent 1:ffff",
+		"qdisc- qdisc pwg7 sfq handle none parent 1:ffff",
 		"class- class pwg7 1:ffff rate 125000000000 ceil 125000000000",
 		"qdisc- qdisc pwg7 htb handle 1:0 parent ffff:ffff",
 	})
@@ -727,7 +727,7 @@ func TestPreflightNamesTheMissingModule(t *testing.T) {
 		module string
 	}{
 		{"no htb", "qdisc+ qdisc pui-shape0 htb handle 1:0 parent ffff:ffff", "sch_htb"},
-		{"no fq_codel", "qdisc+ qdisc pui-shape0 fq_codel handle none parent 1:10", "sch_fq_codel"},
+		{"no sfq", "qdisc+ qdisc pui-shape0 sfq handle none parent 1:10", "sch_sfq"},
 		{"no flower", "filter+ filter pui-shape0 parent 1:0 prio 100 dst_ip 192.0.2.1/32 classid 1:10", "cls_flower"},
 		{"no clsact", "qdisc+ qdisc pui-shape0 clsact handle ffff:0 parent ffff:fff1", "clsact"},
 		{"no mirred", "filter+ filter pui-shape0 parent ffff:fff2 prio 100 src_ip 192.0.2.1/32 redirect pui-shape0", "act_mirred"},
@@ -922,5 +922,49 @@ func BenchmarkSteadyStatePass(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+/*
+TestTheLeafIsNotCodel pins the leaf qdisc, because the one that reads like the
+obvious choice is the one that silently breaks the product.
+
+MEASURED, HTTP through a real WireGuard tunnel on 7.0.0, contracted rate against
+delivered throughput, with an fq_codel leaf on the kernel's own 5ms target:
+
+	100 Mbit 96%   50 Mbit 96%   20 Mbit 96%
+	10 Mbit  1.9%  5 Mbit  1.1%  2 Mbit 1.1%   1 Mbit 1.3%
+
+Almost nothing is dropped — CoDel simply signals congestion continuously once one
+queue of packets outlasts its target, and TCP settles at about one packet in
+flight. It reproduces with a hand-written tc tree and no panel involved, and UDP
+at the same rate is unaffected, so it is the AQM's parameter and not this panel,
+the tunnel, or HTB. Raising the target to 48ms at 5 Mbit restores 96% — but
+vishvananda/netlink v1.3.1 never encodes TCA_FQ_CODEL_TARGET, so from here the
+parameter cannot be set at all.
+
+sfq delivers 96% at every rate from 1 Mbit to 100 Mbit, and holds a saturating
+class to 3.7ms of added delay at 5 Mbit where fq bloats to 54ms and pfifo to 12ms.
+Do not swap this back without re-running that measurement.
+*/
+func TestTheLeafIsNotCodel(t *testing.T) {
+	m, kernel := live(t, device)
+	converge(t, m, want(subject("alice", 2_000_000, 2_000_000, alice4)))
+
+	for _, object := range kernel.Tree() {
+		if strings.Contains(object, "fq_codel") {
+			t.Fatalf("a codel leaf is installed, which delivers ~1%% of a 2 Mbit contract: %q", object)
+		}
+	}
+	var leaves int
+	for _, object := range kernel.Tree() {
+		if strings.Contains(object, " sfq ") {
+			leaves++
+		}
+	}
+	// Both trees, and the default class of each: four in total.
+	if leaves != 4 {
+		t.Fatalf("sfq leaves = %d, want 4 (a shaped class and a default class on the device and on the mirror):\n%s",
+			leaves, strings.Join(kernel.Tree(), "\n"))
 	}
 }

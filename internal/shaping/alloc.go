@@ -1,6 +1,6 @@
 /*
 Package shaping installs and converges the kernel objects that hold one user to a
-contracted rate: an HTB class per shaped user, an fq_codel leaf under it, and a
+contracted rate: an HTB class per shaped user, an sfq leaf under it, and a
 cls_flower filter per address family selecting it.
 
 It is the mechanism and nothing else. It has no email, no protocol, no tier, no
