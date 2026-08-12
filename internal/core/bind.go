@@ -30,6 +30,8 @@ type Bound struct {
 	Versions    VersionManager
 	Link        LinkRenderer
 	Shape       ShapingHost
+	Ingress     RoutableIngress
+	Egress      RoutableEgress
 	Sessions    SessionReporter
 	CounterLoss CounterLossDeclarer
 }
@@ -76,6 +78,12 @@ func Bind(c Core) *Bound {
 	if v, ok := c.(ShapingHost); ok {
 		b.Shape = v
 	}
+	if v, ok := c.(RoutableIngress); ok {
+		b.Ingress = v
+	}
+	if v, ok := c.(RoutableEgress); ok {
+		b.Egress = v
+	}
 	if v, ok := c.(SessionReporter); ok {
 		b.Sessions = v
 	}
@@ -110,10 +118,27 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	if b.Shape != nil && !shapesSomeKind(b.Core, b.Shape) {
 		problems = append(problems, "ShapingHost: implemented, but every kind answers SelectorNone; a core that can shape nothing declares nothing")
 	}
+	if b.Ingress != nil && !routesSomeKind(b.Core, b.Ingress) {
+		problems = append(problems, "RoutableIngress: implemented, but every kind answers IngressNone; a core that can route nothing declares nothing")
+	}
+	if b.Egress != nil && len(b.Egress.ExitKinds()) == 0 {
+		problems = append(problems, "RoutableEgress: implemented, but ExitKinds is empty; a core that offers no exit declares nothing")
+	}
 	if b.CounterLoss != nil && !losesCountersOnSomeKind(b.Core, b.CounterLoss) {
 		problems = append(problems, "CounterLossDeclarer: implemented, but every kind answers false; not implementing it says the same thing")
 	}
 	return problems
+}
+
+// routesSomeKind reports whether any kind this core serves can be named as a
+// routing source, which is the whole of what implementing RoutableIngress claims.
+func routesSomeKind(c Core, r RoutableIngress) bool {
+	for _, kind := range c.Kinds() {
+		if r.IngressSelector(kind) != IngressNone {
+			return true
+		}
+	}
+	return false
 }
 
 // shapesSomeKind reports whether any kind this core serves carries a kernel

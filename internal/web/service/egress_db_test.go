@@ -505,7 +505,7 @@ func TestEgressDesiredSkipsInboundsWithoutALocalDevice(t *testing.T) {
 		}
 	}
 
-	desired, err := service.desired([]*model.Egress{row})
+	desired, err := service.desired(context.Background(), []*model.Egress{row})
 	if err != nil {
 		t.Fatal(err)
 	}

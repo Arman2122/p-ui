@@ -11,12 +11,13 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/egress"
 	"github.com/Arman2122/p-ui/internal/egress/drivers/xraytun"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"github.com/Arman2122/p-ui/internal/wireguard"
 )
 
 // The refusals an operator has to be able to tell apart, and a test has to be
@@ -58,18 +59,33 @@ reconciler and the mutation path start disagreeing about who owns what.
 type EgressService struct{}
 
 /*
-egressIngressDevice is the one place an inbound becomes an `iif` selector, and
-the single protocol dispatch site this feature is budgeted for.
+egressIngressDevice names the interface an inbound's decrypted traffic crosses.
 
-Selection is by ingress device because cryptokey routing has already proven the
-peer's identity by the time a packet appears there — a stronger claim than a
-source prefix, and one that survives an AllowedIPs edit.
+The answer comes from the core registry, so a new L3 core becomes selectable by
+registering rather than by editing a comparison here. Selection is by ingress
+device because cryptokey routing has already proven the peer's identity by the
+time a packet appears there.
 */
-func egressIngressDevice(inbound *model.Inbound) (string, bool) {
-	if inbound == nil || inbound.Protocol != model.WGKernel {
+func egressIngressDevice(ctx context.Context, inbound *model.Inbound) (string, bool) {
+	if inbound == nil {
 		return "", false
 	}
-	return wireguard.InterfaceName(inbound.Id), true
+	handle, err := cores.IngressHandleFor(ctx, core.Instance{
+		ID: inbound.Id, Kind: core.Kind(inbound.Protocol), Tag: inbound.Tag, Settings: inbound.Settings,
+	})
+	if err != nil || handle.Device == "" {
+		return "", false
+	}
+	return handle.Device, true
+}
+
+// egressIngressSelectable is the static half: whether this KIND can ever be
+// selected on, asked before any instance exists and without touching the host.
+func egressIngressSelectable(inbound *model.Inbound) bool {
+	if inbound == nil {
+		return false
+	}
+	return cores.IngressSelectorFor(core.Kind(inbound.Protocol)) == core.IngressDevice
 }
 
 // egressGatewayBase is where every front's own /32 is carved from. An addressless
@@ -258,7 +274,7 @@ left behind by a row somebody deleted — would otherwise revert every attach on
 the box forever. Only this inbound's own rule may decide this inbound's fate.
 */
 func (s *EgressService) verifyAttachment(ctx context.Context, inbound *model.Inbound, egressID int) error {
-	device, ok := egressIngressDevice(inbound)
+	device, ok := egressIngressDevice(ctx, inbound)
 	if !ok {
 		return nil
 	}
@@ -282,7 +298,7 @@ func (s *EgressService) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	desired, err := s.desired(rows)
+	desired, err := s.desired(ctx, rows)
 	if err != nil {
 		return err
 	}
@@ -372,7 +388,7 @@ stranded, and an attached inbound contributes its rule whether or not it is
 enabled: a rule whose device is absent is inert and reattaches by itself, so
 including it removes the window where enabling an inbound egresses direct.
 */
-func (s *EgressService) desired(rows []*model.Egress) ([]egress.Egress, error) {
+func (s *EgressService) desired(ctx context.Context, rows []*model.Egress) ([]egress.Egress, error) {
 	var inbounds []*model.Inbound
 	err := database.GetDB().Model(&model.Inbound{}).
 		Select("id", "protocol", "node_id", "egress_id").
@@ -383,7 +399,7 @@ func (s *EgressService) desired(rows []*model.Egress) ([]egress.Egress, error) {
 	}
 	ingress := map[int][]string{}
 	for _, inbound := range inbounds {
-		device, ok := egressIngressDevice(inbound)
+		device, ok := egressIngressDevice(ctx, inbound)
 		if !ok || inbound.EgressID == nil || inbound.NodeID != nil {
 			continue
 		}
@@ -442,7 +458,7 @@ func checkNotReferenced(tx *gorm.DB, id int) error {
 }
 
 func (s *EgressService) checkAttachable(inbound *model.Inbound, row *model.Egress) error {
-	if _, ok := egressIngressDevice(inbound); !ok {
+	if !egressIngressSelectable(inbound) {
 		return fmt.Errorf("%w: inbound %d is %q", ErrEgressNoIngressDevice, inbound.Id, inbound.Protocol)
 	}
 	if inbound.NodeID != nil {

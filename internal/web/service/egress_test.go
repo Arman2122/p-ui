@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func TestEgressIngressDevice(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := egressIngressDevice(tc.inbound)
+			got, ok := egressIngressDevice(context.Background(), tc.inbound)
 			if ok != tc.resolves || got != tc.want {
 				t.Fatalf("egressIngressDevice = %q,%v; want %q,%v", got, ok, tc.want, tc.resolves)
 			}

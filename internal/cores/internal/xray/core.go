@@ -428,3 +428,18 @@ func (c *Core) hotApply(process *engine.Process, newCfg *engine.Config) bool {
 	process.SetConfig(newCfg)
 	return true
 }
+
+// IngressSelector: every kind xray serves is routed by xray itself, so its
+// inbounds are named directly by tag and the panel installs no kernel state.
+func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
+	if !slices.Contains(c.Kinds(), kind) {
+		return core.IngressNone
+	}
+	return core.IngressInternal
+}
+
+// IngressHandle returns the tag this instance already answers to. An internal
+// ingress needs no device: the router is the same process that terminates it.
+func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
+	return core.IngressHandle{Tag: inst.Tag}, nil
+}
