@@ -213,56 +213,38 @@ Synchronous by design. A reconcile that caught up on the next tick would leave a
 just-attached inbound egressing with the server's own identity for up to a tick,
 which is the one outcome the operator asked for the egress to prevent.
 */
+/*
+Attach is the old two-screen control, expressed as intent.
+
+It used to write inbounds.egress_id, which nothing reads any more — leaving it
+would make the attach control a button that reports success and changes nothing,
+which is the exact bug this feature exists to remove. So it writes the rule the
+operator meant instead, and the routing compile realises it.
+*/
 func (s *EgressService) Attach(inboundID, egressID int) error {
 	inbound := &model.Inbound{}
 	if err := database.GetDB().First(inbound, inboundID).Error; err != nil {
 		return err
 	}
-	var selected *int
-	if egressID > 0 {
-		row, err := s.Get(egressID)
-		if err != nil {
-			return err
-		}
-		if err := s.checkAttachable(inbound, row); err != nil {
-			return err
-		}
-		selected = &row.Id
+	if egressID <= 0 {
+		return (&RoutingService{}).ClearInbound(context.Background(), inboundID)
 	}
-	// Locked, because checkAttachable and the reference it justifies are two
-	// statements apart: a disable landing between them leaves this inbound direct.
-	err := database.GetDB().Transaction(func(tx *gorm.DB) error {
-		if selected != nil {
-			locked := &model.Egress{}
-			if err := lockEgress(tx, *selected, locked); err != nil {
-				return err
-			}
-			if !locked.Enable {
-				return fmt.Errorf("%w: egress %d is disabled, so attaching to it would egress direct",
-					ErrEgressDisabled, locked.Id)
-			}
-		}
-		return tx.Model(&model.Inbound{}).Where("id = ?", inboundID).Update("egress_id", selected).Error
-	})
+	row, err := s.Get(egressID)
 	if err != nil {
 		return err
 	}
-
-	ctx := context.Background()
-	converged := s.Reconcile(ctx)
-	if err := s.verifyAttachment(ctx, inbound, egressID); err != nil {
-		// Attached but unrouted is the one outcome worse than a failed attach: the
-		// inbound would egress with the server's own identity and nobody would know.
-		_ = database.GetDB().Model(&model.Inbound{}).Where("id = ?", inboundID).
-			Update("egress_id", inbound.EgressID).Error
-		// Reconcile has already installed the rejected attachment, so the revert has
-		// to reach the host too, or the kernel routes what the database denies.
-		return errors.Join(err, converged, s.Reconcile(ctx))
+	if err := s.checkAttachable(inbound, row); err != nil {
+		return err
 	}
-	if converged != nil {
-		logger.Warning("egress: inbound", inboundID, "is attached, but another row on this host has not converged:", converged)
+	if !row.Enable {
+		return fmt.Errorf("%w: egress %d is disabled, so attaching to it would egress direct",
+			ErrEgressDisabled, row.Id)
 	}
-	return nil
+	if row.Target == "" {
+		return fmt.Errorf("%w: egress %d names no outbound to send this inbound to",
+			ErrEgressTargetUnresolved, row.Id)
+	}
+	return (&RoutingService{}).ReplaceInboundRule(context.Background(), inboundID, row.Target)
 }
 
 /*
