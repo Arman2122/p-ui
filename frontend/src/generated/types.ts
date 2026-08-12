@@ -290,7 +290,12 @@ export interface ClientLocalAddress {
 }
 
 export interface ClientPolicy {
+  appliedRev: number;
   email: string;
+  overrideExpiry: boolean;
+  overrideInbounds: boolean;
+  overrideLimitIp: boolean;
+  overrideQuota: boolean;
   policyId?: number | null;
   updatedAt: number;
 }
@@ -652,8 +657,12 @@ export interface PanelUpdateStatus {
 
 export interface Policy {
   createdAt: number;
+  durationDays?: number | null;
   id: number;
+  limitIp?: number | null;
   name: string;
+  quotaBytes?: number | null;
+  rev: number;
   tiers: unknown;
   updatedAt: number;
 }
