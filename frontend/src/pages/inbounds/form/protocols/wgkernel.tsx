@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Form, Input, InputNumber, Select, Space } from 'antd';
+import { Alert, Button, Form, Input, InputNumber, Select, Space, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 
 import { FormField } from '@/components/form/rhf';
 import type { EgressRecord } from '@/schemas/api/egress';
+import type { WireguardPoolUsage } from '@/lib/xray/wireguard-pool';
 
 interface WgkernelFieldsProps {
   wgPubKey: string;
@@ -15,6 +16,8 @@ interface WgkernelFieldsProps {
   /* Backend sentences naming a sysctl this host has off, rendered and never
      translated. Empty means the host forwards, or that it could not be asked. */
   forwardingNotes: string[];
+  /* How full the configured prefix is, or null when there is no IPv4 pool to size. */
+  poolUsage: WireguardPoolUsage | null;
 }
 
 /* Kernel WireGuard has no streamSettings and no TUN emulation, so this form is
@@ -27,6 +30,7 @@ export default function WgkernelFields({
   onEgressChange,
   nodeOwned,
   forwardingNotes,
+  poolUsage,
 }: WgkernelFieldsProps) {
   const { t } = useTranslation();
   const egressHelp = nodeOwned
@@ -79,7 +83,24 @@ export default function WgkernelFields({
       <FormField
         name={['settings', 'address']}
         label={t('pages.inbounds.form.wgkernelAddress')}
-        extra={t('pages.inbounds.form.wgkernelAddressHint')}
+        extra={(
+          <>
+            <div>{t('pages.inbounds.form.wgkernelAddressHint')}</div>
+            {poolUsage && (
+              <div>
+                <Typography.Text type={poolUsage.outside > 0 ? 'warning' : undefined}>
+                  {t('pages.inbounds.form.wgkernelPoolUsage', {
+                    used: poolUsage.used, capacity: poolUsage.capacity, prefix: poolUsage.prefix,
+                  })}
+                </Typography.Text>
+                {poolUsage.outside > 0 && (
+                  <div>{t('pages.inbounds.form.wgkernelPoolOutside', { n: poolUsage.outside })}</div>
+                )}
+              </div>
+            )}
+            <div>{t('pages.inbounds.form.wgkernelPoolSizing')}</div>
+          </>
+        )}
       >
         <Select mode="tags" tokenSeparators={[',']} style={{ width: '100%' }} placeholder="10.0.0.1/24" />
       </FormField>
