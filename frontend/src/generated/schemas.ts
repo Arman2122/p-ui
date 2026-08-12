@@ -1518,6 +1518,17 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": 1,
         "type": "integer"
       },
+      "ingressInboundId": {
+        "description": "IngressInboundId is the inbound this front exists for, UNIQUE so the one\nfront per ingress rule is the schema's rather than a convention.",
+        "example": 7,
+        "nullable": true,
+        "type": "integer"
+      },
+      "owner": {
+        "description": "Owner distinguishes a front the panel provisions for an ingress from an\nuplink an operator named. A panel row legitimately carries no target.",
+        "example": "operator",
+        "type": "string"
+      },
       "remark": {
         "example": "warp exit",
         "type": "string"
@@ -3130,6 +3141,86 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "RoutingRule": {
+    "description": "/*\nRoutingRule is one row of operator intent: these inbounds, these criteria, this\ndestination.\n\nKeyed on inbound IDs rather than tags, which is what makes a rule immune to the\ntag-rewriting an inbound rename or delete performs — the failure mode that used\nto widen a rule to every inbound on the box.\n*/",
+    "properties": {
+      "createdAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "criteria": {
+        "example": {
+          "domain": [
+            "geosite:ads"
+          ]
+        }
+      },
+      "destExitId": {
+        "example": 4,
+        "nullable": true,
+        "type": "integer"
+      },
+      "destKind": {
+        "example": "outbound",
+        "type": "string"
+      },
+      "destTag": {
+        "example": "warp",
+        "type": "string"
+      },
+      "enable": {
+        "example": true,
+        "type": "boolean"
+      },
+      "id": {
+        "example": 1,
+        "type": "integer"
+      },
+      "ingressIds": {
+        "example": [
+          3
+        ]
+      },
+      "ingressScope": {
+        "description": "IngressScope is \"selected\" or \"all\"; \"all\" expands at compile time to one\nrule per routable subject, in this rule's own position.",
+        "example": "selected",
+        "type": "string"
+      },
+      "inspect": {
+        "example": false,
+        "type": "boolean"
+      },
+      "remark": {
+        "example": "ads to the blackhole",
+        "type": "string"
+      },
+      "sortIndex": {
+        "example": 0,
+        "type": "integer"
+      },
+      "updatedAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "createdAt",
+      "criteria",
+      "destKind",
+      "destTag",
+      "enable",
+      "id",
+      "ingressIds",
+      "ingressScope",
+      "inspect",
+      "remark",
+      "sortIndex",
+      "updatedAt"
+    ],
+    "type": "object"
+  },
   "RoutingSubject": {
     "description": "RoutingSubject is one inbound as a routing rule may name it. An unroutable tag\nis offered disabled with ReasonKey, never hidden — hiding it reads as data loss.",
     "properties": {
@@ -3163,6 +3254,45 @@ export const SCHEMAS: Record<string, unknown> = {
       "protocol",
       "remark",
       "routable",
+      "tag"
+    ],
+    "type": "object"
+  },
+  "RoutingSubjectView": {
+    "description": "RoutingSubjectView is one inbound as the editor offers it, with the reason it\ncannot be named when it cannot.",
+    "properties": {
+      "blockedKey": {
+        "example": "pages.xray.subjects.reasonBridgeOff",
+        "type": "string"
+      },
+      "criteriaMask": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "inboundId": {
+        "example": 7,
+        "type": "integer"
+      },
+      "routable": {
+        "example": true,
+        "type": "boolean"
+      },
+      "selector": {
+        "example": "device",
+        "type": "string"
+      },
+      "tag": {
+        "example": "wg-home",
+        "type": "string"
+      }
+    },
+    "required": [
+      "criteriaMask",
+      "inboundId",
+      "routable",
+      "selector",
       "tag"
     ],
     "type": "object"

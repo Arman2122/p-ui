@@ -361,6 +361,8 @@ export interface Egress {
   createdAt: number;
   enable: boolean;
   id: number;
+  ingressInboundId?: number | null;
+  owner?: string;
   remark: string;
   settings: string;
   target: string;
@@ -701,12 +703,37 @@ export interface RealityScanResult {
   x25519: boolean;
 }
 
+export interface RoutingRule {
+  createdAt: number;
+  criteria: unknown;
+  destExitId?: number | null;
+  destKind: string;
+  destTag: string;
+  enable: boolean;
+  id: number;
+  ingressIds: unknown;
+  ingressScope: string;
+  inspect: boolean;
+  remark: string;
+  sortIndex: number;
+  updatedAt: number;
+}
+
 export interface RoutingSubject {
   id: number;
   protocol: string;
   reasonKey?: string;
   remark: string;
   routable: boolean;
+  tag: string;
+}
+
+export interface RoutingSubjectView {
+  blockedKey?: string;
+  criteriaMask: string[];
+  inboundId: number;
+  routable: boolean;
+  selector: string;
   tag: string;
 }
 

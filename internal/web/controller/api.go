@@ -21,6 +21,7 @@ type APIController struct {
 	nodeController        *NodeController
 	hostController        *HostController
 	egressController      *EgressController
+	routingController     *RoutingController
 	policyController      *PolicyController
 	settingController     *SettingController
 	xraySettingController *XraySettingController
@@ -107,6 +108,9 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// Egresses API — policy-routed exits an L3 inbound can be sent out through
 	egresses := api.Group("/egresses")
 	a.egressController = NewEgressController(egresses)
+
+	routingGroup := api.Group("/routing")
+	a.routingController = NewRoutingController(routingGroup)
 
 	// Policies API — the speed ladders clients are assigned to
 	policies := api.Group("/policies")

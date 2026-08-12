@@ -388,6 +388,8 @@ export const EgressSchema = z.object({
   createdAt: z.number().int(),
   enable: z.boolean(),
   id: z.number().int(),
+  ingressInboundId: z.number().int().nullable().optional(),
+  owner: z.string().optional(),
   remark: z.string(),
   settings: z.string(),
   target: z.string(),
@@ -747,6 +749,23 @@ export const RealityScanResultSchema = z.object({
 });
 export type RealityScanResult = z.infer<typeof RealityScanResultSchema>;
 
+export const RoutingRuleSchema = z.object({
+  createdAt: z.number().int(),
+  criteria: z.unknown(),
+  destExitId: z.number().int().nullable().optional(),
+  destKind: z.string(),
+  destTag: z.string(),
+  enable: z.boolean(),
+  id: z.number().int(),
+  ingressIds: z.unknown(),
+  ingressScope: z.string(),
+  inspect: z.boolean(),
+  remark: z.string(),
+  sortIndex: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type RoutingRule = z.infer<typeof RoutingRuleSchema>;
+
 export const RoutingSubjectSchema = z.object({
   id: z.number().int(),
   protocol: z.string(),
@@ -756,6 +775,16 @@ export const RoutingSubjectSchema = z.object({
   tag: z.string(),
 });
 export type RoutingSubject = z.infer<typeof RoutingSubjectSchema>;
+
+export const RoutingSubjectViewSchema = z.object({
+  blockedKey: z.string().optional(),
+  criteriaMask: z.array(z.string()),
+  inboundId: z.number().int(),
+  routable: z.boolean(),
+  selector: z.string(),
+  tag: z.string(),
+});
+export type RoutingSubjectView = z.infer<typeof RoutingSubjectViewSchema>;
 
 export const SettingSchema = z.object({
   id: z.number().int(),

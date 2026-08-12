@@ -389,21 +389,35 @@ enabled: a rule whose device is absent is inert and reattaches by itself, so
 including it removes the window where enabling an inbound egresses direct.
 */
 func (s *EgressService) desired(ctx context.Context, rows []*model.Egress) ([]egress.Egress, error) {
-	var inbounds []*model.Inbound
-	err := database.GetDB().Model(&model.Inbound{}).
-		Select("id", "protocol", "node_id", "egress_id").
-		Where("egress_id IS NOT NULL").
-		Find(&inbounds).Error
-	if err != nil {
-		return nil, err
+	// A front names the inbound it exists for; an operator uplink names none. The
+	// selection therefore reads the FRONT rows, not a column on the inbound.
+	byInbound := map[int]int{}
+	for _, row := range rows {
+		if row.IngressInboundId != nil {
+			byInbound[*row.IngressInboundId] = row.Id
+		}
 	}
 	ingress := map[int][]string{}
-	for _, inbound := range inbounds {
-		device, ok := egressIngressDevice(ctx, inbound)
-		if !ok || inbound.EgressID == nil || inbound.NodeID != nil {
-			continue
+	if len(byInbound) > 0 {
+		ids := make([]int, 0, len(byInbound))
+		for id := range byInbound {
+			ids = append(ids, id)
 		}
-		ingress[*inbound.EgressID] = append(ingress[*inbound.EgressID], device)
+		var inbounds []*model.Inbound
+		err := database.GetDB().Model(&model.Inbound{}).
+			Select("id", "protocol", "tag", "settings", "node_id").
+			Where("id IN ?", ids).Find(&inbounds).Error
+		if err != nil {
+			return nil, err
+		}
+		for _, inbound := range inbounds {
+			device, ok := egressIngressDevice(ctx, inbound)
+			if !ok || inbound.NodeID != nil {
+				continue
+			}
+			front := byInbound[inbound.Id]
+			ingress[front] = append(ingress[front], device)
+		}
 	}
 	out := make([]egress.Egress, 0, len(rows))
 	for _, row := range rows {

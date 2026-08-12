@@ -124,11 +124,65 @@ type Egress struct {
 	Remark string `json:"remark" form:"remark" example:"warp exit"`
 	// Target is the outbound or balancer tag the front sends traffic to. An
 	// unresolvable one leaves the egress dark — contained, never silently direct.
-	Target    string `json:"target" form:"target" example:"warp"`
-	Settings  string `json:"settings" form:"settings"`
-	CreatedAt int64  `json:"createdAt" gorm:"autoCreateTime:milli" example:"1700000000000"`
-	UpdatedAt int64  `json:"updatedAt" gorm:"autoUpdateTime:milli" example:"1700000000000"`
+	Target   string `json:"target" form:"target" example:"warp"`
+	Settings string `json:"settings" form:"settings"`
+	// Owner distinguishes a front the panel provisions for an ingress from an
+	// uplink an operator named. A panel row legitimately carries no target.
+	Owner string `json:"owner,omitempty" gorm:"column:owner;not null;default:'operator'" example:"operator"`
+	// IngressInboundId is the inbound this front exists for, UNIQUE so the one
+	// front per ingress rule is the schema's rather than a convention.
+	IngressInboundId *int  `json:"ingressInboundId" gorm:"column:ingress_inbound_id" example:"7"`
+	CreatedAt        int64 `json:"createdAt" gorm:"autoCreateTime:milli" example:"1700000000000"`
+	UpdatedAt        int64 `json:"updatedAt" gorm:"autoUpdateTime:milli" example:"1700000000000"`
 }
+
+// EgressOwner values. A front is provisioned by the routing compile; an operator
+// row is an uplink somebody typed credentials into.
+const (
+	EgressOwnerOperator = "operator"
+	EgressOwnerPanel    = "panel"
+)
+
+/*
+RoutingRule is one row of operator intent: these inbounds, these criteria, this
+destination.
+
+Keyed on inbound IDs rather than tags, which is what makes a rule immune to the
+tag-rewriting an inbound rename or delete performs — the failure mode that used
+to widen a rule to every inbound on the box.
+*/
+type RoutingRule struct {
+	Id        int    `json:"id" gorm:"primaryKey;autoIncrement" example:"1"`
+	SortIndex int    `json:"sortIndex" gorm:"column:sort_index;not null;default:0" example:"0"`
+	Enable    bool   `json:"enable" gorm:"not null;default:true" example:"true"`
+	Remark    string `json:"remark" example:"ads to the blackhole"`
+	// IngressScope is "selected" or "all"; "all" expands at compile time to one
+	// rule per routable subject, in this rule's own position.
+	IngressScope string `json:"ingressScope" gorm:"column:ingress_scope;not null;default:'selected'" example:"selected"`
+	IngressIds   string `json:"ingressIds" gorm:"column:ingress_ids;type:text;not null;default:'[]'" example:"[3]"`
+	DestKind     string `json:"destKind" gorm:"column:dest_kind;not null;default:'direct'" example:"outbound"`
+	DestTag      string `json:"destTag" gorm:"column:dest_tag" example:"warp"`
+	DestExitId   *int   `json:"destExitId" gorm:"column:dest_exit_id" example:"4"`
+	Criteria     string `json:"criteria" gorm:"type:text;not null;default:'{}'" example:"{\"domain\":[\"geosite:ads\"]}"`
+	Inspect      bool   `json:"inspect" gorm:"not null;default:false" example:"false"`
+	CreatedAt    int64  `json:"createdAt" gorm:"autoCreateTime:milli" example:"1700000000000"`
+	UpdatedAt    int64  `json:"updatedAt" gorm:"autoUpdateTime:milli" example:"1700000000000"`
+}
+
+func (RoutingRule) TableName() string { return "routing_rules" }
+
+// Routing destination kinds and ingress scopes, shared with internal/routing so
+// a row and the compile cannot drift on the spelling.
+const (
+	RoutingDestOutbound = "outbound"
+	RoutingDestBalancer = "balancer"
+	RoutingDestExit     = "exit"
+	RoutingDestDirect   = "direct"
+	RoutingDestBlock    = "block"
+
+	RoutingScopeSelected = "selected"
+	RoutingScopeAll      = "all"
+)
 
 // OutboundTraffics tracks traffic statistics for Xray outbound connections.
 type OutboundTraffics struct {

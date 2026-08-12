@@ -60,6 +60,7 @@ func allModels() []any {
 		&model.Policy{},
 		&model.ClientPolicy{},
 		&model.PolicyInbound{},
+		&model.RoutingRule{},
 	}
 }
 
@@ -128,6 +129,12 @@ func initModels() error {
 		return err
 	}
 	if err := migrateSyncOrphanColumns(); err != nil {
+		return err
+	}
+	if err := migrateRoutingIntent(); err != nil {
+		return err
+	}
+	if err := migratePanelEgressForeignKeys(); err != nil {
 		return err
 	}
 	if err := migrateEgressConstraints(); err != nil {

@@ -1210,6 +1210,16 @@ func (s *InboundService) DelInbound(id int) (bool, error) {
 			needRestart = true
 		}
 	}
+	// Synchronously, and not on a later tick: the FK cascade takes the front row,
+	// but only a converge removes its ip rule -- and Linux RE-ATTACHES a detached
+	// iif rule the moment a device of that name reappears, which id reuse allows.
+	if loadErr == nil {
+		if pruned, pruneErr := (&RoutingService{}).PruneInbound(context.Background(), ib.Id); pruneErr != nil {
+			logger.Warning("DelInbound: prune routing rules failed:", pruneErr)
+		} else if pruned {
+			needRestart = true
+		}
+	}
 	// Drop the egress SOCKS bridge a routed mtproto inbound left in the config.
 	if mtprotoRoutesThroughXray(&ib) {
 		needRestart = true
