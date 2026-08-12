@@ -110,8 +110,13 @@ func TestWireguardAllocationBase(t *testing.T) {
 		want     string
 	}{
 		{name: "no peers uses fallback", used: nil, fallback: "10.0.0.0/24", want: "10.0.0.0/24"},
-		{name: "derives subnet from existing peer", used: []string{"172.16.0.2/32"}, fallback: "10.0.0.0/24", want: "172.16.0.0/24"},
+		{name: "derives subnet from a peer outside the device prefix", used: []string{"172.16.0.2/32"}, fallback: "10.0.0.0/24", want: "172.16.0.0/24"},
 		{name: "skips catch-all and ipv6", used: []string{"0.0.0.0/0", "::/0", "fd00::2/128", "192.168.5.7/32"}, fallback: "10.0.0.0/24", want: "192.168.5.0/24"},
+		// The size the operator asked for is the size they get. Deriving a /24 here
+		// strands 768 of a /22's own addresses and puts client 255 outside it.
+		{name: "a wider device prefix keeps its whole range", used: []string{"10.90.4.2/32"}, fallback: "10.90.4.0/22", want: "10.90.4.0/22"},
+		{name: "a device prefix wider than the peers still wins", used: []string{"10.90.7.9/32"}, fallback: "10.90.4.0/22", want: "10.90.4.0/22"},
+		{name: "an unparseable device prefix falls back to the peer's /24", used: []string{"10.90.4.2/32"}, fallback: "not-a-prefix", want: "10.90.4.0/24"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -294,5 +299,37 @@ func TestAHandEnteredAddressCollidesAcrossInbounds(t *testing.T) {
 	err := defaultWireguardClients(nil, clients, ifaces, pool)
 	if err == nil || !strings.Contains(err.Error(), "10.21.0.5/32") {
 		t.Fatalf("defaultWireguardClients = %v, want the address another inbound's client holds refused by name", err)
+	}
+}
+
+/*
+TestAWiderPrefixIsFilledBeforeItSpills.
+
+The whole point of sizing up front. With the base derived from a client's /24
+instead of the device, the 255th client of a /22 lands on 10.90.0.2 — outside the
+prefix the operator configured, needing its own kernel route diffed every pass —
+while 768 addresses inside that /22 stay free. Measured before the fix.
+*/
+func TestAWiderPrefixIsFilledBeforeItSpills(t *testing.T) {
+	const device = "10.90.4.0/22"
+	used := make([]string, 0, 254)
+	for i := 2; i < 256; i++ {
+		used = append(used, fmt.Sprintf("10.90.4.%d/32", i))
+	}
+
+	base := wireguardAllocationBase(used, device)
+	got, err := allocateWireguardAddress(used, base, nil)
+	if err != nil {
+		t.Fatalf("allocate the 255th client: %v", err)
+	}
+	prefix := netip.MustParsePrefix(device)
+	addr := netip.MustParsePrefix(got).Addr()
+	if !prefix.Contains(addr) {
+		t.Fatalf("the 255th client of a %s got %s, which is outside it; the addresses 10.90.5.2 onward are free and need no route", device, got)
+	}
+	// .5.0 and not .5.2: inside a /22 that is an ordinary host address, and the
+	// scan is linear from .4.2 — the same shape TestAllocateWireguardAddressWidensPastFullSlash24 pins.
+	if got != "10.90.5.0/32" {
+		t.Fatalf("the 255th client got %s, want the next address in the prefix 10.90.5.0/32", got)
 	}
 }

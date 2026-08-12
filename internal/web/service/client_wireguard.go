@@ -198,13 +198,30 @@ func wireguardHostAddr(s string) netip.Addr {
 	return netip.Addr{}
 }
 
+/*
+wireguardAllocationBase picks the prefix new clients are allocated from.
+
+The inbound's OWN device prefix wins whenever it already covers this inbound's
+clients: it is the size the operator asked for, and deriving a /24 from a client
+instead strands everything past the 255th outside a prefix that still has room —
+a /22 spilled to the surrounding /16 with 768 of its own addresses free, and each
+of those clients then costs a per-peer route the reconciler diffs forever.
+
+The /24 remains the answer for an inbound whose clients sit outside its device
+prefix, which is what a rebased or hand-edited address leaves behind: following
+the device there would allocate into a range nothing on the wire is using.
+*/
 func wireguardAllocationBase(used []string, fallback string) string {
+	configured, err := netip.ParsePrefix(fallback)
 	for _, u := range used {
 		a := wireguardHostAddr(u)
 		if !a.IsValid() || !a.Is4() || a.IsUnspecified() {
 			continue
 		}
-		if p, err := a.Prefix(24); err == nil {
+		if err == nil && configured.Contains(a) {
+			return configured.Masked().String()
+		}
+		if p, pErr := a.Prefix(24); pErr == nil {
 			return p.String()
 		}
 	}
