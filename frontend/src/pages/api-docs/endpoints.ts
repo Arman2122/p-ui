@@ -1050,6 +1050,55 @@ export const sections: readonly Section[] = [
   },
 
   {
+    id: 'routing',
+    title: 'Routing',
+    description:
+      "Operator routing intent: which inbounds, which criteria, which destination. A rule names inbounds by ID rather than by tag, so renaming or deleting an inbound cannot silently widen it to every inbound on the box. The compile decides which mechanism realises each rule -- an Xray inbound is named directly, while a kernel inbound is fronted and its rule rewritten onto the front's tag -- which is what lets one screen route any protocol to any protocol. A rule naming an inbound the router cannot see is refused at save rather than accepted and left to never match. All endpoints under /panel/api/routing.",
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/routing/rules',
+        summary: "List every routing rule in the operator's own first-match order.",
+        responseSchema: 'RoutingRule',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/routing/subjects',
+        summary:
+          "Which inbounds a rule may name. An inbound that cannot be a subject right now is listed with routable=false and a blockedKey naming why, never omitted. criteriaMask names the criteria that can actually match on it -- user is absent for a kernel ingress because Xray's tun handler builds a user with no email, so the matcher can never return true.",
+        responseSchema: 'RoutingSubjectView',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/routing/rules',
+        summary: 'Create a rule. It is appended last and converges before the response returns.',
+        responseSchema: 'RoutingRule',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/routing/rules/order',
+        summary:
+          'Set the whole first-match order in one write. The body is the complete id list; a partial application would silently change which rule wins.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/routing/rules/:id',
+        summary: 'Update one rule.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Routing rule ID.' }],
+        responseSchema: 'RoutingRule',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/routing/rules/:id/del',
+        summary: 'Delete one rule and converge.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Routing rule ID.' }],
+      },
+    ],
+  },
+
+  {
     id: 'egresses',
     title: 'Egresses',
     description:

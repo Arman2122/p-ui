@@ -42,6 +42,7 @@ func run(root, outDir string) error {
 				"Egress",
 				"Policy",
 				"ClientPolicy",
+				"RoutingRule",
 			),
 			AliasAllow: setOf("Protocol"),
 			Overrides: map[string][]walkOverride{
@@ -64,6 +65,12 @@ func run(root, outDir string) error {
 				"Host": {
 					{Field: "MuxParams", Kind: KindAny},
 					{Field: "SockoptParams", Kind: KindAny},
+				},
+				// Both are JSON in a column, so they cross the API as the values they
+				// are rather than as the strings they are stored in.
+				"RoutingRule": {
+					{Field: "Criteria", Kind: KindAny},
+					{Field: "IngressIds", Kind: KindAny},
 				},
 			},
 		},
@@ -102,6 +109,7 @@ func run(root, outDir string) error {
 				"ProbeResultUI",
 				"RealityScanResult",
 				"RoutingSubject",
+				"RoutingSubjectView",
 			),
 		},
 		{

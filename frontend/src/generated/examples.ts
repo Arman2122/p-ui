@@ -363,6 +363,8 @@ export const EXAMPLES: Record<string, unknown> = {
     "createdAt": 1700000000000,
     "enable": true,
     "id": 1,
+    "ingressInboundId": 7,
+    "owner": "operator",
     "remark": "warp exit",
     "settings": "",
     "target": "warp",
@@ -737,6 +739,27 @@ export const EXAMPLES: Record<string, unknown> = {
     "tlsVersion": "1.3",
     "x25519": true
   },
+  "RoutingRule": {
+    "createdAt": 1700000000000,
+    "criteria": {
+      "domain": [
+        "geosite:ads"
+      ]
+    },
+    "destExitId": 4,
+    "destKind": "outbound",
+    "destTag": "warp",
+    "enable": true,
+    "id": 1,
+    "ingressIds": [
+      3
+    ],
+    "ingressScope": "selected",
+    "inspect": false,
+    "remark": "ads to the blackhole",
+    "sortIndex": 0,
+    "updatedAt": 1700000000000
+  },
   "RoutingSubject": {
     "id": 3,
     "protocol": "vless",
@@ -744,6 +767,16 @@ export const EXAMPLES: Record<string, unknown> = {
     "remark": "main vless",
     "routable": true,
     "tag": "inbound-443"
+  },
+  "RoutingSubjectView": {
+    "blockedKey": "pages.xray.subjects.reasonBridgeOff",
+    "criteriaMask": [
+      ""
+    ],
+    "inboundId": 7,
+    "routable": true,
+    "selector": "device",
+    "tag": "wg-home"
   },
   "Setting": {
     "id": 0,

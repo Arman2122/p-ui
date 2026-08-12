@@ -1544,6 +1544,17 @@
             "example": 1,
             "type": "integer"
           },
+          "ingressInboundId": {
+            "description": "IngressInboundId is the inbound this front exists for, UNIQUE so the one\nfront per ingress rule is the schema's rather than a convention.",
+            "example": 7,
+            "nullable": true,
+            "type": "integer"
+          },
+          "owner": {
+            "description": "Owner distinguishes a front the panel provisions for an ingress from an\nuplink an operator named. A panel row legitimately carries no target.",
+            "example": "operator",
+            "type": "string"
+          },
           "remark": {
             "example": "warp exit",
             "type": "string"
@@ -3156,6 +3167,86 @@
         ],
         "type": "object"
       },
+      "RoutingRule": {
+        "description": "/*\nRoutingRule is one row of operator intent: these inbounds, these criteria, this\ndestination.\n\nKeyed on inbound IDs rather than tags, which is what makes a rule immune to the\ntag-rewriting an inbound rename or delete performs — the failure mode that used\nto widen a rule to every inbound on the box.\n*/",
+        "properties": {
+          "createdAt": {
+            "example": 1700000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "criteria": {
+            "example": {
+              "domain": [
+                "geosite:ads"
+              ]
+            }
+          },
+          "destExitId": {
+            "example": 4,
+            "nullable": true,
+            "type": "integer"
+          },
+          "destKind": {
+            "example": "outbound",
+            "type": "string"
+          },
+          "destTag": {
+            "example": "warp",
+            "type": "string"
+          },
+          "enable": {
+            "example": true,
+            "type": "boolean"
+          },
+          "id": {
+            "example": 1,
+            "type": "integer"
+          },
+          "ingressIds": {
+            "example": [
+              3
+            ]
+          },
+          "ingressScope": {
+            "description": "IngressScope is \"selected\" or \"all\"; \"all\" expands at compile time to one\nrule per routable subject, in this rule's own position.",
+            "example": "selected",
+            "type": "string"
+          },
+          "inspect": {
+            "example": false,
+            "type": "boolean"
+          },
+          "remark": {
+            "example": "ads to the blackhole",
+            "type": "string"
+          },
+          "sortIndex": {
+            "example": 0,
+            "type": "integer"
+          },
+          "updatedAt": {
+            "example": 1700000000000,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdAt",
+          "criteria",
+          "destKind",
+          "destTag",
+          "enable",
+          "id",
+          "ingressIds",
+          "ingressScope",
+          "inspect",
+          "remark",
+          "sortIndex",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "RoutingSubject": {
         "description": "RoutingSubject is one inbound as a routing rule may name it. An unroutable tag\nis offered disabled with ReasonKey, never hidden — hiding it reads as data loss.",
         "properties": {
@@ -3189,6 +3280,45 @@
           "protocol",
           "remark",
           "routable",
+          "tag"
+        ],
+        "type": "object"
+      },
+      "RoutingSubjectView": {
+        "description": "RoutingSubjectView is one inbound as the editor offers it, with the reason it\ncannot be named when it cannot.",
+        "properties": {
+          "blockedKey": {
+            "example": "pages.xray.subjects.reasonBridgeOff",
+            "type": "string"
+          },
+          "criteriaMask": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "inboundId": {
+            "example": 7,
+            "type": "integer"
+          },
+          "routable": {
+            "example": true,
+            "type": "boolean"
+          },
+          "selector": {
+            "example": "device",
+            "type": "string"
+          },
+          "tag": {
+            "example": "wg-home",
+            "type": "string"
+          }
+        },
+        "required": [
+          "criteriaMask",
+          "inboundId",
+          "routable",
+          "selector",
           "tag"
         ],
         "type": "object"
@@ -3263,6 +3393,10 @@
     {
       "name": "Nodes",
       "description": "Manage remote Penhoon UI panels acting as nodes for a central panel. All endpoints under /panel/api/nodes."
+    },
+    {
+      "name": "Routing",
+      "description": "Operator routing intent: which inbounds, which criteria, which destination. A rule names inbounds by ID rather than by tag, so renaming or deleting an inbound cannot silently widen it to every inbound on the box. The compile decides which mechanism realises each rule -- an Xray inbound is named directly, while a kernel inbound is fronted and its rule rewritten onto the front's tag -- which is what lets one screen route any protocol to any protocol. A rule naming an inbound the router cannot see is refused at save rather than accepted and left to never match. All endpoints under /panel/api/routing."
     },
     {
       "name": "Egresses",
@@ -9284,6 +9418,309 @@
         }
       }
     },
+    "/panel/api/routing/rules": {
+      "get": {
+        "tags": [
+          "Routing"
+        ],
+        "summary": "List every routing rule in the operator's own first-match order.",
+        "operationId": "get_panel_api_routing_rules",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RoutingRule"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "createdAt": 1700000000000,
+                      "criteria": {
+                        "domain": [
+                          "geosite:ads"
+                        ]
+                      },
+                      "destExitId": 4,
+                      "destKind": "outbound",
+                      "destTag": "warp",
+                      "enable": true,
+                      "id": 1,
+                      "ingressIds": [
+                        3
+                      ],
+                      "ingressScope": "selected",
+                      "inspect": false,
+                      "remark": "ads to the blackhole",
+                      "sortIndex": 0,
+                      "updatedAt": 1700000000000
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Routing"
+        ],
+        "summary": "Create a rule. It is appended last and converges before the response returns.",
+        "operationId": "post_panel_api_routing_rules",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/RoutingRule"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "createdAt": 1700000000000,
+                    "criteria": {
+                      "domain": [
+                        "geosite:ads"
+                      ]
+                    },
+                    "destExitId": 4,
+                    "destKind": "outbound",
+                    "destTag": "warp",
+                    "enable": true,
+                    "id": 1,
+                    "ingressIds": [
+                      3
+                    ],
+                    "ingressScope": "selected",
+                    "inspect": false,
+                    "remark": "ads to the blackhole",
+                    "sortIndex": 0,
+                    "updatedAt": 1700000000000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/routing/subjects": {
+      "get": {
+        "tags": [
+          "Routing"
+        ],
+        "summary": "Which inbounds a rule may name. An inbound that cannot be a subject right now is listed with routable=false and a blockedKey naming why, never omitted. criteriaMask names the criteria that can actually match on it -- user is absent for a kernel ingress because Xray's tun handler builds a user with no email, so the matcher can never return true.",
+        "operationId": "get_panel_api_routing_subjects",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RoutingSubjectView"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "blockedKey": "pages.xray.subjects.reasonBridgeOff",
+                      "criteriaMask": [
+                        ""
+                      ],
+                      "inboundId": 7,
+                      "routable": true,
+                      "selector": "device",
+                      "tag": "wg-home"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/routing/rules/order": {
+      "post": {
+        "tags": [
+          "Routing"
+        ],
+        "summary": "Set the whole first-match order in one write. The body is the complete id list; a partial application would silently change which rule wins.",
+        "operationId": "post_panel_api_routing_rules_order",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/routing/rules/{id}": {
+      "post": {
+        "tags": [
+          "Routing"
+        ],
+        "summary": "Update one rule.",
+        "operationId": "post_panel_api_routing_rules_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Routing rule ID.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/RoutingRule"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "createdAt": 1700000000000,
+                    "criteria": {
+                      "domain": [
+                        "geosite:ads"
+                      ]
+                    },
+                    "destExitId": 4,
+                    "destKind": "outbound",
+                    "destTag": "warp",
+                    "enable": true,
+                    "id": 1,
+                    "ingressIds": [
+                      3
+                    ],
+                    "ingressScope": "selected",
+                    "inspect": false,
+                    "remark": "ads to the blackhole",
+                    "sortIndex": 0,
+                    "updatedAt": 1700000000000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/routing/rules/{id}/del": {
+      "post": {
+        "tags": [
+          "Routing"
+        ],
+        "summary": "Delete one rule and converge.",
+        "operationId": "post_panel_api_routing_rules_id_del",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Routing rule ID.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/egresses/list": {
       "get": {
         "tags": [
@@ -9320,6 +9757,8 @@
                       "createdAt": 1700000000000,
                       "enable": true,
                       "id": 1,
+                      "ingressInboundId": 7,
+                      "owner": "operator",
                       "remark": "warp exit",
                       "settings": "",
                       "target": "warp",
@@ -9377,6 +9816,8 @@
                     "createdAt": 1700000000000,
                     "enable": true,
                     "id": 1,
+                    "ingressInboundId": 7,
+                    "owner": "operator",
                     "remark": "warp exit",
                     "settings": "",
                     "target": "warp",
@@ -9482,6 +9923,8 @@
                     "createdAt": 1700000000000,
                     "enable": true,
                     "id": 1,
+                    "ingressInboundId": 7,
+                    "owner": "operator",
                     "remark": "warp exit",
                     "settings": "",
                     "target": "warp",
@@ -9555,6 +9998,8 @@
                     "createdAt": 1700000000000,
                     "enable": true,
                     "id": 1,
+                    "ingressInboundId": 7,
+                    "owner": "operator",
                     "remark": "warp exit",
                     "settings": "",
                     "target": "warp",
