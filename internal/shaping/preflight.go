@@ -70,8 +70,8 @@ func (m *Manager) Preflight(ctx context.Context) Report {
 	}{
 		{"sch_htb", func() error { return m.plane.AddQdisc(ctx, root) }},
 		{"sch_htb", func() error { return m.plane.AddClass(ctx, class) }},
-		{"sch_fq_codel", func() error {
-			return m.plane.AddQdisc(ctx, QdiscSpec{Device: ProbeDevice, Type: QdiscFqCodel, Parent: class.Handle})
+		{"sch_sfq", func() error {
+			return m.plane.AddQdisc(ctx, QdiscSpec{Device: ProbeDevice, Type: QdiscSfq, Parent: class.Handle})
 		}},
 		{"cls_flower", func() error {
 			return m.plane.AddFilter(ctx, FilterSpec{

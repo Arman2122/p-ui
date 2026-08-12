@@ -221,8 +221,11 @@ func toQdisc(spec QdiscSpec, index int) (netlink.Qdisc, error) {
 		htb := netlink.NewHtb(attrs)
 		htb.Defcls = uint32(spec.Default)
 		return htb, nil
-	case QdiscFqCodel:
-		return &netlink.FqCodel{QdiscAttrs: attrs}, nil
+	case QdiscSfq:
+		// Perturb rehashes the flow table, so two clients that collide in it share a
+		// queue for ten seconds rather than for the life of the connection. Every
+		// other field stays zero, which is what the kernel reads as its own default.
+		return &netlink.Sfq{QdiscAttrs: attrs, Perturb: 10}, nil
 	case QdiscClsact:
 		return &netlink.Clsact{QdiscAttrs: attrs}, nil
 	}

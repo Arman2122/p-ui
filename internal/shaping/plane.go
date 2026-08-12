@@ -9,9 +9,9 @@ import (
 // The three qdisc types this package installs, as the kernel names them. Strings
 // because that is what a dump returns, so a foreign one can be named in an error.
 const (
-	QdiscHTB     = "htb"
-	QdiscFqCodel = "fq_codel"
-	QdiscClsact  = "clsact"
+	QdiscHTB    = "htb"
+	QdiscSfq    = "sfq"
+	QdiscClsact = "clsact"
 )
 
 /*
