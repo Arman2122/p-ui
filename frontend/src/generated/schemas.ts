@@ -1530,7 +1530,7 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "integer"
       },
       "shapeable": {
-        "description": "Shapeable is false when no core can give this client a kernel identity, so\nthe UI says speed limits are unavailable rather than showing a dead field.",
+        "description": "Shapeable reports whether the kernel holds state for this client NOW, which\nneeds a core that can identify them and a plan granting them a rate.",
         "example": true,
         "type": "boolean"
       },
