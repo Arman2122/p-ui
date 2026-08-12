@@ -268,7 +268,9 @@ func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant,
 				continue
 			}
 			if fact.unresolved {
-				logger.Warning("policy: client", email, "is assigned a plan that no longer exists and is left unshaped")
+				// Debug, not Warning: this pass runs every 10s forever, and what an
+				// operator acts on is EnforcedFor's Unresolved, which the panel shows.
+				logger.Debug("policy: client", email, "is assigned a plan that no longer exists and is left unshaped")
 				continue
 			}
 			limits := policy.Evaluate(fact.plan, fact.usedBytes)
@@ -934,8 +936,8 @@ type EnforcedLimits struct {
 	// a plan that no longer exists, which never throttles and must be reported.
 	PolicyId   int  `json:"policyId" example:"1"`
 	Unresolved bool `json:"unresolved" example:"false"`
-	// Shapeable is false when no core can give this client a kernel identity, so
-	// the UI says speed limits are unavailable rather than showing a dead field.
+	// Shapeable reports whether the kernel holds state for this client NOW, which
+	// needs a core that can identify them and a plan granting them a rate.
 	Shapeable       bool  `json:"shapeable" example:"true"`
 	WantUpBps       int64 `json:"wantUpBps" example:"10000000"`
 	WantDownBps     int64 `json:"wantDownBps" example:"10000000"`

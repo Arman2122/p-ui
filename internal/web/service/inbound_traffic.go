@@ -529,7 +529,26 @@ func (s *InboundService) DelClientStat(tx *gorm.DB, email string) error {
 	if err := clearGlobalTraffic(tx, email); err != nil {
 		return err
 	}
+	if err := releasePolicyAssignments(tx, []string{email}); err != nil {
+		return err
+	}
 	return tx.Where("email = ?", email).Delete(&model.NodeClientTraffic{}).Error
+}
+
+/*
+releasePolicyAssignments drops the plan of every client whose quota just went.
+
+Here rather than at each call site because the two share a lifetime by
+definition: the assignment is email-keyed so it survives a node re-sync's
+delete-and-recreate, which makes an outliving row indistinguishable from a
+surviving one — and the next client to take that email inherits it, throttled on
+a stranger's ladder with nothing on any screen saying why.
+*/
+func releasePolicyAssignments(tx *gorm.DB, emails []string) error {
+	if len(emails) == 0 {
+		return nil
+	}
+	return tx.Where("email IN ?", emails).Delete(&model.ClientPolicy{}).Error
 }
 
 func (s *InboundService) delClientStatsByEmails(tx *gorm.DB, emails []string) error {
@@ -547,6 +566,9 @@ func (s *InboundService) delClientStatsByEmails(tx *gorm.DB, emails []string) er
 			return err
 		}
 		if err := tx.Where("email IN ?", batch).Delete(&model.NodeClientTraffic{}).Error; err != nil {
+			return err
+		}
+		if err := releasePolicyAssignments(tx, batch); err != nil {
 			return err
 		}
 	}
@@ -842,13 +864,15 @@ func (s *InboundService) DelDepletedClients(id int) (err error) {
 
 	// Drop now-orphaned rows. With id >= 0, a row is safe to drop only when
 	// no out-of-scope inbound still references the email.
-	if id < 0 {
-		err = tx.Where(depletedClause, now).Delete(xray.ClientTraffic{}).Error
-		return err
-	}
 	emails := make([]string, 0, len(depletedEmails))
 	for e := range depletedEmails {
 		emails = append(emails, e)
+	}
+	if id < 0 {
+		if err = tx.Where(depletedClause, now).Delete(xray.ClientTraffic{}).Error; err != nil {
+			return err
+		}
+		return releaseFoldedPolicyAssignments(tx, emails)
 	}
 	var stillReferenced []string
 	emailExpr := database.JSONFieldText("client.value", "email")
@@ -875,8 +899,18 @@ func (s *InboundService) DelDepletedClients(id int) (err error) {
 		if err = tx.Where("LOWER(email) IN ?", toDelete).Delete(xray.ClientTraffic{}).Error; err != nil {
 			return err
 		}
+		return releaseFoldedPolicyAssignments(tx, toDelete)
 	}
 	return nil
+}
+
+// releaseFoldedPolicyAssignments is releasePolicyAssignments for this function's
+// already case-folded lists, which is how it decides what is still referenced.
+func releaseFoldedPolicyAssignments(tx *gorm.DB, lowered []string) error {
+	if len(lowered) == 0 {
+		return nil
+	}
+	return tx.Where("LOWER(email) IN ?", lowered).Delete(&model.ClientPolicy{}).Error
 }
 
 func (s *InboundService) GetClientTrafficTgBot(tgId int64) ([]*xray.ClientTraffic, error) {

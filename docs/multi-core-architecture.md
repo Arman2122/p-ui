@@ -362,6 +362,18 @@ it resolves email → set of `(inbound, node)` targets and revokes. Two changes:
   (mtg `[secret-limits]` already does this; accel-ppp/RADIUS `Session-Octets-Limit`; ocserv
   per-user config) with band hysteresis so it does not flap.
 
+**An IP-limit bounce is per-CORE, and deliberately best-effort.** `core.Session` carries no
+instance id, so a breach is attributed to the core that reported it and never to one of its
+inbounds — and it cannot be otherwise: Xray's own online-user stats are keyed by email in a
+global namespace (`user>>>email>>>online`) and carry no inbound tag, so the core could not
+populate such a field if the contract had one. A client on two inbounds of one core therefore
+has the bounce land on whichever of them sorts first. That is acceptable because **the bounce is
+not the enforcement**: the fail2ban line is, and the jail bans the ADDRESS at the host firewall,
+which covers every inbound and every core at once. Removing and re-adding the user only hurries
+along the sessions already established. What must never happen is the bounce landing on a core
+that saw nothing, which is a different client's connections being cut — that is why the target is
+chosen by observation (`SessionScan.Observers`) and not by a sort order.
+
 ### 4.4 Why RADIUS is an adapter, not the architecture
 
 RADIUS is a tempting unifier and it is the wrong backbone here, for one decisive reason:

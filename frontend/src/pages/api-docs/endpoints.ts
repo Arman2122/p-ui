@@ -1124,7 +1124,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/policies/enforced/:email',
         summary:
-          'What one client’s rules currently work out to, beside what the kernel is actually holding for them. The enforced figures are read back out of the kernel rather than echoed from what the panel pushed, so a limit that never landed is visible instead of merely claimed. shapeable is false when no core can distinguish this client in the kernel, in which case the want figures are advisory and no rate is enforced. unresolved means the client is assigned a plan that no longer exists, which never throttles.',
+          'What one client’s rules currently work out to, beside what the kernel is actually holding for them. The enforced figures are read back out of the kernel rather than echoed from what the panel pushed, so a limit that never landed is visible instead of merely claimed. shapeable says whether the kernel is holding state for this client at this moment, which needs both a core that can identify them and a plan granting them a rate — so a client on no plan reads false, and the enforced figures mean nothing until it is true. unresolved means the client is assigned a plan that no longer exists, which never throttles.',
         params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
         responseSchema: 'EnforcedLimits',
       },
