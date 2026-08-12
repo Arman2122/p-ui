@@ -102,32 +102,45 @@ because Xray tunnels it in userspace.
 This is the one real difference in day-to-day operation. An Xray `wireguard`
 inbound egresses through Xray, so it needs nothing from the host. A `wgkernel`
 device completes handshakes and then **routes nothing** until the host is told
-to forward and masquerade its traffic. Run as root, matching the range to the
-inbound's interface address:
+to forward and masquerade its traffic. Run as root:
 
 ```bash
-sysctl -w net.ipv4.ip_forward=1
-iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+printf 'net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\n' > /etc/sysctl.d/99-wgkernel.conf
+sysctl --system
 ```
 
-**IPv6 needs its own pair.** The `.conf` the panel generates carries
-`AllowedIPs = 0.0.0.0/0, ::/0`, so the client installs a v6 default route into
-the tunnel whether or not the host can carry it — and a host that forwards only
-IPv4 then drops every v6 flow in silence. Either add the v6 twins, matching the
-range to a v6 address on the interface:
+**Both families, and written to a file rather than set with `sysctl -w`.** A
+`-w` lasts until the next reboot, after which the tunnel handshakes and
+black-holes again with nothing on any screen explaining why — which is worse
+than never having configured it, because by then you believe it is configured.
+
+The `.conf` the panel generates carries `AllowedIPs = 0.0.0.0/0, ::/0`, so the
+client installs a v6 default route into the tunnel whether or not the host can
+carry it, and a host that forwards only IPv4 drops every v6 flow in silence.
+
+Then NAT, in its own table so it can be removed whole and cannot entangle with
+rules you already have:
 
 ```bash
-sysctl -w net.ipv6.conf.all.forwarding=1
-ip6tables -t nat -A POSTROUTING -s fd00::/64 -j MASQUERADE
+nft add table ip pui_nat
+nft 'add chain ip pui_nat postrouting { type nat hook postrouting priority srcnat; policy accept; }'
+nft add rule ip pui_nat postrouting iifname "pwg*" oifname != "pwg*" masquerade
 ```
 
-or, with a routed v6 prefix instead of NAT, forwarding alone is enough. If the
+**Match the device, not the subnet.** `iptables -t nat -A POSTROUTING -s
+10.0.0.0/24 -j MASQUERADE` covers exactly one range, so every additional
+`wgkernel` inbound on a different range silently needs another rule nobody
+reminds you to add. `iifname "pwg*"` covers every one of them, present and
+future, and excludes peer-to-peer traffic between clients on the same inbound.
+
+Add the v6 twin with `nft add table ip6 pui_nat6` and the same rule if you
+masquerade IPv6; with a routed v6 prefix, forwarding alone is enough. If the
 host has no IPv6 at all, tell your users the tunnel is v4-only.
 `GET /panel/api/egresses/preflight` reports both forwarding knobs.
 
-None of these survive a reboot on their own. Persist the sysctls in
-`/etc/sysctl.d/`, and the firewall rules with `iptables-persistent` or your
-firewall's own rules. The panel deliberately does not write firewall rules for you.
+The nftables rules do not survive a reboot on their own — load the file from a
+small systemd unit, or use your firewall's own persistence. The panel
+deliberately does not write firewall rules for you.
 
 An inbound attached to an **Egress** (below) still needs the forwarding sysctls,
 but not the NAT rules.
@@ -142,7 +155,7 @@ per attached inbound, a private routing table and its blackhole; the front devic
 belongs to Xray. Everything the kernel needs is derived from the egress id, so an
 id is never reused.
 
-- **The MASQUERADE rules above are not needed for an attached inbound.** Xray
+- **The NAT table above is not needed for an attached inbound.** Xray
   terminates the connection and dials the destination itself, so there is nothing
   to NAT. Forwarding is still required — it is a precondition of any L3 inbound
   reaching anything at all — so keep `net.ipv4.ip_forward` and its v6 twin on.
