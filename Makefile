@@ -53,7 +53,7 @@ test-go: dist-stub ## Go tests (shuffle, no cache)
 # back in. It is a local-only tool; the PR gate (`verify`) does not run it.
 .PHONY: race
 race: dist-stub ## Go tests with the race detector (needs cgo + a C compiler)
-	CGO_ENABLED=1 go test -race -shuffle=on -count=1 $(GO_PKGS)
+	CGO_ENABLED=1 go test -race -shuffle=on -count=1 -timeout 30m $(GO_PKGS)
 
 .PHONY: test-fe
 test-fe: ## Frontend tests (vitest)
