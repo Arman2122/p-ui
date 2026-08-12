@@ -72,7 +72,10 @@ type scaleDataset struct {
 func seedScaleDataset(t *testing.T, n, numInbounds int) scaleDataset {
 	t.Helper()
 	db := database.GetDB()
-	resetScaleTables(t, db, "inbounds", "clients", "client_inbounds", "client_traffics")
+	// The per-client tables a measured pass WRITES belong here too, or its own row
+	// count is checked against whatever an earlier run left behind.
+	resetScaleTables(t, db, "inbounds", "clients", "client_inbounds", "client_traffics",
+		"inbound_client_ips", "node_client_ips", "client_policies", "policies")
 
 	clients := makeScaleClients(n)
 	exp := time.Now().AddDate(1, 0, 0).UnixMilli()
