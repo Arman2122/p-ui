@@ -126,9 +126,13 @@ func factsFor(db *gorm.DB, emails []string, plans map[int]policy.Plan) (map[stri
 			Email     string
 			UsedBytes int64
 			PolicyId  *int
+			// Assigned is the joined row's own key, so a surviving assignment can be
+			// told from no assignment at all once the FK has nulled its plan.
+			Assigned *string
 		}
 		err := db.Table("client_traffics").
-			Select("client_traffics.email AS email, "+used+" AS used_bytes, client_policies.policy_id AS policy_id", usedArgs...).
+			Select("client_traffics.email AS email, "+used+" AS used_bytes, "+
+				"client_policies.policy_id AS policy_id, client_policies.email AS assigned", usedArgs...).
 			Joins("LEFT JOIN client_policies ON client_policies.email = client_traffics.email").
 			Where("client_traffics.email IN ?", batch).
 			Scan(&rows).Error
@@ -137,9 +141,14 @@ func factsFor(db *gorm.DB, emails []string, plans map[int]policy.Plan) (map[stri
 		}
 		for _, row := range rows {
 			facts := clientFacts{usedBytes: row.UsedBytes}
-			if row.PolicyId != nil {
+			switch {
+			case row.PolicyId != nil:
 				plan, known := plans[*row.PolicyId]
 				facts.plan, facts.unresolved = plan, !known
+			case row.Assigned != nil:
+				// The row outlived its plan: the FK is ON DELETE SET NULL precisely so
+				// this stays visible, and reading it as "never assigned" throws that away.
+				facts.unresolved = true
 			}
 			out[row.Email] = facts
 		}
@@ -209,6 +218,14 @@ func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant,
 			// An empty device is the core saying it is not hosting this instance
 			// right now. Shaping goes quiet and retries; it does not fail.
 			if target.Device == "" {
+				continue
+			}
+			// Named here rather than left to the plane: the refusal is a fact about
+			// the CORE's device naming, and the mechanism only ever sees a string.
+			if !shaping.Owns(target.Device) {
+				failures = append(failures, fmt.Errorf(
+					"policy: core %s offered device %q for inbound %d, which is outside the namespaces this panel may shape: %w",
+					bound.Core.Describe().ID, target.Device, inst.ID, shaping.ErrNotOwned))
 				continue
 			}
 			targets = append(targets, deviceSubjects{device: target.Device, keys: target.Keys})
@@ -309,11 +326,18 @@ func (s *PolicyService) ConvergeShaping(ctx context.Context) error {
 	return shapingManager.Converge(ctx, wants)
 }
 
+// Sighting is one address as reported for one client. It is the key enforcement
+// is aimed with: which core saw a breach decides which core may be cut for it.
+type Sighting struct{ Email, IP string }
+
 // SessionScan is what the cores could tell us this pass, and which of them could
 // not be asked.
 type SessionScan struct {
 	ByEmail map[string][]policy.Observation
-	Silent  []string
+	// Observers keeps the attribution the merge would otherwise throw away: one
+	// client's addresses can come from several cores and only some are over a cap.
+	Observers map[Sighting][]core.Kind
+	Silent    []string
 }
 
 /*
@@ -325,7 +349,10 @@ all. A core whose Sessions() fails contributes nothing and its clients are simpl
 not evaluated this pass, while every other core's clients still are.
 */
 func (s *PolicyService) ObserveSessions(ctx context.Context) SessionScan {
-	scan := SessionScan{ByEmail: map[string][]policy.Observation{}}
+	scan := SessionScan{
+		ByEmail:   map[string][]policy.Observation{},
+		Observers: map[Sighting][]core.Kind{},
+	}
 	reg := registry()
 	if reg == nil {
 		return scan
@@ -335,7 +362,8 @@ func (s *PolicyService) ObserveSessions(ctx context.Context) SessionScan {
 		if bound.Sessions == nil {
 			continue
 		}
-		id := string(bound.Core.Describe().ID)
+		reporter := bound.Core.Describe().ID
+		id := string(reporter)
 		sessions, err := bound.Sessions.Sessions(ctx)
 		if err != nil {
 			logger.Debug("policy: core", id, "could not name its sessions this pass:", err)
@@ -352,8 +380,13 @@ func (s *PolicyService) ObserveSessions(ctx context.Context) SessionScan {
 				// reporting the connection as live by reporting it at all.
 				seen = nowMilli
 			}
+			address := session.Source.String()
 			scan.ByEmail[session.Email] = append(scan.ByEmail[session.Email],
-				policy.Observation{IP: session.Source.String(), LastSeenUnixMilli: seen})
+				policy.Observation{IP: address, LastSeenUnixMilli: seen})
+			sighting := Sighting{Email: session.Email, IP: address}
+			if !slices.Contains(scan.Observers[sighting], reporter) {
+				scan.Observers[sighting] = append(scan.Observers[sighting], reporter)
+			}
 		}
 	}
 	return scan
@@ -388,7 +421,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 
 	db := database.GetDB()
 	limits := s.inboundService.limitIPByEmail(emails)
-	inbounds := s.inboundService.inboundByEmail(emails)
+	inbounds := s.inboundService.inboundsByEmail(emails)
 	persisted := s.inboundService.clientIPRows(emails)
 
 	nowSeconds := time.Now().Unix()
@@ -411,8 +444,8 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 
 	for _, email := range emails {
 		observed := scan.ByEmail[email]
-		inbound, hosted := inbounds[email]
-		if !hosted {
+		hosted := inbounds[email]
+		if len(hosted) == 0 {
 			// The observation names a client that was renamed or deleted; drop the
 			// orphaned tracking row instead of recreating it every run (#4963).
 			logger.Debugf("policy: skipping stale observed email %q (renamed or deleted)", email)
@@ -437,7 +470,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			row = &model.InboundClientIps{ClientEmail: email}
 		}
 		limit := limits[email]
-		if !enforce || limit <= 0 || !inbound.Enable {
+		if !enforce || limit <= 0 || !hosted[0].Enable {
 			// Nothing to enforce: record what was seen so the panel can show it.
 			row.Ips = encodeClientIPs(observationsToEntries(observed))
 			if err := tx.Save(row).Error; err != nil {
@@ -456,14 +489,15 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			logger.Error("policy: save ip limit result:", err)
 			continue
 		}
-		if len(verdict.Ban) == 0 {
-			continue
-		}
+		// Every client the cap was actually applied to, an EMPTY ban included: the
+		// caller's re-ban memory is pruned by being handed the clients that are back
+		// under their cap, and a verdict it never sees can never be forgotten.
+		target := s.bounceTarget(hosted, scan, email, verdict.Ban)
 		verdicts = append(verdicts, IPLimitVerdict{
 			Email:   email,
 			Ban:     verdict.Ban,
-			Bounce:  s.bounceable(inbound),
-			Inbound: inbound,
+			Bounce:  target != nil,
+			Inbound: target,
 		})
 	}
 
@@ -477,31 +511,63 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 }
 
 /*
+bounceTarget picks the inbound whose core actually observed the banned addresses.
+
+Cutting a client is per-CORE and not per-client: the runtime resolves the core
+from the inbound it is handed, and RemoveUser drops ALL of that client's sessions
+on it. Choosing by id instead would cut a compliant core's connections while the
+core that saw the breach carries on, and would do it silently — the retired job's
+protocol allowlist was the only thing that ever stopped a cross-core cut.
+
+No observing core that can safely be cut means report-only, which is the same
+answer the fail2ban line already carries.
+*/
+func (s *PolicyService) bounceTarget(hosted []*model.Inbound, scan SessionScan, email string, banned []policy.Observation) *model.Inbound {
+	reg := registry()
+	if reg == nil || len(banned) == 0 {
+		return nil
+	}
+	saw := make(map[core.Kind]bool, len(banned))
+	for _, over := range banned {
+		for _, reporter := range scan.Observers[Sighting{Email: email, IP: over.IP}] {
+			saw[reporter] = true
+		}
+	}
+	for _, inbound := range hosted {
+		bound, known := reg.For(core.Kind(inbound.Protocol))
+		if !known || !saw[bound.Core.Describe().ID] {
+			continue
+		}
+		if bounceable(inbound, bound) {
+			return inbound
+		}
+	}
+	return nil
+}
+
+/*
 bounceable reports whether cutting a client's sessions is a safe way to enforce
 a cap on this inbound's core.
 
-A core that gives its users a kernel identity is hosting a tunnel: the session's
-source is the tunnel's own endpoint, so removing the user re-handshakes rather
-than disconnecting the device that is sharing the key, and it ZEROES the peer's
-byte counters. Losing billed bytes to a soft product rule is never worth it, so
-such a client is reported and logged and never bounced.
+The question is what a removal COSTS, and only the core can answer it: for a
+wgkernel peer a remove ZEROES the byte counters the panel bills from, so losing
+real money to a soft product rule is never worth it. That is deliberately not
+inferred from whether the core can shape — two orthogonal properties that happen
+to coincide on the one core doing both today.
 */
-func (s *PolicyService) bounceable(inbound *model.Inbound) bool {
-	reg := registry()
-	if reg == nil || inbound == nil || inbound.NodeID != nil {
+func bounceable(inbound *model.Inbound, bound *core.Bound) bool {
+	if inbound == nil || inbound.NodeID != nil {
 		// A node's inbound is served by a core this host never ran, so its tag
 		// names nothing here and the cut would have to travel as a node push.
 		return false
 	}
-	kind := core.Kind(inbound.Protocol)
-	bound, known := reg.For(kind)
-	if !known || bound.Users == nil {
+	if bound == nil || bound.Users == nil {
 		return false
 	}
-	if bound.Shape == nil {
+	if bound.CounterLoss == nil {
 		return true
 	}
-	return bound.Shape.ShapingSelector(kind) == core.SelectorNone
+	return !bound.CounterLoss.RemovalLosesCounters(core.Kind(inbound.Protocol))
 }
 
 /*
@@ -605,20 +671,21 @@ func (s *InboundService) limitIPByEmail(emails []string) map[string]int {
 }
 
 /*
-inboundByEmail resolves each observed client to the inbound that owns it.
+inboundsByEmail resolves each observed client to EVERY inbound that carries it,
+local ones first and then by id.
 
-A LOCAL inbound wins over a node's, then the lowest id, because the sessions were
-observed by a core running here: resolving to a node's inbound would name a tag
-this host has never served. A client on nothing but node inbounds still resolves,
-so its addresses keep being recorded; only the bounce is skipped.
+Every one of them, not the best one: a client can be attached to two cores and
+only one of them observed the addresses being banned, so the caller picks by
+attribution rather than by a sort order. The first entry is still the local,
+lowest-id inbound, which is the one whose enable flag governs the client here.
 */
-func (s *InboundService) inboundByEmail(emails []string) map[string]*model.Inbound {
+func (s *InboundService) inboundsByEmail(emails []string) map[string][]*model.Inbound {
 	db := database.GetDB()
 	type candidate struct {
 		id    int
 		local bool
 	}
-	best := make(map[string]candidate, len(emails))
+	found := make(map[string][]candidate, len(emails))
 	for _, batch := range chunkStrings(emails, sqlInChunk) {
 		var pairs []struct {
 			Email     string
@@ -635,18 +702,28 @@ func (s *InboundService) inboundByEmail(emails []string) map[string]*model.Inbou
 			return nil
 		}
 		for _, pair := range pairs {
-			now := candidate{id: pair.InboundId, local: pair.NodeID == nil}
-			cur, seen := best[pair.Email]
-			if !seen || (now.local && !cur.local) || (now.local == cur.local && now.id < cur.id) {
-				best[pair.Email] = now
-			}
+			found[pair.Email] = append(found[pair.Email],
+				candidate{id: pair.InboundId, local: pair.NodeID == nil})
 		}
 	}
 
-	ids := make([]int, 0, len(best))
-	for _, pick := range best {
-		if !slices.Contains(ids, pick.id) {
-			ids = append(ids, pick.id)
+	ids := make([]int, 0, len(found))
+	for _, picks := range found {
+		// Local first, then by id: the head is what a caller needing exactly one
+		// inbound has always been given.
+		slices.SortFunc(picks, func(a, b candidate) int {
+			if a.local != b.local {
+				if a.local {
+					return -1
+				}
+				return 1
+			}
+			return a.id - b.id
+		})
+		for _, pick := range picks {
+			if !slices.Contains(ids, pick.id) {
+				ids = append(ids, pick.id)
+			}
 		}
 	}
 	slices.Sort(ids)
@@ -661,20 +738,22 @@ func (s *InboundService) inboundByEmail(emails []string) map[string]*model.Inbou
 			byID[inbound.Id] = inbound
 		}
 	}
-	out := make(map[string]*model.Inbound, len(best))
-	for email, pick := range best {
-		if inbound, ok := byID[pick.id]; ok {
-			out[email] = inbound
+	out := make(map[string][]*model.Inbound, len(found))
+	for email, picks := range found {
+		for _, pick := range picks {
+			if inbound, ok := byID[pick.id]; ok {
+				out[email] = append(out[email], inbound)
+			}
 		}
 	}
 	// A client the relation does not carry yet is resolved one at a time, which is
 	// why the relation is tried first: this scan parses every candidate's settings.
 	for _, email := range emails {
-		if _, resolved := out[email]; resolved {
+		if len(out[email]) > 0 {
 			continue
 		}
 		if inbound, ok := s.inboundBySettingsEmail(email); ok {
-			out[email] = inbound
+			out[email] = []*model.Inbound{inbound}
 		}
 	}
 	return out
@@ -823,6 +902,26 @@ func (s *PolicyService) Assign(email string, policyID int) error {
 		Columns:   []clause.Column{{Name: "email"}},
 		DoUpdates: clause.AssignmentColumns([]string{"policy_id", "updated_at"}),
 	}).Create(&row).Error
+}
+
+/*
+movePolicyAssignment carries a plan across a client rename.
+
+The assignment is keyed by email so it survives the hard-delete-and-recreate a
+node re-sync performs, which is exactly why a rename has to move it by hand: the
+quota beside it is migrated the same way, and a client whose plan silently
+vanished runs at full line rate with nothing on any screen saying so.
+*/
+func movePolicyAssignment(tx *gorm.DB, oldEmail, newEmail string) error {
+	if oldEmail == newEmail {
+		return nil
+	}
+	// The caller only renames onto a free identity, so a row already sitting there
+	// is stale — the same rule UpdateClientIPs applies to the tracking row.
+	if err := tx.Where("email = ?", newEmail).Delete(&model.ClientPolicy{}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&model.ClientPolicy{}).Where("email = ?", oldEmail).Update("email", newEmail).Error
 }
 
 // EnforcedLimits is one client's answer: the plan the rules derive, and what the

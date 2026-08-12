@@ -214,6 +214,10 @@ func (c *Core) OnlineEmails(_ context.Context) ([]string, error) {
 	return slices.Clone(c.online), nil
 }
 
+// RemovalLosesCounters is measured, not inferred: a peer remove ZEROES rx/tx
+// while an allowed-IP, keepalive or preshared-key edit preserves them.
+func (c *Core) RemovalLosesCounters(kind core.Kind) bool { return kind == Kind }
+
 // ShapingSelector answers for this core's own kind alone. A peer's allowed-IP is
 // unforgeable: cryptokey routing drops a spoofed inner source at decap.
 func (c *Core) ShapingSelector(kind core.Kind) core.Selector {

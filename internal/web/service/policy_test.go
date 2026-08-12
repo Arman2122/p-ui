@@ -88,12 +88,29 @@ type proxyCore struct {
 	userCore
 }
 
-// An L3 core: a kernel identity per user, and a peer whose counters die with it.
+// counterBoundCore holds a user's byte counters INSIDE the object a removal
+// destroys, which is measured for a wgkernel peer and true of nothing else here.
+type counterBoundCore struct{ *declaredCore }
+
+func (c counterBoundCore) RemovalLosesCounters(kind core.Kind) bool { return kind == c.kind }
+
+// An L3 core with a kernel identity per user whose removal costs it NOTHING —
+// counters read from a daemon rather than held in the user object.
 type tunnelCore struct {
 	*declaredCore
 	shapingCore
 	sessionCore
 	userCore
+}
+
+// A wgkernel-shaped core: the same kernel identity, and a peer whose byte
+// counters are ZEROED by the removal.
+type peerCore struct {
+	*declaredCore
+	shapingCore
+	sessionCore
+	userCore
+	counterBoundCore
 }
 
 func newProxyCore(base *declaredCore) *proxyCore {
@@ -106,6 +123,16 @@ func newTunnelCore(base *declaredCore) *tunnelCore {
 		shapingCore:  shapingCore{base},
 		sessionCore:  sessionCore{base},
 		userCore:     userCore{base},
+	}
+}
+
+func newPeerCore(base *declaredCore) *peerCore {
+	return &peerCore{
+		declaredCore:     base,
+		shapingCore:      shapingCore{base},
+		sessionCore:      sessionCore{base},
+		userCore:         userCore{base},
+		counterBoundCore: counterBoundCore{base},
 	}
 }
 
@@ -268,7 +295,7 @@ func TestIPLimitReachesACoreThatHasNoOnlineApi(t *testing.T) {
 	base := &declaredCore{
 		id: "tunnel", kind: "wgkernel", selector: core.SelectorInnerIP, device: "pwg7",
 	}
-	installCores(t, newTunnelCore(base))
+	installCores(t, newPeerCore(base))
 	seedPolicyInbound(t, "wgkernel", "wg-cap", 45102, "roamer")
 	setLimitIP(t, "roamer", 2)
 
@@ -288,8 +315,37 @@ func TestIPLimitReachesACoreThatHasNoOnlineApi(t *testing.T) {
 	// byte counters, so this client is reported and never cut.
 	for _, verdict := range verdicts {
 		if verdict.Email == "roamer" && verdict.Bounce {
-			t.Fatal("a client whose core gives it a kernel identity must never be peer-bounced: removing the peer zeroes the counters the panel bills from")
+			t.Fatal("a client whose core LOSES its byte counters on removal must never be bounced: a soft product rule may not destroy billed bytes")
 		}
+	}
+}
+
+/*
+TestAShapeableCoreIsStillBouncedWhenRemovalCostsNothing.
+
+The rule is about what a removal DESTROYS, not about whether the core can be
+shaped: those are orthogonal, and they coincide only on the single core that
+happens to do both today. A core with a kernel identity whose counters live in
+its daemon loses nothing by being cut, so it must be cut.
+*/
+func TestAShapeableCoreIsStillBouncedWhenRemovalCostsNothing(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+
+	base := &declaredCore{
+		id: "innerip", kind: "ocserv", selector: core.SelectorInnerIP, device: "pwg9",
+	}
+	installCores(t, newTunnelCore(base))
+	seedPolicyInbound(t, "ocserv", "ocserv-cap", 45108, "sharer2")
+	setLimitIP(t, "sharer2", 1)
+	base.sessions = observe("sharer2", time.Now().Add(-time.Minute), "198.51.100.7", "198.51.100.8")
+
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	if err != nil {
+		t.Fatalf("EvaluateIPLimits: %v", err)
+	}
+	if len(verdicts) != 1 || !verdicts[0].Bounce {
+		t.Fatalf("a shapeable core that keeps its counters outside the user object must still be cut, got %+v", verdicts)
 	}
 }
 

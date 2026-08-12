@@ -775,6 +775,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 					if e := inboundSvc.UpdateClientIPs(tx, oldEmail, clients[0].Email); e != nil {
 						return e
 					}
+					if e := movePolicyAssignment(tx, oldEmail, clients[0].Email); e != nil {
+						return e
+					}
 				} else {
 					stillUsed, sErr := inboundSvc.emailUsedByOtherInbounds(oldEmail, data.Id)
 					if sErr != nil {

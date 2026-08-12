@@ -452,6 +452,17 @@ root and no routing at all, which makes xray→ocserv trivially Pattern A.
 | fwmark mask | `0xff0fffff` | constant | no |
 | `ip rule` priority (outer) | 30001…30999 | `30000 + id` | no |
 | Local SOCKS port | 21001…21999 | bound to `127.0.0.1` only | no — Pattern A owns its own ports |
+| Shaping upload mirror | `pifb1`…`pifb999` | `"pifb" + id`, ≤15 chars | yes |
+
+**A shapeable core must name its device from one of these namespaces.** `shaping.Owns`
+is a round-tripping predicate over `pwg<id>` / `peg<id>` / `pifb<id>` and nothing else, so
+a `ShapingTarget.Device` outside them is refused rather than adopted — an operator's
+`pwgtest` is somebody else's interface and a tree installed on it throttles traffic this
+panel does not serve. This is the one place the "core #5 costs zero engine edits" claim is
+scoped by more than the Selector vocabulary: a new L3 core whose users are host prefixes on
+one device it owns still has to either take a device name from these namespaces or add its
+own prefix here. Turn the three constants into a registered list at that point; keep the
+round trip, because the ownership property is the round trip and never the literal prefix.
 
 All marks are ≤ `0x7FFFFFFF` so they fit Xray's `int32` `mark` field. Assert at startup
 that the band is unused and that tables 30001–30999 are empty; check for collisions with
