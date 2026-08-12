@@ -392,6 +392,33 @@ func checkSessions(r *report, rig Rig, bound *core.Bound) {
 	if got := second.LastSeenUnixMilli; got != later.UnixMilli() {
 		r.fail("sessions/lastseen-advances", "the session was seen again at %d and Sessions still reports %d; a core that cannot advance it makes every re-ban fire forever or never", later.UnixMilli(), got)
 	}
+	checkSessionLocal(r, rig, second)
+}
+
+/*
+checkSessionLocal holds a reported in-tunnel address to what the HOST holds.
+
+Reporting none is honest — an L7 core's users have no address of their own — so
+only a core that answers gets checked, and it is checked against the device
+rather than against whatever the adapter believes it allocated. A core that
+reports one while supplying no HostSubjects goes unverified; the hook to add
+then is a HostLocals, and inventing it before a core needs it buys nothing.
+*/
+func checkSessionLocal(r *report, rig Rig, s *core.Session) {
+	if len(s.Local) == 0 || rig.HostSubjects == nil {
+		return
+	}
+	held := map[netip.Addr]bool{}
+	for _, raw := range rig.HostSubjects()[Subject] {
+		if prefix, err := netip.ParsePrefix(raw); err == nil && prefix.IsSingleIP() {
+			held[prefix.Addr()] = true
+		}
+	}
+	for _, addr := range s.Local {
+		if !held[addr] {
+			r.fail("sessions/local-is-the-hosts", "Sessions reports %s as %s's address inside the tunnel and the host holds %v; an address the panel shows but the device does not answer to sends one client's traffic to nobody", addr, Subject, rig.HostSubjects()[Subject])
+		}
+	}
 }
 
 // subjectSession returns the reported session for the subject at SessionSource,

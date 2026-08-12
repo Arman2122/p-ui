@@ -93,6 +93,7 @@ func run(root, outDir string) error {
 		{
 			Path: resolveRel(root, "internal/web/service"),
 			StructAllow: setOf(
+				"ClientLocalAddress",
 				"CoreView",
 				"EnforcedLimits",
 				"InboundOption",

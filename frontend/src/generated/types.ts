@@ -284,6 +284,11 @@ export interface ClientInbound {
   inboundId: number;
 }
 
+export interface ClientLocalAddress {
+  address: string;
+  core: string;
+}
+
 export interface ClientPolicy {
   email: string;
   policyId?: number | null;

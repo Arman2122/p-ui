@@ -707,6 +707,8 @@
       "first": "First",
       "last": "Last",
       "ipLog": "IP Log",
+      "tunnelAddress": "Tunnel address",
+      "tunnelAddressNone": "No tunnel address — this client's cores hold none",
       "prefix": "Prefix",
       "postfix": "Postfix",
       "delayedStart": "Start After First Use",

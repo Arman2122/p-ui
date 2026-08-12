@@ -109,3 +109,41 @@ func TestSessionsLeavesOutATunnelThatWentQuiet(t *testing.T) {
 		t.Errorf("got %q from %s, want %q from 203.0.113.9", got[0].Email, got[0].Source, inst.Users[0].Email)
 	}
 }
+
+/*
+TestSessionsReportsTheAddressThePeerAnswersTo.
+
+The address a client on this inbound reaches another one at. A site-to-site
+peer's /24 is deliberately NOT it: that prefix is a network reached THROUGH the
+peer, so offering it as somewhere to connect names nobody, and the panel would
+be printing a LAN address that belongs to the customer's office router.
+*/
+func TestSessionsReportsTheAddressThePeerAnswersTo(t *testing.T) {
+	r := newRig()
+	c := &Core{mgr: r.mgr}
+	inst := r.instance(2)
+	inst.Users[1].Credentials[core.CredAllowedIPs] = []any{"10.9.0.5/32", "192.168.50.0/24"}
+	if err := c.Reconcile(context.Background(), []core.Instance{inst}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	for _, email := range clients {
+		r.kernel.FeedSession(iface, r.keys[email], netip.MustParseAddr("203.0.113.9"), time.Now())
+	}
+
+	got, err := c.Sessions(context.Background())
+	if err != nil {
+		t.Fatalf("Sessions: %v", err)
+	}
+	local := map[string][]string{}
+	for _, s := range got {
+		for _, addr := range s.Local {
+			local[s.Email] = append(local[s.Email], addr.String())
+		}
+	}
+	if want := []string{"10.9.0.5"}; !slices.Equal(local[inst.Users[1].Email], want) {
+		t.Fatalf("the routed peer reports %v inside the tunnel, want %v: a /24 behind it is somebody else's network", local[inst.Users[1].Email], want)
+	}
+	if len(local[inst.Users[0].Email]) != 1 {
+		t.Fatalf("an ordinary peer reports %v, want exactly the one address it holds", local[inst.Users[0].Email])
+	}
+}

@@ -6,6 +6,7 @@ import { CopyOutlined, DownloadOutlined, EyeOutlined, QrcodeOutlined, ReloadOutl
 import { ClipboardManager, FileManager, HttpUtil, IntlUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
+import type { ClientLocalAddress } from '@/generated/types';
 import { formatIpLimit } from '@/lib/policies/labels';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { ClientRecord, InboundOption } from '@/hooks/useClients';
@@ -15,6 +16,15 @@ import { QrPanel } from '@/pages/inbounds/qr';
 import ConfigBlock from '@/components/clients/ConfigBlock';
 import { buildWireguardClientConfig, findWireguardInbound, isWireguardClient } from './wireguardConfig';
 import './ClientInfoModal.css';
+
+const TUNNEL_TAG_STYLE = {
+  display: 'block',
+  width: 'fit-content',
+  maxWidth: '100%',
+  marginBottom: 6,
+  padding: '2px 8px',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+} as const;
 
 const INBOUND_PROTOCOL_COLORS: Record<string, string> = {
   vless: 'blue',
@@ -94,6 +104,7 @@ export default function ClientInfoModal({
   const [messageApi, messageContextHolder] = message.useMessage();
   const [links, setLinks] = useState<string[]>([]);
   const [clientIps, setClientIps] = useState<ClientIpInfo[]>([]);
+  const [localAddrs, setLocalAddrs] = useState<ClientLocalAddress[]>([]);
   const [ipsLoading, setIpsLoading] = useState(false);
   const [ipsClearing, setIpsClearing] = useState(false);
   const [ipsModalOpen, setIpsModalOpen] = useState(false);
@@ -103,6 +114,7 @@ export default function ClientInfoModal({
     if (!open) {
       setLinks([]);
       setClientIps([]);
+      setLocalAddrs([]);
       setIpsModalOpen(false);
       return;
     }
@@ -175,10 +187,14 @@ export default function ClientInfoModal({
   async function loadIps() {
     if (!client?.email) return;
     setIpsLoading(true);
+    const email = encodeURIComponent(client.email);
     try {
-      const msg = await HttpUtil.post(`/panel/api/clients/ips/${encodeURIComponent(client.email)}`) as ApiMsg<unknown[]>;
-      if (!msg?.success) { setClientIps([]); return; }
-      setClientIps(normalizeClientIps(msg.obj));
+      const [ips, local] = await Promise.all([
+        HttpUtil.post(`/panel/api/clients/ips/${email}`) as Promise<ApiMsg<unknown[]>>,
+        HttpUtil.get(`/panel/api/clients/localAddresses/${email}`) as Promise<ApiMsg<ClientLocalAddress[]>>,
+      ]);
+      setClientIps(ips?.success ? normalizeClientIps(ips.obj) : []);
+      setLocalAddrs(local?.success && Array.isArray(local.obj) ? local.obj : []);
     } finally {
       setIpsLoading(false);
     }
@@ -561,6 +577,20 @@ export default function ClientInfoModal({
           </Button>,
         ]}
       >
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('pages.clients.tunnelAddress')}</div>
+          {localAddrs.length > 0 ? (
+            localAddrs.map((entry) => (
+              <Tag key={`${entry.core}-${entry.address}`} color="green" style={TUNNEL_TAG_STYLE}>
+                {entry.address}
+                <span style={{ marginInlineStart: 6, opacity: 0.85, fontWeight: 600 }}>{entry.core}</span>
+              </Tag>
+            ))
+          ) : (
+            <div style={{ opacity: 0.65 }}>{t('pages.clients.tunnelAddressNone')}</div>
+          )}
+        </div>
+        <Divider style={{ margin: '8px 0' }} />
         {clientIps.length > 0 ? (
           <div style={{ maxHeight: 360, overflowY: 'auto' }}>
             {clientIps.map((entry, idx) => (

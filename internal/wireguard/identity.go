@@ -3,16 +3,20 @@ package wireguard
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/netip"
 	"time"
 )
 
 // Endpoint is one client's live tunnel as the kernel sees it: the outer address
-// its last handshake came from, and when that was.
+// its last handshake came from, when that was, and what it answers to inside.
 type Endpoint struct {
 	Email     string
 	Source    netip.Addr
 	Handshake time.Time
+	// Local is the peer's own tunnel address per family, read off the device rather
+	// than from what the panel allocated. A routed subnet is not one and is dropped.
+	Local []netip.Addr
 }
 
 // Endpoints names every client with a live tunnel, across every device. It only
@@ -56,7 +60,23 @@ func (m *Manager) deviceEndpoints(ctx context.Context, id int) []Endpoint {
 		if !ok {
 			continue
 		}
-		out = append(out, Endpoint{Email: email, Source: source.Unmap(), Handshake: peer.LastHandshakeTime})
+		out = append(out, Endpoint{
+			Email: email, Source: source.Unmap(), Handshake: peer.LastHandshakeTime,
+			Local: hostAddrs(peer.AllowedIPs),
+		})
+	}
+	return out
+}
+
+// hostAddrs keeps the allowed-IPs that name the peer ITSELF. A site-to-site /24
+// is a network reached THROUGH the peer, and answering with it names nobody.
+func hostAddrs(allowed []net.IPNet) []netip.Addr {
+	var out []netip.Addr
+	for i := range allowed {
+		prefix, ok := toPrefix(&allowed[i])
+		if ok && prefix.IsSingleIP() {
+			out = append(out, prefix.Addr())
+		}
 	}
 	return out
 }

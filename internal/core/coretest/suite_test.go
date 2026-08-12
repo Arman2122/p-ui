@@ -48,6 +48,7 @@ type defects struct {
 	shapeAStranger      bool
 	zeroSessionLastSeen bool
 	misattributeSession bool
+	inventSessionLocal  bool
 }
 
 type fakeCore struct {
@@ -352,11 +353,17 @@ func (s *shapingCore) ShapingTargets(_ context.Context, inst core.Instance) (cor
 }
 
 func (s *shapingCore) feedSession(email, source string, lastSeenUnixMilli int64) {
-	s.sessions[email] = core.Session{
+	session := core.Session{
 		Email:             email,
 		Source:            netip.MustParseAddr(source),
 		LastSeenUnixMilli: lastSeenUnixMilli,
 	}
+	// The address the HOST holds, so a healthy core proves the check does not fire
+	// on every honest row — which is the half a defect test cannot show.
+	if prefix, placed := s.host[email]; placed {
+		session.Local = []netip.Addr{prefix.Addr()}
+	}
+	s.sessions[email] = session
 }
 
 func (s *shapingCore) Sessions(context.Context) ([]core.Session, error) {
@@ -367,6 +374,9 @@ func (s *shapingCore) Sessions(context.Context) ([]core.Session, error) {
 		}
 		if s.d.misattributeSession {
 			session.Email = "someone-else@example.com"
+		}
+		if s.d.inventSessionLocal {
+			session.Local = []netip.Addr{netip.MustParseAddr("10.0.0.99")}
 		}
 		out = append(out, session)
 	}
@@ -567,6 +577,11 @@ func TestSuiteCatchesBrokenIdentities(t *testing.T) {
 			name:          "attributes a session to the wrong client",
 			defects:       defects{misattributeSession: true},
 			wantInvariant: "sessions/reports-what-the-host-sees",
+		},
+		{
+			name:          "reports an in-tunnel address the device does not answer to",
+			defects:       defects{inventSessionLocal: true},
+			wantInvariant: "sessions/local-is-the-hosts",
 		},
 	}
 

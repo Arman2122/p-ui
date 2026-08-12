@@ -1165,6 +1165,24 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientLocalAddress": {
+    "description": "/*\nClientLocalAddress is one address a client answers to inside a tunnel, and the\ncore that reported it.\n\nPer core rather than merged, because the answer differs per protocol and the two\nare only comparable within one: two clients can reach each other over the address\nthey hold on the SAME inbound, and never across cores.\n*/",
+    "properties": {
+      "address": {
+        "example": "10.0.0.11",
+        "type": "string"
+      },
+      "core": {
+        "example": "wgkernel",
+        "type": "string"
+      }
+    },
+    "required": [
+      "address",
+      "core"
+    ],
+    "type": "object"
+  },
   "ClientPolicy": {
     "description": "/*\nClientPolicy assigns one client a policy, keyed by EMAIL and not by client id.\n\nclient_credentials is client-id keyed and dies with its client, which is right\nfor a credential: a recreated client legitimately gets a fresh UUID. It is wrong\nfor a plan. Deleting a client hard-deletes the row and a node re-sync mints a new\nid for the same email, so an id-keyed assignment would silently vanish and drop a\npaying customer back to no plan. client_traffics is email-keyed for exactly this\nreason — a quota survives a re-sync because of it — and an assignment has a\nquota's lifetime, not a UUID's.\n*/",
     "properties": {
