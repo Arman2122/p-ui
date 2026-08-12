@@ -19,7 +19,10 @@ var _ shaping.Plane = (*Kernel)(nil)
 const (
 	rootParent   uint32 = 0xffffffff
 	clsactParent uint32 = 0xfffffff1
+	// The two filter blocks ONE clsact carries. Both die with it, which is what
+	// makes removing a hook an operator's whole tc setup and not just ours.
 	ingressBlock uint32 = 0xfffffff2
+	EgressBlock  uint32 = 0xfffffff3
 )
 
 /*
@@ -237,6 +240,13 @@ func (k *Kernel) DelQdisc(_ context.Context, spec shaping.QdiscSpec) error {
 		return nil
 	}
 	k.qdiscs = slices.Delete(k.qdiscs, at, at+1)
+	// The clsact owns BOTH its blocks: removing the hook takes every ingress AND
+	// egress filter on it, an operator's included.
+	if spec.Parent == clsactParent {
+		k.filters = slices.DeleteFunc(k.filters, func(f shaping.FilterSpec) bool {
+			return f.Device == spec.Device && (f.Parent == ingressBlock || f.Parent == EgressBlock)
+		})
+	}
 	return nil
 }
 
@@ -363,7 +373,7 @@ func (k *Kernel) dropTree(device string) {
 	})
 	k.classes = slices.DeleteFunc(k.classes, func(c shaping.ClassSpec) bool { return c.Device == device })
 	k.filters = slices.DeleteFunc(k.filters, func(f shaping.FilterSpec) bool {
-		return f.Device == device && f.Parent != ingressBlock
+		return f.Device == device && f.Parent != ingressBlock && f.Parent != EgressBlock
 	})
 }
 

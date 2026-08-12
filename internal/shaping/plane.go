@@ -26,6 +26,9 @@ const (
 	clsactHandle uint32 = 0xffff0000
 	clsactParent uint32 = 0xfffffff1
 	ingressBlock uint32 = 0xfffffff2
+	// egressBlock is the other half of the SAME clsact qdisc. This panel installs
+	// nothing there and must still read it: deleting the hook takes it with us.
+	egressBlock uint32 = 0xfffffff3
 )
 
 // QdiscSpec is one qdisc. A leaf's Handle is assigned by the kernel and read back,
@@ -102,11 +105,11 @@ func (f FilterSpec) String() string {
 		f.Device, handleStr(f.Parent), f.Priority, f.Match, f.Prefix, target)
 }
 
-// same reports whether two filters are the same rule. The kernel-assigned handle
-// is excluded on purpose: including it would make every readback a difference.
-func (f FilterSpec) same(other FilterSpec) bool {
-	f.Handle, other.Handle = 0, 0
-	return f == other
+// identity is the rule as the diff compares it: comparable, and without the
+// kernel-assigned handle, which would otherwise make every readback a difference.
+func (f FilterSpec) identity() FilterSpec {
+	f.Handle = 0
+	return f
 }
 
 // handleStr renders a handle the way tc does, so an error message can be pasted

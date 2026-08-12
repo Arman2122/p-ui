@@ -101,7 +101,9 @@ func (kernelPlane) Snapshot(_ context.Context, device string) (Snapshot, error) 
 		})
 	}
 
-	for _, parent := range [...]uint32{rootHandle, ingressBlock} {
+	// The egress block is read but never written: it hangs off the same clsact as
+	// the ingress one, so a filter there is what makes deleting the hook a theft.
+	for _, parent := range [...]uint32{rootHandle, ingressBlock, egressBlock} {
 		filters, err := netlink.FilterList(target, parent)
 		if err != nil {
 			return Snapshot{}, classify(err)
