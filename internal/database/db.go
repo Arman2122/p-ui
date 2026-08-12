@@ -59,6 +59,7 @@ func allModels() []any {
 		&model.Egress{},
 		&model.Policy{},
 		&model.ClientPolicy{},
+		&model.PolicyInbound{},
 	}
 }
 
@@ -85,6 +86,9 @@ func initModels() error {
 		return err
 	}
 	if err := migratePolicyAssignmentForeignKey(); err != nil {
+		return err
+	}
+	if err := migratePlanTemplateInbounds(); err != nil {
 		return err
 	}
 	if err := normalizeApiTokenCreatedAtSeconds(); err != nil {
@@ -231,6 +235,26 @@ func migratePolicyAssignmentForeignKey() error {
 	}
 	return addConstraintOnce("client_policies", policyAssignmentFK,
 		`FOREIGN KEY (policy_id) REFERENCES policies(id) ON DELETE SET NULL`)
+}
+
+/*
+migratePlanTemplateInbounds pins the membership table a plan provisions onto.
+
+CASCADE on both sides, unlike the assignment above: an assignment to a deleted
+plan is worth reporting as unresolved, but a membership naming a deleted inbound
+carries no evidence anyone needs. The plan columns themselves need no backfill —
+they land NULL, which is exactly "this plan manages nothing".
+*/
+func migratePlanTemplateInbounds() error {
+	if !db.Migrator().HasTable(&model.PolicyInbound{}) {
+		return nil
+	}
+	if err := addConstraintOnce("policy_inbounds", "fk_policy_inbounds_policy",
+		`FOREIGN KEY (policy_id) REFERENCES policies(id) ON DELETE CASCADE`); err != nil {
+		return err
+	}
+	return addConstraintOnce("policy_inbounds", "fk_policy_inbounds_inbound",
+		`FOREIGN KEY (inbound_id) REFERENCES inbounds(id) ON DELETE CASCADE`)
 }
 
 // AutoMigrate adds the column; this only backfills the NULLs the ALTER TABLE on

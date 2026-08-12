@@ -1186,9 +1186,31 @@ export const SCHEMAS: Record<string, unknown> = {
   "ClientPolicy": {
     "description": "/*\nClientPolicy assigns one client a policy, keyed by EMAIL and not by client id.\n\nclient_credentials is client-id keyed and dies with its client, which is right\nfor a credential: a recreated client legitimately gets a fresh UUID. It is wrong\nfor a plan. Deleting a client hard-deletes the row and a node re-sync mints a new\nid for the same email, so an id-keyed assignment would silently vanish and drop a\npaying customer back to no plan. client_traffics is email-keyed for exactly this\nreason — a quota survives a re-sync because of it — and an assignment has a\nquota's lifetime, not a UUID's.\n*/",
     "properties": {
+      "appliedRev": {
+        "description": "AppliedRev is what the PANEL's own writes reached, never what a node holds.\nNode convergence rides MarkNodeDirtyTx and the pending indicator that exists.",
+        "example": 3,
+        "type": "integer"
+      },
       "email": {
         "example": "user1",
         "type": "string"
+      },
+      "overrideExpiry": {
+        "example": false,
+        "type": "boolean"
+      },
+      "overrideInbounds": {
+        "example": false,
+        "type": "boolean"
+      },
+      "overrideLimitIp": {
+        "example": false,
+        "type": "boolean"
+      },
+      "overrideQuota": {
+        "description": "The bit IS the override, and only explicit operator intent sets it. The value\nitself lives on the client, so it cannot be inferred by comparing to the plan.",
+        "example": false,
+        "type": "boolean"
       },
       "policyId": {
         "description": "PolicyId is nullable and the FK is ON DELETE SET NULL, not CASCADE: deleting\na plan must leave the assignment visible-and-unresolved for the UI to report.",
@@ -1203,7 +1225,12 @@ export const SCHEMAS: Record<string, unknown> = {
       }
     },
     "required": [
+      "appliedRev",
       "email",
+      "overrideExpiry",
+      "overrideInbounds",
+      "overrideLimitIp",
+      "overrideQuota",
       "updatedAt"
     ],
     "type": "object"
@@ -2893,13 +2920,35 @@ export const SCHEMAS: Record<string, unknown> = {
         "format": "int64",
         "type": "integer"
       },
+      "durationDays": {
+        "example": 30,
+        "nullable": true,
+        "type": "integer"
+      },
       "id": {
         "example": 1,
+        "type": "integer"
+      },
+      "limitIp": {
+        "example": 2,
+        "nullable": true,
         "type": "integer"
       },
       "name": {
         "example": "fair use",
         "type": "string"
+      },
+      "quotaBytes": {
+        "description": "NULL means the plan does not manage the field; 0 means managed and unlimited.\nBoth states are needed, or the first edit of a ladder-only plan wipes members.",
+        "example": 53687091200,
+        "format": "int64",
+        "nullable": true,
+        "type": "integer"
+      },
+      "rev": {
+        "description": "Rev bumps only when a managed field or the inbound set changes, so editing a\nladder lights no pending badge. client_policies.applied_rev chases it.",
+        "example": 3,
+        "type": "integer"
       },
       "tiers": {
         "description": "Tiers is a policy.Tier array. Sorted and de-duplicated on write, so the\nevaluation on every pass is a scan and never a sort.",
@@ -2921,6 +2970,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "createdAt",
       "id",
       "name",
+      "rev",
       "tiers",
       "updatedAt"
     ],

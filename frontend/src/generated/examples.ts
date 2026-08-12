@@ -278,7 +278,12 @@ export const EXAMPLES: Record<string, unknown> = {
     "core": "wgkernel"
   },
   "ClientPolicy": {
+    "appliedRev": 3,
     "email": "user1",
+    "overrideExpiry": false,
+    "overrideInbounds": false,
+    "overrideLimitIp": false,
+    "overrideQuota": false,
     "policyId": 1,
     "updatedAt": 1700000000000
   },
@@ -683,8 +688,12 @@ export const EXAMPLES: Record<string, unknown> = {
   },
   "Policy": {
     "createdAt": 1700000000000,
+    "durationDays": 30,
     "id": 1,
+    "limitIp": 2,
     "name": "fair use",
+    "quotaBytes": 53687091200,
+    "rev": 3,
     "tiers": [
       {
         "downBps": 0,

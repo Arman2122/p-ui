@@ -12,7 +12,7 @@ const LADDER = [
   { fromBytes: 53687091200, upBps: 10000000, downBps: 10000000 },
 ];
 
-const PLAN = { id: 7, name: 'fair use', tiers: LADDER, createdAt: 0, updatedAt: 0 };
+const PLAN = { id: 7, name: 'fair use', tiers: LADDER, rev: 0, createdAt: 0, updatedAt: 0 };
 
 function mockWrites() {
   return vi.spyOn(HttpUtil, 'post').mockResolvedValue(new Msg(true, '', {}));

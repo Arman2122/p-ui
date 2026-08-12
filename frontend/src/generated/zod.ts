@@ -312,7 +312,12 @@ export const ClientLocalAddressSchema = z.object({
 export type ClientLocalAddress = z.infer<typeof ClientLocalAddressSchema>;
 
 export const ClientPolicySchema = z.object({
+  appliedRev: z.number().int(),
   email: z.string(),
+  overrideExpiry: z.boolean(),
+  overrideInbounds: z.boolean(),
+  overrideLimitIp: z.boolean(),
+  overrideQuota: z.boolean(),
   policyId: z.number().int().nullable().optional(),
   updatedAt: z.number().int(),
 });
@@ -695,8 +700,12 @@ export type PanelUpdateStatus = z.infer<typeof PanelUpdateStatusSchema>;
 
 export const PolicySchema = z.object({
   createdAt: z.number().int(),
+  durationDays: z.number().int().nullable().optional(),
   id: z.number().int(),
+  limitIp: z.number().int().nullable().optional(),
   name: z.string(),
+  quotaBytes: z.number().int().nullable().optional(),
+  rev: z.number().int(),
   tiers: z.unknown(),
   updatedAt: z.number().int(),
 });
