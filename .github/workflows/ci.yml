@@ -207,8 +207,11 @@ jobs:
           exit 1
       - name: Race + shuffle
         run: |
+          # -timeout, because Go's default is 10 minutes PER PACKAGE and the
+          # race-instrumented service suite sits right on it: a real hang still
+          # gets a stack dump, well before the job's own 45-minute cap.
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
-          go test -race -shuffle=on -count=1 -skip 'Scale$' $(cat /tmp/go-packages.txt)
+          go test -race -shuffle=on -count=1 -timeout 30m -skip 'Scale$' $(cat /tmp/go-packages.txt)
 
   # Brief native-fuzz smoke on the security-/parser-critical decoders. Each runs the
   # generated corpus plus 30s of exploration; a crash here is a real input-handling bug.
