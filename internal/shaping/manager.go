@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -264,10 +265,15 @@ func (m *Manager) convergeTree(ctx context.Context, device string, snap Snapshot
 		}
 	}
 
+	// Indexed once per tree rather than rescanned per entry: the steady-state pass
+	// writes nothing, and a linear scan on both sides made discovering that O(N^2).
+	wanted := index(wantFilters)
+	installed := index(view.filters)
+
 	// Every filter that is not exactly what is wanted goes first: it is what stops
 	// classification, and it is what unpins a class the GC is about to delete.
 	for _, have := range view.filters {
-		if slices.ContainsFunc(wantFilters, have.same) {
+		if wanted[have.identity()] {
 			continue
 		}
 		if err := m.plane.DelFilter(ctx, have); err != nil && !settledDel(err) {
@@ -289,7 +295,7 @@ func (m *Manager) convergeTree(ctx context.Context, device string, snap Snapshot
 		failures = append(failures, m.ensureClass(ctx, view, assigned[subject.key()], subject.rate)...)
 	}
 	for _, want := range wantFilters {
-		if slices.ContainsFunc(view.filters, want.same) {
+		if installed[want.identity()] {
 			continue
 		}
 		if err := m.plane.AddFilter(ctx, want); err != nil {
@@ -297,6 +303,16 @@ func (m *Manager) convergeTree(ctx context.Context, device string, snap Snapshot
 		}
 	}
 	return failures
+}
+
+// index keys filters on the identity the diff compares, so each side is walked
+// once. Handle is excluded because the kernel assigns it and a readback carries it.
+func index(filters []FilterSpec) map[FilterSpec]bool {
+	out := make(map[FilterSpec]bool, len(filters))
+	for _, filter := range filters {
+		out[filter.identity()] = true
+	}
+	return out
 }
 
 // ensureClass adds a class or changes its rate, and never deletes and re-adds:
@@ -398,14 +414,21 @@ func (m *Manager) convergeIngress(ctx context.Context, plan devicePlan, snap Sna
 	}
 
 	var have []FilterSpec
-	foreign := 0
+	// Counted, not merely noticed: this is what decides whether the shared hook
+	// may be removed. A filter AHEAD of ours is a different thing and aborts.
+	behind := 0
 	for _, filter := range snap.Filters {
 		switch {
+		case filter.Parent == egressBlock:
+			behind++
 		case filter.Parent != ingressBlock:
 		case filter.Prefix.IsValid() && filter.Priority == ourPriority(filter.Prefix) && filter.Match == MatchSrc:
 			have = append(have, filter)
+		case filter.Priority <= filterPrioV6:
+			return []error{fmt.Errorf("%w: %s is ahead of this panel's own ingress filters on %s and would classify their packets first",
+				ErrForeignObject, filter, plan.device)}
 		default:
-			foreign++
+			behind++
 		}
 	}
 	hooked := slices.ContainsFunc(snap.Qdiscs, func(q QdiscSpec) bool { return q.Parent == clsactParent })
@@ -417,8 +440,10 @@ func (m *Manager) convergeIngress(ctx context.Context, plan devicePlan, snap Sna
 		}
 		hooked = true
 	}
+	wanted := index(want)
+	installed := index(have)
 	for _, filter := range have {
-		if slices.ContainsFunc(want, filter.same) {
+		if wanted[filter.identity()] {
 			continue
 		}
 		if err := m.plane.DelFilter(ctx, filter); err != nil && !settledDel(err) {
@@ -426,16 +451,16 @@ func (m *Manager) convergeIngress(ctx context.Context, plan devicePlan, snap Sna
 		}
 	}
 	for _, filter := range want {
-		if slices.ContainsFunc(have, filter.same) {
+		if installed[filter.identity()] {
 			continue
 		}
 		if err := m.plane.AddFilter(ctx, filter); err != nil {
 			failures = append(failures, fmt.Errorf("shaping: install %s: %w", filter, err))
 		}
 	}
-	// The hook is shared: an operator's own ingress filter is reason enough to
-	// leave the qdisc in place, because deleting it would take theirs with it.
-	if len(want) == 0 && hooked && foreign == 0 {
+	// The hook is shared with the egress block: an operator's own filter on EITHER
+	// side is reason enough to leave the qdisc, because deleting it takes both.
+	if len(want) == 0 && hooked && behind == 0 {
 		if err := m.plane.DelQdisc(ctx, clsactQdisc(plan.device)); err != nil && !settledDel(err) {
 			failures = append(failures, fmt.Errorf("shaping: remove the ingress hook on %s: %w", plan.device, err))
 		}
@@ -458,7 +483,17 @@ func (m *Manager) collectMirrors(ctx context.Context, wanted map[string]bool) er
 	}
 	var failures []error
 	for _, name := range links {
-		if _, mine := ownedIFBID(name); !mine || wanted[name] {
+		id, mine := ownedIFBID(name)
+		if !mine || wanted[name] {
+			continue
+		}
+		pinned, err := m.stillRedirectedInto(ctx, id, name, links)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if pinned != "" {
+			logger.Debugf("shaping: %s still redirects into %s, so the mirror outlives this pass", pinned, name)
 			continue
 		}
 		if err := m.plane.DeleteIFB(ctx, name); err != nil && !settledDel(err) {
@@ -466,6 +501,33 @@ func (m *Manager) collectMirrors(ctx context.Context, wanted map[string]bool) er
 		}
 	}
 	return errors.Join(failures...)
+}
+
+/*
+stillRedirectedInto names a device whose mirred filters would be left pointing at
+a mirror this pass is about to delete.
+
+The kernel answers TC_ACT_SHOT to a redirect at a departed device, so collecting
+a mirror out from under a live filter does not leave that client unshaped — it
+disconnects them outright, which inverts the rule that shaping fails open. A
+device merely missing from this pass's want is not evidence that nothing feeds
+its mirror: only the parent's own tree is.
+*/
+func (m *Manager) stillRedirectedInto(ctx context.Context, id int, mirror string, links []string) (string, error) {
+	for _, prefix := range [...]string{wireguardPrefix, egressPrefix} {
+		parent := prefix + strconv.Itoa(id)
+		if !slices.Contains(links, parent) {
+			continue
+		}
+		snap, err := m.plane.Snapshot(ctx, parent)
+		if err != nil {
+			return "", fmt.Errorf("shaping: read %s before collecting %s: %w", parent, mirror, err)
+		}
+		if slices.ContainsFunc(snap.Filters, func(f FilterSpec) bool { return f.Redirect == mirror }) {
+			return parent, nil
+		}
+	}
+	return "", nil
 }
 
 /*
@@ -485,21 +547,28 @@ func (m *Manager) Enforced(ctx context.Context, want DeviceWant) (map[string]Lim
 		return nil, planErr
 	}
 	out := map[string]Limits{}
-	down, err := m.readRates(ctx, plan.device, MatchDst)
+	device, err := m.plane.Snapshot(ctx, plan.device)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("shaping: read %s: %w", plan.device, err)
 	}
-	up, err := m.readRates(ctx, plan.mirror, MatchSrc)
+	mirror, err := m.plane.Snapshot(ctx, plan.mirror)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("shaping: read %s: %w", plan.mirror, err)
 	}
+	down := readRates(device, MatchDst)
+	up := readRates(mirror, MatchSrc)
+	// An upload budget bills only what the device actually feeds the mirror. An
+	// intact mirror tree nothing redirects into enforces exactly nothing, and
+	// reporting its rate is the confusion this readback exists to prevent.
+	fed := redirectedInto(device, plan.mirror)
 	for _, subject := range want.Subjects {
 		var limits Limits
 		for _, key := range subject.Keys {
-			if rate, ok := down[key.Prefix.Masked()]; ok {
+			prefix := key.Prefix.Masked()
+			if rate, ok := down[prefix]; ok {
 				limits.DownBps = int64(rate) * 8
 			}
-			if rate, ok := up[key.Prefix.Masked()]; ok {
+			if rate, ok := up[prefix]; ok && fed[prefix] {
 				limits.UpBps = int64(rate) * 8
 			}
 		}
@@ -510,16 +579,24 @@ func (m *Manager) Enforced(ctx context.Context, want DeviceWant) (map[string]Lim
 	return out, planErr
 }
 
+// redirectedInto names every prefix the device still hands to the mirror. It is
+// the half of the upload path that lives on the device the core owns.
+func redirectedInto(snap Snapshot, mirror string) map[netip.Prefix]bool {
+	out := map[netip.Prefix]bool{}
+	for _, filter := range snap.Filters {
+		if filter.Parent == ingressBlock && filter.Redirect == mirror && filter.Prefix.IsValid() {
+			out[filter.Prefix] = true
+		}
+	}
+	return out
+}
+
 // readRates resolves the kernel's own prefix -> class -> rate chain on one device.
 // An absent device reports nothing rather than failing: it is shaping nobody.
-func (m *Manager) readRates(ctx context.Context, device string, match MatchField) (map[netip.Prefix]uint64, error) {
-	snap, err := m.plane.Snapshot(ctx, device)
-	if err != nil {
-		return nil, fmt.Errorf("shaping: read %s: %w", device, err)
-	}
+func readRates(snap Snapshot, match MatchField) map[netip.Prefix]uint64 {
 	out := map[netip.Prefix]uint64{}
 	if !snap.Exists {
-		return out, nil
+		return out
 	}
 	rates := map[uint16]uint64{}
 	for _, class := range snap.Classes {
@@ -537,7 +614,7 @@ func (m *Manager) readRates(ctx context.Context, device string, match MatchField
 			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 // devices is the part of one snapshot this panel owns, indexed for the diff.

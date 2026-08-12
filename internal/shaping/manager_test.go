@@ -3,8 +3,10 @@ package shaping_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -760,5 +762,165 @@ func TestPreflightLeavesTheHostAsItFoundIt(t *testing.T) {
 	}
 	if tree := kernel.Tree(); len(tree) != 1 || !strings.Contains(tree[0], "noqueue") {
 		t.Fatalf("preflight left objects behind: %v", tree)
+	}
+}
+
+// clsactOn is the shared hook as the kernel reports it, so a test can remove it
+// out of band exactly as a device recreate does.
+func clsactOn(dev string) shaping.QdiscSpec {
+	return shaping.QdiscSpec{Device: dev, Type: "clsact", Handle: 0xffff0000, Parent: 0xfffffff1}
+}
+
+/*
+TestAForeignIngressFilterAheadOfOursIsAnError.
+
+The download half has always treated this as fatal; the ingress half counted it
+and carried on. tcf_classify returns on the FIRST filter that yields a verdict,
+so a foreign rule ahead of prio 100 swallows the packet and the panel's mirred
+redirect never runs — upload is then permanently unshaped while Converge says nil.
+*/
+func TestAForeignIngressFilterAheadOfOursIsAnError(t *testing.T) {
+	m, kernel := live(t, device)
+	w := want(subject("alice", 0, 10_000_000, alice4))
+	converge(t, m, w)
+
+	kernel.Seed(nil, nil, []shaping.FilterSpec{{Device: device, Parent: 0xfffffff2, Priority: 1}})
+	kernel.ResetOps()
+
+	err := m.Converge(context.Background(), w)
+	if !errors.Is(err, shaping.ErrForeignObject) {
+		t.Fatalf("Converge = %v, want ErrForeignObject", err)
+	}
+	if writes := kernel.Writes(); writes != 0 {
+		t.Fatalf("a shadowed ingress hook was still written to: %v", kernel.Ops())
+	}
+}
+
+// TestAnIngressFilterBehindOursIsLeftAlone: the same split the download tree
+// makes. Only a filter ahead of ours can steal a packet.
+func TestAnIngressFilterBehindOursIsLeftAlone(t *testing.T) {
+	m, kernel := live(t, device)
+	behind := shaping.FilterSpec{Device: device, Parent: 0xfffffff2, Priority: 900, Handle: 7}
+	kernel.Seed(nil, nil, []shaping.FilterSpec{behind})
+
+	converge(t, m, want(subject("alice", 0, 10_000_000, alice4)))
+	if !slices.Contains(kernel.Tree(), behind.String()) {
+		t.Fatalf("an ingress filter behind ours was deleted: %v", kernel.Tree())
+	}
+}
+
+/*
+TestAnOperatorsEgressFilterKeepsTheSharedHook.
+
+One clsact carries both blocks, so deleting it takes an administrator's tc-egress
+filters and BPF programs with it. The retention check has to see the half this
+panel never writes, which is why the snapshot reads it.
+*/
+func TestAnOperatorsEgressFilterKeepsTheSharedHook(t *testing.T) {
+	m, kernel := live(t, device)
+	operator := shaping.FilterSpec{Device: device, Parent: shapetest.EgressBlock, Priority: 1, Handle: 3}
+	kernel.Seed([]shaping.QdiscSpec{clsactOn(device)}, nil, []shaping.FilterSpec{operator})
+
+	converge(t, m, want(subject("alice", 0, 10_000_000, alice4)))
+	kernel.ResetOps()
+
+	// The routine edit: the client moves to a download-only tier, so this panel
+	// wants nothing on the hook any more.
+	converge(t, m, want(subject("alice", 10_000_000, 0, alice4)))
+	for _, op := range kernel.Ops() {
+		if strings.Contains(op, "clsact") {
+			t.Fatalf("the shared hook was removed under an operator's own filter: %v", kernel.Ops())
+		}
+	}
+	if !slices.Contains(kernel.Tree(), operator.String()) {
+		t.Fatalf("an operator's egress filter was deleted with the hook: %v", kernel.Tree())
+	}
+}
+
+/*
+TestAMirrorIsNotCollectedWhileALiveFilterRedirectsIntoIt.
+
+Reachable today by disabling an inbound: the device leaves DesiredInstances at
+once and its teardown is a different job on its own schedule. The kernel answers
+TC_ACT_SHOT to a redirect at a departed device, so reaping the mirror early does
+not leave the client unshaped — it disconnects them.
+*/
+func TestAMirrorIsNotCollectedWhileALiveFilterRedirectsIntoIt(t *testing.T) {
+	m, kernel := live(t, device)
+	converge(t, m, want(subject("alice", 0, 10_000_000, alice4)))
+	kernel.ResetOps()
+
+	converge(t, m, nil)
+	if !slices.Contains(kernel.Devices(), mirror) {
+		t.Fatalf("the mirror was reaped while %s still redirected into it: %v", device, kernel.Ops())
+	}
+	if writes := kernel.Writes(); writes != 0 {
+		t.Fatalf("a device left out of the want was still changed: %v", kernel.Ops())
+	}
+
+	// The parent's teardown is what makes the mirror collectable, and the very
+	// next pass takes it: keeping it is a delay, never a leak.
+	kernel.DelLink(device)
+	converge(t, m, nil)
+	if slices.Contains(kernel.Devices(), mirror) {
+		t.Fatalf("a mirror nothing points at survived: %v", kernel.Devices())
+	}
+}
+
+/*
+TestEnforcedReportsNoUploadWithoutTheRedirect.
+
+An intact mirror tree that nothing feeds is indistinguishable from an enforcing
+one unless the readback follows the whole chain. This is the state a wgkernel
+device recreate leaves: the clsact and every mirred filter die with the device
+while the ifb mirror survives.
+*/
+func TestEnforcedReportsNoUploadWithoutTheRedirect(t *testing.T) {
+	m, kernel := live(t, device)
+	w := want(subject("alice", 10_000_000, 10_000_000, alice4))
+	converge(t, m, w)
+
+	if err := kernel.DelQdisc(context.Background(), clsactOn(device)); err != nil {
+		t.Fatalf("remove the hook out of band: %v", err)
+	}
+	got, err := m.Enforced(context.Background(), w[0])
+	if err != nil {
+		t.Fatalf("Enforced: %v", err)
+	}
+	if want := (shaping.Limits{DownBps: 10_000_000}); got["alice"] != want {
+		t.Fatalf("Enforced[alice] = %+v, want %+v: the mirror tree is intact but nothing feeds it", got["alice"], want)
+	}
+}
+
+// crowd is one device carrying n shaped users, each on its own host prefix.
+func crowd(n int) []shaping.DeviceWant {
+	subjects := make([]shaping.Subject, 0, n)
+	for i := range n {
+		addr := netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)})
+		subjects = append(subjects, subject(fmt.Sprintf("user%d", i), 10_000_000, 10_000_000,
+			netip.PrefixFrom(addr, 32)))
+	}
+	return want(subjects...)
+}
+
+// BenchmarkSteadyStatePass times the pass that issues no write at all — the one
+// the cron runs every 10s and the only one whose cost is paid continuously.
+func BenchmarkSteadyStatePass(b *testing.B) {
+	for _, n := range []int{1000, 2000, 4000, 8000} {
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			kernel := shapetest.New()
+			kernel.AddLink(device)
+			m := shaping.NewManager(kernel)
+			w := crowd(n)
+			if err := m.Converge(context.Background(), w); err != nil {
+				b.Fatalf("build: %v", err)
+			}
+			b.ResetTimer()
+			for b.Loop() {
+				if err := m.Converge(context.Background(), w); err != nil {
+					b.Fatalf("Converge: %v", err)
+				}
+			}
+		})
 	}
 }
