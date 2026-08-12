@@ -97,6 +97,20 @@ one, so a scripted deploy or a restored backup can still produce an inbound that
 never comes up. The `wireguard` protocol works on those hosts either way,
 because Xray tunnels it in userspace.
 
+### Size the interface address up front
+
+Clients are allocated out of the interface address you configure, one `/32`
+each, starting at `.2`. A `/24` holds 254 of them, a `/22` holds 1022 and a
+`/16` holds 65534 — and the form shows how many are used as you go.
+
+Once the prefix fills, allocation continues in the surrounding `/16`, and every
+client out there needs a route of its own that the reconciler rechecks on every
+pass. Nothing breaks, but the addressing plan stops matching the interface.
+
+Widening later is safe and the network address does not move. **Narrowing or
+rebasing is refused** once clients exist, because the `.conf` files already on
+their devices carry the old address and no server can reach in and change them.
+
 ### Forwarding and NAT are yours to configure
 
 This is the one real difference in day-to-day operation. An Xray `wireguard`

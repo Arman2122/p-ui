@@ -93,3 +93,72 @@ describe('wgkernel forwarding notice', () => {
     expect(forwardingAlert().textContent).not.toContain('net.ipv4.ip_forward is 0');
   });
 });
+
+function wgkernelWithPool(address: string[], clientAddrs: string[]) {
+  return new DBInbound({
+    id: 8,
+    port: 51821,
+    listen: '',
+    protocol: 'wgkernel',
+    remark: 'pool',
+    enable: true,
+    settings: {
+      secretKey: '',
+      address,
+      mtu: 1420,
+      dns: '',
+      clients: clientAddrs.map((a, i) => ({ email: `c${i}@wgk`, allowedIPs: [a] })),
+    },
+    streamSettings: { security: 'none' },
+    sniffing: { enabled: false },
+    nodeId: null,
+  });
+}
+
+async function renderPoolForm(address: string[], clientAddrs: string[]) {
+  mockHost([]);
+  renderWithProviders(
+    <InboundFormModal
+      open
+      mode="edit"
+      dbInbound={wgkernelWithPool(address, clientAddrs)}
+      dbInbounds={[]}
+      availableNodes={[]}
+      onClose={() => {}}
+      onSaved={() => {}}
+    />,
+  );
+  for (let i = 0; i < 6; i += 1) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  }
+}
+
+/*
+The allocator leaves the configured prefix silently once it fills, and every
+client out there costs a kernel route rechecked on every pass. The form is the
+only place an operator can learn that before it happens.
+*/
+describe('wgkernel pool capacity', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('says how much of the configured prefix is used', async () => {
+    await renderPoolForm(['10.90.4.1/22'], ['10.90.4.2/32', '10.90.4.3/32']);
+
+    // A /22 offers .2 through .7.255 — 1022 addresses, the number the sizing
+    // advice quotes, so the form and the allocator agree.
+    expect(document.body.textContent).toContain('2 of 1022 addresses used in 10.90.4.0/22');
+  });
+
+  it('names the clients that have already spilled outside it', async () => {
+    await renderPoolForm(['10.90.4.1/22'], ['10.90.4.2/32', '10.90.0.9/32']);
+
+    expect(document.body.textContent).toContain('1 of 1022 addresses used in 10.90.4.0/22');
+    expect(document.body.textContent).toContain('1 client(s) are already outside it');
+  });
+
+  it('says nothing about a pool it cannot size', async () => {
+    await renderPoolForm(['fd00::1/64'], []);
+
+    expect(document.body.textContent).not.toContain('addresses used in');
+  });
+});

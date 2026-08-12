@@ -41,6 +41,7 @@ import {
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { useEgressesQuery, useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
+import { wireguardPoolUsage, type WireguardPoolClient } from '@/lib/xray/wireguard-pool';
 import { unavailableKinds } from '@/lib/cores/core-availability';
 import { Protocols } from '@/schemas/primitives';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
@@ -329,6 +330,14 @@ export default function InboundFormModal({
   const forwardingQuery = useEgressPreflightQuery({
     enabled: open && protocol === Protocols.WGKERNEL && wNodeId == null,
   });
+  /* Derived in the browser from settings the edit form already holds, so how
+     full the pool is costs no query of its own. */
+  const wgkAddresses = useWatch({ control, name: 'settings.address' });
+  const wgkClients = useWatch({ control, name: 'settings.clients' });
+  const poolUsage = useMemo(
+    () => wireguardPoolUsage(wgkAddresses as string[] | undefined, wgkClients as WireguardPoolClient[] | undefined),
+    [wgkAddresses, wgkClients],
+  );
   const [egressId, setEgressId] = useState<number | null>(null);
   const attachedEgressIdRef = useRef<number | null>(null);
 
@@ -709,6 +718,7 @@ export default function InboundFormModal({
           onEgressChange={setEgressId}
           nodeOwned={wNodeId != null}
           forwardingNotes={forwardingQuery.data?.forwardingNotes ?? []}
+          poolUsage={poolUsage}
         />
       )}
 
