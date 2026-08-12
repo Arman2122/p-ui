@@ -35,6 +35,8 @@ import { generateMtprotoSecret } from '@/lib/xray/inbound-defaults';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
 import { DateTimePicker, SelectAllClearButtons } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
+import { IpLimitControl } from '@/components/clients/IpLimitControl';
+import ClientPlanPanel, { POLICY_NONE, POLICY_UNLOADED } from './ClientPlanPanel';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
@@ -67,12 +69,16 @@ interface SaveMetaEdit {
   attach: number[];
   detach: number[];
   externalLinks: ExternalLinkInput[];
+  /* Absent when the plan did not change, so a save never rewrites an
+     assignment the form never managed to read. */
+  policyId?: number;
 }
 
 interface SaveMetaCreate {
   isEdit: false;
   email: string;
   externalLinks: ExternalLinkInput[];
+  policyId?: number;
 }
 
 interface SaveCreatePayload {
@@ -106,6 +112,10 @@ type Values = ClientFormValues & {
   wgAllowedIPs: string;
   secret: string;
   adTag: string;
+  /* The plan rides its own endpoint, so the form tracks what was loaded as well
+     as what is picked and only calls assign when the two differ. */
+  policyId: number;
+  policyIdBaseline: number;
 };
 
 const EMPTY: Values = {
@@ -135,6 +145,8 @@ const EMPTY: Values = {
   wgAllowedIPs: '',
   secret: '',
   adTag: '',
+  policyId: POLICY_NONE,
+  policyIdBaseline: POLICY_NONE,
 };
 
 function toExternalLinkRows(links: ExternalLink[] | undefined): ExternalLinkRow[] {
@@ -194,6 +206,7 @@ export default function ClientFormModal({
   const auth = useWatch({ control: methods.control, name: 'auth' });
   const wgPrivateKey = useWatch({ control: methods.control, name: 'wgPrivateKey' });
   const limitIp = useWatch({ control: methods.control, name: 'limitIp' });
+  const policyId = useWatch({ control: methods.control, name: 'policyId' });
   const {
     fields: externalLinkFields,
     append: appendExternalLink,
@@ -251,6 +264,8 @@ export default function ClientFormModal({
         wgAllowedIPs: client.allowedIPs || '',
         secret: client.secret || '',
         adTag: client.adTag || '',
+        policyId: POLICY_UNLOADED,
+        policyIdBaseline: POLICY_UNLOADED,
       };
       if (et < 0) {
         seed.delayedStart = true;
@@ -298,15 +313,21 @@ export default function ClientFormModal({
 
   /* Empty until the manifest lands. Both the Credentials tab and Save are gated
      on it, so no field is ever rendered — or omitted from a save — on a guess. */
-  const credentials = useMemo(() => {
-    if (!cores) return new Set<ClientCredentialName>();
+  /* One entry per attached inbound, not a set: two shaped inbounds each get the
+     contracted rate, and the plan panel says so. */
+  const attachedKinds = useMemo(() => {
     const kinds: string[] = [];
     for (const id of inboundIds || []) {
       const ib = (inbounds || []).find((row) => row.id === id);
       if (ib?.protocol) kinds.push(ib.protocol);
     }
-    return credentialsForKinds(cores, kinds);
-  }, [cores, inboundIds, inbounds]);
+    return kinds;
+  }, [inboundIds, inbounds]);
+
+  const credentials = useMemo(
+    () => (cores ? credentialsForKinds(cores, attachedKinds) : new Set<ClientCredentialName>()),
+    [cores, attachedKinds],
+  );
 
   const mtprotoDomain = useMemo(() => {
     for (const id of inboundIds || []) {
@@ -551,6 +572,12 @@ export default function ClientFormModal({
       .map((r) => ({ kind: r.kind, value: r.value.trim(), remark: (r.remark || '').trim() }))
       .filter((r) => r.value !== '');
 
+    /* POLICY_UNLOADED means the assignment was never read, so leaving it alone
+       is the only safe answer; an unchanged pick is not worth a write. */
+    const plan = values.policyId !== POLICY_UNLOADED && values.policyId !== values.policyIdBaseline
+      ? values.policyId
+      : undefined;
+
     setSubmitting(true);
     try {
       let msg;
@@ -565,11 +592,12 @@ export default function ClientFormModal({
           attach: toAttach,
           detach: toDetach,
           externalLinks,
+          policyId: plan,
         });
       } else {
         msg = await save(
           { client: clientPayload, inboundIds: values.inboundIds },
-          { isEdit: false, email: clientPayload.email as string, externalLinks },
+          { isEdit: false, email: clientPayload.email as string, externalLinks, policyId: plan },
         );
       }
       if (msg?.success) close();
@@ -652,7 +680,7 @@ export default function ClientFormModal({
                             </Space.Compact>
                           </Form.Item>
                         </Col>
-                        <Col xs={24} md={6}>
+                        <Col xs={24} md={12}>
                           <FormField
                             name="totalGB"
                             label={t('pages.clients.totalGB')}
@@ -661,26 +689,6 @@ export default function ClientFormModal({
                           >
                             <InputNumber min={0} step={1} style={{ width: '100%' }} />
                           </FormField>
-                        </Col>
-                        <Col xs={24} md={6}>
-                          <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')}>
-                            <Tooltip title={limitIpNotice || undefined}>
-                              <span style={{ display: 'flex', width: '100%' }}>
-                                <Space.Compact style={{ display: 'flex', flex: 1 }}>
-                                  <InputNumber value={limitIp} min={0} disabled={limitIpDisabled}
-                                    style={{ flex: 1, ...(limitIpDisabled ? { pointerEvents: 'none' } : null) }}
-                                    onChange={(v) => methods.setValue('limitIp', Number(v) || 0)} />
-                                  {isEdit && (
-                                    <Tooltip title={t('pages.clients.ipLog')}>
-                                      <Button aria-label={t('pages.clients.ipLog')} icon={<EyeOutlined />} loading={ipsLoading} onClick={openIpsModal}>
-                                        {clientIps.length > 0 ? clientIps.length : ''}
-                                      </Button>
-                                    </Tooltip>
-                                  )}
-                                </Space.Compact>
-                              </span>
-                            </Tooltip>
-                          </Form.Item>
                         </Col>
                       </Row>
 
@@ -799,6 +807,44 @@ export default function ClientFormModal({
                         <span style={{ marginLeft: 8 }}>{t('enable')}</span>
                       </Form.Item>
                     </>
+                  ),
+                },
+                {
+                  key: 'limits',
+                  label: t('pages.clients.tabLimits'),
+                  children: (
+                    <Row gutter={16}>
+                      <Col xs={24} md={12}>
+                        <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')}>
+                          <IpLimitControl
+                            value={limitIp}
+                            disabled={limitIpDisabled}
+                            notice={limitIpNotice || undefined}
+                            onChange={(v) => methods.setValue('limitIp', v)}
+                            addon={isEdit ? (
+                              <Tooltip title={t('pages.clients.ipLog')}>
+                                <Button aria-label={t('pages.clients.ipLog')} icon={<EyeOutlined />} loading={ipsLoading} onClick={openIpsModal}>
+                                  {clientIps.length > 0 ? clientIps.length : ''}
+                                </Button>
+                              </Tooltip>
+                            ) : undefined}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={12}>
+                        <ClientPlanPanel
+                          email={isEdit ? (client?.email ?? '') : ''}
+                          kinds={attachedKinds}
+                          cores={cores}
+                          value={policyId}
+                          onSeed={(id) => {
+                            methods.setValue('policyId', id);
+                            methods.setValue('policyIdBaseline', id);
+                          }}
+                          onSelect={(id) => methods.setValue('policyId', id)}
+                        />
+                      </Col>
+                    </Row>
                   ),
                 },
                 {

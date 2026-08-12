@@ -6,6 +6,7 @@ import { CopyOutlined, DownloadOutlined, EyeOutlined, QrcodeOutlined, ReloadOutl
 import { ClipboardManager, FileManager, HttpUtil, IntlUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
+import { formatIpLimit } from '@/lib/policies/labels';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { ClientRecord, InboundOption } from '@/hooks/useClients';
 import { isPostQuantumLink } from '@/lib/xray/inbound-link';
@@ -313,7 +314,7 @@ export default function ClientInfoModal({
                 </tr>
                 <tr>
                   <td>{t('pages.clients.ipLimit')}</td>
-                  <td>{!client.limitIp ? <Tag>∞</Tag> : <Tag>{client.limitIp}</Tag>}</td>
+                  <td><Tag>{formatIpLimit(client.limitIp ?? 0, t)}</Tag></td>
                 </tr>
                 <tr>
                   <td>{t('pages.inbounds.IPLimitlog')}</td>

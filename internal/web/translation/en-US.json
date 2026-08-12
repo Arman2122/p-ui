@@ -110,7 +110,8 @@
     "docs": "Documentation",
     "openMenu": "Open menu",
     "pinSidebar": "Pin sidebar",
-    "unpinSidebar": "Unpin sidebar"
+    "unpinSidebar": "Unpin sidebar",
+    "policies": "Speed Plans"
   },
   "pages": {
     "login": {
@@ -738,7 +739,7 @@
       "expiryTime": "Expiry",
       "addClients": "Add Clients",
       "limitIp": "IP Limit",
-      "limitIpDesc": "Maximum simultaneous IPs. 0 = unlimited.",
+      "limitIpDesc": "How many addresses may use this client at once. Unlimited places no cap.",
       "limitIpFail2banMissing": "Fail2ban is not installed, so the IP limit cannot be enforced. Install Fail2ban from the p-ui bash menu to enable this option.",
       "limitIpDisabled": "The IP limit feature is disabled on this server.",
       "password": "Password",
@@ -873,7 +874,9 @@
         "delOrphans": "{count} unattached clients deleted",
         "imported": "{count} clients imported",
         "importedMixed": "{ok} imported, {failed} skipped"
-      }
+      },
+      "tabLimits": "Limits",
+      "limitIpCapped": "Limit to"
     },
     "groups": {
       "name": "Name",
@@ -915,6 +918,51 @@
       "removeFromGroupTitle": "Remove clients from group \"{name}\"",
       "removeFromGroupDesc": "Select members to remove from this group. Clients themselves are kept (use \"Delete clients in group\" to remove them entirely).",
       "removeFromGroupResult": "Removed {count} client(s) from {name}."
+    },
+    "policies": {
+      "title": "Speed Plans",
+      "desc": "A plan is a ladder of tiers: each names the usage a client must reach before it applies and the speed they get from there. Below the lowest threshold a client is unlimited. A plain speed limit is a one-tier plan starting at zero. Editing a plan never restarts anything and never drops a connection.",
+      "add": "Add Plan",
+      "edit": "Edit Plan",
+      "name": "Plan name",
+      "namePlaceholder": "fair use",
+      "nameRequired": "Give the plan a name",
+      "ladder": "Tiers",
+      "empty": "No plans yet. Add one, then put a client on it from the client form.",
+      "deleteConfirm": "Delete this plan? Every client on it becomes unlimited until you reassign them.",
+      "unlimited": "Unlimited",
+      "capped": "Limit to",
+      "upload": "Upload limit",
+      "download": "Download limit",
+      "threshold": "Applies from",
+      "thresholdHint": "The usage a client must reach before this tier applies. Measured against the same figure their quota is enforced against.",
+      "thresholdInvalid": "A threshold cannot be negative",
+      "thresholdDuplicate": "Another tier already starts at this usage",
+      "rateRequired": "Enter a speed, or choose Unlimited",
+      "ratePlaceholder": "Speed",
+      "fromStart": "From the first byte",
+      "fromUsage": "From {used}",
+      "addTier": "Add tier",
+      "removeTier": "Remove tier",
+      "tierNumber": "Tier {number}",
+      "preview": "Stored as",
+      "belowFirstHint": "Below the lowest threshold the client is unlimited.",
+      "noTiersHint": "This plan has no tiers, so it limits nothing.",
+      "ratesReach": "Speed limits are enforced in the kernel, and only for these protocols",
+      "ratesReachNothing": "No protocol in this build can carry a speed limit. Plans still describe one, but nothing enforces it until a core that gives each client a kernel identity is installed.",
+      "plan": "Speed plan",
+      "planHint": "Applied within seconds of saving. It changes no protocol setting, so no connection drops.",
+      "noPlan": "No plan — no speed limit",
+      "unresolved": "This client is assigned a plan that no longer exists, so no speed limit applies. Pick another plan.",
+      "notShapeable": "Speed limits are not available on this protocol. Quota, expiry and IP limits still apply in full.",
+      "partlyShapeable": "Speed limits reach only this client’s inbounds on these protocols",
+      "perInbound": "This client is on more than one shapeable inbound, and the plan’s speed applies to each of them separately.",
+      "used": "Usage",
+      "inEffect": "Tier in effect",
+      "enforced": "Held by the kernel",
+      "notEnforcedYet": "Not enforced right now — the inbound’s device is down, or it lives on another node.",
+      "readbackFailed": "Could not read this client’s plan.",
+      "ipLimitValue": "{count} at a time"
     },
     "hosts": {
       "addHost": "Add Host",
