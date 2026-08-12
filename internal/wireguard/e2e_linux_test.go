@@ -164,6 +164,34 @@ func billedTo(deltas []Traffic, email string) int64 {
 	return sum
 }
 
+/*
+keyFileWgCanRead writes a private key somewhere the wg BINARY is allowed to open.
+
+Ubuntu 24.04 and 26.04 ship an AppArmor profile for /usr/bin/wg whose only file
+rule is `rw @{etc_rw}/wireguard/{,**}`, so a key under TempDir answers "fopen:
+Permission denied" and four of these tests fail on the newest supported distro
+for a reason that has nothing to do with the panel — which never shells out to
+wg at all, and drives the device over netlink.
+
+Falls back to TempDir where /etc/wireguard cannot be created, so a distro with no
+such profile is unaffected.
+*/
+func keyFileWgCanRead(t *testing.T, key string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll("/etc/wireguard", 0o700); err == nil {
+		if allowed, err := os.MkdirTemp("/etc/wireguard", "pui-e2e-"); err == nil {
+			t.Cleanup(func() { _ = os.RemoveAll(allowed) })
+			dir = allowed
+		}
+	}
+	path := filepath.Join(dir, "cli.key")
+	if err := os.WriteFile(path, []byte(key), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	return path
+}
+
 // liveTunnel puts a real WireGuard client in its own namespace, reached over a
 // veth pair, and returns a function that drives real traffic through it.
 func liveTunnel(t *testing.T, tag, name, srvPub, cliPriv string) func() {
@@ -193,10 +221,7 @@ func liveTunnel(t *testing.T, tag, name, srvPub, cliPriv string) func() {
 	sh("ip", "netns", "exec", ns, "ip", "link", "set", client, "up")
 	sh("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up")
 
-	kf := t.TempDir() + "/cli.key"
-	if err := os.WriteFile(kf, []byte(cliPriv), 0o600); err != nil {
-		t.Fatalf("write key: %v", err)
-	}
+	kf := keyFileWgCanRead(t, cliPriv)
 	sh("ip", "netns", "exec", ns, "ip", "link", "add", "wgc", "type", "wireguard")
 	sh("ip", "netns", "exec", ns, "ip", "addr", "add", "10.123.0.2/24", "dev", "wgc")
 	sh("ip", "netns", "exec", ns, "wg", "set", "wgc", "private-key", kf)
