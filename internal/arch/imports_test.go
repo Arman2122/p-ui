@@ -113,13 +113,14 @@ A core declares what its users ARE — a device, a kernel identity, a live sessi
 rules, the next core's author reads that as the pattern and product policy is
 per-core again. internal/egress joins the engines here: it is panel-owned kernel
 plumbing that a core's traffic crosses, and it has the same reason to stay
-ignorant of what a tier is.
+ignorant of what a tier is. internal/routing joins them for the same reason: it
+compiles where traffic goes and must never learn what a user is allowed.
 */
 func TestCoresDoNotImportPolicy(t *testing.T) {
 	root := repoRoot(t)
 	// Its own list: the engine fences above key off coreEnginePrefixes and must
 	// not start covering egress as a side effect of widening it here.
-	fenced := append(slices.Clone(coreEnginePrefixes), "internal/egress/")
+	fenced := append(slices.Clone(coreEnginePrefixes), "internal/egress/", "internal/routing/")
 	forbidden := []string{
 		modulePrefix + "/internal/policy",
 		modulePrefix + "/internal/shaping",
