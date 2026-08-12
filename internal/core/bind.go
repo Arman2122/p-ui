@@ -17,20 +17,21 @@ capability assertion anywhere else, seeded at zero so it cannot regress.
 type Bound struct {
 	Core Core
 
-	Supervise  Supervisor
-	Apply      InstanceApplier
-	HotApply   HotApplier
-	Users      UserProvisioner
-	UserSet    WholeSetUserProvisioner
-	Creds      CredentialDeclarer
-	Traffic    TrafficSource
-	TagTraffic TagTrafficSource
-	Online     OnlineReporter
-	Quota      QuotaEnforcer
-	Versions   VersionManager
-	Link       LinkRenderer
-	Shape      ShapingHost
-	Sessions   SessionReporter
+	Supervise   Supervisor
+	Apply       InstanceApplier
+	HotApply    HotApplier
+	Users       UserProvisioner
+	UserSet     WholeSetUserProvisioner
+	Creds       CredentialDeclarer
+	Traffic     TrafficSource
+	TagTraffic  TagTrafficSource
+	Online      OnlineReporter
+	Quota       QuotaEnforcer
+	Versions    VersionManager
+	Link        LinkRenderer
+	Shape       ShapingHost
+	Sessions    SessionReporter
+	CounterLoss CounterLossDeclarer
 }
 
 // Bind resolves every optional capability of c exactly once.
@@ -78,6 +79,9 @@ func Bind(c Core) *Bound {
 	if v, ok := c.(SessionReporter); ok {
 		b.Sessions = v
 	}
+	if v, ok := c.(CounterLossDeclarer); ok {
+		b.CounterLoss = v
+	}
 	return b
 }
 
@@ -106,6 +110,9 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	if b.Shape != nil && !shapesSomeKind(b.Core, b.Shape) {
 		problems = append(problems, "ShapingHost: implemented, but every kind answers SelectorNone; a core that can shape nothing declares nothing")
 	}
+	if b.CounterLoss != nil && !losesCountersOnSomeKind(b.Core, b.CounterLoss) {
+		problems = append(problems, "CounterLossDeclarer: implemented, but every kind answers false; not implementing it says the same thing")
+	}
 	return problems
 }
 
@@ -114,6 +121,17 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 func shapesSomeKind(c Core, h ShapingHost) bool {
 	for _, kind := range c.Kinds() {
 		if h.ShapingSelector(kind) != SelectorNone {
+			return true
+		}
+	}
+	return false
+}
+
+// losesCountersOnSomeKind reports whether any kind this core serves actually
+// pays the removal cost, which is the whole of what implementing it claims.
+func losesCountersOnSomeKind(c Core, d CounterLossDeclarer) bool {
+	for _, kind := range c.Kinds() {
+		if d.RemovalLosesCounters(kind) {
 			return true
 		}
 	}

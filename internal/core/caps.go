@@ -132,8 +132,10 @@ type SubjectKey struct {
 
 // ShapingTarget is one instance's shapeable surface as it stands right now.
 type ShapingTarget struct {
-	// Device is the interface this instance's decrypted traffic crosses. Empty means
-	// the core is not hosting it now — shaping goes quiet and retries, it does not fail.
+	// Device is the interface this instance's decrypted traffic crosses, and it MUST
+	// be named from one of the panel's own device namespaces (see shaping.Owns): the
+	// plane installs nothing on an interface it cannot prove it owns. Empty means the
+	// core is not hosting it now — shaping goes quiet and retries, it does not fail.
 	Device   string
 	Selector Selector
 	// Keys maps email to kernel identity. An email absent from it is a client this
@@ -183,6 +185,24 @@ recency and the cap itself are the panel's rules and never travel here.
 */
 type SessionReporter interface {
 	Sessions(ctx context.Context) ([]Session, error)
+}
+
+/*
+CounterLossDeclarer answers whether removing a user destroys the byte counters
+the panel bills from, so a soft product rule is never enforced by losing money.
+
+Measured for wgkernel: a peer remove ZEROES its counters while an allowed-IP,
+keepalive or preshared-key edit preserves them. The panel cannot see that from
+outside, and it must not be guessed from some other property — "can this core
+give its users a kernel identity" is a different question that happens to have
+the same answer for the one core that does both today.
+
+Per-kind for CredentialDeclarer's reason: Descriptor is core-grained and one core
+answers ten kinds. Not implementing it means removal costs nothing, which is the
+right default: every daemon that keeps its counters outside the user object.
+*/
+type CounterLossDeclarer interface {
+	RemovalLosesCounters(kind Kind) bool
 }
 
 // QuotaEnforcer pushes a byte budget into the daemon so overshoot is bounded by

@@ -92,6 +92,10 @@ reportOverLimit writes the fail2ban line and cuts the sessions that can be cut.
 Both appliers run after the evaluation's transaction has committed, so their
 filesystem and network round trips never extend a write lock the node sync also
 takes.
+
+AdvancedSince runs for EVERY evaluated client, not only the ones over a cap: it
+is what forgets a pair whose client came back under its limit, and a pair that is
+never forgotten can never be reported again once fail2ban's own ban lapses.
 */
 func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.IPLimitVerdict) {
 	if j.bannedSeen == nil {
