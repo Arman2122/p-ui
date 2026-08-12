@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 /*
 Policy is one named ladder of speed tiers, the whole product rule as a value.
 
@@ -19,6 +21,36 @@ type Policy struct {
 }
 
 func (Policy) TableName() string { return "policies" }
+
+// MarshalJSON emits the ladder as the array it is rather than as the JSON text
+// the column stores, which is the shape the OpenAPI schema already publishes.
+func (p Policy) MarshalJSON() ([]byte, error) {
+	type alias Policy
+	return json.Marshal(struct {
+		alias
+		Tiers json.RawMessage `json:"tiers"`
+	}{
+		alias: alias(p),
+		Tiers: jsonStringFieldToRaw(p.Tiers),
+	})
+}
+
+// UnmarshalJSON accepts tiers as an array or as JSON-encoded text. Without the
+// array branch every documented request body is rejected by the bind.
+func (p *Policy) UnmarshalJSON(data []byte) error {
+	type alias Policy
+	aux := struct {
+		*alias
+		Tiers json.RawMessage `json:"tiers"`
+	}{
+		alias: (*alias)(p),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	p.Tiers = jsonStringFieldFromRaw(aux.Tiers)
+	return nil
+}
 
 /*
 ClientPolicy assigns one client a policy, keyed by EMAIL and not by client id.
