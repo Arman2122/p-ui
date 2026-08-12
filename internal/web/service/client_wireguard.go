@@ -93,6 +93,55 @@ func (s *InboundService) checkWireguardAddressConflict(inbound *model.Inbound, i
 	return nil
 }
 
+/*
+checkWireguardAddressCoverage refuses an interface-address edit that would strand
+the clients it already allocated.
+
+Rebasing 10.90.0.1/24 to 10.91.0.1/24, or narrowing a /16 to a /24, fails
+INVISIBLY today: desiredRoutes installs a per-peer route for anything the device
+prefix no longer covers, so every client keeps working while the addressing plan
+stops meaning anything and the .conf files already on their devices no longer
+relate to the interface. Refused rather than migrated, because a server cannot
+reach into a config a user is already holding: renumbering silently would break
+exactly the people it was trying to keep working. Widening always passes.
+
+Only a client the OLD prefixes covered counts. An inbound whose pool widened past
+its own /24 has clients outside it already, and holding an edit hostage to those
+would refuse edits that fix nothing.
+*/
+func checkWireguardAddressCoverage(oldInbound, inbound *model.Inbound) error {
+	if !ownsHostWireguardDevice(inbound.Protocol) {
+		return nil
+	}
+	before := wireguardDeviceAddresses(oldInbound.Settings)
+	after := wireguardDeviceAddresses(inbound.Settings)
+	if len(before) == 0 || len(after) == 0 {
+		return nil
+	}
+	for _, raw := range wireguardClientAddresses(inbound.Settings) {
+		held, err := netip.ParsePrefix(strings.TrimSpace(raw))
+		if err != nil || !wireguardCovers(before, held) || wireguardCovers(after, held) {
+			continue
+		}
+		return common.NewError("wireguard: client address", held.String(),
+			"is inside the interface address it was allocated from and outside every address this edit leaves;",
+			"widen the interface address instead, or remove the clients first — their .conf files carry the old one")
+	}
+	return nil
+}
+
+// wireguardCovers mirrors the engine's coveredByAddrs: a prefix is covered when
+// a device address is no narrower and contains it.
+func wireguardCovers(addrs []netip.Prefix, p netip.Prefix) bool {
+	for _, a := range addrs {
+		network := a.Masked()
+		if network.Bits() <= p.Bits() && network.Contains(p.Addr()) {
+			return true
+		}
+	}
+	return false
+}
+
 // wireguardClientAddresses reads the tunnel addresses an inbound's clients hold.
 // On a kernel device each one is a real route in the ONE host routing table.
 func wireguardClientAddresses(settings string) []string {

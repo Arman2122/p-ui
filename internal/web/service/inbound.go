@@ -1373,6 +1373,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if err := s.checkWireguardAddressConflict(inbound, inbound.Id); err != nil {
 		return inbound, false, err
 	}
+	if err := checkWireguardAddressCoverage(oldInbound, inbound); err != nil {
+		return inbound, false, err
+	}
 
 	// Capture the pre-edit protocol and routing state before oldInbound is
 	// overwritten with the new values further down, then ensure a routed
