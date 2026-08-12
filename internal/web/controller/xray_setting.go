@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/integration"
@@ -106,6 +107,13 @@ func (a *XraySettingController) getXraySetting(c *gin.Context) {
 		"inboundTags":       json.RawMessage(inboundTags),
 		"clientReverseTags": json.RawMessage(clientReverseTags),
 		"outboundTestUrl":   outboundTestUrl,
+	}
+	// Which of those tags a rule can actually name. A read that fails here must not
+	// fail the page: the editor falls back to the flat tag list it has always had.
+	if subjects, subjErr := a.InboundService.GetRoutingSubjects(); subjErr == nil {
+		xrayResponse["routingSubjects"] = subjects
+	} else {
+		logger.Warning("routing subjects unavailable, the editor falls back to plain tags:", subjErr)
 	}
 
 	// Surface subscription outbounds (and their tags) so the frontend can:

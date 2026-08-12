@@ -21,8 +21,8 @@ import RuleFormModal from './RuleFormModal';
 import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
 import { useRoutingColumns } from './useRoutingColumns';
-import { arrJoin, originalRuleIndex } from './helpers';
-import type { RuleRow } from './types';
+import { arrJoin, buildInboundTagOptions, originalRuleIndex } from './helpers';
+import type { RoutingSubject, RuleRow } from './types';
 import type { XraySettingsValue, SetTemplate } from '@/hooks/useXraySetting';
 import type { RuleObject } from '@/schemas/routing';
 import './RoutingTab.css';
@@ -31,6 +31,7 @@ interface RoutingTabProps {
   templateSettings: XraySettingsValue | null;
   setTemplateSettings: SetTemplate;
   inboundTags: string[];
+  routingSubjects?: RoutingSubject[];
   clientReverseTags: string[];
   subscriptionOutboundTags?: string[];
   isMobile: boolean;
@@ -40,6 +41,7 @@ export default function RoutingTab({
   templateSettings,
   setTemplateSettings,
   inboundTags,
+  routingSubjects,
   clientReverseTags,
   subscriptionOutboundTags,
   isMobile,
@@ -111,11 +113,11 @@ export default function RoutingTab({
 
   const inboundTagOptions = useMemo(() => {
     const seen = new Set<string>();
-    const out: string[] = [];
+    const templateTags: string[] = [];
     const push = (tag?: string) => {
       if (!tag || seen.has(tag) || isBalancerLoopbackTag(tag)) return;
       seen.add(tag);
-      out.push(tag);
+      templateTags.push(tag);
     };
     for (const ib of (templateSettings?.inbounds as Array<{ tag?: string }>) || []) push(ib?.tag);
     for (const tag of inboundTags || []) push(tag);
@@ -127,8 +129,8 @@ export default function RoutingTab({
     for (const s of (templateSettings?.dns as { servers?: Array<{ tag?: string }> } | undefined)?.servers || []) {
       if (typeof s === 'object' && s?.tag) push(s.tag);
     }
-    return out;
-  }, [templateSettings, inboundTags]);
+    return buildInboundTagOptions(routingSubjects, templateTags);
+  }, [templateSettings, inboundTags, routingSubjects]);
 
   const outboundTagOptions = useMemo(() => {
     const out = new Set<string>(['']);
@@ -312,6 +314,7 @@ export default function RoutingTab({
 
   const desktopColumns = useRoutingColumns({
     isMobile,
+    inboundTagOptions,
     rowsLength: rows.length,
     showSource: hasSource,
     showBalancer: hasBalancer,

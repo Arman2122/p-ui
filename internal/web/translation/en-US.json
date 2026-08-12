@@ -1941,7 +1941,16 @@
         "poolSize": "Pool Size"
       },
       "defaultOutbound": "Default Outbound",
-      "defaultOutboundDesc": "Traffic that does not match any routing rule uses this outbound (Xray uses the first outbound in the list)."
+      "defaultOutboundDesc": "Traffic that does not match any routing rule uses this outbound (Xray uses the first outbound in the list).",
+      "subjects": {
+        "neverMatches": "Never matches",
+        "neverMatchesTip": "This rule names an inbound the router cannot see. Pick a routable inbound or delete the rule.",
+        "reasonBridgeOff": "This inbound can be bridged into Xray's router, but its Route through Xray switch is off. Turn it on in the inbound's form and this tag becomes routable.",
+        "reasonDisabled": "This inbound is disabled, so the router never sees it.",
+        "reasonNoXrayInbound": "This inbound is served outside Xray, so Xray's router never sees its traffic and this tag can never match.",
+        "reasonNode": "This inbound is served by a node's own core. Rules saved here reach this host only, so it can never match.",
+        "reasonUnknownCore": "No core in this build serves this protocol, so the inbound is quarantined and never started."
+      }
     }
   },
   "tgbot": {

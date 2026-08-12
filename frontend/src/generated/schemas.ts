@@ -3130,6 +3130,43 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "RoutingSubject": {
+    "description": "RoutingSubject is one inbound as a routing rule may name it. An unroutable tag\nis offered disabled with ReasonKey, never hidden — hiding it reads as data loss.",
+    "properties": {
+      "id": {
+        "example": 3,
+        "type": "integer"
+      },
+      "protocol": {
+        "example": "vless",
+        "type": "string"
+      },
+      "reasonKey": {
+        "example": "pages.xray.subjects.reasonNode",
+        "type": "string"
+      },
+      "remark": {
+        "example": "main vless",
+        "type": "string"
+      },
+      "routable": {
+        "example": true,
+        "type": "boolean"
+      },
+      "tag": {
+        "example": "inbound-443",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "protocol",
+      "remark",
+      "routable",
+      "tag"
+    ],
+    "type": "object"
+  },
   "Setting": {
     "description": "Setting stores key-value configuration settings for the Penhoon UI panel.",
     "properties": {

@@ -35,9 +35,21 @@ export const XraySettingsValueSchema = z.object({
   fakedns: z.unknown().optional(),
 }).loose();
 
+/* One inbound as a routing rule may name it. An unroutable tag is offered
+   disabled with its reason, never hidden — hiding it reads as data loss. */
+export const RoutingSubjectSchema = z.object({
+  id: z.number(),
+  tag: z.string(),
+  remark: z.string().optional(),
+  protocol: z.string().optional(),
+  routable: z.boolean(),
+  reasonKey: z.string().optional(),
+});
+
 export const XrayConfigPayloadSchema = z.object({
   xraySetting: XraySettingsValueSchema,
   inboundTags: z.array(z.string()).optional(),
+  routingSubjects: z.array(RoutingSubjectSchema).optional(),
   clientReverseTags: z.array(z.string()).optional(),
   outboundTestUrl: z.string().optional(),
   // Subscription outbounds are injected at runtime (not persisted in xraySetting).

@@ -8,11 +8,14 @@ import { keys } from '@/api/queryKeys';
 import {
   OutboundTrafficListSchema,
   OutboundTestResultListSchema,
+  RoutingSubjectSchema,
   XrayConfigPayloadSchema,
   XraySettingsValueSchema,
   type OutboundTestResult,
   type OutboundTrafficRow,
 } from '@/schemas/xray';
+
+type RoutingSubject = z.infer<typeof RoutingSubjectSchema>;
 
 const DEFAULT_TEST_URL = 'https://www.google.com/generate_204';
 // One HTTP-mode batch request tests this many outbounds through a single
@@ -60,6 +63,7 @@ export interface UseXraySettingResult {
   outboundTestUrl: string;
   setOutboundTestUrl: (v: string) => void;
   inboundTags: string[];
+  routingSubjects: RoutingSubject[];
   clientReverseTags: string[];
   subscriptionOutbounds: unknown[];
   subscriptionOutboundTags: string[];
@@ -134,6 +138,7 @@ export function useXraySetting(): UseXraySettingResult {
   const [savedXraySetting, setSavedXraySetting] = useState('');
   const [savedOutboundTestUrl, setSavedOutboundTestUrl] = useState(DEFAULT_TEST_URL);
   const [inboundTags, setInboundTags] = useState<string[]>([]);
+  const [routingSubjects, setRoutingSubjects] = useState<RoutingSubject[]>([]);
   const [clientReverseTags, setClientReverseTags] = useState<string[]>([]);
   const [subscriptionOutbounds, setSubscriptionOutbounds] = useState<unknown[]>([]);
   const [subscriptionOutboundTags, setSubscriptionOutboundTags] = useState<string[]>([]);
@@ -164,6 +169,7 @@ export function useXraySetting(): UseXraySettingResult {
     const pretty = JSON.stringify(obj.xraySetting, null, 2);
     const nextUrl = normalizeOutboundTestUrl(obj.outboundTestUrl || '');
     setInboundTags(obj.inboundTags || []);
+    setRoutingSubjects(obj.routingSubjects || []);
     setClientReverseTags(obj.clientReverseTags || []);
     setSubscriptionOutbounds(obj.subscriptionOutbounds || []);
     setSubscriptionOutboundTags(obj.subscriptionOutboundTags || []);
@@ -448,6 +454,7 @@ export function useXraySetting(): UseXraySettingResult {
       outboundTestUrl,
       setOutboundTestUrl,
       inboundTags,
+      routingSubjects,
       clientReverseTags,
       subscriptionOutbounds,
       subscriptionOutboundTags,
@@ -476,6 +483,7 @@ export function useXraySetting(): UseXraySettingResult {
       outboundTestUrl,
       setOutboundTestUrl,
       inboundTags,
+      routingSubjects,
       clientReverseTags,
       subscriptionOutbounds,
       subscriptionOutboundTags,

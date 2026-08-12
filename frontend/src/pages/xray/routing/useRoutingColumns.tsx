@@ -16,10 +16,11 @@ import type { ColumnsType } from 'antd/es/table';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import CriterionRow from './CriterionRow';
 import { buildRemarkByTag, formatInboundTagList, inboundTagsDisplayTitle, isApiRule } from './helpers';
-import type { RuleRow } from './types';
+import type { InboundTagOption, RuleRow } from './types';
 
 interface RoutingColumnsParams {
   isMobile: boolean;
+  inboundTagOptions?: InboundTagOption[];
   rowsLength: number;
   showSource: boolean;
   showBalancer: boolean;
@@ -33,6 +34,7 @@ interface RoutingColumnsParams {
 
 export function useRoutingColumns({
   isMobile,
+  inboundTagOptions,
   rowsLength,
   showSource,
   showBalancer,
@@ -46,6 +48,16 @@ export function useRoutingColumns({
   const { t } = useTranslation();
   const { data: inboundOptions } = useInboundOptions();
   const remarkByTag = useMemo(() => buildRemarkByTag(inboundOptions || []), [inboundOptions]);
+  /* A tag the router provably never sees. The rule was accepted at save and has
+     been doing nothing ever since, which is the one thing no screen used to say. */
+  const unroutable = useMemo(
+    () => new Set((inboundTagOptions || []).filter((o) => o.disabled).map((o) => o.value)),
+    [inboundTagOptions],
+  );
+  const deadTags = useMemo(
+    () => (raw?: string) => (raw ? raw.split(',').map((s) => s.trim()).filter((s) => unroutable.has(s)) : []),
+    [unroutable],
+  );
   return useMemo(
     () => [
       {
@@ -171,6 +183,11 @@ export function useRoutingColumns({
                   title={`Inbound tag: ${inboundTagsDisplayTitle(record.inboundTag, remarkByTag) ?? inboundParts.join(', ')}`}
                 />
               )}
+              {deadTags(record.inboundTag).map((tag) => (
+                <Tag color="error" key={tag} title={t('pages.xray.subjects.neverMatchesTip')}>
+                  {t('pages.xray.subjects.neverMatches')}
+                </Tag>
+              ))}
               {record.user && <CriterionRow label="User" value={record.user} title={`User: ${record.user}`} />}
               {inboundParts.length === 0 && !record.user && <span className="criterion-empty">—</span>}
             </div>
@@ -209,6 +226,6 @@ export function useRoutingColumns({
           ),
       },
     ],
-    [t, isMobile, rowsLength, showSource, showBalancer, remarkByTag, onHandlePointerDown, openEdit, moveUp, moveDown, confirmDelete, toggleRule],
+    [t, isMobile, rowsLength, showSource, showBalancer, remarkByTag, deadTags, onHandlePointerDown, openEdit, moveUp, moveDown, confirmDelete, toggleRule],
   );
 }

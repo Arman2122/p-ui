@@ -701,6 +701,15 @@ export interface RealityScanResult {
   x25519: boolean;
 }
 
+export interface RoutingSubject {
+  id: number;
+  protocol: string;
+  reasonKey?: string;
+  remark: string;
+  routable: boolean;
+  tag: string;
+}
+
 export interface Setting {
   id: number;
   key: string;
