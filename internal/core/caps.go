@@ -250,3 +250,95 @@ type Share struct {
 	Filename string `json:"filename,omitempty"`
 	Body     string `json:"body"`
 }
+
+/*
+IngressSelector is how a core's traffic is selected for routing, per kind and
+static so a form can gate a field before any instance exists.
+
+A closed vocabulary like Selector's: an unknown value reads as "cannot route",
+which is the fail-closed answer. An L7 proxy is its own router and answers
+IngressInternal; a core whose decrypted traffic crosses a kernel interface
+answers IngressDevice, and the panel routes it by that interface.
+*/
+type IngressSelector string
+
+const (
+	IngressNone     IngressSelector = ""
+	IngressInternal IngressSelector = "internal"
+	IngressDevice   IngressSelector = "device"
+)
+
+// IngressHandle is one instance's routable surface as it stands right now.
+type IngressHandle struct {
+	// Device is the interface the decrypted traffic crosses. Empty is not a failure:
+	// the core is not hosting it now, so routing goes quiet and retries.
+	Device string
+	// Tag is the inbound tag an internal ingress already answers to. Empty with
+	// BlockedKey set means the daemon exposes no tag today.
+	Tag string
+	// BlockedKey is an i18n key naming why this instance cannot be routed now. It
+	// is a key rather than a sentence because the panel ships two locales.
+	BlockedKey string
+}
+
+// RoutableIngress declares that a rule may name this core's inbounds as a source.
+// Without it a core's traffic is not routable and the editor says so.
+type RoutableIngress interface {
+	IngressSelector(kind Kind) IngressSelector
+	IngressHandle(ctx context.Context, inst Instance) (IngressHandle, error)
+}
+
+// ExitHandleKind is what an exit offers the router. Closed vocabulary as above.
+type ExitHandleKind string
+
+const (
+	ExitNone         ExitHandleKind = ""
+	ExitDevice       ExitHandleKind = "device"
+	ExitSocksPort    ExitHandleKind = "socksPort"
+	ExitXrayOutbound ExitHandleKind = "xrayOutbound"
+)
+
+/*
+SourceOwner says who rewrites the source address once traffic leaves an exit.
+
+Load-bearing rather than descriptive: a kernel forward keeps the ingress
+client's inner source, which every upstream that is not a peer drops. A daemon
+that does not NAT its own tunnel needs the panel to, and the panel cannot yet —
+egress.Plane has no netfilter object — so SourceOwnerPanel is a refusal.
+*/
+type SourceOwner string
+
+const (
+	SourceOwnerDaemon SourceOwner = "daemon"
+	SourceOwnerPanel  SourceOwner = "panel"
+)
+
+// ExitHandle is one uplink as it stands right now; exactly one handle is set.
+type ExitHandle struct {
+	Device    string
+	SocksPort int
+	XrayTag   string
+	Source    SourceOwner
+}
+
+/*
+Exit is one uplink instance.
+
+Separate from Instance because an exit has no inbound row, no users and no
+per-user accounting — the three things Instance exists to carry. Settings is
+opaque here, exactly as Instance.Settings is.
+*/
+type Exit struct {
+	ID       int
+	Kind     Kind
+	Enable   bool
+	Settings string
+}
+
+// RoutableEgress declares that this core can terminate traffic somebody else
+// routed to it, which is the other half of any-core-in to any-core-out.
+type RoutableEgress interface {
+	ExitKinds() []Kind
+	ExitHandleKind(kind Kind) ExitHandleKind
+	ExitHandle(ctx context.Context, exit Exit) (ExitHandle, error)
+}

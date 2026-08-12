@@ -1492,7 +1492,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		oldInbound.Protocol = inbound.Protocol
 		// A protocol with no ingress device cannot be selected on, so keeping the
 		// reference would pin the egress against every delete and disable forever.
-		if _, selectable := egressIngressDevice(oldInbound); !selectable {
+		if !egressIngressSelectable(oldInbound) {
 			oldInbound.EgressID = nil
 		}
 		oldInbound.Settings = inbound.Settings

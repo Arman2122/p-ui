@@ -4,6 +4,7 @@ package mtproto
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"sync"
@@ -223,3 +224,37 @@ func (c *Core) OnlineEmails(_ context.Context) ([]string, error) {
 func (c *Core) ResetQuota(_ context.Context, email string) error {
 	return c.mgr.ResetQuota(email)
 }
+
+// IngressSelector: the sidecar terminates MTProto and hands the plaintext to
+// Xray over a loopback bridge, so the routable surface is a tag, not a device.
+func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
+	if kind != Kind {
+		return core.IngressNone
+	}
+	return core.IngressInternal
+}
+
+/*
+IngressHandle answers with the bridge tag, or names why there is none.
+
+Without routeThroughXray the sidecar carries the traffic straight out and Xray's
+router never sees a packet, so a rule naming this inbound could never match. The
+blocked key is the reason the editor shows instead of offering a dead tag.
+*/
+func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
+	var parsed struct {
+		RouteThroughXray bool `json:"routeThroughXray"`
+		RouteXrayPort    int  `json:"routeXrayPort"`
+	}
+	if err := json.Unmarshal([]byte(inst.Settings), &parsed); err != nil {
+		return core.IngressHandle{BlockedKey: blockedBridgeOff}, nil
+	}
+	if !parsed.RouteThroughXray || parsed.RouteXrayPort <= 0 {
+		return core.IngressHandle{BlockedKey: blockedBridgeOff}, nil
+	}
+	return core.IngressHandle{Tag: inst.Tag}, nil
+}
+
+// blockedBridgeOff is the i18n key the routing editor renders. Declared here so
+// the reason travels with the core that knows it, not with the web layer.
+const blockedBridgeOff = "pages.xray.subjects.reasonBridgeOff"

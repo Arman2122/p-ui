@@ -2,6 +2,7 @@
 package cores
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -102,4 +103,29 @@ func Default(deps Deps) (*core.Registry, error) {
 		return nil, err
 	}
 	return reg, nil
+}
+
+/*
+IngressSelectorFor answers how a kind's traffic is selected for routing.
+
+Here rather than in the service layer for ServedByXray's reason: this package is
+the one place allowed to name a concrete core, so the router asks the registry
+and a new core becomes routable by registering, not by editing a switch.
+*/
+func IngressSelectorFor(kind core.Kind) core.IngressSelector {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Ingress == nil {
+		return core.IngressNone
+	}
+	return bound.Ingress.IngressSelector(kind)
+}
+
+// IngressHandleFor resolves one instance's routable surface right now. A core
+// without the capability answers an empty handle, which reads as "not routable".
+func IngressHandleFor(ctx context.Context, inst core.Instance) (core.IngressHandle, error) {
+	bound, ok := kindOwners().For(inst.Kind)
+	if !ok || bound.Ingress == nil {
+		return core.IngressHandle{}, nil
+	}
+	return bound.Ingress.IngressHandle(ctx, inst)
 }

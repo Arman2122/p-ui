@@ -288,3 +288,23 @@ func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
 	}
 	return out, nil
 }
+
+// IngressSelector answers for this core's own kind alone: decrypted traffic
+// leaves the tunnel across a kernel interface, so the panel routes it by that.
+func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
+	if kind != Kind {
+		return core.IngressNone
+	}
+	return core.IngressDevice
+}
+
+/*
+IngressHandle names the interface this instance's traffic crosses.
+
+This is the resolver that used to live in the service layer as a protocol
+comparison. Selection is by ingress device because cryptokey routing has already
+proven the peer's identity by the time a packet appears there.
+*/
+func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
+	return core.IngressHandle{Device: engine.InterfaceName(inst.ID)}, nil
+}
