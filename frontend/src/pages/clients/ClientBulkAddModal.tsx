@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AutoComplete, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Tooltip, message } from 'antd';
+import { AutoComplete, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
@@ -12,6 +12,7 @@ import { supportsMultipleClients } from '@/lib/inbounds/multi-client';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives';
 import { DateTimePicker, SelectAllClearButtons } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
+import { IpLimitControl } from '@/components/clients/IpLimitControl';
 import { useClients, type InboundOption } from '@/hooks/useClients';
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
 import { ClientBulkAddFormSchema, type ClientBulkAddFormValues } from '@/schemas/client';
@@ -314,14 +315,13 @@ export default function ClientBulkAddModal({
               </FormField>
             )}
 
-            <Form.Item label={t('pages.clients.limitIp')}>
-              <Tooltip title={limitIpNotice || undefined}>
-                <span style={{ display: 'inline-flex' }}>
-                  <InputNumber value={limitIp} min={0} disabled={limitIpDisabled}
-                    style={limitIpDisabled ? { pointerEvents: 'none' } : undefined}
-                    onChange={(v) => methods.setValue('limitIp', Number(v) || 0)} />
-                </span>
-              </Tooltip>
+            <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')}>
+              <IpLimitControl
+                value={limitIp}
+                disabled={limitIpDisabled}
+                notice={limitIpNotice || undefined}
+                onChange={(v) => methods.setValue('limitIp', v)}
+              />
             </Form.Item>
 
             <FormField name="totalGB" label={t('pages.clients.totalGB')} transform={{ output: (v) => Number(v) || 0 }}>

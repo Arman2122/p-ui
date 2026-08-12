@@ -32,6 +32,7 @@ import {
   SwapOutlined,
   TagsOutlined,
   TeamOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
 
@@ -50,13 +51,14 @@ const SIDEBAR_PINNED_KEY = 'sidebar-pinned';
 
 let hoveredAcrossRemounts = false;
 
-type IconName = 'dashboard' | 'inbound' | 'team' | 'groups' | 'setting' | 'tool' | 'cluster' | 'hosts' | 'logout' | 'apidocs' | 'outbound' | 'routing';
+type IconName = 'dashboard' | 'inbound' | 'team' | 'groups' | 'policies' | 'setting' | 'tool' | 'cluster' | 'hosts' | 'logout' | 'apidocs' | 'outbound' | 'routing';
 
 const iconByName: Record<IconName, ComponentType> = {
   dashboard: DashboardOutlined,
   inbound: ImportOutlined,
   team: TeamOutlined,
   groups: TagsOutlined,
+  policies: ThunderboltOutlined,
   setting: SettingOutlined,
   tool: ToolOutlined,
   cluster: ClusterOutlined,
@@ -181,6 +183,7 @@ export default function AppSidebar() {
     { key: '/inbounds', icon: 'inbound', title: t('menu.inbounds') },
     { key: '/clients', icon: 'team', title: t('menu.clients') },
     { key: '/groups', icon: 'groups', title: t('menu.groups') },
+    { key: '/policies', icon: 'policies', title: t('menu.policies') },
     { key: '/nodes', icon: 'cluster', title: t('menu.nodes') },
     { key: '/hosts', icon: 'hosts', title: t('menu.hosts') },
     { key: '/outbound', icon: 'outbound', title: t('menu.outbounds') },

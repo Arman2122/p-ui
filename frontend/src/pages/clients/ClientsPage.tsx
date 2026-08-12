@@ -57,6 +57,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useClients } from '@/hooks/useClients';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
+import { usePolicyMutations } from '@/api/queries/usePolicyMutations';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
@@ -240,6 +241,7 @@ export default function ClientsPage() {
     refresh,
     hydrate,
   } = useClients();
+  const { assign } = usePolicyMutations();
 
   useWebSocket({
     traffic: applyTrafficEvent,
@@ -777,14 +779,19 @@ export default function ClientsPage() {
   const onSave = useCallback(async (
     payload: Record<string, unknown> | { client: Record<string, unknown>; inboundIds: number[] },
     meta:
-      | { isEdit: false; email: string; externalLinks: ExternalLinkInput[] }
-      | { isEdit: true; email: string; attach: number[]; detach: number[]; externalLinks: ExternalLinkInput[] },
+      | { isEdit: false; email: string; externalLinks: ExternalLinkInput[]; policyId?: number }
+      | { isEdit: true; email: string; attach: number[]; detach: number[]; externalLinks: ExternalLinkInput[]; policyId?: number },
   ) => {
     if (!meta.isEdit) {
       const createMsg = await create(payload);
       if (!createMsg?.success) return createMsg;
       if (meta.email && meta.externalLinks.length > 0) {
         const r = await setExternalLinks(meta.email, meta.externalLinks);
+        if (!r?.success) return r;
+      }
+      /* After the create, because assign refuses an email no client owns. */
+      if (meta.policyId != null && meta.email) {
+        const r = await assign(meta.email, meta.policyId);
         if (!r?.success) return r;
       }
       return createMsg;
@@ -801,11 +808,15 @@ export default function ClientsPage() {
       const r = await detach(emailKey, meta.detach);
       if (!r?.success) return r;
     }
+    if (meta.policyId != null) {
+      const r = await assign(emailKey, meta.policyId);
+      if (!r?.success) return r;
+    }
     // Always replace the client's external links (an empty set clears them).
     const r = await setExternalLinks(emailKey, meta.externalLinks);
     if (!r?.success) return r;
     return updateMsg;
-  }, [create, update, attach, detach, setExternalLinks]);
+  }, [create, update, attach, detach, setExternalLinks, assign]);
 
   const pageClass = useMemo(() => {
     const classes = ['clients-page'];

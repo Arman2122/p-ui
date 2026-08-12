@@ -15,6 +15,7 @@ import {
   preferPublicHost,
 } from '@/lib/xray/inbound-link';
 import { inboundFromDb } from '@/lib/xray/inbound-from-db';
+import { formatIpLimit } from '@/lib/policies/labels';
 
 import {
   buildInboundInfo,
@@ -319,7 +320,7 @@ export default function InboundInfoModal({
             <tr><td>{t('comment')}</td><td><Tag className="info-large-tag">{clientSettings.comment}</Tag></td></tr>
           )}
           {ipLimitEnable && (
-            <tr><td>{t('pages.inbounds.IPLimit')}</td><td><Tag>{clientSettings?.limitIp ?? 0}</Tag></td></tr>
+            <tr><td>{t('pages.inbounds.IPLimit')}</td><td><Tag>{formatIpLimit(clientSettings?.limitIp ?? 0, t)}</Tag></td></tr>
           )}
           {ipLimitEnable && (clientSettings?.limitIp ?? 0) > 0 && (
             <tr>

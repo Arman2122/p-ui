@@ -48,4 +48,9 @@ export const keys = {
     list: () => ['egresses', 'list'] as const,
     preflight: () => ['egresses', 'preflight'] as const,
   },
+  policies: {
+    root: () => ['policies'] as const,
+    list: () => ['policies', 'list'] as const,
+    enforced: (email: string) => ['policies', 'enforced', email] as const,
+  },
 } as const;
