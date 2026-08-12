@@ -40,7 +40,7 @@ import {
 } from '@/schemas/forms/inbound-form';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
-import { useEgressesQuery } from '@/api/queries/useEgressesQuery';
+import { useEgressesQuery, useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
 import { unavailableKinds } from '@/lib/cores/core-availability';
 import { Protocols } from '@/schemas/primitives';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
@@ -324,6 +324,11 @@ export default function InboundFormModal({
      payload, so it sits beside the form store and posts after the save. */
   const egressesQuery = useEgressesQuery({ enabled: open && protocol === Protocols.WGKERNEL });
   const attachableEgresses = (egressesQuery.data ?? []).filter((e) => e.enable);
+  /* Host state, and only this host's: an inbound deployed to a node is served
+     somewhere this panel cannot read a sysctl from. */
+  const forwardingQuery = useEgressPreflightQuery({
+    enabled: open && protocol === Protocols.WGKERNEL && wNodeId == null,
+  });
   const [egressId, setEgressId] = useState<number | null>(null);
   const attachedEgressIdRef = useRef<number | null>(null);
 
@@ -703,6 +708,7 @@ export default function InboundFormModal({
           egressId={egressId}
           onEgressChange={setEgressId}
           nodeOwned={wNodeId != null}
+          forwardingNotes={forwardingQuery.data?.forwardingNotes ?? []}
         />
       )}
 

@@ -70,7 +70,12 @@ func (a *EgressController) preflight(c *gin.Context) {
 	if notes == nil {
 		notes = []string{}
 	}
-	jsonObj(c, gin.H{"ok": report.OK(), "refusals": refusals, "notes": notes}, nil)
+	// forwardingNotes is the same facts on their own, because a wgkernel inbound
+	// needs them and has no egress whose report it could read them out of.
+	jsonObj(c, gin.H{
+		"ok": report.OK(), "refusals": refusals, "notes": notes,
+		"forwardingNotes": a.egressService.ForwardingNotes(c.Request.Context()),
+	}, nil)
 }
 
 func (a *EgressController) add(c *gin.Context) {

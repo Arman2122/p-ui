@@ -337,6 +337,16 @@ func (s *EgressService) Preflight(ctx context.Context) egress.Report {
 	return report
 }
 
+// ForwardingNotes is the host-forwarding half of Preflight on its own, for the
+// wgkernel form: an L3 inbound needs it whether or not an egress exists.
+func (s *EgressService) ForwardingNotes(ctx context.Context) []string {
+	notes := egressManager.ForwardingNotes(ctx)
+	if notes == nil {
+		return []string{}
+	}
+	return notes
+}
+
 // deadTargets names every enabled row whose target stopped resolving. validate()
 // checks it once at save, so without this nothing ever says it again.
 func deadTargets(rows []*model.Egress) []string {

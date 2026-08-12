@@ -138,9 +138,29 @@ masquerade IPv6; with a routed v6 prefix, forwarding alone is enough. If the
 host has no IPv6 at all, tell your users the tunnel is v4-only.
 `GET /panel/api/egresses/preflight` reports both forwarding knobs.
 
-The nftables rules do not survive a reboot on their own — load the file from a
-small systemd unit, or use your firewall's own persistence. The panel
-deliberately does not write firewall rules for you.
+The nftables rules do not survive a reboot on their own. The panel deliberately
+does not write firewall rules for you, so persist them yourself — either through
+your firewall's own mechanism, or with a unit of about six lines:
+
+```bash
+nft list table ip pui_nat > /etc/p-ui/nat.nft
+cat > /etc/systemd/system/p-ui-nat.service <<'EOF'
+[Unit]
+Description=p-ui wgkernel NAT
+After=network-pre.target
+Wants=network-pre.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/p-ui/nat.nft
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now p-ui-nat.service
+```
+
+`network-pre.target` rather than `network-online.target`: the rules should be in
+place before an interface carries a packet, not after.
 
 An inbound attached to an **Egress** (below) still needs the forwarding sysctls,
 but not the NAT rules.

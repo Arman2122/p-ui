@@ -463,6 +463,7 @@
         "wgkernelAddress": "Interface Address",
         "wgkernelAddressHint": "The tunnel address the server's own device answers on. Cover the pool clients are allocated from, so the kernel routes the whole range.",
         "wgkernelForwardingTitle": "Kernel WireGuard needs host forwarding",
+        "wgkernelForwardingOff": "This host is not forwarding. Until it is, this inbound will complete handshakes and route nothing:",
         "wgkernelForwardingHint": "The kernel device completes handshakes but routes nothing until the host forwards and masquerades. The generated client config routes ::/0 too, so a host that forwards IPv4 only drops every IPv6 flow in silence. Run as root. The masquerade rule matches the device name, so every wgkernel inbound is covered and a new one needs no edit — but nftables rules are lost on reboot unless you load them at boot, and this panel does not do that for you:",
         "wgkernelForwardingHintEgress": "The kernel device completes handshakes but routes nothing until the host forwards. The attached egress terminates the connection itself, so no masquerade rule is needed. The generated client config routes ::/0 too, so a host that forwards IPv4 only drops every IPv6 flow in silence. Run as root:",
         "egress": "Egress",

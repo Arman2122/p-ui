@@ -12,6 +12,9 @@ interface WgkernelFieldsProps {
   egressId: number | null;
   onEgressChange: (egressId: number | null) => void;
   nodeOwned: boolean;
+  /* Backend sentences naming a sysctl this host has off, rendered and never
+     translated. Empty means the host forwards, or that it could not be asked. */
+  forwardingNotes: string[];
 }
 
 /* Kernel WireGuard has no streamSettings and no TUN emulation, so this form is
@@ -23,6 +26,7 @@ export default function WgkernelFields({
   egressId,
   onEgressChange,
   nodeOwned,
+  forwardingNotes,
 }: WgkernelFieldsProps) {
   const { t } = useTranslation();
   const egressHelp = nodeOwned
@@ -32,11 +36,19 @@ export default function WgkernelFields({
     <>
       <Alert
         style={{ marginBottom: 16 }}
-        type="warning"
+        type={forwardingNotes.length > 0 ? 'error' : 'warning'}
         showIcon
         title={t('pages.inbounds.form.wgkernelForwardingTitle')}
         description={(
           <>
+            {forwardingNotes.length > 0 && (
+              <div style={{ marginBottom: 6, fontWeight: 600 }}>
+                {t('pages.inbounds.form.wgkernelForwardingOff')}
+                {forwardingNotes.map((note) => (
+                  <div key={note} style={{ fontWeight: 400 }} dir="ltr">{note}</div>
+                ))}
+              </div>
+            )}
             <div>{t(egressId == null
               ? 'pages.inbounds.form.wgkernelForwardingHint'
               : 'pages.inbounds.form.wgkernelForwardingHintEgress')}

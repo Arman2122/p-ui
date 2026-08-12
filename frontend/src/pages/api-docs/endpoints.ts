@@ -1073,9 +1073,9 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/egresses/preflight',
         summary:
-          "What stops this host carrying an egress: a foreign rule in the reserved 31001-31999 priority band, a foreign route in tables 30001-30999, a gateway prefix already on the box, net.ipv4.conf.all.rp_filter=1 (the effective value is max(all, dev), so the panel cannot lower it per device), or no permission to write a routing rule at all. Notes report host facts the panel does not own: either forwarding knob being off, and any enabled egress whose front device is not on this host, which leaves everything attached to it contained rather than routed.",
+          "What stops this host carrying an egress: a foreign rule in the reserved 31001-31999 priority band, a foreign route in tables 30001-30999, a gateway prefix already on the box, net.ipv4.conf.all.rp_filter=1 (the effective value is max(all, dev), so the panel cannot lower it per device), or no permission to write a routing rule at all. Notes report host facts the panel does not own: either forwarding knob being off, and any enabled egress whose front device is not on this host, which leaves everything attached to it contained rather than routed. forwardingNotes repeats just the forwarding half, because a kernel WireGuard inbound needs it whether or not any egress exists — without it that inbound completes handshakes and routes nothing.",
         response:
-          '{\n  "success": true,\n  "obj": {\n    "ok": true,\n    "refusals": [],\n    "notes": ["net.ipv6.conf.all.forwarding is 0, so no L3 inbound on this host forwards a packet of that family at all, egress or not"]\n  }\n}',
+          '{\n  "success": true,\n  "obj": {\n    "ok": true,\n    "refusals": [],\n    "notes": ["net.ipv6.conf.all.forwarding is 0, so no L3 inbound on this host forwards a packet of that family at all, egress or not"],\n    "forwardingNotes": ["net.ipv6.conf.all.forwarding is 0, so no L3 inbound on this host forwards a packet of that family at all, egress or not"]\n  }\n}',
       },
       {
         method: 'POST',

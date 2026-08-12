@@ -261,3 +261,41 @@ func TestPreflightNamesBothForwardingKnobs(t *testing.T) {
 		t.Fatalf("notes = %v, want nothing said about a knob that is on", report.Notes)
 	}
 }
+
+/*
+TestForwardingNotesAnswersWithoutAnEgress.
+
+The half of Preflight a plain wgkernel inbound needs. It must not require a
+gateway base, a row, or a clean band — none of which a host with no egress at
+all has — because the whole point is telling an operator creating their FIRST
+kernel inbound that this host forwards nothing.
+*/
+func TestForwardingNotesAnswersWithoutAnEgress(t *testing.T) {
+	tests := []struct {
+		name    string
+		v4, v6  string
+		wantOff []string
+	}{
+		{name: "both off", v4: "0", v6: "0", wantOff: []string{egress.IPForwardKey, egress.IPForward6Key}},
+		{name: "v6 alone is off", v4: "1", v6: "0", wantOff: []string{egress.IPForward6Key}},
+		{name: "both on says nothing", v4: "1", v6: "1"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			k := cleanHost(t)
+			k.SetSysctlValue(egress.IPForwardKey, tc.v4)
+			k.SetSysctlValue(egress.IPForward6Key, tc.v6)
+
+			notes := egress.New(k, nil).ForwardingNotes(context.Background())
+			if len(notes) != len(tc.wantOff) {
+				t.Fatalf("notes = %v, want %d naming %v", notes, len(tc.wantOff), tc.wantOff)
+			}
+			joined := strings.Join(notes, "\n")
+			for _, key := range tc.wantOff {
+				if !strings.Contains(joined, key+" is 0") {
+					t.Fatalf("notes = %v, want one naming %s", notes, key)
+				}
+			}
+		})
+	}
+}
