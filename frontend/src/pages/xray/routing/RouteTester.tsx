@@ -6,9 +6,10 @@ import { AimOutlined } from '@ant-design/icons';
 import { HttpUtil } from '@/utils';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import { buildRemarkByTag, formatInboundTag } from './helpers';
+import type { InboundTagOption } from './types';
 
 interface RouteTesterProps {
-  inboundTags: string[];
+  inboundTags: InboundTagOption[];
   isMobile: boolean;
 }
 
@@ -105,7 +106,9 @@ export default function RouteTester({ inboundTags, isMobile }: RouteTesterProps)
             allowClear
             value={inboundTag}
             onChange={setInboundTag}
-            options={inboundTags.filter(Boolean).map((tag) => ({ label: formatInboundTag(tag, remarkByTag), value: tag }))}
+            options={inboundTags.filter((o) => o.value).map((o) => ({
+              label: formatInboundTag(o.value, remarkByTag), value: o.value, disabled: o.disabled,
+            }))}
           />
         </Col>
         <Col xs={12} sm={4}>

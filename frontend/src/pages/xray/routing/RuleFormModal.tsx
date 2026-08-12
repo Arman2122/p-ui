@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Form, Input, Modal, Select, Space, Switch, Tooltip } from 'antd';
+import { Button, Form, Input, Modal, Select, Space, Switch, Tooltip, Typography } from 'antd';
 import { PlusOutlined, MinusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { InputAddon } from '@/components/ui';
@@ -8,6 +8,7 @@ import { FormField } from '@/components/form/rhf';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import { RuleFormSchema, type RuleFormValues } from '@/schemas/xray';
 import { buildRemarkByTag, formatInboundTag, isApiRule } from './helpers';
+import type { InboundTagOption } from './types';
 
 export interface RoutingRule {
   enabled?: boolean;
@@ -31,7 +32,7 @@ export interface RoutingRule {
 interface RuleFormModalProps {
   open: boolean;
   rule: RoutingRule | null;
-  inboundTags: string[];
+  inboundTags: InboundTagOption[];
   outboundTags: string[];
   balancerTags: string[];
   onClose: () => void;
@@ -292,7 +293,25 @@ export default function RuleFormModal({
           <FormField name="inboundTag" label={t('pages.xray.ruleForm.inboundTags')}>
             <Select
               mode="multiple"
-              options={inboundTags.map((tag) => ({ value: tag, label: formatInboundTag(tag, remarkByTag) }))}
+              options={inboundTags.map((o) => ({
+                value: o.value,
+                label: formatInboundTag(o.value, remarkByTag),
+                disabled: o.disabled,
+                reasonKey: o.reasonKey,
+              }))}
+              optionRender={(option) => {
+                const reasonKey = (option.data as { reasonKey?: string }).reasonKey;
+                return (
+                  <div>
+                    <div>{option.label}</div>
+                    {reasonKey && (
+                      <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'normal' }}>
+                        {t(reasonKey)}
+                      </Typography.Text>
+                    )}
+                  </div>
+                );
+              }}
             />
           </FormField>
 

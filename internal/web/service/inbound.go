@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1800,6 +1801,92 @@ func (s *InboundService) GetInboundTags() (string, error) {
 	}
 	tags, _ := json.Marshal(inboundTags)
 	return string(tags), nil
+}
+
+// Routing subject reason keys. Declared in Go so the frontend dead-key test
+// counts them as referenced, the same way a Descriptor's title key is.
+const (
+	subjectReasonNode        = "pages.xray.subjects.reasonNode"
+	subjectReasonDisabled    = "pages.xray.subjects.reasonDisabled"
+	subjectReasonNoXray      = "pages.xray.subjects.reasonNoXrayInbound"
+	subjectReasonBridgeOff   = "pages.xray.subjects.reasonBridgeOff"
+	subjectReasonUnknownCore = "pages.xray.subjects.reasonUnknownCore"
+)
+
+// RoutingSubject is one inbound as a routing rule may name it. An unroutable tag
+// is offered disabled with ReasonKey, never hidden — hiding it reads as data loss.
+type RoutingSubject struct {
+	Id        int    `json:"id" example:"3"`
+	Tag       string `json:"tag" example:"inbound-443"`
+	Remark    string `json:"remark" example:"main vless"`
+	Protocol  string `json:"protocol" example:"vless"`
+	Routable  bool   `json:"routable" example:"true"`
+	ReasonKey string `json:"reasonKey,omitempty" example:"pages.xray.subjects.reasonNode"`
+}
+
+/*
+GetRoutingSubjects answers which inbounds a routing rule can actually name.
+
+GetInboundTags above is every row with no WHERE, so the editor has always offered
+tags the router provably never sees — a rule on one is accepted and then silently
+never matches. This is the same question RenderInbound answers, asked out loud.
+*/
+func (s *InboundService) GetRoutingSubjects() ([]RoutingSubject, error) {
+	var inbounds []*model.Inbound
+	err := database.GetDB().Model(model.Inbound{}).Find(&inbounds).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	subjects := make([]RoutingSubject, 0, len(inbounds))
+	for _, inbound := range inbounds {
+		reason := routingSubjectReason(inbound)
+		subjects = append(subjects, RoutingSubject{
+			Id:        inbound.Id,
+			Tag:       inbound.Tag,
+			Remark:    inbound.Remark,
+			Protocol:  string(inbound.Protocol),
+			Routable:  reason == "",
+			ReasonKey: reason,
+		})
+	}
+	return subjects, nil
+}
+
+// routingSubjectReason returns "" when a rule may name this inbound, else the
+// translation key saying why it cannot. First match wins; order is the argument.
+func routingSubjectReason(inbound *model.Inbound) string {
+	switch {
+	case inbound == nil:
+		return subjectReasonNoXray
+	// A node serves its own core and never receives this host's rules array.
+	case inbound.NodeID != nil:
+		return subjectReasonNode
+	case !inbound.Enable:
+		return subjectReasonDisabled
+	case cores.ServedByXray(core.Kind(inbound.Protocol)):
+		return ""
+	// The bridge gives an MTProto inbound a real Xray inbound tag; without it the
+	// sidecar carries the traffic and Xray's router never sees a packet.
+	case mtprotoRoutesThroughXray(inbound):
+		return ""
+	case settingsHasKey(inbound.Settings, "routeThroughXray"):
+		return subjectReasonBridgeOff
+	case !slices.Contains(cores.Kinds(), core.Kind(inbound.Protocol)):
+		return subjectReasonUnknownCore
+	default:
+		return subjectReasonNoXray
+	}
+}
+
+// settingsHasKey reports whether an inbound's settings carry a key at all, which
+// is how a switch is detected without naming the protocol that owns it.
+func settingsHasKey(settings, key string) bool {
+	var parsed map[string]json.RawMessage
+	if json.Unmarshal([]byte(settings), &parsed) != nil {
+		return false
+	}
+	_, present := parsed[key]
+	return present
 }
 
 func (s *InboundService) GetClientReverseTags() (string, error) {

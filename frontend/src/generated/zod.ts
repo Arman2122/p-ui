@@ -747,6 +747,16 @@ export const RealityScanResultSchema = z.object({
 });
 export type RealityScanResult = z.infer<typeof RealityScanResultSchema>;
 
+export const RoutingSubjectSchema = z.object({
+  id: z.number().int(),
+  protocol: z.string(),
+  reasonKey: z.string().optional(),
+  remark: z.string(),
+  routable: z.boolean(),
+  tag: z.string(),
+});
+export type RoutingSubject = z.infer<typeof RoutingSubjectSchema>;
+
 export const SettingSchema = z.object({
   id: z.number().int(),
   key: z.string(),

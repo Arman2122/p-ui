@@ -737,6 +737,14 @@ export const EXAMPLES: Record<string, unknown> = {
     "tlsVersion": "1.3",
     "x25519": true
   },
+  "RoutingSubject": {
+    "id": 3,
+    "protocol": "vless",
+    "reasonKey": "pages.xray.subjects.reasonNode",
+    "remark": "main vless",
+    "routable": true,
+    "tag": "inbound-443"
+  },
   "Setting": {
     "id": 0,
     "key": "",

@@ -59,6 +59,7 @@ export default function XrayPage() {
     outboundTestUrl,
     setOutboundTestUrl,
     inboundTags,
+    routingSubjects,
     clientReverseTags,
     subscriptionOutbounds,
     subscriptionOutboundTags,
@@ -221,6 +222,7 @@ export default function XrayPage() {
             templateSettings={templateSettings}
             setTemplateSettings={setTemplateSettings}
             inboundTags={inboundTags}
+            routingSubjects={routingSubjects}
             clientReverseTags={clientReverseTags}
             subscriptionOutboundTags={subscriptionOutboundTags}
             isMobile={isMobile}

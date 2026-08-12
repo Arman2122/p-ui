@@ -1,4 +1,4 @@
-import type { RuleRow } from './types';
+import type { InboundTagOption, RoutingSubject, RuleRow } from './types';
 
 export function arrJoin(v: unknown): string | undefined {
   if (v == null) return undefined;
@@ -100,4 +100,32 @@ export function ruleCriteriaChips(rule: RuleRow) {
   if (rule.user) chips.push({ label: 'User', value: rule.user });
   if (rule.vlessRoute) chips.push({ label: 'VLESS', value: rule.vlessRoute });
   return chips;
+}
+
+/**
+ * Build the "From" picker's options.
+ *
+ * A tag the router provably never sees is offered DISABLED with its reason
+ * rather than hidden: hiding it is how an operator concludes the panel lost
+ * their inbound. Tags already stored on the rule being edited are always kept,
+ * or opening an old rule would silently drop its inbound on the next save.
+ */
+export function buildInboundTagOptions(
+  subjects: RoutingSubject[] | undefined,
+  templateTags: string[],
+  selectedTags: string[] = [],
+): InboundTagOption[] {
+  const out: InboundTagOption[] = [];
+  const seen = new Set<string>();
+  const push = (value: string, disabled: boolean, reasonKey?: string) => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    out.push({ value, disabled, reasonKey });
+  };
+  for (const subject of subjects || []) {
+    push(subject.tag, !subject.routable, subject.reasonKey);
+  }
+  for (const tag of templateTags) push(tag, false);
+  for (const tag of selectedTags) push(tag, false);
+  return out;
 }
