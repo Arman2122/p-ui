@@ -124,7 +124,16 @@ func TestRemoveInboundTagReferences_DropsInboundOnlyRule(t *testing.T) {
 	}
 }
 
-func TestRemoveInboundTagReferences_KeepsRuleWithOtherMatchers(t *testing.T) {
+/*
+Renegotiated deliberately: this used to assert that a rule losing its last
+inboundTag keeps its other matchers and simply drops the tag.
+
+That is a WIDENING. An untagged rule matches every inbound, including every
+front the routing compile creates, so deleting one inbound re-pointed every
+other inbound's matching traffic out that rule's outbound. The operator's rule
+is kept -- they wrote it -- but switched off with the reason.
+*/
+func TestRemoveInboundTagReferences_DisablesRuleThatLostItsLastInboundTag(t *testing.T) {
 	setupSettingTestDB(t)
 	seedXrayTemplate(t, `{
 		"routing": {
@@ -150,15 +159,26 @@ func TestRemoveInboundTagReferences_KeepsRuleWithOtherMatchers(t *testing.T) {
 		t.Fatalf("GetXrayConfigTemplate: %v", err)
 	}
 	rule := findRuleByOutbound(t, got, "direct")
+	if enabled, ok := rule["enabled"].(bool); !ok || enabled {
+		t.Fatalf("a rule with no inbound left must not stay live, rule = %#v", rule)
+	}
 	if _, ok := rule["inboundTag"]; ok {
-		t.Fatalf("inboundTag should be removed, rule = %#v", rule)
+		t.Fatalf("the dead tag should be gone, rule = %#v", rule)
 	}
 	if domain, _ := rule["domain"].([]any); len(domain) != 1 {
-		t.Fatalf("domain matcher should remain, rule = %#v", rule)
+		t.Fatalf("the operator's own matchers are kept, rule = %#v", rule)
+	}
+	if remark, _ := rule["remark"].(string); remark == "" {
+		t.Fatalf("the rule must say why it was switched off, rule = %#v", rule)
 	}
 }
 
-func TestRemoveInboundTagReferences_KeepsSourceScopedRule(t *testing.T) {
+/*
+Renegotiated for the same reason as the rule above: `source` matches the CLIENT's
+address, not the inbound, so untagging a source-scoped rule widens it to every
+inbound whose users share that prefix — including a fronted kernel inbound.
+*/
+func TestRemoveInboundTagReferences_DisablesSourceScopedRuleThatLostItsInbound(t *testing.T) {
 	setupSettingTestDB(t)
 	seedXrayTemplate(t, `{
 		"routing": {
@@ -184,10 +204,13 @@ func TestRemoveInboundTagReferences_KeepsSourceScopedRule(t *testing.T) {
 	}
 	rule := findRuleByOutbound(t, got, "blocked")
 	if _, ok := rule["inboundTag"]; ok {
-		t.Fatalf("inboundTag should be trimmed, rule = %#v", rule)
+		t.Fatalf("the dead tag should be trimmed, rule = %#v", rule)
+	}
+	if enabled, ok := rule["enabled"].(bool); !ok || enabled {
+		t.Fatalf("an untagged rule matches every inbound, so it must not stay live: %#v", rule)
 	}
 	if src, _ := rule["source"].([]any); len(src) != 1 {
-		t.Fatalf("source-scoped rule was dropped instead of kept; rule = %#v", rule)
+		t.Fatalf("the operator's rule is kept, not dropped; rule = %#v", rule)
 	}
 }
 
