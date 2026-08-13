@@ -17,6 +17,7 @@ import TextModal from '@/components/feedback/TextModal';
 import { isBalancerLoopbackTag } from '../balancers/balancer-loopback';
 import RoutingBasic from './RoutingBasic';
 import RouteTester from './RouteTester';
+import RoutingRulesPanel from './RoutingRulesPanel';
 import RuleFormModal from './RuleFormModal';
 import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
@@ -348,8 +349,19 @@ export default function RoutingTab({
             ),
           },
           {
+            key: 'intent',
+            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.routing.title'), isMobile),
+            children: (
+              <RoutingRulesPanel
+                isMobile={isMobile}
+                outboundTags={outboundTagOptions}
+                balancerTags={balancerTagOptions}
+              />
+            ),
+          },
+          {
             key: 'rules',
-            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.Routings'), isMobile),
+            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.routing.templateRules'), isMobile),
             children: (
               <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Space wrap>
