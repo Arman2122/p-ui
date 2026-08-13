@@ -308,3 +308,32 @@ proven the peer's identity by the time a packet appears there.
 func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
 	return core.IngressHandle{Device: engine.InterfaceName(inst.ID)}, nil
 }
+
+// ExitKinds: this core can terminate traffic somebody else routed to it, on the
+// same kind it serves inbound. One engine, two directions.
+func (c *Core) ExitKinds() []core.Kind { return []core.Kind{Kind} }
+
+// ExitHandleKind: an uplink is reached by sending packets at a kernel interface,
+// which is what a device handle means.
+func (c *Core) ExitHandleKind(kind core.Kind) core.ExitHandleKind {
+	if kind != Kind {
+		return core.ExitNone
+	}
+	return core.ExitDevice
+}
+
+/*
+ExitHandle names the device an uplink answers on, and who owns the source address.
+
+SourceOwnerPanel is the honest answer and it is load-bearing: WireGuard does not
+translate addresses, so a packet forwarded into this device still carries the
+ingress client's inner source and the far side drops it. Until the panel writes
+a MASQUERADE rule, the compile must refuse this exit rather than emit a route
+that looks healthy and delivers nothing.
+*/
+func (c *Core) ExitHandle(_ context.Context, exit core.Exit) (core.ExitHandle, error) {
+	return core.ExitHandle{
+		Device: engine.InterfaceName(exit.ID),
+		Source: core.SourceOwnerPanel,
+	}, nil
+}
