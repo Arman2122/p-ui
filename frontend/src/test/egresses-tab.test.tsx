@@ -11,7 +11,7 @@ const REFUSAL = 'egress: net.ipv4.conf.all.rp_filter is 1, so the return path is
 const NOTE = 'net.ipv4.ip_forward is 0, so no L3 inbound on this host forwards a packet at all';
 const EGRESS = {
   id: 1,
-  type: 'xray-tun',
+  type: 'xray-tun' as const,
   enable: true,
   remark: 'warp exit',
   target: 'warp',
@@ -60,7 +60,9 @@ describe('EgressesTab', () => {
 
     const row = document.querySelector('.ant-table-tbody tr.ant-table-row');
     expect(row?.textContent).toContain(EGRESS.remark);
-    expect(row?.textContent).toContain(EGRESS.type);
+    /* The type is named, not spelled as its driver id: an operator picking
+       between a front and an uplink should not have to know either string. */
+    expect(row?.textContent).toContain(enUS.pages.xray.egress.types[EGRESS.type]);
     expect(row?.textContent).toContain(EGRESS.target);
     expect(document.querySelectorAll('.ant-alert')).toHaveLength(0);
   });

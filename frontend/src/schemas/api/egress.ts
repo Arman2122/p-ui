@@ -19,17 +19,70 @@ export const EgressPreflightSchema = z.object({
 });
 export type EgressPreflight = z.infer<typeof EgressPreflightSchema>;
 
-/* One driver ships, so `type` is a constant rather than a picker; `settings` is
-   the per-type column no driver reads yet and the form round-trips it untouched. */
+/* xray-tun terminates an L3 inbound inside Xray; wg-client dials a provider and
+   is where traffic actually leaves. A third type — openvpn, ikev2 — is one entry
+   here and one driver in Go, which is the whole point of the split. */
 export const EGRESS_TYPE = 'xray-tun';
+export const EGRESS_TYPE_UPLINK = 'wg-client';
+export const EGRESS_TYPES = [EGRESS_TYPE, EGRESS_TYPE_UPLINK] as const;
+export type EgressType = (typeof EGRESS_TYPES)[number];
 
-export const EgressFormSchema = z.object({
-  id: z.number().int().default(0),
-  remark: z.string().trim().max(256).default(''),
-  target: z.string().trim().min(1, 'pages.xray.egress.targetRequired').default(''),
-  enable: z.boolean().default(true),
+/* An uplink carries no target: it IS the destination. Its settings are the
+   fields every WireGuard provider hands out, named as their .conf names them so
+   an operator pasting from Surfshark or Mullvad recognises each one. */
+export const UplinkSettingsSchema = z.object({
+  privateKey: z.string().trim().default(''),
+  address: z.array(z.string()).default([]),
+  mtu: z.number().int().nonnegative().default(0),
+  publicKey: z.string().trim().default(''),
+  endpoint: z.string().trim().default(''),
+  presharedKey: z.string().trim().default(''),
+  keepAlive: z.number().int().nonnegative().default(0),
 });
-export type EgressFormValues = z.infer<typeof EgressFormSchema>;
+export type UplinkSettings = z.infer<typeof UplinkSettingsSchema>;
+
+/* The plain object stays exported because per-field validation reads `.shape`,
+   which the refined schema below does not carry. */
+export const EgressFormFields = z.object({
+  id: z.number().int().default(0),
+  type: z.enum(EGRESS_TYPES).default(EGRESS_TYPE),
+  remark: z.string().trim().max(256).default(''),
+  target: z.string().trim().default(''),
+  enable: z.boolean().default(true),
+  privateKey: z.string().trim().default(''),
+  address: z.string().trim().default(''),
+  mtu: z.number().int().nonnegative().default(0),
+  publicKey: z.string().trim().default(''),
+  endpoint: z.string().trim().default(''),
+  presharedKey: z.string().trim().default(''),
+  keepAlive: z.number().int().nonnegative().default(0),
+});
+
+/* Which fields are required depends on the type, so it is refined rather than
+   marked on the fields: an uplink has no target, and a front has no keys. */
+export const EgressFormSchema = EgressFormFields.superRefine((value, ctx) => {
+  const need = (field: 'target' | 'privateKey' | 'publicKey' | 'endpoint' | 'address', key: string) => {
+    if (!value[field]) ctx.addIssue({ code: 'custom', path: [field], message: key });
+  };
+  if (value.type === EGRESS_TYPE) {
+    need('target', 'pages.xray.egress.targetRequired');
+    return;
+  }
+  need('privateKey', 'pages.xray.egress.privateKeyRequired');
+  need('publicKey', 'pages.xray.egress.publicKeyRequired');
+  need('endpoint', 'pages.xray.egress.endpointRequired');
+  need('address', 'pages.xray.egress.addressRequired');
+});
+export type EgressFormValues = z.infer<typeof EgressFormFields>;
+
+/* One address per line or comma-separated, because that is how a provider's
+   .conf writes it and pasting it whole must work. */
+export function splitAddresses(raw: string): string[] {
+  return raw
+    .split(/[\n,]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
 
 /* Everything the operator owns. The timestamps are the database's, so a write
    that carried them back would be claiming to set them. */
