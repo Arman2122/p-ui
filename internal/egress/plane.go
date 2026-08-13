@@ -42,9 +42,16 @@ type RuleSpec struct {
 	Priority int
 	Iif      string
 	Table    int
+	// Mark selects by the fwmark a socket carries instead of by ingress device,
+	// which is how traffic an L7 core originates on this host reaches an exit.
+	// Zero means "no mark", so an iif rule is unchanged by its presence.
+	Mark uint32
 }
 
 func (r RuleSpec) String() string {
+	if r.Mark != 0 {
+		return fmt.Sprintf("%s prio %d fwmark %#x lookup %d", r.Family, r.Priority, r.Mark, r.Table)
+	}
 	return fmt.Sprintf("%s prio %d iif %s lookup %d", r.Family, r.Priority, r.Iif, r.Table)
 }
 

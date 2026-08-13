@@ -71,7 +71,13 @@ func (kernelPlane) Snapshot(context.Context) (Snapshot, error) {
 			if _, mine := prioEgressID(r.Priority); !mine {
 				continue
 			}
-			snap.Rules = append(snap.Rules, RuleSpec{Family: family, Priority: r.Priority, Iif: r.IifName, Table: r.Table})
+			spec := RuleSpec{Family: family, Priority: r.Priority, Iif: r.IifName, Table: r.Table}
+			// A rule the kernel reports with no mark gives Mask -1 and Mark 0; read
+			// it back so a marked rule the panel wrote compares equal to itself.
+			if r.Mark != 0 {
+				spec.Mark = uint32(r.Mark)
+			}
+			snap.Rules = append(snap.Rules, spec)
 		}
 
 		// RT_TABLE_UNSPEC with the table filter set is what makes the dump cover
@@ -131,8 +137,14 @@ func toNetlinkRule(spec RuleSpec) *netlink.Rule {
 	rule := netlink.NewRule()
 	rule.Family = netlinkFamily(spec.Family)
 	rule.Priority = spec.Priority
-	rule.IifName = spec.Iif
 	rule.Table = spec.Table
+	// One selector or the other, never both: a rule carrying an empty iif AND a
+	// mark of zero matches everything, which is the one thing it must not do.
+	if spec.Mark != 0 {
+		rule.Mark = uint32(spec.Mark)
+	} else {
+		rule.IifName = spec.Iif
+	}
 	return rule
 }
 
