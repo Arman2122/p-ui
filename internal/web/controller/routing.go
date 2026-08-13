@@ -28,6 +28,7 @@ func NewRoutingController(g *gin.RouterGroup) *RoutingController {
 func (a *RoutingController) initRouter(g *gin.RouterGroup) {
 	g.GET("/rules", a.rules)
 	g.GET("/subjects", a.subjects)
+	g.GET("/exits", a.exits)
 
 	g.POST("/rules", a.add)
 	g.POST("/rules/order", a.reorder)
@@ -52,6 +53,17 @@ func (a *RoutingController) subjects(c *gin.Context) {
 		return
 	}
 	jsonObj(c, subjects, nil)
+}
+
+// exits answers which uplinks a rule may be pointed at. Operator-owned rows
+// only: a front is machinery for an ingress, never a destination.
+func (a *RoutingController) exits(c *gin.Context) {
+	exits, err := a.routingService.ExitViews(context.Background())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, exits, nil)
 }
 
 func (a *RoutingController) add(c *gin.Context) {

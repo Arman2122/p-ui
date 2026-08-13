@@ -34,8 +34,33 @@ export const RoutingSubjectViewSchema = z.object({
 
 export const RoutingSubjectViewListSchema = z.array(RoutingSubjectViewSchema);
 
+/* One uplink a rule may be pointed at. What device or port realises it is the
+   compile's business and deliberately absent. */
+export const RoutingExitViewSchema = z.object({
+  id: z.number(),
+  label: z.string(),
+});
+
+export const RoutingExitViewListSchema = z.array(RoutingExitViewSchema);
+
 export type RoutingRuleRecord = z.infer<typeof RoutingRuleSchema>;
 export type RoutingSubjectView = z.infer<typeof RoutingSubjectViewSchema>;
+export type RoutingExitView = z.infer<typeof RoutingExitViewSchema>;
+
+/* An uplink rides the destination field the editor already has, under a prefix
+   no Xray tag can collide with, so choosing one is the same gesture as choosing
+   an outbound instead of a second control that means almost the same thing. */
+export const EXIT_TAG_PREFIX = 'exit:';
+
+export function exitTagFor(id: number): string {
+  return `${EXIT_TAG_PREFIX}${id}`;
+}
+
+export function exitIdFromTag(tag: string | undefined): number | null {
+  if (!tag?.startsWith(EXIT_TAG_PREFIX)) return null;
+  const id = Number(tag.slice(EXIT_TAG_PREFIX.length));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
 
 /* What the server binds. ingressIds and criteria go back as the JSON text the
    column holds, because model.RoutingRule stores them that way. */
@@ -51,7 +76,7 @@ export interface RoutingRulePayload {
   inspect: boolean;
 }
 
-export const DEST_KINDS = ['outbound', 'balancer', 'direct', 'block'] as const;
+export const DEST_KINDS = ['outbound', 'balancer', 'exit', 'direct', 'block'] as const;
 
 /* Every criterion the editor can offer. A subject's criteriaMask is the subset
    that can actually match on it, and anything outside the mask is disabled with
@@ -149,7 +174,9 @@ export function intentToRule(
     ? []
     : ingressIdsToArray(record.ingressIds).map((id) => tagOf(id) ?? `#${id}`).filter(Boolean);
   if (record.destKind === 'balancer') out.balancerTag = record.destTag;
-  else out.outboundTag = destTagFor(record);
+  else if (record.destKind === 'exit' && record.destExitId != null) {
+    out.outboundTag = exitTagFor(record.destExitId);
+  } else out.outboundTag = destTagFor(record);
   return out;
 }
 
@@ -178,12 +205,20 @@ export function ruleToIntent(
     remark: typeof rule.remark === 'string' ? rule.remark : '',
     ingressScope: ids.length === 0 ? 'all' : 'selected',
     ingressIds: JSON.stringify(ids),
-    destKind: rule.balancerTag ? 'balancer' : 'outbound',
-    destTag: rule.balancerTag || rule.outboundTag || '',
-    destExitId: null,
+    ...destinationOf(rule),
     criteria: criteriaFromForm(criteria),
     inspect: false,
   };
+}
+
+/* An uplink is stored as its id, never as a tag: the tag in the picker is a
+   transport for the choice, and a rule that kept it would name something no
+   Xray config contains. */
+function destinationOf(rule: XrayRuleShape): Pick<RoutingRulePayload, 'destKind' | 'destTag' | 'destExitId'> {
+  const exitId = exitIdFromTag(rule.outboundTag);
+  if (exitId != null) return { destKind: 'exit', destTag: '', destExitId: exitId };
+  if (rule.balancerTag) return { destKind: 'balancer', destTag: rule.balancerTag, destExitId: null };
+  return { destKind: 'outbound', destTag: rule.outboundTag || '', destExitId: null };
 }
 
 /* Which criteria can match on every one of these subjects. The INTERSECTION,

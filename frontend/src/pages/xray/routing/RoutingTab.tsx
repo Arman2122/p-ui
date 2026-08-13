@@ -23,7 +23,11 @@ import RuleCardList from './RuleCardList';
 import { useRoutingColumns } from './useRoutingColumns';
 import { arrJoin, buildInboundTagOptions, originalRuleIndex } from './helpers';
 import { useRoutingMutations } from '@/api/queries/useRoutingMutations';
-import { useRoutingRulesQuery, useRoutingSubjectsQuery } from '@/api/queries/useRoutingQuery';
+import {
+  useRoutingExitsQuery,
+  useRoutingRulesQuery,
+  useRoutingSubjectsQuery,
+} from '@/api/queries/useRoutingQuery';
 import { intentToRule, ruleToIntent, type XrayRuleShape } from '@/schemas/api/routing';
 import type { RoutingSubject, RuleRow } from './types';
 import type { XraySettingsValue, SetTemplate } from '@/hooks/useXraySetting';
@@ -138,6 +142,7 @@ export default function RoutingTab({
 
   const { data: intentRecords = [] } = useRoutingRulesQuery();
   const { data: subjects = [] } = useRoutingSubjectsQuery();
+  const { data: exits = [] } = useRoutingExitsQuery();
   const routingMut = useRoutingMutations();
 
   const tagOfInbound = useMemo(() => {
@@ -540,6 +545,7 @@ export default function RoutingTab({
         balancerTags={balancerTagOptions}
         onClose={() => setRuleModalOpen(false)}
         subjects={subjects}
+        exits={editingSource === 'intent' ? exits : undefined}
         onConfirm={onRuleConfirm}
       />
       <PromptModal

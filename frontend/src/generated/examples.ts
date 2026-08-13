@@ -739,6 +739,10 @@ export const EXAMPLES: Record<string, unknown> = {
     "tlsVersion": "1.3",
     "x25519": true
   },
+  "RoutingExitView": {
+    "id": 4,
+    "label": "US-sfo | Surfshark"
+  },
   "RoutingRule": {
     "createdAt": 1700000000000,
     "criteria": {

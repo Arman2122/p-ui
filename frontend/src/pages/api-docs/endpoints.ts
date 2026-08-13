@@ -1071,6 +1071,14 @@ export const sections: readonly Section[] = [
         responseSchemaArray: true,
       },
       {
+        method: 'GET',
+        path: '/panel/api/routing/exits',
+        summary:
+          "Which uplinks a rule may be pointed at. Operator-owned exits only -- a panel-owned front is machinery for an ingress and never a destination. The handle that realises an exit is deliberately absent: which device or port carries it is the compile's business, and an editor that showed it would invite an operator to depend on it.",
+        responseSchema: 'RoutingExitView',
+        responseSchemaArray: true,
+      },
+      {
         method: 'POST',
         path: '/panel/api/routing/rules',
         summary: 'Create a rule. It is appended last and converges before the response returns.',

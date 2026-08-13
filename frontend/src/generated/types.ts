@@ -703,6 +703,11 @@ export interface RealityScanResult {
   x25519: boolean;
 }
 
+export interface RoutingExitView {
+  id: number;
+  label: string;
+}
+
 export interface RoutingRule {
   createdAt: number;
   criteria: unknown;
