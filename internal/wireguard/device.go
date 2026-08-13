@@ -44,23 +44,34 @@ type Instance struct {
 	Peers      []Peer
 }
 
-// interfacePrefix marks a device as this panel's. It is deliberately not "wg":
-// an operator's own tunnel must never look like something the panel may delete.
-const interfacePrefix = "pwg"
+/*
+interfacePrefix marks a device as this panel's. It is deliberately not "wg": an
+operator's own tunnel must never look like something the panel may delete.
+
+UplinkPrefix is the second namespace. Inbound ids and egress ids are independent
+sequences, so a single prefix would let inbound 4 and uplink 4 both claim pwg4 --
+one device, two writers, and whichever converged last wins.
+*/
+const (
+	interfacePrefix = "pwg"
+	UplinkPrefix    = "pux"
+)
 
 // InterfaceName is the kernel device an inbound is served by. It is derived from
 // the id so two inbounds can never claim one device.
-func InterfaceName(id int) string { return interfacePrefix + strconv.Itoa(id) }
+func InterfaceName(id int) string { return nameIn(interfacePrefix, id) }
 
-// ownedID reads the inbound id back out of a device name. It round-trips through
-// InterfaceName, so a near miss like pwg007 or pwg0 is somebody else's.
-func ownedID(name string) (int, bool) {
-	rest, ok := strings.CutPrefix(name, interfacePrefix)
+func nameIn(prefix string, id int) string { return prefix + strconv.Itoa(id) }
+
+// ownedIDIn reads the id back out of a device name. It round-trips through the
+// prefix, so a near miss like pwg007 or pwg0 is somebody else's.
+func ownedIDIn(prefix, name string) (int, bool) {
+	rest, ok := strings.CutPrefix(name, prefix)
 	if !ok {
 		return 0, false
 	}
 	id, err := strconv.Atoi(rest)
-	if err != nil || id <= 0 || InterfaceName(id) != name {
+	if err != nil || id <= 0 || nameIn(prefix, id) != name {
 		return 0, false
 	}
 	return id, true
@@ -79,7 +90,8 @@ func linkMTU(mtu int) int {
 	return mtu
 }
 
-// Interface names the device this instance owns.
+// Interface names the device this instance owns in the default (inbound)
+// namespace. A manager with its own namespace uses Manager.Name instead.
 func (inst Instance) Interface() string { return InterfaceName(inst.ID) }
 
 // deviceSettings is the device half of a wgkernel inbound's settings JSON. The

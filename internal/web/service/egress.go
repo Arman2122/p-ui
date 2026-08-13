@@ -16,8 +16,10 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/egress"
+	"github.com/Arman2122/p-ui/internal/egress/drivers/wgclient"
 	"github.com/Arman2122/p-ui/internal/egress/drivers/xraytun"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/wireguard"
 )
 
 // The refusals an operator has to be able to tell apart, and a test has to be
@@ -40,6 +42,9 @@ func newEgressDriverRegistry() *egress.Registry {
 	registry := egress.NewRegistry()
 	// The only failure is a duplicate type, which one literal list cannot make.
 	_ = registry.Register(xraytun.New())
+	// The shared engine, not a second one: an uplink and an inbound must never
+	// end up as two writers to the same device namespace.
+	_ = registry.Register(wgclient.New(wireguard.GetUplinkManager()))
 	return registry
 }
 
@@ -421,12 +426,19 @@ func egressRow(row *model.Egress) egress.Egress {
 }
 
 func (s *EgressService) validate(row *model.Egress) error {
-	if _, known := egressDriverRegistry.For(row.Type); !known {
+	driver, known := egressDriverRegistry.For(row.Type)
+	if !known {
 		return fmt.Errorf("%w: %q — this build serves %v", ErrEgressUnknownType, row.Type, egressDriverRegistry.Types())
 	}
 	// A disabled row routes nothing, so its target is not resolved against
 	// anything: an egress whose outbound was deleted first can still be switched off.
 	if !row.Enable {
+		return nil
+	}
+	// Only a FRONT needs a target. It terminates into a core and injects a rule
+	// pointing at one, so an unresolvable tag would leave it dark. An uplink IS
+	// the destination -- asking it which outbound to forward to is meaningless.
+	if _, fronts := driver.(egress.Injector); !fronts {
 		return nil
 	}
 	resolves, err := egressTargetResolves(row.Target)

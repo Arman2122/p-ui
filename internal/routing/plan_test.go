@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/egress"
 )
 
 func internalSubject(id int, tag string) Subject {
@@ -204,7 +205,14 @@ The cell-B leak guard. egress.RuleSpec has no Mark field, so a marked socket wit
 no ip rule to catch it routes via main and leaves with the SERVER's address --
 direct rather than dark, which inverts what internal/egress guarantees.
 */
-func TestPlanNeverEmitsAMarkWithoutItsRule(t *testing.T) {
+/*
+A mark with no ip rule to catch it routes via main and leaves with the server's
+own address -- direct rather than dark, which inverts the property egress
+guarantees. The compile cannot see netlink, so the checkable half of the pairing
+is the derivation: every mark it emits must be egress.Mark of a device exit that
+was actually in the input, which is the same row whose Fill converges the rule.
+*/
+func TestPlanEmitsNoMarkNoExitDerives(t *testing.T) {
 	got := Plan(Input{
 		Subjects: []Subject{internalSubject(1, "vless-in"), deviceSubject(7, "wg-home", "pwg7")},
 		Rules: []Rule{
@@ -217,14 +225,70 @@ func TestPlanNeverEmitsAMarkWithoutItsRule(t *testing.T) {
 		Blackhole: "blocked", Direct: "direct", FrontIDFor: frontIDs(map[int]int{7: 1}),
 	})
 
-	for _, raw := range append(append([]json.RawMessage{}, got.XrayRules...), got.Outbounds...) {
-		if strings.Contains(string(raw), "mark") {
-			t.Fatalf("emitted a mark with no ip rule to catch it: %s", raw)
+	if len(got.Refusals()) != 0 {
+		t.Fatalf("a daemon-sourced device exit is routable and must not be refused: %v", got.Refusals())
+	}
+	marks := marksIn(t, got)
+	if len(marks) == 0 {
+		t.Fatal("a device exit is realised by a marked socket; none was emitted")
+	}
+	for _, mark := range marks {
+		if mark != egress.Mark(3) {
+			t.Fatalf("emitted mark %d, which no exit in the input derives (exit 3 is %d)", mark, egress.Mark(3))
 		}
 	}
-	if len(got.Refusals()) != 2 {
-		t.Fatalf("a device exit has no driver yet and must be refused on both subjects, got %d", len(got.Refusals()))
+}
+
+// An exit the panel would have to NAT for stays refused: WireGuard translates
+// nothing, so the far side drops a packet still carrying the inner source.
+func TestPlanRefusesADeviceExitItWouldHaveToNATFor(t *testing.T) {
+	got := Plan(Input{
+		Subjects: []Subject{internalSubject(1, "vless-in")},
+		Rules:    []Rule{{ID: 1, Enable: true, Scope: ScopeAll, Dest: Dest{Kind: DestExit, ExitID: 3}}},
+		Exits: []ResolvedExit{{
+			ID: 3, Label: "office", Kind: core.ExitDevice,
+			Handle: core.ExitHandle{Device: "ppp0", Source: core.SourceOwnerPanel},
+		}},
+		Blackhole: "blocked", Direct: "direct", FrontIDFor: frontIDs(nil),
+	})
+
+	if len(got.Refusals()) != 1 {
+		t.Fatalf("want one refusal, got %d", len(got.Refusals()))
 	}
+	if key := got.Refusals()[0].MessageKey; key != KeyNoSnat {
+		t.Fatalf("MessageKey = %q, want %q", key, KeyNoSnat)
+	}
+	if marks := marksIn(t, got); len(marks) != 0 {
+		t.Fatalf("a refused exit must emit no mark, got %v", marks)
+	}
+}
+
+// marksIn reads every sockopt mark the compile emitted, from both artifacts: a
+// mark hidden in a rule rather than an outbound is just as unpaired.
+func marksIn(t *testing.T, got Compiled) []uint32 {
+	t.Helper()
+	var out []uint32
+	for _, raw := range append(append([]json.RawMessage{}, got.XrayRules...), got.Outbounds...) {
+		var probe struct {
+			StreamSettings struct {
+				Sockopt struct {
+					Mark *uint32 `json:"mark"`
+				} `json:"sockopt"`
+			} `json:"streamSettings"`
+		}
+		if err := json.Unmarshal(raw, &probe); err != nil {
+			continue
+		}
+		if probe.StreamSettings.Sockopt.Mark != nil {
+			out = append(out, *probe.StreamSettings.Sockopt.Mark)
+			continue
+		}
+		// Belt and braces: a mark anywhere else in the artifact is still a mark.
+		if strings.Contains(string(raw), `"mark"`) {
+			t.Fatalf("an artifact carries a mark outside sockopt: %s", raw)
+		}
+	}
+	return out
 }
 
 func TestPanelSourceOwnerExitIsRefused(t *testing.T) {

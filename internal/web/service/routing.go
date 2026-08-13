@@ -14,6 +14,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/egress"
+	"github.com/Arman2122/p-ui/internal/egress/drivers/wgclient"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/routing"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -104,9 +105,13 @@ func (s *RoutingService) compile(ctx context.Context, cfgOutbounds []map[string]
 	if err != nil {
 		return routing.Compiled{}, err
 	}
+	exits, err := s.Exits(ctx)
+	if err != nil {
+		return routing.Compiled{}, err
+	}
 	blackhole, direct := outboundsByProtocol(cfgOutbounds)
 	return routing.Plan(routing.Input{
-		Rules: toPlanRules(rules), Subjects: subjects,
+		Rules: toPlanRules(rules), Subjects: subjects, Exits: exits,
 		Blackhole: blackhole, Direct: direct,
 		FrontIDFor: func(inboundID int) (int, bool) {
 			id, ok := fronts[inboundID]
@@ -662,4 +667,59 @@ func dropMasquerade(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+/*
+Exits resolves the uplinks a rule may target, asking each core what its own
+handle is.
+
+Operator-owned rows only: a panel-owned row is a front, which is machinery for
+an ingress and never a destination. The kind comes from the row's type, and the
+handle from whichever core claims it, so an openvpn or ikev2 uplink appears here
+by registering a driver and answering RoutableEgress -- nothing in this function
+learns a protocol name.
+*/
+func (s *RoutingService) Exits(ctx context.Context) ([]routing.ResolvedExit, error) {
+	rows, err := (&EgressService{}).GetAll()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]routing.ResolvedExit, 0, len(rows))
+	for _, row := range rows {
+		if row == nil || !row.Enable || row.Owner == model.EgressOwnerPanel {
+			continue
+		}
+		kind := exitKindFor(row.Type)
+		if kind == "" {
+			continue
+		}
+		handleKind, handle, hErr := cores.ExitHandleFor(ctx, core.Exit{
+			ID: row.Id, Kind: kind, Enable: row.Enable, Settings: row.Settings,
+		})
+		if hErr != nil || handleKind == core.ExitNone {
+			continue
+		}
+		out = append(out, routing.ResolvedExit{
+			ID: row.Id, Label: exitLabel(row), Kind: handleKind, Handle: handle,
+		})
+	}
+	return out, nil
+}
+
+// exitKindFor maps an egress row's type to the core kind that serves it. The one
+// place the two vocabularies meet, so a new uplink type is one line here.
+func exitKindFor(rowType string) core.Kind {
+	if rowType == wgclient.Type {
+		return "wgkernel"
+	}
+	return ""
+}
+
+// exitLabel is what the operator named it, falling back to something they can
+// still recognise in a picker.
+func exitLabel(row *model.Egress) string {
+	if row.Remark != "" {
+		return row.Remark
+	}
+	return fmt.Sprintf("%s #%d", row.Type, row.Id)
 }

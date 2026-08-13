@@ -129,3 +129,42 @@ func IngressHandleFor(ctx context.Context, inst core.Instance) (core.IngressHand
 	}
 	return bound.Ingress.IngressHandle(ctx, inst)
 }
+
+/*
+ExitHandleFor resolves one uplink's handle, and what kind of handle it is.
+
+Both together because a caller needs the kind to know how to route to it and the
+handle to know where: asking twice would let the two disagree while a device
+came up between the calls.
+*/
+func ExitHandleFor(ctx context.Context, exit core.Exit) (core.ExitHandleKind, core.ExitHandle, error) {
+	bound, ok := kindOwners().For(exit.Kind)
+	if !ok || bound.Egress == nil {
+		return core.ExitNone, core.ExitHandle{}, nil
+	}
+	kind := bound.Egress.ExitHandleKind(exit.Kind)
+	if kind == core.ExitNone {
+		return core.ExitNone, core.ExitHandle{}, nil
+	}
+	handle, err := bound.Egress.ExitHandle(ctx, exit)
+	if err != nil {
+		return core.ExitNone, core.ExitHandle{}, err
+	}
+	return kind, handle, nil
+}
+
+// ExitKinds names every kind that can terminate a route in this build, so a
+// picker is built from the registry rather than from a list somebody maintains.
+func ExitKinds() []core.Kind {
+	var out []core.Kind
+	for _, kind := range Kinds() {
+		bound, ok := kindOwners().For(kind)
+		if !ok || bound.Egress == nil {
+			continue
+		}
+		if bound.Egress.ExitHandleKind(kind) != core.ExitNone {
+			out = append(out, kind)
+		}
+	}
+	return out
+}

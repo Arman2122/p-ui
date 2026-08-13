@@ -175,7 +175,7 @@ func (m *Manager) plan(e Egress, snap Snapshot) (want, error) {
 			Family: family, Table: Table(e.ID), Type: RouteBlackhole,
 			Dst: family.DefaultRoute(), Metric: BlackholeMetric,
 		})
-		if fill.Device != "" && present {
+		if fill.Device != "" && present && fillCarries(fill, family) {
 			w.fronts = append(w.fronts, RouteSpec{
 				Family: family, Table: Table(e.ID), Type: RouteUnicast,
 				Dst: family.DefaultRoute(), Device: fill.Device, Metric: FrontMetric,
@@ -189,10 +189,34 @@ func (m *Manager) plan(e Egress, snap Snapshot) (want, error) {
 			})
 		}
 	}
+	// A locally originated socket has no ingress device, so the mark is the only
+	// handle. Emitted with the table it selects, never on its own: a mark with no
+	// rule to catch it routes via main and leaves with the host's own address.
+	if fill.Marked {
+		for _, family := range Families {
+			w.rules = append(w.rules, RuleSpec{
+				Family: family, Priority: Prio(e.ID), Mark: Mark(e.ID), Table: Table(e.ID),
+			})
+		}
+	}
 	if present {
 		w.sysctls = fill.Sysctls
 	}
 	return w, problem
+}
+
+/*
+fillCarries reports whether this device may be routed in this family.
+
+The blackhole is deliberately NOT gated on it: a family the device cannot carry
+must still be dropped inside the table, never released to main. Withholding the
+route and keeping the blackhole is the difference between contained and leaking.
+*/
+func fillCarries(fill Fill, family Family) bool {
+	if fill.Families == nil {
+		return true
+	}
+	return slices.Contains(fill.Families, family)
 }
 
 // have is the part of the snapshot one id owns. Ownership is structural, so a
@@ -243,8 +267,13 @@ func ownedView(snap Snapshot, id int, device string) have {
 	return h
 }
 
-// ownsDevice accepts the row's own device and anything in the panel's peg<id>
-// namespace, so a front pointing at the WRONG peg is replaced, not left leaking.
+/*
+ownsDevice accepts the row's own device and anything in the panel's own device
+namespaces, so a front pointing at the WRONG one is replaced rather than left
+leaking -- including when the row is being torn down and want is empty.
+
+Both namespaces: a front the panel carved (peg) and an uplink it dials (pux).
+*/
 func ownsDevice(want, got string) bool {
 	if got == "" {
 		return false
@@ -252,14 +281,45 @@ func ownsDevice(want, got string) bool {
 	if want != "" && got == want {
 		return true
 	}
-	_, mine := ownedEgressID(got)
+	if _, mine := ownedEgressID(got); mine {
+		return true
+	}
+	_, mine := ownedUplinkID(got)
 	return mine
+}
+
+/*
+provision brings up a device this panel owns, before anything is routed at it.
+
+Ordered deliberately: the device first, then the route, because a route into a
+device that does not exist is refused by the kernel and the row would converge
+to its blackhole alone. A driver that does not provision -- one whose device
+belongs to a core -- is simply skipped.
+*/
+func (m *Manager) provision(ctx context.Context, e Egress) error {
+	driver, known := m.drivers.For(e.Type)
+	if !known {
+		return nil
+	}
+	provisioner, provisions := driver.(Provisioner)
+	if !provisions {
+		return nil
+	}
+	if !e.Enable {
+		return provisioner.Deprovision(ctx, e.ID)
+	}
+	return provisioner.Provision(ctx, e)
 }
 
 func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 	if err := checkID(e.ID); err != nil {
 		return err
 	}
+	// Before the plan, for a device this panel makes: the kernel refuses a route
+	// into a device that does not exist, and the row would converge to its
+	// blackhole alone. A failure here is joined below rather than returned, so
+	// the containment still happens for a device that could not be dialled.
+	provisionErr := m.provision(ctx, e)
 	w, planErr := m.plan(e, snap)
 	h := ownedView(snap, e.ID, w.device)
 
@@ -267,7 +327,7 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 	addBlack, delBlack := diff(w.blackholes, h.blackholes)
 	addFront, delFront := diff(w.fronts, h.fronts)
 
-	failures := []error{planErr}
+	failures := []error{planErr, provisionErr}
 	// Removing the rule is what stops traffic, so a teardown starts here and a
 	// build-up never reaches here with anything to do.
 	live := map[Family]int{}

@@ -203,12 +203,13 @@ func groupRules(in Input) map[int][]Rule {
 /*
 compileRule emits one Xray rule for one (rule, subject) pair.
 
-target() is where the N-by-N matrix collapses to four answers, and the cell that
-is deliberately missing is the marked one: THE COMPILE NEVER EMITS A MARKED
-OUTBOUND WITHOUT ITS MATCHING ip rule fwmark. egress.RuleSpec has no Mark field,
-so a marked socket with no rule to catch it routes via main and leaves with the
-server's own address — direct rather than dark, which inverts the one property
-internal/egress guarantees.
+The N-by-N matrix collapses to five answers here, and the marked one carries the
+invariant: A MARKED OUTBOUND IS ONLY EMITTED FOR AN EXIT WHOSE ROW CONVERGES THE
+MATCHING ip rule fwmark. A marked socket with no rule to catch it routes via main
+and leaves with the server's own address — direct rather than dark, which inverts
+the one property internal/egress guarantees. The row is what ties them together:
+the same enabled egress that answers ExitDevice here is the one whose Fill sets
+Marked, and the service layer converges the kernel before Xray is restarted.
 */
 func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (json.RawMessage, Diag, json.RawMessage) {
 	diag := Diag{RuleID: rule.ID, SubjectTag: subject.Tag, Pattern: pattern, Severity: SeverityOK}
@@ -254,15 +255,21 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 			body["outboundTag"] = mustJSON(name)
 			diag.Pattern = PatternProxy
 		case core.ExitDevice:
-			// Refused until a fwmark rule exists to catch the marked socket, and
-			// refused for good when the panel would have to NAT and cannot.
-			diag.Severity, diag.Pattern = SeverityInert, PatternInert
-			diag.MessageKey = KeyNoExitDriver
-			if exit.Handle.Source == core.SourceOwnerPanel {
+			// Still refused for good when the panel would have to NAT and cannot:
+			// a route that looks healthy and delivers nothing is the worse answer.
+			if exit.Handle.Source == core.SourceOwnerPanel || exit.Handle.Device == "" {
+				diag.Severity, diag.Pattern = SeverityInert, PatternInert
 				diag.MessageKey = KeyNoSnat
+				if exit.Handle.Device == "" {
+					diag.MessageKey = KeyNoExitDriver
+				}
+				diag.Args = map[string]string{"exit": exit.Label}
+				return nil, diag, nil
 			}
-			diag.Args = map[string]string{"exit": exit.Label}
-			return nil, diag, nil
+			name := exitOutboundTag(exit.ID)
+			outbound = markedOutbound(name, egress.Mark(exit.ID))
+			body["outboundTag"] = mustJSON(name)
+			diag.Pattern = PatternMarked
 		default:
 			diag.Severity, diag.Pattern, diag.MessageKey = SeverityInert, PatternInert, KeyExitMissing
 			return nil, diag, nil
@@ -313,6 +320,26 @@ func findExit(exits []ResolvedExit, id int) (ResolvedExit, bool) {
 // exitOutboundTag names a synthesized outbound. The prefix round-trips through
 // this one function so nothing else has to know the shape.
 func exitOutboundTag(id int) string { return fmt.Sprintf("pex%d", id) }
+
+/*
+markedOutbound re-originates the traffic and stamps the socket so the kernel can
+steer it.
+
+freedom, not a proxy: the far end of a device exit speaks no proxy protocol. The
+mark is the whole mechanism — it is what internal/egress matches to send this
+socket into the exit's own table, and re-originating here is what makes the
+kernel choose the uplink's address as the source, so nothing has to NAT.
+*/
+func markedOutbound(tag string, mark uint32) json.RawMessage {
+	return mustJSON(map[string]any{
+		"tag":      tag,
+		"protocol": "freedom",
+		"settings": map[string]any{},
+		"streamSettings": map[string]any{
+			"sockopt": map[string]any{"mark": mark},
+		},
+	})
+}
 
 func socksOutbound(tag string, port int) json.RawMessage {
 	return mustJSON(map[string]any{
