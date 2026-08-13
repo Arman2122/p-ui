@@ -88,7 +88,11 @@ ForwardingNotes reports the host forwarding knobs that are off.
 Split out of Preflight because it is the one half of it that has nothing to do
 with an egress: a plain wgkernel inbound needs forwarding just as much, and
 without this it completes handshakes and routes nothing with no word anywhere.
-Reported and never owned — turning it on is not this panel's call.
+
+Still reported, no longer only reported: EnsureForwarding turns it on once an
+L3 inbound exists. This stays because the knob can be off for a moment -- before
+the first converge, or after somebody sets it back -- and saying so beats a
+tunnel that hands out addresses and drops every packet.
 */
 func (m *Manager) ForwardingNotes(ctx context.Context) []string {
 	var notes []string
