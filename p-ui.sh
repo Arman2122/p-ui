@@ -265,6 +265,15 @@ uninstall() {
     rm ${pui_folder}/ -rf
     rm -f "${pui_env_file}"
 
+    # The panel turns host forwarding on for an L3 inbound, so uninstall takes the
+    # drop-in back. The running value is left alone on purpose: docker, another
+    # VPN or a container network may rely on the same knob, and this panel did
+    # not put those there.
+    if [[ -f /etc/sysctl.d/99-p-ui-forwarding.conf ]]; then
+        rm -f /etc/sysctl.d/99-p-ui-forwarding.conf
+        echo -e "${yellow}Removed /etc/sysctl.d/99-p-ui-forwarding.conf. Packet forwarding stays on until the next reboot; nothing else was changed.${plain}"
+    fi
+
     if postgresql_installed; then
         purge_postgresql
     fi

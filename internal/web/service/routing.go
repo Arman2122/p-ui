@@ -483,6 +483,12 @@ a restart — leaving that would make an attach report success and route nothing
 */
 func (s *RoutingService) converge(ctx context.Context) error {
 	(&XrayService{}).SetToNeedRestart()
+	// Before the kernel objects, because a rule that routes into a device on a
+	// host that forwards nothing is inert, and this is the one knob a fresh
+	// install ships off.
+	if err := s.EnsureHostForwarding(ctx); err != nil {
+		logger.Warning("routing: host forwarding could not be enabled:", err)
+	}
 	return (&EgressService{}).Reconcile(ctx)
 }
 
@@ -569,4 +575,30 @@ func (s *RoutingService) ClearInbound(ctx context.Context, inboundID int) error 
 		}
 	}
 	return s.converge(ctx)
+}
+
+/*
+EnsureHostForwarding turns on packet forwarding when this host has an inbound
+that needs it, and leaves the knob alone when it does not.
+
+Asked through the registry rather than by protocol, so a future L3 core enables
+it by declaring IngressDevice and nothing here changes. Conditional because a
+box serving only Xray inbounds forwards nothing and should not be quietly
+reconfigured; enabled-never-disabled because docker, another VPN or a container
+network may depend on the same knob, and none of those are the panel's to break.
+*/
+func (s *RoutingService) EnsureHostForwarding(ctx context.Context) error {
+	var inbounds []*model.Inbound
+	err := database.GetDB().Model(&model.Inbound{}).
+		Select("id", "protocol").
+		Where("node_id IS NULL AND enable = ?", true).Find(&inbounds).Error
+	if err != nil {
+		return err
+	}
+	for _, inbound := range inbounds {
+		if cores.IngressSelectorFor(core.Kind(inbound.Protocol)) == core.IngressDevice {
+			return egressManager.EnsureForwarding(ctx)
+		}
+	}
+	return nil
 }
