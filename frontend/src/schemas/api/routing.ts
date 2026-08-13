@@ -107,3 +107,91 @@ function safeParse(raw: string): Record<string, unknown> | unknown[] | null {
     return null;
   }
 }
+
+/* The bridge between the two halves of the list. A rule is the same sentence
+   either way -- these convert the shape, never the meaning, so one editor can
+   open a stored intent row and a template rule without knowing which it has. */
+
+export interface XrayRuleShape {
+  enabled?: boolean;
+  type?: string;
+  domain?: string[];
+  ip?: string[];
+  port?: string;
+  sourcePort?: string;
+  network?: string;
+  sourceIP?: string[];
+  user?: string[];
+  inboundTag?: string[];
+  protocol?: string[];
+  outboundTag?: string;
+  balancerTag?: string;
+  [key: string]: unknown;
+}
+
+const LIST_KEYS: Record<string, 'domain' | 'ip' | 'sourceIP' | 'user' | 'protocol'> = {
+  domain: 'domain', ip: 'ip', source: 'sourceIP', user: 'user', protocol: 'protocol',
+};
+
+export function intentToRule(
+  record: RoutingRuleRecord,
+  tagOf: (inboundId: number) => string | undefined,
+): XrayRuleShape {
+  const criteria = criteriaToForm(record.criteria);
+  const out: XrayRuleShape = { type: 'field', enabled: record.enable };
+  for (const [key, value] of Object.entries(criteria)) {
+    if (!value) continue;
+    const listKey = LIST_KEYS[key];
+    if (listKey) out[listKey] = value.split(',').map((s) => s.trim()).filter(Boolean);
+    else out[key] = value;
+  }
+  out.inboundTag = record.ingressScope === 'all'
+    ? []
+    : ingressIdsToArray(record.ingressIds).map((id) => tagOf(id) ?? `#${id}`).filter(Boolean);
+  if (record.destKind === 'balancer') out.balancerTag = record.destTag;
+  else out.outboundTag = destTagFor(record);
+  return out;
+}
+
+function destTagFor(record: RoutingRuleRecord): string {
+  if (record.destKind === 'direct') return 'direct';
+  if (record.destKind === 'block') return 'blocked';
+  return record.destTag ?? '';
+}
+
+export function ruleToIntent(
+  rule: XrayRuleShape,
+  idOf: (tag: string) => number | undefined,
+): RoutingRulePayload {
+  const criteria: Record<string, string> = {};
+  for (const [formKey, ruleKey] of Object.entries(LIST_KEYS)) {
+    const value = rule[ruleKey];
+    if (Array.isArray(value) && value.length > 0) criteria[formKey] = value.join(',');
+  }
+  for (const scalar of ['port', 'sourcePort', 'network']) {
+    const value = rule[scalar];
+    if (typeof value === 'string' && value !== '') criteria[scalar] = value;
+  }
+  const ids = (rule.inboundTag ?? []).map((tag) => idOf(tag)).filter((id): id is number => id != null);
+  return {
+    enable: rule.enabled !== false,
+    remark: typeof rule.remark === 'string' ? rule.remark : '',
+    ingressScope: ids.length === 0 ? 'all' : 'selected',
+    ingressIds: JSON.stringify(ids),
+    destKind: rule.balancerTag ? 'balancer' : 'outbound',
+    destTag: rule.balancerTag || rule.outboundTag || '',
+    destExitId: null,
+    criteria: criteriaFromForm(criteria),
+    inspect: false,
+  };
+}
+
+/* Which criteria can match on every one of these subjects. The INTERSECTION,
+   because one rule carries one set and the narrowest subject decides. */
+export function intersectMask(subjects: RoutingSubjectView[]): Set<string> {
+  if (subjects.length === 0) return new Set(CRITERIA_FIELDS);
+  return subjects.slice(1).reduce<Set<string>>(
+    (acc, subject) => new Set([...acc].filter((field) => subject.criteriaMask.includes(field))),
+    new Set(subjects[0].criteriaMask),
+  );
+}

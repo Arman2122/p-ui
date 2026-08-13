@@ -1862,30 +1862,48 @@ func (s *InboundService) GetRoutingSubjects() ([]RoutingSubject, error) {
 	return subjects, nil
 }
 
-// routingSubjectReason returns "" when a rule may name this inbound, else the
-// translation key saying why it cannot. First match wins; order is the argument.
+/*
+routingSubjectReason returns "" when a rule may name this inbound, else the
+translation key saying why it cannot.
+
+The answer comes from the core registry rather than from "does Xray serve it".
+A kernel inbound is routable even though Xray never sees its packets, because
+the routing compile fronts it and rewrites the rule onto the front's tag — so
+the honest question is whether ANY core declares a routable ingress for it.
+*/
 func routingSubjectReason(inbound *model.Inbound) string {
-	switch {
-	case inbound == nil:
-		return subjectReasonNoXray
-	// A node serves its own core and never receives this host's rules array.
-	case inbound.NodeID != nil:
-		return subjectReasonNode
-	case !inbound.Enable:
-		return subjectReasonDisabled
-	case cores.ServedByXray(core.Kind(inbound.Protocol)):
-		return ""
-	// The bridge gives an MTProto inbound a real Xray inbound tag; without it the
-	// sidecar carries the traffic and Xray's router never sees a packet.
-	case mtprotoRoutesThroughXray(inbound):
-		return ""
-	case settingsHasKey(inbound.Settings, "routeThroughXray"):
-		return subjectReasonBridgeOff
-	case !slices.Contains(cores.Kinds(), core.Kind(inbound.Protocol)):
-		return subjectReasonUnknownCore
-	default:
+	if inbound == nil {
 		return subjectReasonNoXray
 	}
+	// A node serves its own core and never receives this host's rules array.
+	if inbound.NodeID != nil {
+		return subjectReasonNode
+	}
+	if !inbound.Enable {
+		return subjectReasonDisabled
+	}
+	kind := core.Kind(inbound.Protocol)
+	if !slices.Contains(cores.Kinds(), kind) {
+		return subjectReasonUnknownCore
+	}
+	if cores.IngressSelectorFor(kind) == core.IngressNone {
+		return subjectReasonNoXray
+	}
+	// The instance's own answer: an MTProto inbound with its bridge switched off
+	// is a routable KIND whose current instance still exposes nothing.
+	handle, err := cores.IngressHandleFor(context.Background(), core.Instance{
+		ID: inbound.Id, Kind: kind, Tag: inbound.Tag, Settings: inbound.Settings,
+	})
+	if err != nil {
+		return subjectReasonNoXray
+	}
+	if handle.BlockedKey != "" {
+		return handle.BlockedKey
+	}
+	if handle.Tag == "" && handle.Device == "" {
+		return subjectReasonNoXray
+	}
+	return ""
 }
 
 // settingsHasKey reports whether an inbound's settings carry a key at all, which

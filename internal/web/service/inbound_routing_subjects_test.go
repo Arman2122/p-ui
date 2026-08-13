@@ -1,8 +1,11 @@
 package service
 
 import (
+	"context"
 	"testing"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
@@ -24,8 +27,12 @@ func seedRoutingInbound(t *testing.T, remark string, port int, protocol model.Pr
 
 /*
 The routing editor offered every tag in the inbounds table, so a rule naming a
-wgkernel or node inbound saved cleanly and then never matched a packet. Measured
-on a real host: the rule is accepted, and traffic is entirely unaffected.
+node inbound saves cleanly and then never matches a packet.
+
+A wgkernel inbound is ROUTABLE here, and that changed when the routing compile
+landed: Xray still never sees its packets, but the compile fronts it and
+rewrites the rule onto the front's tag. The question is whether a core declares
+a routable ingress, not whether Xray serves the protocol.
 */
 func TestRoutingSubjectsMarkUnroutableTags(t *testing.T) {
 	initTestDB(t)
@@ -54,7 +61,7 @@ func TestRoutingSubjectsMarkUnroutableTags(t *testing.T) {
 	}{
 		{"vless-in", true, ""},
 		{"mt-bridged", true, ""},
-		{"wg-home", false, "pages.xray.subjects.reasonNoXrayInbound"},
+		{"wg-home", true, ""},
 		{"mt-plain", false, "pages.xray.subjects.reasonBridgeOff"},
 		{"vless-off", false, "pages.xray.subjects.reasonDisabled"},
 		{"vless-node", false, "pages.xray.subjects.reasonNode"},
@@ -75,11 +82,11 @@ func TestRoutingSubjectsMarkUnroutableTags(t *testing.T) {
 }
 
 /*
-The anti-regression, and the one that encodes the bug: RenderInbound decides what
-Xray's router will ever see, so a subject the editor calls routable must be one
-RenderInbound actually emits. Changing either side alone turns this red.
+The anti-regression: a subject the editor calls routable must be one the compile
+can actually realise — either Xray renders it directly, or a core declares an
+ingress the compile can front. Changing either side alone turns this red.
 */
-func TestRoutingSubjectsAgreeWithRenderInbound(t *testing.T) {
+func TestRoutingSubjectsAgreeWithTheCores(t *testing.T) {
 	initTestDB(t)
 	two := 2
 
@@ -101,18 +108,19 @@ func TestRoutingSubjectsAgreeWithRenderInbound(t *testing.T) {
 		byTag[inbound.Tag] = inbound
 	}
 
-	xrayService := &XrayService{}
 	for _, subject := range subjects {
 		inbound := byTag[subject.Tag]
-		rendered, renderErr := xrayService.RenderInbound(inbound)
-		if renderErr != nil {
-			t.Fatalf("RenderInbound(%s): %v", subject.Tag, renderErr)
+		handle, err := cores.IngressHandleFor(context.Background(), core.Instance{
+			ID: inbound.Id, Kind: core.Kind(inbound.Protocol), Tag: inbound.Tag, Settings: inbound.Settings,
+		})
+		if err != nil {
+			t.Fatalf("IngressHandleFor(%s): %v", subject.Tag, err)
 		}
-		reachesRouter := rendered != nil || mtprotoRoutesThroughXray(inbound)
-		if subject.Routable != reachesRouter {
-			t.Errorf("%s: the editor says routable=%v but the generated config %s it",
-				subject.Tag, subject.Routable,
-				map[bool]string{true: "carries", false: "never carries"}[reachesRouter])
+		realisable := inbound.NodeID == nil && handle.BlockedKey == "" &&
+			(handle.Tag != "" || handle.Device != "")
+		if subject.Routable != realisable {
+			t.Errorf("%s: the editor says routable=%v but the cores say %v",
+				subject.Tag, subject.Routable, realisable)
 		}
 	}
 }
