@@ -19,6 +19,11 @@ export const keys = {
     defaults: () => ['settings', 'defaults'] as const,
     factoryDefaults: () => ['settings', 'factoryDefaults'] as const,
   },
+  routing: {
+    root: () => ['routing'] as const,
+    rules: () => ['routing', 'rules'] as const,
+    subjects: () => ['routing', 'subjects'] as const,
+  },
   cores: {
     root: () => ['cores'] as const,
     list: () => ['cores', 'list'] as const,

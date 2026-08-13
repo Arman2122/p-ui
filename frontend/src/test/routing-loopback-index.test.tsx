@@ -37,7 +37,7 @@ describe('RoutingTab hidden-loopback index mapping', () => {
       </QueryClientProvider>,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Routing Rules/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Template rules/ }));
 
     const switches = document.querySelectorAll('.routing-table .ant-switch');
     expect(switches.length).toBe(2);
