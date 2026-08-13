@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Form, Input, Modal, Select, Space, Switch, Tooltip, Typography } from 'antd';
+import type { SelectProps } from 'antd';
 import { PlusOutlined, MinusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { InputAddon } from '@/components/ui';
@@ -8,7 +9,12 @@ import { FormField } from '@/components/form/rhf';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import { RuleFormSchema, type RuleFormValues } from '@/schemas/xray';
 import { buildRemarkByTag, formatInboundTag, isApiRule } from './helpers';
-import { intersectMask, type RoutingSubjectView } from '@/schemas/api/routing';
+import {
+  exitTagFor,
+  intersectMask,
+  type RoutingExitView,
+  type RoutingSubjectView,
+} from '@/schemas/api/routing';
 import type { InboundTagOption } from './types';
 
 export interface RoutingRule {
@@ -39,6 +45,9 @@ interface RuleFormModalProps {
   /* When present, criteria are gated by what the selected inbounds can match.
      Absent for a template rule, whose subjects the panel does not resolve. */
   subjects?: RoutingSubjectView[];
+  /* Uplinks this rule may be pointed at. Absent for a template rule: that row
+     is a raw Xray rule, and an uplink is not a tag any Xray config contains. */
+  exits?: RoutingExitView[];
   onClose: () => void;
   onConfirm: (rule: Record<string, unknown>) => void;
 }
@@ -75,6 +84,7 @@ export default function RuleFormModal({
   outboundTags,
   balancerTags,
   subjects,
+  exits,
   onClose,
   onConfirm,
 }: RuleFormModalProps) {
@@ -84,6 +94,21 @@ export default function RuleFormModal({
 
   const { data: inboundOptions } = useInboundOptions();
   const remarkByTag = useMemo(() => buildRemarkByTag(inboundOptions || []), [inboundOptions]);
+
+  /* Uplinks sit in the destination field beside the outbounds, grouped so it is
+     obvious which are Xray's and which the panel dials itself. Ungrouped when
+     there are none, so an install without an uplink looks exactly as it did. */
+  const destinationOptions = useMemo<SelectProps['options']>(() => {
+    const outbounds = outboundTags.map((tag) => ({ value: tag, label: tag || '(none)' }));
+    if (!exits?.length) return outbounds;
+    return [
+      { label: t('pages.xray.Outbounds'), options: outbounds },
+      {
+        label: t('pages.xray.ruleForm.uplinks'),
+        options: exits.map((exit) => ({ value: exitTagFor(exit.id), label: exit.label })),
+      },
+    ];
+  }, [outboundTags, exits, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -343,7 +368,7 @@ export default function RuleFormModal({
           </FormField>
 
           <FormField name="outboundTag" label={t('pages.xray.ruleForm.outboundTag')}>
-            <Select options={outboundTags.map((tag) => ({ value: tag, label: tag || '(none)' }))} />
+            <Select options={destinationOptions} />
           </FormField>
 
           <FormField

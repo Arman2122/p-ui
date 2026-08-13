@@ -1689,7 +1689,8 @@
         "inboundTags": "Inbound tags",
         "outboundTag": "Outbound tag",
         "balancerTag": "Balancer tag",
-        "balancerTagTooltip": "Routes traffic through one of the configured load balancers"
+        "balancerTagTooltip": "Routes traffic through one of the configured load balancers",
+        "uplinks": "Uplinks"
       },
       "outboundForm": {
         "tagDuplicate": "Tag already used by another outbound",

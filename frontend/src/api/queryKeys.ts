@@ -23,6 +23,7 @@ export const keys = {
     root: () => ['routing'] as const,
     rules: () => ['routing', 'rules'] as const,
     subjects: () => ['routing', 'subjects'] as const,
+    exits: () => ['routing', 'exits'] as const,
   },
   cores: {
     root: () => ['cores'] as const,

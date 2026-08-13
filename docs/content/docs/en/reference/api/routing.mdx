@@ -29,6 +29,13 @@ _openapi:
         a user with no email, so the matcher can never return true.
       url: '#which-inbounds-a-rule-may-name-an-inbound-that-cannot-be-a-subject-right-now-is-listed-with-routablefalse-and-a-blockedkey-naming-why-never-omitted-criteriamask-names-the-criteria-that-can-actually-match-on-it----user-is-absent-for-a-kernel-ingress-because-xrays-tun-handler-builds-a-user-with-no-email-so-the-matcher-can-never-return-true'
     - depth: 2
+      title: "Which uplinks a rule may be pointed at. Operator-owned exits only -- a
+        panel-owned front is machinery for an ingress and never a destination.
+        The handle that realises an exit is deliberately absent: which device or
+        port carries it is the compile's business, and an editor that showed it
+        would invite an operator to depend on it."
+      url: '#which-uplinks-a-rule-may-be-pointed-at-operator-owned-exits-only----a-panel-owned-front-is-machinery-for-an-ingress-and-never-a-destination-the-handle-that-realises-an-exit-is-deliberately-absent-which-device-or-port-carries-it-is-the-compiles-business-and-an-editor-that-showed-it-would-invite-an-operator-to-depend-on-it'
+    - depth: 2
       title: Set the whole first-match order in one write. The body is the complete id
         list; a partial application would silently change which rule wins.
       url: '#set-the-whole-first-match-order-in-one-write-the-body-is-the-complete-id-list-a-partial-application-would-silently-change-which-rule-wins'
@@ -52,6 +59,12 @@ _openapi:
           handler builds a user with no email, so the matcher can never return
           true.
         id: which-inbounds-a-rule-may-name-an-inbound-that-cannot-be-a-subject-right-now-is-listed-with-routablefalse-and-a-blockedkey-naming-why-never-omitted-criteriamask-names-the-criteria-that-can-actually-match-on-it----user-is-absent-for-a-kernel-ingress-because-xrays-tun-handler-builds-a-user-with-no-email-so-the-matcher-can-never-return-true
+      - content: "Which uplinks a rule may be pointed at. Operator-owned exits only -- a
+          panel-owned front is machinery for an ingress and never a destination.
+          The handle that realises an exit is deliberately absent: which device
+          or port carries it is the compile's business, and an editor that
+          showed it would invite an operator to depend on it."
+        id: which-uplinks-a-rule-may-be-pointed-at-operator-owned-exits-only----a-panel-owned-front-is-machinery-for-an-ingress-and-never-a-destination-the-handle-that-realises-an-exit-is-deliberately-absent-which-device-or-port-carries-it-is-the-compiles-business-and-an-editor-that-showed-it-would-invite-an-operator-to-depend-on-it
       - content: Set the whole first-match order in one write. The body is the complete
           id list; a partial application would silently change which rule wins.
         id: set-the-whole-first-match-order-in-one-write-the-body-is-the-complete-id-list-a-partial-application-would-silently-change-which-rule-wins
@@ -71,7 +84,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/routing/rules","method":"get"},{"path":"/panel/api/routing/rules","method":"post"},{"path":"/panel/api/routing/subjects","method":"get"},{"path":"/panel/api/routing/rules/order","method":"post"},{"path":"/panel/api/routing/rules/{id}","method":"post"},{"path":"/panel/api/routing/rules/{id}/del","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/routing/rules","method":"get"},{"path":"/panel/api/routing/rules","method":"post"},{"path":"/panel/api/routing/subjects","method":"get"},{"path":"/panel/api/routing/exits","method":"get"},{"path":"/panel/api/routing/rules/order","method":"post"},{"path":"/panel/api/routing/rules/{id}","method":"post"},{"path":"/panel/api/routing/rules/{id}/del","method":"post"}]} showTitle />
     </>
   );
 }

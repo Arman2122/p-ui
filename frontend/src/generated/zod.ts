@@ -749,6 +749,12 @@ export const RealityScanResultSchema = z.object({
 });
 export type RealityScanResult = z.infer<typeof RealityScanResultSchema>;
 
+export const RoutingExitViewSchema = z.object({
+  id: z.number().int(),
+  label: z.string(),
+});
+export type RoutingExitView = z.infer<typeof RoutingExitViewSchema>;
+
 export const RoutingRuleSchema = z.object({
   createdAt: z.number().int(),
   criteria: z.unknown(),

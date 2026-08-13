@@ -426,6 +426,32 @@ type RoutingSubjectView struct {
 	CriteriaMask []string `json:"criteriaMask"`
 }
 
+/*
+RoutingExitView is one uplink as the rule editor offers it.
+
+The handle is deliberately not here: which device or port realises an exit is
+the compile's business, and an editor that showed it would invite an operator to
+depend on it.
+*/
+type RoutingExitView struct {
+	Id    int    `json:"id" example:"4"`
+	Label string `json:"label" example:"US-sfo | Surfshark"`
+}
+
+// ExitViews is the editor's half of Exits: every uplink a rule may point at,
+// named as the operator named it.
+func (s *RoutingService) ExitViews(ctx context.Context) ([]RoutingExitView, error) {
+	exits, err := s.Exits(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RoutingExitView, 0, len(exits))
+	for _, exit := range exits {
+		out = append(out, RoutingExitView{Id: exit.ID, Label: exit.Label})
+	}
+	return out, nil
+}
+
 // SubjectViews is the editor's half of Subjects: the same answers, shaped for a
 // picker that has to disable a row and say why.
 func (s *RoutingService) SubjectViews(ctx context.Context) ([]RoutingSubjectView, error) {

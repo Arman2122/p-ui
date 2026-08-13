@@ -3141,6 +3141,24 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "RoutingExitView": {
+    "description": "/*\nRoutingExitView is one uplink as the rule editor offers it.\n\nThe handle is deliberately not here: which device or port realises an exit is\nthe compile's business, and an editor that showed it would invite an operator to\ndepend on it.\n*/",
+    "properties": {
+      "id": {
+        "example": 4,
+        "type": "integer"
+      },
+      "label": {
+        "example": "US-sfo | Surfshark",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "label"
+    ],
+    "type": "object"
+  },
   "RoutingRule": {
     "description": "/*\nRoutingRule is one row of operator intent: these inbounds, these criteria, this\ndestination.\n\nKeyed on inbound IDs rather than tags, which is what makes a rule immune to the\ntag-rewriting an inbound rename or delete performs — the failure mode that used\nto widen a rule to every inbound on the box.\n*/",
     "properties": {
