@@ -4,6 +4,7 @@ import { act } from '@testing-library/react';
 import EgressFormModal from '@/pages/xray/egresses/EgressFormModal';
 import { EGRESS_TYPE_UPLINK, EgressFormSchema } from '@/schemas/api/egress';
 import { HttpUtil, Msg } from '@/utils';
+import enUS from '../../../internal/web/translation/en-US.json';
 
 import { renderWithProviders } from './test-utils';
 
@@ -57,6 +58,28 @@ describe('the uplink half of the egress form', () => {
 
     const address = document.querySelector('#address') as HTMLTextAreaElement | null;
     expect(address?.value).toBe('10.14.0.2/32\nfd00::2/128');
+  });
+});
+
+describe('the uplink form when a required field is empty', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  /* A Save that neither saves nor explains is the worst of both. The refine
+     blocks the submit; these messages are what tell the operator which field. */
+  it('says which field is missing instead of doing nothing', async () => {
+    const empty = { ...UPLINK, settings: '' };
+    await renderModal(empty);
+
+    const save = Array.from(document.querySelectorAll('button'))
+      .find((b) => b.textContent?.trim() === 'Save');
+    await act(async () => { save?.click(); });
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    }
+
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(enUS.pages.xray.egress.endpointRequired);
+    expect(text).toContain(enUS.pages.xray.egress.privateKeyRequired);
   });
 });
 
