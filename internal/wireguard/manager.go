@@ -194,6 +194,9 @@ func (m *Manager) drainLocked(rec *managed, snap Snapshot) {
 type Manager struct {
 	mu    sync.Mutex
 	plane Plane
+	// prefix is this manager's device namespace. Two managers over one host must
+	// not share it, or their id spaces collide on a single device.
+	prefix string
 	// scrapeMu serialises CollectTraffic. Counter.Observe assumes readings arrive
 	// in order; two overlapping scrapes can invert them and re-bill a counter.
 	scrapeMu sync.Mutex
@@ -201,21 +204,42 @@ type Manager struct {
 	warnOnce sync.Once
 }
 
-// NewManager returns a manager over one network stack. It is the single
-// injection seam: production passes the host's, tests pass a fake.
-func NewManager(p Plane) *Manager {
-	return &Manager{plane: p, devices: map[int]*managed{}}
+// Name is the device this manager gives an id. It is the contract a caller
+// routes by: whatever this returns is what Ensure creates.
+func (m *Manager) Name(id int) string { return nameIn(m.prefix, id) }
+
+// owned reports whether a device is in this manager's namespace, so a sweep
+// never reaches across into the other's.
+func (m *Manager) owned(name string) (int, bool) { return ownedIDIn(m.prefix, name) }
+
+// NewManager returns a manager over one network stack in the inbound namespace.
+// It is the single injection seam: production passes the host's, tests a fake.
+func NewManager(p Plane) *Manager { return NewNamedManager(p, interfacePrefix) }
+
+// NewNamedManager returns a manager owning its own device namespace. Each sweep
+// is confined to that prefix, so two managers over one host ignore each other.
+func NewNamedManager(p Plane, prefix string) *Manager {
+	return &Manager{plane: p, prefix: prefix, devices: map[int]*managed{}}
 }
 
 var (
 	managerOnce sync.Once
 	manager     *Manager
+	uplinkOnce  sync.Once
+	uplinkMgr   *Manager
 )
 
 // GetManager returns the process-wide manager over the host network stack.
 func GetManager() *Manager {
 	managerOnce.Do(func() { manager = NewManager(hostPlane()) })
 	return manager
+}
+
+// GetUplinkManager returns the process-wide manager for dialled uplinks. A
+// separate manager, because an uplink id and an inbound id mean different things.
+func GetUplinkManager() *Manager {
+	uplinkOnce.Do(func() { uplinkMgr = NewNamedManager(hostPlane(), UplinkPrefix) })
+	return uplinkMgr
 }
 
 // record returns this inbound's state, creating it on first sight. The counter is
@@ -255,7 +279,7 @@ func (m *Manager) Ensure(ctx context.Context, inst Instance) error {
 }
 
 func (m *Manager) ensureLocked(ctx context.Context, inst Instance) error {
-	name := inst.Interface()
+	name := m.Name(inst.ID)
 	key, err := parseKey(inst.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("wireguard: inbound %d has an unusable private key: %w", inst.ID, err)
@@ -310,7 +334,7 @@ func (m *Manager) ensureLocked(ctx context.Context, inst Instance) error {
 // ensureDeviceLocked brings the link up and writes the device scalars, returning
 // the snapshot the peer diff is computed from and whether the link is new.
 func (m *Manager) ensureDeviceLocked(ctx context.Context, inst Instance, key wgtypes.Key) (Snapshot, bool, error) {
-	name := inst.Interface()
+	name := m.Name(inst.ID)
 	state, err := m.plane.EnsureLink(ctx, LinkSpec{Name: name, MTU: linkMTU(inst.MTU)})
 	if err != nil {
 		return Snapshot{}, false, m.note(err)
@@ -401,7 +425,7 @@ func (m *Manager) Reconcile(ctx context.Context, desired []Instance, retain ...i
 		failures = append(failures, m.note(err))
 	}
 	for _, name := range names {
-		id, mine := ownedID(name)
+		id, mine := m.owned(name)
 		if !mine {
 			continue
 		}
@@ -434,7 +458,7 @@ func (m *Manager) Remove(ctx context.Context, id int) error {
 // removeLocked keeps the record when the delete fails, so the next reconcile
 // tries again rather than leaving a device nothing is tracking.
 func (m *Manager) removeLocked(ctx context.Context, id int) error {
-	name := InterfaceName(id)
+	name := m.Name(id)
 	rec, tracked := m.devices[id]
 	// Deleting the link zeroes every peer counter, so this device's last interval
 	// is banked first and handed out by the scrape that follows.
@@ -466,7 +490,7 @@ func (m *Manager) AddPeer(ctx context.Context, inst Instance, p Peer) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	name := inst.Interface()
+	name := m.Name(inst.ID)
 	want, err := desiredPeer(p)
 	if err != nil {
 		return err
@@ -516,7 +540,7 @@ func (m *Manager) RemovePeer(ctx context.Context, inst Instance, email, fallback
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	name := inst.Interface()
+	name := m.Name(inst.ID)
 	key, ok := m.resolveLocked(inst, email, fallbackKey)
 	if !ok {
 		return nil
@@ -591,7 +615,7 @@ func (m *Manager) resolveLocked(inst Instance, email, fallbackKey string) (wgtyp
 // peerSnapshot reads the device a single-peer write targets. A device that is gone
 // fails the edit: a rebuild from a single-user instance would serve nobody else.
 func (m *Manager) peerSnapshot(ctx context.Context, inst Instance) (Snapshot, error) {
-	name := inst.Interface()
+	name := m.Name(inst.ID)
 	snap, err := m.plane.Snapshot(ctx, name)
 	if err != nil {
 		return Snapshot{}, m.note(err)
@@ -638,7 +662,7 @@ func (m *Manager) scrapeDevice(ctx context.Context, id int) ([]Traffic, []string
 	// Taken before the read can fail: a peer drained and then deleted with its
 	// device would otherwise have its final reading dropped on the floor.
 	billed := rec.takePending()
-	snap, err := m.plane.Snapshot(ctx, InterfaceName(id))
+	snap, err := m.plane.Snapshot(ctx, m.Name(id))
 	if err != nil || !snap.Exists {
 		return flatten(billed), nil
 	}

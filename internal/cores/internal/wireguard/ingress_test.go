@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	engine "github.com/Arman2122/p-ui/internal/wireguard"
 )
 
 /*
@@ -39,15 +40,17 @@ func TestWireguardIsADeviceIngress(t *testing.T) {
 
 /*
 The same engine serves an inbound and dials an uplink, so this core answers on
-both sides of a rule. What it must NOT do is claim the source address is handled.
+both sides of a rule.
 
-WireGuard performs no address translation, so a packet forwarded into an uplink
-still carries the ingress client's inner source and the far side drops it. Saying
-SourceOwnerPanel is what makes the compile refuse this exit until the panel can
-write a MASQUERADE rule -- a refusal beats a route that looks healthy and
-delivers nothing.
+The uplink is a device the panel dials, in its own namespace: an inbound and an
+uplink numbered the same are two devices, never one. Source is the daemon's
+because every ingress reaches an exit through a front, so what arrives at the
+uplink is a socket Xray re-originated -- the kernel picks the uplink's own
+address at route lookup and nothing has to translate it. A packet merely
+FORWARDED in would keep the client's inner source and need a MASQUERADE, which
+is why this answer is tied to the fronted path rather than asserted in general.
 */
-func TestExitHandleAdmitsThePanelOwnsTheSource(t *testing.T) {
+func TestExitHandleIsAnUplinkTheDaemonSources(t *testing.T) {
 	c := &Core{}
 
 	if kinds := c.ExitKinds(); len(kinds) != 1 || kinds[0] != Kind {
@@ -64,11 +67,14 @@ func TestExitHandleAdmitsThePanelOwnsTheSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExitHandle: %v", err)
 	}
-	if handle.Device != "pwg5" {
-		t.Errorf("Device = %q, want %q", handle.Device, "pwg5")
+	if want := engine.GetUplinkManager().Name(5); handle.Device != want {
+		t.Errorf("Device = %q, want %q", handle.Device, want)
 	}
-	if handle.Source != core.SourceOwnerPanel {
-		t.Fatalf("Source = %q, want %q: claiming the daemon NATs would let the compile "+
-			"emit a route that silently drops every packet", handle.Source, core.SourceOwnerPanel)
+	if handle.Device == engine.InterfaceName(5) {
+		t.Fatal("uplink 5 must not name inbound 5's device: two writers, one device")
+	}
+	if handle.Source != core.SourceOwnerDaemon {
+		t.Fatalf("Source = %q, want %q: Xray re-originates through the front, so the "+
+			"kernel picks the uplink's own source", handle.Source, core.SourceOwnerDaemon)
 	}
 }

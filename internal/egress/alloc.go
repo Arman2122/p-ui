@@ -26,6 +26,15 @@ const (
 	// devicePrefix marks a device as this panel's egress front. Like wireguard's
 	// "pwg" it is deliberately not a name an operator would reach for.
 	devicePrefix = "peg"
+
+	// uplinkPrefix marks a device this panel DIALS OUT through. Its own namespace
+	// because a front and an uplink are opposite ends: one terminates traffic the
+	// panel received, the other originates traffic the panel sends.
+	uplinkPrefix = "pux"
+
+	// markBase is the fwmark band §5.3 reserves. MaxID is 999, so an id fits the
+	// low bits and never reaches the byte the band itself occupies.
+	markBase = 0x0e000000
 )
 
 // ValidID reports whether id is inside the band §5.3 reserves for egresses.
@@ -50,6 +59,43 @@ func Prio(id int) int { return prioBase + id }
 // Device is the front device the table's default route points at. A driver may
 // name its own device instead; this is the default and xray-tun's answer.
 func Device(id int) string { return devicePrefix + strconv.Itoa(id) }
+
+// Uplink is the device an egress this panel dials leaves through. Unlike Device
+// it is created here rather than by a core, so its name is ours to derive.
+func Uplink(id int) string { return uplinkPrefix + strconv.Itoa(id) }
+
+// ownedUplinkID round-trips through Uplink, so pux007 and pux0 are not ours.
+func ownedUplinkID(name string) (int, bool) {
+	rest, ok := strings.CutPrefix(name, uplinkPrefix)
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.Atoi(rest)
+	if err != nil || !ValidID(id) || Uplink(id) != name {
+		return 0, false
+	}
+	return id, true
+}
+
+/*
+Mark is the fwmark a socket carries to leave through this egress.
+
+The other half of selection. An ingress device names traffic the kernel
+FORWARDS; a mark names traffic this host ORIGINATES, which is the only handle
+an L7 core's own socket offers.
+*/
+func Mark(id int) uint32 { return markBase | uint32(id) }
+
+// markEgressID reads the id back out of a mark. The ValidID bound is
+// load-bearing: an id learned outside the band derives objects checkID then
+// refuses to collect, so the sweep would error on every pass forever.
+func markEgressID(mark uint32) (int, bool) {
+	id := int(mark &^ markBase)
+	if !ValidID(id) || Mark(id) != mark {
+		return 0, false
+	}
+	return id, true
+}
 
 // ownedEgressID reads the id back out of a device name. It round-trips through
 // Device, so a near miss like peg007 or peg0 is somebody else's device.

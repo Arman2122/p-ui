@@ -325,15 +325,20 @@ func (c *Core) ExitHandleKind(kind core.Kind) core.ExitHandleKind {
 /*
 ExitHandle names the device an uplink answers on, and who owns the source address.
 
-SourceOwnerPanel is the honest answer and it is load-bearing: WireGuard does not
-translate addresses, so a packet forwarded into this device still carries the
-ingress client's inner source and the far side drops it. Until the panel writes
-a MASQUERADE rule, the compile must refuse this exit rather than emit a route
-that looks healthy and delivers nothing.
+SourceOwnerDaemon, and the reason is the path rather than the device: what
+reaches an uplink is a marked socket this host ORIGINATED, so the kernel chooses
+its source at route lookup and picks the uplink's own address. Nobody has to
+rewrite it.
+
+That is only true while the traffic is re-originated. A pure kernel forward into
+this device would keep the client's inner source and need translation, which is
+why SourceOwner is answered per path and the compile refuses SourceOwnerPanel.
 */
 func (c *Core) ExitHandle(_ context.Context, exit core.Exit) (core.ExitHandle, error) {
 	return core.ExitHandle{
-		Device: engine.InterfaceName(exit.ID),
-		Source: core.SourceOwnerPanel,
+		// Asked of the engine that creates the device rather than derived a second
+		// time: two derivations of one name is how pux4 and pwg4 diverged.
+		Device: engine.GetUplinkManager().Name(exit.ID),
+		Source: core.SourceOwnerDaemon,
 	}, nil
 }

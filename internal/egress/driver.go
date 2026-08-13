@@ -1,6 +1,7 @@
 package egress
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/netip"
@@ -36,6 +37,19 @@ type Fill struct {
 	// Sysctls are the knobs the front's return path needs, applied once the device
 	// exists. Keyed by the full dotted name so the plane stays device-agnostic.
 	Sysctls map[string]string
+
+	// Marked selects this egress by the fwmark a socket on this host carries
+	// rather than by an ingress device. An uplink is reached by a local process --
+	// the core's own outbound -- and a locally originated packet has no input
+	// device to match on.
+	Marked bool
+
+	// Families names the families this device may carry. Nil means both, which is
+	// right for a front that re-originates: the core picks its own source, so its
+	// tun is usable in a family it holds no address in. A device the packet really
+	// LEAVES from must name only the families it has an address in, or the kernel
+	// borrows another interface's and the egress silently sources from eth0.
+	Families []Family
 }
 
 // Injection is what an egress contributes to a core's generated config. Raw JSON
@@ -52,6 +66,26 @@ type Injection struct {
 type Driver interface {
 	Type() string
 	Fill(e Egress) (Fill, error)
+}
+
+/*
+Provisioner is the optional half for a driver whose device the PANEL makes.
+
+The three shapes a driver can take, and why the split is here rather than in a
+type switch somewhere: xray-tun's front belongs to Xray and appears when Xray
+does, so it implements Injector; a WireGuard uplink is dialled by this panel, so
+it implements Provisioner; an ikev2 uplink is dialled by strongSwan, which makes
+its own device, so it implements Driver alone. Adding openvpn is choosing one of
+these three and registering it.
+*/
+type Provisioner interface {
+	// Provision brings the device up, or reports why it cannot. It is called on
+	// every converge and must be idempotent: a device already correct is untouched.
+	Provision(ctx context.Context, e Egress) error
+
+	// Deprovision takes it down. Called with the id alone, because a row being
+	// torn down may already be gone from the database.
+	Deprovision(ctx context.Context, id int) error
 }
 
 // Injector is the optional half: a driver whose front is a device the core itself

@@ -46,7 +46,7 @@ func (m *Manager) deviceEndpoints(ctx context.Context, id int) []Endpoint {
 	if !ok {
 		return nil
 	}
-	snap, err := m.plane.Snapshot(ctx, InterfaceName(id))
+	snap, err := m.plane.Snapshot(ctx, m.Name(id))
 	if err != nil || !snap.Exists {
 		return nil
 	}
@@ -95,14 +95,14 @@ func (m *Manager) PeerAllowedIPs(ctx context.Context, id int) (map[string][]neti
 
 	rec, ok := m.devices[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrNoDevice, InterfaceName(id))
+		return nil, fmt.Errorf("%w: %s", ErrNoDevice, m.Name(id))
 	}
-	snap, err := m.plane.Snapshot(ctx, InterfaceName(id))
+	snap, err := m.plane.Snapshot(ctx, m.Name(id))
 	if err != nil {
 		return nil, m.note(err)
 	}
 	if !snap.Exists {
-		return nil, fmt.Errorf("%w: %s", ErrNoDevice, InterfaceName(id))
+		return nil, fmt.Errorf("%w: %s", ErrNoDevice, m.Name(id))
 	}
 	out := make(map[string][]netip.Prefix, len(snap.Device.Peers))
 	for _, peer := range snap.Device.Peers {
