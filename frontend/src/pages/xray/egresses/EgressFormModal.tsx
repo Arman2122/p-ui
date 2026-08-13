@@ -63,6 +63,14 @@ function uplinkFrom(egress: EgressRecord | null): Partial<EgressFormValues> {
   }
 }
 
+/* The refine decides what a save needs, but a refine cannot mark a field. These
+   mirror it per field so an empty one says why instead of a Save that does
+   nothing -- and they only run while the uplink fields are mounted, which is
+   exactly when they apply. */
+const required = (key: string) => ({
+  validate: (value: unknown) => (value ? true : key),
+});
+
 export default function EgressFormModal({ open, egress, onClose }: EgressFormModalProps) {
   const { t } = useTranslation();
   const methods = useForm<EgressFormValues>({ defaultValues: defaultValues() });
@@ -188,6 +196,7 @@ export default function EgressFormModal({ open, egress, onClose }: EgressFormMod
                 name="endpoint"
                 tooltip={t('pages.xray.egress.endpointHint')}
                 required
+                rules={required('pages.xray.egress.endpointRequired')}
               >
                 <Input id="endpoint" placeholder="us-sfo.example.com:51820" autoComplete="off" />
               </FormField>
@@ -197,6 +206,7 @@ export default function EgressFormModal({ open, egress, onClose }: EgressFormMod
                 name="privateKey"
                 tooltip={t('pages.xray.egress.privateKeyHint')}
                 required
+                rules={required('pages.xray.egress.privateKeyRequired')}
               >
                 <Input.Password id="privateKey" autoComplete="off" />
               </FormField>
@@ -206,6 +216,7 @@ export default function EgressFormModal({ open, egress, onClose }: EgressFormMod
                 name="publicKey"
                 tooltip={t('pages.xray.egress.publicKeyHint')}
                 required
+                rules={required('pages.xray.egress.publicKeyRequired')}
               >
                 <Input id="publicKey" autoComplete="off" />
               </FormField>
@@ -215,6 +226,7 @@ export default function EgressFormModal({ open, egress, onClose }: EgressFormMod
                 name="address"
                 tooltip={t('pages.xray.egress.addressHint')}
                 required
+                rules={required('pages.xray.egress.addressRequired')}
               >
                 <Input.TextArea id="address" rows={2} placeholder="10.14.0.2/32" autoComplete="off" />
               </FormField>
