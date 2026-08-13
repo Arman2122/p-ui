@@ -159,7 +159,38 @@ func (s *RoutingService) ensureFronts(subjects []routing.Subject, rules []*model
 		}
 		out[subject.InboundID] = row.Id
 	}
-	return out, nil
+	return out, s.reapFronts(out)
+}
+
+/*
+reapFronts removes the front of an ingress no rule names any more.
+
+Without this the row outlives its last rule, and the row is not the harm: the
+ip rule it derives keeps selecting that device into a table that now holds only
+its blackhole, so the inbound stops forwarding entirely. Measured -- deleting
+the last rule took a working WireGuard client from the internet to nothing,
+which is worse than the state before any rule existed.
+
+Panel-owned rows only. An operator's uplink is theirs to delete.
+*/
+func (s *RoutingService) reapFronts(keep map[int]int) error {
+	var rows []*model.Egress
+	err := database.GetDB().Where("owner = ?", model.EgressOwnerPanel).Find(&rows).Error
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if row.IngressInboundId == nil {
+			continue
+		}
+		if id, wanted := keep[*row.IngressInboundId]; wanted && id == row.Id {
+			continue
+		}
+		if err := (&EgressService{}).Del(row.Id); err != nil {
+			return fmt.Errorf("routing: retire the front of inbound %d: %w", *row.IngressInboundId, err)
+		}
+	}
+	return nil
 }
 
 // ruleIngressIDs resolves a rule's subjects, expanding "all" against what is
@@ -590,15 +621,45 @@ network may depend on the same knob, and none of those are the panel's to break.
 func (s *RoutingService) EnsureHostForwarding(ctx context.Context) error {
 	var inbounds []*model.Inbound
 	err := database.GetDB().Model(&model.Inbound{}).
-		Select("id", "protocol").
+		Select("id", "protocol", "tag", "settings").
 		Where("node_id IS NULL AND enable = ?", true).Find(&inbounds).Error
 	if err != nil {
 		return err
 	}
+	var devices []string
 	for _, inbound := range inbounds {
-		if cores.IngressSelectorFor(core.Kind(inbound.Protocol)) == core.IngressDevice {
-			return egressManager.EnsureForwarding(ctx)
+		if cores.IngressSelectorFor(core.Kind(inbound.Protocol)) != core.IngressDevice {
+			continue
 		}
+		handle, hErr := cores.IngressHandleFor(ctx, core.Instance{
+			ID: inbound.Id, Kind: core.Kind(inbound.Protocol), Tag: inbound.Tag, Settings: inbound.Settings,
+		})
+		if hErr == nil && handle.Device != "" {
+			devices = append(devices, handle.Device)
+		}
+	}
+	if len(devices) == 0 {
+		// Nothing on this host forwards, so neither knob nor rule is ours to set.
+		// The table is still cleared, or a deleted inbound would leave one behind.
+		return dropMasquerade(ctx)
+	}
+	var failures []error
+	if err := egressManager.EnsureForwarding(ctx); err != nil {
+		failures = append(failures, err)
+	}
+	// Forwarding without translation is a tunnel that hands out addresses and
+	// drops every packet: the client's in-tunnel source never survives upstream.
+	if err := egress.EnsureMasquerade(ctx, devices); err != nil && !errors.Is(err, egress.ErrNoNft) {
+		failures = append(failures, err)
+	}
+	return errors.Join(failures...)
+}
+
+// dropMasquerade removes the panel's nat table, tolerating a host that never
+// had nft to begin with.
+func dropMasquerade(ctx context.Context) error {
+	if err := egress.EnsureMasquerade(ctx, nil); err != nil && !errors.Is(err, egress.ErrNoNft) {
+		return err
 	}
 	return nil
 }
