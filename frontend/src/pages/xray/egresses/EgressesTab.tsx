@@ -6,9 +6,21 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { useEgressesQuery, useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
 import { useEgressMutations } from '@/api/queries/useEgressMutations';
-import { EGRESS_TYPE, type EgressRecord } from '@/schemas/api/egress';
+import { EGRESS_TYPE, UplinkSettingsSchema, type EgressRecord } from '@/schemas/api/egress';
 
 import EgressFormModal from './EgressFormModal';
+
+/* Where an uplink goes is its endpoint, not a target tag, so the column that
+   answers "where does this leave through" stays meaningful for both types. */
+function uplinkEndpoint(row: EgressRecord): string {
+  if (!row.settings) return '';
+  try {
+    const parsed = UplinkSettingsSchema.safeParse(JSON.parse(row.settings));
+    return parsed.success ? parsed.data.endpoint : '';
+  } catch {
+    return '';
+  }
+}
 
 interface EgressesTabProps {
   isMobile: boolean;
@@ -68,17 +80,20 @@ export default function EgressesTab({ isMobile }: EgressesTabProps) {
       title: t('pages.xray.egress.type'),
       dataIndex: 'type',
       render: (type: string) => (
-        <Tag bordered={false} color={type === EGRESS_TYPE ? 'blue' : 'default'}>
-          <span dir="ltr">{type}</span>
+        <Tag bordered={false} color={type === EGRESS_TYPE ? 'blue' : 'green'}>
+          {t(`pages.xray.egress.types.${type}`, { defaultValue: type })}
         </Tag>
       ),
     },
     {
       title: t('pages.xray.egress.target'),
       dataIndex: 'target',
-      render: (target: string) => (
-        target ? <code dir="ltr">{target}</code> : <Typography.Text type="secondary">{t('none')}</Typography.Text>
-      ),
+      render: (target: string, row) => {
+        const where = target || uplinkEndpoint(row);
+        return where
+          ? <code dir="ltr">{where}</code>
+          : <Typography.Text type="secondary">{t('none')}</Typography.Text>;
+      },
     },
     {
       title: t('enable'),
