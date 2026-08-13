@@ -14,6 +14,10 @@ export interface InboundTagOption {
 
 export interface RuleRow {
   key: number;
+  /* Which store this row lives in. The only place that distinction surfaces:
+     an operator sees one list in true evaluation order. */
+  source?: 'intent' | 'template';
+  storeIndex?: number;
   enabled?: boolean;
   domain?: string;
   ip?: string;

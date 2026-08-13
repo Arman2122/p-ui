@@ -8,6 +8,7 @@ import { FormField } from '@/components/form/rhf';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import { RuleFormSchema, type RuleFormValues } from '@/schemas/xray';
 import { buildRemarkByTag, formatInboundTag, isApiRule } from './helpers';
+import { intersectMask, type RoutingSubjectView } from '@/schemas/api/routing';
 import type { InboundTagOption } from './types';
 
 export interface RoutingRule {
@@ -35,6 +36,9 @@ interface RuleFormModalProps {
   inboundTags: InboundTagOption[];
   outboundTags: string[];
   balancerTags: string[];
+  /* When present, criteria are gated by what the selected inbounds can match.
+     Absent for a template rule, whose subjects the panel does not resolve. */
+  subjects?: RoutingSubjectView[];
   onClose: () => void;
   onConfirm: (rule: Record<string, unknown>) => void;
 }
@@ -70,6 +74,7 @@ export default function RuleFormModal({
   inboundTags,
   outboundTags,
   balancerTags,
+  subjects,
   onClose,
   onConfirm,
 }: RuleFormModalProps) {
@@ -105,6 +110,22 @@ export default function RuleFormModal({
   }, [open, rule, methods]);
 
   const attrs = useWatch({ control: methods.control, name: 'attrs' }) ?? [];
+  const chosenTags = useWatch({ control: methods.control, name: 'inboundTag' }) ?? [];
+
+  /* A criterion the selected inbounds cannot match is disabled with the reason
+     rather than hidden: a rule that saves and never matches is the bug this
+     editor exists to stop, and hiding the field only moves the surprise. */
+  const allowed = useMemo(() => {
+    if (!subjects) return null;
+    const picked = subjects.filter((subject) => chosenTags.includes(subject.tag));
+    if (picked.length === 0) return null;
+    return intersectMask(picked);
+  }, [subjects, chosenTags]);
+
+  const gate = (field: string) => {
+    if (!allowed || allowed.has(field)) return {};
+    return { disabled: true, extra: t('pages.xray.routing.criterionUnavailable') };
+  };
 
   function submit() {
     const validated = RuleFormSchema.safeParse(methods.getValues());
@@ -203,8 +224,12 @@ export default function RuleFormModal({
             <Select options={NETWORKS.map((n) => ({ value: n, label: n || '(any)' }))} />
           </FormField>
 
-          <FormField name="protocol" label={t('pages.inbounds.protocol')}>
-            <Select mode="multiple" options={PROTOCOLS.map((p) => ({ value: p, label: p }))} />
+          <FormField name="protocol" label={t('pages.inbounds.protocol')} {...gate('protocol')}>
+            <Select
+              mode="multiple"
+              disabled={!!gate('protocol').disabled}
+              options={PROTOCOLS.map((p) => ({ value: p, label: p }))}
+            />
           </FormField>
 
           <Form.Item label={t('pages.xray.ruleForm.attributes')}>
@@ -259,24 +284,26 @@ export default function RuleFormModal({
 
           <FormField
             name="domain"
+            {...gate('domain')}
             label={
               <Tooltip title={t('pages.xray.rules.useComma')}>
                 {t('domainName')} <QuestionCircleOutlined aria-hidden="true" />
               </Tooltip>
             }
           >
-            <Input placeholder="google.com, geosite:cn" />
+            <Input placeholder="google.com, geosite:cn" disabled={!!gate('domain').disabled} />
           </FormField>
 
           <FormField
             name="user"
+            {...gate('user')}
             label={
               <Tooltip title={t('pages.xray.rules.useComma')}>
                 {t('pages.xray.ruleForm.user')} <QuestionCircleOutlined aria-hidden="true" />
               </Tooltip>
             }
           >
-            <Input placeholder="email address" />
+            <Input placeholder="email address" disabled={!!gate('user').disabled} />
           </FormField>
 
           <FormField

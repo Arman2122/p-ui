@@ -1655,30 +1655,8 @@
         "useComma": "Comma-separated list"
       },
       "routing": {
-        "addRule": "Add rule",
-        "criteria": "Criteria",
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
-        "dest": {
-          "outbounds": "Outbounds",
-          "balancers": "Balancers",
-          "builtin": "Built in",
-          "direct": "Direct",
-          "block": "Block"
-        },
-        "dropCriteriaConfirm": "Some criteria will be dropped",
-        "dropCriteriaConfirmDesc": "The inbounds you picked cannot match these, so they will not be saved: {fields}",
-        "editRule": "Edit rule",
-        "from": "From",
-        "fromPlaceholder": "Pick the inbounds this rule applies to",
-        "intentHint": "Evaluated before the template's own rules, top to bottom.",
-        "noRules": "No routing rules yet. Traffic follows the template's own rules.",
-        "remark": "Note",
-        "scopeAll": "Every routable inbound",
-        "someInboundsUnroutable": "{count} inbound(s) cannot be named by a rule",
-        "templateRules": "Template rules",
-        "title": "Routing rules",
-        "to": "Send through",
-        "unknownInbound": "inbound {id} is gone"
+        "scopeAll": "Every routable inbound"
       },
       "ruleForm": {
         "sourceIps": "Source IPs",

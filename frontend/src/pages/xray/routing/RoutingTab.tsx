@@ -17,12 +17,14 @@ import TextModal from '@/components/feedback/TextModal';
 import { isBalancerLoopbackTag } from '../balancers/balancer-loopback';
 import RoutingBasic from './RoutingBasic';
 import RouteTester from './RouteTester';
-import RoutingRulesPanel from './RoutingRulesPanel';
 import RuleFormModal from './RuleFormModal';
 import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
 import { useRoutingColumns } from './useRoutingColumns';
 import { arrJoin, buildInboundTagOptions, originalRuleIndex } from './helpers';
+import { useRoutingMutations } from '@/api/queries/useRoutingMutations';
+import { useRoutingRulesQuery, useRoutingSubjectsQuery } from '@/api/queries/useRoutingQuery';
+import { intentToRule, ruleToIntent, type XrayRuleShape } from '@/schemas/api/routing';
 import type { RoutingSubject, RuleRow } from './types';
 import type { XraySettingsValue, SetTemplate } from '@/hooks/useXraySetting';
 import type { RuleObject } from '@/schemas/routing';
@@ -52,6 +54,7 @@ export default function RoutingTab({
   const [ruleModalOpen, setRuleModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<RoutingRule | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingSource, setEditingSource] = useState<'intent' | 'template'>('intent');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const dragRef = useRef<{ from: number | null; to: number | null; startY: number; moved: boolean }>({
@@ -133,6 +136,77 @@ export default function RoutingTab({
     return buildInboundTagOptions(routingSubjects, templateTags);
   }, [templateSettings, inboundTags, routingSubjects]);
 
+  const { data: intentRecords = [] } = useRoutingRulesQuery();
+  const { data: subjects = [] } = useRoutingSubjectsQuery();
+  const routingMut = useRoutingMutations();
+
+  const tagOfInbound = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const subject of subjects) map.set(subject.inboundId, subject.tag);
+    return map;
+  }, [subjects]);
+  const idOfTag = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const subject of subjects) map.set(subject.tag, subject.inboundId);
+    return map;
+  }, [subjects]);
+
+  /*
+  One list, in the order Xray actually evaluates it: the operator's own rules
+  compile above the template's, so they are shown above them. Which store a row
+  lives in is the panel's problem, and `source` is the only place it shows.
+  */
+  const intentRows: RuleRow[] = useMemo(
+    () => intentRecords.map((record, index) => {
+      const shape = intentToRule(record, (id) => tagOfInbound.get(id));
+      return {
+        key: 10000 + index,
+        source: 'intent' as const,
+        storeIndex: index,
+        enabled: record.enable,
+        inboundTag: (shape.inboundTag ?? []).join(',') || t('pages.xray.routing.scopeAll'),
+        domain: arrJoin(shape.domain),
+        ip: arrJoin(shape.ip),
+        port: shape.port,
+        sourcePort: shape.sourcePort,
+        network: shape.network,
+        sourceIP: arrJoin(shape.sourceIP),
+        user: arrJoin(shape.user),
+        protocol: arrJoin(shape.protocol),
+        outboundTag: shape.outboundTag,
+        balancerTag: shape.balancerTag,
+      };
+    }),
+    [intentRecords, tagOfInbound, t],
+  );
+
+  const mergedRows: RuleRow[] = useMemo(
+    () => [
+      ...intentRows,
+      ...rows.map((row) => ({ ...row, source: 'template' as const, storeIndex: row.key })),
+    ],
+    [intentRows, rows],
+  );
+
+  const mergedRowsRef = useRef<RuleRow[]>([]);
+  mergedRowsRef.current = mergedRows;
+  const intentRecordsRef = useRef(intentRecords);
+  intentRecordsRef.current = intentRecords;
+  const tagOfInboundRef = useRef(tagOfInbound);
+  tagOfInboundRef.current = tagOfInbound;
+  const idOfTagRef = useRef(idOfTag);
+  idOfTagRef.current = idOfTag;
+
+  // Reordering an operator rule writes the whole order in one call, so a failure
+  // cannot leave first-match half applied.
+  async function moveIntent(index: number, delta: number) {
+    const next = [...intentRecordsRef.current];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    await routingMut.reorder(next.map((record) => record.id));
+  }
+
   const outboundTagOptions = useMemo(() => {
     const out = new Set<string>(['']);
     for (const ob of templateSettings?.outbounds || []) {
@@ -192,19 +266,42 @@ export default function RoutingTab({
     setImportOpen(false);
   }
 
+  /* A row knows which store it came from, so one set of handlers serves both.
+     Adding always creates an OPERATOR rule: the template half is what the panel
+     maintains, and new intent belongs where the panel can compile it. */
+  const rowAt = (idx: number) => mergedRowsRef.current[idx];
+
   function openAdd() {
     setEditingRule(null);
     setEditingIndex(null);
+    setEditingSource('intent');
     setRuleModalOpen(true);
   }
   function openEdit(idx: number) {
-    const target = originalRuleIndex(rowsRef.current, idx);
+    const row = rowAt(idx);
+    if (row?.source === 'intent') {
+      const record = intentRecordsRef.current[row.storeIndex ?? 0];
+      setEditingRule(record ? intentToRule(record, (id) => tagOfInboundRef.current.get(id)) : null);
+      setEditingIndex(row.storeIndex ?? null);
+      setEditingSource('intent');
+      setRuleModalOpen(true);
+      return;
+    }
+    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
     setEditingRule(rulesRef.current[target]);
     setEditingIndex(target);
+    setEditingSource('template');
     setRuleModalOpen(true);
   }
   function onRuleConfirm(rule: Record<string, unknown>) {
     if (JSON.stringify(rule).length <= 3) {
+      setRuleModalOpen(false);
+      return;
+    }
+    if (editingSource === 'intent') {
+      const payload = ruleToIntent(rule as XrayRuleShape, (tag) => idOfTagRef.current.get(tag));
+      const record = editingIndex == null ? null : intentRecordsRef.current[editingIndex];
+      void (record ? routingMut.update(record.id, payload) : routingMut.add(payload));
       setRuleModalOpen(false);
       return;
     }
@@ -219,7 +316,13 @@ export default function RoutingTab({
   }
 
   function confirmDelete(idx: number) {
-    const target = originalRuleIndex(rowsRef.current, idx);
+    const row = rowAt(idx);
+    if (row?.source === 'intent') {
+      const record = intentRecordsRef.current[row.storeIndex ?? 0];
+      if (record) void routingMut.remove(record.id);
+      return;
+    }
+    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
     modal.confirm({
       title: `${t('delete')} ${t('pages.xray.Routings')} #${idx + 1}?`,
       okText: t('delete'),
@@ -233,8 +336,11 @@ export default function RoutingTab({
 
   function moveUp(idx: number) {
     if (idx <= 0) return;
-    const target = originalRuleIndex(rowsRef.current, idx);
-    const prev = originalRuleIndex(rowsRef.current, idx - 1);
+    const row = rowAt(idx);
+    if (row?.source === 'intent') { void moveIntent(row.storeIndex ?? 0, -1); return; }
+    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+    const prev = rowAt(idx - 1)?.storeIndex;
+    if (prev == null) return;
     mutate((tt) => {
       const list = tt.routing?.rules;
       if (!list || !list[target] || !list[prev]) return;
@@ -242,9 +348,12 @@ export default function RoutingTab({
     });
   }
   function moveDown(idx: number) {
-    if (idx >= rowsRef.current.length - 1) return;
-    const target = originalRuleIndex(rowsRef.current, idx);
-    const next = originalRuleIndex(rowsRef.current, idx + 1);
+    if (idx >= mergedRowsRef.current.length - 1) return;
+    const row = rowAt(idx);
+    if (row?.source === 'intent') { void moveIntent(row.storeIndex ?? 0, 1); return; }
+    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+    const next = rowAt(idx + 1)?.storeIndex;
+    if (next == null) return;
     mutate((tt) => {
       const list = tt.routing?.rules;
       if (!list || !list[target] || !list[next]) return;
@@ -252,7 +361,18 @@ export default function RoutingTab({
     });
   }
   function toggleRule(idx: number, enabled: boolean) {
-    const target = originalRuleIndex(rowsRef.current, idx);
+    const row = rowAt(idx);
+    if (row?.source === 'intent') {
+      const record = intentRecordsRef.current[row.storeIndex ?? 0];
+      if (record) {
+        const shape = intentToRule(record, (id) => tagOfInboundRef.current.get(id));
+        void routingMut.update(record.id, {
+          ...ruleToIntent(shape, (tag) => idOfTagRef.current.get(tag)), enable: enabled,
+        });
+      }
+      return;
+    }
+    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
     mutate((tt) => {
       const list = tt.routing?.rules;
       if (!list || !list[target]) return;
@@ -349,19 +469,8 @@ export default function RoutingTab({
             ),
           },
           {
-            key: 'intent',
-            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.routing.title'), isMobile),
-            children: (
-              <RoutingRulesPanel
-                isMobile={isMobile}
-                outboundTags={outboundTagOptions}
-                balancerTags={balancerTagOptions}
-              />
-            ),
-          },
-          {
             key: 'rules',
-            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.routing.templateRules'), isMobile),
+            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.Routings'), isMobile),
             children: (
               <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Space wrap>
@@ -383,7 +492,7 @@ export default function RoutingTab({
 
                 {isMobile ? (
                   <RuleCardList
-                    rows={rows}
+                    rows={mergedRows}
                     draggedIndex={draggedIndex}
                     dropTargetIndex={dropTargetIndex}
                     onHandlePointerDown={onHandlePointerDown}
@@ -396,7 +505,7 @@ export default function RoutingTab({
                 ) : (
                   <Table
                     columns={desktopColumns}
-                    dataSource={rows}
+                    dataSource={mergedRows}
                     rowKey={(r) => r.key}
                     pagination={false}
                     scroll={{ x: tableScrollX }}
@@ -430,6 +539,7 @@ export default function RoutingTab({
         outboundTags={outboundTagOptions}
         balancerTags={balancerTagOptions}
         onClose={() => setRuleModalOpen(false)}
+        subjects={subjects}
         onConfirm={onRuleConfirm}
       />
       <PromptModal
