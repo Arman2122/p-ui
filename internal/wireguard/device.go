@@ -25,6 +25,10 @@ type Peer struct {
 	PreSharedKey string
 	AllowedIPs   []string
 	KeepAlive    int
+	// Endpoint is where this peer is reached, host:port. Empty for a client of
+	// ours — it dials us and we learn its address — and set when the device is
+	// the dialling side, which is what makes an uplink out of the same engine.
+	Endpoint string
 }
 
 // Instance is the desired state of one kernel WireGuard inbound. Port is the
@@ -234,8 +238,13 @@ func desiredPeer(p Peer) (wgtypes.PeerConfig, error) {
 	if err != nil {
 		return wgtypes.PeerConfig{}, err
 	}
+	endpoint, err := parseEndpoint(p.Endpoint)
+	if err != nil {
+		return wgtypes.PeerConfig{}, err
+	}
 	keepalive := time.Duration(p.KeepAlive) * time.Second
 	cfg := wgtypes.PeerConfig{
+		Endpoint:                    endpoint,
 		PublicKey:                   key,
 		PresharedKey:                &psk,
 		PersistentKeepaliveInterval: &keepalive,
@@ -250,6 +259,25 @@ func desiredPeer(p Peer) (wgtypes.PeerConfig, error) {
 
 // desiredPeers converts the served set, returning the peers that parse alongside
 // an error naming the rest. One bad client must not freeze the whole inbound.
+/*
+parseEndpoint resolves the address of the side we dial.
+
+Resolved here rather than handed to the kernel as a name because wgctrl takes a
+UDP address: a peer whose host stops resolving keeps the address it last had,
+which is the same containment the rest of this package chooses everywhere.
+*/
+func parseEndpoint(value string) (*net.UDPAddr, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	addr, err := net.ResolveUDPAddr("udp", value)
+	if err != nil {
+		return nil, fmt.Errorf("wireguard: endpoint %q is not a reachable host:port: %w", value, err)
+	}
+	return addr, nil
+}
+
 func desiredPeers(peers []Peer) ([]wgtypes.PeerConfig, error) {
 	out := make([]wgtypes.PeerConfig, 0, len(peers))
 	seen := make(map[wgtypes.Key]string, len(peers))
@@ -295,6 +323,11 @@ func claimedAllowedIP(claimed map[string]string, allowed []net.IPNet) (string, s
 // and handshake state are the peer's own and are never part of desired state.
 func peerEqual(cur wgtypes.Peer, want wgtypes.PeerConfig) bool {
 	if want.PresharedKey == nil || want.PersistentKeepaliveInterval == nil {
+		return false
+	}
+	// An endpoint that moved is a different peer in every way that matters: the
+	// device would keep dialling the old address until something reconciled it.
+	if want.Endpoint != nil && (cur.Endpoint == nil || cur.Endpoint.String() != want.Endpoint.String()) {
 		return false
 	}
 	if cur.PresharedKey != *want.PresharedKey || cur.PersistentKeepaliveInterval != *want.PersistentKeepaliveInterval {
