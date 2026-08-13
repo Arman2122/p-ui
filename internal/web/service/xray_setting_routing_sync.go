@@ -95,6 +95,15 @@ func replaceInboundTagInRule(rule map[string]any, oldTag, newTag string) bool {
 	return updated
 }
 
+// orphanedRuleRemark says why a rule was switched off, where an operator looks.
+func orphanedRuleRemark(existing any, deletedTag string) string {
+	note := "disabled: its only inbound " + deletedTag + " was deleted"
+	if text, ok := existing.(string); ok && text != "" {
+		return text + " (" + note + ")"
+	}
+	return note
+}
+
 func removeInboundTagFromRules(rules []map[string]any, deletedTag string) ([]map[string]any, bool) {
 	if deletedTag == "" {
 		return rules, false
@@ -125,7 +134,13 @@ func removeInboundTagFromRules(rules []map[string]any, deletedTag string) ([]map
 			continue
 		}
 		if len(nextTags) == 0 {
+			// Dropping the key alone would leave an UNTAGGED rule, which matches every
+			// inbound including every front — so deleting one inbound would re-point
+			// every other inbound's matching traffic. The operator wrote it, so it is
+			// kept and switched off rather than silently widened or silently removed.
 			delete(rule, "inboundTag")
+			rule["enabled"] = false
+			rule["remark"] = orphanedRuleRemark(rule["remark"], deletedTag)
 		} else {
 			writeInboundTags(rule, nextTags)
 		}
