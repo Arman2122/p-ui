@@ -112,6 +112,15 @@ func (m *Manager) Reconcile(ctx context.Context, rows []Egress) error {
 			}
 		}
 	}
+	// A device this panel dialled outlives its rule and its table, so the band
+	// alone would miss an uplink whose row is gone and whose route was reaped.
+	for _, link := range snap.Links {
+		if id, mine := ownedUplinkID(link); mine {
+			if _, known := byID[id]; !known {
+				byID[id] = Egress{ID: id}
+			}
+		}
+	}
 
 	ids := slices.Sorted(maps.Keys(byID))
 	failures := make([]error, 0, len(ids))
@@ -297,6 +306,14 @@ to its blackhole alone. A driver that does not provision -- one whose device
 belongs to a core -- is simply skipped.
 */
 func (m *Manager) provision(ctx context.Context, e Egress) error {
+	// A row that no longer exists is synthesised from what the kernel still
+	// holds, so it carries no type: nobody recorded which driver made the
+	// device. Every provisioner is asked instead, and each ignores an id it
+	// never made -- otherwise a deleted uplink keeps dialling its provider
+	// forever while its route is reaped out from under it.
+	if e.Type == "" {
+		return m.deprovisionAll(ctx, e.ID)
+	}
 	driver, known := m.drivers.For(e.Type)
 	if !known {
 		return nil
@@ -309,6 +326,22 @@ func (m *Manager) provision(ctx context.Context, e Egress) error {
 		return provisioner.Deprovision(ctx, e.ID)
 	}
 	return provisioner.Provision(ctx, e)
+}
+
+func (m *Manager) deprovisionAll(ctx context.Context, id int) error {
+	var failures []error
+	for _, name := range m.drivers.Types() {
+		driver, known := m.drivers.For(name)
+		if !known {
+			continue
+		}
+		if provisioner, provisions := driver.(Provisioner); provisions {
+			if err := provisioner.Deprovision(ctx, id); err != nil {
+				failures = append(failures, err)
+			}
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
