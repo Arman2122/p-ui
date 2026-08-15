@@ -55,6 +55,8 @@ import { originalOutboundIndex } from './outbounds-tab-helpers';
 import { useOutboundColumns } from './useOutboundColumns';
 import OutboundCardList from './OutboundCardList';
 import SubscriptionOutbounds from './SubscriptionOutbounds';
+import { useEgressMutations } from '@/api/queries/useEgressMutations';
+import type { EgressPayload } from '@/schemas/api/egress';
 
 interface OutboundSub {
   id: number;
@@ -119,6 +121,7 @@ export default function OutboundsTab({
   const [editingOutbound, setEditingOutbound] = useState<Record<string, unknown> | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [existingTags, setExistingTags] = useState<string[]>([]);
+  const egressMut = useEgressMutations();
 
   // Subscription manager (CRUD + reorder + refresh + preview)
   const [subDrawerOpen, setSubDrawerOpen] = useState(false);
@@ -220,6 +223,13 @@ export default function OutboundsTab({
       }
     });
     setModalOpen(false);
+  }
+
+  /* An exit is a row the panel owns, not a line in the Xray config, so it is
+     posted rather than folded into the template mutation above. */
+  async function onConfirmExit(payload: EgressPayload) {
+    const msg = await egressMut.add(payload);
+    if (msg?.success) setModalOpen(false);
   }
 
   function confirmDelete(idx: number) {
@@ -564,6 +574,7 @@ export default function OutboundsTab({
           dialerProxyTags={dialerProxyTags}
           onClose={() => setModalOpen(false)}
           onConfirm={onConfirm}
+          onConfirmExit={onConfirmExit}
         />
         <PromptModal
           open={importOpen}

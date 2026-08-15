@@ -32,12 +32,21 @@ import {
   canEnableTls,
   canEnableTlsFlow,
 } from '@/lib/xray/protocol-capabilities';
+import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { outboundProtocolGroups } from '@/lib/cores/outbound-protocols';
+import {
+  EgressFormFields,
+  uplinkPayload,
+  type EgressFormValues,
+  type EgressPayload,
+} from '@/schemas/api/egress';
+import ExitFields from './protocols/exit';
 
 import {
   FLOW_OPTIONS,
   HYSTERIA_NETWORK_OPTION,
   NETWORK_OPTIONS,
-  PROTOCOL_OPTIONS,
+  PROTOCOL_NAMES,
   SERVER_PROTOCOLS,
   TARGET_STRATEGY_OPTIONS,
 } from './outbound-form-constants';
@@ -84,6 +93,9 @@ interface OutboundFormModalProps {
   dialerProxyTags?: string[];
   onClose: () => void;
   onConfirm: (outbound: Record<string, unknown>) => void;
+  /* An exit is a database row, not a line in the Xray config, so it leaves by a
+     different door. Absent means this build offers no exit kinds to pick. */
+  onConfirmExit?: (payload: EgressPayload) => void;
 }
 
 export default function OutboundFormModal({
@@ -93,10 +105,13 @@ export default function OutboundFormModal({
   dialerProxyTags,
   onClose,
   onConfirm,
+  onConfirmExit,
 }: OutboundFormModalProps) {
   const { t } = useTranslation();
   const [messageApi, messageContextHolder] = message.useMessage();
   const methods = useForm<OutboundFormValues>({ defaultValues: buildAddModeValues() });
+  const exitMethods = useForm<EgressFormValues>({ defaultValues: EgressFormFields.parse({}) });
+  const coresQuery = useCoresQuery();
   const [activeKey, setActiveKey] = useState('1');
   const [jsonText, setJsonText] = useState('');
   const [jsonDirty, setJsonDirty] = useState(false);
@@ -116,7 +131,31 @@ export default function OutboundFormModal({
   const reverseTag = useWatch({ control: methods.control, name: 'settings.reverseTag' });
   const wgSecretKey = useWatch({ control: methods.control, name: 'settings.secretKey' }) as string | undefined;
 
-  const streamAllowed = canEnableStream({ protocol });
+  /* Xray's own protocols plus every core's declared exit kinds, grouped by the
+     core that owns them: Xray's userspace `wireguard` is not Kernel WireGuard. */
+  const protocolGroups = useMemo(
+    () => outboundProtocolGroups(coresQuery.data, { coreId: 'xray', kinds: PROTOCOL_NAMES }),
+    [coresQuery.data],
+  );
+  const exitKinds = useMemo(
+    () => new Set(protocolGroups.filter((g) => g.coreId !== 'xray').flatMap((g) => g.options.map((o) => o.kind))),
+    [protocolGroups],
+  );
+  const isExit = exitKinds.has(protocol);
+  const protocolOptions = useMemo(
+    () => protocolGroups.map((group) => ({
+      label: t(group.titleKey),
+      title: t(group.titleKey),
+      options: group.options.map((option) => ({
+        value: option.kind,
+        label: option.kind,
+        disabled: !!option.unavailable,
+      })),
+    })),
+    [protocolGroups, t],
+  );
+
+  const streamAllowed = !isExit && canEnableStream({ protocol });
   const tlsAllowed = canEnableTls({ protocol, streamSettings: { network, security } });
   const realityAllowed = canEnableReality({ protocol, streamSettings: { network, security } });
   const tlsFlowAllowed = canEnableTlsFlow({ protocol, streamSettings: { network, security } });
@@ -308,7 +347,21 @@ export default function OutboundFormModal({
     switchTab(key);
   }
 
+  /* An exit row carries no Xray tag, transport or JSON payload — only the
+     remark the operator names it by and the credentials its driver dials with. */
+  async function onOkExit() {
+    if (!onConfirmExit) return;
+    if (!(await exitMethods.trigger())) return;
+    const parsed = EgressFormFields.safeParse(exitMethods.getValues());
+    if (!parsed.success) return;
+    onConfirmExit(uplinkPayload(parsed.data, methods.getValues('tag') ?? ''));
+  }
+
   async function onOk() {
+    if (isExit) {
+      await onOkExit();
+      return;
+    }
     let values: OutboundFormValues;
     if (activeKey === '2') {
       const raw = jsonText.trim();
@@ -380,7 +433,7 @@ export default function OutboundFormModal({
                         name="protocol"
                         rules={{ validate: rhfZodValidate(OutboundFormBaseSchema.shape.tag) }}
                       >
-                        <Select id="protocol" options={PROTOCOL_OPTIONS} />
+                        <Select id="protocol" showSearch optionFilterProp="value" options={protocolOptions} />
                       </FormField>
 
                       <Controller
@@ -410,6 +463,14 @@ export default function OutboundFormModal({
                         }}
                       />
 
+                      {isExit && (
+                        <FormProvider {...exitMethods}>
+                          <ExitFields />
+                        </FormProvider>
+                      )}
+
+                      {!isExit && (
+                      <>
                       <FormField label={t('pages.xray.outbound.sendThrough')} name="sendThrough">
                         <Input placeholder={t('pages.xray.outboundForm.localIpPlaceholder')} />
                       </FormField>
@@ -548,10 +609,12 @@ export default function OutboundFormModal({
                       />
 
                       <MuxForm protocol={protocol} network={network} />
+                      </>
+                      )}
                     </>
                   ),
                 },
-                {
+                ...(isExit ? [] : [{
                   key: '2',
                   label: 'JSON',
                   children: (
@@ -574,7 +637,7 @@ export default function OutboundFormModal({
                       />
                     </Space>
                   ),
-                },
+                }]),
               ]}
             />
           </Form>
