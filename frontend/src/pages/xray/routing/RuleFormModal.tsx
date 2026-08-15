@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Form, Input, Modal, Select, Space, Switch, Tooltip, Typography } from 'antd';
+import { Alert, Button, Form, Input, Modal, Select, Space, Switch, Tooltip, Typography } from 'antd';
 import type { SelectProps } from 'antd';
 import { PlusOutlined, MinusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
@@ -151,6 +151,15 @@ export default function RuleFormModal({
     if (!allowed || allowed.has(field)) return {};
     return { disabled: true, extra: t('pages.xray.routing.criterionUnavailable') };
   };
+
+  /* Routing an L3 inbound is not free and the cost is invisible until someone
+     tries the protocol that stopped working, so it is said before the save. */
+  const frontedTags = useMemo(() => {
+    if (!subjects) return [];
+    return subjects
+      .filter((subject) => subject.selector === 'device' && chosenTags.includes(subject.tag))
+      .map((subject) => subject.tag);
+  }, [subjects, chosenTags]);
 
   function submit() {
     const validated = RuleFormSchema.safeParse(methods.getValues());
@@ -366,6 +375,22 @@ export default function RuleFormModal({
               }}
             />
           </FormField>
+
+          {frontedTags.length > 0 && (
+            <Form.Item wrapperCol={{ span: 24 }}>
+              <Alert
+                type="warning"
+                showIcon
+                title={t('pages.xray.routing.l3Fronted')}
+                description={(
+                  <>
+                    <div>{t('pages.xray.routing.l3FrontedDetail')}</div>
+                    <div dir="ltr" style={{ marginTop: 4 }}><code>{frontedTags.join(', ')}</code></div>
+                  </>
+                )}
+              />
+            </Form.Item>
+          )}
 
           <FormField name="outboundTag" label={t('pages.xray.ruleForm.outboundTag')}>
             <Select options={destinationOptions} />
