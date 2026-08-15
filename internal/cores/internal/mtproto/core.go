@@ -5,6 +5,8 @@ package mtproto
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -72,12 +74,22 @@ func (c *Core) ClientCredentials(kind core.Kind) []string {
 
 func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	want := make([]engine.Instance, 0, len(desired))
+	var keep []int
+	var failures []error
 	for _, d := range desired {
-		if inst, ok := toEngine(d); ok {
+		inst, serve, err := toEngine(d)
+		switch {
+		case err != nil:
+			// Omitting it would read as "no longer desired" and stop the sidecar
+			// with every client on it, for settings that merely will not parse.
+			keep = append(keep, d.ID)
+			failures = append(failures, fmt.Errorf("mtproto: inbound %d: %w", d.ID, err))
+		case serve:
 			want = append(want, inst)
 		}
 	}
-	return c.mgr.Reconcile(want)
+	failures = append(failures, c.mgr.Reconcile(want, keep...))
+	return errors.Join(failures...)
 }
 
 func (c *Core) StopAll(_ context.Context) error {
@@ -88,8 +100,8 @@ func (c *Core) StopAll(_ context.Context) error {
 // PlanChange mirrors what the engine will actually do: anything outside the
 // [secrets] section needs a restart, a secrets-only edit is applied in place.
 func (c *Core) PlanChange(before, after core.Instance) core.Action {
-	b, bOK := toEngine(before)
-	a, aOK := toEngine(after)
+	b, bOK, _ := toEngine(before)
+	a, aOK, _ := toEngine(after)
 	switch {
 	case bOK != aOK:
 		// One side has nothing to serve — disabled, or its last keyed client
@@ -134,8 +146,12 @@ func (c *Core) RemoveUser(_ context.Context, inst core.Instance, email string) e
 // apply pushes one instance's current user set. An instance with no serveable
 // user is stopped, not started with an empty [secrets] section mtg would reject.
 func (c *Core) apply(inst core.Instance) error {
-	want, ok := toEngine(inst)
-	if !ok {
+	want, serve, err := toEngine(inst)
+	if err != nil {
+		// Same rule as Reconcile: unreadable is not a request to stop.
+		return fmt.Errorf("mtproto: inbound %d: %w", inst.ID, err)
+	}
+	if !serve {
 		c.mgr.Remove(inst.ID)
 		return nil
 	}

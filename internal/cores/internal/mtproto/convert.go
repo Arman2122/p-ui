@@ -14,8 +14,15 @@ const (
 
 // toEngine converts desired state into the engine's shape. ok is false when the
 // instance cannot be served — disabled, or with no client holding a secret.
-func toEngine(inst core.Instance) (engine.Instance, bool) {
-	out := engine.Instance{
+/*
+toEngine projects one instance. serve says whether it should be running; err is
+kept separate from it because they mean opposite things to the caller: a
+disabled inbound must be stopped, an unreadable one must be left exactly as it
+is. Collapsing both into "do not serve" is what stopped a live sidecar, and
+every client on it, over settings that merely would not parse.
+*/
+func toEngine(inst core.Instance) (out engine.Instance, serve bool, err error) {
+	out = engine.Instance{
 		Id:     inst.ID,
 		Tag:    inst.Tag,
 		Listen: inst.Listen,
@@ -24,10 +31,10 @@ func toEngine(inst core.Instance) (engine.Instance, bool) {
 	// Refuse rather than fall back to mtg's defaults: the tuning carries
 	// routeThroughXray, so guessing egresses the inbound straight out instead.
 	if err := out.ApplySettings(inst.Settings); err != nil {
-		return out, false
+		return out, false, err
 	}
 	if !inst.Enable {
-		return out, false
+		return out, false, nil
 	}
 	for _, u := range inst.Users {
 		secret := core.CredString(u.Credentials, CredSecret)
@@ -47,5 +54,5 @@ func toEngine(inst core.Instance) (engine.Instance, bool) {
 		}
 		out.Secrets = append(out.Secrets, entry)
 	}
-	return out, len(out.Secrets) > 0
+	return out, len(out.Secrets) > 0, nil
 }

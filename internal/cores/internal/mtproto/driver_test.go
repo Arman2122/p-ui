@@ -350,7 +350,7 @@ func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
 			{Email: "real@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee01"}},
 		},
 	}
-	got, ok := toEngine(inst)
+	got, ok, _ := toEngine(inst)
 	if !ok {
 		t.Fatal("an enabled instance with one keyed client must be serveable")
 	}
@@ -386,6 +386,60 @@ func TestPlanChangeSeparatesReloadFromRestart(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := c.PlanChange(base, tc.next); got != tc.want {
 				t.Fatalf("PlanChange = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+/*
+Settings that will not parse are not a request to stop serving.
+
+The three reasons an instance is not served used to collapse into one boolean,
+so a settings blob the panel could not read looked exactly like "this inbound is
+gone" — and Reconcile stopped the sidecar, dropping every connected client, on
+what is most likely a transient or hand-edited row.
+*/
+func TestUnreadableSettingsDoNotStopALiveSidecar(t *testing.T) {
+	keyed := []core.User{{Email: "a@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee01"}}}
+
+	for _, tc := range []struct {
+		name      string
+		inst      core.Instance
+		wantServe bool
+		wantErr   bool
+	}{
+		{
+			name:      "unreadable settings report an error and no verdict",
+			inst:      core.Instance{ID: 1, Tag: "in-1", Port: 443, Enable: true, Settings: `{not json`, Users: keyed},
+			wantServe: false,
+			wantErr:   true,
+		},
+		{
+			name:      "a disabled inbound is a verdict, not an error",
+			inst:      core.Instance{ID: 1, Tag: "in-1", Port: 443, Enable: false, Users: keyed},
+			wantServe: false,
+			wantErr:   false,
+		},
+		{
+			name:      "no keyed client is a verdict, not an error",
+			inst:      core.Instance{ID: 1, Tag: "in-1", Port: 443, Enable: true},
+			wantServe: false,
+			wantErr:   false,
+		},
+		{
+			name:      "an ordinary instance serves",
+			inst:      core.Instance{ID: 1, Tag: "in-1", Port: 443, Enable: true, Users: keyed},
+			wantServe: true,
+			wantErr:   false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, serve, err := toEngine(tc.inst)
+			if serve != tc.wantServe {
+				t.Errorf("serve = %v, want %v", serve, tc.wantServe)
+			}
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, want error: %v", err, tc.wantErr)
 			}
 		})
 	}
