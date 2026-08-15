@@ -32,9 +32,19 @@ It asks the registry what a core can do and never asks what protocol it serves,
 which is why an arch guard forbids this file naming one.
 */
 
+/*
+shapingNamespaces is which device namespaces this panel may shape.
+
+One set, shared with the manager, because "may I shape this device" has to have
+exactly one answer: a core that brings its own device band registers it here at
+wiring time, and both the refusal below and the manager's own planning read the
+same registry rather than two copies of a list.
+*/
+var shapingNamespaces = shaping.DefaultNamespaces()
+
 // shapingManager owns every qdisc, class and filter the ladders install. One,
 // for egressManager's reason: two writers to one host's kernel state disagree.
-var shapingManager = shaping.NewManager(shaping.HostPlane())
+var shapingManager = shaping.NewManager(shaping.HostPlane(), shapingNamespaces)
 
 // PolicyService evaluates the panel's product rules against what the cores
 // report, and converges the kernel on the answer.
@@ -222,7 +232,7 @@ func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant,
 			}
 			// Named here rather than left to the plane: the refusal is a fact about
 			// the CORE's device naming, and the mechanism only ever sees a string.
-			if !shaping.Owns(target.Device) {
+			if !shapingNamespaces.Owns(target.Device) {
 				failures = append(failures, fmt.Errorf(
 					"policy: core %s offered device %q for inbound %d, which is outside the namespaces this panel may shape: %w",
 					bound.Core.Describe().ID, target.Device, inst.ID, shaping.ErrNotOwned))
