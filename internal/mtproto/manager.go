@@ -394,13 +394,19 @@ func (m *Manager) Remove(id int) {
 
 // Reconcile drives the running set toward the desired instances, at boot and
 // periodically. One instance failing does not stop the others; errors are joined.
-func (m *Manager) Reconcile(desired []Instance) error {
+// Reconcile converges the running sidecars on desired. keep names inbounds that
+// must be left running even though they are not in desired — a caller that could
+// not read one must not have that read count as "stop it".
+func (m *Manager) Reconcile(desired []Instance, keep ...int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepOrphansLocked()
-	want := make(map[int]struct{}, len(desired))
+	want := make(map[int]struct{}, len(desired)+len(keep))
 	for _, inst := range desired {
 		want[inst.Id] = struct{}{}
+	}
+	for _, id := range keep {
+		want[id] = struct{}{}
 	}
 	for id, cur := range m.procs {
 		if _, ok := want[id]; !ok {
