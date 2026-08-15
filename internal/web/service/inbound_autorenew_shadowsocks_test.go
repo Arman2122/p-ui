@@ -77,7 +77,7 @@ func TestAutoRenewShadowsocksKeepsSettingsClean(t *testing.T) {
 		t.Fatalf("seed client_traffics: %v", err)
 	}
 
-	if _, count, err := svc.autoRenewClients(db); err != nil {
+	if _, count, _, err := svc.autoRenewClients(db); err != nil {
 		t.Fatalf("autoRenewClients: %v", err)
 	} else if count != 1 {
 		t.Fatalf("renewed count = %d, want 1", count)
