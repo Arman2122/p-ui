@@ -20,6 +20,7 @@ const WG_CORE: CoreView = {
   caps: {},
   available: true,
   unavailable: '',
+  exitKinds: [],
   clientCredentials: {},
   shaping: { wgkernel: 'innerIP' },
 };

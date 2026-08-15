@@ -9,6 +9,7 @@ function core(over: Partial<CoreView>): CoreView {
     titleKey: 'cores.x.title',
     kinds: [],
     caps: {},
+    exitKinds: [],
     clientCredentials: {},
     shaping: {},
     available: true,

@@ -1455,6 +1455,16 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "object"
       },
+      "exitKinds": {
+        "description": "ExitKinds are the kinds a route may terminate on — the outbound half of\nKinds, so an outbound picker is built from the registry rather than a list.",
+        "example": [
+          "wgkernel"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "id": {
         "example": "xray",
         "type": "string"
@@ -1493,6 +1503,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "available",
       "caps",
       "clientCredentials",
+      "exitKinds",
       "id",
       "kinds",
       "shaping",
