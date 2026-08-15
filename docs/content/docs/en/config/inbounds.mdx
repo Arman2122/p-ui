@@ -183,8 +183,8 @@ but not the NAT rules.
 
 An **egress** sends one `wgkernel` inbound's decrypted traffic out through a
 named Xray outbound or balancer instead of the server's own address — a warp
-exit, a chained proxy, another VPS. Create one under **Xray Configs → Egresses**,
-then attach an inbound from that inbound's own form. The panel owns one `ip rule`
+exit, a chained proxy, another VPS. Create one under **Xray Configs → Outbounds**
+by picking a protocol a core exits on, then point a routing rule at it. The panel owns one `ip rule`
 per attached inbound, a private routing table and its blackhole; the front device
 belongs to Xray. Everything the kernel needs is derived from the egress id, so an
 id is never reused.
