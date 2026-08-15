@@ -7,38 +7,11 @@ import { FormField } from '@/components/form/rhf';
 import { useEgressMutations } from '@/api/queries/useEgressMutations';
 import {
   EgressFormFields,
-  UplinkSettingsSchema,
-  uplinkPayload,
   type EgressFormValues,
   type EgressRecord,
 } from '@/schemas/api/egress';
 
-import ExitFields from './protocols/exit';
-
-/* An existing row carries its settings as a JSON string. Unreadable settings
-   open an empty form rather than throwing the operator out of the edit. */
-function valuesFrom(exit: EgressRecord | null): EgressFormValues {
-  const base = EgressFormFields.parse({ remark: exit?.remark ?? '', enable: exit?.enable ?? true });
-  if (!exit?.settings) return base;
-  try {
-    const parsed = UplinkSettingsSchema.safeParse(JSON.parse(exit.settings));
-    if (!parsed.success) return base;
-    const s = parsed.data;
-    return {
-      ...base,
-      id: exit.id,
-      privateKey: s.privateKey,
-      address: s.address.join('\n'),
-      mtu: s.mtu,
-      publicKey: s.publicKey,
-      endpoint: s.endpoint,
-      presharedKey: s.presharedKey,
-      keepAlive: s.keepAlive,
-    };
-  } catch {
-    return base;
-  }
-}
+import { exitModuleForType } from './exits';
 
 interface ExitFormModalProps {
   open: boolean;
@@ -50,23 +23,26 @@ interface ExitFormModalProps {
    protocol is the same act as choosing vless or trojan. */
 export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProps) {
   const { t } = useTranslation();
-  const methods = useForm<EgressFormValues>({ defaultValues: valuesFrom(null) });
+  const methods = useForm<EgressFormValues>({ defaultValues: EgressFormFields.parse({}) });
+  /* Found by the row's stored type, which is the driver's name for it — the kind
+     the picker used is not carried on the row. */
+  const module = exit ? exitModuleForType(exit.type) : undefined;
   const [submitting, setSubmitting] = useState(false);
   const { update } = useEgressMutations();
 
   useEffect(() => {
     if (!open) return;
-    methods.reset(valuesFrom(exit));
-  }, [open, exit, methods]);
+    methods.reset(exit && module ? module.fromRecord(exit) : EgressFormFields.parse({}));
+  }, [open, exit, module, methods]);
 
   async function onOk() {
-    if (!exit) return;
+    if (!exit || !module) return;
     if (!(await methods.trigger())) return;
     const parsed = EgressFormFields.safeParse(methods.getValues());
     if (!parsed.success) return;
     setSubmitting(true);
     try {
-      const msg = await update(exit.id, { ...uplinkPayload(parsed.data, parsed.data.remark), id: exit.id });
+      const msg = await update(exit.id, { ...module.toPayload(parsed.data, parsed.data.remark), id: exit.id });
       if (msg?.success) onClose();
     } finally {
       setSubmitting(false);
@@ -91,7 +67,7 @@ export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProp
           <FormField label={t('remark')} name="remark">
             <Input placeholder={t('pages.xray.egress.remarkPlaceholder')} />
           </FormField>
-          <ExitFields />
+          {module && <module.Fields />}
         </Form>
       </FormProvider>
     </Modal>

@@ -1729,7 +1729,8 @@
         "interface": "Interface",
         "proxyProtocol": "Proxy protocol",
         "tcpUserTimeoutMs": "TCP user timeout (ms)",
-        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)"
+        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)",
+        "exitKindUnsupported": "This build has no form for that exit protocol. Its core declares it, but the panel cannot author one yet — update the panel, or pick another destination."
       },
       "outbound": {
         "tag": "Tag",
