@@ -1661,7 +1661,8 @@
       },
       "routing": {
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
-        "scopeAll": "Every routable inbound"
+        "scopeAll": "Every routable inbound",
+        "dragToReorder": "Drag to reorder"
       },
       "ruleForm": {
         "sourceIps": "Source IPs",

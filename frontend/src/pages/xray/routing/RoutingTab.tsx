@@ -322,20 +322,26 @@ export default function RoutingTab({
 
   function confirmDelete(idx: number) {
     const row = rowAt(idx);
-    if (row?.source === 'intent') {
-      const record = intentRecordsRef.current[row.storeIndex ?? 0];
-      if (record) void routingMut.remove(record.id);
-      return;
-    }
-    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+    /* Both halves ask. An operator rule used to go on the first click while a
+       template rule asked — the same gesture on two adjacent rows, one of them
+       undoable only by retyping it. */
+    const remove = row?.source === 'intent'
+      ? () => {
+        const record = intentRecordsRef.current[row.storeIndex ?? 0];
+        if (record) void routingMut.remove(record.id);
+      }
+      : () => {
+        const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+        mutate((tt) => {
+          tt.routing?.rules?.splice(target, 1);
+        });
+      };
     modal.confirm({
       title: `${t('delete')} ${t('pages.xray.Routings')} #${idx + 1}?`,
       okText: t('delete'),
       okType: 'danger',
       cancelText: t('cancel'),
-      onOk: () => mutate((tt) => {
-        tt.routing?.rules?.splice(target, 1);
-      }),
+      onOk: remove,
     });
   }
 
@@ -420,8 +426,22 @@ export default function RoutingTab({
       setDraggedIndex(null);
       setDropTargetIndex(null);
       if (!moved || from == null || to == null || from === to) return;
-      const fromOrig = originalRuleIndex(rowsRef.current, from);
-      const toOrig = originalRuleIndex(rowsRef.current, to);
+      const fromRow = mergedRowsRef.current[from];
+      const toRow = mergedRowsRef.current[to];
+      /* The two lists are ordered independently and the table merges them into
+         evaluation order, so a drag across the boundary names no position in
+         either. Resolving a MERGED index against the template list is what used
+         to reorder a template rule when an operator rule was dragged. */
+      if (!fromRow || !toRow || fromRow.source !== toRow.source) return;
+      if (fromRow.source === 'intent') {
+        const next = [...intentRecordsRef.current];
+        const [movedRecord] = next.splice(fromRow.storeIndex ?? 0, 1);
+        next.splice(toRow.storeIndex ?? 0, 0, movedRecord);
+        void routingMut.reorder(next.map((record) => record.id));
+        return;
+      }
+      const fromOrig = fromRow.storeIndex ?? originalRuleIndex(rowsRef.current, from);
+      const toOrig = toRow.storeIndex ?? originalRuleIndex(rowsRef.current, to);
       mutate((tt) => {
         const list = tt.routing?.rules;
         if (!list) return;
@@ -441,7 +461,7 @@ export default function RoutingTab({
   const desktopColumns = useRoutingColumns({
     isMobile,
     inboundTagOptions,
-    rowsLength: rows.length,
+    rowsLength: mergedRows.length,
     showSource: hasSource,
     showBalancer: hasBalancer,
     onHandlePointerDown,
