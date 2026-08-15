@@ -19,6 +19,9 @@ type CoreView struct {
 	// so the id is not a protocol and must never be used as one.
 	Kinds []string          `json:"kinds" example:"[\"vless\",\"vmess\"]"`
 	Caps  core.Capabilities `json:"caps"`
+	// ExitKinds are the kinds a route may terminate on — the outbound half of
+	// Kinds, so an outbound picker is built from the registry rather than a list.
+	ExitKinds []string `json:"exitKinds" example:"[\"wgkernel\"]"`
 	// ClientCredentials are the credential fields a client of each kind carries,
 	// keyed by kind. A kind absent here declares none; the form keeps its own.
 	ClientCredentials map[string][]string `json:"clientCredentials" example:"{\"vless\":[\"uuid\"],\"vmess\":[\"uuid\",\"security\"]}"`
@@ -53,6 +56,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		described := bound.Core.Describe()
 		kinds := bound.Core.Kinds()
 		names := make([]string, 0, len(kinds))
+		exits := make([]string, 0, len(kinds))
 		credentials := make(map[string][]string, len(kinds))
 		shaping := make(map[string]string, len(kinds))
 		for _, kind := range kinds {
@@ -61,6 +65,11 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 				if selector := bound.Shape.ShapingSelector(kind); selector != core.SelectorNone {
 					shaping[string(kind)] = string(selector)
 				}
+			}
+			// Mirrors cores.ExitKinds, per core rather than build-wide, so the
+			// picker can group a destination under the core that terminates it.
+			if bound.Egress != nil && bound.Egress.ExitHandleKind(kind) != core.ExitNone {
+				exits = append(exits, string(kind))
 			}
 			if bound.Creds == nil {
 				continue
@@ -72,6 +81,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		// Both sources are declaration order — registration order here, the
 		// core's own slice for kinds — and an unstable order makes gen-check flap.
 		sort.Strings(names)
+		sort.Strings(exits)
 		unavailable := ""
 		if err := bound.Core.Preflight(ctx); err != nil {
 			unavailable = err.Error()
@@ -80,6 +90,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			ID:                string(described.ID),
 			TitleKey:          described.TitleKey,
 			Kinds:             names,
+			ExitKinds:         exits,
 			Caps:              described.Caps,
 			ClientCredentials: credentials,
 			Shaping:           shaping,

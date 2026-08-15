@@ -348,6 +348,9 @@ export const EXAMPLES: Record<string, unknown> = {
         "security"
       ]
     },
+    "exitKinds": [
+      "wgkernel"
+    ],
     "id": "xray",
     "kinds": [
       "vless",

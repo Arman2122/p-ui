@@ -350,6 +350,7 @@ export interface CoreView {
   available: boolean;
   caps: Capabilities;
   clientCredentials: Record<string, string[]>;
+  exitKinds: string[];
   id: string;
   kinds: string[];
   shaping: Record<string, string>;

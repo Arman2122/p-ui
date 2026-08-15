@@ -31,6 +31,27 @@ type declaringCore struct {
 
 func (d declaringCore) ClientCredentials(kind core.Kind) []string { return d.credentials[kind] }
 
+// exitingCore terminates a route on some of its kinds and not others, which is
+// the whole distinction between the outbound half of Kinds and the inbound half.
+type exitingCore struct {
+	stubCore
+	exits map[core.Kind]core.ExitHandleKind
+}
+
+func (e exitingCore) ExitKinds() []core.Kind {
+	out := make([]core.Kind, 0, len(e.exits))
+	for kind := range e.exits {
+		out = append(out, kind)
+	}
+	return out
+}
+
+func (e exitingCore) ExitHandleKind(kind core.Kind) core.ExitHandleKind { return e.exits[kind] }
+
+func (e exitingCore) ExitHandle(context.Context, core.Exit) (core.ExitHandle, error) {
+	return core.ExitHandle{}, nil
+}
+
 func registryOf(t *testing.T, cores ...core.Core) *core.Registry {
 	t.Helper()
 	reg := core.NewRegistry()
@@ -90,6 +111,16 @@ func TestCoreViews(t *testing.T) {
 		kinds:      []core.Kind{"wgkernel"},
 		unusable:   errors.New("wireguard: no kernel support on this host"),
 	}
+	exiting := exitingCore{
+		stubCore: stubCore{
+			descriptor: core.Descriptor{ID: "wireguard", TitleKey: "cores.wireguard.title"},
+			kinds:      []core.Kind{"wgkernel", "wgtunnel"},
+		},
+		exits: map[core.Kind]core.ExitHandleKind{
+			"wgkernel": core.ExitDevice,
+			"wgtunnel": core.ExitNone,
+		},
+	}
 
 	tests := []struct {
 		name string
@@ -101,31 +132,38 @@ func TestCoreViews(t *testing.T) {
 			reg:  registryOf(t, xray, mtproto),
 			want: `[{"id":"mtproto","titleKey":"cores.mtproto.title","kinds":["mtproto"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false},` +
-				`"clientCredentials":{},"shaping":{},"available":true,"unavailable":""},` +
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""},` +
 				`{"id":"xray","titleKey":"cores.xray.title","kinds":["shadowsocks","trojan","vless"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false},` +
-				`"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "an unanswered capability stays null, never false",
 			reg:  registryOf(t, unanswered),
 			want: `[{"id":"future","titleKey":"cores.future.title","kinds":["future"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "credentials are keyed per kind, and a kind the core skips is absent, not empty",
 			reg:  registryOf(t, declaring),
 			want: `[{"id":"multi","titleKey":"cores.multi.title","kinds":["tun","vless","vmess"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "a core this host cannot run says so, and says why, instead of being offered",
 			reg:  registryOf(t, unusable),
 			want: `[{"id":"wgkernel","titleKey":"cores.wgkernel.title","kinds":["wgkernel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"clientCredentials":{},"shaping":{},"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
+		},
+		{
+			name: "only a kind that can terminate a route is offered as an exit",
+			reg:  registryOf(t, exiting),
+			want: `[{"id":"wireguard","titleKey":"cores.wireguard.title","kinds":["wgkernel","wgtunnel"],` +
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"exitKinds":["wgkernel"],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",
