@@ -103,6 +103,32 @@ func (s *InboundService) resetMtprotoClientQuota(email string) {
 	}
 }
 
+/*
+resetCoreQuotas clears the daemon-side usage counter for renewed clients.
+
+Asked of the registry rather than of mtproto by name: any core that pushes a
+byte budget down answers QuotaEnforcer, and a renewed client whose daemon keeps
+counting stays blocked by that daemon until it restarts, however the panel feels
+about the client's quota.
+*/
+func resetCoreQuotas(ctx context.Context, emails []string) {
+	reg := registry()
+	if reg == nil || len(emails) == 0 {
+		return
+	}
+	for _, bound := range reg.Cores() {
+		if bound.Quota == nil {
+			continue
+		}
+		for _, email := range emails {
+			if err := bound.Quota.ResetQuota(ctx, email); err != nil {
+				logger.Warning("quota reset failed for", email, "on core", bound.Core.Describe().ID, ":", err,
+					"— the client may stay blocked by its daemon until that daemon restarts")
+			}
+		}
+	}
+}
+
 func (s *InboundService) resetAllMtprotoQuotas() {
 	mgr := mtproto.GetManager()
 	if !mgr.HasRunning() {

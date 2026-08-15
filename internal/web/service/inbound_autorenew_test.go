@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -52,10 +53,23 @@ func TestAutoRenewClients_MultiInbound(t *testing.T) {
 		t.Fatalf("seed client_traffics: %v", err)
 	}
 
-	if _, count, err := svc.autoRenewClients(db); err != nil {
+	_, count, renewed, err := svc.autoRenewClients(db)
+	if err != nil {
 		t.Fatalf("autoRenewClients: %v", err)
-	} else if count != 3 {
+	}
+	if count != 3 {
 		t.Fatalf("renewed count = %d, want 3", count)
+	}
+	/*
+		The renewed emails are reported so the caller can clear each one's
+		daemon-side counter. A core that meters its own clients — mtg keeps a
+		per-secret quota — goes on refusing a client the panel has renewed until
+		that counter is reset, and the panel's own zeroing of client_traffics
+		says nothing to it.
+	*/
+	slices.Sort(renewed)
+	if want := []string{"a@x", "b@x", "c@x"}; !slices.Equal(renewed, want) {
+		t.Fatalf("renewed emails = %v, want %v", renewed, want)
 	}
 
 	now := time.Now().UnixMilli()

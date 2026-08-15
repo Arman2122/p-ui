@@ -53,11 +53,14 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 		return false, false, err
 	}
 
-	needRestart0, count, renewErr := s.autoRenewClients(tx)
+	needRestart0, count, renewed, renewErr := s.autoRenewClients(tx)
 	if renewErr != nil {
 		logger.Warning("Error in renew clients:", renewErr)
 	} else if count > 0 {
 		logger.Debugf("%v clients renewed", count)
+		/* After the commit, not inside it: the daemon call is a network round
+		   trip and must not hold the traffic transaction open. */
+		defer resetCoreQuotas(context.Background(), renewed)
 	}
 
 	disabledClientsCount := int64(0)
@@ -304,7 +307,7 @@ func apiUserFromClient(client map[string]any, cipher string) map[string]any {
 	return user
 }
 
-func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
+func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, []string, error) {
 	// check for time expired
 	var traffics []*xray.ClientTraffic
 	now := time.Now().Unix() * 1000
@@ -324,11 +327,11 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 			Where("i.node_id IS NULL")).
 		Find(&traffics).Error
 	if err != nil {
-		return false, 0, err
+		return false, 0, nil, err
 	}
 	// return if there is no client to renew
 	if len(traffics) == 0 {
-		return false, 0, nil
+		return false, 0, nil, nil
 	}
 
 	var inbound_ids []int
@@ -354,7 +357,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 			Where("clients.email IN ?", batch).
 			Distinct().
 			Pluck("client_inbounds.inbound_id", &ids).Error; err != nil {
-			return false, 0, err
+			return false, 0, nil, err
 		}
 		inbound_ids = append(inbound_ids, ids...)
 	}
@@ -366,7 +369,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 	for _, batch := range chunkInts(inbound_ids, maxBindVars) {
 		var page []*model.Inbound
 		if err = tx.Model(model.Inbound{}).Where("id IN ?", batch).Find(&page).Error; err != nil {
-			return false, 0, err
+			return false, 0, nil, err
 		}
 		inbounds = append(inbounds, page...)
 	}
@@ -422,13 +425,13 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 		settings["clients"] = clients
 		newSettings, err := json.MarshalIndent(settings, "", "  ")
 		if err != nil {
-			return false, 0, err
+			return false, 0, nil, err
 		}
 		inbounds[inbound_index].Settings = string(newSettings)
 	}
 	err = tx.Save(inbounds).Error
 	if err != nil {
-		return false, 0, err
+		return false, 0, nil, err
 	}
 	for _, ib := range inbounds {
 		if ib == nil {
@@ -445,17 +448,17 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 	}
 	err = tx.Save(traffics).Error
 	if err != nil {
-		return false, 0, err
+		return false, 0, nil, err
 	}
 	// A renewed client starts a fresh quota window: drop the cross-panel rows
 	// too, or the stale pushed totals would re-deplete it immediately.
 	if err = clearGlobalTraffic(tx, renewEmails...); err != nil {
-		return false, 0, err
+		return false, 0, nil, err
 	}
 	if process := currentXrayProcess(); process != nil {
 		err1 = s.xrayApi.Init(process.GetAPIPort())
 		if err1 != nil {
-			return true, int64(len(traffics)), nil
+			return true, int64(len(traffics)), renewEmails, nil
 		}
 		for _, clientToAdd := range clientsToAdd {
 			err1 = s.xrayApi.AddUser(clientToAdd.protocol, clientToAdd.tag, clientToAdd.client)
@@ -465,7 +468,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, error) {
 		}
 		s.xrayApi.Close()
 	}
-	return needRestart, int64(len(traffics)), nil
+	return needRestart, int64(len(traffics)), renewEmails, nil
 }
 
 // AddClientStat inserts a per-client accounting row, or refreshes the
