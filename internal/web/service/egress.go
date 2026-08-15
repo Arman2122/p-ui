@@ -451,11 +451,24 @@ func (s *EgressService) validate(row *model.Egress) error {
 	return nil
 }
 
-// checkNotReferenced refuses to delete or disable a row inbounds still select.
-// Both would move those inbounds to direct without anybody asking for it.
+// checkNotReferenced refuses to delete or disable a row still in use. Both would
+// move that traffic to direct — the server's own identity — without anybody
+// asking. A routing rule naming the exit is the live reference; the legacy
+// inbounds.egress_id attach is the older one, kept until that path is retired.
 func checkNotReferenced(tx *gorm.DB, id int) error {
+	var ruleIDs []int
+	err := tx.Model(&model.RoutingRule{}).
+		Where("dest_kind = ? AND dest_exit_id = ?", model.RoutingDestExit, id).
+		Order("id").Pluck("id", &ruleIDs).Error
+	if err != nil {
+		return err
+	}
+	if len(ruleIDs) > 0 {
+		return fmt.Errorf("%w: egress %d is the exit of routing rule(s) %v — repoint or delete them first", ErrEgressInUse, id, ruleIDs)
+	}
+
 	var attached []int
-	err := tx.Model(&model.Inbound{}).Where("egress_id = ?", id).Order("id").Pluck("id", &attached).Error
+	err = tx.Model(&model.Inbound{}).Where("egress_id = ?", id).Order("id").Pluck("id", &attached).Error
 	if err != nil {
 		return err
 	}

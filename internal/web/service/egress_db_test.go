@@ -330,15 +330,24 @@ func waitFor(t *testing.T, what string, done func() bool) {
 	}
 }
 
-func TestEgressDeleteAndDisableAreRefusedWhileAttached(t *testing.T) {
+/*
+The legacy attach column still holds a row down, for as long as it exists.
+
+Seeded directly rather than through Attach: since the routing migration, Attach
+writes a rule naming the egress's TARGET and never references the egress row, so
+driving this arm through it asserted a premise that had stopped being true — the
+form this test was in until 2026-08-15, red and unnoticed because the commits
+that changed Attach have never been pushed and CI never ran on them.
+*/
+func TestEgressDeleteAndDisableAreRefusedWhileTheLegacyColumnPointsAtIt(t *testing.T) {
 	initTestDB(t)
 	withFakeEgressKernel(t)
 	service := &EgressService{}
 
 	row := seedEgress(t, &model.Egress{Type: "xray-tun", Enable: true, Target: "direct"})
 	inbound := seedInbound(t, wgKernelInbound("in-held", 30020))
-	if err := service.Attach(inbound.Id, row.Id); err != nil {
-		t.Fatalf("Attach: %v", err)
+	if err := database.GetDB().Model(inbound).Update("egress_id", row.Id).Error; err != nil {
+		t.Fatalf("seed the legacy attachment: %v", err)
 	}
 
 	if err := service.Del(row.Id); !errors.Is(err, ErrEgressInUse) {
@@ -348,6 +357,57 @@ func TestEgressDeleteAndDisableAreRefusedWhileAttached(t *testing.T) {
 	disabling.Enable = false
 	if _, err := service.Update(&disabling); !errors.Is(err, ErrEgressInUse) {
 		t.Fatalf("disabling Update = %v, want %v", err, ErrEgressInUse)
+	}
+}
+
+/*
+A routing rule is how an exit is used now, and it must hold the row down.
+
+The attach column this guard used to read is written NIL in production — the
+routing migration nulled every one and both inbound write paths clear it — so a
+guard that only asked it said "nothing references this" about an uplink live
+rules route through, and deleting it moved that traffic to the server's own
+identity while the panel reported success.
+*/
+func TestEgressDeleteAndDisableAreRefusedWhileARuleRoutesToIt(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+	service := &EgressService{}
+
+	uplink := seedEgress(t, &model.Egress{Type: "wg-client", Enable: true, Owner: "operator"})
+	rule := &model.RoutingRule{
+		Enable: true, Remark: "office traffic",
+		IngressScope: model.RoutingScopeAll,
+		DestKind:     model.RoutingDestExit, DestExitId: &uplink.Id,
+	}
+	if err := database.GetDB().Create(rule).Error; err != nil {
+		t.Fatalf("seed routing rule: %v", err)
+	}
+
+	if err := service.Del(uplink.Id); !errors.Is(err, ErrEgressInUse) {
+		t.Fatalf("Del = %v, want %v", err, ErrEgressInUse)
+	}
+	disabling := *uplink
+	disabling.Enable = false
+	if _, err := service.Update(&disabling); !errors.Is(err, ErrEgressInUse) {
+		t.Fatalf("disabling Update = %v, want %v", err, ErrEgressInUse)
+	}
+
+	// The refusal must name the rule, or an operator cannot act on it.
+	err := service.Del(uplink.Id)
+	if want := strconv.Itoa(rule.Id); !strings.Contains(err.Error(), want) {
+		t.Fatalf("Del error %q does not name rule %s", err, want)
+	}
+
+	// A rule pointing somewhere else must not hold it down.
+	other := 0
+	if err := database.GetDB().Model(rule).Updates(map[string]any{
+		"dest_kind": model.RoutingDestDirect, "dest_exit_id": &other,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Del(uplink.Id); err != nil {
+		t.Fatalf("Del after the rule stopped naming it = %v, want nil", err)
 	}
 }
 
