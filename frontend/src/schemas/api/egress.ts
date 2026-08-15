@@ -87,3 +87,26 @@ export function splitAddresses(raw: string): string[] {
 /* Everything the operator owns. The timestamps are the database's, so a write
    that carried them back would be claiming to set them. */
 export type EgressPayload = Omit<Egress, 'createdAt' | 'updatedAt'>;
+
+/* An uplink as the API takes it. Its credentials live in the settings JSON the
+   driver reads, and it names no target because it IS the destination. */
+export function uplinkPayload(form: EgressFormValues, remark: string): EgressPayload {
+  return {
+    id: form.id,
+    type: EGRESS_TYPE_UPLINK,
+    remark: remark.trim(),
+    target: '',
+    enable: form.enable,
+    owner: 'operator',
+    ingressInboundId: 0,
+    settings: JSON.stringify({
+      privateKey: form.privateKey,
+      address: splitAddresses(form.address),
+      mtu: form.mtu,
+      publicKey: form.publicKey,
+      endpoint: form.endpoint,
+      presharedKey: form.presharedKey,
+      keepAlive: form.keepAlive,
+    }),
+  };
+}

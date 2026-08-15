@@ -10,7 +10,10 @@ import {
 import { OutboundDomainStrategySchema } from '@/schemas/protocols/outbound';
 import { SSMethodSchema } from '@/schemas/protocols/shared/shadowsocks';
 
-export const PROTOCOL_OPTIONS = Object.values(Protocols).map((p) => ({ value: p, label: p }));
+/* The outbound protocols Xray itself serves. Not core.Kind values: freedom and
+   blackhole are outbound-only and can never be an inbound protocol. */
+export const PROTOCOL_NAMES: readonly string[] = Object.values(Protocols);
+export const PROTOCOL_OPTIONS = PROTOCOL_NAMES.map((p) => ({ value: p, label: p }));
 export const SECURITY_OPTIONS = Object.values(USERS_SECURITY).map((v) => ({ value: v, label: v }));
 export const FLOW_OPTIONS = Object.values(TLS_FLOW_CONTROL).map((v) => ({ value: v, label: v }));
 export const SS_METHOD_OPTIONS = SSMethodSchema.options.map((v) => ({ value: v, label: v }));
