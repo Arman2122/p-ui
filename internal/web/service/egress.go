@@ -211,73 +211,6 @@ func (s *EgressService) Del(id int) error {
 	return nil
 }
 
-/*
-Attach points one inbound at an egress; an egressID of 0 detaches it.
-
-Synchronous by design. A reconcile that caught up on the next tick would leave a
-just-attached inbound egressing with the server's own identity for up to a tick,
-which is the one outcome the operator asked for the egress to prevent.
-*/
-/*
-Attach is the old two-screen control, expressed as intent.
-
-It used to write inbounds.egress_id, which nothing reads any more — leaving it
-would make the attach control a button that reports success and changes nothing,
-which is the exact bug this feature exists to remove. So it writes the rule the
-operator meant instead, and the routing compile realises it.
-*/
-func (s *EgressService) Attach(inboundID, egressID int) error {
-	inbound := &model.Inbound{}
-	if err := database.GetDB().First(inbound, inboundID).Error; err != nil {
-		return err
-	}
-	if egressID <= 0 {
-		return (&RoutingService{}).ClearInbound(context.Background(), inboundID)
-	}
-	row, err := s.Get(egressID)
-	if err != nil {
-		return err
-	}
-	if err := s.checkAttachable(inbound, row); err != nil {
-		return err
-	}
-	if !row.Enable {
-		return fmt.Errorf("%w: egress %d is disabled, so attaching to it would egress direct",
-			ErrEgressDisabled, row.Id)
-	}
-	if row.Target == "" {
-		return fmt.Errorf("%w: egress %d names no outbound to send this inbound to",
-			ErrEgressTargetUnresolved, row.Id)
-	}
-	return (&RoutingService{}).ReplaceInboundRule(context.Background(), inboundID, row.Target)
-}
-
-/*
-verifyAttachment asks the kernel whether THIS inbound is routed as asked.
-
-Reconcile converges the whole host and joins every row's failure, so a permanent
-condition on an unrelated egress — a front whose family the host disabled, an id
-left behind by a row somebody deleted — would otherwise revert every attach on
-the box forever. Only this inbound's own rule may decide this inbound's fate.
-*/
-func (s *EgressService) verifyAttachment(ctx context.Context, inbound *model.Inbound, egressID int) error {
-	device, ok := egressIngressDevice(ctx, inbound)
-	if !ok {
-		return nil
-	}
-	routed, err := egressManager.Selects(ctx, device, egressID)
-	if err != nil {
-		return err
-	}
-	if !routed {
-		if egressID == 0 {
-			return fmt.Errorf("%w: %s is still selected into the egress band", ErrEgressNotRouted, device)
-		}
-		return fmt.Errorf("%w: no rule selects %s into egress %d", ErrEgressNotRouted, device, egressID)
-	}
-	return nil
-}
-
 // Reconcile drives the host toward every row. It is the ONE convergence path:
 // mutations call it synchronously and the drift job calls it on a tick.
 func (s *EgressService) Reconcile(ctx context.Context) error {
@@ -451,10 +384,9 @@ func (s *EgressService) validate(row *model.Egress) error {
 	return nil
 }
 
-// checkNotReferenced refuses to delete or disable a row still in use. Both would
-// move that traffic to direct — the server's own identity — without anybody
-// asking. A routing rule naming the exit is the live reference; the legacy
-// inbounds.egress_id attach is the older one, kept until that path is retired.
+// checkNotReferenced refuses to delete or disable a row a routing rule sends
+// traffic to. Either would move that traffic to direct — the server's own
+// identity — without anybody asking.
 func checkNotReferenced(tx *gorm.DB, id int) error {
 	var ruleIDs []int
 	err := tx.Model(&model.RoutingRule{}).
@@ -466,35 +398,9 @@ func checkNotReferenced(tx *gorm.DB, id int) error {
 	if len(ruleIDs) > 0 {
 		return fmt.Errorf("%w: egress %d is the exit of routing rule(s) %v — repoint or delete them first", ErrEgressInUse, id, ruleIDs)
 	}
-
-	var attached []int
-	err = tx.Model(&model.Inbound{}).Where("egress_id = ?", id).Order("id").Pluck("id", &attached).Error
-	if err != nil {
-		return err
-	}
-	if len(attached) > 0 {
-		return fmt.Errorf("%w: egress %d still serves inbound(s) %v — detach them first", ErrEgressInUse, id, attached)
-	}
 	return nil
 }
 
-func (s *EgressService) checkAttachable(inbound *model.Inbound, row *model.Egress) error {
-	if !egressIngressSelectable(inbound) {
-		return fmt.Errorf("%w: inbound %d is %q", ErrEgressNoIngressDevice, inbound.Id, inbound.Protocol)
-	}
-	if inbound.NodeID != nil {
-		return fmt.Errorf("%w: inbound %d lives on node %d, and every resource egress %d derives is per-host",
-			ErrEgressMasterLocal, inbound.Id, *inbound.NodeID, row.Id)
-	}
-	if !row.Enable {
-		return fmt.Errorf("%w: egress %d is disabled, so attaching to it would egress direct", ErrEgressDisabled, row.Id)
-	}
-	report := egressManager.Preflight(context.Background(), egressGatewayBase(), egressRow(row))
-	for _, note := range report.Notes {
-		logger.Warning("egress preflight:", note)
-	}
-	return report.Err()
-}
 
 // egressTargetResolves reports whether tag names an outbound or a balancer the
 // injection will find: the template plus subscriptions, which is that surface.
