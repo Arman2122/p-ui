@@ -10,8 +10,11 @@ const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } };
    so a partial body would blank `type` and be refused as an unknown driver. */
 export function useEgressMutations() {
   const queryClient = useQueryClient();
+  /* Routing too, not just egresses: the rule editor's destination picker reads
+     routing/exits, so without this a new uplink is missing from it until a reload. */
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: keys.egresses.root() });
+    void queryClient.invalidateQueries({ queryKey: keys.routing.root() });
   };
 
   const addMut = useMutation({
