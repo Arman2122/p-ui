@@ -163,7 +163,10 @@ export function intentToRule(
   tagOf: (inboundId: number) => string | undefined,
 ): XrayRuleShape {
   const criteria = criteriaToForm(record.criteria);
-  const out: XrayRuleShape = { type: 'field', enabled: record.enable };
+  /* The remark rides through unchanged: the form does not manage it, the modal
+     carries every unmanaged key, and ruleToIntent reads it back. Omitting it
+     here is what used to blank the column on every edit and every toggle. */
+  const out: XrayRuleShape = { type: 'field', enabled: record.enable, remark: record.remark };
   for (const [key, value] of Object.entries(criteria)) {
     if (!value) continue;
     const listKey = LIST_KEYS[key];
