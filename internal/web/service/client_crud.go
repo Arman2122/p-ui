@@ -10,9 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/xray"
 
@@ -146,29 +147,23 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	return needRestart, nil
 }
 
+/*
+fillProtocolDefaults gives a fresh client the credentials its kind mints, asked
+of the core registry rather than of a protocol switch. A kind no core owns gets
+nothing, exactly as the switch's missing arms did.
+*/
 func (s *ClientService) fillProtocolDefaults(c *model.Client, ib *model.Inbound) error {
-	switch ib.Protocol {
-	case model.VMESS, model.VLESS:
-		if c.ID == "" {
-			c.ID = uuid.NewString()
-		}
-	case model.Trojan:
-		if c.Password == "" {
-			c.Password = strings.ReplaceAll(uuid.NewString(), "-", "")
-		}
-	case model.Shadowsocks:
-		method := xray.ShadowsocksMethodFromSettings(ib.Settings)
-		if c.Password == "" || !xray.ValidShadowsocksClientKey(method, c.Password) {
-			c.Password = xray.RandomShadowsocksClientKey(method)
-		}
-	case model.Hysteria:
-		if c.Auth == "" {
-			c.Auth = strings.ReplaceAll(uuid.NewString(), "-", "")
-		}
-	case model.MTProto:
-		if c.Secret == "" {
-			c.Secret = mtproto.MintFakeTLSSecret(ib.Settings)
-		}
+	kind := core.Kind(ib.Protocol)
+	authority, ok := cores.ClientCredentialAuthority(kind)
+	if !ok {
+		return nil
+	}
+	minted, err := authority.MintClientCredentials(kind, ib.Settings, clientCredentialValues(c))
+	if err != nil {
+		return err
+	}
+	for name, value := range minted {
+		setClientCredential(c, name, value)
 	}
 	return nil
 }
