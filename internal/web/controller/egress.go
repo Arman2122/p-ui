@@ -125,4 +125,3 @@ func (a *EgressController) del(c *gin.Context) {
 	jsonObj(c, id, nil)
 	a.xrayService.SetToNeedRestart()
 }
-

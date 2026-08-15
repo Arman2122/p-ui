@@ -86,17 +86,6 @@ an L7 core's own socket offers.
 */
 func Mark(id int) uint32 { return markBase | uint32(id) }
 
-// markEgressID reads the id back out of a mark. The ValidID bound is
-// load-bearing: an id learned outside the band derives objects checkID then
-// refuses to collect, so the sweep would error on every pass forever.
-func markEgressID(mark uint32) (int, bool) {
-	id := int(mark &^ markBase)
-	if !ValidID(id) || Mark(id) != mark {
-		return 0, false
-	}
-	return id, true
-}
-
 // ownedEgressID reads the id back out of a device name. It round-trips through
 // Device, so a near miss like peg007 or peg0 is somebody else's device.
 func ownedEgressID(name string) (int, bool) {

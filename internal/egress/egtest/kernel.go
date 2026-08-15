@@ -24,6 +24,7 @@ type Kernel struct {
 	links   []string
 	addrs   []egress.AddrSpec
 	sysctls map[string]string
+	dropIns map[string]string
 
 	ops []string
 	// snapshots counts the passes that read the host, so a test can wait for one
@@ -157,6 +158,26 @@ func (k *Kernel) SetSysctl(_ context.Context, key, value string) error {
 	}
 	k.sysctls[key] = value
 	return nil
+}
+
+// PersistSysctl records the drop-in a real host would have written. Recorded
+// rather than performed: a fake that wrote /etc/sysctl.d would need root.
+func (k *Kernel) PersistSysctl(_ context.Context, path, body string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.dropIns == nil {
+		k.dropIns = map[string]string{}
+	}
+	k.dropIns[path] = body
+	return nil
+}
+
+// DropIn returns what PersistSysctl was asked to write at path.
+func (k *Kernel) DropIn(path string) (string, bool) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	body, ok := k.dropIns[path]
+	return body, ok
 }
 
 // AddLink brings a device up. Any sysctl a caller declared for it appears at the

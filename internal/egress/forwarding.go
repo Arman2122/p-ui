@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 )
 
 /*
@@ -64,27 +61,8 @@ func (m *Manager) EnsureForwarding(ctx context.Context) error {
 			failures = append(failures, fmt.Errorf("set %s: %w", key, err))
 		}
 	}
-	if err := persistForwarding(); err != nil {
+	if err := m.plane.PersistSysctl(ctx, ForwardingDropIn, forwardingDropInBody); err != nil {
 		failures = append(failures, err)
 	}
 	return errors.Join(failures...)
-}
-
-// persistForwarding writes the drop-in, and only when it would change: an
-// unchanged file keeps its mtime so an operator can see when the panel last
-// touched it.
-func persistForwarding() error {
-	if runtime.GOOS != "linux" {
-		return nil
-	}
-	if current, err := os.ReadFile(ForwardingDropIn); err == nil && string(current) == forwardingDropInBody {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(ForwardingDropIn), 0o755); err != nil {
-		return fmt.Errorf("egress: create %s: %w", filepath.Dir(ForwardingDropIn), err)
-	}
-	if err := os.WriteFile(ForwardingDropIn, []byte(forwardingDropInBody), 0o644); err != nil {
-		return fmt.Errorf("egress: write %s: %w", ForwardingDropIn, err)
-	}
-	return nil
 }

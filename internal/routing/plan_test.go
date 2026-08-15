@@ -62,8 +62,10 @@ table, no front. A design that fronts everything pays gVisor for every flow.
 func TestInternalIngressEmitsNoKernelState(t *testing.T) {
 	got := Plan(baseInput(
 		[]Subject{internalSubject(1, "vless-in")},
-		[]Rule{{ID: 1, Enable: true, Scope: ScopeSelected, IngressIDs: []int{1},
-			Dest: Dest{Kind: DestOutbound, Tag: "warp"}}},
+		[]Rule{{
+			ID: 1, Enable: true, Scope: ScopeSelected, IngressIDs: []int{1},
+			Dest: Dest{Kind: DestOutbound, Tag: "warp"},
+		}},
 		nil,
 	))
 
@@ -90,10 +92,14 @@ func TestDeviceIngressIsFrontedAndTagRewritten(t *testing.T) {
 	got := Plan(baseInput(
 		[]Subject{deviceSubject(7, "wg-home", "pwg7")},
 		[]Rule{
-			{ID: 1, SortIndex: 0, Enable: true, Scope: ScopeSelected, IngressIDs: []int{7},
-				Dest: Dest{Kind: DestOutbound, Tag: "de"}},
-			{ID: 2, SortIndex: 1, Enable: true, Scope: ScopeSelected, IngressIDs: []int{7},
-				Dest: Dest{Kind: DestBlock}},
+			{
+				ID: 1, SortIndex: 0, Enable: true, Scope: ScopeSelected, IngressIDs: []int{7},
+				Dest: Dest{Kind: DestOutbound, Tag: "de"},
+			},
+			{
+				ID: 2, SortIndex: 1, Enable: true, Scope: ScopeSelected, IngressIDs: []int{7},
+				Dest: Dest{Kind: DestBlock},
+			},
 		},
 		map[int]int{7: 1},
 	))
@@ -132,8 +138,10 @@ func TestMultiSubjectRuleFansOutWithCorrectSubjects(t *testing.T) {
 	criteria := map[string]json.RawMessage{"domain": json.RawMessage(`["geosite:ads"]`)}
 	got := Plan(baseInput(
 		[]Subject{internalSubject(1, "vless-in"), deviceSubject(7, "wg-home", "pwg7")},
-		[]Rule{{ID: 5, Enable: true, Scope: ScopeSelected, IngressIDs: []int{1, 7},
-			Criteria: criteria, Dest: Dest{Kind: DestOutbound, Tag: "warp"}}},
+		[]Rule{{
+			ID: 5, Enable: true, Scope: ScopeSelected, IngressIDs: []int{1, 7},
+			Criteria: criteria, Dest: Dest{Kind: DestOutbound, Tag: "warp"},
+		}},
 		map[int]int{7: 1},
 	))
 
@@ -180,9 +188,11 @@ func TestCriteriaMaskIsTheIntersection(t *testing.T) {
 
 	got := Plan(baseInput(
 		[]Subject{l7, l3},
-		[]Rule{{ID: 5, Enable: true, Scope: ScopeSelected, IngressIDs: []int{1, 7},
+		[]Rule{{
+			ID: 5, Enable: true, Scope: ScopeSelected, IngressIDs: []int{1, 7},
 			Criteria: map[string]json.RawMessage{"user": json.RawMessage(`["a@b"]`)},
-			Dest:     Dest{Kind: DestOutbound, Tag: "warp"}}},
+			Dest:     Dest{Kind: DestOutbound, Tag: "warp"},
+		}},
 		map[int]int{7: 1},
 	))
 
@@ -388,8 +398,10 @@ func TestDisabledRuleEmitsNothing(t *testing.T) {
 
 // A blocked ingress is reported with the core's own reason rather than fronted.
 func TestBlockedIngressIsReportedNotFronted(t *testing.T) {
-	subject := Subject{InboundID: 3, Tag: "mt-1",
-		Handle: core.IngressHandle{BlockedKey: "pages.xray.subjects.reasonBridgeOff"}}
+	subject := Subject{
+		InboundID: 3, Tag: "mt-1",
+		Handle: core.IngressHandle{BlockedKey: "pages.xray.subjects.reasonBridgeOff"},
+	}
 	got := Plan(baseInput(
 		[]Subject{subject},
 		[]Rule{{ID: 1, Enable: true, Scope: ScopeSelected, IngressIDs: []int{3}, Dest: Dest{Kind: DestBlock}}},

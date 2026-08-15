@@ -2,6 +2,7 @@ package egress_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/egress"
@@ -31,6 +32,23 @@ func TestEnsureForwardingTurnsBothFamiliesOn(t *testing.T) {
 		}
 		if got != "1" {
 			t.Errorf("%s = %q, want \"1\": an L3 inbound is inert without it", key, got)
+		}
+	}
+
+	/*
+		The drop-in goes through the plane like every other host write.
+
+		It used to be a package function calling os.WriteFile, so a test holding a
+		fake plane still wrote to the real /etc/sysctl.d — which passes as root and
+		fails everywhere else, and CI is everywhere else.
+	*/
+	body, written := plane.DropIn(egress.ForwardingDropIn)
+	if !written {
+		t.Fatalf("nothing was persisted to %s, so the setting dies at the next reboot", egress.ForwardingDropIn)
+	}
+	for _, key := range []string{egress.IPForwardKey, egress.IPForward6Key} {
+		if !strings.Contains(body, key) {
+			t.Errorf("the drop-in does not carry %s:\n%s", key, body)
 		}
 	}
 }

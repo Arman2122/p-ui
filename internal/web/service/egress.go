@@ -401,7 +401,6 @@ func checkNotReferenced(tx *gorm.DB, id int) error {
 	return nil
 }
 
-
 // egressTargetResolves reports whether tag names an outbound or a balancer the
 // injection will find: the template plus subscriptions, which is that surface.
 func egressTargetResolves(tag string) (bool, error) {

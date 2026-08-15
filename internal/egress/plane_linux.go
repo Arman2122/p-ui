@@ -75,7 +75,7 @@ func (kernelPlane) Snapshot(context.Context) (Snapshot, error) {
 			// A rule the kernel reports with no mark gives Mask -1 and Mark 0; read
 			// it back so a marked rule the panel wrote compares equal to itself.
 			if r.Mark != 0 {
-				spec.Mark = uint32(r.Mark)
+				spec.Mark = r.Mark
 			}
 			snap.Rules = append(snap.Rules, spec)
 		}
@@ -141,7 +141,7 @@ func toNetlinkRule(spec RuleSpec) *netlink.Rule {
 	// One selector or the other, never both: a rule carrying an empty iif AND a
 	// mark of zero matches everything, which is the one thing it must not do.
 	if spec.Mark != 0 {
-		rule.Mark = uint32(spec.Mark)
+		rule.Mark = spec.Mark
 	} else {
 		rule.IifName = spec.Iif
 	}
@@ -251,6 +251,19 @@ func (kernelPlane) Sysctl(_ context.Context, key string) (string, error) {
 
 func (kernelPlane) SetSysctl(_ context.Context, key, value string) error {
 	return classifySysctl(os.WriteFile(sysctlPath(key), []byte(value+"\n"), 0o644))
+}
+
+func (kernelPlane) PersistSysctl(_ context.Context, path, body string) error {
+	if current, err := os.ReadFile(path); err == nil && string(current) == body {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("egress: create %s: %w", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return fmt.Errorf("egress: write %s: %w", path, err)
+	}
+	return nil
 }
 
 // classifySysctl reads an absent key as an absent device: the per-device knobs

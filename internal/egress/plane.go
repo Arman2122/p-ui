@@ -160,6 +160,12 @@ type Plane interface {
 	// knobs only exist while the device does.
 	Sysctl(ctx context.Context, key string) (string, error)
 	SetSysctl(ctx context.Context, key, value string) error
+
+	// PersistSysctl writes a sysctl drop-in so the setting survives a reboot.
+	// On the Plane rather than beside it: a host write that reaches around this
+	// interface is one a fake cannot intercept, so the test that thought it was
+	// driving a fake wrote to the real /etc and failed as an unprivileged user.
+	PersistSysctl(ctx context.Context, path, body string) error
 }
 
 // HostPlane is the real stack on Linux and a refusing stub everywhere else.

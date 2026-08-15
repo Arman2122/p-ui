@@ -1906,17 +1906,6 @@ func routingSubjectReason(inbound *model.Inbound) string {
 	return ""
 }
 
-// settingsHasKey reports whether an inbound's settings carry a key at all, which
-// is how a switch is detected without naming the protocol that owns it.
-func settingsHasKey(settings, key string) bool {
-	var parsed map[string]json.RawMessage
-	if json.Unmarshal([]byte(settings), &parsed) != nil {
-		return false
-	}
-	_, present := parsed[key]
-	return present
-}
-
 func (s *InboundService) GetClientReverseTags() (string, error) {
 	db := database.GetDB()
 	var inbounds []model.Inbound
