@@ -74,6 +74,29 @@ the fields it has always shown, so an unknown inbound stays editable.
 */
 type CredentialDeclarer interface {
 	ClientCredentials(kind Kind) []string
+
+	/*
+		MintClientCredentials returns fresh values for the credentials a client
+		is missing — or holds in a form the kind cannot serve, which is why the
+		current values are passed in: a shadowsocks key of the wrong size for the
+		inbound's method is replaced, not kept. Keys are vocabulary names; only
+		declared names may come back, and minting over its own output returns
+		nothing. Settings may be empty — mint what can be minted without it.
+	*/
+	MintClientCredentials(kind Kind, settings string, have map[string]string) (map[string]string, error)
+
+	/*
+		ValidateClient refuses a client this kind cannot serve, with the reason
+		as the operator reads it. Required-ness lives here rather than in a
+		declaration: what "required" means is protocol knowledge — shadowsocks
+		needs the email that identifies the client in the config, wireguard a
+		public key no panel can invent — and only the core can word the refusal.
+	*/
+	ValidateClient(kind Kind, settings, email string, have map[string]string) error
+
+	// ClientIdentity names the field that identifies a client of this kind
+	// inside a rendered config: a vocabulary name, or "email".
+	ClientIdentity(kind Kind) string
 }
 
 // TrafficSource reports per-user usage. Deltas only: a core normalises its own

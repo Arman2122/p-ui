@@ -63,6 +63,24 @@ func (c *Core) ClientCredentials(kind core.Kind) []string {
 	return []string{core.CredPrivateKey, core.CredPublicKey, core.CredPreSharedKey, core.CredAllowedIPs}
 }
 
+// MintClientCredentials mints nothing: a WireGuard keypair is the client's own,
+// generated where the private key should live, and the panel cannot invent one.
+func (c *Core) MintClientCredentials(core.Kind, string, map[string]string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+// The refusal string is the API's exact historical wording.
+func (c *Core) ValidateClient(kind core.Kind, _, _ string, have map[string]string) error {
+	if kind == Kind && have[core.CredPublicKey] == "" {
+		return errors.New("wireguard client requires a key")
+	}
+	return nil
+}
+
+// ClientIdentity: a peer is named by email in the panel's own config JSON; the
+// public key identifies it to the kernel, not to the rendered inbound.
+func (c *Core) ClientIdentity(core.Kind) string { return "email" }
+
 func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
 	want := make([]engine.Instance, 0, len(desired))
 	var keep []int

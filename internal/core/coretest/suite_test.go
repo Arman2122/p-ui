@@ -98,6 +98,23 @@ func (f *fakeCore) ClientCredentials(core.Kind) []string {
 	return []string{core.CredUUID}
 }
 
+func (f *fakeCore) MintClientCredentials(_ core.Kind, _ string, have map[string]string) (map[string]string, error) {
+	minted := map[string]string{}
+	if have[core.CredUUID] == "" {
+		minted[core.CredUUID] = "fake-uuid"
+	}
+	return minted, nil
+}
+
+func (f *fakeCore) ValidateClient(_ core.Kind, _, _ string, have map[string]string) error {
+	if have[core.CredUUID] == "" {
+		return errors.New("empty client ID")
+	}
+	return nil
+}
+
+func (f *fakeCore) ClientIdentity(core.Kind) string { return core.CredUUID }
+
 func (f *fakeCore) Reconcile(_ context.Context, desired []core.Instance) error {
 	changed := !slices.EqualFunc(f.desired, desired, func(a, b core.Instance) bool {
 		return a.ID == b.ID && a.Tag == b.Tag && a.Port == b.Port && len(a.Users) == len(b.Users)
