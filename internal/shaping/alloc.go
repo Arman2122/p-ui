@@ -41,23 +41,6 @@ func IFBDevice(id int) string { return ifbPrefix + strconv.Itoa(id) }
 // through IFBDevice, so a near miss like pifb007 or pifb0 is somebody else's.
 func ownedIFBID(name string) (int, bool) { return ownedID(name, ifbPrefix) }
 
-/*
-Owns reports whether this panel may install objects on device.
-
-It is a round-tripping predicate over the panel's own device names, not a string
-prefix test: an operator's "pwgtest" shares the prefix and is somebody else's
-interface, and a tree installed on it would throttle traffic the panel does not
-serve.
-*/
-func Owns(device string) bool {
-	for _, prefix := range [...]string{wireguardPrefix, egressPrefix, ifbPrefix} {
-		if _, mine := ownedID(device, prefix); mine {
-			return true
-		}
-	}
-	return false
-}
-
 // ownedID is the shared round trip: the name must rebuild itself exactly from the
 // id it claims, which is what rejects a leading zero and a trailing letter alike.
 func ownedID(name, prefix string) (int, bool) {

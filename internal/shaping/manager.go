@@ -7,7 +7,6 @@ import (
 	"maps"
 	"net/netip"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -47,9 +46,17 @@ type DeviceWant struct {
 type Manager struct {
 	mu    sync.Mutex
 	plane Plane
+	ns    *Namespaces
 }
 
-func NewManager(p Plane) *Manager { return &Manager{plane: p} }
+// NewManager takes the namespaces it may install on explicitly: a manager that
+// decided its own would be a second opinion on which devices the panel owns.
+func NewManager(p Plane, ns *Namespaces) *Manager {
+	if ns == nil {
+		ns = DefaultNamespaces()
+	}
+	return &Manager{plane: p, ns: ns}
+}
 
 // shaped is one subject reduced to what a single tree needs: the selectors, and
 // the one direction's rate already canonicalised into the kernel's own unit.
@@ -95,7 +102,7 @@ func (m *Manager) Converge(ctx context.Context, want []DeviceWant) error {
 	plans := make([]devicePlan, 0, len(want))
 	mirrors := map[string]string{}
 	for _, w := range want {
-		plan, err := planDevice(w)
+		plan, err := m.planDevice(w)
 		if err != nil {
 			failures = append(failures, err)
 		}
@@ -128,11 +135,11 @@ runs unshaped, and the error names it. Shaping one user as another is the only
 failure a customer cannot detect for themselves, so a selector claimed twice
 drops BOTH subjects rather than picking one.
 */
-func planDevice(w DeviceWant) (devicePlan, error) {
-	if !Owns(w.Device) {
+func (m *Manager) planDevice(w DeviceWant) (devicePlan, error) {
+	if !m.ns.Owns(w.Device) {
 		return devicePlan{}, fmt.Errorf("%w: %q", ErrNotOwned, w.Device)
 	}
-	id, mine := deviceID(w.Device)
+	id, mine := m.ns.DeviceID(w.Device)
 	if !mine {
 		return devicePlan{}, fmt.Errorf("%w: %q carries no inbound id", ErrNotOwned, w.Device)
 	}
@@ -515,8 +522,8 @@ device merely missing from this pass's want is not evidence that nothing feeds
 its mirror: only the parent's own tree is.
 */
 func (m *Manager) stillRedirectedInto(ctx context.Context, id int, mirror string, links []string) (string, error) {
-	for _, prefix := range [...]string{wireguardPrefix, egressPrefix} {
-		parent := prefix + strconv.Itoa(id)
+	for _, prefix := range m.ns.Shapeable() {
+		parent := parentOf(prefix, id)
 		if !slices.Contains(links, parent) {
 			continue
 		}
@@ -543,7 +550,7 @@ func (m *Manager) Enforced(ctx context.Context, want DeviceWant) (map[string]Lim
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	plan, planErr := planDevice(want)
+	plan, planErr := m.planDevice(want)
 	if plan.device == "" {
 		return nil, planErr
 	}
@@ -765,17 +772,6 @@ func rootQdisc(device string) QdiscSpec {
 
 func clsactQdisc(device string) QdiscSpec {
 	return QdiscSpec{Device: device, Type: QdiscClsact, Handle: clsactHandle, Parent: clsactParent}
-}
-
-// deviceID reads the inbound id out of an owned device name, whichever of the
-// panel's namespaces it belongs to.
-func deviceID(device string) (int, bool) {
-	for _, prefix := range [...]string{wireguardPrefix, egressPrefix, ifbPrefix} {
-		if id, mine := ownedID(device, prefix); mine {
-			return id, true
-		}
-	}
-	return 0, false
 }
 
 func sortSubjects(in []shaped) {

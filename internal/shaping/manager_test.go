@@ -49,7 +49,7 @@ func live(t *testing.T, links ...string) (*shaping.Manager, *shapetest.Kernel) {
 	t.Helper()
 	kernel := shapetest.New()
 	kernel.AddLink(links...)
-	return shaping.NewManager(kernel), kernel
+	return shaping.NewManager(kernel, shaping.DefaultNamespaces()), kernel
 }
 
 func converge(t *testing.T, m *shaping.Manager, w []shaping.DeviceWant) {
@@ -420,7 +420,7 @@ func TestOneDeviceFailingDoesNotStopAnother(t *testing.T) {
 	kernel := shapetest.New()
 	kernel.AddLink("pwg7", "pwg8")
 	kernel.SnapshotErr = map[string]error{"pwg7": errors.New("netlink is unhappy")}
-	m := shaping.NewManager(kernel)
+	m := shaping.NewManager(kernel, shaping.DefaultNamespaces())
 
 	err := m.Converge(context.Background(), []shaping.DeviceWant{
 		{Device: "pwg7", Subjects: []shaping.Subject{subject("alice", 10_000_000, 0, alice4)}},
@@ -512,7 +512,7 @@ func TestAnExistingTreeIsAdoptedAfterARestart(t *testing.T) {
 
 	// A brand new manager is exactly what a panel restart produces: no memory of
 	// which minor anybody had, and the same kernel underneath.
-	fresh := shaping.NewManager(kernel)
+	fresh := shaping.NewManager(kernel, shaping.DefaultNamespaces())
 	kernel.ResetOps()
 	converge(t, fresh, want(subject("alice", 10_000_000, 0, alice4)))
 	if writes := kernel.Writes(); writes != 0 {
@@ -703,7 +703,7 @@ func TestEnforcedReportsNothingForAnUnshapedSubject(t *testing.T) {
 func TestTwoDevicesDerivingOneMirrorIsRefused(t *testing.T) {
 	kernel := shapetest.New()
 	kernel.AddLink("pwg7", "peg7")
-	m := shaping.NewManager(kernel)
+	m := shaping.NewManager(kernel, shaping.DefaultNamespaces())
 
 	err := m.Converge(context.Background(), []shaping.DeviceWant{
 		{Device: "pwg7", Subjects: []shaping.Subject{subject("alice", 0, 10_000_000, alice4)}},
@@ -736,7 +736,7 @@ func TestPreflightNamesTheMissingModule(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			kernel := shapetest.New()
 			kernel.Fail = map[string]error{tc.op: errors.New("this kernel says no")}
-			report := shaping.NewManager(kernel).Preflight(context.Background())
+			report := shaping.NewManager(kernel, shaping.DefaultNamespaces()).Preflight(context.Background())
 			if report.OK() {
 				t.Fatalf("preflight passed a host that cannot %s", tc.op)
 			}
@@ -754,7 +754,7 @@ func TestPreflightLeavesTheHostAsItFoundIt(t *testing.T) {
 	kernel.AddLink(device)
 	before := kernel.Devices()
 
-	if report := shaping.NewManager(kernel).Preflight(context.Background()); !report.OK() {
+	if report := shaping.NewManager(kernel, shaping.DefaultNamespaces()).Preflight(context.Background()); !report.OK() {
 		t.Fatalf("Preflight on a capable host: %v", report.Err())
 	}
 	if after := kernel.Devices(); !slices.Equal(before, after) {
@@ -910,7 +910,7 @@ func BenchmarkSteadyStatePass(b *testing.B) {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			kernel := shapetest.New()
 			kernel.AddLink(device)
-			m := shaping.NewManager(kernel)
+			m := shaping.NewManager(kernel, shaping.DefaultNamespaces())
 			w := crowd(n)
 			if err := m.Converge(context.Background(), w); err != nil {
 				b.Fatalf("build: %v", err)

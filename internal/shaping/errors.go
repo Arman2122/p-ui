@@ -13,6 +13,11 @@ var (
 	// ErrNotOwned is a device outside Owns(). It is refused rather than shaped,
 	// because installing a tree on somebody else's interface is unrecoverable.
 	ErrNotOwned = errors.New("shaping: the device is not this panel's to shape")
+	// ErrBadNamespace is a device prefix that cannot round-trip an id unambiguously.
+	ErrBadNamespace = errors.New("shaping: the device namespace is not usable")
+	// ErrDuplicateNamespace is one prefix claimed twice, which would leave two
+	// managers believing they own one device's tree.
+	ErrDuplicateNamespace = errors.New("shaping: the device namespace is already registered")
 	// ErrForeignObject is an object on an owned device that the panel did not write.
 	// It is reported and left alone: a reconciler that guesses deletes an operator's work.
 	ErrForeignObject = errors.New("shaping: an object on the device belongs to somebody else")

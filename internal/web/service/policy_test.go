@@ -163,7 +163,7 @@ func installKernel(t *testing.T, devices ...string) *shapetest.Kernel {
 	kernel := shapetest.New()
 	kernel.AddLink(devices...)
 	previous := shapingManager
-	shapingManager = shaping.NewManager(kernel)
+	shapingManager = shaping.NewManager(kernel, shapingNamespaces)
 	t.Cleanup(func() { shapingManager = previous })
 	return kernel
 }

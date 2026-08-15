@@ -20,7 +20,7 @@ func TestZZRate(t *testing.T) {
 	up, _ := strconv.ParseInt(os.Getenv("PUI_SHAPE_UP"), 10, 64)
 	client := netip.MustParsePrefix(os.Getenv("PUI_SHAPE_CLIENT"))
 
-	m := NewManager(hostPlane())
+	m := NewManager(hostPlane(), DefaultNamespaces())
 	w := []DeviceWant{{Device: "pwg901", Subjects: []Subject{
 		{ID: "alice", Keys: []Key{{Prefix: client}}, Limits: Limits{DownBps: down, UpBps: up}},
 	}}}

@@ -28,7 +28,7 @@ func TestOwnsRoundTrips(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.device, func(t *testing.T) {
-			if got := Owns(tc.device); got != tc.owned {
+			if got := DefaultNamespaces().Owns(tc.device); got != tc.owned {
 				t.Fatalf("Owns(%q) = %v, want %v", tc.device, got, tc.owned)
 			}
 		})

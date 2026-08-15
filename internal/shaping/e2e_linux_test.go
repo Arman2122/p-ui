@@ -76,7 +76,7 @@ func liveManager(t *testing.T) (*Manager, Plane) {
 		sh(t, "ip", "link", "del", e2eMirror)
 		sh(t, "ip", "link", "del", ProbeDevice)
 	})
-	return NewManager(plane), plane
+	return NewManager(plane, DefaultNamespaces()), plane
 }
 
 func sh(t *testing.T, name string, args ...string) string {
