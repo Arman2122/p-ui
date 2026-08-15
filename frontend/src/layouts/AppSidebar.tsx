@@ -6,7 +6,6 @@ import { Drawer, Layout, Menu } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   ApiOutlined,
-  BranchesOutlined,
   CloseOutlined,
   CloudServerOutlined,
   ClusterOutlined,
@@ -215,7 +214,6 @@ export default function AppSidebar() {
     { key: '/xray#basic', icon: <SettingOutlined />, label: t('pages.xray.basicTemplate') },
     { key: '/xray#balancer', icon: <ClusterOutlined />, label: t('pages.xray.Balancers') },
     { key: '/xray#dns', icon: <DatabaseOutlined />, label: 'DNS' },
-    { key: '/xray#egress', icon: <BranchesOutlined />, label: t('pages.xray.egress.title') },
     { key: '/xray#advanced', icon: <CodeOutlined />, label: t('pages.xray.advancedTemplate') },
   ], [t]);
 

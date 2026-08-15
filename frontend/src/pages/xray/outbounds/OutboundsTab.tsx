@@ -55,6 +55,7 @@ import { originalOutboundIndex } from './outbounds-tab-helpers';
 import { useOutboundColumns } from './useOutboundColumns';
 import OutboundCardList from './OutboundCardList';
 import SubscriptionOutbounds from './SubscriptionOutbounds';
+import ExitsSection from './ExitsSection';
 import { useEgressMutations } from '@/api/queries/useEgressMutations';
 import type { EgressPayload } from '@/schemas/api/egress';
 
@@ -605,6 +606,8 @@ export default function OutboundsTab({
             onTestSubscription={onTestSubscription}
           />
         )}
+
+        <ExitsSection isMobile={isMobile} />
       </Space>
 
       <Modal

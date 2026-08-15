@@ -32,11 +32,10 @@ import { OutboundsTab } from './outbounds';
 import { BalancersTab } from './balancers';
 import { cleanupOrphanedBalancerLoopbacks, ensureMissingBalancerLoopbacks, detectBalancerCycles } from './balancers/balancer-loopback';
 import { DnsTab } from './dns';
-import { EgressesTab } from './egresses';
 import { WarpModal, NordModal } from './overrides';
 import './XrayPage.css';
 
-const SECTION_SLUGS = ['basic', 'routing', 'outbound', 'balancer', 'dns', 'egress', 'advanced'];
+const SECTION_SLUGS = ['basic', 'routing', 'outbound', 'balancer', 'dns', 'advanced'];
 
 type AdvKey = 'xraySetting' | 'inboundSettings' | 'outboundSettings' | 'routingRuleSettings';
 
@@ -267,8 +266,6 @@ export default function XrayPage() {
             setTemplateSettings={setTemplateSettings}
           />
         );
-      case 'egress':
-        return <EgressesTab isMobile={isMobile} />;
       case 'advanced':
         return (
           <>
