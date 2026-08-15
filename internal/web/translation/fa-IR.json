@@ -1609,7 +1609,8 @@
         "interface": "رابط",
         "proxyProtocol": "Proxy Protocol",
         "tcpUserTimeoutMs": "TCP user timeout (ms)",
-        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)"
+        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)",
+        "exitKindUnsupported": "این نسخه از پنل فرمی برای این پروتکل خروج ندارد. هستهٔ آن این پروتکل را اعلام می‌کند، اما پنل هنوز نمی‌تواند آن را بسازد — پنل را به‌روز کنید یا مقصد دیگری انتخاب کنید."
       },
       "outbound": {
         "tag": "تگ",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Form,
   Input,
   InputNumber,
@@ -36,11 +37,10 @@ import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { outboundProtocolGroups } from '@/lib/cores/outbound-protocols';
 import {
   EgressFormFields,
-  uplinkPayload,
   type EgressFormValues,
   type EgressPayload,
 } from '@/schemas/api/egress';
-import ExitFields from './protocols/exit';
+import { exitModuleForKind } from './exits';
 
 import {
   FLOW_OPTIONS,
@@ -142,6 +142,9 @@ export default function OutboundFormModal({
     [protocolGroups],
   );
   const isExit = exitKinds.has(protocol);
+  /* A kind the registry declares but this build has no form for: offered, and
+     refused with the reason rather than rendered as some other kind's fields. */
+  const exitModule = isExit ? exitModuleForKind(protocol) : undefined;
   const protocolOptions = useMemo(
     () => protocolGroups.map((group) => ({
       label: t(group.titleKey),
@@ -354,7 +357,9 @@ export default function OutboundFormModal({
     if (!(await exitMethods.trigger())) return;
     const parsed = EgressFormFields.safeParse(exitMethods.getValues());
     if (!parsed.success) return;
-    onConfirmExit(uplinkPayload(parsed.data, methods.getValues('tag') ?? ''));
+    const module = exitModuleForKind(protocol);
+    if (!module) return;
+    onConfirmExit(module.toPayload(parsed.data, methods.getValues('tag') ?? ''));
   }
 
   async function onOk() {
@@ -463,10 +468,20 @@ export default function OutboundFormModal({
                         }}
                       />
 
-                      {isExit && (
+                      {isExit && exitModule && (
                         <FormProvider {...exitMethods}>
-                          <ExitFields />
+                          <exitModule.Fields />
                         </FormProvider>
+                      )}
+
+                      {isExit && !exitModule && (
+                        <Form.Item wrapperCol={{ span: 24 }}>
+                          <Alert
+                            type="warning"
+                            showIcon
+                            title={t('pages.xray.outboundForm.exitKindUnsupported')}
+                          />
+                        </Form.Item>
                       )}
 
                       {!isExit && (
