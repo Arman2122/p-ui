@@ -185,23 +185,23 @@ An **egress** sends one `wgkernel` inbound's decrypted traffic out through a
 named Xray outbound or balancer instead of the server's own address — a warp
 exit, a chained proxy, another VPS. Create one under **Xray Configs → Outbounds**
 by picking a protocol a core exits on, then point a routing rule at it. The panel owns one `ip rule`
-per attached inbound, a private routing table and its blackhole; the front device
+per routed inbound, a private routing table and its blackhole; the front device
 belongs to Xray. Everything the kernel needs is derived from the egress id, so an
 id is never reused.
 
-- **The NAT table above is not needed for an attached inbound.** Xray
+- **The NAT table above is not needed for a routed inbound.** Xray
   terminates the connection and dials the destination itself, so there is nothing
   to NAT. Forwarding is still required — it is a precondition of any L3 inbound
   reaching anything at all — so keep `net.ipv4.ip_forward` and its v6 twin on.
-- **It is master-local.** An inbound deployed to a node cannot be attached: the
-  egress id is a global database key while the routing table, rule and front
-  device it derives all live on one host.
+- **It is master-local.** An inbound deployed to a node cannot be routed through
+  one: the egress id is a global database key while the routing table, rule and
+  front device it derives all live on one host.
 - **A dark egress contains; it never leaks.** If the target names no outbound, if
   the egress is switched off, or if Xray has not yet created the front device, the
   private table holds only its blackhole and the attached traffic is dropped. It
   does not fall back to the server's own identity — that is the whole point of the
-  feature, and it is why the panel refuses to disable or delete an egress that
-  still serves inbounds.
+  feature, and it is why the panel refuses to disable or delete an egress that a
+  routing rule still sends traffic to.
 - **Do not test one with `ping` or `traceroute`.** ICMP is echo-only and answered
   by the front device itself, so a ping through an egress succeeds for a
   destination that exists nowhere — including when the egress is completely dark.

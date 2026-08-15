@@ -47,15 +47,8 @@ _openapi:
       url: '#replace-the-editable-half-of-an-egress-the-id-and-so-the-routing-table-rule-priority-front-device-and-gateway-derived-from-it-are-fixed-for-the-rows-life-disabling-a-row-that-inbounds-still-select-is-refused-it-would-move-them-to-direct'
     - depth: 2
       title: Delete an egress and bring down the kernel state its id owns. Refused
-        while an inbound still selects it.
-      url: '#delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-an-inbound-still-selects-it'
-    - depth: 2
-      title: 'Point one inbound at an egress, or detach it with egressId 0.
-        Synchronous: the ip rule is installed before the call returns, so there
-        is no window where the inbound egresses with the server’s own identity.
-        Only a kernel WireGuard inbound has an ingress device to select on, and
-        only one hosted by this panel.'
-      url: '#point-one-inbound-at-an-egress-or-detach-it-with-egressid-0-synchronous-the-ip-rule-is-installed-before-the-call-returns-so-there-is-no-window-where-the-inbound-egresses-with-the-servers-own-identity-only-a-kernel-wireguard-inbound-has-an-ingress-device-to-select-on-and-only-one-hosted-by-this-panel'
+        while a routing rule still sends traffic to it.
+      url: '#delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-a-routing-rule-still-sends-traffic-to-it'
   structuredData:
     headings:
       - content: List every egress in id order.
@@ -86,14 +79,8 @@ _openapi:
           is refused: it would move them to direct.'
         id: replace-the-editable-half-of-an-egress-the-id-and-so-the-routing-table-rule-priority-front-device-and-gateway-derived-from-it-are-fixed-for-the-rows-life-disabling-a-row-that-inbounds-still-select-is-refused-it-would-move-them-to-direct
       - content: Delete an egress and bring down the kernel state its id owns. Refused
-          while an inbound still selects it.
-        id: delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-an-inbound-still-selects-it
-      - content: 'Point one inbound at an egress, or detach it with egressId 0.
-          Synchronous: the ip rule is installed before the call returns, so
-          there is no window where the inbound egresses with the server’s own
-          identity. Only a kernel WireGuard inbound has an ingress device to
-          select on, and only one hosted by this panel.'
-        id: point-one-inbound-at-an-egress-or-detach-it-with-egressid-0-synchronous-the-ip-rule-is-installed-before-the-call-returns-so-there-is-no-window-where-the-inbound-egresses-with-the-servers-own-identity-only-a-kernel-wireguard-inbound-has-an-ingress-device-to-select-on-and-only-one-hosted-by-this-panel
+          while a routing rule still sends traffic to it.
+        id: delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-a-routing-rule-still-sends-traffic-to-it
     contents: []
 ---
 
@@ -106,7 +93,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/egresses/list","method":"get"},{"path":"/panel/api/egresses/get/{id}","method":"get"},{"path":"/panel/api/egresses/preflight","method":"get"},{"path":"/panel/api/egresses/add","method":"post"},{"path":"/panel/api/egresses/update/{id}","method":"post"},{"path":"/panel/api/egresses/del/{id}","method":"post"},{"path":"/panel/api/egresses/attach","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/egresses/list","method":"get"},{"path":"/panel/api/egresses/get/{id}","method":"get"},{"path":"/panel/api/egresses/preflight","method":"get"},{"path":"/panel/api/egresses/add","method":"post"},{"path":"/panel/api/egresses/update/{id}","method":"post"},{"path":"/panel/api/egresses/del/{id}","method":"post"}]} showTitle />
     </>
   );
 }

@@ -10,9 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// EgressController exposes the egress rows an L3 inbound can be sent out
-// through. Attach is deliberately not part of the inbound update payload: a
-// caller that never learned about egresses would silently detach one.
+// EgressController exposes the exit rows a routing rule can send traffic to.
+// Which inbound uses one is a routing rule's business, never this controller's.
 type EgressController struct {
 	egressService service.EgressService
 	xrayService   service.XrayService
@@ -32,7 +31,6 @@ func (a *EgressController) initRouter(g *gin.RouterGroup) {
 	g.POST("/add", a.add)
 	g.POST("/update/:id", a.update)
 	g.POST("/del/:id", a.del)
-	g.POST("/attach", a.attach)
 }
 
 func (a *EgressController) list(c *gin.Context) {
@@ -128,20 +126,3 @@ func (a *EgressController) del(c *gin.Context) {
 	a.xrayService.SetToNeedRestart()
 }
 
-// attach points one inbound at an egress, or detaches it when egressId is 0. It
-// costs one ip rule and never touches the core's config, so no restart is armed.
-func (a *EgressController) attach(c *gin.Context) {
-	var req struct {
-		InboundId int `json:"inboundId" form:"inboundId"`
-		EgressId  int `json:"egressId" form:"egressId"`
-	}
-	if err := c.ShouldBind(&req); err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	if err := a.egressService.Attach(req.InboundId, req.EgressId); err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), nil)
-}

@@ -10094,7 +10094,7 @@
         "tags": [
           "Egresses"
         ],
-        "summary": "Delete an egress and bring down the kernel state its id owns. Refused while an inbound still selects it.",
+        "summary": "Delete an egress and bring down the kernel state its id owns. Refused while a routing rule still sends traffic to it.",
         "operationId": "post_panel_api_egresses_del_id",
         "parameters": [
           {
@@ -10107,50 +10107,6 @@
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "obj": {}
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/panel/api/egresses/attach": {
-      "post": {
-        "tags": [
-          "Egresses"
-        ],
-        "summary": "Point one inbound at an egress, or detach it with egressId 0. Synchronous: the ip rule is installed before the call returns, so there is no window where the inbound egresses with the server’s own identity. Only a kernel WireGuard inbound has an ingress device to select on, and only one hosted by this panel.",
-        "operationId": "post_panel_api_egresses_attach",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              },
-              "example": {
-                "inboundId": 3,
-                "egressId": 1
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful response",

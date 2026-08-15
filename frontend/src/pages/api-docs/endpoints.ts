@@ -1155,15 +1155,8 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/egresses/del/:id',
         summary:
-          'Delete an egress and bring down the kernel state its id owns. Refused while an inbound still selects it.',
+          'Delete an egress and bring down the kernel state its id owns. Refused while a routing rule still sends traffic to it.',
         params: [{ name: 'id', in: 'path', type: 'number', desc: 'Egress ID.' }],
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/egresses/attach',
-        summary:
-          'Point one inbound at an egress, or detach it with egressId 0. Synchronous: the ip rule is installed before the call returns, so there is no window where the inbound egresses with the server’s own identity. Only a kernel WireGuard inbound has an ingress device to select on, and only one hosted by this panel.',
-        body: '{\n  "inboundId": 3,\n  "egressId": 1\n}',
       },
     ],
   },

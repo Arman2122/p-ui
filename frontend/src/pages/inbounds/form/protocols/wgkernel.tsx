@@ -4,17 +4,12 @@ import { Alert, Button, Form, Input, InputNumber, Select, Space, Typography } fr
 import { ReloadOutlined } from '@ant-design/icons';
 
 import { FormField } from '@/components/form/rhf';
-import type { EgressRecord } from '@/schemas/api/egress';
 import type { WireguardPoolUsage } from '@/lib/xray/wireguard-pool';
 import { normalizeInterfaceAddresses } from '@/lib/xray/interface-address';
 
 interface WgkernelFieldsProps {
   wgPubKey: string;
   regenInboundWg: () => void;
-  egresses: EgressRecord[];
-  egressId: number | null;
-  onEgressChange: (egressId: number | null) => void;
-  nodeOwned: boolean;
   /* Backend sentences naming a sysctl this host has off, rendered and never
      translated. Empty means the host forwards, or that it could not be asked. */
   forwardingNotes: string[];
@@ -27,18 +22,11 @@ interface WgkernelFieldsProps {
 export default function WgkernelFields({
   wgPubKey,
   regenInboundWg,
-  egresses,
-  egressId,
-  onEgressChange,
-  nodeOwned,
   forwardingNotes,
   poolUsage,
 }: WgkernelFieldsProps) {
   const { t } = useTranslation();
   const [rejected, setRejected] = useState<{ reason: string; values: string[] } | null>(null);
-  const egressHelp = nodeOwned
-    ? t('pages.inbounds.form.egressNodeOwned')
-    : (egresses.length === 0 ? t('pages.inbounds.form.egressNone') : t('pages.inbounds.form.egressHint'));
   return (
     <>
       <Alert
@@ -56,19 +44,12 @@ export default function WgkernelFields({
                 ))}
               </div>
             )}
-            <div>{t(egressId == null
-              ? 'pages.inbounds.form.wgkernelForwardingHint'
-              : 'pages.inbounds.form.wgkernelForwardingHintEgress')}
-            </div>
+            <div>{t('pages.inbounds.form.wgkernelForwardingHint')}</div>
             <div><code>printf &apos;net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\n&apos; &gt; /etc/sysctl.d/99-wgkernel.conf</code></div>
             <div><code>sysctl --system</code></div>
-            {egressId == null && (
-              <>
-                <div><code>nft add table ip pui_nat</code></div>
-                <div><code>nft &apos;add chain ip pui_nat postrouting {'{'} type nat hook postrouting priority srcnat; policy accept; {'}'}&apos;</code></div>
-                <div><code>nft add rule ip pui_nat postrouting iifname &quot;pwg*&quot; oifname != &quot;pwg*&quot; masquerade</code></div>
-              </>
-            )}
+            <div><code>nft add table ip pui_nat</code></div>
+            <div><code>nft &apos;add chain ip pui_nat postrouting {'{'} type nat hook postrouting priority srcnat; policy accept; {'}'}&apos;</code></div>
+            <div><code>nft add rule ip pui_nat postrouting iifname &quot;pwg*&quot; oifname != &quot;pwg*&quot; masquerade</code></div>
           </>
         )}
       />
@@ -127,25 +108,6 @@ export default function WgkernelFields({
       <FormField name={['settings', 'dns']} label={t('pages.inbounds.info.dns')}>
         <Input placeholder="1.1.1.1, 1.0.0.1" />
       </FormField>
-      <Form.Item label={t('pages.inbounds.form.egress')} htmlFor="egress" extra={egressHelp}>
-        <Select
-          id="egress"
-          allowClear
-          disabled={nodeOwned || egresses.length === 0}
-          value={egressId ?? undefined}
-          placeholder={t('pages.inbounds.form.egressDirect')}
-          onChange={(value) => onEgressChange(typeof value === 'number' ? value : null)}
-          options={egresses.map((egress) => ({
-            value: egress.id,
-            label: (
-              <span>
-                {egress.remark || `#${egress.id}`}
-                <span dir="ltr" style={{ marginInlineStart: 8, opacity: 0.65 }}>{egress.target}</span>
-              </span>
-            ),
-          }))}
-        />
-      </Form.Item>
     </>
   );
 }
