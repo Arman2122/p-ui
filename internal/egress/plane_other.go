@@ -29,3 +29,7 @@ func (unsupportedPlane) Sysctl(context.Context, string) (string, error) {
 func (unsupportedPlane) SetSysctl(context.Context, string, string) error {
 	return ErrPlatformUnsupported
 }
+
+func (unsupportedPlane) PersistSysctl(context.Context, string, string) error {
+	return ErrPlatformUnsupported
+}

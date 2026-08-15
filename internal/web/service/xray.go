@@ -704,30 +704,6 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound) {
 	})
 }
 
-/*
-blackholeOutboundTag names the outbound that drops traffic, found by protocol
-rather than by the "blocked" the default template happens to call it.
-
-An egress front's rule is prepended, so without a companion rule ahead of it the
-front is the one class of forwarded traffic exempt from the template's own
-geoip:private block — and it is the class whose destination is a raw
-client-chosen IP the panel's outbound then dials from the host: cloud metadata at
-169.254.169.254, the provider's management LAN, RFC1918.
-*/
-func blackholeOutboundTag(raw json_util.RawMessage) (string, bool) {
-	var outbounds []map[string]any
-	if len(raw) == 0 || json.Unmarshal(raw, &outbounds) != nil {
-		return "", false
-	}
-	for _, outbound := range outbounds {
-		tag, _ := outbound["tag"].(string)
-		if kind, _ := outbound["protocol"].(string); kind == "blackhole" && tag != "" {
-			return tag, true
-		}
-	}
-	return "", false
-}
-
 // mergeSubscriptionOutbounds appends the subscription outbounds to the
 // OutboundConfigs array of the xray config. It works on the already-unmarshaled
 // template so that manually configured outbounds are never overwritten.

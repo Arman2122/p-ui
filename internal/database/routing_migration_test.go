@@ -74,7 +74,7 @@ func TestMigrationKeepsThePrivateBlockAnchor(t *testing.T) {
 	}
 
 	kept := templateRules(t)
-	var anchor, allow int = -1, -1
+	anchor, allow := -1, -1
 	for i, raw := range kept {
 		rule, _ := raw.(map[string]any)
 		if out, _ := rule["outboundTag"].(string); out == "blocked" {
