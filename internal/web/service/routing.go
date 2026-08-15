@@ -480,6 +480,9 @@ func (s *RoutingService) Add(ctx context.Context, rule *model.RoutingRule) (*mod
 	if err := normalizeRule(rule); err != nil {
 		return nil, err
 	}
+	if err := destResolves(rule); err != nil {
+		return nil, err
+	}
 	rule.Id = 0
 	var next int
 	if err := database.GetDB().Model(&model.RoutingRule{}).
@@ -495,6 +498,9 @@ func (s *RoutingService) Add(ctx context.Context, rule *model.RoutingRule) (*mod
 
 func (s *RoutingService) Update(ctx context.Context, rule *model.RoutingRule) (*model.RoutingRule, error) {
 	if err := normalizeRule(rule); err != nil {
+		return nil, err
+	}
+	if err := destResolves(rule); err != nil {
 		return nil, err
 	}
 	err := database.GetDB().Model(&model.RoutingRule{}).Where("id = ?", rule.Id).Updates(map[string]any{
@@ -552,6 +558,33 @@ func (s *RoutingService) converge(ctx context.Context) error {
 		logger.Warning("routing: host forwarding could not be enabled:", err)
 	}
 	return (&EgressService{}).Reconcile(ctx)
+}
+
+/*
+destResolves refuses a rule aimed at a tag nothing answers to.
+
+Xray does not fail an unknown outboundTag — it falls back to the first outbound,
+so a rule left pointing at a deleted or renamed one keeps matching and sends that
+traffic somewhere the operator never chose. Shape validation cannot see this: the
+tag is a non-empty string either way.
+
+A config this cannot read does not block the save. Refusing every rule write
+because the base config is unreadable trades one silent misroute for a total
+outage of the page.
+*/
+func destResolves(rule *model.RoutingRule) error {
+	if rule.DestKind != model.RoutingDestOutbound && rule.DestKind != model.RoutingDestBalancer {
+		return nil
+	}
+	resolves, err := egressTargetResolves(rule.DestTag)
+	if err != nil {
+		logger.Warning("routing: could not check whether", rule.DestTag, "resolves:", err)
+		return nil
+	}
+	if !resolves {
+		return fmt.Errorf("routing: %q is neither an outbound tag nor a balancer tag", rule.DestTag)
+	}
+	return nil
 }
 
 // normalizeRule refuses a shape the compile could not realise, at the boundary

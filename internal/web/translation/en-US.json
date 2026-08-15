@@ -1662,7 +1662,9 @@
       "routing": {
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
         "scopeAll": "Every routable inbound",
-        "dragToReorder": "Drag to reorder"
+        "dragToReorder": "Drag to reorder",
+        "l3Fronted": "Routing this inbound changes what it can carry",
+        "l3FrontedDetail": "A kernel WireGuard inbound forwards every IP protocol until a rule names it. Once routed, its traffic is terminated inside Xray, which carries TCP, UDP and ICMP only — ESP, GRE, SCTP and anything else is dropped. Ping is answered locally, so it succeeds even for a destination that is unreachable. Test with a real request instead."
       },
       "ruleForm": {
         "sourceIps": "Source IPs",
