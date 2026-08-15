@@ -14,6 +14,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/random"
 	"github.com/Arman2122/p-ui/internal/web/runtime"
@@ -374,34 +375,9 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 		if strings.TrimSpace(client.Email) == "" {
 			return false, common.NewError("client email is required")
 		}
-		switch oldInbound.Protocol {
-		case "trojan":
-			if client.Password == "" {
-				return false, common.NewError("empty client ID")
-			}
-		case "shadowsocks":
-			if client.Email == "" {
-				return false, common.NewError("empty client ID")
-			}
-		case "hysteria":
-			if client.Auth == "" {
-				return false, common.NewError("empty client ID")
-			}
-		case "wireguard", "wgkernel":
-			if client.PublicKey == "" {
-				return false, common.NewError("wireguard client requires a key")
-			}
-		case "mtproto":
-			if client.Secret == "" {
-				return false, common.NewError("mtproto client requires a secret")
-			}
-			if client.AdTag != "" && !model.ValidMtprotoAdTag(client.AdTag) {
-				return false, common.NewError("mtproto client ad tag must be 32 hex characters")
-			}
-		default:
-			if client.ID == "" {
-				return false, common.NewError("empty client ID")
-			}
+		client := client
+		if err := validateClientForKind(oldInbound.Protocol, oldInbound.Settings, &client); err != nil {
+			return false, err
 		}
 	}
 
@@ -544,21 +520,13 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		return false, err
 	}
 
-	newClientId := ""
-	switch oldInbound.Protocol {
-	case "trojan":
-		newClientId = clients[0].Password
-	case "shadowsocks":
-		newClientId = clients[0].Email
-	case "hysteria":
-		newClientId = clients[0].Auth
-	case "wireguard", "wgkernel":
-		newClientId = clients[0].Email
-	case "mtproto":
-		newClientId = clients[0].Email
-	default:
-		newClientId = clients[0].ID
+	// Which field names a client of this kind is the core's answer; a kind no
+	// core owns keeps the oldest one, the uuid.
+	identityField := core.CredUUID
+	if authority, ok := cores.ClientCredentialAuthority(core.Kind(oldInbound.Protocol)); ok {
+		identityField = authority.ClientIdentity(core.Kind(oldInbound.Protocol))
 	}
+	newClientId := clientIdentityValue(&clients[0], identityField)
 
 	// Locate the client to replace by email — the client's stable identity.
 	// Credentials (uuid/password/auth) can drift from the inbound JSON, so they
@@ -578,7 +546,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	if strings.TrimSpace(clients[0].Email) == "" {
 		return false, common.NewError("client email is required")
 	}
-	if oldInbound.Protocol == model.MTProto && clients[0].AdTag != "" && !model.ValidMtprotoAdTag(clients[0].AdTag) {
+	if oldInbound.Protocol == model.MTProto && clients[0].AdTag != "" && !mtproto.ValidAdTag(clients[0].AdTag) {
 		return false, common.NewError("mtproto client ad tag must be 32 hex characters")
 	}
 

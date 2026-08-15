@@ -60,6 +60,18 @@ func ClientCredentials(kind core.Kind) []string {
 	return bound.Creds.ClientCredentials(kind)
 }
 
+// ClientCredentialAuthority is the core that answers for one kind's client
+// credentials, when any does. The caller keeps its own fallback for a kind no
+// core owns — a quarantined inbound's clients are neither loosened nor newly
+// refused by this seam.
+func ClientCredentialAuthority(kind core.Kind) (core.CredentialDeclarer, bool) {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Creds == nil {
+		return nil, false
+	}
+	return bound.Creds, true
+}
+
 // kindOwners resolves the kind-to-core map once. Empty Deps are enough: the map
 // is fixed at compile time, and nothing here touches a core's runtime state.
 var kindOwners = sync.OnceValue(func() *core.Registry {

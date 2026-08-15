@@ -1001,36 +1001,11 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		inbound.Settings = normalized
 	}
 
-	// Secure client ID
+	// Refused with the kind's own wording, asked of its core.
 	for _, client := range clients {
-		switch inbound.Protocol {
-		case "trojan":
-			if client.Password == "" {
-				return inbound, false, common.NewError("empty client ID")
-			}
-		case "shadowsocks":
-			if client.Email == "" {
-				return inbound, false, common.NewError("empty client ID")
-			}
-		case "hysteria":
-			if client.Auth == "" {
-				return inbound, false, common.NewError("empty client ID")
-			}
-		case "wireguard", "wgkernel":
-			if client.PublicKey == "" {
-				return inbound, false, common.NewError("wireguard client requires a key")
-			}
-		case "mtproto":
-			if client.Secret == "" {
-				return inbound, false, common.NewError("mtproto client requires a secret")
-			}
-			if client.AdTag != "" && !model.ValidMtprotoAdTag(client.AdTag) {
-				return inbound, false, common.NewError("mtproto client ad tag must be 32 hex characters")
-			}
-		default:
-			if client.ID == "" {
-				return inbound, false, common.NewError("empty client ID")
-			}
+		client := client
+		if err := validateClientForKind(inbound.Protocol, inbound.Settings, &client); err != nil {
+			return inbound, false, err
 		}
 	}
 
