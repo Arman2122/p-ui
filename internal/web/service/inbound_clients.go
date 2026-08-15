@@ -12,6 +12,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/xray"
 
@@ -229,7 +230,7 @@ func (s *InboundService) buildTargetClientFromSource(source model.Client, target
 	case model.Hysteria:
 		target.Auth = s.generateRandomCredential(targetProtocol)
 	case model.MTProto:
-		target.Secret = model.GenerateFakeTLSSecret(mtprotoDomainFromSettings(targetInbound.Settings))
+		target.Secret = mtproto.MintFakeTLSSecret(targetInbound.Settings)
 	default:
 		target.ID = s.generateRandomCredential(targetProtocol)
 	}

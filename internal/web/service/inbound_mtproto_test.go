@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/mtproto"
 )
 
 func TestMtprotoRoutesThroughXray(t *testing.T) {
@@ -121,7 +122,7 @@ func TestFillProtocolDefaultsMtproto(t *testing.T) {
 	if err := cs.fillProtocolDefaults(c2, &model.Inbound{Protocol: model.MTProto, Settings: `{}`}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(c2.Secret, hex.EncodeToString([]byte(defaultMtprotoDomain))) {
+	if !strings.HasSuffix(c2.Secret, hex.EncodeToString([]byte(mtproto.FakeTLSDomainFromSettings("")))) {
 		t.Fatalf("a domainless inbound should front the default host, got %q", c2.Secret)
 	}
 }

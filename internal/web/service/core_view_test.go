@@ -31,6 +31,14 @@ type declaringCore struct {
 
 func (d declaringCore) ClientCredentials(kind core.Kind) []string { return d.credentials[kind] }
 
+func (d declaringCore) MintClientCredentials(core.Kind, string, map[string]string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (d declaringCore) ValidateClient(core.Kind, string, string, map[string]string) error { return nil }
+
+func (d declaringCore) ClientIdentity(core.Kind) string { return "email" }
+
 // exitingCore terminates a route on some of its kinds and not others, which is
 // the whole distinction between the outbound half of Kinds and the inbound half.
 type exitingCore struct {

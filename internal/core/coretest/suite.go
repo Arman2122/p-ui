@@ -157,10 +157,45 @@ func checkCredentials(r *report, bound *core.Bound) {
 		return
 	}
 	for _, kind := range bound.Core.Kinds() {
-		for _, name := range bound.Creds.ClientCredentials(kind) {
+		declared := bound.Creds.ClientCredentials(kind)
+		for _, name := range declared {
 			if !core.IsClientCredential(name) {
 				r.fail("credentials/known-vocabulary", "kind %q declares credential %q, which is outside the vocabulary in internal/core/credentials.go; no form renders it, so the operator has no way to set it", kind, name)
 			}
+		}
+
+		// The identity must be a name the panel can read off a client: a
+		// vocabulary credential, or the email every client carries.
+		identity := bound.Creds.ClientIdentity(kind)
+		if identity != "email" && !core.IsClientCredential(identity) {
+			r.fail("credentials/identity-vocabulary", "kind %q names %q as its client identity, which is neither \"email\" nor a vocabulary credential; nothing can read it off a client", kind, identity)
+		}
+
+		// Minting may only produce declared names — a minted-but-undeclared
+		// credential is a value the operator can never see or rotate.
+		minted, err := bound.Creds.MintClientCredentials(kind, "", map[string]string{})
+		if err != nil {
+			r.fail("credentials/mint", "kind %q refuses to mint for a fresh client with empty settings: %v; settings may legitimately be empty", kind, err)
+			continue
+		}
+		for name, value := range minted {
+			if !slices.Contains(declared, name) {
+				r.fail("credentials/mint-declared", "kind %q minted %q, which it does not declare; the client form will never show it", kind, name)
+			}
+			if value == "" {
+				r.fail("credentials/mint-empty", "kind %q minted an empty %q, which is a missing credential wearing a present one's name", kind, name)
+			}
+		}
+
+		// Minting over its own output must return nothing: mint is "fill what
+		// is missing or unusable", and its output is neither.
+		again, err := bound.Creds.MintClientCredentials(kind, "", minted)
+		if err != nil {
+			r.fail("credentials/mint-again", "kind %q failed the second mint: %v", kind, err)
+			continue
+		}
+		if len(again) != 0 {
+			r.fail("credentials/mint-idempotent", "kind %q re-minted %v over its own output; a client would get fresh credentials on every save", kind, again)
 		}
 	}
 }

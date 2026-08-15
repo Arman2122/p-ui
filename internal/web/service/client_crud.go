@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +12,8 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
-	"github.com/Arman2122/p-ui/internal/util/random"
 	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/gorm"
@@ -158,9 +157,9 @@ func (s *ClientService) fillProtocolDefaults(c *model.Client, ib *model.Inbound)
 			c.Password = strings.ReplaceAll(uuid.NewString(), "-", "")
 		}
 	case model.Shadowsocks:
-		method := shadowsocksMethodFromSettings(ib.Settings)
-		if c.Password == "" || !validShadowsocksClientKey(method, c.Password) {
-			c.Password = randomShadowsocksClientKey(method)
+		method := xray.ShadowsocksMethodFromSettings(ib.Settings)
+		if c.Password == "" || !xray.ValidShadowsocksClientKey(method, c.Password) {
+			c.Password = xray.RandomShadowsocksClientKey(method)
 		}
 	case model.Hysteria:
 		if c.Auth == "" {
@@ -168,32 +167,10 @@ func (s *ClientService) fillProtocolDefaults(c *model.Client, ib *model.Inbound)
 		}
 	case model.MTProto:
 		if c.Secret == "" {
-			c.Secret = model.GenerateFakeTLSSecret(mtprotoDomainFromSettings(ib.Settings))
+			c.Secret = mtproto.MintFakeTLSSecret(ib.Settings)
 		}
 	}
 	return nil
-}
-
-// defaultMtprotoDomain is the FakeTLS fronting domain used when an mtproto
-// inbound carries no fakeTlsDomain of its own; it mirrors the frontend default.
-const defaultMtprotoDomain = "www.cloudflare.com"
-
-// mtprotoDomainFromSettings returns the inbound-level FakeTLS domain, falling
-// back to the default when unset, so a generated client secret always fronts a
-// real hostname.
-func mtprotoDomainFromSettings(settings string) string {
-	domain := ""
-	if settings != "" {
-		var m map[string]any
-		if err := json.Unmarshal([]byte(settings), &m); err == nil {
-			domain, _ = m["fakeTlsDomain"].(string)
-		}
-	}
-	domain = strings.TrimSpace(domain)
-	if domain == "" {
-		return defaultMtprotoDomain
-	}
-	return domain
 }
 
 func clientWithInboundFlow(c model.Client, ib *model.Inbound) model.Client {
@@ -203,47 +180,6 @@ func clientWithInboundFlow(c model.Client, ib *model.Inbound) model.Client {
 	return c
 }
 
-func shadowsocksMethodFromSettings(settings string) string {
-	if settings == "" {
-		return ""
-	}
-	var m map[string]any
-	if err := json.Unmarshal([]byte(settings), &m); err != nil {
-		return ""
-	}
-	method, _ := m["method"].(string)
-	return method
-}
-
-func randomShadowsocksClientKey(method string) string {
-	if n := shadowsocksKeyBytes(method); n > 0 {
-		return random.Base64Bytes(n)
-	}
-	return strings.ReplaceAll(uuid.NewString(), "-", "")
-}
-
-func validShadowsocksClientKey(method, key string) bool {
-	n := shadowsocksKeyBytes(method)
-	if n == 0 {
-		return key != ""
-	}
-	decoded, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return false
-	}
-	return len(decoded) == n
-}
-
-func shadowsocksKeyBytes(method string) int {
-	switch method {
-	case "2022-blake3-aes-128-gcm":
-		return 16
-	case "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305":
-		return 32
-	}
-	return 0
-}
-
 // normalizeShadowsocksClientKeys rewrites any Shadowsocks-2022 client password
 // whose decoded length no longer matches settings.method, which happens after the
 // inbound method is switched between ciphers of different key sizes (e.g.
@@ -251,8 +187,8 @@ func shadowsocksKeyBytes(method string) int {
 // fails to connect; regenerating restores a valid key (clients must re-fetch).
 // Non-Shadowsocks / legacy-SS settings pass through unchanged.
 func normalizeShadowsocksClientKeys(settings string) (string, bool) {
-	method := shadowsocksMethodFromSettings(settings)
-	if shadowsocksKeyBytes(method) == 0 {
+	method := xray.ShadowsocksMethodFromSettings(settings)
+	if xray.ShadowsocksKeyBytes(method) == 0 {
 		return settings, false
 	}
 	var m map[string]any
@@ -269,10 +205,10 @@ func normalizeShadowsocksClientKeys(settings string) (string, bool) {
 		if !ok {
 			continue
 		}
-		if pw, _ := c["password"].(string); validShadowsocksClientKey(method, pw) {
+		if pw, _ := c["password"].(string); xray.ValidShadowsocksClientKey(method, pw) {
 			continue
 		}
-		c["password"] = randomShadowsocksClientKey(method)
+		c["password"] = xray.RandomShadowsocksClientKey(method)
 		clients[i] = c
 		changed = true
 	}

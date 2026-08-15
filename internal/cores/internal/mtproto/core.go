@@ -72,6 +72,32 @@ func (c *Core) ClientCredentials(kind core.Kind) []string {
 	return []string{core.CredSecret, core.CredAdTag}
 }
 
+func (c *Core) MintClientCredentials(kind core.Kind, settings string, have map[string]string) (map[string]string, error) {
+	minted := map[string]string{}
+	if kind == Kind && have[core.CredSecret] == "" {
+		minted[core.CredSecret] = engine.MintFakeTLSSecret(settings)
+	}
+	return minted, nil
+}
+
+// The refusal strings are the API's exact historical wording.
+func (c *Core) ValidateClient(kind core.Kind, _, _ string, have map[string]string) error {
+	if kind != Kind {
+		return nil
+	}
+	if have[core.CredSecret] == "" {
+		return errors.New("mtproto client requires a secret")
+	}
+	if tag := have[core.CredAdTag]; tag != "" && !engine.ValidAdTag(tag) {
+		return errors.New("mtproto client ad tag must be 32 hex characters")
+	}
+	return nil
+}
+
+// ClientIdentity: an mtproto client is named by email in the rendered secret
+// set, never by the secret itself.
+func (c *Core) ClientIdentity(core.Kind) string { return "email" }
+
 func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	want := make([]engine.Instance, 0, len(desired))
 	var keep []int
