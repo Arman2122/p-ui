@@ -4642,6 +4642,47 @@
         }
       }
     },
+    "/panel/api/cores/{id}/restart": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Restart one core’s daemons: stop them, then converge them back on the inbounds they should be serving. The id is a core id from GET /panel/api/cores, never a protocol — one core serves many kinds. Xray is converged through its generated config rather than an instance set, so it delegates to the same path /restartXrayService uses. A core that runs no daemon this panel supervises is refused.",
+        "operationId": "post_panel_api_cores_id_restart",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Core id, e.g. mtproto.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/server/status": {
       "get": {
         "tags": [

@@ -267,6 +267,12 @@ export const sections: readonly Section[] = [
         responseSchemaArray: true,
       },
       {
+        method: 'POST',
+        path: '/panel/api/cores/:id/restart',
+        summary: 'Restart one core’s daemons: stop them, then converge them back on the inbounds they should be serving. The id is a core id from GET /panel/api/cores, never a protocol — one core serves many kinds. Xray is converged through its generated config rather than an instance set, so it delegates to the same path /restartXrayService uses. A core that runs no daemon this panel supervises is refused.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Core id, e.g. mtproto.' }],
+      },
+      {
         method: 'GET',
         path: '/panel/api/server/status',
         summary: 'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load averages, open connections, Xray state. Cached and refreshed every 2 seconds in the background.',
