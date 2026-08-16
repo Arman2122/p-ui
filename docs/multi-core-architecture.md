@@ -134,7 +134,7 @@ cheaper to freeze than it is now.
 ```
 internal/core/                    # the contract. Importable by everyone.
     core.go                       #   Core, Kind, Descriptor
-    caps.go                       #   the optional capability interfaces (11 today)
+    caps.go                       #   the optional capability interfaces (17 today)
     bind.go                       #   Bound + Bind() — the ONLY place assertions live
     counter.go                    #   the ONE cumulative→delta engine
     traffic.go                    #   ClientTraffic (moved from internal/xray), TrafficDelta
@@ -147,9 +147,7 @@ internal/cores/                   # wiring only
     cores.go                      #   one import + one Register line per core. ONE file.
     internal/xray/                # concrete cores — importable ONLY from internal/cores/...
     internal/mtproto/
-    internal/openvpn/
-    internal/ocserv/
-    ...
+    internal/wireguard/
 ```
 
 The nested `internal/` is the enforcement. Per `cmd/go`, code below a directory named
@@ -160,7 +158,7 @@ It cannot be `//nolint`-ed, cannot rot, and costs **zero configuration lines per
 > Rejected: a `depguard` deny-list naming each core. One line per core, silently incomplete
 > forever after the first omission — precisely the marginal-cost problem being solved.
 
-### 3.2 Three mandatory methods, nine optional capabilities
+### 3.2 Three mandatory methods, seventeen optional capabilities
 
 ```go
 // internal/core/core.go — as implemented
@@ -180,24 +178,34 @@ type Core interface {
 
 Everything else is an **optional** interface:
 
-| Capability | Purpose | Cores lacking it |
+| Capability | Purpose | Implemented today by |
 |---|---|---|
-| `Supervisor` | `Reconcile(desired []Instance)`, `Spec()` | — (mandatory in practice) |
-| `InstanceApplier` | apply one inbound's desired state | — |
-| `HotApplier` | apply user changes without dropping sessions | pptpd |
-| `UserProvisioner` | add/remove/update one user live | — |
-| `CredentialDeclarer` | which credential fields a kind's clients carry (P5) | — |
-| `TrafficSource` | `CollectTraffic() ([]TrafficDelta, []string)` | ssh (no native counters) |
-| `TagTrafficSource` | inbound/outbound totals, not per user (§12.3) | — |
-| `OnlineReporter` | who is connected right now | wireguard (handshake age only) |
-| `QuotaEnforcer` | push a byte budget *into* the daemon | xray, ocserv |
+| `Supervisor` | `Reconcile(desired []Instance)`, `StopAll` | all three (mandatory in practice) |
+| `InstanceApplier` | apply/drop one inbound without disturbing the rest | all three |
+| `HotApplier` | classify a change so the caller can avoid a restart | all three |
+| `UserProvisioner` | add/remove one user against a running instance | all three |
+| `WholeSetUserProvisioner` | provisions by re-applying its whole user set — `Instance.Users` is the set as it now stands, a missing client is a revoked one | mtproto (mtg rewrites `[secrets]`) |
+| `CredentialDeclarer` | declare, mint and validate a kind's client credentials; name the identity field (§3.2a) | all three |
+| `TrafficSource` | `CollectTraffic() ([]TrafficDelta, error)` — deltas, each core normalising its own counter semantics | all three |
+| `TagTrafficSource` | inbound/outbound totals, not per user (§12.3) | all three |
+| `OnlineReporter` | who is connected right now | all three |
+| `SessionReporter` | each live connection with its source address | xray, wgkernel — not mtg, which sees a secret in use and no address |
+| `QuotaEnforcer` | a byte budget the daemon itself enforces (today: `ResetQuota`, §4.3) | mtproto |
+| `CounterLossDeclarer` | does removing a user destroy the counters the panel bills from | wgkernel (a peer remove zeroes them — measured) |
+| `ShapingHost` | a user's kernel identity on a device the panel owns, for rate limits | wgkernel |
+| `RoutableIngress` | may a routing rule name this core's inbounds as a source (§3.2b) | all three |
+| `RoutableEgress` | may this core terminate a route: exit kinds and handles (§3.2b) | wgkernel (wg-client uplinks) |
 | `VersionManager` | install/list the daemon's own releases (§15) | no implementer yet |
-| `LinkRenderer` | produce the client's config/URI | no implementer yet |
+| `LinkRenderer` | render the client's config; `host` resolved by the caller (§3.2a) | wgkernel (.conf) |
 
-All eleven exist in `caps.go` today; `VersionManager` and `LinkRenderer` are declared slots
-with no implementer. `RateLimiter` and an egress pair are deliberately **absent** until a core
-needs them — an interface with no implementor is a guess, and adding one later costs a nil
-field, which is the whole point of `Bound`.
+All seventeen exist in `caps.go`; `VersionManager` is now the only declared slot with no
+implementer. An earlier revision here kept `RateLimiter` and an egress pair deliberately
+**absent** "until a core needs them — adding one later costs a nil field". Both needs
+arrived and the claim priced correctly: shaping added `ShapingHost` and routing added
+`RoutableIngress`/`RoutableEgress` as nil fields on `Bound`, with no edit to any other
+core. `coretest` refuses the hollow version of each — a core implementing `RoutableIngress`
+whose every kind answers `IngressNone` "can route nothing and declares nothing"
+(`bind.go:121`).
 
 **Only `Reconcile` is genuinely mandatory.** A core that cannot reconcile desired state
 cannot self-heal after a crash, so every panel restart becomes a correctness event.
@@ -207,6 +215,55 @@ recovers for free today (`manager.go:366`).
 `CollectTraffic` is **not** mandatory: SSH-VPN has no per-user byte counter worth the name,
 and forcing it produces the `return nil` stub that `runtime/local.go:116` and `:125`
 already demonstrate as a failure mode.
+### 3.2a Credentials and links are protocol knowledge, and the engines host it
+
+`CredentialDeclarer` grew from one method to four (`caps.go:75`). `ClientCredentials`
+still names a kind's fields from `credentials.go`'s closed vocabulary. `MintClientCredentials`
+returns fresh values for what a client is missing — or holds in a form the kind cannot
+serve, which is why the current values are passed in: a shadowsocks key of the wrong size
+for the inbound's method is replaced, not kept. `ValidateClient` refuses with the words the
+operator reads — required-ness is protocol knowledge (shadowsocks needs the email that
+identifies the client in the config, wireguard a public key no panel can invent), and only
+the core can word the refusal, so `coretest` and the arch guard pin the *exact* strings.
+`ClientIdentity` names the field that identifies a client inside a rendered config.
+
+The knowledge itself lives in the ENGINES, once each: `internal/xray/shadowsocks.go` (SS2022
+keys are raw AEAD keys with an exact byte size per method; legacy methods take any
+passphrase) and `internal/mtproto/secrets.go` (a FakeTLS secret embeds the inbound's
+fronting domain), so the core adapter and the panel's settings-healing pass read one
+implementation. Migrating the service layer's client-credential switches onto these
+methods took the dispatch ratchet from 125 to 101 (`dispatch_ratchet_test.go:66`).
+
+`LinkRenderer` is implemented and consumed. The wgkernel core renders the `.conf` itself
+(`cores/internal/wireguard/share.go`): a WireGuard client is configured by a FILE, and the
+`wireguard://` URI the subscription emits is a lossy transport the apps rebuild a `.conf`
+from, so the file is the true deliverable. The sub server serves it at
+`GET :subid/file/:inboundId` (`sub/controller.go:288`) — the subscription token already
+authenticates the client for links, so it authorises the file too: same secret, same
+audience, one more representation. `RenderClient(inst, user, host)` takes `host` as an
+argument the CALLER resolved: which hostname reaches this panel is delivery policy — public
+host settings, node addresses, the request's own Host — and it never enters a core.
+
+### 3.2b The routing pair and its closed vocabularies
+
+`RoutableIngress` says a rule may name this core's inbounds as a source.
+`IngressSelector(kind)` is static per kind, so a form can gate a field before any instance
+exists; `IngressHandle` is per-instance and dynamic, because the surface can be absent at
+any moment by design. The vocabulary is closed the way `credentials.go`'s is:
+`IngressInternal` — an L7 proxy is its own router, so the handle is a tag (xray; mtproto
+once its loopback bridge hands plaintext to Xray, and a `BlockedKey` i18n key names why
+not when the bridge is off) — or `IngressDevice`, decrypted traffic crossing a kernel
+interface the panel routes by (wgkernel). An unknown value reads as "cannot route", which
+is the fail-closed answer.
+
+`RoutableEgress` is the other half of any-core-in to any-core-out: `ExitKinds` feeds the
+Outbounds page's picker, `ExitHandleKind` (closed: `device` / `socksPort` /
+`xrayOutbound`) tells the router how to reach an exit, `ExitHandle` tells it where, right
+now. The handle carries a `SourceOwner`, and that field is load-bearing rather than
+descriptive: a kernel forward keeps the ingress client's inner source address, which every
+upstream that is not a peer drops. A daemon that does not NAT its own tunnel needs the
+panel to, and the panel cannot yet — `egress.Plane` has no netfilter object — so
+`SourceOwnerPanel` is a refusal, not a plan (`caps.go:335`).
 
 ### 3.3 `Bound` — the step that actually removes the dispatch
 
@@ -218,17 +275,23 @@ Interface segregation *alone* just relocates `switch protocol` into scattered
 type Bound struct {
     Core Core
 
-    Supervise  Supervisor      // nil if unsupported
-    Apply      InstanceApplier
-    HotApply   HotApplier
-    Users      UserProvisioner
-    Creds      CredentialDeclarer
-    Traffic    TrafficSource
-    TagTraffic TagTrafficSource
-    Online     OnlineReporter
-    Quota      QuotaEnforcer
-    Versions   VersionManager
-    Link       LinkRenderer
+    Supervise   Supervisor      // nil if unsupported
+    Apply       InstanceApplier
+    HotApply    HotApplier
+    Users       UserProvisioner
+    UserSet     WholeSetUserProvisioner
+    Creds       CredentialDeclarer
+    Traffic     TrafficSource
+    TagTraffic  TagTrafficSource
+    Online      OnlineReporter
+    Quota       QuotaEnforcer
+    Versions    VersionManager
+    Link        LinkRenderer
+    Shape       ShapingHost
+    Ingress     RoutableIngress
+    Egress      RoutableEgress
+    Sessions    SessionReporter
+    CounterLoss CounterLossDeclarer
 }
 ```
 
@@ -244,15 +307,21 @@ interfaces probed by assertion" split is `database/sql`'s (`Queryer`, `ExecerCon
 
 ```go
 // internal/cores/cores.go — the whole "which cores exist" answer, greppable, +2 lines/core
-func Register(reg *core.Registry) {
-    must(reg.Register(xray.New()))
-    must(reg.Register(mtproto.New()))
-    must(reg.Register(openvpn.New()))
+func Register(reg *core.Registry, deps Deps) error {
+    if err := reg.Register(mtproto.New()); err != nil {
+        return err
+    }
+    if err := reg.Register(wireguard.New()); err != nil {
+        return err
+    }
+    return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))
 }
 ```
 
-Duplicate registration **panics** at boot (`database/sql`'s discipline, not sing-box's
-silent overwrite).
+A duplicate kind is **refused at boot** (`database/sql`'s discipline, not sing-box's
+silent overwrite). `Deps` carries the panel-side facts a core cannot derive for itself —
+today the Xray base config — passed in rather than reached for, so a core still cannot
+import the web layer.
 
 The decisive argument is repo-specific: `make gen-check` is the **first step** of
 `make verify` (`Makefile:30`, `:84`) and fails on a dirty tree. With `init()`-based
@@ -260,6 +329,15 @@ registration the registered set depends on the transitive import graph of whiche
 the generator links — so a dropped blank import **silently shrinks the generated frontend
 schema** and `gen-check` still passes. Secondary: `make test-go` runs `-shuffle=on`
 (`Makefile:49`), and package-global mutable registration turns order dependence into flakes.
+**One registry, learned the hard way.** The panel builds its registry once at boot
+(`web.go:530`) and hands it to the facade with `cores.Use` (`cores.go:115`). Every
+deps-free helper — `ServedByXray`, `ClientCredentials`, `ClientShare`,
+`IngressSelectorFor`, … — answers from that WIRED registry: those are the adapter
+instances the jobs drive and the supervisor restarts, and an answer from a second set of
+instances is an answer about cores nothing is running — the facade and the jobs used to
+disagree exactly that way. The `Deps{}`-built fallback survives only for processes that
+never wire a runtime: the CLI, codegen, and tests that call a facade helper directly
+(`kindOwners`, `cores.go:106`).
 
 ### 3.5 One capability evaluator, cross-checked across the language boundary
 
@@ -292,7 +370,11 @@ at least once. **There must be exactly one.**
 
 P2 deleted the mtproto copy: the manager now feeds raw cumulative readings to `core.Counter`
 and the bug is gone, with `TestCollectTrafficSurvivesAnMtgRestart` covering both restart
-signals. `xray/api.go` is P3's.
+signals. The xray copy followed (dc375f93, 2026-08-04): `XrayAPI` holds a `core.Counter`
+(`api.go:58`) and `GetTraffic` feeds it raw cumulative stats (`api.go:780`). Xray's stats
+carry no incarnation token, so a panel-caused restart arrives out of band through
+`NoteCoreRestart` and a reset counter is caught by the backwards-counter backstop. The one
+engine now has exactly one implementation and every core as its caller.
 
 ### 4.1 Four rules
 
@@ -315,6 +397,17 @@ signals. `xray/api.go` is P3's.
    poll that is **7.5 GB**. Only a limit pushed *into* the daemon bounds overshoot
    independently of the control plane — and it is the only thing that still works when a
    node is partitioned.
+Status, measured 2026-08-16. Rule 1 is real at process scope: every adapter hands raw
+cumulative readings to `core.Counter`, and the destructive tag-stats read is banked in the
+adapter and drained exactly once per poll — the traffic job loops over capabilities, not
+protocols (`job/core_traffic.go:43`). Rule 2 is still a target: deltas are computed in the
+adapter's memory and applied additively, not inside a Postgres transaction owning a cursor,
+so a panel crash between `Observe` and commit loses that poll. Rule 3 is built where it was
+measured to matter — the WireGuard manager banks every peer's reading before any write that
+destroys one (`wireguard/manager.go:177`, `TestRemovePeerBanksItsFinalReading`) — but as a
+manager habit, not yet the contract-level obligation this rule demands. Rule 4 holds for
+mtg, whose `[secret-limits]` maps `totalGB`/`expiryTime` into the daemon at config render,
+and for nothing else; §4.3 has what `QuotaEnforcer` does today.
 
 Where correctness is genuinely unobtainable (bytes between the last read and an unobserved
 crash), **record `bytes_known_lost` and undercount**. Never estimate into the enforced
@@ -329,7 +422,7 @@ number. Undercounting costs bandwidth; overcounting costs trust.
 | Per-session | OpenVPN `bytecount`, RADIUS per-session | accumulate per session id, sum live + closed |
 | Event-push | RADIUS Interim-Update | node-local accumulator, then Class A |
 
-**Keep `Reset_: false`** on the Xray stats query — `api.go:748` already does this and it is
+**Keep `Reset_: false`** on the Xray stats query — `api.go:764` already does this and it is
 correct. `Set(0)` is an `atomic.SwapInt64`: atomic with respect to the data plane, but
 at-most-once with respect to you.
 
@@ -345,22 +438,39 @@ pinned by a test in `counter_test.go`:
   token must not be read as having restarted: the epoch would flip away and back, and each
   flip wipes every baseline, so the next reading is billed in full. Unknown keeps the last
   known epoch and leaves the work to the backstop.
-- **Baselines are never expired automatically.** A key absent from one reading is ambiguous —
-  removed, or a partial scrape mid-reload — and dropping it bills a live subject its whole
-  counter again. `Counter.Forget` is the only way a baseline is dropped, and it is the
-  panel's job to call it when *the panel* removes a user.
+- **Baselines expire only on sustained absence — and this rule has been wrong in both
+  directions.** The old prune dropped a baseline after one missing reading, and a partial
+  scrape mid-reload re-billed a live subject its whole counter; this section then
+  over-corrected to "never expire automatically", which grows the map with every subject
+  ever seen. As shipped (7d10dda2, 2026-08-04): a baseline is dropped after
+  `baselineGrace = 10` consecutive readings without its key (`counter.go:30`) — 50 s at
+  Xray's poll, 100 s at mtg's, far longer than any reload — and a reading with no subjects
+  at all is evidence about nothing, so it counts no absences. `Counter.Forget` stays the
+  immediate path when *the panel* removes a subject; drain the final reading first.
 
 ### 4.3 Enforcement
 
-`disableInvalidClients` (`service/inbound_disable.go:97`) is already the right *shape* —
-it resolves email → set of `(inbound, node)` targets and revokes. Two changes:
+`disableInvalidClients` (`service/inbound_disable.go:120`) is already the right *shape* —
+it resolves email → set of `(inbound, node)` targets and revokes. Two changes were
+prescribed here; one resolved sideways, one half-landed:
 
-- It calls `s.xrayApi.RemoveUser` **directly** for local targets, which both violates the
-  `runtime.Runtime` layering rule and silently no-ops for an MTProto inbound (the tag isn't
-  in Xray, so it returns "User not found"). Route through the registry instead.
-- Add pushdown: for cores with `QuotaEnforcer`, push `min(remaining, band)` into the daemon
-  (mtg `[secret-limits]` already does this; accel-ppp/RADIUS `Session-Octets-Limit`; ocserv
-  per-user config) with band hysteresis so it does not flap.
+- It still calls `s.xrayApi.RemoveUser` **directly** for local targets
+  (`inbound_disable.go:182`), which violates the `runtime.Runtime` layering rule; routing
+  it through the registry remains open. The MTProto half resolved differently than
+  prescribed: `restartCannotFix` (`inbound_disable.go:323`) classifies Xray's "handler not
+  found" as nothing-to-remove rather than a restart trigger, and the depleted client is cut
+  off by its own core — the mtproto reconcile drops the secret once
+  `client_traffics.enable` goes false. Each core revoking its own depleted clients through
+  reconcile is the durable shape; the direct call is the residue.
+- Pushdown exists at both ends for mtg and neither for anyone else. `[secret-limits]`
+  carries quota and expiry *into* the daemon at config render. The reverse edge shipped
+  2026-08-15 (a996a4e0): auto-renew clears the daemon-side counter through every core
+  answering `QuotaEnforcer` (`resetCoreQuotas`, `service/inbound_mtproto.go:114`) — the
+  capability's first production consumer — because a renewed client whose daemon keeps
+  counting stays blocked however the panel feels about their quota. The
+  `min(remaining, band)` push with hysteresis is still the target for cores whose budget
+  cannot ride their config (accel-ppp/RADIUS `Session-Octets-Limit`; ocserv per-user
+  config).
 
 **An IP-limit bounce is per-CORE, and deliberately best-effort.** `core.Session` carries no
 instance id, so a breach is attributed to the core that reported it and never to one of its
@@ -801,24 +911,32 @@ gets an exact tag *and* a sha256 the build verifies. (The panel already verifies
 
 ## 8. Data model
 
-**Freeze the `clients` column set.** `model.Client` is *already* a 10-credential union
-(`ID`, `Security`, `Password`, `Flow`, `Auth`, `PrivateKey`, `PublicKey`, `PreSharedKey`,
-`Secret`, `AdTag`) out of 26 fields; WireGuard alone cost five columns on `ClientRecord`.
-openapigen emits this to the frontend, so the TS type for a VLESS client already carries
-`preSharedKey?`. At 11 cores that is a ~60-optional-field type.
+**The `clients` column set is frozen — enforced, not aspirational.**
+`TestClientRecordColumnsAreFrozen` (`arch/client_columns_test.go`) pins `ClientRecord` to
+its measured field list, so adding `ocserv_password` requires deleting a line from the
+freeze — which is the review signal this design depends on. The union it froze is Xray's
+plus WireGuard's (uuid, password, auth, security, flow, and the five WG columns);
+MTProto's `secret` and `ad_tag` have already *left* the table for `client_credentials`,
+dropped from `clients` and backfilled by the one-time `ClientCredentials` seeder
+(`db.go:752`). openapigen still emits the union to the frontend, so the TS type for a
+VLESS client carries `preSharedKey?` — the frozen width is the accepted cost; unbounded
+growth was the danger.
 
 The real cost is not the columns — it is hand-written O(fields) code that **fails silently**.
-`MergeClientRecord` (`model.go:1179`) is one `if existing.X != incoming.X && incoming.X != ""`
+`MergeClientRecord` (`model.go:1297`) is one `if existing.X != incoming.X && incoming.X != ""`
 branch per field, on the node-sync path. Forgetting a field does not error; the merge drops
 it and the symptom is "works on the master, not on the node". `ToRecord` and `ToClient`
 repeat the mapping twice more.
 
 ```sql
+-- Built: db.go:646, model.ClientCredential. MTProto is the only tenant so far
+-- (keys "secret" and "adTag"), plus idx_client_credentials_inbound_id for the
+-- inbound-side lookups.
 CREATE TABLE client_credentials (
-    client_id  int   NOT NULL,
-    inbound_id int   NOT NULL,
-    key        text  NOT NULL,
-    value      text  NOT NULL,
+    client_id  integer NOT NULL,
+    inbound_id integer NOT NULL,
+    key        text    NOT NULL,
+    value      text    NOT NULL,
     PRIMARY KEY (client_id, inbound_id, key)
 );
 ```
@@ -827,27 +945,57 @@ CREATE TABLE client_credentials (
 `PRIMARY KEY (client_id, core_id)`, which cannot hold the first credential it would be asked
 to hold: the paragraph below already says an MTProto secret embeds the *inbound's* FakeTLS
 domain, so a client on two mtproto inbounds needs two values. `client_inbounds.flow_override`
-(`model.go:975`) is the repo's existing precedent and is already per-(client, inbound) and
+(`model.go:1055`) is the repo's existing precedent and is already per-(client, inbound) and
 already authoritative over the column on `clients`. Keying per core would have left the table
 with no tenant it could actually serve.
 
-No FK (the repo runs `DisableForeignKeyConstraintWhenMigrating: true` at `db.go:1872` and
-actively drops FKs). Credentials are never queried by content; every access is by PK or by
-`(client_id, inbound_id)`. When a core needs real uniqueness, use a partial expression index
-in that core's own migration. **The client-list endpoint must never join this table.**
+No FK on this table — but "the repo has no FKs" stopped being true when egress landed.
+GORM-driven constraints stay off (`DisableForeignKeyConstraintWhenMigrating: true`,
+`db.go:2162`); where a dangling reference is a silent *leak* rather than a stale id, the
+panel now writes the constraint by hand. `fk_inbounds_egress` is `ON DELETE RESTRICT`
+(`db.go:299`) because an inbound pointing at a deleted egress emits no rule and egresses
+with the server's own identity while the panel still reports it attached — RESTRICT rather
+than SET NULL because a silent detach is that same leak with the database agreeing to it.
+The same reasoning exempts `egresses` from the boot-time sequence resync
+(`sequenceMustNotRewind`, `db.go:160`): an egress id names host-global kernel state (table
+`30000+id`, rule priority `31000+id`, device `peg<id>`), and a rewound sequence would hand
+a deleted egress's id — and whatever of its kernel state survived — to the next one
+created. Credentials carry neither risk: never queried by content, every access by PK or
+`(client_id, inbound_id)`; when a core needs real uniqueness, use a partial expression
+index in that core's own migration. **The client-list endpoint must never join this
+table.**
 
 **Store credentials, do not derive them.** Derivation is *impossible* for ocserv (salted
 one-way hash), OpenVPN (a CA signature; revocation needs CRL state) and MTProto (the secret
-embeds the **inbound's** FakeTLS domain — `model.go:597` — so the same client's secret
-differs per inbound). Add exactly one core-agnostic `clients.secret_seed bytea` as a default
-*generator*, never as an invariant.
+embeds the **inbound's** FakeTLS domain — `GenerateFakeTLSSecret`, `model.go:691` — so the
+same client's secret differs per inbound). The generator question resolved better than the
+`clients.secret_seed` column this section once proposed: minting moved into the core that
+owns the format (`CredentialDeclarer.MintClientCredentials`, §3.2a), so the panel asks
+rather than derives, and no seed column was ever added.
+
+**Every byte of durable core state rides a DB row — the invariant nothing had written
+down.** A WireGuard server key lives in the inbound's `settings` JSON, peer keys in the
+frozen `clients` columns, an mtg secret in `client_credentials`; the only file any core
+writes in production is its rendered config, regenerated from rows on every reconcile
+(`mtproto/manager.go:653` is the one such write under either engine). That is what makes
+`pg_dump` a *complete* backup of a panel: binaries reinstall, configs regenerate, rows
+restore. The first core that keeps a state directory — an OpenVPN CA and its CRL are the
+obvious candidate — breaks restore silently: everything works until the box dies. Such
+state goes in rows (settings JSON, `client_credentials`, or a table of its own), or the
+core must say loudly in review that backup now has a second half.
 
 **An inbound whose core is unknown is quarantined** — never started, never deleted, never
-re-marshalled, badged in the UI. The column is a plain varchar with no CHECK constraint, so
-an old binary can already `SELECT` a row with `protocol = 'ocserv'`; the danger is the
-*write* path, where `db.go:665-782` and `:1393-1620` do unmarshal→mutate→marshal round-trips.
-Guard: `TestUnknownCoreRoundTripsByteForByte` — **proposed, not written** (§10).
-**Never remove or reuse a `Kind` constant** — it is persisted on installs you will never see.
+re-marshalled, badged in the UI (`reasonUnknownCore`). The column is a plain varchar with
+no CHECK constraint, so an old binary can already `SELECT` a row with
+`protocol = 'ocserv'`; the danger is the *write* path, where db.go's healer and backfill
+passes do unmarshal→mutate→marshal round-trips. The guard is written:
+`TestUnknownCoreRoundTripsByteForByte` (`arch/unknown_core_test.go:52`) drives an unknown
+kind through the render path — which must *omit* it, nil config and nil error, never mangle
+it — and its second half pins quarantine as a loud refusal: a state-changing op against an
+unknown kind must fail with the exact refusal string, because a silent success is a delete
+that never happened. `Registry.For`'s false result means "quarantine", never "delete"
+(`registry.go:54`). **Never remove or reuse a `Kind` constant** — it is persisted on
+installs you will never see.
 
 ---
 
