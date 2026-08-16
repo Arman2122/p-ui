@@ -112,6 +112,22 @@ func (s *Subscriber) formatMessage(e eventbus.Event) (subject, body string) {
 		}
 		body = wrap(i18n("tgbot.messages.eventOutboundUp", "Tag=="+e.Source), content)
 
+	case eventbus.EventCoreCrash:
+		name := e.Source
+		errText := ""
+		if data, ok := e.Data.(*eventbus.CoreCrashData); ok {
+			if name == "" {
+				name = data.CoreID
+			}
+			errText = data.Err
+		}
+		subject = host + " " + i18n("tgbot.messages.eventCoreCrash", "Core=="+name)
+		content := kv(i18n("email.labelStatus"), `<span style="color:red">`+i18n("email.statusCrashed")+`</span>`)
+		if errText != "" {
+			content += kv(i18n("email.labelError"), errText)
+		}
+		body = wrap(i18n("tgbot.messages.eventCoreCrash", "Core=="+name), content)
+
 	case eventbus.EventXrayCrash:
 		subject = host + " " + i18n("tgbot.messages.eventXrayCrash")
 		content := kv(i18n("email.labelStatus"), `<span style="color:red">`+i18n("email.statusCrashed")+`</span>`)

@@ -362,7 +362,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 	if err := writeConfig(cfgPath, inst, apiPort, apiToken); err != nil {
 		return err
 	}
-	proc := newProcess(cfgPath, fmt.Sprintf("inbound %d", inst.Id))
+	proc := newProcess(cfgPath, fmt.Sprintf("inbound %d", inst.Id), inst.Id)
 	if err := proc.Start(); err != nil {
 		return err
 	}

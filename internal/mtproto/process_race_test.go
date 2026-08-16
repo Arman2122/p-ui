@@ -12,7 +12,7 @@ import (
 )
 
 func TestProcessLifecycleFieldsRaceSafe(t *testing.T) {
-	proc := newProcess("", "test")
+	proc := newProcess("", "test", 1)
 	stop := make(chan struct{})
 	var workers sync.WaitGroup
 	defer func() {
@@ -59,7 +59,7 @@ func TestProcessStatusDuringExit(t *testing.T) {
 	if err := os.WriteFile(configPath, nil, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	proc := newProcess(configPath, "test")
+	proc := newProcess(configPath, "test", 1)
 	if err := proc.Start(); err != nil {
 		t.Fatalf("start process: %v", err)
 	}

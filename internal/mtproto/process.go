@@ -124,13 +124,25 @@ type Process struct {
 	configPath      string
 	logWriter       *procLogWriter
 	exitErr         error
+	inboundID       int
 	intentionalStop atomic.Bool
 }
 
-func newProcess(configPath, label string) *Process {
+/*
+OnCrash is called when an mtg process exits on its own, with the inbound whose
+sidecar died. Set from the web layer, the way xray.OnCrash is.
+
+A package global rather than a field for the same reason xray's is: the engine
+must not import the event bus, and a sidecar that dies silently is a whole
+inbound's clients offline with nothing said to the operator.
+*/
+var OnCrash func(inboundID int, err error)
+
+func newProcess(configPath, label string, inboundID int) *Process {
 	return &Process{
 		configPath: configPath,
 		logWriter:  &procLogWriter{label: label},
+		inboundID:  inboundID,
 	}
 }
 
@@ -201,6 +213,9 @@ func (p *Process) wait(cmd *exec.Cmd, done chan struct{}) {
 	}
 	logger.Errorf("mtproto: mtg process exited: %v", err)
 	p.setExitErr(err)
+	if OnCrash != nil {
+		OnCrash(p.inboundID, err)
+	}
 }
 
 func (p *Process) setExitErr(err error) {
