@@ -81,6 +81,17 @@ func ClientShare(inst core.Instance, user core.User, host string) (core.Share, b
 	return share, true, nil
 }
 
+// TransportAuthority is the core that answers what one kind binds, when any
+// does. A kind no core claims has no authority, and the caller keeps its own
+// oldest rule rather than inventing one here.
+func TransportAuthority(kind core.Kind) (core.TransportDeclarer, bool) {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Transports == nil {
+		return nil, false
+	}
+	return bound.Transports, true
+}
+
 // ClientCredentialAuthority is the core that answers for one kind's client
 // credentials, when any does. The caller keeps its own fallback for a kind no
 // core owns — a quarantined inbound's clients are neither loosened nor newly

@@ -23,6 +23,7 @@ type Bound struct {
 	Users       UserProvisioner
 	UserSet     WholeSetUserProvisioner
 	Creds       CredentialDeclarer
+	Transports  TransportDeclarer
 	Traffic     TrafficSource
 	TagTraffic  TagTrafficSource
 	Online      OnlineReporter
@@ -56,6 +57,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(CredentialDeclarer); ok {
 		b.Creds = v
+	}
+	if v, ok := c.(TransportDeclarer); ok {
+		b.Transports = v
 	}
 	if v, ok := c.(TrafficSource); ok {
 		b.Traffic = v
