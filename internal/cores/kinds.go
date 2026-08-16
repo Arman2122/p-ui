@@ -11,11 +11,7 @@ tag, and the two drifted — the tag accepted tun while no core claimed it, so t
 panel stored those inbounds and then refused to apply them.
 */
 func Kinds() []core.Kind {
-	reg := core.NewRegistry()
-	if err := Register(reg, Deps{}); err != nil {
-		// Only a duplicate or empty kind fails here, and two cores claiming one
-		// protocol has no correct routing. TestDefaultRegistryIsCoherent covers it.
-		panic("cores: " + err.Error())
-	}
-	return reg.Kinds()
+	// The shared map, not a fresh build: this used to construct every adapter
+	// on every call, purely to read a list that is fixed at compile time.
+	return kindOwners().Kinds()
 }
