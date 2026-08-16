@@ -2074,7 +2074,8 @@
       "eventNodeDown": "نود {{ .Name }} قطع است",
       "eventNodeUp": "نود {{ .Name }} وصل است",
       "eventLoginFallback": "ورود ناموفق از {{ .Source }}",
-      "memoryThreshold": "مصرف حافظه {{ .Percent }}% از حد آستانه {{ .Threshold }}% فراتر رفته است"
+      "memoryThreshold": "مصرف حافظه {{ .Percent }}% از حد آستانه {{ .Threshold }}% فراتر رفته است",
+      "eventCoreCrash": "{{ .Core }} از کار افتاد"
     },
     "buttons": {
       "closeKeyboard": "❌ بستن کیبورد",

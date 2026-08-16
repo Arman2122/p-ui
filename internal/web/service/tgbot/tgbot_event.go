@@ -86,6 +86,13 @@ func (t *Tgbot) formatEventMessage(e eventbus.Event) string {
 		}
 		return msg
 
+	case eventbus.EventCoreCrash:
+		msg := header + "🔥 " + t.I18nBot("tgbot.messages.eventCoreCrash", "Core=="+coreCrashName(e))
+		if data, ok := e.Data.(*eventbus.CoreCrashData); ok && data.Err != "" {
+			msg += "\n" + t.I18nBot("tgbot.messages.eventXrayCrashError", "Error=="+data.Err)
+		}
+		return msg
+
 	case eventbus.EventXrayCrash:
 		errStr := ""
 		if e.Data != nil {
@@ -159,4 +166,16 @@ func (t *Tgbot) formatEventMessage(e eventbus.Event) string {
 	}
 
 	return ""
+}
+
+// coreCrashName is what an operator sees a dead daemon called: the source the
+// publisher set, or the bare core id when it set none.
+func coreCrashName(e eventbus.Event) string {
+	if e.Source != "" {
+		return e.Source
+	}
+	if data, ok := e.Data.(*eventbus.CoreCrashData); ok {
+		return data.CoreID
+	}
+	return "core"
 }
