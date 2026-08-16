@@ -84,6 +84,7 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 
 	api.GET("/openapi.json", ServeOpenAPISpec)
 	api.GET("/cores", a.getCores)
+	api.POST("/cores/:id/restart", a.restartCore)
 
 	// Inbounds API
 	inbounds := api.Group("/inbounds")
@@ -130,6 +131,22 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 // a core declares instead of from its own protocol switch.
 func (a *APIController) getCores(c *gin.Context) {
 	jsonObj(c, service.CoreViews(c.Request.Context()), nil)
+}
+
+/*
+restartCore stops one core's daemons and converges them back.
+
+Asked of the registry by id, so the panel is not an Xray-only control surface:
+until this, an mtg sidecar could not be restarted from the panel at all.
+*/
+func (a *APIController) restartCore(c *gin.Context) {
+	id := c.Param("id")
+	err := (&service.ServerService{}).RestartCore(c.Request.Context(), id)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.xray.restartError"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.xray.restartSuccess"), nil)
 }
 
 // BackuptoTgbot sends a backup of the panel data to Telegram bot admins.
