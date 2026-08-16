@@ -45,7 +45,7 @@ func (c *Core) Describe() core.Descriptor {
 			// The kernel holds no per-peer byte budget, and the .conf a client
 			// needs is still built by the panel's own link builders.
 			QuotaPushdown: core.No(),
-			ShareLink:     core.No(),
+			ShareLink:     core.Yes(),
 		},
 	}
 }
