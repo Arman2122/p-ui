@@ -1027,9 +1027,33 @@ Two hard constraints:
 - **Never narrow the generated Zod protocol enum to enabled cores.** It validates data read
   *out of* the DB; narrowing makes disabling a core break its existing inbounds client-side.
   Filter the picker, not the validator.
+**The outbound picker is registry-driven, and exits are authored where outbounds are.**
+`GET /panel/api/cores` grew `exitKinds` (`service/core.go:24`, mirroring `cores.ExitKinds`
+per core rather than build-wide), and `outboundProtocolGroups`
+(`src/lib/cores/outbound-protocols.ts`) builds the picker from it: Xray's built-in
+protocols under Xray's heading, every other core's exit kinds under their own. The grouping
+is load-bearing, not cosmetic — Xray's userspace `wireguard` outbound and the `wgkernel`
+core are near-identical names for different things, and the heading is the only thing that
+tells an operator which one they chose. A kind whose core this host cannot run stays
+listed, disabled with the reason, exactly as the inbound picker already does.
 
-Rename `frontend/src/lib/xray/` → `src/lib/cores/xray/` in the first frontend PR — that
-directory name is the key both the ESLint boundary rule and the ratchet's exempt regex use.
+The Egresses page is deleted; its list/edit/delete/preflight live in `ExitsSection` on the
+Outbounds page, which filters out panel-owned rows (`owner == 'panel'` — the fronts routing
+provisions and reaps for itself, §12). Authoring goes through one module per exit kind
+(`pages/xray/outbounds/exits/index.ts`), where the two vocabularies meet and nowhere else:
+a CORE KIND is what the registry declares and the picker shows, an EGRESS TYPE is what the
+row stores and which driver dials it. Before the split both were the WireGuard uplink's, so
+a second core declaring an exit would have rendered WireGuard's fields and saved a row the
+wrong driver then tried to dial. A kind with no module in this build is **offered and
+refused with the reason**, never rendered as some other kind's form — the registry answers
+what *can* exit, and the build either has a form for it or honestly says it does not.
+
+The rename this section once ordered — `frontend/src/lib/xray/` → `src/lib/cores/xray/` —
+never happened, and its justification named an ESLint boundary rule and a frontend ratchet
+that do not exist. What happened instead is better: `src/lib/cores/` grew beside it, five
+registry-facing modules (capabilities, client credentials, client shaping, core
+availability, outbound protocols), while `src/lib/xray/` stays what it is — Xray's own
+domain logic. That split is the honest one; renaming the Xray directory buys nothing now.
 
 ---
 
@@ -1076,8 +1100,25 @@ one missing: supervision never became registry-driven until the guard was finall
 `TestDescriptorMatchesInterfaces` is not a test at all — it is the
 `descriptor/capabilities-match` invariant raised inside `RunAdapterSuite`, which every core's
 `driver_test.go` runs and `TestSuiteCatchesBrokenAdapters` keeps honest.
+**The census kept growing with the egress, routing and policy work** — these landed after
+the table above was compiled, in the same register (each parses the tree or drives the
+registry; none is configuration):
 
-**The ratchet's number is `dispatchTotal`, not this table.** It is **94** after P5:
+| Guard | Where | Prevents |
+|---|---|---|
+| `TestSniffingExcludesEveryKindXrayDoesNotServe` + its converse | `arch/capability_core_names_test.go:25`, `:46` | `CapSniffing`'s "list each new such core" comment staying prose — a non-Xray kind ships excluded or the build fails naming it, instead of the form offering a sniffing toggle nothing reads |
+| `TestPolicyNamesNoProtocol` | `arch/policy_naming_test.go:57` | `internal/policy`, `internal/shaping`, the join `service/policy.go` and the pass `job/core_policy.go` naming a core; seeded at zero, and it sees `.Kind` and bare kind literals the ratchet cannot |
+| `TestEgressKickCoversEveryCoreConfigSwap` | `arch/egress_kick_test.go:35` | a core-config-swap path forgetting the egress reconcile kick — every attached inbound dark until the 10s drift tick |
+| `TestEgressContainmentIsInstalledBeforeAnyCoreStarts` | `arch/egress_boot_order_test.go:32` | boot reordering: containment installs before any core creates a front, or an inbound egresses with the server's own address |
+| `TestTheEgressJobConverges` | `arch/egress_boot_order_test.go:87` | the job behind that ordering decaying to a no-op |
+| `TestEveryLiveTestCallsItsGate` | `arch/live_e2e_gate_test.go:25` | a `TestLive*` writing real kernel state on whatever host runs it |
+| `TestRegisterRefusesANamespaceThatCannotRoundTrip` | `shaping/namespaces_test.go:10` | ambiguous device ownership: `Namespaces.Register` (`shaping/namespaces.go:46`) takes lower-case letters only, because an id is all digits — a prefix ending in a digit makes `pawg1`+2 and `pawg`+12 one string, `pawg12`, with two managers owning one tree |
+
+One more is raised inside the contract rather than `internal/arch`: `bind.go:124` refuses a
+`RoutableEgress` whose `ExitKinds` is empty — a core that offers no exit declares nothing —
+pinned by `core/routing_declaration_test.go`.
+
+**The ratchet's number is `dispatchTotal`, not this table.** After P5 it stood at **94**:
 109 seeded (P-1) → 106 (P1) → 99 (P3) → 94 (`e5cc0bc5`, which took `runtime/local.go` to
 zero) → 95 (`e2478640`, a one-off migration in `db.go`, a file already frozen as historical)
 → 94 (`6fb1f026`, `RenderInbound` asking the registry instead of naming mtproto).
@@ -1092,6 +1133,17 @@ to guard.
 Teaching it that shape moved the total to **123** with nothing having regressed. The honest
 reading of P5 is therefore that it removed five dispatch sites out of 123, not out of 99 —
 the direction is right and the remaining distance is larger than the old number implied.
+**The number at HEAD is 101** (`dispatch_ratchet_test.go:66`), and the chain from 123 is
+the refactor's actual scoreboard: 123 → 116 (`acf29f7c`, P6-2a's abstraction fix) → 126
+(`09f926d7`, registering wgkernel) → 127 (`0d4d6f2e`, egress) → 126 (`dda88456` — P8 added
+the whole policy subsystem and still came out net −1) → 125 (`da46d28a`, routing declared
+through the contract) → **101** (`8d0dc878`, credential minting asked of the registry:
+`client_crud.go` went 6 → 0 **and out of the map entirely**, the first service file the
+ratchet has ever dropped, with `client_inbound_apply.go` 19 → 7 and `inbound.go` 18 → 12).
+Two arms stayed protocol-named on purpose: the update path's ad-tag check
+(`client_inbound_apply.go:549`), which must not refuse a metadata-only edit whose secret
+hydrates after the payload, and copy-to-inbound's always-fresh mint switch
+(`inbound_clients.go`), whose semantics differ from add-time minting.
 
 **The ratchet must fail in both directions.** If it only fails upward, slack accumulates
 every time someone deletes a site and the guard dies quietly. Failing when the count is
@@ -1102,10 +1154,11 @@ what `routes_contract_test.go:109`/`:123` does, and why that test still works af
 `routes_contract_test.go:78-80`. Without it, renaming `Protocol` turns every budget green
 and the test certifies nothing for a year.
 
-**The detector must be name-based, not type-based.** `client_inbound_apply.go:478` and
-`:860` are `if oldInbound.Protocol == "shadowsocks"` — both operands have static type
-`string`, so a `go/analysis` type-based analyzer sees nothing. A `go/ast` name-based walk
-catches all three shapes, uses only stdlib (house rule), and needs no new `go.mod` dependency.
+**The detector must be name-based, not type-based.** `client_inbound_apply.go` carried two
+sites shaped `if oldInbound.Protocol == "shadowsocks"` — both operands of static type
+`string`, so a `go/analysis` type-based analyzer sees nothing. Both have since migrated
+(`8d0dc878`); the argument outlives them. A `go/ast` name-based walk catches all three
+shapes, uses only stdlib (house rule), and needs no new `go.mod` dependency.
 
 ---
 
@@ -1334,6 +1387,43 @@ while that is still true — after the refactor starts, every one becomes a nego
 engine*; `internal/web/runtime` answers *which machine* (Local vs Remote over mTLS).
 Separated, that is 2+N. Merged, it is a 2×N matrix — and `local.go` is already halfway into
 that trap at N=2.
+**The table stops at P6 because P6 was the measurement; the work did not.** What landed
+after it, phase by phase, with the ratchet as the scoreboard — P6 itself shipped as v1.2.0
+(2026-08-11):
+
+- **P7 — egress.** Kernel-WireGuard uplinks became a first-class exit the panel dials
+  (`0d4d6f2e`, ratchet 126 → 127), under the driver taxonomy §5 now describes
+  (`internal/egress/driver.go`). The legacy attach path — the `egresses/attach` endpoint,
+  `EgressService.Attach`, the per-inbound egress picker — is **deleted** (`b310b82f`,
+  −901 lines): a rule names an ingress; an inbound is never told its egress. The Egresses
+  page went with it (`dfb75f35`); exits are authored on the Outbounds page from
+  registry-declared kinds (§9).
+- **P8 — policy** (v1.3.0/1.3.1, 2026-08-12): speed ladders, IP limits and threshold
+  throttling, core-agnostic by construction and guarded so (`TestPolicyNamesNoProtocol`,
+  §10). A whole subsystem, net **−1** on the ratchet (127 → 126, `dda88456`).
+- **P9** (v1.4.0, 2026-08-12): tunnel addresses per core. **P10**: the installer sets up
+  wgkernel host networking.
+- **Routing** (`da46d28a`, `e30b1841`, `ff0978dc`; 126 → 125): cores declare
+  `RoutableIngress`/`RoutableEgress` (`core/caps.go:312`, `:366`), rules are
+  `routing_rules` rows the panel owns, and `internal/routing/plan.go` compiles intent into
+  rules and kernel state as one pure function. Device ingress is fronted by a gVisor tun
+  the panel provisions and reaps for itself (`ensureFronts`/`reapFronts`,
+  `service/routing.go:131`, `:171`) — and the editor **discloses what that costs**: a
+  fronted L3 inbound carries tcp/udp/icmp only (`9b562111`, RuleFormModal's `l3Fronted`
+  alert). The kernel fast path that would remove the cost is reserved — `PatternKernel`,
+  `routing/diag.go:21` — with **zero emitters**. Still open.
+- **P7-C** (`7c9b53ff`): a rule is pointed at an uplink from the routing page. That is
+  also where the exit-authoring question settled: authored under Outbounds, consumed from
+  Routing, never attached to an inbound.
+- **Credentials** (`331729bf`, `8d0dc878`; 125 → **101**): `CredentialDeclarer` grew
+  `MintClientCredentials`/`ValidateClient`/`ClientIdentity`, and the engines host the
+  protocol knowledge (`internal/xray/shadowsocks.go`, `internal/mtproto/secrets.go`) —
+  §11.3's item 4, mostly paid (§12.4).
+- **Seams cut for the next arc** (§12.5): `shaping.Namespaces` registration (`eba337d4`,
+  §10); `LinkRenderer` implemented and consumed (`f8bbefd7`; §13, decision 1); the facade
+  answering from the one wired registry (`358775f9` — `cores.Use`, with the deps-free
+  build as fallback only for unwired processes); auto-renew clearing daemon-side quota
+  through `QuotaEnforcer`, its first production consumer (`a996a4e0`).
 
 ### 12.1 What porting core #1 corrected in the contract
 
@@ -1502,8 +1592,9 @@ states rather than a constant the panel picks.
 The second question is shape. `mtproto_job` also **reconciles** — it restarts sidecars that
 died — and that is supervision, not accounting. Folding it into the traffic job couples the
 two; keeping it separate but registry-driven would satisfy `TestJobCountDoesNotGrowPerCore`
-just as well, because what that guard forbids is a job *per core*, not a second job. **That
-guard does not exist yet** (§10), so nothing currently stops the next core shipping a third job.
+just as well, because what that guard forbids is a job *per core*, not a second job. The
+guard has since landed (`arch/job_growth_test.go` — §10's late-arrivals table), and the
+merge itself followed: the RESOLVED note in §12.4.
 
 ### 12.4 What P5 landed, and what it deliberately did not
 
@@ -1529,12 +1620,15 @@ inbounds).
   they ride the node-sync wire format and the subscription path, so moving them buys nothing
   today. The point was to ship the table **with a real tenant** rather than as speculative
   architecture; `TestClientRecordColumnsAreFrozen` holds the line.
-- **Credential *storage* generalised; credential *minting* did not.**
-  `client_credential.go` still holds a hand-written `mtprotoCredentialRows` /
-  `applyMtprotoCredentials` pair, and `client_crud.go` and `inbound_clients.go` still mint
-  credentials from a `switch` with a silent `default`. **Partly RESOLVED in P6-2a:**
-  `cores.ClientCredentials` now backs the four WireGuard key gates, so `CredentialDeclarer`
-  has a Go caller; minting itself still switches on the protocol string.
+- **Credential *storage* generalised; credential *minting* did not** — then it did.
+  P6-2a put `cores.ClientCredentials` behind the four WireGuard key gates, and
+  `331729bf` + `8d0dc878` finished it: `CredentialDeclarer` grew `MintClientCredentials`
+  (missing-or-unusable semantics), `ValidateClient` (required-ness IS protocol knowledge,
+  down to the exact historical refusal strings) and `ClientIdentity`, and `client_crud.go`
+  now mints from the registry (`client_crud.go:161`) — zero dispatch sites, out of the
+  ratchet's map. Of §11.3's item-4 trio, `inbound_clients.go`'s copy-to-inbound mint stays
+  deliberately (always-fresh semantics differ from add) and `client_credential.go` keeps
+  the `mtprotoCredentialRows`/`applyMtprotoCredentials` pair as the storage projection.
 - **Supervision did not merge.** `mtproto_job` still reconciles sidecars on its own 10s
   cadence beside the traffic job's 5s (`web.go:289-290`), and `web.go` still calls
   `mtproto.GetManager().StopAll()` by name. §12.3 is still the open design.
@@ -1542,7 +1636,10 @@ inbounds).
   or `frontend/src/lib/xray/`. The descriptor idea was proven on the *client* form only, and
   §9's `ui:`-tag renderer remains unwritten — which is the whole of §11.2's TypeScript column.
 - **The enforcement hole from §2.1 is still open.** `CapTLS`, `CapReality`, `CapStream` and
-  `CapSniffing` are still evaluated by nothing on any write path.
+  `CapSniffing` are still evaluated by nothing on any write path. One corner is now pinned
+  at build time — a non-Xray kind must be excluded from `CapSniffing` or
+  `arch/capability_core_names_test.go` fails naming it (§10) — but a write path that asks
+  the table still does not exist.
 
 **RESOLVED for supervision, and it kept both cadences.** `mtproto_job` is gone;
 `core_supervise` loops `registry.Cores()` over `Supervisor.Reconcile` at `@every 10s`, and
@@ -1564,6 +1661,68 @@ Xray (`isManuallyStopped` lives in `XrayService`, not in the core). So `cores.Pa
 names the one core the panel still converges itself. Removing it needs the base config to
 become complete and the manual-stop fact to move into the engine manager — real work, not
 wiring, and the last thing standing between core #11 and free supervision.
+### 12.5 The next arc: the 2026-08-15 roster
+
+Decided 2026-08-15, with a directive that governs every design below: **no easy-path
+cores.** The roster pass had recommended userspace `amneziawg-go` for packaging
+convenience; the owner overrode it — this panel targets production hosts, so throughput
+and operational quality outrank implementation convenience. Every "v1 simplification" in
+the notes below gets re-argued against that bar at design time, with the production-grade
+option and its cost on the table.
+
+The build order, converged on independently by two roster passes:
+
+1. **AmneziaWG — KERNEL module, latest upstream.** Still a *variant* of wgkernel —
+   identity, counters and the diff engine reuse wholesale — but the honest shape is
+   vendored module source with a panel-owned DKMS lifecycle in the installer, a
+   family-parameterised netlink control path (wgctrl is genl-bound to family
+   "wireguard"; AWG registers "amneziawg" with extra attrs), and Secure Boot/MOK surfaced
+   at Preflight rather than hidden. `amneziawg-go` is at most an explicitly-reported
+   degraded fallback. What it needs from the tree: a second Plane, a carrier for the
+   obfuscation params (Jc/Jmin/Jmax/S/H/I1–I5 have no home in `wgtypes.Config`), a device
+   fingerprint that includes them or edits read as Noop, and the `pawg` prefix registered
+   on `shaping.Namespaces` — the seam `eba337d4` built for exactly this.
+2. **SSH — an embedded Go server in the panel process**, the first in-process core
+   (`golang.org/x/crypto` is already a dependency). Ingress rides the mtproto
+   SOCKS-bridge precedent (§12.3); accounting is counted `io.Copy` splices — exact
+   per-user; shaping is honestly refused, since nothing tc can key on exists. Its exit is
+   the first honest producer of `ExitSocksPort` (`core/caps.go:323`) — a handle kind the
+   routing compiler already consumes (`routing/plan.go:252`) with no producer in the tree.
+3. **OpenVPN** — child per inbound on the mtproto pattern, never systemd units; the panel
+   is the authenticator (deferred `auth-user-pass-verify` against a panel socket), server
+   cert via Go x509, no easy-rsa. The `.ovpn` is `RenderClient` on its core plus nothing
+   else — the file path §13's decision 1 already carries end to end.
+4. **OpenConnect / IKEv2.** ocserv child-per-inbound — a process *tree* (Setpgid, signal
+   the pgid, or workers orphan). strongSwan over VICI is the first **host-daemon** core:
+   one daemon per host, the panel a client rather than a parent, one ikev2 inbound per
+   node enforced at Preflight. Both lean on an embedded Go RADIUS server built once as
+   panel infrastructure — authenticator and accounting for ocserv, the accounting fold
+   for accel-ppp, optional exact accounting for IKEv2.
+5. **PPP family last** — accel-ppp source-built and bundled (packaged in no archive the
+   panel supports; musl-static like mtg-multi); SSTP rides its `[sstp]` section, the only
+   live path anywhere; PPTP only behind a typed-confirmation gate, because MS-CHAPv2/MPPE
+   is broken and captured traffic is decryptable.
+
+**The honest ingress-only column.** The any-core-in, any-core-out matrix keeps deliberate
+holes, and the closed vocabularies are how they are declared rather than discovered:
+mtproto answers `IngressInternal` and implements no `RoutableEgress` — the sidecar
+terminates MTProto and can only hand plaintext onward — and the PPP family is ingress-only
+too, its exit blocked by both the IPCP-pushed-address and the no-NAT walls. A contributor
+extends the vocabulary; nobody special-cases around it.
+
+Four contract gaps gate named roster items, each readable at its seam today:
+
+- `Driver.Fill` is a pure function of static settings (`egress/driver.go:68`) — an exit
+  whose address is server-pushed (OpenVPN, dynamic IKEv2, PPP) cannot fill a table.
+- `ExitHandle` cannot declare TCP-only (`core/caps.go:343`) — an SSH exit would silently
+  blackhole routed UDP.
+- `IngressSelector` has no subnet value (`core/caps.go:291`) — both per-session-device
+  families (PPP, OpenConnect) have no stable device to route by, only their pool prefix,
+  so they ship `BlockedKey`-unroutable until `from <prefix>` rules exist.
+- `Instance.Listen`/`Port` assumes per-inbound sockets (`core/core.go:78`) — false for a
+  host-daemon core; IKEv2 needs a one-per-node refusal shape.
+
+Fix each once, before the core that hits it: the §12.1 lesson, priced in advance this time.
 
 ---
 
@@ -1578,6 +1737,14 @@ wiring, and the last thing standing between core #11 and free supervision.
    `wg0.conf`, `.sswan`, `.p12`), not URIs — so `Share.Kind == "file"` plus a backend
    endpoint means zero frontend link logic per core. Do not let an `.ovpn` template appear
    anywhere under `frontend/src/`.
+   **The file half is RESOLVED** (`f8bbefd7`): `LinkRenderer` is implemented — the
+   wireguard core's `.conf` (`cores/internal/wireguard/share.go`), field-synced with the
+   frontend's builder and golden-tested — and consumed:
+   `GET <subPath>/:subid/file/:inboundId` (`sub/controller.go:288`), the sub token
+   authorising and every refusal one 404. `host` is resolved by the caller — which
+   hostname reaches this panel is delivery policy, and a core must not learn it. What
+   stays open is the URI half: the three link renderers still exist, and the docs copy
+   still drifts silently.
 2. ~~**`openapigen` drops const values.**~~ **RESOLVED.** A named string type with constants
    is now emitted as a closed set everywhere: `types.ts` gets the union, `zod.ts` gets
    `PROTOCOL_VALUES` plus `z.enum(PROTOCOL_VALUES)`. The rule is general, not a protocol
@@ -1585,9 +1752,17 @@ wiring, and the last thing standing between core #11 and free supervision.
    `frontend/src/schemas/primitives/protocol.ts` is now a re-export, and `Protocols` is a
    mapped type over the generated list, so it is exhaustive by construction. **Core #11
    touches no TypeScript at all.**
-3. **SoftEther vs from-source accel-ppp** for the SSTP/L2TP/PPTP family — packaged and
-   opaque, versus unpackaged with a DKMS tax. Deferrable until phase 6+.
-4. **Whether SSH ships at all** without a Go SSH server to give it real accounting.
+3. ~~**SoftEther vs from-source accel-ppp** for the SSTP/L2TP/PPTP family — packaged and
+   opaque, versus unpackaged with a DKMS tax. Deferrable until phase 6+.~~ **RESOLVED
+   2026-08-15: from-source accel-ppp, built and bundled** (§12.5). The distro matrix
+   forced it — accel-ppp is packaged in no archive the panel supports, no standalone SSTP
+   daemon is packaged anywhere, and SoftEther is a frozen 2020 snapshot already absent on
+   trixie. SSTP rides accel-ppp's `[sstp]` section; PPTP ships only behind a
+   typed-confirmation gate; the whole family is ingress-only (§12.5).
+4. ~~**Whether SSH ships at all** without a Go SSH server to give it real accounting.~~
+   **RESOLVED 2026-08-15: it ships, and the Go server is the panel itself** — an embedded
+   `x/crypto/ssh` server in-process (§12.5), whose counted `io.Copy` splices are exact
+   per-user accounting, better than any daemon scrape in the tree.
 5. ~~**Does p-ui support Xray `tun` inbounds?**~~ **RESOLVED: yes, supported.** `model.Tun`
    now exists, the xray core claims the kind, and `knownProtocolDivergence` is empty — all
    three protocol sources agree for the first time. P3 forced the decision by making an
