@@ -360,3 +360,8 @@ func (c *Core) ExitHandle(_ context.Context, exit core.Exit) (core.ExitHandle, e
 		Source: core.SourceOwnerDaemon,
 	}, nil
 }
+
+// Transports: WireGuard is UDP only, at every layer and in every configuration.
+func (c *Core) Transports(core.Kind, string, string) core.Transports {
+	return core.Transports{UDP: true}
+}

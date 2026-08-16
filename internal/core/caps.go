@@ -99,6 +99,31 @@ type CredentialDeclarer interface {
 	ClientIdentity(kind Kind) string
 }
 
+/*
+Transports is the L4 footprint one inbound occupies on its port. Both false is
+not a valid answer — a port nothing listens on cannot conflict, and a core that
+returns it would silently disable conflict detection for its own kind.
+*/
+type Transports struct {
+	TCP bool
+	UDP bool
+}
+
+/*
+TransportDeclarer answers what an inbound actually binds, so port-conflict
+detection stops deriving it from the protocol string.
+
+It takes the settings because the answer is not static per kind: a shadowsocks
+inbound carries its L4 choice in a CSV field that overrides everything, a mixed
+inbound adds UDP with a boolean, and Xray's kcp and quic transports move a
+stream from TCP to UDP. Only the core that reads those blobs knows which of its
+kinds is on which protocol, and a wrong guess either lets two inbounds bind one
+port or refuses a pair that never collided.
+*/
+type TransportDeclarer interface {
+	Transports(kind Kind, settings, streamSettings string) Transports
+}
+
 // TrafficSource reports per-user usage. Deltas only: a core normalises its own
 // counter semantics — cumulative, per-session, or reset-on-read — before
 // returning, using Counter where the source is cumulative.

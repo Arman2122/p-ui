@@ -300,3 +300,9 @@ func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.Ingres
 // blockedBridgeOff is the i18n key the routing editor renders. Declared here so
 // the reason travels with the core that knows it, not with the web layer.
 const blockedBridgeOff = "pages.xray.subjects.reasonBridgeOff"
+
+// Transports: mtg is a TCP proxy and reads no stream settings, so its footprint
+// is the same whatever an inbound carries.
+func (c *Core) Transports(core.Kind, string, string) core.Transports {
+	return core.Transports{TCP: true}
+}

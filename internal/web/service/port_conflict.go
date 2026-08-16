@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/common"
@@ -17,71 +19,32 @@ const (
 	transportUDP
 )
 
+/*
+inboundTransports asks the kind's core what it binds.
+
+This used to derive the answer from the protocol string: two switches plus a
+generic streamSettings peek, all in the service layer, all guessing on behalf of
+cores that know. A kind no core claims keeps the oldest rule — TCP — so a
+quarantined inbound still occupies its port for conflict purposes rather than
+becoming invisible to the check.
+*/
 func inboundTransports(protocol model.Protocol, streamSettings, settings string) transportBits {
-	// protocols that ignore streamSettings entirely.
-	switch protocol {
-	case model.Hysteria, model.WireGuard, model.WGKernel:
-		return transportUDP
-	case model.MTProto:
+	kind := core.Kind(protocol)
+	bound, ok := cores.TransportAuthority(kind)
+	if !ok {
 		return transportTCP
 	}
-
+	answer := bound.Transports(kind, settings, streamSettings)
 	var bits transportBits
-
-	// peek at streamSettings.network to spot udp-based transports.
-	// parse errors are non-fatal: missing or weird streamSettings just
-	// keeps the default tcp bit below.
-	network := ""
-	if streamSettings != "" {
-		var ss map[string]any
-		if json.Unmarshal([]byte(streamSettings), &ss) == nil {
-			if n, _ := ss["network"].(string); n != "" {
-				network = n
-			}
-		}
-	}
-	switch network {
-	case "kcp", "quic":
-		bits |= transportUDP
-	default:
+	if answer.TCP {
 		bits |= transportTCP
 	}
-
-	// a few protocols carry their L4 choice in settings instead of (or in
-	// addition to) streamSettings: SS / Tunnel via a CSV field that wins
-	// outright, Mixed via an additive udp boolean.
-	if settings != "" {
-		var st map[string]any
-		if json.Unmarshal([]byte(settings), &st) == nil {
-			switch protocol {
-			case model.Shadowsocks, model.Tunnel:
-				key := "network"
-				if protocol == model.Tunnel {
-					key = "allowedNetwork"
-				}
-				if n, ok := st[key].(string); ok && n != "" {
-					bits = 0
-					for part := range strings.SplitSeq(n, ",") {
-						switch strings.TrimSpace(part) {
-						case "tcp":
-							bits |= transportTCP
-						case "udp":
-							bits |= transportUDP
-						}
-					}
-				}
-			case model.Mixed:
-				// socks/http "mixed" inbound: settings.udp=true means it
-				// also relays udp on the same port (socks5 udp associate).
-				if udpOn, _ := st["udp"].(bool); udpOn {
-					bits |= transportUDP
-				}
-			}
-		}
+	if answer.UDP {
+		bits |= transportUDP
 	}
-
-	// safety net: never return zero, even if every parse failed.
 	if bits == 0 {
+		// A core that claims to bind nothing would disable the check for its own
+		// kind; the port is occupied either way.
 		bits = transportTCP
 	}
 	return bits
