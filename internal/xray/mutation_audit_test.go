@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	procutil "github.com/Arman2122/p-ui/internal/util/proc"
+
 	"github.com/Arman2122/p-ui/internal/util/json_util"
 )
 
@@ -272,7 +274,7 @@ func TestWaitForCommand_CrashExitRecordsError(t *testing.T) {
 		t.Fatalf("startCommand: %v", err)
 	}
 	// We never call Stop -> intentionalStop stays false; the child exits 2.
-	if err := p.waitForExit(5 * time.Second); err != nil {
+	if err := procutil.WaitForExit(p.done, 5*time.Second, "xray test child"); err != nil {
 		t.Fatalf("child did not exit: %v", err)
 	}
 	if p.GetErr() == nil {
@@ -304,7 +306,7 @@ func TestStop_RemovesTempConfigFile(t *testing.T) {
 		if p.IsRunning() {
 			p.intentionalStop.Store(true)
 			_ = p.cmd.Process.Kill()
-			_ = p.waitForExit(2 * time.Second)
+			_ = procutil.WaitForExit(p.done, 2*time.Second, "xray test child")
 		}
 	})
 
