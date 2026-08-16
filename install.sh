@@ -14,8 +14,11 @@ pui_env_file="/etc/default/p-ui"
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}Fatal error: ${plain} Please run this script with root privilege \n " && exit 1
 
-# Penhoon UI targets Ubuntu 22.04 / 24.04 / 26.04 and Debian 12+ exclusively.
-# apt, systemd and iptables are assumed unconditionally from here on.
+# Penhoon UI targets the Debian family: Ubuntu 22.04 / 24.04 / 26.04 and
+# Debian 12+ are the tested set, and a derivative that identifies itself as
+# one of them through ID_LIKE (Armbian, Raspberry Pi OS, Mint) is accepted on
+# the capability checks below. apt, systemd and iptables are assumed
+# unconditionally from here on.
 if [[ -f /etc/os-release ]]; then
     source /etc/os-release
     release=$ID
@@ -29,9 +32,20 @@ fi
 
 unsupported_os() {
     echo -e "${red}Unsupported operating system: ${PRETTY_NAME:-${release} ${VERSION_ID:-unknown}}${plain}" >&2
-    echo -e "${yellow}Penhoon UI supports Ubuntu 22.04 / 24.04 / 26.04 and Debian 12 or newer only.${plain}" >&2
+    echo -e "${yellow}Penhoon UI supports Ubuntu 22.04 / 24.04 / 26.04, Debian 12 or newer, and Debian-family derivatives.${plain}" >&2
     echo -e "${yellow}It requires apt, systemd and iptables; no other distribution or init system is supported.${plain}" >&2
     exit 1
+}
+
+# A derivative names its ancestry in ID_LIKE ("ubuntu debian" on Mint,
+# "debian" on Armbian). Word-matched, not substring: an ID_LIKE of
+# "opensuse" must not pass because "suse" appears somewhere in it.
+id_like_has() {
+    local want="$1" word
+    for word in ${ID_LIKE:-}; do
+        [[ "${word}" == "${want}" ]] && return 0
+    done
+    return 1
 }
 
 case "${release}" in
@@ -43,10 +57,17 @@ case "${release}" in
         ;;
     debian)
         debian_major="${VERSION_ID%%.*}"
-        [[ "${debian_major}" =~ ^[0-9]+$ ]] && ((debian_major >= 12)) || unsupported_os
+        # Debian testing/sid ships no VERSION_ID: treat it as new enough
+        # rather than refusing the newest Debian there is.
+        if [[ -n "${VERSION_ID:-}" ]]; then
+            [[ "${debian_major}" =~ ^[0-9]+$ ]] && ((debian_major >= 12)) || unsupported_os
+        fi
         ;;
     *)
-        unsupported_os
+        # Not a name we know — accept a declared Debian-family derivative and
+        # let the apt/systemctl capability checks below be the real gate.
+        id_like_has debian || id_like_has ubuntu || unsupported_os
+        echo -e "${yellow}Note: ${PRETTY_NAME:-${release}} is a Debian-family derivative, not part of the tested set.${plain}"
         ;;
 esac
 
