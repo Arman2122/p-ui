@@ -262,9 +262,12 @@ type VersionManager interface {
 }
 
 // LinkRenderer produces what an end user needs to connect. Kind distinguishes a
-// URI ("link") from a config file ("file") such as .ovpn or wg0.conf.
+// URI ("link") from a config file ("file") such as .ovpn or wg0.conf. host is
+// the endpoint address the CALLER resolved — which hostname reaches this panel
+// is delivery policy (public host settings, node addresses, the request's own
+// Host), and a core must not learn it.
 type LinkRenderer interface {
-	RenderClient(inst Instance, user User) (Share, error)
+	RenderClient(inst Instance, user User, host string) (Share, error)
 }
 
 // Share is one deliverable client config.

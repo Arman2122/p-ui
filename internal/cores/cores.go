@@ -61,6 +61,26 @@ func ClientCredentials(kind core.Kind) []string {
 	return bound.Creds.ClientCredentials(kind)
 }
 
+/*
+ClientShare renders what one client needs to connect, when their kind's core
+can. host is the endpoint address the caller resolved — which hostname reaches
+this panel is delivery policy, and no core learns it.
+
+The second return distinguishes "this kind renders no share" from a render that
+failed: the first is a normal state every URI-only kind is in today.
+*/
+func ClientShare(inst core.Instance, user core.User, host string) (core.Share, bool, error) {
+	bound, ok := kindOwners().For(inst.Kind)
+	if !ok || bound.Link == nil {
+		return core.Share{}, false, nil
+	}
+	share, err := bound.Link.RenderClient(inst, user, host)
+	if err != nil {
+		return core.Share{}, true, err
+	}
+	return share, true, nil
+}
+
 // ClientCredentialAuthority is the core that answers for one kind's client
 // credentials, when any does. The caller keeps its own fallback for a kind no
 // core owns — a quarantined inbound's clients are neither loosened nor newly

@@ -283,6 +283,9 @@ func (a *SUBController) initRouter(g *gin.RouterGroup) {
 	gLink := g.Group(a.subPath)
 	gLink.GET(":subid", a.subs)
 	gLink.HEAD(":subid", a.subs)
+	// The file a kind is configured by, for cores that render one. The sub
+	// token authenticates links already, so it authorises the file too.
+	gLink.GET(":subid/file/:inboundId", a.subFile)
 	if a.jsonEnabled {
 		gJson := g.Group(a.subJsonPath)
 		gJson.GET(":subid", a.subJsons)
@@ -374,6 +377,27 @@ func dedupeEmails(emails []string) []string {
 }
 
 // subs handles HTTP requests for subscription links, returning either HTML page or base64-encoded subscription data.
+// subFile serves one inbound's config file for this subscription: the .conf a
+// WireGuard client imports, the .ovpn an OpenVPN one will. 404 for a pair with
+// nothing file-shaped, indistinguishable from a subscription that does not
+// exist — a guessable id must not confirm anything.
+func (a *SUBController) subFile(c *gin.Context) {
+	inboundId := fileShareInboundId(c.Param("inboundId"))
+	if inboundId == 0 {
+		c.Status(404)
+		return
+	}
+	_, host, _, _ := a.subService.ResolveRequest(c)
+	share, err := a.subService.ForRequest(host).FileShare(c.Param("subid"), inboundId, host)
+	if err != nil {
+		c.Status(404)
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="`+share.Filename+`"`)
+	c.Header("Cache-Control", "no-store")
+	c.Data(200, "application/octet-stream", []byte(share.Body))
+}
+
 func (a *SUBController) subs(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 	if a.maybeServeSubInfo(c) {
