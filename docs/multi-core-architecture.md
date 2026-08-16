@@ -423,10 +423,23 @@ aggregate-only and must never back a quota.
 | Pattern | Covers | Mechanism |
 |---|---|---|
 | **A — L7 chain** | xray → {xray, ocserv, wireguard, ssh, shadowsocks} | egress daemon exposes a local SOCKS port (or none: Xray's native `wireguard` outbound with `noKernelTun`); emit one outbound + routing rule. **Zero kernel state.** This is the majority of real demand and it is the pattern `injectMtprotoEgress` already implements. |
-| **B — marked egress** | xray → {openvpn, ikev2, amneziawg, ppp} | allocate `(mark, table)`; run the client daemon with `route-noexec`; install `default dev X` + `blackhole default` in the table from the daemon's up-hook; set `sockopt.mark` on the Xray outbound. |
+| **B — marked egress** | xray → {wg uplink, openvpn, ikev2, amneziawg, ppp} | emit a `freedom` outbound whose `sockopt.mark` is `0x0e000000 \| id`; the manager pairs an exact-match `ip rule fwmark` with the id's table and blackhole; a driver brings the uplink device up and fills the table with it. **Built** — the `wg-client` uplink shipped it, dialled by the panel's own engine rather than by a client daemon with `route-noexec` up-hooks. |
 | **C — L3 bridge** | any L3 inbound → anything | `ip rule iif <ingress-dev> table T` (`from <pool-or-/32>` where the core gives an inbound no device of its own); T holds `default dev <front>` over `blackhole default`. The front is another kernel tunnel, or a tun2socks / Xray-`tun` device fronting an L7 proxy. |
 
 Everything else in the matrix is a parameterisation of A, B or C.
+
+That sentence used to price Pattern B as a hand-build per daemon; the tree superseded that
+with a taxonomy. `internal/egress/driver.go` splits an egress type into `Driver` — what
+fills the id's routing table, the only mandatory half — plus `Provisioner` when the PANEL
+makes the device and `Injector` when the front is a device the core itself creates. The
+shapes map onto who owns the device: `xray-tun`'s front belongs to Xray and appears when
+Xray does, so it injects; a WireGuard uplink is dialled by this panel, so it provisions
+(`drivers/wgclient` — on the SAME engine that serves `pwg` inbounds, because an uplink and
+an inbound must never be two writers to one device namespace); an ikev2 uplink would be
+dialled by strongSwan, which makes its own device, so it is a `Driver` alone. Adding openvpn
+is choosing one of these three and adding one `Register` line to `newEgressDriverRegistry`
+(`internal/web/service/egress.go`) — explicit, never `init()`, for §3.4's reason. A type the
+registry does not serve is contained, never let out through the server's own identity.
 
 Three corrections to that table, each measured on 6.8.0-111:
 
@@ -457,79 +470,116 @@ root and no routing at all, which makes xray→ocserv trivially Pattern A.
 |---|---|---|---|
 | Egress id | 1…999 | DB primary key | yes |
 | Routing table | 30001…30999 | `30000 + id` | yes |
-| `ip rule` priority (data) | 31001…31999 | `31000 + id` | yes |
-| Tunnel device | `peg1`…`peg999` | `"peg" + id`, ≤15 chars | yes |
-| fwmark (data) | `0x0e000001`… | `0x0e000000 \| id` | no — no driver marks |
-| fwmark (tunnel's own outer socket) | `0x0e0f0001`… | `0x0e0f0000 \| id` | no |
-| fwmark mask | `0xff0fffff` | constant | no |
-| `ip rule` priority (outer) | 30001…30999 | `30000 + id` | no |
-| Local SOCKS port | 21001…21999 | bound to `127.0.0.1` only | no — Pattern A owns its own ports |
+| `ip rule` priority | 31001…31999 | `31000 + id` | yes |
+| Front device | `peg1`…`peg999` | `"peg" + id`, ≤15 chars | yes |
+| Uplink device | `pux1`…`pux999` | `"pux" + id` | yes |
+| Front gateway | `100.127.0.1/32`… | `DefaultGatewayBase` (100.127.0.0/16) + id | yes |
+| fwmark (data) | `0x0e000001`…`0x0e0003e7` | `0x0e000000 \| id`, exact match — no mask | yes |
+| Local SOCKS port | — | an `ExitSocksPort` handle names the core's own port | band not needed |
 | Shaping upload mirror | `pifb1`…`pifb999` | `"pifb" + id`, ≤15 chars | yes |
 
-**A shapeable core must name its device from one of these namespaces.** `shaping.Owns`
-is a round-tripping predicate over `pwg<id>` / `peg<id>` / `pifb<id>` and nothing else, so
-a `ShapingTarget.Device` outside them is refused rather than adopted — an operator's
-`pwgtest` is somebody else's interface and a tree installed on it throttles traffic this
-panel does not serve. This is the one place the "core #5 costs zero engine edits" claim is
-scoped by more than the Selector vocabulary: a new L3 core whose users are host prefixes on
-one device it owns still has to either take a device name from these namespaces or add its
-own prefix here. Turn the three constants into a registered list at that point; keep the
-round trip, because the ownership property is the round trip and never the literal prefix.
+A front and an uplink are opposite ends — one terminates traffic the panel received, the
+other originates traffic the panel sends — which is why `pux` is its own namespace rather
+than a `peg` variant, with its own round-trip (`alloc.go:33`). The gateway /32 exists for
+the return path alone: an addressless front fails reverse-path filtering, and only there.
 
-All marks are ≤ `0x7FFFFFFF` so they fit Xray's `int32` `mark` field. Assert at startup
-that the band is unused and that tables 30001–30999 are empty; check for collisions with
-`wg-quick`'s 51820+ and sing-box's defaults.
+**A shapeable core must name its device from a registered namespace.** What the previous
+revision said to do "at that point" is done: the three constants became
+`shaping.Namespaces` (`internal/shaping/namespaces.go`), which `NewManager` takes
+explicitly — a manager that decided its own would be a second opinion on which devices the
+panel owns. `pwg` and `peg` are built in because the panel derives them from an id itself;
+`pifb` is owned by construction, since this package creates the mirrors; a core that brings
+its own device namespace registers a prefix at wiring time. The ownership property survived
+the generalisation intact: `Owns` is still a round-tripping predicate and never a prefix
+test — an operator's `pwgtest` is somebody else's interface and a tree installed on it
+throttles traffic this panel does not serve — and `Register` enforces what keeps the round
+trip sound: lower-case letters only, so any device name splits at exactly one place and two
+namespaces can never both claim one device (`pwg1`+`2` versus `pwg`+`12`).
 
-**The mask was wrong and is corrected above: it is `0xff0fffff`, not `0xff00ffff`.**
-`0xff00ffff` zeroes the `0x0f0000` nibble that is the only thing separating the two mark
-bands, so `0x0e000000|id` and `0x0e0f0000|id` mask to the same value. Because the outer
-rule sits at the *lower* priority it is evaluated first, so it would have swallowed every
-data-marked packet into the tunnel's own underlay table — a silent routing loop for the
-first Pattern B type. The four unbuilt rows are deliberate: `xray-tun` marks nothing and
-opens no SOCKS port, and deriving constants no driver consumes means writing tests that
-certify dead code. Build them with the first Pattern B driver, against its real need.
+All marks are ≤ `0x7FFFFFFF` so they fit Xray's `int32` `mark` field. The asserts this
+section used to ask for are real: `Preflight` (`internal/egress/preflight.go`) refuses
+anything foreign in the reserved priority and table bands, refuses a gateway-base collision
+with an address already on the box, and refuses a strict `net.ipv4.conf.all.rp_filter`
+naming the sysctl. The `wg-quick` (51820+) and sing-box defaults sit outside 30001–30999
+entirely, so the one band walk subsumes that check. It is deliberately not part of the
+reconcile tick — drift repair would either shout the same refusal forever or delete objects
+it has no claim to; it answers at save time and on the Outbounds page instead.
+
+**Two mark rows died before shipping, and the corpse is instructive.** The design carried a
+second band for the tunnel's own outer socket (`0x0e0f0000 | id`) plus a shared mask, and
+the mask was corrected once already — `0xff00ffff` zeroed the only nibble separating the
+bands, and because the outer rule sits at the *lower* priority it would have swallowed every
+data-marked packet into the underlay table, a silent routing loop. The corrected mask then
+never shipped either, because the premise dissolved: the first marked driver's uplink is a
+WireGuard device, its outer UDP is kernel-encapsulated and carries a mark only when a
+`FirewallMark` is set on the device — §5.2's 9-marked/0-unmarked measurement — and
+`wgclient` sets none, so the outer traffic routes via `main` with no second rule and the
+loop the outer band existed to break cannot form. One exact-match band won: `ip rule fwmark
+Mark(id)` with no mask at all (`alloc.go:87`). A future daemon whose outer socket CAN
+inherit the data mark — OpenVPN over its own TCP, say — is the point at which an outer band
+gets built, against its real need.
 
 ### 5.4 What P6-3 decided (the `xray-tun` type)
 
 **Data model.** One table whose `type` column is the whole generalisation seam:
 
 ```
-egresses(id PK, type, enable, remark, target, settings JSON, created_at, updated_at)
-inbounds.egress_id INT NULL
+egresses(id PK, type, enable, remark, target, settings JSON, owner,
+         ingress_inbound_id UNIQUE NULL, created_at, updated_at)
+inbounds.egress_id INT NULL   -- dead; survives as the migration's backfill input
 ```
 
-`id` is the only allocation ever stored — `Table`, `Prio`, `Device` and `Gateway` are pure
-functions of it (`internal/egress/alloc.go`), and `ownedEgressID` round-trips a device name
-back through `Device` so `peg007` is somebody else's. `target` is the outbound-or-balancer
-tag, resolved by the same `routingTargetExists`/`routingTagIsBalancer` the three Pattern A
-bridges use. `settings` buys the next driver zero migrations.
+`id` is the only allocation ever stored — `Table`, `Prio`, `Device`, `Uplink`, `Mark` and
+`Gateway` are pure functions of it (`internal/egress/alloc.go`), and `ownedEgressID` /
+`ownedUplinkID` round-trip a device name back, so `peg007` is somebody else's. Two columns
+arrived with routing (§5.5): `owner` separates a front the panel provisions from an uplink
+an operator typed credentials into, and `ingress_inbound_id` — UNIQUE — names the inbound a
+front exists for, which makes one-front-per-ingress the schema's rule rather than a
+convention. `target` is the outbound-or-balancer tag a FRONT sends traffic to, resolved by
+the same `routingTargetExists`/`routingTagIsBalancer` the three Pattern A bridges use; an
+uplink IS the destination, so only a driver that injects is held to one. `settings` buys the
+next driver zero migrations.
 
-`egress_id` is a **column, not a settings key**, for three reasons and the third decides it:
-it is a relation; the reconciler enumerates it to compute desired kernel state; and anything
-rendered into an inbound's `settings`/`streamSettings` drags a REALITY inbound through
-`hot_diff.go`'s REALITY rule into a **full process restart**, so re-selecting an egress would
-drop every connection on the box. The id sequence is exempt from `resyncPostgresSequences`
-(`internal/database/db.go`): the resync sets a sequence back to `MAX(id)`, which after
-deleting the newest egress would hand the same id — and whatever of its kernel state
-survived — to the next one created.
+`egress_id` was the attachment column, and the attachment path is deleted (§5.5): the
+column survives only so `migrateRoutingIntent` (`internal/database/routing_migration.go`)
+can backfill old attachments into `routing_rules` rows plus panel-owned fronts, clearing
+each reference as it goes — it must, because the column now carries `fk_inbounds_egress …
+ON DELETE RESTRICT` (`db.go`) and a leftover reference would block the row's deletion. The
+third of its original three reasons outlived the column and decides where intent lives
+instead: anything rendered into an inbound's `settings`/`streamSettings` drags a REALITY
+inbound through `hot_diff.go`'s REALITY rule into a **full process restart**, which is why a
+rule is a `routing_rules` row and never a key on the inbound. The id sequence stays exempt
+from `resyncPostgresSequences` (`internal/database/db.go`): the resync sets a sequence back
+to `MAX(id)`, which after deleting the newest egress would hand the same id — and whatever
+of its kernel state survived — to the next one created.
 
-**Selection is `iif`, not `from <pool>`.** Cryptokey routing has already proven the peer's
-identity by the time the packet appears on `pwg<inboundID>`, so the ingress device is a
-stronger claim than a source prefix, needs no pool parsing, and survives an AllowedIPs edit.
-`from <pool-or-/32>` stays the documented fallback for a core that gives an inbound no device
-of its own. Locally generated traffic has no `iif`, so the front's own uplink sockets can
-never match the rule — the loop hazard upstream's `proxy/tun/README.md` warns about is
-structurally impossible here rather than avoided by careful metrics.
+**Selection is `iif` for what the kernel forwards, `fwmark` for what this host originates.**
+Cryptokey routing has already proven the peer's identity by the time the packet appears on
+`pwg<inboundID>`, so the ingress device is a stronger claim than a source prefix, needs no
+pool parsing, and survives an AllowedIPs edit; `from <pool-or-/32>` stays the documented
+fallback for a core that gives an inbound no device of its own. The second selector landed
+with uplinks: a core's own outbound socket has no input device to match on, so a driver sets
+`Fill.Marked` and the manager emits an exact-match `ip rule fwmark Mark(id)` into the same
+table — with the table, never on its own, because a mark with no rule to catch it routes via
+`main` and leaves with the host's own address. Locally generated traffic has no `iif`, so a
+front's own uplink sockets can never match the device rule — the loop hazard upstream's
+`proxy/tun/README.md` warns about is structurally impossible here rather than avoided by
+careful metrics.
 
-**Lifecycle follows the row, not the attachment count.** The front and its routing rule exist
-while the egress row is enabled, so attach/detach is exactly one `ip rule` per family and
-makes no core call at all. That removes the ordering hazard of tearing a front down while a
-rule still points at it. Attach is **synchronous** — a tick that caught up later would leave a
-just-attached inbound egressing with the server's own identity. A rule whose device is absent
-installs, lists as `[detached]` and reattaches by itself, so an attached-but-disabled inbound
-keeps its rule and boot is fail-closed by *ordering*: one reconcile pass runs before any core
-is started. Add order is blackhole → rules → core config → the one `default dev peg<id>`
-route; remove order is the exact reverse, because removing the rule is what stops traffic.
+**Lifecycle follows ownership, and the attach control is gone.** An operator uplink's kernel
+objects exist while its row is enabled; a panel-owned front's ROW follows the rules that
+need it — `ensureFronts` upserts one per device ingress a rule names, `reapFronts` retires
+the front of an ingress no rule names any more (`internal/web/service/routing.go`). The reap
+is not tidiness: measured, a front row outliving its last rule keeps selecting the device
+into a table holding only its blackhole, and deleting the last rule took a working WireGuard
+client from the internet to nothing — worse than the state before any rule existed. The
+synchronous property survived the attach path's deletion: every rule write passes through
+the one `converge`, which reconciles the kernel before returning — a tick that caught up
+later would leave a just-saved rule egressing with the server's own identity. A rule whose
+device is absent installs, lists as `[detached]` and reattaches by itself, and boot is
+fail-closed by *ordering*: one reconcile pass runs before any core is started. Add order is
+blackhole → rules → core config → the one `default dev <front>` route; remove order is the
+exact reverse, because removing the rule is what stops traffic.
 
 **An unresolvable target means dark, not direct.** Inheriting the three bridges' skip-and-log
 means no front is injected while the rules and blackhole stay, so the egress's clients are
@@ -540,14 +590,25 @@ wholly independent, so a v4-only implementation leaks every v6 flow silently. Ev
 blackhole and front route has a twin. Reverse-path filtering is the one v4-only knob —
 `/proc/sys/net/ipv6/conf/<dev>/rp_filter` does not exist.
 
-**Two host globals the panel reports and never owns.** `net.ipv4.conf.all.rp_filter` — the
-effective value is `max(all, dev)`, so a strict global cannot be lowered per device and an
-attach is refused naming the sysctl; and `net.ipv4.ip_forward`, which is a precondition of
-any L3 core reaching the internet at all, egress or not.
+**One host global the panel reports and never owns; two it took ownership of.**
+`net.ipv4.conf.all.rp_filter` stays a refusal — the effective value is `max(all, dev)`, so a
+strict global cannot be lowered per device and preflight names the sysctl (per-device the
+drivers do lower it: `2`, loose, on an uplink, because `0` is overridden on a hardened
+host). Forwarding switched sides: `EnsureHostForwarding` turns both families' knobs on the
+moment any `IngressDevice` inbound exists, persists them through a sysctl drop-in
+(`Plane.PersistSysctl`) so a reboot does not silently darken every tunnel, and never turns
+them off — docker or another VPN may depend on the same knob, and neither is the panel's to
+break. It owns one nft table too: `EnsureMasquerade` translates the forwarded traffic of L3
+ingress devices, because a client's in-tunnel source never survives upstream and a tunnel
+that hands out addresses and drops every packet is the alternative; the table is dropped
+when the last L3 inbound goes.
 
-**Master-local in v1.** Attaching an inbound with `NodeID != nil` is refused: the id is a
-global DB key while every resource it derives is per-host. Multi-node egress is its own
-phase, gated behind node sync carrying egress rows.
+**Master-local in v1.** A node inbound (`NodeID != nil`) is simply never a routing subject —
+`Subjects` filters on `node_id IS NULL`, and `DesiredInstances` filters node inbounds before
+any core is asked, so a core structurally cannot answer for an inbound living somewhere
+else. The reason is unchanged: an egress id is a global DB key while every resource it
+derives is per-host. Multi-node egress is its own phase, gated behind node sync carrying
+egress rows.
 
 **No per-user accounting is added.** By §5.1's invariant the `wgkernel` core's per-peer
 counters already bill correctly whatever egress the traffic took. The front's tag `peg<id>`
@@ -556,13 +617,100 @@ discarded rather than rolled into an inbound whose bytes were already counted at
 The mtproto bridge made the opposite choice — it reuses the inbound's own tag — and had to
 add rollup suppression to stop double-billing.
 
-**Known costs, accepted.** A fourth injection deepens the §12.4 debt: everything
-`GetXrayConfig` injects after the inbound list is invisible to the Xray core's own
-`Reconcile`. gVisor termination changes observable client behaviour — a connection to a dead
-host still completes a handshake and then RSTs — and ICMP is echo-only and answered locally,
-so traceroute through the egress is meaningless. Every kernel fact in §5.2 and §5.3 was
+**Known costs, accepted.** The injections deepen the §12.4 debt: everything `GetXrayConfig`
+injects after the inbound list — now including the routing compile's fronts and its
+synthesized `pex<id>` outbounds — is invisible to the Xray core's own `Reconcile`. gVisor
+termination changes observable client behaviour — a connection to a dead host still
+completes a handshake and then RSTs, ICMP is echo-only and answered locally, so traceroute
+through the egress is meaningless — and is now DISCLOSED where it is chosen: the rule editor
+warns that routing a kernel WireGuard inbound narrows it to TCP, UDP and ICMP
+(`RuleFormModal`'s fronted alert, keys `pages.xray.routing.l3Fronted*`). Every kernel fact in §5.2 and §5.3 was
 measured on 6.8.0-111 / iproute2 6.1.0 while §6 verifies against Ubuntu 26.04 / kernel 7.0 /
 iproute2 6.19; the semantics are long-stable but the gap travels with the numbers.
+
+### 5.5 Routing: intent in `routing_rules`, one pure compile (landed 2026-08)
+
+What §5.4 called attach grew into the general thing and then replaced it. Operator intent is
+one table — `routing_rules`: these inbounds, these criteria, this destination — compiled
+into BOTH artifacts that realise it, the Xray rules array and the kernel state §5.4's
+manager converges. The attach endpoint and service path are deleted, and the Egresses page
+went with them: what an operator authors is rules on the Xray page's Routing tab and exits
+on the Outbounds page. `inbounds.egress_id` survives only as the migration's input (§5.4).
+
+**The rule row** carries `sort_index` for first-match order, a scope (`selected` plus
+inbound IDs, or `all` — expanded at compile time to one rule per routable subject *at the
+rule's own position*, which keeps ordering exact across mechanisms), a criteria JSON object,
+and one of five destination kinds: `outbound`, `balancer`, `exit`, `direct`, `block`. Rules
+name inbounds by id, never by tag: tag-keyed rules are what an inbound rename used to
+silently widen to every inbound on the box. The save boundary refuses what the compile could
+not realise (`normalizeRule`) and what Xray would misroute: an unknown `outboundTag` does
+not fail, it falls back to the *first outbound*, so `destResolves` refuses a rule aimed at a
+tag nothing answers to — and `checkNotReferenced` refuses to delete or disable an exit while
+a rule routes to it, the same silent-direct hazard from the other side. Deleting an inbound
+prunes it from every rule (`PruneInbound`); a rule left naming nobody is disabled and
+labelled, never silently removed — the operator wrote it. The prune converges synchronously
+because a row is not kernel state: a detached `iif` rule re-attaches the moment a device of
+that name reappears, which `resyncPostgresSequences` re-handing inbound ids makes possible.
+
+**The compile** (`internal/routing/plan.go`) is pure by construction — no database, no
+netlink, no xray-core types — so a preview and a save must derive the same answer from the
+same input. Everything protocol-specific arrives already resolved: the service layer asks
+the core registry once, and `Plan` never learns which core it serves. It also never returns
+an error: a rule it cannot realise becomes a `Diag`, per (rule, subject) PAIR and never per
+row — one rule naming an Xray inbound and a WireGuard inbound is realised by two mechanisms,
+and one chip cannot describe both without lying about one of them. The mechanism vocabulary
+is closed: `proxy`, `inspected`, `marked`, `inert` — and `kernel`, reserved with zero
+emitters, the name held for a rule realised as a pure `ip rule` with no front. `Refusals`
+names the diag subset that must gate a save; today the boundary checks above do the gating
+and the editor carries the per-subject truth, so surfacing the pair diags there is the
+seam's unconsumed half.
+
+**What a core declares** (`internal/core/caps.go`): `RoutableIngress` — a static
+`IngressSelector` per kind (`internal`: an L7 proxy is its own router; `device`: decrypted
+traffic crosses a kernel interface) plus a live per-instance `IngressHandle` — and
+`RoutableEgress` — `ExitKinds`, a static `ExitHandleKind` (`device` / `socksPort` /
+`xrayOutbound`) and a live `ExitHandle` carrying a `SourceOwner`. Closed vocabularies like
+`Selector`'s: an unknown value reads as "cannot route", the fail-closed answer.
+`SourceOwnerPanel` is a refusal today (`KeyNoSnat`) — a kernel forward keeps the ingress
+client's inner source, which every upstream that is not a peer drops, and `egress.Plane` has
+no netfilter object to rewrite it. `wgkernel` answers `SourceOwnerDaemon` for its uplinks
+because the answer is about the path, not the device: what reaches an uplink is a marked
+socket this host ORIGINATED, so the kernel picks the uplink's own address at route lookup
+and nobody rewrites anything.
+
+**Fronts are provisioned, never authored.** An L3 subject a rule names is always fronted
+through Xray's gVisor tun in this phase — the kernel FIB has no domain or port vocabulary,
+so criteria can only match inside Xray. `ensureFronts` upserts exactly one panel-owned
+`egresses` row per named device ingress (UNIQUE on `ingress_inbound_id`; fronts and exits
+draw from ONE id sequence, so the two can never derive the same table, priority or device)
+and `reapFronts` retires a front with its last rule — §5.4's measured reason. The compile
+stamps a `geoip:private` guard strictly ahead of each front's rules, because a front is
+otherwise the one class of forwarded traffic exempt from the template's private block. The
+gVisor downgrade — TCP/UDP/ICMP only, ping answered locally — is disclosed in the rule
+editor the moment a fronted subject is picked, and the criteria mask says the same thing
+structurally: `user`, `domain` and `protocol` are withheld for a fronted subject, because
+Xray's tun handler builds a MemoryUser with no Email and an unsniffed packet carries no
+name, and a field offered there produces a rule that saves and never matches — the exact
+bug class this page exists to remove.
+
+**Exits are authored on the Outbounds page from what the registry declares.**
+`CoreView.ExitKinds` mirrors each bound core's `RoutableEgress` answer, so the picker is
+built from the registry rather than a list somebody maintains; the frontend keeps one module
+per authorable kind (`frontend/src/pages/xray/outbounds/exits/`) — the ONE place the core
+KIND and egress TYPE vocabularies meet, after a bug where both were the WireGuard uplink's
+and a second exit kind would have saved itself as a `wg-client` for the wrong driver to
+dial. A `DestExit` rule compiles by handle kind: `xrayOutbound` and `socksPort` are Pattern
+A; `device` is Pattern B and carries `compileRule`'s capitalised invariant — a marked
+outbound is only emitted for an exit whose row converges the matching `ip rule` fwmark,
+because a marked socket with no rule to catch it routes via `main` and leaves with the
+server's own address: direct rather than dark, inverting the one property `internal/egress`
+guarantees. The row is the tie — the same enabled egress that answers `ExitDevice` is the
+one whose `Fill` sets `Marked` — and `converge` reconciles the kernel before Xray restarts.
+
+The whole seam, priced for core #N: declare `RoutableIngress` and its inbounds appear as
+rule subjects; declare `RoutableEgress`, register an egress driver in one of §5.2's three
+shapes, and add the one kind→type line in `exitKindFor`, and its uplinks appear as
+destinations. Nothing in the compile, the manager or the editor learns the protocol's name.
 
 ---
 
