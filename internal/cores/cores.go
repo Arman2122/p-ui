@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
@@ -72,9 +73,34 @@ func ClientCredentialAuthority(kind core.Kind) (core.CredentialDeclarer, bool) {
 	return bound.Creds, true
 }
 
-// kindOwners resolves the kind-to-core map once. Empty Deps are enough: the map
-// is fixed at compile time, and nothing here touches a core's runtime state.
-var kindOwners = sync.OnceValue(func() *core.Registry {
+/*
+kindOwners is the registry every facade helper answers from.
+
+The one the panel WIRED, when it wired one: those are the adapter instances the
+jobs drive and the supervisor restarts, and an answer from a second set of
+instances is an answer about cores nothing is running — the facade and the jobs
+used to disagree exactly that way. The deps-free build survives only as the
+fallback for processes that never wire a runtime: the CLI, codegen, and tests
+that call a facade helper directly.
+*/
+func kindOwners() *core.Registry {
+	if reg := wiredRegistry.Load(); reg != nil {
+		return reg
+	}
+	return fallbackRegistry()
+}
+
+// Use hands the facade the registry the panel actually runs. Called where the
+// runtime manager is set, so the two can never name different instances.
+func Use(reg *core.Registry) {
+	if reg != nil {
+		wiredRegistry.Store(reg)
+	}
+}
+
+var wiredRegistry atomic.Pointer[core.Registry]
+
+var fallbackRegistry = sync.OnceValue(func() *core.Registry {
 	reg, err := Default(Deps{})
 	if err != nil {
 		panic("cores: " + err.Error())

@@ -537,6 +537,10 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		LoadInbound:    (&service.InboundService{}).GetInbound,
 		RenderInbound:  s.xrayService.RenderInbound,
 	}))
+	// The facade answers from THIS registry from here on — the same adapter
+	// instances the jobs drive. These two lines are one wiring: setting a
+	// manager without pointing the facade re-arms the two-registries split.
+	cores.Use(registry)
 	// The traffic and supervision jobs both work off this one registry.
 	s.cores = registry
 	job.Cores = registry
