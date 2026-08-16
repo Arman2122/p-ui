@@ -80,6 +80,18 @@ else
     echo "Failed to check the system OS, please contact the author!" >&2
     exit 1
 fi
+# A Debian-family derivative names its ancestry in ID_LIKE; fold it onto the
+# parent so every per-OS branch below serves it instead of silently skipping.
+if [[ "${release}" != "ubuntu" && "${release}" != "debian" ]]; then
+    for _like in ${ID_LIKE:-}; do
+        case "${_like}" in
+            ubuntu | debian)
+                release="${_like}"
+                break
+                ;;
+        esac
+    done
+fi
 echo "The OS release is: $release"
 
 os_version=""
