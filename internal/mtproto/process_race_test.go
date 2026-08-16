@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	procutil "github.com/Arman2122/p-ui/internal/util/proc"
 )
 
 func TestProcessLifecycleFieldsRaceSafe(t *testing.T) {
@@ -94,7 +96,7 @@ func TestProcessStatusDuringExit(t *testing.T) {
 	if err := os.WriteFile(exitFile, nil, 0o600); err != nil {
 		t.Fatalf("trigger exit: %v", err)
 	}
-	if err := waitForExit(done, time.Second); err != nil {
+	if err := procutil.WaitForExit(done, time.Second, "mtg test"); err != nil {
 		t.Fatalf("wait for process exit: %v", err)
 	}
 	if proc.IsRunning() {

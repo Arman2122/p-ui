@@ -17,11 +17,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/proc"
 )
 
 // GetBinaryName returns the mtg binary filename for the current arch, matching
@@ -237,34 +237,5 @@ func (p *Process) Stop() error {
 		return errors.New("mtg is not running")
 	}
 
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		if errors.Is(err, os.ErrProcessDone) {
-			return waitForExit(done, forceStopTimeout)
-		}
-		return err
-	}
-
-	if err := waitForExit(done, gracefulStopTimeout); err == nil {
-		return nil
-	}
-
-	logger.Warning("mtproto: mtg did not stop after SIGTERM, killing process")
-	if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return err
-	}
-	return waitForExit(done, forceStopTimeout)
-}
-
-func waitForExit(done <-chan struct{}, timeout time.Duration) error {
-	if done == nil {
-		return nil
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-done:
-		return nil
-	case <-timer.C:
-		return fmt.Errorf("timed out waiting for mtg process to stop after %s", timeout)
-	}
+	return proc.Stop(cmd, done, gracefulStopTimeout, forceStopTimeout, "mtg process")
 }

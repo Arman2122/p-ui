@@ -16,12 +16,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/proc"
 )
 
 // GetBinaryName returns the Xray binary filename for the current OS and architecture.
@@ -702,7 +702,7 @@ func (p *process) Stop() error {
 	// Snapshot cmd once, then run the blocking Signal/Kill/Wait on the local copy
 	// without holding the lock.
 	p.mu.RLock()
-	cmd := p.cmd
+	cmd, done := p.cmd, p.done
 	p.mu.RUnlock()
 	if cmd == nil || cmd.Process == nil {
 		return errors.New("xray is not running")
@@ -718,41 +718,7 @@ func (p *process) Stop() error {
 		}
 	}
 
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		if errors.Is(err, os.ErrProcessDone) {
-			return p.waitForExit(xrayForceStopTimeout)
-		}
-		return err
-	}
-
-	if err := p.waitForExit(xrayGracefulStopTimeout); err == nil {
-		return nil
-	}
-
-	logger.Warning("xray-core did not stop after SIGTERM, killing process")
-	if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return err
-	}
-	return p.waitForExit(xrayForceStopTimeout)
-}
-
-func (p *process) waitForExit(timeout time.Duration) error {
-	p.mu.RLock()
-	done := p.done
-	p.mu.RUnlock()
-	if done == nil {
-		return nil
-	}
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	select {
-	case <-done:
-		return nil
-	case <-timer.C:
-		return common.NewErrorf("timed out waiting for xray-core process to stop after %s", timeout)
-	}
+	return proc.Stop(cmd, done, xrayGracefulStopTimeout, xrayForceStopTimeout, "xray-core process")
 }
 
 const (

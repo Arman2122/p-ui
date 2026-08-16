@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	procutil "github.com/Arman2122/p-ui/internal/util/proc"
+
 	"github.com/op/go-logging"
 
 	puilogger "github.com/Arman2122/p-ui/internal/logger"
@@ -142,7 +144,7 @@ func startProcessHelper(t *testing.T, mode string) *process {
 		if p.IsRunning() {
 			p.intentionalStop.Store(true)
 			_ = p.cmd.Process.Kill()
-			_ = p.waitForExit(2 * time.Second)
+			_ = procutil.WaitForExit(p.done, 2*time.Second, "xray test child")
 		}
 	})
 
