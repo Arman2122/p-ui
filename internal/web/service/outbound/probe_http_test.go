@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -136,7 +135,7 @@ func withStubProcess(t *testing.T, factory func(cfg *xray.Config, configPath str
 	t.Cleanup(func() { newBatchProcess = orig })
 }
 
-func withEgressTraceProbe(t *testing.T, probe func(*url.URL) *TestEgressResult) {
+func withEgressTraceProbe(t *testing.T, probe func(probeRoute) *TestEgressResult) {
 	t.Helper()
 	orig := egressTraceProbe
 	egressTraceProbe = probe
@@ -425,7 +424,7 @@ func TestTestOutboundsHTTPBatchThroughStubSocks(t *testing.T) {
 		proc = &stubProcess{cfg: cfg, serveSocks: true}
 		return proc
 	})
-	withEgressTraceProbe(t, func(*url.URL) *TestEgressResult {
+	withEgressTraceProbe(t, func(probeRoute) *TestEgressResult {
 		return &TestEgressResult{IPv4: "198.51.100.1", Country: "ZZ", Warp: "off"}
 	})
 
@@ -539,7 +538,7 @@ func TestTestOutboundsTCPModeForcesUDPToHTTPProbe(t *testing.T) {
 	withStubProcess(t, func(cfg *xray.Config, configPath string) batchProcess {
 		return &stubProcess{cfg: cfg, serveSocks: true}
 	})
-	withEgressTraceProbe(t, func(*url.URL) *TestEgressResult {
+	withEgressTraceProbe(t, func(probeRoute) *TestEgressResult {
 		return &TestEgressResult{IPv4: "198.51.100.2", Country: "ZZ", Warp: "off"}
 	})
 
@@ -590,7 +589,7 @@ func TestProbeThroughSocksTransportFailure(t *testing.T) {
 	}()
 
 	var result TestOutboundResult
-	probeThroughSocks(l.Addr().(*net.TCPAddr).Port, "http://127.0.0.1:9/", 2*time.Second, false, &result)
+	probeThroughRoute(socksRoute{port: l.Addr().(*net.TCPAddr).Port}, "http://127.0.0.1:9/", 2*time.Second, false, &result)
 	if result.Success || result.Error == "" {
 		t.Errorf("expected transport failure, got %+v", result)
 	}

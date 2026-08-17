@@ -13,7 +13,6 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -320,7 +319,7 @@ func runHTTPProbeBatch(items []*httpBatchItem, allOutbounds []any, testURL strin
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			probeThroughSocks(port, testURL, httpProbeTimeout, realDelay, it.result)
+			probeThroughRoute(socksRoute{port: port}, testURL, httpProbeTimeout, realDelay, it.result)
 		}(items[i], ports[i])
 	}
 	wg.Wait()
@@ -460,13 +459,11 @@ func outboundsContainTag(outbounds []any, tag string) bool {
 // the established tunnel — falling back to the cold total if the warm request
 // fails. The test URL's hostname is resolved by xray (Go's SOCKS5 client
 // sends the domain to the proxy), so DNS goes through the outbound too.
-func probeThroughSocks(port int, testURL string, timeout time.Duration, realDelay bool, result *TestOutboundResult) {
-	proxyURL := &url.URL{Scheme: "socks5", Host: net.JoinHostPort("127.0.0.1", strconv.Itoa(port))}
-	tr := &http.Transport{
-		Proxy:               http.ProxyURL(proxyURL),
-		MaxIdleConns:        1,
-		MaxIdleConnsPerHost: 1,
-		IdleConnTimeout:     timeout,
+func probeThroughRoute(route probeRoute, testURL string, timeout time.Duration, realDelay bool, result *TestOutboundResult) {
+	tr, err := route.newTransport(nil)
+	if err != nil {
+		result.Error = err.Error()
+		return
 	}
 	defer tr.CloseIdleConnections()
 	client := &http.Client{
@@ -551,7 +548,7 @@ func probeThroughSocks(port int, testURL string, timeout time.Duration, realDela
 	}
 	result.Delay = max(delay, 1)
 	if !realDelay {
-		result.Egress = egressTraceProbe(proxyURL)
+		result.Egress = egressTraceProbe(route)
 	}
 }
 
@@ -560,17 +557,15 @@ func probeThroughSocks(port int, testURL string, timeout time.Duration, realDela
 // Cloudflare address directly, when available, while keeping the TLS SNI as
 // cloudflare.com. Failures are intentionally ignored by the caller: egress
 // metadata is diagnostic, not reachability.
-func probeEgressTrace(proxyURL *url.URL) *TestEgressResult {
+func probeEgressTrace(route probeRoute) *TestEgressResult {
 	ipv4, ipv6 := cloudflareTraceTargets()
 	if ipv4 == nil && ipv6 == nil {
 		return nil
 	}
 
-	tr := &http.Transport{
-		Proxy: http.ProxyURL(proxyURL),
-		TLSClientConfig: &tls.Config{
-			ServerName: egressTraceHost,
-		},
+	tr, err := route.newTransport(&tls.Config{ServerName: egressTraceHost})
+	if err != nil {
+		return nil
 	}
 	defer tr.CloseIdleConnections()
 

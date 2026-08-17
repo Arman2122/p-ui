@@ -28,6 +28,7 @@ func (a *EgressController) initRouter(g *gin.RouterGroup) {
 	g.GET("/get/:id", a.get)
 	g.GET("/preflight", a.preflight)
 
+	g.POST("/test", a.test)
 	g.POST("/add", a.add)
 	g.POST("/update/:id", a.update)
 	g.POST("/del/:id", a.del)
@@ -74,6 +75,26 @@ func (a *EgressController) preflight(c *gin.Context) {
 		"ok": report.OK(), "refusals": refusals, "notes": notes,
 		"forwardingNotes": a.egressService.ForwardingNotes(c.Request.Context()),
 	}, nil)
+}
+
+// test times a real request out through each egress, so an uplink's latency
+// means what an outbound's does. A row that cannot be measured honestly answers
+// with why, never with a number.
+func (a *EgressController) test(c *gin.Context) {
+	var request struct {
+		Ids  []int  `json:"ids"`
+		Mode string `json:"mode"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	results, err := a.egressService.TestEgresses(c.Request.Context(), request.Ids, request.Mode)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	jsonObj(c, results, nil)
 }
 
 func (a *EgressController) add(c *gin.Context) {
