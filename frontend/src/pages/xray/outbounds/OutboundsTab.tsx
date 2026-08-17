@@ -52,7 +52,7 @@ import type { XraySettingsValue, SetTemplate, OutboundTestMode, OutboundTestStat
 import './OutboundsTab.css';
 
 import type { OutboundRow } from './outbounds-tab-types';
-import { exitAsOutboundRow, originalOutboundIndex } from './outbounds-tab-helpers';
+import { exitAsOutboundRow, isUntestable, originalOutboundIndex } from './outbounds-tab-helpers';
 import { useOutboundColumns } from './useOutboundColumns';
 import OutboundCardList from './OutboundCardList';
 import SubscriptionOutbounds from './SubscriptionOutbounds';
@@ -101,7 +101,7 @@ interface OutboundsTabProps {
   onResetTraffic: (tag: string) => void;
   onTest: (index: number, mode: string) => void;
   onTestSubscription: (outbound: Record<string, unknown>, mode: string) => void;
-  onTestAll: (mode: string) => void;
+  onTestAll: (mode: string, exitKeys?: number[]) => void;
   onShowWarp: () => void;
   onShowNord: () => void;
   onRefreshXrayData?: () => void;
@@ -185,6 +185,12 @@ export default function OutboundsTab({
   /* Exits come last and the move/delete handlers still address `rows` by
      position, so an outbound's index means the same thing it always did. */
   const tableRows = useMemo(() => [...rows, ...exitRows], [rows, exitRows]);
+  /* Test All has to be told which exits to probe: they are not in the xray
+     config, so the hook that owns the results cannot find them by itself. */
+  const testableExitKeys = useMemo(
+    () => exitRows.filter((row) => !isUntestable(row)).map((row) => row.key),
+    [exitRows],
+  );
 
   const dialerProxyTags = useMemo(() => {
     const tags = new Set<string>();
@@ -577,7 +583,7 @@ export default function OutboundsTab({
                   <Radio.Button value="real">{t('pages.xray.outbound.modeRealDelay')}</Radio.Button>
                 </Radio.Group>
               </Tooltip>
-              <Button type="primary" loading={testingAll} icon={<PlayCircleOutlined />} onClick={() => onTestAll(testMode)}>
+              <Button type="primary" loading={testingAll} icon={<PlayCircleOutlined />} onClick={() => onTestAll(testMode, testableExitKeys)}>
                 {!isMobile && t('pages.xray.outbound.testAll')}
               </Button>
               <Popconfirm

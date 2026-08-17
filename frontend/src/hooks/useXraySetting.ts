@@ -86,7 +86,7 @@ export interface UseXraySettingResult {
     outbound: unknown,
     mode?: string,
   ) => Promise<OutboundTestResult | null>;
-  testAllOutbounds: (mode?: string) => Promise<void>;
+  testAllOutbounds: (mode?: string, exitKeys?: number[]) => Promise<void>;
   saveAll: () => Promise<void>;
   resetToDefault: () => Promise<void>;
 }
@@ -329,7 +329,11 @@ export function useXraySetting(): UseXraySettingResult {
       }));
       let result: OutboundTestResult;
       try {
-        const raw = await HttpUtil.post('/panel/api/egresses/test', { ids: [id], mode });
+        // JSON, like every other /egresses endpoint: form-encoding turns ids
+        // into repeated keys and the body never reaches the decoder intact.
+        const raw = await HttpUtil.post('/panel/api/egresses/test', { ids: [id], mode }, {
+          headers: { 'Content-Type': 'application/json' },
+        });
         const msg = parseMsg(raw, OutboundTestResultListSchema, 'egresses/test');
         result = (msg?.success && Array.isArray(msg.obj) ? msg.obj[0] : null)
           ?? { success: false, error: msg?.msg || 'no result', mode: effMode };
@@ -359,13 +363,15 @@ export function useXraySetting(): UseXraySettingResult {
     [postOutboundTestBatch],
   );
 
-  const testAllOutbounds = useCallback(async (mode = 'tcp') => {
+  const testAllOutbounds = useCallback(async (mode = 'tcp', exitKeys: number[] = []) => {
     // Template outbounds key their results by index (outboundTestStates);
     // subscription outbounds aren't in the template, so they key by tag
     // (subscriptionTestStates). Both go through the same probe endpoint.
+    // Exits are neither: their keys are passed in by the table that lists them,
+    // because they live in the egress rows rather than in the xray config.
     const templateList = templateSettingsRef.current?.outbounds || [];
     const subList = (subscriptionOutboundsRef.current || []) as Array<{ tag?: string; protocol?: string }>;
-    if ((templateList.length === 0 && subList.length === 0) || testingAll) return;
+    if ((templateList.length === 0 && subList.length === 0 && exitKeys.length === 0) || testingAll) return;
     setTestingAll(true);
     try {
       type TcpEntry =
@@ -458,11 +464,24 @@ export function useXraySetting(): UseXraySettingResult {
         await runTplHttpLane();
         await runSubHttpLane();
       };
-      await Promise.all([runTcpLane(), runHttpLane()]);
+      /* Exits take no xray instance and so no batch lock, but each one holds a
+         connection open through its own tunnel for seconds — a few at a time. */
+      const runExitLane = async () => {
+        const queue = [...exitKeys];
+        const worker = async () => {
+          while (queue.length > 0) {
+            const key = queue.shift();
+            if (key === undefined) break;
+            await testExit(key, mode);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => worker()));
+      };
+      await Promise.all([runTcpLane(), runHttpLane(), runExitLane()]);
     } finally {
       setTestingAll(false);
     }
-  }, [testingAll, testOutbound, testSubscriptionOutbound, postOutboundTestBatch]);
+  }, [testingAll, testOutbound, testExit, testSubscriptionOutbound, postOutboundTestBatch]);
 
   const saveDisabled = savedXraySetting === xraySetting
     && savedOutboundTestUrl === normalizeOutboundTestUrl(outboundTestUrl);
