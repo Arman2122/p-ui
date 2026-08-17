@@ -13,9 +13,9 @@ Mode "tcp" is promoted to the HTTP probe. A bare dial proves nothing about a
 WireGuard uplink, whose peer answers no unauthenticated packet, which is the
 same reason the outbound lane forces UDP protocols down this path.
 */
-func ProbeMarked(mark uint32, mode string, result *TestOutboundResult) {
+func ProbeMarked(mark uint32, network, mode string, result *TestOutboundResult) {
 	result.Mode = MarkedProbeMode(mode)
-	probeThroughRoute(markRoute{mark: mark, timeout: httpProbeTimeout}, defaultTestURL, httpProbeTimeout, mode == "real", result)
+	probeThroughRoute(markRoute{mark: mark, network: network, timeout: httpProbeTimeout}, defaultTestURL, httpProbeTimeout, mode == "real", result)
 }
 
 // MarkedProbeMode is the probe a marked route would actually run, which the
