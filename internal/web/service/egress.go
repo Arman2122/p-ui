@@ -291,6 +291,11 @@ func deadTargets(rows []*model.Egress) []string {
 		if !row.Enable {
 			continue
 		}
+		// Only a front has a target to lose, exactly as validate() decides it. An
+		// uplink IS the destination, so asking it resolves "" and condemns the row.
+		if !egressFronts(row.Type) {
+			continue
+		}
 		if resolves, err := egressTargetResolves(row.Target); err == nil && !resolves {
 			notes = append(notes, fmt.Sprintf(
 				"egress %d targets %q, which is no longer an outbound or a balancer tag, so everything attached to it is contained rather than routed",
@@ -358,8 +363,26 @@ func egressRow(row *model.Egress) egress.Egress {
 	return converted
 }
 
+/*
+egressFronts reports whether this type needs an outbound tag to send traffic to.
+
+Only a FRONT does: it terminates into a core and injects a rule pointing at one,
+so an unresolvable tag would leave it dark. An uplink IS the destination, and
+asking it which outbound to forward to is meaningless. The one answer, because
+save and preflight asking it separately is how an uplink came to be reported as
+containing the traffic it was in fact carrying.
+*/
+func egressFronts(egressType string) bool {
+	driver, known := egressDriverRegistry.For(egressType)
+	if !known {
+		return false
+	}
+	_, fronts := driver.(egress.Injector)
+	return fronts
+}
+
 func (s *EgressService) validate(row *model.Egress) error {
-	driver, known := egressDriverRegistry.For(row.Type)
+	_, known := egressDriverRegistry.For(row.Type)
 	if !known {
 		return fmt.Errorf("%w: %q — this build serves %v", ErrEgressUnknownType, row.Type, egressDriverRegistry.Types())
 	}
@@ -368,10 +391,7 @@ func (s *EgressService) validate(row *model.Egress) error {
 	if !row.Enable {
 		return nil
 	}
-	// Only a FRONT needs a target. It terminates into a core and injects a rule
-	// pointing at one, so an unresolvable tag would leave it dark. An uplink IS
-	// the destination -- asking it which outbound to forward to is meaningless.
-	if _, fronts := driver.(egress.Injector); !fronts {
+	if !egressFronts(row.Type) {
 		return nil
 	}
 	resolves, err := egressTargetResolves(row.Target)

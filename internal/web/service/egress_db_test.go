@@ -228,6 +228,32 @@ func TestEgressPreflightNamesARowWhoseTargetDied(t *testing.T) {
 	}
 }
 
+/*
+An uplink IS the destination, so it has no outbound tag to lose.
+
+validate() has always known that — it returns before the target check for any
+driver that is not an Injector. deadTargets() did not, so every enabled uplink
+was reported as targeting "" and, worse, as containing the traffic attached to
+it: the one row whose exit was working was the row the banner condemned.
+*/
+func TestEgressPreflightIsQuietAboutAnUplinksMissingTarget(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+	service := &EgressService{}
+
+	uplink := seedEgress(t, &model.Egress{
+		Type: "wg-client", Enable: true, Remark: "US-sfo | Surfshark",
+		Settings: `{"privateKey":"a","address":["10.2.0.2/32"],"publicKey":"b","endpoint":"us-sfo.example:51820"}`,
+	})
+
+	report := service.Preflight(context.Background())
+	for _, note := range report.Notes {
+		if strings.Contains(note, "egress "+strconv.Itoa(uplink.Id)+" targets") {
+			t.Fatalf("an uplink has no outbound target to lose, but preflight said: %q", note)
+		}
+	}
+}
+
 func TestEgressSchemaConstraints(t *testing.T) {
 	initTestDB(t)
 	db := database.GetDB()
