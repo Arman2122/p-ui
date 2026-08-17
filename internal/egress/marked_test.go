@@ -45,12 +45,46 @@ func TestMarkedExitReportsNoDeviceWhileContained(t *testing.T) {
 		t.Fatalf("Ensure with the device gone: %v", err)
 	}
 
-	device, err := manager.MarkedExit(ctx, 1)
+	routed, err := manager.MarkedExit(ctx, 1)
 	if err != nil {
 		t.Fatalf("MarkedExit while contained = %v, want nil", err)
 	}
-	if device != "" {
-		t.Fatalf("MarkedExit = %q, want empty: the device is gone, so only the blackhole is in the table", device)
+	if routed.Device != "" {
+		t.Fatalf("MarkedExit = %q, want empty: the device is gone, so only the blackhole is in the table", routed.Device)
+	}
+}
+
+/*
+The probe must dial only the families the egress actually carries.
+
+Measured on the test host: a Surfshark uplink holding one v4 address gets a v4
+route and a v6 blackhole, and a probe left to Go's happy-eyeballs picked the
+AAAA, found no v6 source to select and failed with "connect: invalid argument".
+A working exit, reported as broken, in the language of a syscall.
+*/
+func TestMarkedExitNetworkFollowsTheFamiliesCarried(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		route       egress.MarkedRoute
+		wantNetwork string
+		wantRouted  bool
+	}{
+		{"a v4-only uplink", egress.MarkedRoute{Device: "pux1", V4: true}, "tcp4", true},
+		{"a v6-only uplink", egress.MarkedRoute{Device: "pux1", V6: true}, "tcp6", true},
+		{"dual stack", egress.MarkedRoute{Device: "pux1", V4: true, V6: true}, "tcp", true},
+		{"caught but contained", egress.MarkedRoute{}, "", false},
+		// A device with no family routed drops everything inside the table, so
+		// there is nothing to time and nothing to dial.
+		{"a device with neither family", egress.MarkedRoute{Device: "pux1"}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.route.Network(); got != tc.wantNetwork {
+				t.Fatalf("Network() = %q, want %q", got, tc.wantNetwork)
+			}
+			if got := tc.route.Routed(); got != tc.wantRouted {
+				t.Fatalf("Routed() = %v, want %v", got, tc.wantRouted)
+			}
+		})
 	}
 }
 
@@ -68,11 +102,11 @@ func TestMarkedExitNamesTheUplinkDevice(t *testing.T) {
 			t.Fatalf("Ensure: %v", err)
 		}
 	}
-	device, err := manager.MarkedExit(ctx, 1)
+	routed, err := manager.MarkedExit(ctx, 1)
 	if err != nil {
 		t.Fatalf("MarkedExit: %v", err)
 	}
-	if device != egress.Uplink(1) {
-		t.Fatalf("MarkedExit = %q, want %q", device, egress.Uplink(1))
+	if routed.Device != egress.Uplink(1) {
+		t.Fatalf("MarkedExit = %q, want %q", routed.Device, egress.Uplink(1))
 	}
 }

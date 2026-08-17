@@ -71,17 +71,20 @@ func (s *EgressService) probeOne(ctx context.Context, row *model.Egress, id int,
 		return result
 	}
 
-	device, err := egressManager.MarkedExit(ctx, id)
+	routed, err := egressManager.MarkedExit(ctx, id)
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
-	if device == "" {
+	if !routed.Routed() {
 		result.Error = ErrEgressProbeContained.Error()
 		return result
 	}
 
-	outbound.ProbeMarked(egress.Mark(id), mode, result)
+	// Pinned to the families the egress carries: a v4-only uplink left to Go's
+	// happy-eyeballs is probed over its own v6 blackhole and reports a working
+	// exit as "invalid argument".
+	outbound.ProbeMarked(egress.Mark(id), routed.Network(), mode, result)
 	return result
 }
 
