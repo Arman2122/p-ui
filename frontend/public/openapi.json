@@ -10130,6 +10130,68 @@
         }
       }
     },
+    "/panel/api/egresses/test": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Time a real request out through each egress and report the exit it came from, so an uplink answers the same question an outbound does. mode is \"tcp\", \"http\" or \"real\"; \"tcp\" is promoted to the HTTP probe because a bare dial proves nothing about a tunnel whose peer ignores unauthenticated packets. Every probe is gated on the host agreeing that this egress's mark reaches its own device: a mark no rule catches falls through to the main table and leaves with the server's own address, so a disabled row, a contained one, or one whose device is gone answers with why rather than with a latency that measured the direct path. A front is refused outright — it hands its traffic to an outbound tag, and that outbound is testable on its own row.",
+        "operationId": "post_panel_api_egresses_test",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "ids": [
+                  18
+                ],
+                "mode": "real"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "tag": "US-sfo | Surfshark (kernel)",
+                      "mode": "real",
+                      "success": true,
+                      "delay": 142,
+                      "httpStatus": 204,
+                      "egress": {
+                        "ipv4": "169.150.196.10",
+                        "country": "US"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/egresses/del/{id}": {
       "post": {
         "tags": [

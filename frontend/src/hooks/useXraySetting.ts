@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { HttpUtil, Msg } from '@/utils';
 import { parseMsg } from '@/utils/zodValidate';
 import { keys } from '@/api/queryKeys';
+import { exitIdFromKey } from '@/schemas/api/egress';
 import {
   OutboundTrafficListSchema,
   OutboundTestResultListSchema,
@@ -79,6 +80,7 @@ export interface UseXraySettingResult {
     outbound: unknown,
     mode?: string,
   ) => Promise<OutboundTestResult | null>;
+  testExit: (key: number, mode?: string) => Promise<OutboundTestResult | null>;
   testSubscriptionOutbound: (
     tag: string,
     outbound: unknown,
@@ -314,6 +316,32 @@ export function useXraySetting(): UseXraySettingResult {
     [postOutboundTestBatch],
   );
 
+  /* A host-level exit is not in templateSettings.outbounds and has no SOCKS
+     inbound to route through, so it is timed by its own endpoint — but it lands
+     in the same state map, because the table it renders in is the same table. */
+  const testExit = useCallback(
+    async (key: number, mode = 'tcp'): Promise<OutboundTestResult | null> => {
+      const id = exitIdFromKey(key);
+      const effMode = mode === 'tcp' ? 'http' : mode;
+      setOutboundTestStates((prev) => ({
+        ...prev,
+        [key]: { testing: true, result: null, mode: effMode },
+      }));
+      let result: OutboundTestResult;
+      try {
+        const raw = await HttpUtil.post('/panel/api/egresses/test', { ids: [id], mode });
+        const msg = parseMsg(raw, OutboundTestResultListSchema, 'egresses/test');
+        result = (msg?.success && Array.isArray(msg.obj) ? msg.obj[0] : null)
+          ?? { success: false, error: msg?.msg || 'no result', mode: effMode };
+      } catch (e) {
+        result = { success: false, error: String(e), mode: effMode };
+      }
+      setOutboundTestStates((prev) => ({ ...prev, [key]: { testing: false, result } }));
+      return result.success ? result : null;
+    },
+    [],
+  );
+
   // Test a subscription outbound (not present in templateSettings.outbounds);
   // results are keyed by tag in subscriptionTestStates.
   const testSubscriptionOutbound = useCallback(
@@ -466,6 +494,7 @@ export function useXraySetting(): UseXraySettingResult {
       fetchOutboundsTraffic: fetchOutboundsTrafficCb,
       resetOutboundsTraffic,
       testOutbound,
+      testExit,
       testSubscriptionOutbound,
       testAllOutbounds,
       saveAll,
@@ -495,6 +524,7 @@ export function useXraySetting(): UseXraySettingResult {
       fetchOutboundsTrafficCb,
       resetOutboundsTraffic,
       testOutbound,
+      testExit,
       testSubscriptionOutbound,
       testAllOutbounds,
       saveAll,

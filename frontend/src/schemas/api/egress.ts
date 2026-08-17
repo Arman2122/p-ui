@@ -7,6 +7,14 @@ export type EgressRecord = Egress;
 
 export const EgressListSchema = z.array(EgressSchema);
 
+/* An exit shares the outbound table, so it needs a key in the same space that
+   cannot collide with an outbound's array index. Above every plausible index,
+   and reversible, because the row's id is what the test endpoint is asked for. */
+export const EXIT_KEY_BASE = 1_000_000;
+export const exitKeyFor = (id: number): number => EXIT_KEY_BASE + id;
+export const exitIdFromKey = (key: number): number => key - EXIT_KEY_BASE;
+export const isExitKey = (key: number): boolean => key >= EXIT_KEY_BASE;
+
 /* What stops this host carrying an egress. Refusals and notes are backend
    sentences naming a sysctl or a device, so they are rendered, never translated. */
 export const EgressPreflightSchema = z.object({

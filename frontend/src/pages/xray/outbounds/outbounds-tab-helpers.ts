@@ -4,6 +4,8 @@ import { OutboundProtocols as Protocols } from '@/schemas/primitives';
 import { isUdpOutbound } from '@/hooks/useXraySetting';
 import type { OutboundTestMode, OutboundTestState, OutboundTrafficRow } from '@/hooks/useXraySetting';
 
+import { EGRESS_TYPE_UPLINK, UplinkSettingsSchema, exitKeyFor, type EgressRecord } from '@/schemas/api/egress';
+
 import type { OutboundRow } from './outbounds-tab-types';
 
 /**
@@ -19,7 +21,34 @@ export function originalOutboundIndex(rows: OutboundRow[], positionalIndex: numb
   return row ? row.key : positionalIndex;
 }
 
+/* An exit's address is where it dials, which for an uplink is its endpoint and
+   for a front is the outbound tag it hands traffic to. */
+export function exitAddress(row: EgressRecord): string {
+  if (row.target) return row.target;
+  try {
+    const parsed = UplinkSettingsSchema.safeParse(JSON.parse(row.settings || '{}'));
+    return parsed.success ? parsed.data.endpoint : '';
+  } catch {
+    return '';
+  }
+}
+
+/* An exit rendered as a table row. The protocol reads as what an operator chose
+   in the picker, not as the driver's type string. */
+export function exitAsOutboundRow(row: EgressRecord): OutboundRow {
+  return {
+    key: exitKeyFor(row.id),
+    tag: row.remark || `exit #${row.id}`,
+    protocol: row.type === EGRESS_TYPE_UPLINK ? 'wireguard (kernel)' : row.type,
+    egress: row,
+  };
+}
+
 export function outboundAddresses(o: OutboundRow): string[] {
+  if (o.egress) {
+    const where = exitAddress(o.egress);
+    return where ? [where] : [];
+  }
   const settings = o.settings as Record<string, unknown> | undefined;
   switch (o.protocol) {
     case Protocols.VMess: {
@@ -49,6 +78,9 @@ export function outboundAddresses(o: OutboundRow): string[] {
 
 export function isUntestable(o: OutboundRow): boolean {
   if (!o) return true;
+  // A disabled exit installs nothing, and a front is measured by testing the
+  // outbound it targets — the backend refuses both rather than timing them.
+  if (o.egress) return !o.egress.enable || o.egress.type !== EGRESS_TYPE_UPLINK;
   if (o.protocol === Protocols.Blackhole || o.protocol === Protocols.Loopback || o.tag === 'blocked') return true;
   // freedom ("direct") and dns aren't proxies — a TCP dial has no endpoint and
   // an HTTP probe would only measure the host's own direct reachability, so
