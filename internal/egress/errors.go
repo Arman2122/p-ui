@@ -15,11 +15,14 @@ var (
 	// ipv6.disable=1 leaves it: nothing in that family can be installed, ever.
 	ErrFamilyUnsupported = errors.New("egress: this kernel does not carry the address family")
 	ErrIDOutOfRange      = errors.New("egress: the id is outside the reserved band")
-	ErrGatewayBase       = errors.New("egress: the gateway base cannot serve the id band")
-	ErrUnknownDriver     = errors.New("egress: no driver is registered for this type")
-	ErrDuplicateDriver   = errors.New("egress: a driver is already registered for this type")
-	ErrForeignResource   = errors.New("egress: an object in the reserved band belongs to somebody else")
-	ErrStrictRPFilter    = errors.New("egress: strict reverse-path filtering kills the front's return path")
+	// ErrNotRouted is a mark nothing catches. Distinct from a contained egress:
+	// that one drops the packet, this one releases it out of the host's own address.
+	ErrNotRouted       = errors.New("egress: no rule catches this egress's mark")
+	ErrGatewayBase     = errors.New("egress: the gateway base cannot serve the id band")
+	ErrUnknownDriver   = errors.New("egress: no driver is registered for this type")
+	ErrDuplicateDriver = errors.New("egress: a driver is already registered for this type")
+	ErrForeignResource = errors.New("egress: an object in the reserved band belongs to somebody else")
+	ErrStrictRPFilter  = errors.New("egress: strict reverse-path filtering kills the front's return path")
 
 	// The kernel's two answers that mean it already agrees with the diff. The errno
 	// differs by object; the manager's response to them does not.

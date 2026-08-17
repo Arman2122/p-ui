@@ -1159,6 +1159,15 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/egresses/test',
+        summary:
+          'Time a real request out through each egress and report the exit it came from, so an uplink answers the same question an outbound does. mode is "tcp", "http" or "real"; "tcp" is promoted to the HTTP probe because a bare dial proves nothing about a tunnel whose peer ignores unauthenticated packets. Every probe is gated on the host agreeing that this egress\'s mark reaches its own device: a mark no rule catches falls through to the main table and leaves with the server\'s own address, so a disabled row, a contained one, or one whose device is gone answers with why rather than with a latency that measured the direct path. A front is refused outright — it hands its traffic to an outbound tag, and that outbound is testable on its own row.',
+        body: '{\n  "ids": [18],\n  "mode": "real"\n}',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "tag": "US-sfo | Surfshark (kernel)",\n      "mode": "real",\n      "success": true,\n      "delay": 142,\n      "httpStatus": 204,\n      "egress": { "ipv4": "169.150.196.10", "country": "US" }\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/egresses/del/:id',
         summary:
           'Delete an egress and bring down the kernel state its id owns. Refused while a routing rule still sends traffic to it.',
