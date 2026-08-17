@@ -13,6 +13,7 @@ import {
   Row,
   Space,
   Switch,
+  Alert,
   Table,
   Tag,
   Tooltip,
@@ -51,13 +52,24 @@ import type { XraySettingsValue, SetTemplate, OutboundTestMode, OutboundTestStat
 import './OutboundsTab.css';
 
 import type { OutboundRow } from './outbounds-tab-types';
-import { originalOutboundIndex } from './outbounds-tab-helpers';
+import { exitAsOutboundRow, originalOutboundIndex } from './outbounds-tab-helpers';
 import { useOutboundColumns } from './useOutboundColumns';
 import OutboundCardList from './OutboundCardList';
 import SubscriptionOutbounds from './SubscriptionOutbounds';
-import ExitsSection from './ExitsSection';
+import ExitFormModal from './ExitFormModal';
 import { useEgressMutations } from '@/api/queries/useEgressMutations';
-import type { EgressPayload } from '@/schemas/api/egress';
+import { useEgressesQuery, useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
+import type { EgressPayload, EgressRecord } from '@/schemas/api/egress';
+
+/* Backend sentences name a sysctl, a device or a rule priority, so they are
+   shown verbatim and left-to-right even when the panel is in Persian. */
+function HostSentences({ lines }: { lines: string[] }) {
+  return (
+    <div dir="ltr" style={{ textAlign: 'left' }}>
+      {lines.map((line) => <div key={line}><code>{line}</code></div>)}
+    </div>
+  );
+}
 
 interface OutboundSub {
   id: number;
@@ -123,6 +135,10 @@ export default function OutboundsTab({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [existingTags, setExistingTags] = useState<string[]>([]);
   const egressMut = useEgressMutations();
+  const egressesQuery = useEgressesQuery();
+  const preflight = useEgressPreflightQuery().data;
+  const [editingExit, setEditingExit] = useState<EgressRecord | null>(null);
+  const [exitFormOpen, setExitFormOpen] = useState(false);
 
   // Subscription manager (CRUD + reorder + refresh + preview)
   const [subDrawerOpen, setSubDrawerOpen] = useState(false);
@@ -159,6 +175,16 @@ export default function OutboundsTab({
   );
   const rowsRef = useRef<OutboundRow[]>([]);
   rowsRef.current = rows;
+
+  /* Panel-owned rows are the fronts routing provisions and reaps for itself, so
+     an operator neither made them nor can act on them. */
+  const exitRows = useMemo(
+    () => (egressesQuery.data ?? []).filter((row) => row.owner !== 'panel').map(exitAsOutboundRow),
+    [egressesQuery.data],
+  );
+  /* Exits come last and the move/delete handlers still address `rows` by
+     position, so an outbound's index means the same thing it always did. */
+  const tableRows = useMemo(() => [...rows, ...exitRows], [rows, exitRows]);
 
   const dialerProxyTags = useMemo(() => {
     const tags = new Set<string>();
@@ -469,6 +495,32 @@ export default function OutboundsTab({
     }
   }
 
+  function editExit(exit: EgressRecord) {
+    setEditingExit(exit);
+    setExitFormOpen(true);
+  }
+
+  function toggleExit(exit: EgressRecord) {
+    void egressMut.update(exit.id, {
+      id: exit.id,
+      type: exit.type,
+      enable: !exit.enable,
+      remark: exit.remark,
+      target: exit.target,
+      settings: exit.settings,
+    });
+  }
+
+  function deleteExit(exit: EgressRecord) {
+    modal.confirm({
+      title: `${t('delete')} ${exit.remark || `#${exit.id}`}?`,
+      content: t('pages.xray.egress.deleteConfirm'),
+      okText: t('confirm'),
+      cancelText: t('cancel'),
+      onOk: () => { void egressMut.remove(exit.id); },
+    });
+  }
+
   const columns = useOutboundColumns({
     testMode,
     rows,
@@ -481,6 +533,9 @@ export default function OutboundsTab({
     confirmDelete,
     onResetTraffic,
     onTest,
+    editExit,
+    toggleExit,
+    deleteExit,
   });
 
   return (
@@ -538,9 +593,26 @@ export default function OutboundsTab({
           </Col>
         </Row>
 
+        {preflight && !preflight.ok && (
+          <Alert
+            type="error"
+            showIcon
+            title={t('pages.xray.egress.preflightBlocked')}
+            description={<HostSentences lines={preflight.refusals} />}
+          />
+        )}
+        {preflight && preflight.notes.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            title={t('pages.xray.egress.preflightNotes')}
+            description={<HostSentences lines={preflight.notes} />}
+          />
+        )}
+
         {isMobile ? (
           <OutboundCardList
-            rows={rows}
+            rows={tableRows}
             testMode={testMode}
             outboundsTraffic={outboundsTraffic}
             outboundTestStates={outboundTestStates}
@@ -553,7 +625,7 @@ export default function OutboundsTab({
         ) : (
           <Table
             columns={columns}
-            dataSource={rows}
+            dataSource={tableRows}
             rowKey={(r) => r.key}
             pagination={false}
             size="small"
@@ -607,7 +679,7 @@ export default function OutboundsTab({
           />
         )}
 
-        <ExitsSection isMobile={isMobile} />
+        <ExitFormModal open={exitFormOpen} exit={editingExit} onClose={() => setExitFormOpen(false)} />
       </Space>
 
       <Modal

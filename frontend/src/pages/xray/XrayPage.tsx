@@ -34,6 +34,7 @@ import { cleanupOrphanedBalancerLoopbacks, ensureMissingBalancerLoopbacks, detec
 import { DnsTab } from './dns';
 import { WarpModal, NordModal } from './overrides';
 import './XrayPage.css';
+import { isExitKey } from '@/schemas/api/egress';
 
 const SECTION_SLUGS = ['basic', 'routing', 'outbound', 'balancer', 'dns', 'advanced'];
 
@@ -69,6 +70,7 @@ export default function XrayPage() {
     fetchAll,
     resetOutboundsTraffic,
     testOutbound,
+    testExit,
     testSubscriptionOutbound,
     testAllOutbounds,
     saveAll,
@@ -97,6 +99,12 @@ export default function XrayPage() {
   );
 
   async function onTestOutbound(idx: number, mode: string) {
+    // The table hands back a row key, and an exit's lives above every outbound
+    // index because it is not in the xray config at all.
+    if (isExitKey(idx)) {
+      await testExit(idx, mode);
+      return;
+    }
     const outbound = templateSettings?.outbounds?.[idx];
     if (outbound) await testOutbound(idx, outbound, mode);
   }

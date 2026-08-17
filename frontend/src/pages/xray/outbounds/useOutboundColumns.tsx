@@ -13,6 +13,8 @@ import {
   ArrowDownOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -20,6 +22,8 @@ import { SizeFormatter } from '@/utils';
 import { activateOnKey } from '@/utils/a11y';
 import { OutboundProtocols as Protocols } from '@/schemas/primitives';
 import type { OutboundTestMode, OutboundTestState, OutboundTrafficRow } from '@/hooks/useXraySetting';
+
+import type { EgressRecord } from '@/schemas/api/egress';
 
 import type { OutboundRow } from './outbounds-tab-types';
 import CountryPill from './CountryPill';
@@ -49,6 +53,9 @@ interface OutboundColumnsParams {
   confirmDelete: (idx: number) => void;
   onResetTraffic: (tag: string) => void;
   onTest: (index: number, mode: string) => void;
+  editExit: (exit: EgressRecord) => void;
+  toggleExit: (exit: EgressRecord) => void;
+  deleteExit: (exit: EgressRecord) => void;
 }
 
 export function useOutboundColumns({
@@ -63,6 +70,9 @@ export function useOutboundColumns({
   confirmDelete,
   onResetTraffic,
   onTest,
+  editExit,
+  toggleExit,
+  deleteExit,
 }: OutboundColumnsParams): ColumnsType<OutboundRow> {
   const { t, i18n } = useTranslation();
   const [showEgressIp, setShowEgressIp] = useState(false);
@@ -73,7 +83,30 @@ export function useOutboundColumns({
         key: 'action',
         align: 'center',
         width: 100,
-        render: (_v, _record, index) => (
+        render: (_v, record, index) => (
+          record.egress ? (
+            <div className="action-cell">
+              <span className="row-index">{index + 1}</span>
+              <div className="action-buttons">
+                <Button shape="circle" size="small" icon={<EditOutlined />} aria-label={t('edit')} onClick={() => editExit(record.egress!)} />
+                <Dropdown
+                  trigger={['click']}
+                  menu={{
+                    items: [
+                      {
+                        key: 'toggle',
+                        label: <>{record.egress.enable ? <PauseCircleOutlined /> : <PlayCircleOutlined />} {record.egress.enable ? t('disable') : t('enable')}</>,
+                        onClick: () => toggleExit(record.egress!),
+                      },
+                      { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, onClick: () => deleteExit(record.egress!) },
+                    ],
+                  }}
+                >
+                  <Button shape="circle" size="small" icon={<MoreOutlined />} aria-label={t('more')} />
+                </Dropdown>
+              </div>
+            </div>
+          ) : (
           <div className="action-cell">
             <span className="row-index">{index + 1}</span>
             <div className="action-buttons">
@@ -98,6 +131,7 @@ export function useOutboundColumns({
               </Dropdown>
             </div>
           </div>
+          )
         ),
       },
       {
@@ -110,7 +144,8 @@ export function useOutboundColumns({
               <span className="tag-name">{record.tag}</span>
             </Tooltip>
             <div className="protocol-line">
-              <Tag color="green">{record.protocol}</Tag>
+              <Tag color={record.egress ? 'geekblue' : 'green'}>{record.protocol}</Tag>
+              {record.egress && !record.egress.enable && <Tag>{t('disabled')}</Tag>}
               {[Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks].includes(record.protocol as never) && (
                 <>
                   <Tag>{record.streamSettings?.network}</Tag>

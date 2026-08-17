@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import ExitsSection from '@/pages/xray/outbounds/ExitsSection';
+import OutboundsTab from '@/pages/xray/outbounds/OutboundsTab';
+import type { XraySettingsValue } from '@/hooks/useXraySetting';
 import { HttpUtil, Msg } from '@/utils';
 import enUS from '../../../internal/web/translation/en-US.json';
 
@@ -43,29 +45,59 @@ function mockHost(preflight: { ok: boolean; refusals: string[]; notes: string[] 
   ));
 }
 
-async function renderSection() {
-  renderWithProviders(<ExitsSection isMobile={false} />);
+function settings(): XraySettingsValue {
+  return { outbounds: [{ tag: 'direct', protocol: 'freedom' }] } as unknown as XraySettingsValue;
+}
+
+async function renderTab() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  renderWithProviders(
+    <QueryClientProvider client={queryClient}>
+      <OutboundsTab
+        templateSettings={settings()}
+        setTemplateSettings={vi.fn()}
+        outboundsTraffic={[]}
+        outboundTestStates={{}}
+        subscriptionTestStates={{}}
+        testingAll={false}
+        inboundTags={[]}
+        isMobile={false}
+        onResetTraffic={vi.fn()}
+        onTest={vi.fn()}
+        onTestSubscription={vi.fn()}
+        onTestAll={vi.fn()}
+        onShowWarp={vi.fn()}
+        onShowNord={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
   for (let i = 0; i < 6; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }
 }
 
-describe('the exits an operator owns, listed on the outbounds page', () => {
+/*
+An exit is an answer to "where does traffic leave", which is the question the
+outbounds table already asks — so it is a row in that table, not a second table
+underneath it with its own heading.
+*/
+describe('exits share the outbounds table', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('lists an uplink by the endpoint it leaves through', async () => {
+  it('lists an uplink beside the outbounds, by the endpoint it leaves through', async () => {
     mockHost({ ok: true, refusals: [], notes: [] }, [UPLINK]);
-    await renderSection();
+    await renderTab();
 
     const rows = Array.from(document.querySelectorAll('.ant-table-tbody tr.ant-table-row'));
-    expect(rows).toHaveLength(1);
-    expect(rows[0].textContent).toContain('mullvad');
-    expect(rows[0].textContent).toContain('us-sfo.example.com:51820');
+    const body = rows.map((row) => row.textContent ?? '').join(' ');
+    expect(body).toContain('direct');
+    expect(body).toContain('mullvad');
+    expect(body).toContain('us-sfo.example.com:51820');
   });
 
   it('hides the fronts routing provisions for itself', async () => {
     mockHost({ ok: true, refusals: [], notes: [] }, [UPLINK, PANEL_FRONT]);
-    await renderSection();
+    await renderTab();
 
     const body = document.querySelector('.ant-table-tbody')?.textContent ?? '';
     expect(body).toContain('mullvad');
@@ -73,10 +105,10 @@ describe('the exits an operator owns, listed on the outbounds page', () => {
   });
 
   /* Refusals name a sysctl the panel cannot override, so they survive the move
-     off the old tab verbatim and left-to-right. */
+     onto the merged table verbatim and left-to-right. */
   it('still says what stops this host carrying an exit', async () => {
     mockHost({ ok: false, refusals: [REFUSAL], notes: [NOTE] }, []);
-    await renderSection();
+    await renderTab();
 
     const alerts = Array.from(document.querySelectorAll('.ant-alert'));
     const blocked = alerts.find((a) => a.textContent?.includes(enUS.pages.xray.egress.preflightBlocked));
