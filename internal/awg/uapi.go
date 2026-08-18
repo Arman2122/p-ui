@@ -66,3 +66,38 @@ const (
 	devRandomTrailers
 	devDisableCookies
 )
+
+// Peer attributes, from enum wgpeer_attribute. ADVANCED_SECURITY is AmneziaWG's
+// own: obfuscation is negotiated per peer, not only per device.
+const (
+	peerUnspec uint16 = iota
+	peerPublicKey
+	peerPresharedKey
+	peerFlags
+	peerEndpoint
+	peerPersistentKeepaliveInterval
+	peerLastHandshakeTime
+	peerRxBytes
+	peerTxBytes
+	peerAllowedIPs
+	peerProtocolVersion
+	peerAdvancedSecurity
+)
+
+// Allowed-IP attributes, from enum wgallowedip_attribute.
+const (
+	allowedIPUnspec uint16 = iota
+	allowedIPFamily
+	allowedIPAddr
+	allowedIPCidrMask
+	allowedIPFlags
+)
+
+// The flags that make a message authoritative rather than additive.
+const (
+	deviceReplacePeers uint32 = 1 << 0
+	peerRemoveMe       uint32 = 1 << 0
+	peerReplaceAllowed uint32 = 1 << 1
+	peerUpdateOnly     uint32 = 1 << 2
+	peerHasAdvancedSec uint32 = 1 << 3
+)
