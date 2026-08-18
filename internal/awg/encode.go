@@ -71,13 +71,6 @@ func encodeConfig(name string, cfg Config) ([]netlink.Attribute, error) {
 	}
 	attrs = append(attrs, encodeParams(cfg.Params)...)
 
-	if len(cfg.Peers) > 0 {
-		nested, err := encodePeers(cfg.Peers)
-		if err != nil {
-			return nil, err
-		}
-		attrs = append(attrs, netlink.Attribute{Type: devPeers | netlink.Nested, Data: nested})
-	}
 	return attrs, nil
 }
 
@@ -138,20 +131,6 @@ func encodeParams(p Params) []netlink.Attribute {
 	boolean(devRandomTrailers, p.RandomTrailers)
 	boolean(devDisableCookies, p.DisableCookies)
 	return attrs
-}
-
-func encodePeers(peers []Peer) ([]byte, error) {
-	encoder := netlink.NewAttributeEncoder()
-	for i, peer := range peers {
-		one, err := encodePeer(peer)
-		if err != nil {
-			return nil, fmt.Errorf("peer %d: %w", i, err)
-		}
-		// The index is the nested array's own key, which is how the kernel tells
-		// one peer from the next inside a single WGDEVICE_A_PEERS attribute.
-		encoder.Bytes(uint16(i)|netlink.Nested, one)
-	}
-	return encoder.Encode()
 }
 
 func encodePeer(peer Peer) ([]byte, error) {
@@ -258,3 +237,55 @@ const (
 	afInet  uint16 = 2
 	afInet6 uint16 = 10
 )
+
+// peerChunkBudget is how many bytes of peers ride in one message. The kernel's
+// limit is larger, but a device's own attributes share the first message and a
+// refusal here costs a whole reconcile -- so this leaves room rather than
+// discovering the ceiling in production.
+const peerChunkBudget = 16 << 10
+
+/*
+encodePeerChunks splits the peers across as many messages as they need.
+
+Always at least one chunk, even for no peers, so the caller's first message is
+uniform. The caller must send REPLACE_PEERS with the first chunk ONLY: repeated,
+it clears what the previous chunk installed, and a device with more clients than
+one message holds would end up serving just the last few.
+*/
+func encodePeerChunks(peers []Peer) ([][]byte, error) {
+	if len(peers) == 0 {
+		return nil, nil
+	}
+
+	var chunks [][]byte
+	encoder := netlink.NewAttributeEncoder()
+	var used, inChunk int
+	for _, peer := range peers {
+		one, err := encodePeer(peer)
+		if err != nil {
+			return nil, err
+		}
+		// Flushed BEFORE adding, so a chunk never exceeds the budget; a peer
+		// larger than the budget on its own still goes out alone rather than
+		// being dropped.
+		if inChunk > 0 && used+len(one) > peerChunkBudget {
+			encoded, err := encoder.Encode()
+			if err != nil {
+				return nil, err
+			}
+			chunks = append(chunks, encoded)
+			encoder = netlink.NewAttributeEncoder()
+			used, inChunk = 0, 0
+		}
+		// The index restarts per chunk: it is the nested array's key within this
+		// message, not a position in the device's peer list.
+		encoder.Bytes(uint16(inChunk)|netlink.Nested, one)
+		used += len(one)
+		inChunk++
+	}
+	encoded, err := encoder.Encode()
+	if err != nil {
+		return nil, err
+	}
+	return append(chunks, encoded), nil
+}
