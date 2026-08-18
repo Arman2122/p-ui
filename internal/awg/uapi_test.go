@@ -141,3 +141,74 @@ func enumOrder(t *testing.T, enumName, prefix string) map[string]uint16 {
 	t.Fatalf("enum %s never closed in the vendored header", enumName)
 	return nil
 }
+
+/*
+The attribute WIDTHS must match the module's policy table, not just the numbers.
+
+This test exists because the number check above passed while five attributes
+were transcribed at the wrong width: the timers and the padding addition are
+NLA_U32 and were being written as u16, and the header protection key is an
+exact-length binary key that was being written as a NUL string. The module
+answered "attribute 27 is not a uint16" only when a real device was read back,
+which is far too late and only visible on Linux.
+
+Read from netlink.c's nla_policy table, which is what the kernel actually
+enforces.
+*/
+func TestAttributeWidthsMatchTheModulePolicy(t *testing.T) {
+	policy := devicePolicy(t)
+
+	for name, want := range map[string]string{
+		"WGDEVICE_A_JC":                       "NLA_U16",
+		"WGDEVICE_A_JMIN":                     "NLA_U16",
+		"WGDEVICE_A_JMAX":                     "NLA_U16",
+		"WGDEVICE_A_S1":                       "NLA_U16",
+		"WGDEVICE_A_S4":                       "NLA_U16",
+		"WGDEVICE_A_H1":                       "NLA_U64",
+		"WGDEVICE_A_H4":                       "NLA_U64",
+		"WGDEVICE_A_I1":                       "NLA_NUL_STRING",
+		"WGDEVICE_A_CONTENT_PADDING_ADDITION": "NLA_U32",
+		"WGDEVICE_A_REKEY_AFTER_TIME":         "NLA_U32",
+		"WGDEVICE_A_REKEY_TIMEOUT":            "NLA_U32",
+		"WGDEVICE_A_REJECT_AFTER_TIME":        "NLA_U32",
+		"WGDEVICE_A_KEEPALIVE_TIMEOUT":        "NLA_U32",
+		"WGDEVICE_A_MAX_HANDSHAKE_ATTEMPTS":   "NLA_U32",
+		"WGDEVICE_A_RANDOM_TRAILERS":          "NLA_U8",
+		"WGDEVICE_A_DISABLE_COOKIES":          "NLA_U8",
+	} {
+		got, ok := policy[name]
+		if !ok {
+			t.Errorf("%s has no entry in the module's policy table", name)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s is %s in the module, and this package encodes it as %s", name, got, want)
+		}
+	}
+}
+
+// devicePolicy reads the declared NLA type of each device attribute out of
+// netlink.c's policy table.
+func devicePolicy(t *testing.T) map[string]string {
+	t.Helper()
+	body, err := os.ReadFile("../../third_party/amneziawg-kernel/src/netlink.c")
+	if err != nil {
+		t.Fatalf("reading the module's netlink.c: %v", err)
+	}
+	out := map[string]string{}
+	matcher := regexp.MustCompile(`\[(WGDEVICE_A_\w+)\]\s*=\s*(?:\{\s*\.type\s*=\s*(\w+)|NLA_POLICY_MASK\((\w+)|NLA_POLICY_EXACT_LEN\((\w+)\))`)
+	for _, match := range matcher.FindAllStringSubmatch(string(body), -1) {
+		switch {
+		case match[2] != "":
+			out[match[1]] = match[2]
+		case match[3] != "":
+			out[match[1]] = match[3]
+		case match[4] != "":
+			out[match[1]] = "EXACT_LEN(" + match[4] + ")"
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("no device policy entries parsed; the table's shape changed")
+	}
+	return out
+}

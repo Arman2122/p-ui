@@ -31,11 +31,11 @@ func TestValidateMirrorsTheModulesOwnRefusals(t *testing.T) {
 		// each other -- otherwise every partial configuration would be refused.
 		{"unset headers do not collide", Params{H1: HeaderRange(10, 19)}, nil},
 		{"padding without header protection is free", Params{S1: 4}, nil},
-		{"padding too small for the nonce", Params{HeaderProtectionKey: "k", S1: 4}, ErrPaddingTooSmall},
-		{"padding exactly the nonce size", Params{HeaderProtectionKey: "k", S1: HeaderProtectionNonceSize}, nil},
+		{"padding too small for the nonce", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: 4}, ErrPaddingTooSmall},
+		{"padding exactly the nonce size", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: HeaderProtectionNonceSize}, nil},
 		// Zero padding is "unset", not "too small": a protected device that pads
 		// only the handshake messages is normal.
-		{"unset padding beside header protection", Params{HeaderProtectionKey: "k", S1: 20}, nil},
+		{"unset padding beside header protection", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: 20}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.params.Validate()

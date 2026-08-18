@@ -4,6 +4,7 @@ package awg
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -106,5 +107,95 @@ func TestModuleAcceptsAPeerWithAllowedIPs(t *testing.T) {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("allowed ip %q never reached the device:\n%s", want, out)
 		}
+	}
+}
+
+/*
+Reading a device back is what a reconcile diffs against, so it has to return
+what was actually set -- obfuscation included.
+
+wgctrl would return this device's WireGuard half and silently omit every
+AmneziaWG attribute, which is the failure this whole package exists to avoid:
+the reconcile would see parameters missing on every pass and rewrite them
+forever, rekeying every client each time.
+*/
+func TestDeviceReadsBackWhatWasConfigured(t *testing.T) {
+	client := requireModule(t)
+	const name = "awgselftest2"
+	makeDevice(t, name)
+
+	key, err := wgtypes.GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+	peerKey, _ := wgtypes.GeneratePrivateKey()
+	port := 51997
+	want := Params{Jc: 3, Jmin: 50, Jmax: 90, S1: 15, S2: 25}
+
+	if err := client.ConfigureDevice(name, Config{
+		PrivateKey: &key, ListenPort: &port, ReplacePeers: true,
+		Params: want,
+		Peers: []Peer{{
+			PublicKey:  peerKey.PublicKey(),
+			AllowedIPs: []string{"10.9.0.7/32"},
+		}},
+	}); err != nil {
+		t.Fatalf("ConfigureDevice: %v", err)
+	}
+
+	device, err := client.Device(name)
+	if err != nil {
+		t.Fatalf("Device: %v", err)
+	}
+	// The module reports the headers it is actually using, so an unset one comes
+	// back as WireGuard's default rather than as zero. Comparing without this is
+	// how a reconcile would see drift forever.
+	if device.Params != want.WithDefaultHeaders() {
+		t.Errorf("params read back as %+v, want %+v", device.Params, want.WithDefaultHeaders())
+	}
+	if device.ListenPort != port {
+		t.Errorf("listen port = %d, want %d", device.ListenPort, port)
+	}
+	if len(device.Peers) != 1 {
+		t.Fatalf("got %d peers, want 1", len(device.Peers))
+	}
+	if device.Peers[0].PublicKey != peerKey.PublicKey() {
+		t.Error("the peer that came back is not the one that was configured")
+	}
+	// Never contacted, so it must read as never -- not as 1970.
+	if !device.Peers[0].LastHandshakeTime.IsZero() {
+		t.Errorf("a peer that never handshook reports %v", device.Peers[0].LastHandshakeTime)
+	}
+}
+
+// Many peers arrive across several replies, and a caller wanting one device must
+// get all of them rather than the first message's worth.
+func TestDeviceCoalescesManyPeers(t *testing.T) {
+	client := requireModule(t)
+	const name = "awgselftest3"
+	makeDevice(t, name)
+
+	key, _ := wgtypes.GeneratePrivateKey()
+	const clients = 300
+	peers := make([]Peer, clients)
+	for i := range peers {
+		peerKey, _ := wgtypes.GeneratePrivateKey()
+		peers[i] = Peer{
+			PublicKey:  peerKey.PublicKey(),
+			AllowedIPs: []string{fmt.Sprintf("10.9.%d.%d/32", i/250, i%250)},
+		}
+	}
+	if err := client.ConfigureDevice(name, Config{
+		PrivateKey: &key, ReplacePeers: true, Peers: peers,
+	}); err != nil {
+		t.Fatalf("ConfigureDevice with %d peers: %v", clients, err)
+	}
+
+	device, err := client.Device(name)
+	if err != nil {
+		t.Fatalf("Device: %v", err)
+	}
+	if len(device.Peers) != clients {
+		t.Fatalf("the device reports %d peers, want %d -- peers were lost in the split or the coalesce", len(device.Peers), clients)
 	}
 }

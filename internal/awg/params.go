@@ -13,6 +13,7 @@ operator can tune in isolation.
 package awg
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 )
@@ -23,6 +24,7 @@ var (
 	ErrJunkRange       = errors.New("awg: jmin must not exceed jmax")
 	ErrHeaderOverlap   = errors.New("awg: the message headers must not overlap")
 	ErrPaddingTooSmall = errors.New("awg: header protection needs room for its nonce")
+	ErrHeaderKeyLength = errors.New("awg: the header protection key must be 32 bytes, base64")
 )
 
 // HeaderProtectionNonceSize is src/header_protection.h's own constant. Padding
@@ -70,20 +72,24 @@ type Params struct {
 
 	// HeaderProtectionKey encrypts the header itself. Its presence is what makes
 	// the S1..S4 minimum below apply.
+	// HeaderProtectionKey is a 32-byte ChaCha key, carried base64 like every
+	// other key here. NLA_POLICY_EXACT_LEN, so a wrong length is refused.
 	HeaderProtectionKey string `json:"headerProtectionKey,omitempty"`
 
-	ContentPaddingAddition uint16 `json:"contentPaddingAddition,omitempty"`
+	// ContentPaddingAddition is a u16 RANGE, packed (hi<<16|lo): the module picks
+	// a fresh value inside it per packet, which is what makes padding unguessable.
+	ContentPaddingAddition uint32 `json:"contentPaddingAddition,omitempty"`
 	RandomTrailers         bool   `json:"randomTrailers,omitempty"`
 	DisableCookies         bool   `json:"disableCookies,omitempty"`
 
 	// Timer overrides, in seconds. WireGuard's defaults are themselves a
 	// fingerprint, so a deployment that changes them must change them on both
 	// ends like everything else here.
-	RekeyAfterTime       uint16 `json:"rekeyAfterTime,omitempty"`
-	RekeyTimeout         uint16 `json:"rekeyTimeout,omitempty"`
-	RejectAfterTime      uint16 `json:"rejectAfterTime,omitempty"`
-	KeepaliveTimeout     uint16 `json:"keepaliveTimeout,omitempty"`
-	MaxHandshakeAttempts uint16 `json:"maxHandshakeAttempts,omitempty"`
+	RekeyAfterTime       uint32 `json:"rekeyAfterTime,omitempty"`
+	RekeyTimeout         uint32 `json:"rekeyTimeout,omitempty"`
+	RejectAfterTime      uint32 `json:"rejectAfterTime,omitempty"`
+	KeepaliveTimeout     uint32 `json:"keepaliveTimeout,omitempty"`
+	MaxHandshakeAttempts uint32 `json:"maxHandshakeAttempts,omitempty"`
 }
 
 // IsZero reports a device with no obfuscation at all, which is plain WireGuard
@@ -124,6 +130,10 @@ func (p Params) Validate() error {
 	}
 
 	if p.HeaderProtectionKey != "" {
+		key, err := base64.StdEncoding.DecodeString(p.HeaderProtectionKey)
+		if err != nil || len(key) != HeaderProtectionKeySize {
+			return fmt.Errorf("%w", ErrHeaderKeyLength)
+		}
 		for _, padding := range []struct {
 			name  string
 			value uint16
@@ -158,3 +168,47 @@ var (
 	ErrModuleAbsent        = errors.New("awg: the amneziawg kernel module is not loaded")
 	ErrPlatformUnsupported = errors.New("awg: the amneziawg module is available on Linux only")
 )
+
+/*
+TimerRange encodes a u16 range the way src/type.h's u16_range_init does:
+(hi<<16 | lo).
+
+The timers and the padding addition are RANGES, not values -- the module draws a
+fresh number from each one, which is what stops a constant rekey interval or a
+constant padding size being its own fingerprint. Written as a bare number the
+range reads as [n, 0]: an upper bound below its lower bound, and the randomness
+the parameter exists for is gone.
+*/
+func TimerRange(lo, hi uint16) uint32 { return uint32(hi)<<16 | uint32(lo) }
+
+// HeaderProtectionKeySize is CHACHA_KEY_SIZE, as src/header_protection.h has it.
+// The attribute is NLA_POLICY_EXACT_LEN, so the kernel refuses any other length
+// outright rather than padding or truncating.
+const HeaderProtectionKeySize = 32
+
+/*
+DefaultHeaders are the message-type headers a device reports when none were
+configured: WireGuard's own 1, 2, 3 and 4, each as the range [n, n].
+
+They matter because the module never reports a header as "unset" -- it reports
+what the device is actually using. A reconcile that compares a desired zero
+against these sees drift on every pass and rewrites the device forever, and
+rewriting obfuscation rekeys every client on it. Measured against the module on
+2026-08-18; also exactly what makes plain WireGuard recognisable, which is why
+an obfuscated deployment sets all four.
+*/
+var DefaultHeaders = [4]uint64{
+	HeaderRange(1, 1), HeaderRange(2, 2), HeaderRange(3, 3), HeaderRange(4, 4),
+}
+
+// WithDefaultHeaders fills in whichever headers were left unset, so a desired
+// configuration can be compared against what the module reports without the
+// unset ones reading as drift.
+func (p Params) WithDefaultHeaders() Params {
+	for i, target := range []*uint64{&p.H1, &p.H2, &p.H3, &p.H4} {
+		if *target == 0 {
+			*target = DefaultHeaders[i]
+		}
+	}
+	return p
+}
