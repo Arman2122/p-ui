@@ -57,9 +57,9 @@ func TestSetParametersReachTheWire(t *testing.T) {
 			S1: 20, S2: 30, S3: 40, S4: 50,
 			H1: HeaderRange(10, 19), H2: HeaderRange(20, 29),
 			H3: HeaderRange(30, 39), H4: HeaderRange(40, 49),
-			I1: "b0xdeadbeef", HeaderProtectionKey: "secret",
-			ContentPaddingAddition: 16, RandomTrailers: true, DisableCookies: true,
-			RekeyAfterTime: 120, MaxHandshakeAttempts: 5,
+			I1: "b0xdeadbeef", HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+			ContentPaddingAddition: TimerRange(0, 32), RandomTrailers: true, DisableCookies: true,
+			RekeyAfterTime: TimerRange(100, 140), MaxHandshakeAttempts: TimerRange(3, 7),
 		},
 	})
 	if err != nil {
@@ -97,42 +97,6 @@ func TestSetParametersReachTheWire(t *testing.T) {
 func TestEncodeRefusesAnInvalidConfig(t *testing.T) {
 	if _, err := encodeConfig("awg0", Config{Params: Params{Jmin: 70, Jmax: 40}}); err == nil {
 		t.Fatal("an inverted junk range must be refused before it reaches the kernel")
-	}
-}
-
-/*
-A peer's advanced-security value is meaningless without its flag.
-
-The kernel ignores WGPEER_A_ADVANCED_SECURITY unless WGPEER_F_HAS_ADVANCED_SECURITY
-is set, so without the flag "off" and "unset" are the same message -- and a peer
-switched on could never be switched back.
-*/
-func TestAdvancedSecurityCarriesItsFlag(t *testing.T) {
-	for _, on := range []bool{true, false} {
-		raw, err := encodePeer(Peer{PublicKey: wgtypes.Key{}, AdvancedSecurity: &on})
-		if err != nil {
-			t.Fatalf("encodePeer: %v", err)
-		}
-		decoder, err := netlink.NewAttributeDecoder(raw)
-		if err != nil {
-			t.Fatalf("decoding the peer: %v", err)
-		}
-		var flags uint32
-		var sawValue bool
-		for decoder.Next() {
-			switch decoder.Type() {
-			case peerFlags:
-				flags = decoder.Uint32()
-			case peerAdvancedSecurity:
-				sawValue = true
-			}
-		}
-		if !sawValue {
-			t.Fatalf("advancedSecurity=%v emitted no value", on)
-		}
-		if flags&peerHasAdvancedSec == 0 {
-			t.Fatalf("advancedSecurity=%v emitted no HAS_ADVANCED_SECURITY flag, so the kernel ignores it", on)
-		}
 	}
 }
 
@@ -251,5 +215,50 @@ func TestNoPeersProducesNoChunks(t *testing.T) {
 	}
 	if len(chunks) != 0 {
 		t.Fatalf("got %d chunks for no peers, want 0", len(chunks))
+	}
+}
+
+/*
+Advanced security is an NLA_FLAG, so its PRESENCE is the value.
+
+Three states have to stay distinguishable and only one of them is obvious.
+"Unset" emits nothing at all and the kernel leaves the peer alone. "On" emits
+the flag attribute. "Off" emits NO attribute -- but still sets
+WGPEER_F_HAS_ADVANCED_SECURITY, which is what tells the kernel to apply the
+absence rather than ignore it. Encode "off" without that flag and a peer that
+was switched on can never be switched back.
+*/
+func TestAdvancedSecurityIsAFlagWithThreeStates(t *testing.T) {
+	read := func(t *testing.T, peer Peer) (flags uint32, present bool) {
+		t.Helper()
+		raw, err := encodePeer(peer)
+		if err != nil {
+			t.Fatalf("encodePeer: %v", err)
+		}
+		decoder, err := netlink.NewAttributeDecoder(raw)
+		if err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		for decoder.Next() {
+			switch decoder.Type() {
+			case peerFlags:
+				flags = decoder.Uint32()
+			case peerAdvancedSecurity:
+				present = true
+			}
+		}
+		return flags, present
+	}
+
+	on, off := true, false
+
+	if flags, present := read(t, Peer{AdvancedSecurity: &on}); !present || flags&peerHasAdvancedSec == 0 {
+		t.Errorf("on: attribute present=%v, HAS flag set=%v; want both", present, flags&peerHasAdvancedSec != 0)
+	}
+	if flags, present := read(t, Peer{AdvancedSecurity: &off}); present || flags&peerHasAdvancedSec == 0 {
+		t.Errorf("off: attribute present=%v (want false), HAS flag set=%v (want true)", present, flags&peerHasAdvancedSec != 0)
+	}
+	if flags, present := read(t, Peer{}); present || flags&peerHasAdvancedSec != 0 {
+		t.Errorf("unset: attribute present=%v, HAS flag set=%v; want neither", present, flags&peerHasAdvancedSec != 0)
 	}
 }

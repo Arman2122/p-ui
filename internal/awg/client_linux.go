@@ -104,3 +104,47 @@ func (c *Client) execute(attrs []netlink.Attribute) error {
 	}
 	return nil
 }
+
+/*
+Device reads one device back, obfuscation included.
+
+A device with many peers arrives across several replies, each repeating the
+name and carrying more peers; they are coalesced here because the caller wants
+one device, and a caller that saw fragments would have to know the protocol to
+add them up. That is upstream's own documented shape, not an edge case.
+*/
+func (c *Client) Device(name string) (*Device, error) {
+	data, err := netlink.MarshalAttributes([]netlink.Attribute{
+		{Type: devIfName, Data: nlNulString(name)},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("awg: marshalling the request: %w", err)
+	}
+	messages, err := c.conn.Execute(
+		genetlink.Message{
+			Header: genetlink.Header{Command: cmdGetDevice, Version: FamilyVersion},
+			Data:   data,
+		},
+		c.family.ID,
+		netlink.Request|netlink.Dump,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("awg: reading device %s: %w", name, err)
+	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("awg: the module returned nothing for %s", name)
+	}
+
+	device, err := decodeDevice(messages[0].Data)
+	if err != nil {
+		return nil, err
+	}
+	for _, message := range messages[1:] {
+		more, err := decodeDevice(message.Data)
+		if err != nil {
+			return nil, err
+		}
+		device.Peers = append(device.Peers, more.Peers...)
+	}
+	return device, nil
+}

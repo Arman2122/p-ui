@@ -12,3 +12,5 @@ func New() (*Client, error) { return nil, ErrPlatformUnsupported }
 func (c *Client) Close() error { return ErrPlatformUnsupported }
 
 func (c *Client) ConfigureDevice(string, Config) error { return ErrPlatformUnsupported }
+
+func (c *Client) Device(string) (*Device, error) { return nil, ErrPlatformUnsupported }

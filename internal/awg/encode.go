@@ -1,6 +1,7 @@
 package awg
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"net/netip"
@@ -89,6 +90,11 @@ func encodeParams(p Params) []netlink.Attribute {
 			attrs = append(attrs, netlink.Attribute{Type: kind, Data: nlU16(value)})
 		}
 	}
+	u32 := func(kind uint16, value uint32) {
+		if value != 0 {
+			attrs = append(attrs, netlink.Attribute{Type: kind, Data: nlU32(value)})
+		}
+	}
 	u64 := func(kind uint16, value uint64) {
 		if value != 0 {
 			attrs = append(attrs, netlink.Attribute{Type: kind, Data: nlU64(value)})
@@ -121,13 +127,19 @@ func encodeParams(p Params) []netlink.Attribute {
 	str(devI3, p.I3)
 	str(devI4, p.I4)
 	str(devI5, p.I5)
-	str(devHeaderProtectionKey, p.HeaderProtectionKey)
-	u16(devContentPaddingAddition, p.ContentPaddingAddition)
-	u16(devRekeyAfterTime, p.RekeyAfterTime)
-	u16(devRekeyTimeout, p.RekeyTimeout)
-	u16(devRejectAfterTime, p.RejectAfterTime)
-	u16(devKeepaliveTimeout, p.KeepaliveTimeout)
-	u16(devMaxHandshakeAttempts, p.MaxHandshakeAttempts)
+	if p.HeaderProtectionKey != "" {
+		// Validated already, so a decode failure here cannot happen without the
+		// caller having skipped Validate -- and an exact-length attribute is one
+		// the kernel refuses outright rather than truncating.
+		key, _ := base64.StdEncoding.DecodeString(p.HeaderProtectionKey)
+		attrs = append(attrs, netlink.Attribute{Type: devHeaderProtectionKey, Data: key})
+	}
+	u32(devContentPaddingAddition, p.ContentPaddingAddition)
+	u32(devRekeyAfterTime, p.RekeyAfterTime)
+	u32(devRekeyTimeout, p.RekeyTimeout)
+	u32(devRejectAfterTime, p.RejectAfterTime)
+	u32(devKeepaliveTimeout, p.KeepaliveTimeout)
+	u32(devMaxHandshakeAttempts, p.MaxHandshakeAttempts)
 	boolean(devRandomTrailers, p.RandomTrailers)
 	boolean(devDisableCookies, p.DisableCookies)
 	return attrs
@@ -149,11 +161,11 @@ func encodePeer(peer Peer) ([]byte, error) {
 		// ignores the attribute, so "advanced security off" and "unset" would be
 		// the same message and a peer could never be switched back.
 		flags |= peerHasAdvancedSec
-		var on uint8
+		// NLA_FLAG: the attribute carries no payload and its PRESENCE is the
+		// value, so "off" is expressed by leaving it out entirely.
 		if *peer.AdvancedSecurity {
-			on = 1
+			encoder.Flag(peerAdvancedSecurity, true)
 		}
-		encoder.Uint8(peerAdvancedSecurity, on)
 	}
 	if flags != 0 {
 		encoder.Uint32(peerFlags, flags)
@@ -162,7 +174,8 @@ func encodePeer(peer Peer) ([]byte, error) {
 		encoder.Bytes(peerPresharedKey, peer.PresharedKey[:])
 	}
 	if peer.PersistentKeepaliveInterval != nil {
-		encoder.Uint16(peerPersistentKeepaliveInterval, uint16(*peer.PersistentKeepaliveInterval))
+		// U32 here, unlike upstream WireGuard: AmneziaWG widened it.
+		encoder.Uint32(peerPersistentKeepaliveInterval, uint32(*peer.PersistentKeepaliveInterval))
 	}
 	if len(peer.AllowedIPs) > 0 {
 		allowed, err := encodeAllowedIPs(peer.AllowedIPs)
