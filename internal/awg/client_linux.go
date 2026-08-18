@@ -32,7 +32,7 @@ func New() (*Client, error) {
 	family, err := conn.GetFamily(FamilyName)
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("%w: %s", ErrModuleAbsent, err)
+		return nil, fmt.Errorf("%w: %w", ErrModuleAbsent, err)
 	}
 	return &Client{conn: conn, family: family}, nil
 }
