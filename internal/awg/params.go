@@ -152,3 +152,9 @@ func headersOverlap(left, right uint64) bool {
 // bare number instead, its high half reads as an upper bound of zero and the
 // kernel's overlap check silently never fires.
 func HeaderRange(lo, hi uint32) uint64 { return uint64(hi)<<32 | uint64(lo) }
+
+// The failures a caller must be able to tell apart from a bad configuration.
+var (
+	ErrModuleAbsent        = errors.New("awg: the amneziawg kernel module is not loaded")
+	ErrPlatformUnsupported = errors.New("awg: the amneziawg module is available on Linux only")
+)

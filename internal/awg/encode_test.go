@@ -195,3 +195,61 @@ func TestAllowedIPsAreMasked(t *testing.T) {
 		t.Fatal("an unparseable prefix must be refused rather than skipped")
 	}
 }
+
+/*
+Many clients must survive the split, and the count is what proves it.
+
+The kernel takes a device's configuration across several messages when it does
+not fit in one. The hazard is that every message is ACCEPTED either way, so a
+split that loses peers reports success: an inbound with hundreds of clients
+would come up serving only the last chunk, and the operator's symptom is
+"most of my clients stopped connecting" with nothing in any log.
+*/
+func TestEveryPeerSurvivesTheSplit(t *testing.T) {
+	const clients = 400
+	peers := make([]Peer, clients)
+	for i := range peers {
+		peers[i] = Peer{
+			PublicKey:  wgtypes.Key{byte(i), byte(i >> 8)},
+			AllowedIPs: []string{"10.8.0.4/32", "fd00::4/128"},
+		}
+	}
+
+	chunks, err := encodePeerChunks(peers)
+	if err != nil {
+		t.Fatalf("encodePeerChunks: %v", err)
+	}
+	if len(chunks) < 2 {
+		t.Fatalf("400 peers fit in %d chunk(s); this test no longer exercises the split", len(chunks))
+	}
+
+	var counted int
+	for i, chunk := range chunks {
+		if len(chunk) > peerChunkBudget*2 {
+			t.Errorf("chunk %d is %d bytes, well past the budget", i, len(chunk))
+		}
+		decoder, err := netlink.NewAttributeDecoder(chunk)
+		if err != nil {
+			t.Fatalf("decoding chunk %d: %v", i, err)
+		}
+		for decoder.Next() {
+			counted++
+		}
+	}
+	if counted != clients {
+		t.Fatalf("%d peers survived the split, want %d", counted, clients)
+	}
+}
+
+// No peers means no chunks, so the caller's first message carries the device
+// alone rather than an empty nested attribute the kernel would read as "replace
+// the peer list with nothing".
+func TestNoPeersProducesNoChunks(t *testing.T) {
+	chunks, err := encodePeerChunks(nil)
+	if err != nil {
+		t.Fatalf("encodePeerChunks(nil): %v", err)
+	}
+	if len(chunks) != 0 {
+		t.Fatalf("got %d chunks for no peers, want 0", len(chunks))
+	}
+}
