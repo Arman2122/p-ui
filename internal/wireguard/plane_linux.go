@@ -16,13 +16,43 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-// kernelPlane drives the host through netlink and wgctrl. Every operation is one
-// syscall round trip, so the manager keeps no cached view of the result.
-type kernelPlane struct{}
+// kernelPlane drives the host through netlink. Every operation is one syscall
+// round trip, so the manager keeps no cached view of the result.
+//
+// Parameterised by family because a second module -- AmneziaWG -- creates a
+// different link type and answers on a different generic netlink family, while
+// addresses, routes and link state are identical for both. Duplicating those
+// would mean two copies of the code that decides whether a device is ours.
+type kernelPlane struct {
+	linkType string
+	devices  DeviceDriver
+}
 
-func hostPlane() Plane { return kernelPlane{} }
+func hostPlane() Plane { return kernelPlane{linkType: wireguardLinkType, devices: wgctrlDriver{}} }
 
-func (kernelPlane) Probe(context.Context) error {
+/*
+DeviceDriver is the half of a Plane that speaks a module's own netlink family:
+reading a device and configuring one. Everything else a Plane does is family
+agnostic.
+*/
+type DeviceDriver interface {
+	// Probe reports whether this module is usable on this host at all.
+	Probe() error
+	Device(name string) (*wgtypes.Device, error)
+	ConfigureDevice(name string, cfg wgtypes.Config) error
+}
+
+// NewKernelPlane returns a Plane for a module that creates linkType and answers
+// through devices. Exported so a core outside this package can reuse the
+// address, route and link handling without reimplementing it.
+func NewKernelPlane(linkType string, devices DeviceDriver) Plane {
+	return kernelPlane{linkType: linkType, devices: devices}
+}
+
+// wgctrlDriver is kernel WireGuard's own driver.
+type wgctrlDriver struct{}
+
+func (wgctrlDriver) Probe() error {
 	return probeKernel(func() error {
 		client, err := wgctrl.New()
 		if err != nil {
@@ -35,7 +65,27 @@ func (kernelPlane) Probe(context.Context) error {
 	})
 }
 
-func (kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
+func (wgctrlDriver) Device(name string) (*wgtypes.Device, error) {
+	client, err := wgctrl.New()
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	return client.Device(name)
+}
+
+func (wgctrlDriver) ConfigureDevice(name string, cfg wgtypes.Config) error {
+	client, err := wgctrl.New()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	return client.ConfigureDevice(name, cfg)
+}
+
+func (p kernelPlane) Probe(context.Context) error { return p.devices.Probe() }
+
+func (p kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
 		var missing netlink.LinkNotFoundError
@@ -44,7 +94,7 @@ func (kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
 		}
 		return Snapshot{}, classify(err)
 	}
-	if link.Type() != wireguardLinkType {
+	if link.Type() != p.linkType {
 		return Snapshot{}, fmt.Errorf("%w: %s is a %q link", ErrNotWireguardLink, name, link.Type())
 	}
 	attrs := link.Attrs()
@@ -53,12 +103,7 @@ func (kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
 		Link:   LinkState{Index: attrs.Index, MTU: attrs.MTU, Up: attrs.Flags&net.FlagUp != 0},
 	}
 
-	client, err := wgctrl.New()
-	if err != nil {
-		return Snapshot{}, classify(err)
-	}
-	defer client.Close()
-	device, err := client.Device(name)
+	device, err := p.devices.Device(name)
 	if err != nil {
 		return Snapshot{}, classify(err)
 	}
@@ -87,21 +132,21 @@ func (kernelPlane) Snapshot(_ context.Context, name string) (Snapshot, error) {
 
 const wireguardLinkType = "wireguard"
 
-func (kernelPlane) Links(context.Context) ([]string, error) {
+func (p kernelPlane) Links(context.Context) ([]string, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
 		return nil, classify(err)
 	}
 	out := make([]string, 0, len(links))
 	for _, l := range links {
-		if l.Type() == wireguardLinkType {
+		if l.Type() == p.linkType {
 			out = append(out, l.Attrs().Name)
 		}
 	}
 	return out, nil
 }
 
-func (kernelPlane) EnsureLink(_ context.Context, spec LinkSpec) (LinkState, error) {
+func (p kernelPlane) EnsureLink(_ context.Context, spec LinkSpec) (LinkState, error) {
 	link, err := netlink.LinkByName(spec.Name)
 	if err != nil {
 		var missing netlink.LinkNotFoundError
@@ -115,7 +160,7 @@ func (kernelPlane) EnsureLink(_ context.Context, spec LinkSpec) (LinkState, erro
 		if spec.MTU > 0 {
 			attrs.MTU = spec.MTU
 		}
-		if addErr := netlink.LinkAdd(&netlink.Wireguard{LinkAttrs: attrs}); addErr != nil {
+		if addErr := netlink.LinkAdd(p.newLink(attrs)); addErr != nil {
 			return LinkState{}, classify(addErr)
 		}
 		link, err = netlink.LinkByName(spec.Name)
@@ -128,7 +173,7 @@ func (kernelPlane) EnsureLink(_ context.Context, spec LinkSpec) (LinkState, erro
 		attrsNow := link.Attrs()
 		return LinkState{Index: attrsNow.Index, MTU: attrsNow.MTU, Up: true, Created: true}, nil
 	}
-	if link.Type() != wireguardLinkType {
+	if link.Type() != p.linkType {
 		return LinkState{}, fmt.Errorf("%w: %s is a %q link", ErrNotWireguardLink, spec.Name, link.Type())
 	}
 	attrs := link.Attrs()
@@ -148,7 +193,7 @@ func (kernelPlane) EnsureLink(_ context.Context, spec LinkSpec) (LinkState, erro
 	return LinkState{Index: attrs.Index, MTU: attrs.MTU, Up: up}, nil
 }
 
-func (kernelPlane) DeleteLink(_ context.Context, name string) error {
+func (p kernelPlane) DeleteLink(_ context.Context, name string) error {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
 		var missing netlink.LinkNotFoundError
@@ -160,16 +205,11 @@ func (kernelPlane) DeleteLink(_ context.Context, name string) error {
 	return classify(netlink.LinkDel(link))
 }
 
-func (kernelPlane) Configure(_ context.Context, name string, cfg wgtypes.Config) error {
-	client, err := wgctrl.New()
-	if err != nil {
-		return classify(err)
-	}
-	defer client.Close()
-	return classify(client.ConfigureDevice(name, cfg))
+func (p kernelPlane) Configure(_ context.Context, name string, cfg wgtypes.Config) error {
+	return classify(p.devices.ConfigureDevice(name, cfg))
 }
 
-func (kernelPlane) AddAddr(_ context.Context, name string, addr netip.Prefix) error {
+func (p kernelPlane) AddAddr(_ context.Context, name string, addr netip.Prefix) error {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
 		return classify(err)
@@ -178,7 +218,7 @@ func (kernelPlane) AddAddr(_ context.Context, name string, addr netip.Prefix) er
 	return classify(netlink.AddrAdd(link, &netlink.Addr{IPNet: &ipnet}))
 }
 
-func (kernelPlane) DelAddr(_ context.Context, name string, addr netip.Prefix) error {
+func (p kernelPlane) DelAddr(_ context.Context, name string, addr netip.Prefix) error {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
 		return classify(err)
@@ -187,7 +227,7 @@ func (kernelPlane) DelAddr(_ context.Context, name string, addr netip.Prefix) er
 	return classify(netlink.AddrDel(link, &netlink.Addr{IPNet: &ipnet}))
 }
 
-func (kernelPlane) AddRoute(_ context.Context, name string, dst netip.Prefix) error {
+func (p kernelPlane) AddRoute(_ context.Context, name string, dst netip.Prefix) error {
 	route, err := peerRoute(name, dst)
 	if err != nil {
 		return err
@@ -195,7 +235,7 @@ func (kernelPlane) AddRoute(_ context.Context, name string, dst netip.Prefix) er
 	return classify(netlink.RouteAdd(route))
 }
 
-func (kernelPlane) DelRoute(_ context.Context, name string, dst netip.Prefix) error {
+func (p kernelPlane) DelRoute(_ context.Context, name string, dst netip.Prefix) error {
 	route, err := peerRoute(name, dst)
 	if err != nil {
 		return err
@@ -228,4 +268,13 @@ func classify(err error) error {
 		return fmt.Errorf("%w: %w", ErrNoDevice, err)
 	}
 	return err
+}
+
+// newLink builds the link this plane's family creates. WireGuard has a typed
+// netlink struct; anything else is a generic link named by its kind.
+func (p kernelPlane) newLink(attrs netlink.LinkAttrs) netlink.Link {
+	if p.linkType == wireguardLinkType {
+		return &netlink.Wireguard{LinkAttrs: attrs}
+	}
+	return &netlink.GenericLink{LinkAttrs: attrs, LinkType: p.linkType}
 }
