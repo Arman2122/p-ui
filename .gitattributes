@@ -11,3 +11,7 @@ frontend/src/test/golden/** text eol=lf
 # Embedded into the binary as the default Xray template, so its bytes reach the
 # generated config. Pinned so a Windows checkout cannot add CRs of its own.
 internal/web/service/config.json text eol=lf
+# Vendored kernel-module source: compiled by DKMS on the target host, so every
+# byte must reach Linux as it left upstream. A CR in a Makefile or a Kbuild
+# recipe fails the build with an error naming neither the file nor the reason.
+third_party/amneziawg-kernel/** text eol=lf
