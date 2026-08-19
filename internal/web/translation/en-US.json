@@ -666,7 +666,18 @@
           "node": "Node address",
           "listen": "Inbound listen",
           "custom": "Custom"
-        }
+        },
+        "awgObfuscation": "AmneziaWG obfuscation",
+        "awgObfuscationHint": "These values must be identical on the client. The panel writes them into every config it hands out, so change them here and re-issue the clients. Leaving them empty runs plain WireGuard through the AmneziaWG module.",
+        "awgPreset": "Use a sensible set",
+        "awgJc": "Junk packets (Jc)",
+        "awgJcHint": "How many junk packets are sent before the real handshake.",
+        "awgJmin": "Junk packet minimum size (Jmin)",
+        "awgJmax": "Junk packet maximum size (Jmax)",
+        "awgS1": "Init packet junk size (S1)",
+        "awgS2": "Response packet junk size (S2)",
+        "awgS3": "Cookie packet junk size (S3)",
+        "awgS4": "Transport packet junk size (S4)"
       },
       "info": {
         "mode": "Mode",
