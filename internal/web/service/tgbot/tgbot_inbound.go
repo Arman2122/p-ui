@@ -159,6 +159,7 @@ func (t *Tgbot) getInboundsAddClient() (*telego.InlineKeyboardMarkup, error) {
 		model.Mixed:     true,
 		model.WireGuard: true,
 		model.WGKernel:  true,
+		model.AWGKernel: true,
 		model.HTTP:      true,
 	}
 
@@ -204,6 +205,7 @@ func (t *Tgbot) getInboundsAttachPicker() (*telego.InlineKeyboardMarkup, error) 
 		model.Mixed:     true,
 		model.WireGuard: true,
 		model.WGKernel:  true,
+		model.AWGKernel: true,
 		model.HTTP:      true,
 	}
 	selected := make(map[int]bool, len(receiver_inbound_IDs))
