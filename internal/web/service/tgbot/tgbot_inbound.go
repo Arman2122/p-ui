@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 
@@ -154,18 +153,9 @@ func (t *Tgbot) getInboundsAddClient() (*telego.InlineKeyboardMarkup, error) {
 		return nil, errors.New(t.I18nBot("tgbot.answers.getInboundsFailed"))
 	}
 
-	excludedProtocols := map[model.Protocol]bool{
-		model.Tunnel:    true,
-		model.Mixed:     true,
-		model.WireGuard: true,
-		model.WGKernel:  true,
-		model.AWGKernel: true,
-		model.HTTP:      true,
-	}
-
 	var buttons []telego.InlineKeyboardButton
 	for _, inbound := range inbounds {
-		if excludedProtocols[inbound.Protocol] {
+		if !offerableToTelegram(inbound.Protocol) {
 			continue
 		}
 
@@ -200,21 +190,13 @@ func (t *Tgbot) getInboundsAttachPicker() (*telego.InlineKeyboardMarkup, error) 
 	if len(inbounds) == 0 {
 		return nil, errors.New(t.I18nBot("tgbot.answers.getInboundsFailed"))
 	}
-	excludedProtocols := map[model.Protocol]bool{
-		model.Tunnel:    true,
-		model.Mixed:     true,
-		model.WireGuard: true,
-		model.WGKernel:  true,
-		model.AWGKernel: true,
-		model.HTTP:      true,
-	}
 	selected := make(map[int]bool, len(receiver_inbound_IDs))
 	for _, id := range receiver_inbound_IDs {
 		selected[id] = true
 	}
 	var buttons []telego.InlineKeyboardButton
 	for _, ib := range inbounds {
-		if excludedProtocols[ib.Protocol] {
+		if !offerableToTelegram(ib.Protocol) {
 			continue
 		}
 		mark := "☐"

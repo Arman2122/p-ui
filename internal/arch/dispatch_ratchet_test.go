@@ -46,13 +46,13 @@ var dispatchBudget = map[string]int{
 	"internal/web/service/client_inbound_apply.go": 7,
 	"internal/web/service/xray.go":                 9,
 	"internal/web/service/inbound_clients.go":      8,
-	"internal/web/service/tgbot/tgbot_inbound.go":  10,
-	"internal/sub/service.go":                      16,
-	"internal/sub/clash_service.go":                7,
+	"internal/web/service/tgbot/protocols.go":      4,
+	"internal/sub/service.go":                      12,
+	"internal/sub/clash_service.go":                5,
 	"internal/database/db.go":                      6,
 	"internal/web/service/inbound_protocol.go":     1,
 	"internal/web/service/inbound_mtproto.go":      3,
-	"internal/sub/json_service.go":                 9,
+	"internal/sub/json_service.go":                 7,
 	"internal/web/service/inbound_migration.go":    2,
 	"internal/mtproto/manager.go":                  1,
 	"internal/web/service/inbound_flow_restore.go": 1,
@@ -62,7 +62,7 @@ var dispatchBudget = map[string]int{
 // dispatchTotal guards the guard. If the detector stops matching the code — a
 // rename of Protocol, a moved const block — every per-file budget silently goes
 // green, and only a total that must still be met catches it.
-const dispatchTotal = 93
+const dispatchTotal = 79
 
 // frozenDispatch are sites that must NOT migrate to the registry. Historical
 // migrations are frozen facts about data written by past releases; rewriting
