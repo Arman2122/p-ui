@@ -677,7 +677,18 @@
         "awgS1": "Init packet junk size (S1)",
         "awgS2": "Response packet junk size (S2)",
         "awgS3": "Cookie packet junk size (S3)",
-        "awgS4": "Transport packet junk size (S4)"
+        "awgS4": "Transport packet junk size (S4)",
+        "awgAdvanced": "Advanced (must also match the client)",
+        "awgI1": "Signature junk packet 1 (I1)",
+        "awgI2": "Signature junk packet 2 (I2)",
+        "awgI3": "Signature junk packet 3 (I3)",
+        "awgI4": "Signature junk packet 4 (I4)",
+        "awgI5": "Signature junk packet 5 (I5)",
+        "awgIHint": "A tagged junk packet in AmneziaWG's own notation, for example b0xdeadbeef. Sent before the handshake so the first bytes on the wire look like something else.",
+        "awgHeaderProtectionKey": "Header protection key",
+        "awgHeaderProtectionKeyHint": "32 bytes, base64. Encrypts the packet header itself. Any junk sizes you set must then be at least 12 bytes, which is what the nonce needs.",
+        "awgRandomTrailers": "Random trailers",
+        "awgDisableCookies": "Disable cookies"
       },
       "info": {
         "mode": "Mode",
