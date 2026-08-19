@@ -48,14 +48,46 @@ type Settings struct {
 }
 
 // Driver is the wg-client egress type.
-type Driver struct{ mgr *engine.Manager }
+/*
+Driver dials one WireGuard-family uplink, parameterised by the type it serves.
+
+AmneziaWG dials with the same fields -- a key, an address and one peer -- so it
+is this driver over a manager pointed at the other module rather than a copy.
+The TYPE has to differ even though the shape does not: it is what decides which
+module the device is created with, and an AmneziaWG exit dialled by the plain
+WireGuard driver would connect with no obfuscation at all and say nothing.
+*/
+type Driver struct {
+	mgr        *engine.Manager
+	driverType string
+	// obfuscate applies a module's own extra device parameters, if it has any.
+	// Nil for plain WireGuard, which has none.
+	obfuscate func(device, settings string) error
+}
 
 // New returns a driver that dials through the uplink engine. That manager owns
 // its own device namespace, so an uplink id and an inbound id of the same number
 // name two devices rather than fighting over one.
-func New(mgr *engine.Manager) Driver { return Driver{mgr: mgr} }
+func New(mgr *engine.Manager) Driver { return NewTyped(Type, mgr) }
 
-func (Driver) Type() string { return Type }
+// NewTyped returns a driver serving one uplink type through its own manager.
+func NewTyped(driverType string, mgr *engine.Manager) Driver {
+	return Driver{mgr: mgr, driverType: driverType}
+}
+
+// WithObfuscation returns the driver with a module-specific parameter step, run
+// once the device exists.
+func (d Driver) WithObfuscation(apply func(device, settings string) error) Driver {
+	d.obfuscate = apply
+	return d
+}
+
+func (d Driver) Type() string {
+	if d.driverType == "" {
+		return Type
+	}
+	return d.driverType
+}
 
 /*
 Fill names the device and, crucially, the families it may carry.
@@ -120,7 +152,17 @@ func (d Driver) Provision(ctx context.Context, e egress.Egress) error {
 			Endpoint:   strings.TrimSpace(settings.Endpoint),
 		}},
 	}
-	return d.mgr.Ensure(ctx, inst)
+	if err := d.mgr.Ensure(ctx, inst); err != nil {
+		return err
+	}
+	// The obfuscation, for a driver whose module has any. A provider tunnel is
+	// exactly where it is needed -- an uplink dialled without the parameters the
+	// far end expects completes no handshake at all -- and applying it after the
+	// device exists leaves the peer untouched.
+	if d.obfuscate != nil {
+		return d.obfuscate(d.mgr.Name(e.ID), string(e.Settings))
+	}
+	return nil
 }
 
 // Deprovision takes the device down. The row may already be gone, so this works

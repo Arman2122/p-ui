@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/Arman2122/p-ui/internal/awg"
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
@@ -768,8 +769,11 @@ func (s *RoutingService) Exits(ctx context.Context) ([]routing.ResolvedExit, err
 // exitKindFor maps an egress row's type to the core kind that serves it. The one
 // place the two vocabularies meet, so a new uplink type is one line here.
 func exitKindFor(rowType string) core.Kind {
-	if rowType == wgclient.Type {
+	switch rowType {
+	case wgclient.Type:
 		return "wgkernel"
+	case awg.UplinkDriverType:
+		return "awgkernel"
 	}
 	return ""
 }

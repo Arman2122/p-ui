@@ -3,6 +3,8 @@
 package awg
 
 import (
+	"sync"
+
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/Arman2122/p-ui/internal/wireguard"
@@ -22,3 +24,22 @@ func (Driver) ConfigureDevice(string, wgtypes.Config) error { return ErrPlatform
 
 // ConfigureParams matches the Linux signature so callers compile unchanged.
 func ConfigureParams(string, Params) error { return ErrPlatformUnsupported }
+
+// The uplink namespace and driver type are platform-independent facts; the
+// manager is not, so off Linux it drives the refusing plane.
+const (
+	UplinkPrefix     = "paux"
+	UplinkDriverType = "awg-client"
+)
+
+var (
+	uplinkOnce sync.Once
+	uplinkMgr  *wireguard.Manager
+)
+
+func UplinkManager() *wireguard.Manager {
+	uplinkOnce.Do(func() { uplinkMgr = wireguard.NewNamedManager(NewPlane(), UplinkPrefix) })
+	return uplinkMgr
+}
+
+func ApplyUplinkObfuscation(string, string) error { return ErrPlatformUnsupported }
