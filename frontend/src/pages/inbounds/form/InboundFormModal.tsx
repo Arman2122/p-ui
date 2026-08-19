@@ -71,6 +71,7 @@ import {
   TunnelFields,
   VlessFields,
   WgkernelFields,
+  AwgObfuscationFields,
   WireguardFields,
 } from './protocols';
 import {
@@ -692,7 +693,7 @@ export default function InboundFormModal({
     <>
       {protocol === Protocols.WIREGUARD && <WireguardFields wgPubKey={wgPubKey} regenInboundWg={regenInboundWg} />}
 
-      {protocol === Protocols.WGKERNEL && (
+      {(protocol === Protocols.WGKERNEL || protocol === Protocols.AWGKERNEL) && (
         <WgkernelFields
           wgPubKey={wgPubKey}
           regenInboundWg={regenInboundWg}
@@ -700,6 +701,10 @@ export default function InboundFormModal({
           poolUsage={poolUsage}
         />
       )}
+
+      {/* The device is identical to kernel WireGuard's; only the obfuscation is
+          this protocol's own, so it is added rather than duplicating the form. */}
+      {protocol === Protocols.AWGKERNEL && <AwgObfuscationFields />}
 
       {protocol === Protocols.TUN && <TunFields />}
 

@@ -92,7 +92,8 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
             "op": "in",
             "values": [
               "mtproto",
-              "wgkernel"
+              "wgkernel",
+              "awgkernel"
             ],
             "not": true
           }
