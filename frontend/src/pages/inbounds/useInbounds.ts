@@ -62,6 +62,7 @@ const TRACKED_PROTOCOLS: readonly string[] = [
   Protocols.HYSTERIA,
   Protocols.WIREGUARD,
   Protocols.WGKERNEL,
+  Protocols.AWGKERNEL,
   Protocols.MTPROTO,
 ];
 

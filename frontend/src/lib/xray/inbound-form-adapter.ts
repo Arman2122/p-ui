@@ -260,7 +260,8 @@ function clientSchemaForProtocol(protocol: string): z.ZodType | null {
     case 'shadowsocks': return ShadowsocksClientSchema;
     case 'hysteria': return HysteriaClientSchema;
     case 'wireguard': return WireguardClientSchema;
-    case 'wgkernel': return WireguardClientSchema;
+    case 'wgkernel':
+    case 'awgkernel': return WireguardClientSchema;
     case 'mtproto': return MtprotoClientSchema;
     default: return null;
   }

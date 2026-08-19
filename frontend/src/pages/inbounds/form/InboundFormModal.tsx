@@ -91,6 +91,7 @@ import SniffingTab from './SniffingTab';
 
 import type { DBInbound } from '@/models/dbinbound';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
+import { isKernelWireguard } from '@/lib/xray/kernel-wireguard';
 
 
 /* Render a field label with a hover tooltip icon instead of an `extra` help line below. */
@@ -325,7 +326,7 @@ export default function InboundFormModal({
   /* Host state, and only this host's: an inbound deployed to a node is served
      somewhere this panel cannot read a sysctl from. */
   const forwardingQuery = useEgressPreflightQuery({
-    enabled: open && protocol === Protocols.WGKERNEL && wNodeId == null,
+    enabled: open && isKernelWireguard(protocol) && wNodeId == null,
   });
   /* Derived in the browser from settings the edit form already holds, so how
      full the pool is costs no query of its own. */
@@ -1008,6 +1009,7 @@ export default function InboundFormModal({
                 Protocols.TUN,
                 Protocols.WIREGUARD,
                 Protocols.WGKERNEL,
+                Protocols.AWGKERNEL,
                 Protocols.MTPROTO,
               ] as string[]).includes(protocol) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]

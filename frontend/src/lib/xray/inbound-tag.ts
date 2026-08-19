@@ -1,4 +1,5 @@
 // Client-side mirror of the backend inbound-tag derivation
+import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 // (web/service/port_conflict.go). Keep in sync; inbound-tag.test.ts guards parity.
 
 type TransportBits = number;
@@ -14,7 +15,7 @@ function inboundTransports(
   streamSettings: Record<string, unknown> | undefined,
   settings: Record<string, unknown> | undefined,
 ): TransportBits {
-  if (protocol === 'hysteria' || protocol === 'wireguard' || protocol === 'wgkernel') return UDP;
+  if (protocol === 'hysteria' || isWireguardLike(protocol)) return UDP;
 
   let bits: TransportBits = 0;
   const network = asString(streamSettings?.network);

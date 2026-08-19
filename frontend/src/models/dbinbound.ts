@@ -1,6 +1,7 @@
 import dayjs, { type Dayjs } from 'dayjs';
 import { ObjectUtil, NumberFormatter, SizeFormatter } from '@/utils';
 import { Protocols } from '@/schemas/primitives';
+import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 
 export type RawJsonField = string | Record<string, unknown> | unknown[];
 
@@ -170,7 +171,7 @@ export class DBInbound {
     /* Both WireGuard cores: xray's userspace tunnel and the kernel device.
        Callers ask this to mean "UDP listener whose product is a .conf". */
     get isWireguard() {
-        return this.protocol === Protocols.WIREGUARD || this.protocol === Protocols.WGKERNEL;
+        return isWireguardLike(this.protocol);
     }
 
     get isHysteria() {

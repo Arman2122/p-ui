@@ -1,6 +1,7 @@
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { preferPublicHost, resolveShareHost } from '@/lib/xray/inbound-link';
 import type { ClientRecord, InboundOption } from '@/hooks/useClients';
+import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 
 export function isWireguardClient(client: ClientRecord | null | undefined): boolean {
   if (!client) return false;
@@ -13,7 +14,7 @@ export function findWireguardInbound(
 ): InboundOption | undefined {
   return (client?.inboundIds || [])
     .map((id) => inboundsById[id])
-    .find((ib) => ib?.protocol === 'wireguard' || ib?.protocol === 'wgkernel');
+    .find((ib) => isWireguardLike(ib?.protocol));
 }
 
 export function buildWireguardClientConfig(

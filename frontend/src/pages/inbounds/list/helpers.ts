@@ -75,6 +75,7 @@ export function isInboundMultiUser(record: { protocol: string; settings: unknown
     case 'mtproto':
     case 'wireguard':
     case 'wgkernel':
+    case 'awgkernel':
       return true;
     case 'shadowsocks':
       return isSSMultiUser({ protocol: 'shadowsocks', settings: readSettings(record.settings) });

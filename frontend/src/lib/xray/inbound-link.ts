@@ -14,6 +14,7 @@ import type { XHttpStreamSettings } from '@/schemas/protocols/stream/xhttp';
 import { getHeaderValue } from './headers';
 import { canEnableTlsFlow } from './protocol-capabilities';
 import { deriveSpiderX } from './spider-x';
+import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 
 // Share-link generators. Each per-protocol fn takes a typed inbound plus
 // client overrides and returns a URL (or '' when the protocol doesn't
@@ -1249,7 +1250,7 @@ export function genInboundLinks(input: GenInboundLinksInput): string {
    product — so every renderer below serves them alike. wgkernel carries no
    `peers` key at all; only `clients`. */
 function isWireguardFamily(protocol: string): boolean {
-  return protocol === 'wireguard' || protocol === 'wgkernel';
+  return isWireguardLike(protocol);
 }
 
 // Per-peer wireguard fanout. Each peer gets its own link (or .conf
