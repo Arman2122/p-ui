@@ -1553,6 +1553,22 @@ install_p-ui() {
         chmod +x bin/mtg-linux-$(arch)
     fi
 
+    # AmneziaWG is optional by design: the module needs kernel headers and a
+    # toolchain, and a host that cannot build it must still get a working panel
+    # with every other protocol. So this reports and continues rather than
+    # failing the install, and the panel's own Preflight disables that one core.
+    if [[ -x awg-dkms.sh && -d amneziawg/src ]]; then
+        mkdir -p ${pui_folder}
+        cp -a amneziawg ${pui_folder}/amneziawg
+        cp -f awg-dkms.sh ${pui_folder}/awg-dkms.sh
+        chmod +x ${pui_folder}/awg-dkms.sh
+        echo -e "${yellow}Building the AmneziaWG kernel module, which takes a minute${plain}"
+        if ! ${pui_folder}/awg-dkms.sh install ${pui_folder}/amneziawg; then
+            echo -e "${yellow}AmneziaWG is unavailable on this host; every other protocol still works${plain}"
+            echo -e "${yellow}Retry later with: ${pui_folder}/awg-dkms.sh install${plain}"
+        fi
+    fi
+
     # Update p-ui cli and se set permission
     mv -f "${pui_script_temp}" /usr/bin/p-ui
     if [[ $? -ne 0 ]]; then

@@ -100,6 +100,12 @@ jobs:
           cp pui-release p-ui/
           cp p-ui.service.debian p-ui/
           cp p-ui.sh p-ui/
+          # AmneziaWG ships as SOURCE, not a binary: a kernel module is bound to the
+          # kernel it was compiled against, so the host builds it with DKMS. The
+          # same payload for every architecture, being C rather than a build.
+          cp awg-dkms.sh p-ui/
+          mkdir -p p-ui/amneziawg
+          cp -a third_party/amneziawg-kernel/. p-ui/amneziawg/
           mv p-ui/pui-release p-ui/p-ui
           mkdir p-ui/bin
           cd p-ui/bin
