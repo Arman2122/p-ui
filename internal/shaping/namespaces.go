@@ -28,7 +28,7 @@ type Namespaces struct {
 // the fronts the egress band carves. The mirror namespace is not among them —
 // this package creates those itself, so ownership is never in question.
 func DefaultNamespaces() *Namespaces {
-	return &Namespaces{shapeable: []string{wireguardPrefix, egressPrefix}}
+	return &Namespaces{shapeable: []string{wireguardPrefix, amneziawgPrefix, egressPrefix}}
 }
 
 /*

@@ -15,7 +15,7 @@ import (
 func reconciled(t *testing.T, users int) (*rig, *Core, core.Instance) {
 	t.Helper()
 	r := newRig()
-	c := &Core{mgr: r.mgr}
+	c := NewFor(Kind, r.mgr)
 	inst := r.instance(users)
 	if err := c.Reconcile(context.Background(), []core.Instance{inst}); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -27,7 +27,7 @@ func reconciled(t *testing.T, users int) (*rig, *Core, core.Instance) {
 // conformance rig cannot drive: every peer it builds already carries a /32.
 func TestShapingTargetsLeavesAWiderPrefixUnshaped(t *testing.T) {
 	r := newRig()
-	c := &Core{mgr: r.mgr}
+	c := NewFor(Kind, r.mgr)
 	inst := r.instance(2)
 	// A site-to-site peer is a real configuration and not an identity: its prefix
 	// answers for everyone inside it, so shaping on it shapes strangers.
@@ -61,7 +61,7 @@ func TestShapingTargetsGoesQuietWithoutADevice(t *testing.T) {
 			setup: func(t *testing.T) (*Core, core.Instance) {
 				t.Helper()
 				r := newRig()
-				return &Core{mgr: r.mgr}, r.instance(1)
+				return NewFor(Kind, r.mgr), r.instance(1)
 			},
 		},
 		{
@@ -120,7 +120,7 @@ be printing a LAN address that belongs to the customer's office router.
 */
 func TestSessionsReportsTheAddressThePeerAnswersTo(t *testing.T) {
 	r := newRig()
-	c := &Core{mgr: r.mgr}
+	c := NewFor(Kind, r.mgr)
 	inst := r.instance(2)
 	inst.Users[1].Credentials[core.CredAllowedIPs] = []any{"10.9.0.5/32", "192.168.50.0/24"}
 	if err := c.Reconcile(context.Background(), []core.Instance{inst}); err != nil {

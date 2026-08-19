@@ -20,6 +20,9 @@ import (
 // imported: this package may name a device, never a core.
 const (
 	wireguardPrefix = "pwg"
+	// amneziawgPrefix is the AmneziaWG core's own device namespace: its inbounds
+	// are shapeable exactly as WireGuard's are, and share none of their names.
+	amneziawgPrefix = "pawg"
 	egressPrefix    = "peg"
 	// ifbPrefix names the upload mirror device. It is created by this package
 	// outright, so its whole lifecycle — including the GC — is ours.

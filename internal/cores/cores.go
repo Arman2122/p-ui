@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores/internal/amneziawg"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/cores/internal/wireguard"
 	"github.com/Arman2122/p-ui/internal/cores/internal/xray"
@@ -157,6 +158,9 @@ func Register(reg *core.Registry, deps Deps) error {
 		return fmt.Errorf("cores: Register(nil registry)")
 	}
 	if err := reg.Register(mtproto.New()); err != nil {
+		return err
+	}
+	if err := reg.Register(amneziawg.New()); err != nil {
 		return err
 	}
 	if err := reg.Register(wireguard.New()); err != nil {

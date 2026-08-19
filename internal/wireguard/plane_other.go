@@ -50,3 +50,10 @@ func (unsupportedPlane) AddRoute(context.Context, string, netip.Prefix) error {
 func (unsupportedPlane) DelRoute(context.Context, string, netip.Prefix) error {
 	return ErrPlatformUnsupported
 }
+
+// UnsupportedPlane is the refusing plane, exported so a core for a Linux-only
+// module can still be constructed and registered off Linux. Registration must
+// not depend on the platform: the panel decides what it can serve through
+// Preflight, and a core missing from the registry on a developer's machine is a
+// different build rather than the same one honestly reporting a refusal.
+func UnsupportedPlane() Plane { return unsupportedPlane{} }

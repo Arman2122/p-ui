@@ -7,7 +7,7 @@ export const PROCESSSTATE_VALUES = ['running', 'stop', 'error'] as const;
 export const ProcessStateSchema = z.enum(PROCESSSTATE_VALUES);
 export type ProcessState = z.infer<typeof ProcessStateSchema>;
 
-export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'tun'] as const;
+export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun'] as const;
 export const ProtocolSchema = z.enum(PROTOCOL_VALUES);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
@@ -511,7 +511,7 @@ export const InboundSchema = z.object({
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
   port: z.number().int().min(0).max(65535),
-  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'tun']),
+  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun']),
   remark: z.string(),
   settings: z.unknown(),
   shareAddr: z.string(),
