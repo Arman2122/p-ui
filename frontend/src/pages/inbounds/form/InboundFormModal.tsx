@@ -92,6 +92,7 @@ import SniffingTab from './SniffingTab';
 import type { DBInbound } from '@/models/dbinbound';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { isKernelWireguard } from '@/lib/xray/kernel-wireguard';
+import { takenSubnets, suggestFreeSubnet } from '@/lib/xray/wireguard-subnets';
 
 
 /* Render a field label with a hover tooltip icon instead of an `extra` help line below. */
@@ -332,6 +333,12 @@ export default function InboundFormModal({
      full the pool is costs no query of its own. */
   const wgkAddresses = useWatch({ control, name: 'settings.address' });
   const wgkClients = useWatch({ control, name: 'settings.clients' });
+  /* Every subnet another kernel device already serves. The modal is handed the
+     inbound list already, so this costs no query. */
+  const takenWgSubnets = useMemo(
+    () => takenSubnets(dbInbounds, dbInbound?.id),
+    [dbInbounds, dbInbound?.id],
+  );
   const poolUsage = useMemo(
     () => wireguardPoolUsage(wgkAddresses as string[] | undefined, wgkClients as WireguardPoolClient[] | undefined),
     [wgkAddresses, wgkClients],
@@ -467,6 +474,11 @@ export default function InboundFormModal({
       if (name !== 'protocol' || type !== 'change') return;
       const next = getV('protocol') as string;
       const settings = createDefaultInboundSettings(next) ?? undefined;
+      /* A kernel device opens on a subnet nothing else serves. The shared default
+         is right for the first such inbound and refused for every one after. */
+      if (settings && isKernelWireguard(next)) {
+        (settings as { address?: string[] }).address = [suggestFreeSubnet(takenWgSubnets)];
+      }
       setV('settings', settings);
       if (!NODE_ELIGIBLE_PROTOCOLS.has(next)) {
         setV('nodeId', null);
@@ -700,6 +712,7 @@ export default function InboundFormModal({
           regenInboundWg={regenInboundWg}
           forwardingNotes={forwardingQuery.data?.forwardingNotes ?? []}
           poolUsage={poolUsage}
+          takenSubnets={takenWgSubnets}
         />
       )}
 
