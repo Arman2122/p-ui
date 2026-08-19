@@ -174,8 +174,11 @@ func encodePeer(peer Peer) ([]byte, error) {
 		encoder.Bytes(peerPresharedKey, peer.PresharedKey[:])
 	}
 	if peer.PersistentKeepaliveInterval != nil {
-		// U32 here, unlike upstream WireGuard: AmneziaWG widened it.
-		encoder.Uint32(peerPersistentKeepaliveInterval, uint32(*peer.PersistentKeepaliveInterval))
+		// A u16 RANGE, not a value: timers.c calls u16_range_pick_one on it, so the
+		// module draws a fresh interval each time. A bare n encodes [n, 0] -- an
+		// inverted range -- and the keepalive never fires as asked.
+		seconds := uint16(*peer.PersistentKeepaliveInterval)
+		encoder.Uint32(peerPersistentKeepaliveInterval, TimerRange(seconds, seconds))
 	}
 	if len(peer.AllowedIPs) > 0 {
 		allowed, err := encodeAllowedIPs(peer.AllowedIPs)

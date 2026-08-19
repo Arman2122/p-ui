@@ -151,7 +151,9 @@ func decodePeer(data []byte) (wgtypes.Peer, error) {
 		case peerEndpoint:
 			peer.Endpoint = decodeSockaddr(decoder.Bytes())
 		case peerPersistentKeepaliveInterval:
-			peer.PersistentKeepaliveInterval = time.Duration(decoder.Uint32()) * time.Second
+			// The low half is the range's lower bound, which is the interval asked
+			// for when both bounds match.
+			peer.PersistentKeepaliveInterval = time.Duration(uint16(decoder.Uint32())) * time.Second
 		case peerLastHandshakeTime:
 			peer.LastHandshakeTime = decodeTimespec(decoder.Bytes())
 		case peerRxBytes:
