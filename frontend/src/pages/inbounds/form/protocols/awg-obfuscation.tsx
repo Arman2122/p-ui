@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Collapse, InputNumber, Space } from 'antd';
+import { Alert, Button, Collapse, Input, InputNumber, Space, Switch, Typography } from 'antd';
 import { useFormContext } from 'react-hook-form';
 
 import { FormField } from '@/components/form/rhf';
@@ -75,6 +75,36 @@ export default function AwgObfuscationFields() {
             </FormField>
             <FormField label={t('pages.inbounds.form.awgS4')} name="settings.awg.s4">
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
+            </FormField>
+
+            {/* The rest of 3.1, behind their own heading: a deployment that sets
+                junk and padding is already obfuscated, and these are for one that
+                needs to look different again. Ranges are written lo-hi. */}
+            <Typography.Text type="secondary">{t('pages.inbounds.form.awgAdvanced')}</Typography.Text>
+
+            <FormField label={t('pages.inbounds.form.awgI1')} name="settings.awg.i1" tooltip={t('pages.inbounds.form.awgIHint')}>
+              <Input placeholder="b0xdeadbeef" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgI2')} name="settings.awg.i2">
+              <Input />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgI3')} name="settings.awg.i3">
+              <Input />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgI4')} name="settings.awg.i4">
+              <Input />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgI5')} name="settings.awg.i5">
+              <Input />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgHeaderProtectionKey')} name="settings.awg.headerProtectionKey" tooltip={t('pages.inbounds.form.awgHeaderProtectionKeyHint')}>
+              <Input placeholder="base64, 32 bytes" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgRandomTrailers')} name="settings.awg.randomTrailers" valueProp="checked">
+              <Switch />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgDisableCookies')} name="settings.awg.disableCookies" valueProp="checked">
+              <Switch />
             </FormField>
           </Space>
         ),
