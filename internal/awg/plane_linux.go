@@ -3,6 +3,10 @@
 package awg
 
 import (
+	"encoding/json"
+	"fmt"
+	"sync"
+
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/Arman2122/p-ui/internal/wireguard"
@@ -111,3 +115,59 @@ func fromWgtypes(cfg wgtypes.Config) Config {
 
 // ensure the driver keeps satisfying the seam it was written for.
 var _ wireguard.DeviceDriver = Driver{}
+
+/*
+The uplink half: an AmneziaWG tunnel the panel DIALS rather than serves.
+
+Here rather than in the core package because internal/cores/internal is fenced
+off from the service layer by the compiler, and the egress driver registry lives
+there. The core is the thing that must not leak; a device namespace and a driver
+type are not.
+*/
+const (
+	// UplinkPrefix is this module's dialled-device namespace, distinct from both
+	// its inbound devices (pawg) and kernel WireGuard's uplinks (pux): three
+	// managers, three namespaces, and no id ever naming two devices.
+	UplinkPrefix = "paux"
+
+	// UplinkDriverType is the egress row type an AmneziaWG uplink is stored as.
+	// It must differ from wg-client even though the fields are identical: the
+	// type decides which module creates the device, and one dialled by the plain
+	// WireGuard driver would carry no obfuscation while claiming to.
+	UplinkDriverType = "awg-client"
+)
+
+var (
+	uplinkOnce sync.Once
+	uplinkMgr  *wireguard.Manager
+)
+
+// UplinkManager is the process-wide manager for AmneziaWG uplinks.
+func UplinkManager() *wireguard.Manager {
+	uplinkOnce.Do(func() { uplinkMgr = wireguard.NewNamedManager(NewPlane(), UplinkPrefix) })
+	return uplinkMgr
+}
+
+/*
+ApplyUplinkObfuscation reads an egress row's settings and pushes its parameters
+onto the dialled device.
+
+A provider tunnel is exactly where these matter: an uplink dialled without the
+parameters the far end expects completes no handshake at all, which is the same
+failure a client hits and just as silent.
+*/
+func ApplyUplinkObfuscation(device, settings string) error {
+	if settings == "" {
+		return nil
+	}
+	var row struct {
+		AWG Params `json:"awg"`
+	}
+	if err := json.Unmarshal([]byte(settings), &row); err != nil {
+		return fmt.Errorf("awg: uplink settings: %w", err)
+	}
+	if row.AWG.IsZero() {
+		return nil
+	}
+	return ConfigureParams(device, row.AWG)
+}

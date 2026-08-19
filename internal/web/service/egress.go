@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/Arman2122/p-ui/internal/awg"
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
@@ -45,6 +46,10 @@ func newEgressDriverRegistry() *egress.Registry {
 	// The shared engine, not a second one: an uplink and an inbound must never
 	// end up as two writers to the same device namespace.
 	_ = registry.Register(wgclient.New(wireguard.GetUplinkManager()))
+	// AmneziaWG dials the same shape through the other module. A distinct type,
+	// because the type decides which module makes the device and one dialled by
+	// the plain WireGuard driver would carry no obfuscation while claiming to.
+	_ = registry.Register(wgclient.NewTyped(awg.UplinkDriverType, awg.UplinkManager()).WithObfuscation(awg.ApplyUplinkObfuscation))
 	return registry
 }
 

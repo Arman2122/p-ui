@@ -32,7 +32,11 @@ export type EgressPreflight = z.infer<typeof EgressPreflightSchema>;
    here and one driver in Go, which is the whole point of the split. */
 export const EGRESS_TYPE = 'xray-tun';
 export const EGRESS_TYPE_UPLINK = 'wg-client';
-export const EGRESS_TYPES = [EGRESS_TYPE, EGRESS_TYPE_UPLINK] as const;
+/* AmneziaWG dials with the same fields, but must be its own type: the type is
+   what decides which module creates the device, and one dialled as wg-client
+   would connect with no obfuscation while the row claims otherwise. */
+export const EGRESS_TYPE_AWG_UPLINK = 'awg-client';
+export const EGRESS_TYPES = [EGRESS_TYPE, EGRESS_TYPE_UPLINK, EGRESS_TYPE_AWG_UPLINK] as const;
 export type EgressType = (typeof EGRESS_TYPES)[number];
 
 /* An uplink carries no target: it IS the destination. Its settings are the
@@ -98,10 +102,10 @@ export type EgressPayload = Omit<Egress, 'createdAt' | 'updatedAt'>;
 
 /* An uplink as the API takes it. Its credentials live in the settings JSON the
    driver reads, and it names no target because it IS the destination. */
-export function uplinkPayload(form: EgressFormValues, remark: string): EgressPayload {
+export function uplinkPayload(form: EgressFormValues, remark: string, type: EgressType = EGRESS_TYPE_UPLINK): EgressPayload {
   return {
     id: form.id,
-    type: EGRESS_TYPE_UPLINK,
+    type,
     remark: remark.trim(),
     target: '',
     enable: form.enable,
