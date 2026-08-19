@@ -688,7 +688,8 @@
         "awgHeaderProtectionKey": "Header protection key",
         "awgHeaderProtectionKeyHint": "32 bytes, base64. Encrypts the packet header itself. Any junk sizes you set must then be at least 12 bytes, which is what the nonce needs.",
         "awgRandomTrailers": "Random trailers",
-        "awgDisableCookies": "Disable cookies"
+        "awgDisableCookies": "Disable cookies",
+        "wgkernelAddressConflict": "{cidr} is already served by inbound {inbound}. Two kernel devices on one subnet answer each other's clients, so the panel will refuse this on save."
       },
       "info": {
         "mode": "Mode",

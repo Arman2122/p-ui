@@ -6,6 +6,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { FormField } from '@/components/form/rhf';
 import type { WireguardPoolUsage } from '@/lib/xray/wireguard-pool';
 import { normalizeInterfaceAddresses } from '@/lib/xray/interface-address';
+import { conflictingSubnet } from '@/lib/xray/wireguard-subnets';
 
 interface WgkernelFieldsProps {
   wgPubKey: string;
@@ -15,6 +16,9 @@ interface WgkernelFieldsProps {
   forwardingNotes: string[];
   /* How full the configured prefix is, or null when there is no IPv4 pool to size. */
   poolUsage: WireguardPoolUsage | null;
+  /* Subnets other kernel devices already serve, so a collision is caught while
+     it is typed rather than refused after the form is filled in. */
+  takenSubnets: { cidr: string; owner: { id: number; remark?: string } }[];
 }
 
 /* Kernel WireGuard has no streamSettings and no TUN emulation, so this form is
@@ -24,9 +28,11 @@ export default function WgkernelFields({
   regenInboundWg,
   forwardingNotes,
   poolUsage,
+  takenSubnets,
 }: WgkernelFieldsProps) {
   const { t } = useTranslation();
   const [rejected, setRejected] = useState<{ reason: string; values: string[] } | null>(null);
+  const [clash, setClash] = useState<{ cidr: string; remark: string } | null>(null);
   return (
     <>
       <Alert
@@ -73,6 +79,8 @@ export default function WgkernelFields({
             setRejected(result.rejected.length > 0 && result.reason
               ? { reason: result.reason, values: result.rejected }
               : null);
+            const hit = result.values.map((v) => conflictingSubnet(v, takenSubnets)).find(Boolean);
+            setClash(hit ? { cidr: hit.cidr, remark: hit.owner.remark || String(hit.owner.id) } : null);
             return result.values;
           },
         }}
@@ -82,6 +90,11 @@ export default function WgkernelFields({
             {rejected && (
               <Typography.Text type="danger">
                 {t(rejected.reason, { value: rejected.values.join(', ') })}
+              </Typography.Text>
+            )}
+            {clash && (
+              <Typography.Text type="danger">
+                {t('pages.inbounds.form.wgkernelAddressConflict', { cidr: clash.cidr, inbound: clash.remark })}
               </Typography.Text>
             )}
             {poolUsage && (
