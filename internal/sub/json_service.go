@@ -230,7 +230,7 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			newOutbounds = append(newOutbounds, s.genServer(subReq, inbound, streamSettings, client, jsonMux(mux, hostMux)))
 		case "hysteria":
 			newOutbounds = append(newOutbounds, s.genHy(inbound, newStream, client, jsonMux(mux, hostMux)))
-		case "wireguard", "wgkernel":
+		case "wireguard", "wgkernel", "awgkernel":
 			wgOutbound := s.genWireguard(inbound, client)
 			if wgOutbound == nil {
 				continue
