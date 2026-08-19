@@ -273,6 +273,13 @@ uninstall() {
     systemctl daemon-reload
     systemctl reset-failed
 
+    # Before the folder goes, since the script that unregisters the DKMS tree
+    # lives inside it. Left behind, the module keeps being rebuilt on every
+    # kernel upgrade for a panel that is no longer installed.
+    if [[ -x ${pui_folder}/awg-dkms.sh ]]; then
+        ${pui_folder}/awg-dkms.sh remove || true
+    fi
+
     rm /etc/p-ui/ -rf
     rm ${pui_folder}/ -rf
     rm -f "${pui_env_file}"
