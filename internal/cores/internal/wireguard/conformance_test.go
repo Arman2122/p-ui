@@ -147,7 +147,7 @@ func (r *rig) feedSession(email, source string, lastSeenUnixMilli int64) {
 
 func (r *rig) asRig() coretest.Rig {
 	return coretest.Rig{
-		NewCore:       func() (core.Core, error) { return &Core{mgr: r.mgr}, nil },
+		NewCore:       func() (core.Core, error) { return NewFor(Kind, r.mgr), nil },
 		Instance:      r.instance,
 		Starts:        r.starts,
 		FeedTraffic:   r.feed,

@@ -14,7 +14,7 @@ comparison, and the dispatch ratchet dropped by one when it moved here. The
 device name is derived from the inbound id, so it is stable across restarts.
 */
 func TestIngressHandleNamesTheDevice(t *testing.T) {
-	got, err := (&Core{}).IngressHandle(context.Background(), core.Instance{ID: 7, Kind: Kind})
+	got, err := NewFor(Kind, nil).IngressHandle(context.Background(), core.Instance{ID: 7, Kind: Kind})
 	if err != nil {
 		t.Fatalf("IngressHandle: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestIngressHandleNamesTheDevice(t *testing.T) {
 }
 
 func TestWireguardIsADeviceIngress(t *testing.T) {
-	c := &Core{}
+	c := NewFor(Kind, nil)
 	if got := c.IngressSelector(Kind); got != core.IngressDevice {
 		t.Errorf("IngressSelector(%q) = %q, want %q", Kind, got, core.IngressDevice)
 	}
@@ -51,7 +51,7 @@ FORWARDED in would keep the client's inner source and need a MASQUERADE, which
 is why this answer is tied to the fronted path rather than asserted in general.
 */
 func TestExitHandleIsAnUplinkTheDaemonSources(t *testing.T) {
-	c := &Core{}
+	c := NewFor(Kind, nil)
 
 	if kinds := c.ExitKinds(); len(kinds) != 1 || kinds[0] != Kind {
 		t.Fatalf("ExitKinds = %v, want [%s]", kinds, Kind)
@@ -63,7 +63,7 @@ func TestExitHandleIsAnUplinkTheDaemonSources(t *testing.T) {
 		t.Errorf("a kind this core does not serve = %q, want %q", got, core.ExitNone)
 	}
 
-	handle, err := (&Core{}).ExitHandle(context.Background(), core.Exit{ID: 5, Kind: Kind, Enable: true})
+	handle, err := NewFor(Kind, nil).ExitHandle(context.Background(), core.Exit{ID: 5, Kind: Kind, Enable: true})
 	if err != nil {
 		t.Fatalf("ExitHandle: %v", err)
 	}

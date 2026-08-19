@@ -37,10 +37,10 @@ func TestRegisterRefusesANamespaceThatCannotRoundTrip(t *testing.T) {
 
 func TestRegisterRefusesASecondClaimOnOneNamespace(t *testing.T) {
 	ns := DefaultNamespaces()
-	if err := ns.Register("pawg"); err != nil {
+	if err := ns.Register("pfake"); err != nil {
 		t.Fatalf("first Register: %v", err)
 	}
-	if err := ns.Register("pawg"); !errors.Is(err, ErrDuplicateNamespace) {
+	if err := ns.Register("pfake"); !errors.Is(err, ErrDuplicateNamespace) {
 		t.Fatalf("second Register = %v, want %v", err, ErrDuplicateNamespace)
 	}
 	if err := ns.Register(wireguardPrefix); !errors.Is(err, ErrDuplicateNamespace) {
@@ -55,7 +55,7 @@ another — which is how a tree gets built and then never collected.
 */
 func TestARegisteredNamespaceIsOwnedEverywhere(t *testing.T) {
 	ns := DefaultNamespaces()
-	if err := ns.Register("pawg"); err != nil {
+	if err := ns.Register("pfake"); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 
@@ -65,12 +65,12 @@ func TestARegisteredNamespaceIsOwnedEverywhere(t *testing.T) {
 	if id, mine := ns.DeviceID("pawg7"); !mine || id != 7 {
 		t.Errorf("DeviceID(pawg7) = %d, %v; want 7, true", id, mine)
 	}
-	if !slices.Contains(ns.Shapeable(), "pawg") {
+	if !slices.Contains(ns.Shapeable(), "pfake") {
 		t.Errorf("Shapeable() = %v, missing the registered namespace", ns.Shapeable())
 	}
 
 	// The round trip still holds: sharing the prefix is not owning the device.
-	for _, foreign := range []string{"pawgtest", "pawg0", "pawg007", "pawg", "awg7"} {
+	for _, foreign := range []string{"pawgtest", "pawg0", "pawg007", "pfake", "awg7"} {
 		if ns.Owns(foreign) {
 			t.Errorf("Owns(%q) = true; a near miss is somebody else's interface", foreign)
 		}
@@ -78,7 +78,8 @@ func TestARegisteredNamespaceIsOwnedEverywhere(t *testing.T) {
 
 	// A namespace nobody registered stays foreign, which is the default that
 	// keeps the panel off an operator's own interfaces.
-	if DefaultNamespaces().Owns("pawg7") {
+	// Not pawg: that one IS a default now, being the AmneziaWG core's devices.
+	if DefaultNamespaces().Owns("pzzz7") {
 		t.Error("an unregistered namespace is owned by a fresh set")
 	}
 }

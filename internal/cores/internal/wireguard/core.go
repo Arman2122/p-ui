@@ -21,8 +21,16 @@ const Kind core.Kind = "wgkernel"
 
 // Core is the kernel WireGuard adapter. The engine owns the devices; the only
 // state here is the last scrape's online set, which OnlineEmails replays.
+/*
+Core is the kernel WireGuard adapter, parameterised by the kind it serves.
+
+AmneziaWG is this same protocol plus obfuscation -- same devices, same peers,
+same netlink shape -- so it reuses this core with its own kind and its own
+manager rather than copying three hundred lines that would then drift.
+*/
 type Core struct {
-	mgr *engine.Manager
+	kind core.Kind
+	mgr  *engine.Manager
 
 	mu          sync.Mutex
 	online      []string
@@ -30,13 +38,22 @@ type Core struct {
 }
 
 // New returns a core over the process-wide device manager.
-func New() *Core { return &Core{mgr: engine.GetManager()} }
+func New() *Core { return NewFor(Kind, engine.GetManager()) }
 
-func (c *Core) Kinds() []core.Kind { return []core.Kind{Kind} }
+// NewFor returns a core serving kind through mgr, which is how a second module
+// implementing the same protocol reuses all of this.
+func NewFor(kind core.Kind, mgr *engine.Manager) *Core {
+	return &Core{kind: kind, mgr: mgr}
+}
+
+func (c *Core) Kinds() []core.Kind { return []core.Kind{c.kind} }
 
 func (c *Core) Describe() core.Descriptor {
 	return core.Descriptor{
-		ID:       Kind,
+		ID: c.kind,
+		// A literal, not derived from the kind: the dead-key guard scans sources
+		// statically, and a computed key is invisible to it. A core reusing this
+		// one overrides Describe with its own.
 		TitleKey: "cores.wgkernel.title",
 		Caps: core.Capabilities{
 			UserHotAdd:   core.Yes(),
@@ -57,7 +74,7 @@ func (c *Core) Preflight(ctx context.Context) error { return c.mgr.Preflight(ctx
 // ClientCredentials names what a client of this core carries. keepAlive is not
 // among them: it is outside the vocabulary a client form can render.
 func (c *Core) ClientCredentials(kind core.Kind) []string {
-	if kind != Kind {
+	if kind != c.kind {
 		return nil
 	}
 	return []string{core.CredPrivateKey, core.CredPublicKey, core.CredPreSharedKey, core.CredAllowedIPs}
@@ -71,7 +88,7 @@ func (c *Core) MintClientCredentials(core.Kind, string, map[string]string) (map[
 
 // The refusal string is the API's exact historical wording.
 func (c *Core) ValidateClient(kind core.Kind, _, _ string, have map[string]string) error {
-	if kind == Kind && have[core.CredPublicKey] == "" {
+	if kind == c.kind && have[core.CredPublicKey] == "" {
 		return errors.New("wireguard client requires a key")
 	}
 	return nil
@@ -234,12 +251,12 @@ func (c *Core) OnlineEmails(_ context.Context) ([]string, error) {
 
 // RemovalLosesCounters is measured, not inferred: a peer remove ZEROES rx/tx
 // while an allowed-IP, keepalive or preshared-key edit preserves them.
-func (c *Core) RemovalLosesCounters(kind core.Kind) bool { return kind == Kind }
+func (c *Core) RemovalLosesCounters(kind core.Kind) bool { return kind == c.kind }
 
 // ShapingSelector answers for this core's own kind alone. A peer's allowed-IP is
 // unforgeable: cryptokey routing drops a spoofed inner source at decap.
 func (c *Core) ShapingSelector(kind core.Kind) core.Selector {
-	if kind != Kind {
+	if kind != c.kind {
 		return core.SelectorNone
 	}
 	return core.SelectorInnerIP
@@ -310,7 +327,7 @@ func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
 // IngressSelector answers for this core's own kind alone: decrypted traffic
 // leaves the tunnel across a kernel interface, so the panel routes it by that.
 func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
-	if kind != Kind {
+	if kind != c.kind {
 		return core.IngressNone
 	}
 	return core.IngressDevice
@@ -329,12 +346,12 @@ func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.Ingres
 
 // ExitKinds: this core can terminate traffic somebody else routed to it, on the
 // same kind it serves inbound. One engine, two directions.
-func (c *Core) ExitKinds() []core.Kind { return []core.Kind{Kind} }
+func (c *Core) ExitKinds() []core.Kind { return []core.Kind{c.kind} }
 
 // ExitHandleKind: an uplink is reached by sending packets at a kernel interface,
 // which is what a device handle means.
 func (c *Core) ExitHandleKind(kind core.Kind) core.ExitHandleKind {
-	if kind != Kind {
+	if kind != c.kind {
 		return core.ExitNone
 	}
 	return core.ExitDevice

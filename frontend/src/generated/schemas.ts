@@ -2101,6 +2101,7 @@ export const SCHEMAS: Record<string, unknown> = {
           "hysteria",
           "mtproto",
           "wgkernel",
+          "awgkernel",
           "tun"
         ],
         "example": "vless",

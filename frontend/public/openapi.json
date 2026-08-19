@@ -2127,6 +2127,7 @@
               "hysteria",
               "mtproto",
               "wgkernel",
+              "awgkernel",
               "tun"
             ],
             "example": "vless",

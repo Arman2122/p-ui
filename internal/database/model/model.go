@@ -35,6 +35,9 @@ const (
 	// WGKernel is kernel WireGuard, converged over netlink. WireGuard above is
 	// xray's userspace tunnel and keeps that name; the two are separate cores.
 	WGKernel Protocol = "wgkernel"
+	// AWGKernel is AmneziaWG: the same kernel protocol carrying obfuscation, and
+	// a separate kind because a client of one cannot speak to the other.
+	AWGKernel Protocol = "awgkernel"
 	// Tun had no constant for a long while despite being accepted, offered and
 	// implemented; that gap is what stopped tun inbounds being served once the
 	// runtime resolved cores by protocol.

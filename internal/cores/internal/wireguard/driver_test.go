@@ -117,7 +117,7 @@ func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
 // inbound form writes inbounds.port, and no schema writes a listenPort.
 func TestTheListenPortComesFromTheInbound(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	inst := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 	inst.Settings = fmt.Sprintf(`{"secretKey":%q,"address":["10.0.0.1/24"],"listenPort":9999}`, serverKey)
 
@@ -132,7 +132,7 @@ func TestTheListenPortComesFromTheInbound(t *testing.T) {
 // TestPlanChangeIsolatesTheRename guards the answer UpdateInbound acts on: a
 // non-noop rename has it drop the old instance, which for this core is the device.
 func TestPlanChangeIsolatesTheRename(t *testing.T) {
-	c := &Core{}
+	c := NewFor(Kind, nil)
 	base := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 
 	renamed := base
@@ -167,7 +167,7 @@ func TestPlanChangeIsolatesTheRename(t *testing.T) {
 // has: a removal then an add, for a rename, a quota, an expiry or a re-key alike.
 func TestClientEditsNeverTakeTheLinkDown(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	kept := client("b@example.com", fill(2), "10.0.0.12/32", "", 0)
 	current := client("a@example.com", fill(1), "10.0.0.11/32", "", 0)
 	base := inbound(current, kept)
@@ -251,7 +251,7 @@ func TestRemoveUserResolvesTheClientWithoutAUserSet(t *testing.T) {
 
 	t.Run("from the engine's index", func(t *testing.T) {
 		k := wgtest.New()
-		c := &Core{mgr: engine.NewManager(k)}
+		c := NewFor(Kind, engine.NewManager(k))
 		if err := c.Reconcile(t.Context(), []core.Instance{inbound(a, b)}); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -265,7 +265,7 @@ func TestRemoveUserResolvesTheClientWithoutAUserSet(t *testing.T) {
 
 	t.Run("from the stored settings when the index is cold", func(t *testing.T) {
 		k := wgtest.New()
-		if err := (&Core{mgr: engine.NewManager(k)}).Reconcile(t.Context(), []core.Instance{inbound(a, b)}); err != nil {
+		if err := (NewFor(Kind, engine.NewManager(k))).Reconcile(t.Context(), []core.Instance{inbound(a, b)}); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 		stored := inbound()
@@ -273,7 +273,7 @@ func TestRemoveUserResolvesTheClientWithoutAUserSet(t *testing.T) {
 			`{"secretKey":%q,"address":["10.0.0.1/24"],"clients":[{"email":%q,"publicKey":%q}]}`,
 			serverKey, a.Email, fill(1).String())
 
-		restarted := &Core{mgr: engine.NewManager(k)}
+		restarted := NewFor(Kind, engine.NewManager(k))
 		if err := restarted.RemoveUser(t.Context(), stored, a.Email); err != nil {
 			t.Fatalf("RemoveUser: %v", err)
 		}
@@ -286,7 +286,7 @@ func TestRemoveUserResolvesTheClientWithoutAUserSet(t *testing.T) {
 // TestUserOpsTouchOneClient pins the marker this core must NOT declare: it would
 // have the runtime reload the row and project every client for each edit.
 func TestUserOpsTouchOneClient(t *testing.T) {
-	bound := core.Bind(&Core{})
+	bound := core.Bind(NewFor(Kind, nil))
 	if bound.Users == nil {
 		t.Fatal("wgkernel no longer provisions users at all, so every client edit converges the whole inbound instead of one peer")
 	}
@@ -353,7 +353,7 @@ func TestReplacePeersIsNeverSet(t *testing.T) {
 
 func TestPreflightReportsAnUnusableKernel(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	if err := c.Preflight(t.Context()); err != nil {
 		t.Fatalf("Preflight on a usable host = %v, want nil", err)
 	}
@@ -368,7 +368,7 @@ func TestPreflightReportsAnUnusableKernel(t *testing.T) {
 // push is decided by the node plan, never by the inbound being enabled.
 func TestAddUserToADisabledInboundIsANoop(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	user := client("a@example.com", fill(1), "10.0.0.11/32", "", 0)
 	inst := inbound(user)
 	inst.Enable = false
@@ -395,7 +395,7 @@ func TestUnreadableSettingsNeverDeleteTheDevice(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			k := wgtest.New()
-			c := &Core{mgr: engine.NewManager(k)}
+			c := NewFor(Kind, engine.NewManager(k))
 			live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 			if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
 				t.Fatalf("Reconcile: %v", err)
@@ -432,7 +432,7 @@ func TestUnreadableSettingsNeverDeleteTheDevice(t *testing.T) {
 // told rather than shown an inbound that is up.
 func TestAnInboundWithNoServerKeyIsNotServed(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	inst := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 	inst.Settings = `{"address":["10.0.0.1/24"]}`
 
@@ -450,7 +450,7 @@ func TestAnInboundWithNoServerKeyIsNotServed(t *testing.T) {
 // went missing is a broken edit, never an instruction to destroy a live device.
 func TestLosingTheServerKeyNeverDeletesTheDevice(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 	if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -484,7 +484,7 @@ func TestLosingTheServerKeyNeverDeletesTheDevice(t *testing.T) {
 // this is the contract holding for a caller that trusts it instead.
 func TestADisabledClientIsNotAuthorised(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 	if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -504,7 +504,7 @@ func TestADisabledClientIsNotAuthorised(t *testing.T) {
 // inbound-level traffic limit is never reached and the row reports 0 B forever.
 func TestAnInboundsOwnTotalIsBilled(t *testing.T) {
 	k := wgtest.New()
-	c := &Core{mgr: engine.NewManager(k)}
+	c := NewFor(Kind, engine.NewManager(k))
 	live := inbound(client("a@example.com", fill(1), "10.0.0.11/32", "", 0))
 	if err := c.Reconcile(t.Context(), []core.Instance{live}); err != nil {
 		t.Fatalf("Reconcile: %v", err)

@@ -188,7 +188,7 @@ var capabilityRules = map[string]Rule{
 	// Sniffing is an Xray inbound block, so it applies to no kind Xray does not
 	// serve: mtproto runs in mtg, wgkernel in the kernel. List each new such core.
 	CapSniffing: {Any: []Term{
-		{All: []Clause{{Field: "protocol", Op: OpIn, Values: []string{"mtproto", "wgkernel"}, Not: true}}},
+		{All: []Clause{{Field: "protocol", Op: OpIn, Values: []string{"mtproto", "wgkernel", "awgkernel"}, Not: true}}},
 	}},
 	// Fallbacks are raw-TCP only — stricter than tlsFlow, which also allows XHTTP.
 	CapFallbacks: {Any: []Term{
