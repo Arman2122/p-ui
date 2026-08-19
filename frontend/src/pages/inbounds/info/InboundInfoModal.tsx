@@ -27,6 +27,7 @@ import {
 } from './helpers';
 import type { ClientSetting, ClientStats, InboundInfo, InboundInfoModalProps } from './types';
 import './InboundInfoModal.css';
+import { isKernelWireguard, isWireguardLike } from '@/lib/xray/kernel-wireguard';
 
 export default function InboundInfoModal({
   open,
@@ -116,7 +117,7 @@ export default function InboundInfoModal({
 
     const inboundForLinks = inboundFromDb(dbInbound);
     const fallbackHostname = preferPublicHost(window.location.hostname, subSettings?.publicHost ?? '');
-    if (info.protocol === Protocols.WIREGUARD || info.protocol === Protocols.WGKERNEL) {
+    if (isWireguardLike(info.protocol)) {
       setWireguardConfigs(
         genWireguardConfigs({
           inbound: inboundForLinks,
@@ -786,7 +787,7 @@ export default function InboundInfoModal({
             </div>
             {/* noKernelTun is xray's TUN emulation; the kernel device answers on
                 an address of its own instead. Neither field exists on the other. */}
-            {dbInbound.protocol === Protocols.WGKERNEL ? (
+            {isKernelWireguard(dbInbound.protocol) ? (
               <div className="info-row">
                 <dt>{t('pages.inbounds.form.wgkernelAddress')}</dt>
                 <dd>

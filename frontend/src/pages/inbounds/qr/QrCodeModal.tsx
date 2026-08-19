@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Collapse, Modal } from 'antd';
 import type { CollapseProps } from 'antd';
 
-import { Protocols } from '@/schemas/primitives';
+import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 import {
   genAllLinks,
   genWireguardConfigs,
@@ -58,7 +58,7 @@ export default function QrCodeModal({
     if (!open || !dbInbound) return;
     const inbound = inboundFromDb(dbInbound);
     const fallbackHostname = preferPublicHost(window.location.hostname, subSettings?.publicHost ?? '');
-    if (inbound.protocol === Protocols.WIREGUARD || inbound.protocol === Protocols.WGKERNEL) {
+    if (isWireguardLike(inbound.protocol)) {
       const peerRemark = client?.email
         ? `${dbInbound.remark}-${client.email}`
         : dbInbound.remark || '';

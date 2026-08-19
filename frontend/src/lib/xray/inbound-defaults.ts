@@ -318,7 +318,8 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
     case 'tunnel':      return createDefaultTunnelInboundSettings();
     case 'tun':         return createDefaultTunInboundSettings();
     case 'wireguard':   return createDefaultWireguardInboundSettings();
-    case 'wgkernel':    return createDefaultWgkernelInboundSettings();
+    case 'wgkernel':
+    case 'awgkernel':   return createDefaultWgkernelInboundSettings();
     case 'mtproto':     return createDefaultMtprotoInboundSettings();
     default:            return null;
   }
