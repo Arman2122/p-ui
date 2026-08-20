@@ -109,6 +109,10 @@ type Compiled struct {
 func Plan(in Input) Compiled {
 	out := Compiled{}
 	bySubject := groupRules(in)
+	// An exit's outbound is named after the exit, not after the pair that asked
+	// for it, so every extra (rule, subject) pointing at one exit would repeat
+	// it verbatim — and xray refuses a duplicate tag by refusing the whole load.
+	emitted := map[string]bool{}
 
 	subjects := append([]Subject(nil), in.Subjects...)
 	sort.Slice(subjects, func(i, j int) bool { return subjects[i].InboundID < subjects[j].InboundID })
@@ -157,12 +161,16 @@ func Plan(in Input) Compiled {
 		}
 
 		for _, rule := range rules {
-			emitted, diag, outbound := compileRule(in, rule, subject, tag, pattern)
+			xrayRule, diag, outbound := compileRule(in, rule, subject, tag, pattern)
 			out.Diags = append(out.Diags, diag)
-			if emitted != nil {
-				out.XrayRules = append(out.XrayRules, emitted)
+			if xrayRule != nil {
+				out.XrayRules = append(out.XrayRules, xrayRule)
 			}
-			if outbound != nil {
+			if outbound == nil {
+				continue
+			}
+			if outTag := synthesizedTag(outbound); !emitted[outTag] {
+				emitted[outTag] = true
 				out.Outbounds = append(out.Outbounds, outbound)
 				out.NeedsRestart = true
 			}
@@ -320,6 +328,16 @@ func findExit(exits []ResolvedExit, id int) (ResolvedExit, bool) {
 // exitOutboundTag names a synthesized outbound. The prefix round-trips through
 // this one function so nothing else has to know the shape.
 func exitOutboundTag(id int) string { return fmt.Sprintf("pex%d", id) }
+
+// synthesizedTag reads back the tag compileRule stamped, which is what identity
+// means for an outbound as far as xray-core's handler registry is concerned.
+func synthesizedTag(outbound json.RawMessage) string {
+	var tagged struct {
+		Tag string `json:"tag"`
+	}
+	_ = json.Unmarshal(outbound, &tagged)
+	return tagged.Tag
+}
 
 /*
 markedOutbound re-originates the traffic and stamps the socket so the kernel can
