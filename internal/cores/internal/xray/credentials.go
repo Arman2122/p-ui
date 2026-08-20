@@ -17,6 +17,14 @@ strings are the API's exact historical wording — a message an operator has
 automated against must not be reworded by a refactor.
 */
 
+/*
+singleUserSS2022Method is the one Shadowsocks-2022 cipher xray's multi-user
+inbound refuses: buildShadowsocks2022 takes the multi-user branch as soon as a
+clients array is present and then rejects every non-AES method, which aborts the
+whole config rather than that one inbound.
+*/
+const singleUserSS2022Method = "2022-blake3-chacha20-poly1305"
+
 func (c *Core) MintClientCredentials(kind core.Kind, settings string, have map[string]string) (map[string]string, error) {
 	minted := map[string]string{}
 	switch kind {
@@ -43,7 +51,7 @@ func (c *Core) MintClientCredentials(kind core.Kind, settings string, have map[s
 	return minted, nil
 }
 
-func (c *Core) ValidateClient(kind core.Kind, _, email string, have map[string]string) error {
+func (c *Core) ValidateClient(kind core.Kind, settings, email string, have map[string]string) error {
 	switch kind {
 	case "trojan":
 		if have[core.CredPassword] == "" {
@@ -54,6 +62,10 @@ func (c *Core) ValidateClient(kind core.Kind, _, email string, have map[string]s
 		// a client without one cannot be told apart from its siblings.
 		if email == "" {
 			return errors.New("empty client ID")
+		}
+		if engine.ShadowsocksMethodFromSettings(settings) == singleUserSS2022Method {
+			return errors.New("shadowsocks method " + singleUserSS2022Method +
+				" is single-user and cannot carry clients; use 2022-blake3-aes-128-gcm or 2022-blake3-aes-256-gcm")
 		}
 	case "hysteria":
 		if have[core.CredAuth] == "" {
