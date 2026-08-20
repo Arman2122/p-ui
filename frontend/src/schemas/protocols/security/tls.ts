@@ -45,8 +45,10 @@ export const TlsCertFileSchema = z.object({
   buildChain: z.boolean().default(false),
 });
 export const TlsCertInlineSchema = z.object({
-  certificate: z.array(z.string()),
-  key: z.array(z.string()),
+  // Non-empty, or the union below accepts the blank certificate the TLS radio
+  // seeds and xray-core fails the whole config on: "both file and bytes are empty."
+  certificate: z.array(z.string()).nonempty(),
+  key: z.array(z.string()).nonempty(),
   ocspStapling: z.number().default(0),
   oneTimeLoading: z.boolean().default(false),
   usage: TlsCertUsageSchema.default('encipherment'),
