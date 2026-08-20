@@ -1,4 +1,6 @@
 import { Tag } from 'antd';
+
+import { linkCarriesObfuscation } from '@/lib/xray/awg-conf';
 import { Base64 } from '@/utils';
 
 /* Shared parsing + rendering for the "protocol / transport / security"
@@ -63,7 +65,19 @@ export function parseLinkParts(link: string): LinkParts | null {
   const trimmed = link.trim();
   const scheme = /^([a-z0-9]+):\/\//i.exec(trimmed)?.[1]?.toLowerCase() ?? '';
   if (!scheme) return null;
-  const protocol = PROTOCOL_LABELS[scheme] ?? scheme.charAt(0).toUpperCase() + scheme.slice(1);
+  /* AmneziaWG shares the wireguard:// scheme -- there is no separate one -- so
+     the obfuscation parameters are the only thing that distinguishes it. Labelled
+     WireGuard, an operator cannot tell which client app the config needs, and
+     importing it into a plain WireGuard app produces a tunnel that never
+     completes a handshake. */
+  let protocol = PROTOCOL_LABELS[scheme] ?? scheme.charAt(0).toUpperCase() + scheme.slice(1);
+  if (scheme === 'wireguard' || scheme === 'wg') {
+    try {
+      if (linkCarriesObfuscation(new URL(trimmed).searchParams)) protocol = 'AmneziaWG';
+    } catch {
+      protocol = PROTOCOL_LABELS[scheme] ?? protocol;
+    }
+  }
   let network = '';
   let security = '';
   let remark = '';

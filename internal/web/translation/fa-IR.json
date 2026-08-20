@@ -902,7 +902,8 @@
         "importedMixed": "{ok} وارد شد، {failed} رد شد"
       },
       "tabLimits": "محدودیت‌ها",
-      "limitIpCapped": "محدود به"
+      "limitIpCapped": "محدود به",
+      "amneziawgConfig": "کانفیگ AmneziaWG"
     },
     "groups": {
       "name": "نام",

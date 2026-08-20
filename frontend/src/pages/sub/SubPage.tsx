@@ -34,6 +34,7 @@ import {
 
 import { ClipboardManager, IntlUtil, LanguageManager } from '@/utils';
 import { isPostQuantumLink, wireguardConfigFromLink } from '@/lib/xray/inbound-link';
+import { linkCarriesObfuscation } from '@/lib/xray/awg-conf';
 import { LinkTags, parseLinkParts } from '@/lib/xray/link-label';
 import ConfigBlock from '@/components/clients/ConfigBlock';
 import { setMessageInstance } from '@/utils/messageBus';
@@ -451,6 +452,16 @@ export default function SubPage() {
                         const qrLabel = parts?.remark || rowTitle;
                         const canQr = !isPostQuantumLink(link);
                         const isWireguardLink = link.startsWith('wireguard://') || link.startsWith('wg://');
+                        /* The config block says which client app this needs. Both
+                           protocols share the wireguard:// scheme, and a config
+                           imported into the wrong app never completes a handshake. */
+                        const isAwgLink = isWireguardLink && (() => {
+                          try {
+                            return linkCarriesObfuscation(new URL(link).searchParams);
+                          } catch {
+                            return false;
+                          }
+                        })();
                         return (
                           <Fragment key={link}>
                           <div className="sub-link-row">
@@ -499,7 +510,7 @@ export default function SubPage() {
                           </div>
                           {isWireguardLink && (
                             <ConfigBlock
-                              label={t('pages.clients.wireguardConfig')}
+                              label={t(isAwgLink ? 'pages.clients.amneziawgConfig' : 'pages.clients.wireguardConfig')}
                               text={wireguardConfigFromLink(link, rowTitle)}
                               fileName={`${rowTitle || 'peer'}.conf`}
                               qrRemark={rowTitle}

@@ -31,6 +31,10 @@ manager rather than copying three hundred lines that would then drift.
 type Core struct {
 	kind core.Kind
 	mgr  *engine.Manager
+	// uplink names the devices this core DIALS. Its own, not the process-wide
+	// one: a core serving another module dials through another namespace, and
+	// asking the global would name a device nobody created.
+	uplink *engine.Manager
 
 	mu          sync.Mutex
 	online      []string
@@ -38,12 +42,12 @@ type Core struct {
 }
 
 // New returns a core over the process-wide device manager.
-func New() *Core { return NewFor(Kind, engine.GetManager()) }
+func New() *Core { return NewFor(Kind, engine.GetManager(), engine.GetUplinkManager()) }
 
 // NewFor returns a core serving kind through mgr, which is how a second module
 // implementing the same protocol reuses all of this.
-func NewFor(kind core.Kind, mgr *engine.Manager) *Core {
-	return &Core{kind: kind, mgr: mgr}
+func NewFor(kind core.Kind, mgr, uplink *engine.Manager) *Core {
+	return &Core{kind: kind, mgr: mgr, uplink: uplink}
 }
 
 func (c *Core) Kinds() []core.Kind { return []core.Kind{c.kind} }
@@ -279,7 +283,7 @@ func (c *Core) ShapingTargets(ctx context.Context, inst core.Instance) (core.Sha
 		}
 		return core.ShapingTarget{}, fmt.Errorf("wgkernel: inbound %d: %w", inst.ID, err)
 	}
-	target := core.ShapingTarget{Device: engine.InterfaceName(inst.ID), Selector: core.SelectorInnerIP}
+	target := core.ShapingTarget{Device: c.mgr.Name(inst.ID), Selector: core.SelectorInnerIP}
 	for _, u := range inst.Users {
 		hosts := hostPrefixes(held[u.Email])
 		if len(hosts) == 0 {
@@ -341,7 +345,11 @@ comparison. Selection is by ingress device because cryptokey routing has already
 proven the peer's identity by the time a packet appears there.
 */
 func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
-	return core.IngressHandle{Device: engine.InterfaceName(inst.ID)}, nil
+	// c.mgr, never the package default: this core may serve another module, whose
+	// devices live in another namespace. Named wrongly, everything keyed on the
+	// ingress device -- NAT, egress selection, shaping -- points at a device that
+	// does not exist, and the tunnel comes up carrying nothing.
+	return core.IngressHandle{Device: c.mgr.Name(inst.ID)}, nil
 }
 
 // ExitKinds: this core can terminate traffic somebody else routed to it, on the
@@ -373,7 +381,7 @@ func (c *Core) ExitHandle(_ context.Context, exit core.Exit) (core.ExitHandle, e
 	return core.ExitHandle{
 		// Asked of the engine that creates the device rather than derived a second
 		// time: two derivations of one name is how pux4 and pwg4 diverged.
-		Device: engine.GetUplinkManager().Name(exit.ID),
+		Device: c.uplink.Name(exit.ID),
 		Source: core.SourceOwnerDaemon,
 	}, nil
 }

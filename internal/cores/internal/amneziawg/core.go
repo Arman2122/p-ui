@@ -36,7 +36,9 @@ type Core struct {
 // this core's prefix.
 func New() *Core {
 	mgr := engine.NewNamedManager(awg.NewPlane(), DevicePrefix)
-	return &Core{Core: wgcore.NewFor(Kind, mgr), mgr: mgr}
+	// Its own uplink manager too, so a dialled AmneziaWG device is named in this
+	// module's namespace rather than kernel WireGuard's.
+	return &Core{Core: wgcore.NewFor(Kind, mgr, awg.UplinkManager()), mgr: mgr}
 }
 
 // Describe reuses the WireGuard core's capability claims -- they are the same
