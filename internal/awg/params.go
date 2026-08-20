@@ -25,6 +25,7 @@ var (
 	ErrHeaderOverlap   = errors.New("awg: the message headers must not overlap")
 	ErrPaddingTooSmall = errors.New("awg: header protection needs room for its nonce")
 	ErrHeaderKeyLength = errors.New("awg: the header protection key must be 32 bytes, base64")
+	ErrRangeText       = errors.New("awg: a range is written lo-hi, or a single number")
 )
 
 // HeaderProtectionNonceSize is src/header_protection.h's own constant. Padding

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { genWireguardConfigs } from '@/lib/xray/inbound-link';
-import { awgInterfaceLines } from '@/lib/xray/awg-conf';
+import { genWireguardConfigs, genWireguardLinks, wireguardConfigFromLink } from '@/lib/xray/inbound-link';
+import { awgInterfaceLines, linkCarriesObfuscation } from '@/lib/xray/awg-conf';
 
 /*
 The config the QR panel hands out must carry the obfuscation.
@@ -64,5 +64,45 @@ describe('the AmneziaWG client config the panel hands out', () => {
     expect(awgInterfaceLines({ jc: 4 } as never)).toBe('Jc = 4\n');
     expect(awgInterfaceLines(undefined)).toBe('');
     expect(awgInterfaceLines({} as never)).toBe('');
+  });
+});
+
+/*
+The subscription page builds its downloadable config from the LINK, not from the
+inbound. So a link that drops the obfuscation produces a config that cannot
+connect to the server that issued it -- reported from the panel as "I downloaded
+the config and it fails", with nothing on either side saying why.
+*/
+describe('the AmneziaWG share link', () => {
+  it('carries the obfuscation, and the config built from it gets it back', () => {
+    const link = genWireguardLinks({
+      inbound: inbound({ jc: 4, jmin: 40, jmax: 70, s1: 20, s2: 30, i1: 'b0xdeadbeef' }),
+      remark: 'awg',
+      fallbackHostname: 'vpn.example.com',
+    }).split('\r\n')[0];
+
+    const params = new URL(link).searchParams;
+    expect(params.get('jc'), `link dropped the obfuscation: ${link}`).toBe('4');
+    expect(params.get('i1')).toBe('b0xdeadbeef');
+    expect(linkCarriesObfuscation(params)).toBe(true);
+
+    const conf = wireguardConfigFromLink(link, 'awg');
+    const iface = conf.slice(0, conf.indexOf('[Peer]'));
+    for (const want of ['Jc = 4', 'Jmin = 40', 'Jmax = 70', 'S1 = 20', 'S2 = 30', 'I1 = b0xdeadbeef']) {
+      expect(iface, `${want} missing from the derived config:\n${conf}`).toContain(want);
+    }
+  });
+
+  // A plain WireGuard link must stay plain, or every existing client's config
+  // gains keys their app does not understand.
+  it('leaves a plain WireGuard link alone', () => {
+    const link = genWireguardLinks({
+      inbound: inbound(),
+      remark: 'plain',
+      fallbackHostname: 'vpn.example.com',
+    }).split('\r\n')[0];
+
+    expect(linkCarriesObfuscation(new URL(link).searchParams)).toBe(false);
+    expect(wireguardConfigFromLink(link, 'plain')).not.toContain('Jc =');
   });
 });

@@ -669,6 +669,10 @@ func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) stri
 	if client.KeepAlive > 0 {
 		params["keepalive"] = strconv.Itoa(client.KeepAlive)
 	}
+	// Without these an AmneziaWG inbound's link describes a plain WireGuard
+	// tunnel, and the config the subscription page derives from it cannot
+	// connect to the server that issued it.
+	awgLinkParams(inbound, params)
 	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", ""))
 }
 
