@@ -1147,15 +1147,17 @@ func (s *XrayService) RestartXray(isForce bool) error {
 			logger.Debug("It does not need to restart Xray")
 			return nil
 		}
+		// Nothing is applied and nothing is stopped until the replacement is known
+		// to load: xray-core refuses a config whole, so one bad row would end every
+		// inbound of every protocol on the box and keep doing so on each retry.
+		// Ahead of the hot apply too — that path leaves a partially applied core
+		// behind when it fails, and relies on the restart below to clean it up.
+		if err := xray.TestConfig(xrayConfig); err != nil {
+			return common.NewError("refusing to restart xray, the generated config is rejected by the core:", err)
+		}
 		if !isForce && !configUnchanged && s.tryHotApply(process, xrayConfig) {
 			logger.Info("Xray config changes applied through the core API, no restart needed")
 			return nil
-		}
-		// Nothing is stopped until the replacement is known to load: xray-core
-		// refuses a config whole, so one bad row would otherwise end every
-		// inbound of every protocol on the box and keep doing so on each retry.
-		if err := xray.TestConfig(xrayConfig); err != nil {
-			return common.NewError("refusing to restart xray, the generated config is rejected by the core:", err)
 		}
 		_ = process.Stop()
 	}

@@ -226,3 +226,42 @@ func TestUpdateInboundRefusesConfigXrayCoreRejects(t *testing.T) {
 		t.Fatalf("the refused edit was committed anyway: security=%v", stream["security"])
 	}
 }
+
+/*
+TestSetInboundEnableRefusesABrokenRow closes the one save that does not go
+through UpdateInbound. A broken row can legitimately be stored while disabled —
+that is the escape hatch validateInboundForXray deliberately leaves — so
+enabling it is where it becomes the core's problem, and the toggle reports
+success while the restart it asks for is silently refused forever.
+*/
+func TestSetInboundEnableRefusesABrokenRow(t *testing.T) {
+	initTestDB(t)
+	svc := InboundService{}
+
+	broken := coreRejectedInbounds[0].inbound
+	broken.UserId = 1
+	broken.Port = 20201
+	broken.Tag = "enable-broken"
+	broken.Enable = false
+	created, _, err := svc.AddInbound(&broken)
+	if err != nil {
+		t.Fatalf("a disabled row must still save, that is the escape hatch: %v", err)
+	}
+
+	if _, err := svc.SetInboundEnable(created.Id, true); err == nil {
+		t.Fatal("a config xray-core refuses was enabled; the restart it asks for is then refused with only a log line")
+	}
+
+	reloaded, err := svc.GetInbound(created.Id)
+	if err != nil {
+		t.Fatalf("GetInbound: %v", err)
+	}
+	if reloaded.Enable {
+		t.Fatal("the refused toggle was written anyway")
+	}
+
+	// Disabling one is never refused, or a broken row could not be parked.
+	if _, err := svc.SetInboundEnable(created.Id, false); err != nil {
+		t.Fatalf("disabling must always be allowed: %v", err)
+	}
+}

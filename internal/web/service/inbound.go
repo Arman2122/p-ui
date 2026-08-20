@@ -1267,6 +1267,16 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 	if inbound.Enable == enable {
 		return false, nil
 	}
+	// Enabling is the moment the row joins the generated config, and it is the
+	// one save that does not go through UpdateInbound. A row saved broken while
+	// disabled would otherwise reach the core here, with a success toast.
+	if enable {
+		candidate := *inbound
+		candidate.Enable = true
+		if err := validateInboundForXray(&candidate); err != nil {
+			return false, err
+		}
+	}
 
 	db := database.GetDB()
 	if err := db.Transaction(func(tx *gorm.DB) error {
