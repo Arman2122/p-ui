@@ -6,7 +6,9 @@ package xray
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"net"
 	"os"
@@ -191,6 +193,34 @@ func ValidateInboundConfig(inbound []byte) error {
 		return err
 	}
 	_, err := detour.Build()
+	return err
+}
+
+// ValidateRoutingCriteria parses one rule's criteria through xray-core's own
+// routing-rule parser, so a value the core cannot read is caught by whoever
+// typed it. The rule is completed with a placeholder destination: the compile
+// picks the real outbound tag later, and the parser only requires that one of
+// the two tags is present.
+func ValidateRoutingCriteria(criteria map[string]json.RawMessage) error {
+	ensureXrayAssetLocation()
+
+	body := map[string]json.RawMessage{}
+	for key, value := range criteria {
+		body[key] = value
+	}
+	body["type"] = json.RawMessage(`"field"`)
+	body["outboundTag"] = json.RawMessage(`"direct"`)
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	_, err = (&conf.RouterConfig{RuleList: []json.RawMessage{raw}}).Build()
+	if errors.Is(err, fs.ErrNotExist) {
+		// A geoip:/geosite: token is resolved against the .dat files. Missing or
+		// mid-update, that is the panel being unable to judge — not the operator
+		// having typed something wrong, and not a reason to refuse the edit.
+		return nil
+	}
 	return err
 }
 
