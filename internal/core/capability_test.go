@@ -51,6 +51,27 @@ func TestCapabilityRules(t *testing.T) {
 			facts: Facts{Protocol: "vless", Stream: map[string]string{"network": "xhttp"}, Settings: map[string]string{"decryption": "mlkem768x25519plus.native.0rtt.KEY"}},
 			want:  false,
 		},
+		{
+			// xray refuses the pairing outright, which fails the whole config —
+			// and the form offers "generate VLESS auth" and the Fallbacks card
+			// in one modal, on the same transport.
+			name:  "no fallbacks alongside VLESS encryption",
+			cap:   CapFallbacks,
+			facts: Facts{Protocol: "vless", Stream: map[string]string{"network": "tcp", "security": "tls"}, Settings: map[string]string{"decryption": "mlkem768x25519plus.native.600s.KEY"}},
+			want:  false,
+		},
+		{
+			name:  "decryption none is xray's off-switch, not encryption",
+			cap:   CapFallbacks,
+			facts: Facts{Protocol: "vless", Stream: map[string]string{"network": "tcp", "security": "tls"}, Settings: map[string]string{"decryption": "none"}},
+			want:  true,
+		},
+		{
+			name:  "trojan has no decryption field and keeps its fallbacks",
+			cap:   CapFallbacks,
+			facts: Facts{Protocol: "trojan", Stream: map[string]string{"network": "tcp", "security": "reality"}},
+			want:  true,
+		},
 
 		{"sniffing on vless", CapSniffing, Facts{Protocol: "vless"}, true},
 		{"sniffing not on mtproto", CapSniffing, Facts{Protocol: "mtproto"}, false},

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
 // inboundShadowsocksMethod extracts settings.method for Shadowsocks inbounds so
@@ -37,4 +38,27 @@ func inboundCanHostFallbacks(ib *model.Inbound) bool {
 		return false
 	}
 	return core.Can(core.CapFallbacks, core.FactsFromJSON(string(ib.Protocol), ib.Settings, ib.StreamSettings))
+}
+
+/*
+checkFallbacksSurviveEdit refuses an edit that moves an inbound off the shape
+its own fallbacks need — turning VLESS encryption on is the reachable one, since
+the form offers "generate VLESS auth" and the Fallbacks card in the same modal.
+
+Refused rather than dropped: the rows stay attached, the child inbounds keep
+listening, and nothing anywhere says why they stopped receiving traffic.
+*/
+func (s *InboundService) checkFallbacksSurviveEdit(inbound *model.Inbound) error {
+	if inbound == nil || inbound.Id == 0 || inboundCanHostFallbacks(inbound) {
+		return nil
+	}
+	rows, err := s.fallbackService.GetByMaster(inbound.Id)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return common.NewError("this inbound has", len(rows), "fallback(s):", errFallbackHostShape+
+		". Remove them before making this change")
 }

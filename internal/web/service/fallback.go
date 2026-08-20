@@ -7,11 +7,19 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/common"
 
 	"gorm.io/gorm"
 )
 
 type FallbackService struct{}
+
+// errFallbackHostShape is the one wording for the shape fallbacks need, said
+// wherever a configuration would leave them attached but never emitted. VLESS
+// encryption is in the list because xray-core refuses that pairing outright:
+// `"fallbacks" can not be used together with "decryption"` fails the whole
+// config, not just this inbound.
+const errFallbackHostShape = "fallbacks need an inbound on raw TCP with TLS or REALITY, and without VLESS encryption"
 
 // FallbackInput is the payload shape POSTed by the inbound form.
 type FallbackInput struct {
@@ -56,9 +64,21 @@ func (s *FallbackService) GetParentForChild(childId int) (*model.InboundFallback
 	return &row, nil
 }
 
-// SetByMaster replaces the master's entire fallback list atomically.
+// SetByMaster replaces the master's entire fallback list atomically. A list the
+// master cannot host is refused rather than stored: the injection is gated on
+// the same capability, so stored-and-never-emitted is the one outcome that
+// leaves no trace anywhere.
 func (s *FallbackService) SetByMaster(masterId int, items []FallbackInput) error {
 	db := database.GetDB()
+	if len(items) > 0 {
+		var master model.Inbound
+		if err := db.First(&master, masterId).Error; err != nil {
+			return err
+		}
+		if !inboundCanHostFallbacks(&master) {
+			return common.NewError(errFallbackHostShape)
+		}
+	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("master_id = ?", masterId).Delete(&model.InboundFallback{}).Error; err != nil {
 			return err

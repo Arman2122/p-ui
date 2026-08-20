@@ -30,6 +30,7 @@ import {
   canEnableSniffing,
   canEnableStream,
   canEnableTls,
+  canHostFallbacks,
   isSS2022,
 } from '@/lib/xray/protocol-capabilities';
 import {
@@ -245,6 +246,7 @@ export default function InboundFormModal({
    */
   const nodeShareOptionAvailable = selectableNodes.length > 0 && isNodeEligible;
   const vlessEncryption = useWatch({ control, name: 'settings.encryption' }) ?? '';
+  const wDecryption = useWatch({ control, name: 'settings.decryption' }) ?? '';
   const ssMethod = useWatch({ control, name: 'settings.method' });
   const isSSWith2022 = isSS2022({
     protocol,
@@ -287,10 +289,15 @@ export default function InboundFormModal({
     streamSettings: { network },
     settings: { network: wSsNetwork, allowedNetwork: wTunnelNetwork, udp: mixedUdpOn },
   });
-  const isFallbackHost =
-    (protocol === Protocols.VLESS || protocol === Protocols.TROJAN)
-    && network === 'tcp'
-    && (security === 'tls' || security === 'reality');
+  /*
+  Read from the capability table, not restated here: the rule also excludes
+  VLESS encryption, which xray-core refuses to pair with fallbacks at all.
+  */
+  const isFallbackHost = canHostFallbacks({
+    protocol,
+    settings: { decryption: typeof wDecryption === 'string' ? wDecryption : undefined },
+    streamSettings: { network, security },
+  });
 
   const {
     genRealityKeypair,

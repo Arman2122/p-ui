@@ -52,6 +52,11 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
               "tls",
               "reality"
             ]
+          },
+          {
+            "field": "settings.decryption",
+            "op": "set",
+            "not": true
           }
         ]
       }
