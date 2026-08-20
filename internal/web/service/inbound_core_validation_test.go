@@ -29,6 +29,52 @@ var coreRejectedInbounds = []struct {
 		wants: `empty "privateKey"`,
 	},
 	{
+		name: "reality with no serverNames",
+		inbound: model.Inbound{
+			Enable: true, Port: 20011, Protocol: model.VLESS, Tag: "reality-no-servernames",
+			Settings: `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"a@b"}],"decryption":"none"}`,
+			StreamSettings: `{"network":"tcp","security":"reality","realitySettings":` +
+				`{"target":"example.com:443","serverNames":[],"shortIds":["aa"],` +
+				`"privateKey":"YIrCPHOtBRQVvz-x2ZaLRD3vwUEwOHZYZKUmDlM8UUA"}}`,
+		},
+		wants: `empty "serverNames"`,
+	},
+	{
+		name: "reality with no shortIds",
+		inbound: model.Inbound{
+			Enable: true, Port: 20012, Protocol: model.VLESS, Tag: "reality-no-shortids",
+			Settings: `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"a@b"}],"decryption":"none"}`,
+			StreamSettings: `{"network":"tcp","security":"reality","realitySettings":` +
+				`{"target":"example.com:443","serverNames":["example.com"],"shortIds":[],` +
+				`"privateKey":"YIrCPHOtBRQVvz-x2ZaLRD3vwUEwOHZYZKUmDlM8UUA"}}`,
+		},
+		wants: `empty "shortIds"`,
+	},
+	{
+		name: "reality with a shortId that is not even-length hex",
+		inbound: model.Inbound{
+			Enable: true, Port: 20013, Protocol: model.VLESS, Tag: "reality-odd-shortid",
+			Settings: `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"a@b"}],"decryption":"none"}`,
+			StreamSettings: `{"network":"tcp","security":"reality","realitySettings":` +
+				`{"target":"example.com:443","serverNames":["example.com"],"shortIds":["abc"],` +
+				`"privateKey":"YIrCPHOtBRQVvz-x2ZaLRD3vwUEwOHZYZKUmDlM8UUA"}}`,
+		},
+		wants: `invalid "shortIds[0]"`,
+	},
+	{
+		// Pruned away entirely rather than blanked: the builder then takes its
+		// client branch, which fails on a different field and is easy to misread.
+		name: "reality with no target at all",
+		inbound: model.Inbound{
+			Enable: true, Port: 20014, Protocol: model.VLESS, Tag: "reality-no-target",
+			Settings: `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"a@b"}],"decryption":"none"}`,
+			StreamSettings: `{"network":"tcp","security":"reality","realitySettings":` +
+				`{"serverNames":["example.com"],"shortIds":["aa"],` +
+				`"privateKey":"YIrCPHOtBRQVvz-x2ZaLRD3vwUEwOHZYZKUmDlM8UUA"}}`,
+		},
+		wants: `please use "serverName" instead`,
+	},
+	{
 		name: "tls with a blank certificate",
 		inbound: model.Inbound{
 			Enable: true, Port: 20002, Protocol: model.VLESS, Tag: "tls-blank-cert",
@@ -102,6 +148,19 @@ func TestValidateInboundForXrayScope(t *testing.T) {
 	}
 	if err := validateInboundForXray(&good); err != nil {
 		t.Fatalf("an ordinary inbound must save: %v", err)
+	}
+
+	// The counterpart to the four REALITY refusals above: a complete keypair
+	// still saves, so the guard cannot be satisfied by refusing REALITY itself.
+	reality := model.Inbound{
+		Enable: true, Port: 20006, Protocol: model.VLESS, Tag: "reality-complete",
+		Settings: `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"a@b"}],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"reality","realitySettings":` +
+			`{"target":"example.com:443","serverNames":["example.com"],"shortIds":["aa"],` +
+			`"privateKey":"YIrCPHOtBRQVvz-x2ZaLRD3vwUEwOHZYZKUmDlM8UUA"}}`,
+	}
+	if err := validateInboundForXray(&reality); err != nil {
+		t.Fatalf("a complete REALITY inbound must save: %v", err)
 	}
 }
 
