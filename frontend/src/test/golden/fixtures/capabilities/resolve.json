@@ -26,6 +26,11 @@
                 "tls",
                 "reality"
               ]
+            },
+            {
+              "field": "settings.decryption",
+              "op": "set",
+              "not": true
             }
           ]
         }
@@ -4440,7 +4445,7 @@
         }
       },
       "expect": {
-        "fallbacks": true,
+        "fallbacks": false,
         "reality": true,
         "sniffing": true,
         "ss2022": false,
@@ -4572,7 +4577,7 @@
         }
       },
       "expect": {
-        "fallbacks": true,
+        "fallbacks": false,
         "reality": true,
         "sniffing": true,
         "ss2022": false,

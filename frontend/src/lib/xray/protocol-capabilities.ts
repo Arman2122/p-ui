@@ -64,6 +64,11 @@ export function canEnableTlsFlow(values: CapabilityProtocolSlice): boolean {
   return can('tlsFlow', toFacts(values));
 }
 
+/* Stricter than tlsFlow: raw TCP only, and never alongside VLESS encryption. */
+export function canHostFallbacks(values: CapabilityVlessSlice): boolean {
+  return can('fallbacks', toFacts(values));
+}
+
 export function canEnableStream(values: { protocol: string }): boolean {
   return can('stream', { protocol: values.protocol });
 }

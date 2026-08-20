@@ -191,11 +191,15 @@ var capabilityRules = map[string]Rule{
 		{All: []Clause{{Field: "protocol", Op: OpIn, Values: []string{"mtproto", "wgkernel", "awgkernel"}, Not: true}}},
 	}},
 	// Fallbacks are raw-TCP only — stricter than tlsFlow, which also allows XHTTP.
+	// And never alongside VLESS encryption: xray refuses that pairing outright
+	// ("fallbacks" can not be used together with "decryption"), which fails the
+	// whole config rather than this one inbound.
 	CapFallbacks: {Any: []Term{
 		{All: []Clause{
 			in("protocol", "vless", "trojan"),
 			in("stream.network", "tcp"),
 			in("stream.security", "tls", "reality"),
+			{Field: "settings.decryption", Op: OpSet, Not: true},
 		}},
 	}},
 	CapSS2022: {Any: []Term{
