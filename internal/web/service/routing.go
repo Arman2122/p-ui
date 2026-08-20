@@ -617,6 +617,11 @@ func normalizeRule(rule *model.RoutingRule) error {
 	if json.Unmarshal([]byte(rule.Criteria), &criteria) != nil {
 		return errors.New("routing: criteria must be a JSON object")
 	}
+	// compileRule copies these values into the emitted rule verbatim, so one
+	// unreadable character here is a config the core refuses whole.
+	if err := xray.ValidateRoutingCriteria(criteria); err != nil {
+		return fmt.Errorf("routing: xray core rejects these criteria: %w", err)
+	}
 	switch rule.DestKind {
 	case model.RoutingDestOutbound, model.RoutingDestBalancer:
 		if rule.DestTag == "" {
