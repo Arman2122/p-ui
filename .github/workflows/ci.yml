@@ -243,7 +243,13 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned, not latest. "latest" shipped a staticcheck release candidate
+          # whose nilness analyzer PANICS on a recover() builtin: the linter
+          # crashed on internal/util/common and took the job to its timeout with
+          # nothing wrong in the tree. A linter that cannot parse the language is
+          # not a gate, and an unpinned one turns somebody else's release into a
+          # red build here.
+          version: v2.6.0
 
   frontend:
     runs-on: ubuntu-latest

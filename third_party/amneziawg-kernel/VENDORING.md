@@ -71,3 +71,20 @@ genuinely needed, carry it as a patch file beside this document with the reason.
 Verified on 2026-08-18 against kernel 6.8.0-137-generic (Ubuntu 24.04): builds
 clean, loads, coexists with the in-tree `wireguard` module, and accepts
 `ip link add … type amneziawg`.
+
+## No userspace fallback
+
+Decided 2026-08-20: the panel serves AmneziaWG through the kernel module or not
+at all. There is deliberately no amneziawg-go path for hosts that cannot build
+one — a container VPS sharing the host kernel (OpenVZ, LXC), an enforcing Secure
+Boot, a provider kernel with no matching headers package.
+
+Those hosts lose this one protocol and keep every other. `awg-dkms.sh` already
+names which of the three it hit, and the core's Preflight disables itself rather
+than failing one inbound at a time, so the panel stays honest about it.
+
+Do not add one back without asking. It is not an oversight: a second
+implementation of the same protocol means two code paths to keep matching, two
+sets of parameters to keep identical, and a per-inbound daemon whose memory cost
+(~690-730 MB under load, measured above) is what ruled it out as the primary in
+the first place.
