@@ -15,7 +15,7 @@ import { getHeaderValue } from './headers';
 import { canEnableTlsFlow } from './protocol-capabilities';
 import { deriveSpiderX } from './spider-x';
 import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
-import { awgInterfaceLines } from '@/lib/xray/awg-conf';
+import { awgInterfaceLines, awgLinesFromLinkParams, awgLinkParams } from '@/lib/xray/awg-conf';
 import type { AwgParams } from '@/schemas/protocols/inbound/awgkernel';
 
 // Share-link generators. Each per-protocol fn takes a typed inbound plus
@@ -847,6 +847,11 @@ export function genWireguardLink(input: GenWireguardLinkInput): string {
   if (typeof settings.mtu === 'number' && settings.mtu > 0) {
     url.searchParams.set('mtu', String(settings.mtu));
   }
+  /* So a config built from this link can still connect: the subscription page
+     derives one from the link, not from the inbound. */
+  for (const [key, value] of awgLinkParams((settings as { awg?: AwgParams }).awg)) {
+    url.searchParams.set(key, value);
+  }
 
   url.hash = encodeURIComponent(remark);
   return url.toString();
@@ -942,6 +947,9 @@ export function wireguardConfigFromLink(link: string, fallbackRemark = ''): stri
     `DNS = ${dns}`,
   ];
   if (mtu && Number(mtu) > 0) lines.push(`MTU = ${mtu}`);
+  /* AmneziaWG. Dropping these leaves a config for a plain WireGuard tunnel,
+     which cannot connect to the obfuscated server that issued the link. */
+  lines.push(...awgLinesFromLinkParams(params));
   lines.push('');
   if (remark) lines.push(`# ${remark}`);
   lines.push('[Peer]', `PublicKey = ${publicKey}`);
