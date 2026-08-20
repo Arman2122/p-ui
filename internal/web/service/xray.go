@@ -17,6 +17,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
 	"github.com/Arman2122/p-ui/internal/xray"
 
@@ -393,6 +394,32 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 	}
 
 	return rendered.GenXrayInboundConfig(), nil
+}
+
+/*
+validateInboundForXray refuses a row xray-core's own builders reject, at the one
+boundary where the operator is still holding it.
+
+Scoped to what this panel would put in its own config, exactly as RenderInbound
+scopes it: a disabled row and a node's row are never in these bytes, so neither
+can abort this core's load, and refusing them would only take away the escape
+hatch of saving a broken inbound disabled.
+*/
+func validateInboundForXray(inbound *model.Inbound) error {
+	if inbound == nil || !inbound.Enable || inbound.NodeID != nil {
+		return nil
+	}
+	if !cores.ServedByXray(core.Kind(inbound.Protocol)) {
+		return nil
+	}
+	raw, err := json.Marshal(inbound.GenXrayInboundConfig())
+	if err != nil {
+		return err
+	}
+	if err := xray.ValidateInboundConfig(raw); err != nil {
+		return common.NewError("xray core rejects this inbound:", err)
+	}
+	return nil
 }
 
 /*
@@ -1123,6 +1150,12 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		if !isForce && !configUnchanged && s.tryHotApply(process, xrayConfig) {
 			logger.Info("Xray config changes applied through the core API, no restart needed")
 			return nil
+		}
+		// Nothing is stopped until the replacement is known to load: xray-core
+		// refuses a config whole, so one bad row would otherwise end every
+		// inbound of every protocol on the box and keep doing so on each retry.
+		if err := xray.TestConfig(xrayConfig); err != nil {
+			return common.NewError("refusing to restart xray, the generated config is rejected by the core:", err)
 		}
 		_ = process.Stop()
 	}

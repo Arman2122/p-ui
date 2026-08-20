@@ -16,7 +16,7 @@ func makeInboundWithSubSortIndex(tag string, port int, subSortIndex int) *model.
 		Port:           port,
 		Protocol:       model.VLESS,
 		StreamSettings: `{"network":"tcp"}`,
-		Settings:       `{"clients":[]}`,
+		Settings:       `{"clients":[],"decryption":"none"}`,
 		SubSortIndex:   subSortIndex,
 	}
 }

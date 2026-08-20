@@ -82,7 +82,7 @@ func TestUpdateInboundRebuildsAnXrayServedInbound(t *testing.T) {
 	t.Cleanup(func() { runtime.SetManager(nil) })
 
 	seedInboundConflict(t, "vless-polarity", "", 46171, model.VLESS, "",
-		`{"clients":[{"email":"vl","id":"3a3d2f6e-6f1a-4b7c-9d2e-1f0a5c8b7d61","enable":true}]}`)
+		`{"clients":[{"email":"vl","id":"3a3d2f6e-6f1a-4b7c-9d2e-1f0a5c8b7d61","enable":true}],"decryption":"none"}`)
 	seeded := loadInboundByTag(t, "vless-polarity")
 	seedClientTraffic(t, seeded.Id, "vl", true)
 

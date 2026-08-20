@@ -180,6 +180,20 @@ func (x *XrayAPI) DelInbound(tag string) error {
 	return err
 }
 
+// ValidateInboundConfig builds an inbound JSON object through the vendored
+// xray-core config loader, so a row the core would refuse is caught by whoever
+// is saving it instead of aborting the whole config on the next restart.
+func ValidateInboundConfig(inbound []byte) error {
+	ensureXrayAssetLocation()
+
+	detour := new(conf.InboundDetourConfig)
+	if err := json.Unmarshal(inbound, detour); err != nil {
+		return err
+	}
+	_, err := detour.Build()
+	return err
+}
+
 // ValidateOutboundConfig builds an outbound JSON object through the vendored
 // xray-core config loader, surfacing the exact error the core would raise at
 // startup — notably v26.7.11's refusal of unencrypted vless/trojan outbounds

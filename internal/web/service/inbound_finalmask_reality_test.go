@@ -95,13 +95,13 @@ func TestAddInbound_IgnoresBoundIdAndCreatesNewRow(t *testing.T) {
 	setupConflictDB(t)
 	svc := &InboundService{}
 
-	first := &model.Inbound{Tag: "in-45100-tcp", Enable: true, Listen: "0.0.0.0", Port: 45100, Protocol: model.VLESS, Settings: `{"clients":[]}`}
+	first := &model.Inbound{Tag: "in-45100-tcp", Enable: true, Listen: "0.0.0.0", Port: 45100, Protocol: model.VLESS, Settings: `{"clients":[],"decryption":"none"}`}
 	created, _, err := svc.AddInbound(first)
 	if err != nil {
 		t.Fatalf("AddInbound first: %v", err)
 	}
 
-	second := &model.Inbound{Id: created.Id, Tag: "in-45101-tcp", Enable: true, Listen: "0.0.0.0", Port: 45101, Protocol: model.VLESS, Settings: `{"clients":[]}`}
+	second := &model.Inbound{Id: created.Id, Tag: "in-45101-tcp", Enable: true, Listen: "0.0.0.0", Port: 45101, Protocol: model.VLESS, Settings: `{"clients":[],"decryption":"none"}`}
 	if _, _, err := svc.AddInbound(second); err != nil {
 		t.Fatalf("AddInbound second: %v", err)
 	}

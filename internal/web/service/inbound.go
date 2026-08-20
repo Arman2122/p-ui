@@ -1009,6 +1009,10 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		}
 	}
 
+	if err := validateInboundForXray(inbound); err != nil {
+		return inbound, false, err
+	}
+
 	db := database.GetDB()
 	needRestart := false
 	var postCommitApply func()
@@ -1483,6 +1487,11 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		oldInbound.Settings = inbound.Settings
 		oldInbound.StreamSettings = inbound.StreamSettings
 		oldInbound.Sniffing = inbound.Sniffing
+		// After the normalisations above, which are what a method change relies on
+		// to keep the row buildable, and before anything is written.
+		if err := validateInboundForXray(oldInbound); err != nil {
+			return err
+		}
 		if strings.TrimSpace(inbound.ShareAddrStrategy) == "" {
 			normalizeInboundShareAddress(oldInbound)
 			inbound.ShareAddrStrategy = oldInbound.ShareAddrStrategy
