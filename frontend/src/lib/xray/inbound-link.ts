@@ -15,6 +15,8 @@ import { getHeaderValue } from './headers';
 import { canEnableTlsFlow } from './protocol-capabilities';
 import { deriveSpiderX } from './spider-x';
 import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
+import { awgInterfaceLines } from '@/lib/xray/awg-conf';
+import type { AwgParams } from '@/schemas/protocols/inbound/awgkernel';
 
 // Share-link generators. Each per-protocol fn takes a typed inbound plus
 // client overrides and returns a URL (or '' when the protocol doesn't
@@ -872,6 +874,9 @@ export function genWireguardConfig(input: GenWireguardLinkInput): string {
   if (typeof settings.mtu === 'number' && settings.mtu > 0) {
     txt += `MTU = ${settings.mtu}\n`;
   }
+  /* AmneziaWG only. Every value has to match the server, so a config handed out
+     without them completes no handshake at all -- and says nothing about why. */
+  txt += awgInterfaceLines((settings as { awg?: AwgParams }).awg);
   txt += `\n# ${remark}\n`;
   txt += `[Peer]\n`;
   txt += `PublicKey = ${pubKey}\n`;
