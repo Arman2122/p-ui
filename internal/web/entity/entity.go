@@ -308,6 +308,7 @@ type HostGroup struct {
 	EchConfigList          string   `json:"echConfigList"`
 	MuxParams              string   `json:"muxParams"`
 	SockoptParams          string   `json:"sockoptParams"`
+	DownloadSettings       string   `json:"downloadSettings"`
 	FinalMask              string   `json:"finalMask"`
 	VlessRoute             string   `json:"vlessRoute"`
 	ExcludeFromSubTypes    []string `json:"excludeFromSubTypes"`
