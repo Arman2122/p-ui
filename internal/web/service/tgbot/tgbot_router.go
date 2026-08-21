@@ -1508,22 +1508,60 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 
 		}
 	default:
+		/*
+			These three carry an email in the payload, and a payload is
+			attacker-chosen text rather than a button press — telego's own doc
+			says a query can arrive carrying data no keyboard ever offered. So a
+			non-admin is served only the email their own client row names.
+		*/
+		serveLinks := func(email string, send func(int64, string)) {
+			if !isAdmin && !t.ownsEmail(callbackQuery.From.ID, email) {
+				t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.answers.accessDenied"))
+				return
+			}
+			send(chatId, email)
+		}
 		if after, ok := strings.CutPrefix(callbackQuery.Data, "client_sub_links "); ok {
-			email := after
-			t.sendClientSubLinks(chatId, email)
+			serveLinks(after, t.sendClientSubLinks)
 			return
 		}
 		if after, ok := strings.CutPrefix(callbackQuery.Data, "client_individual_links "); ok {
-			email := after
-			t.sendClientIndividualLinks(chatId, email)
+			serveLinks(after, t.sendClientIndividualLinks)
 			return
 		}
 		if after, ok := strings.CutPrefix(callbackQuery.Data, "client_qr_links "); ok {
-			email := after
-			t.sendClientQRLinks(chatId, email)
+			serveLinks(after, t.sendClientQRLinks)
 			return
 		}
 	}
+}
+
+/*
+ownsEmail reports whether this Telegram id is the one the client's own row names.
+
+Compared byte for byte against the stored email, which is the identity the
+lookup it guards also uses: GetClientTrafficTgBot returns client_traffics rows,
+and GetClientByEmail keys on that same column with SQL equality. Neither side
+folds case or trims, so the guard cannot come to disagree with the thing it
+guards about what "the same email" means.
+
+Fails closed. A lookup error is not evidence of ownership.
+*/
+func (t *Tgbot) ownsEmail(tgID int64, email string) bool {
+	if email == "" {
+		return false
+	}
+	traffics, err := t.inboundService.GetClientTrafficTgBot(tgID)
+	if err != nil {
+		logger.Warning("tgbot: could not resolve the caller's own clients:", err)
+		return false
+	}
+	for _, traffic := range traffics {
+		if traffic != nil && traffic.Email == email {
+			return true
+		}
+	}
+	return false
 }
 
 // checkAdmin checks if the given Telegram ID is an admin.

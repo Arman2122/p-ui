@@ -2142,6 +2142,7 @@
     "answers": {
       "successfulOperation": "✅ انجام شد!",
       "errorOperation": "❗ خطا در عملیات.",
+      "accessDenied": "این کاربر متعلق به شما نیست",
       "getInboundsFailed": "❌ دریافت ورودی‌ها با خطا مواجه شد.",
       "getClientsFailed": "❌ دریافت مشتریان با شکست مواجه شد.",
       "canceled": "❌ {{ .Email }} : عملیات لغو شد.",
