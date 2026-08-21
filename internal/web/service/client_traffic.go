@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -12,6 +13,99 @@ import (
 
 	"gorm.io/gorm"
 )
+
+/*
+A client is disabled in three places and the core reads all of them: the
+client_traffics row (both render paths), the clients row (RenderInbound, so every
+Xray kind) and the inbound's settings JSON (buildInboundForLocalRuntime, so
+mtproto and wgkernel). The depletion pass writes all three; a reset that restores
+one leaves the client cut off exactly as before, with the panel showing a fresh
+allowance.
+
+These two functions are the before and after of a reset. The reset paths write
+client_traffics directly for bulk efficiency — one UPDATE over N emails instead
+of N Update calls — and that shortcut is how they came to restore one location
+out of three.
+*/
+
+/*
+depletedAndDisabled names the clients a depletion pass had cut off, which is the
+only set a reset may bring back: enable=false also means admin-disabled, and
+zeroing usage is not a reason to undo that.
+
+A client that is BOTH admin-disabled and depleted does match here, and does come
+back. Deliberate, and the same answer the per-client paths already give — they
+call Update with Enable=true unconditionally. A reset is the operator saying
+"give this client its allowance back", and the panel has never split the two
+reasons inside that gesture.
+
+Pass a nil email list for "every client", which is what the panel-wide reset
+means.
+*/
+func depletedAndDisabled(tx *gorm.DB, emails []string) ([]string, error) {
+	cond, args := depletedCond(tx)
+	query := func(extra string, extraArgs ...any) ([]string, error) {
+		var rows []string
+		err := tx.Model(xray.ClientTraffic{}).
+			Where(cond+" AND enable = ?"+extra, append(append(append([]any{}, args...), false), extraArgs...)...).
+			Pluck("email", &rows).Error
+		return rows, err
+	}
+	if emails == nil {
+		return query("")
+	}
+	out := make([]string, 0, len(emails))
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		rows, err := query(" AND email IN ?", batch)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+/*
+reEnableRecovered drives the clients that are no longer depleted back through
+BulkSetEnable — the one write path that owns all three enable locations and the
+runtime push — so the reset paths do not have to know where those locations are.
+
+Re-checked rather than assumed: zeroing usage does not clear an expiry-based
+depletion, so a client past its expiryTime stays disabled, and should.
+
+Call it after the traffic write has committed, never inside submitTrafficWrite:
+that queue is drained by a single worker.
+*/
+func (s *ClientService) reEnableRecovered(inboundSvc *InboundService, was []string) (bool, error) {
+	if len(was) == 0 || inboundSvc == nil {
+		return false, nil
+	}
+	db := database.GetDB()
+	cond, args := depletedCond(db)
+	stillDepleted := map[string]struct{}{}
+	for _, batch := range chunkStrings(was, sqlInChunk) {
+		var rows []string
+		if err := db.Model(xray.ClientTraffic{}).
+			Where(cond+" AND email IN ?", append(append([]any{}, args...), batch)...).
+			Pluck("email", &rows).Error; err != nil {
+			return false, err
+		}
+		for _, email := range rows {
+			stillDepleted[email] = struct{}{}
+		}
+	}
+	recovered := make([]string, 0, len(was))
+	for _, email := range was {
+		if _, depleted := stillDepleted[email]; !depleted {
+			recovered = append(recovered, email)
+		}
+	}
+	if len(recovered) == 0 {
+		return false, nil
+	}
+	_, needRestart, err := s.BulkSetEnable(inboundSvc, recovered, true)
+	return needRestart, err
+}
 
 func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email string) (bool, error) {
 	if email == "" {
@@ -127,22 +221,33 @@ func (s *ClientService) BulkResetTraffic(inboundSvc *InboundService, emails []st
 	if err != nil {
 		return 0, err
 	}
+	// The sidecar counts for itself, so a panel-side zero means nothing to it:
+	// an mtproto client stays blocked on its own quota until this call.
+	resetCoreQuotas(context.Background(), cleanEmails)
 	return affected, nil
 }
 
 func (s *ClientService) ResetAllClientTraffics(inboundSvc *InboundService, id int) error {
+	var wasDepleted []string
 	err := submitTrafficWrite(func() error {
-		return s.resetAllClientTrafficsLocked(id)
+		var lockedErr error
+		wasDepleted, lockedErr = s.resetAllClientTrafficsLocked(id)
+		return lockedErr
 	})
-	if err == nil {
-		inboundSvc.resetAllMtprotoQuotas()
+	if err != nil {
+		return err
 	}
-	return err
+	inboundSvc.resetAllMtprotoQuotas()
+	if _, err := s.reEnableRecovered(inboundSvc, wasDepleted); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *ClientService) resetAllClientTrafficsLocked(id int) error {
+func (s *ClientService) resetAllClientTrafficsLocked(id int) ([]string, error) {
 	db := database.GetDB()
 	now := time.Now().Unix() * 1000
+	var wasDepleted []string
 
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		// client_traffics.inbound_id is stale: it reflects the inbound the row was
@@ -170,9 +275,15 @@ func (s *ClientService) resetAllClientTrafficsLocked(id int) error {
 			return err
 		}
 
+		// Before the usage is zeroed, while depletion is still readable off the row.
+		var snapErr error
+		if wasDepleted, snapErr = depletedAndDisabled(tx, resetEmails); snapErr != nil {
+			return snapErr
+		}
+
 		result := tx.Model(xray.ClientTraffic{}).
 			Where("email IN ?", resetEmails).
-			Updates(map[string]any{"enable": true, "up": 0, "down": 0})
+			Updates(map[string]any{"up": 0, "down": 0})
 
 		if result.Error != nil {
 			return result.Error
@@ -201,18 +312,23 @@ func (s *ClientService) resetAllClientTrafficsLocked(id int) error {
 
 		return result.Error
 	}); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return wasDepleted, nil
 }
 
-func (s *ClientService) ResetAllTraffics() (bool, error) {
+func (s *ClientService) ResetAllTraffics(inboundSvc *InboundService) (bool, error) {
 	var affected int64
+	var wasDepleted []string
 	err := submitTrafficWrite(func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
+			var snapErr error
+			if wasDepleted, snapErr = depletedAndDisabled(tx, nil); snapErr != nil {
+				return snapErr
+			}
 			res := tx.Model(&xray.ClientTraffic{}).
 				Where("1 = 1").
-				Updates(map[string]any{"enable": true, "up": 0, "down": 0})
+				Updates(map[string]any{"up": 0, "down": 0})
 			if res.Error != nil {
 				return res.Error
 			}
@@ -226,5 +342,10 @@ func (s *ClientService) ResetAllTraffics() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return affected > 0, nil
+	inboundSvc.resetAllMtprotoQuotas()
+	needRestart, err := s.reEnableRecovered(inboundSvc, wasDepleted)
+	if err != nil {
+		return false, err
+	}
+	return needRestart || affected > 0, nil
 }

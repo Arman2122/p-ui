@@ -579,6 +579,7 @@ func (s *InboundService) delClientStatsByEmails(tx *gorm.DB, emails []string) er
 }
 
 func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
+	var wasDepleted []string
 	err := submitTrafficWrite(func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
 			if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {
@@ -587,17 +588,24 @@ func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
 			if err := clearGlobalTraffic(tx, clientEmail); err != nil {
 				return err
 			}
+			// Before the usage is zeroed, while depletion is still readable.
+			var snapErr error
+			if wasDepleted, snapErr = depletedAndDisabled(tx, []string{clientEmail}); snapErr != nil {
+				return snapErr
+			}
 			if err := tx.Model(xray.ClientTraffic{}).
 				Where("email = ?", clientEmail).
-				Updates(map[string]any{"enable": true, "up": 0, "down": 0}).Error; err != nil {
+				Updates(map[string]any{"up": 0, "down": 0}).Error; err != nil {
 				return err
 			}
 			return tx.Where("email = ?", clientEmail).Delete(&model.NodeClientTraffic{}).Error
 		})
 	})
-	if err == nil {
-		s.resetMtprotoClientQuota(clientEmail)
+	if err != nil {
+		return err
 	}
+	s.resetMtprotoClientQuota(clientEmail)
+	_, err = s.clientService.reEnableRecovered(s, wasDepleted)
 	return err
 }
 
@@ -748,12 +756,41 @@ func (s *InboundService) propagateResetAllTrafficsToNodes() {
 }
 
 func (s *InboundService) ResetInboundTraffic(id int) error {
+	now := time.Now().UnixMilli()
+	/*
+		An inbound carries its own quota and its own expiry, and disableInvalidInbounds
+		flips inbounds.enable when either is spent — so its own reset has to be able to
+		undo that, or the reset is a no-op the operator watches succeed.
+
+		Snapshotted before the zeroing for the same reason the client paths do it:
+		afterwards, an inbound disabled by hand is indistinguishable from one the
+		quota disabled, and only the second may come back. The rule is the exact
+		inverse of what disabled it — no longer over its own total, and not past its
+		own expiry. Expiry is why the re-enable is conditional rather than
+		unconditional: zeroing usage does not move a date.
+	*/
+	var wasDepleted int64
+	if err := database.GetDB().Model(model.Inbound{}).
+		Where("id = ? AND enable = ? AND ((total > 0 AND up + down >= total) OR (expiry_time > 0 AND expiry_time <= ?))",
+			id, false, now).
+		Count(&wasDepleted).Error; err != nil {
+		return err
+	}
+
 	if err := submitTrafficWrite(func() error {
 		return database.GetDB().Model(model.Inbound{}).
 			Where("id = ?", id).
 			Updates(map[string]any{"up": 0, "down": 0}).Error
 	}); err != nil {
 		return err
+	}
+
+	if wasDepleted > 0 {
+		if err := database.GetDB().Model(model.Inbound{}).
+			Where("id = ? AND (expiry_time = 0 OR expiry_time > ?)", id, now).
+			Update("enable", true).Error; err != nil {
+			return err
+		}
 	}
 
 	inbound, err := s.GetInbound(id)

@@ -48,7 +48,15 @@ func TestAddTrafficCommitsDespiteDisableHelperError(t *testing.T) {
 	}
 }
 
-func TestResetAllTrafficsReenablesDepletedClients(t *testing.T) {
+/*
+Superseded on the enable half by TestEveryResetPathRestoresAllThreeEnableLocations,
+which reads all three locations the core actually gates on. This one asserted
+client_traffics alone — one of the three — and so certified the bug it was
+written to prevent: the client came back in the panel and stayed gone from the
+core. What is left here is the usage half, which this path owns and that test
+does not re-read.
+*/
+func TestResetAllTrafficsZeroesUsage(t *testing.T) {
 	db := initTrafficTestDB(t)
 	svc := &ClientService{}
 
@@ -56,16 +64,13 @@ func TestResetAllTrafficsReenablesDepletedClients(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	if _, err := svc.ResetAllTraffics(); err != nil {
+	if _, err := svc.ResetAllTraffics(&InboundService{}); err != nil {
 		t.Fatalf("ResetAllTraffics: %v", err)
 	}
 
 	row := readTraffic(t, db, "spent@x")
 	if row.Up != 0 || row.Down != 0 {
 		t.Fatalf("usage not reset: up=%d down=%d", row.Up, row.Down)
-	}
-	if !row.Enable {
-		t.Fatal("a depleted client must be re-enabled after Reset All Client Traffic, matching every other reset path")
 	}
 }
 
@@ -80,7 +85,7 @@ func TestResetAllTrafficsClearsNodeBaselines(t *testing.T) {
 		t.Fatalf("seed node baseline: %v", err)
 	}
 
-	if _, err := svc.ResetAllTraffics(); err != nil {
+	if _, err := svc.ResetAllTraffics(&InboundService{}); err != nil {
 		t.Fatalf("ResetAllTraffics: %v", err)
 	}
 

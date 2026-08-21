@@ -22,6 +22,20 @@ here; the git log is the full record.
   `restartXrayOnClientDisable` off if you would rather revocation applied only to
   new connections.
 
+- **A quota reset now actually restores access.** A client is disabled in three
+  places and the core reads all of them; the periodic reset, the Clients page
+  reset-all button, the Telegram bot's reset and an inbound's own reset each
+  restored one. The panel showed a fresh allowance and the client still could not
+  connect — on any protocol, and an Xray restart did not help, because the
+  restart rebuilt from the same three places. mtproto clients also stayed blocked
+  on the sidecar's own counter, which no reset cleared.
+  **What you will notice:** clients stuck disabled after an earlier reset come
+  back at their next one. A client the operator disabled by hand stays disabled,
+  unless they were also over quota — in which case a reset does bring them back,
+  which is what the per-client reset has always done. An inbound comes back from
+  its own reset only if its own quota was what disabled it, and only if it is not
+  also past its own expiry.
+
 - **Per-client IP limits that survived an upgrade start being enforced once
   fail2ban is available.** They were always meant to be, and the panel has
   always ignored them while fail2ban was missing — but a limit set long ago,
