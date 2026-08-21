@@ -110,7 +110,10 @@ export function uplinkPayload(form: EgressFormValues, remark: string, type: Egre
     target: '',
     enable: form.enable,
     owner: 'operator',
-    ingressInboundId: 0,
+    /* An uplink selects no ingress. The scalar 0 that used to sit here binds to
+       a non-nil *int on the server and lands in a column with a foreign key onto
+       inbounds(id), which no row can ever have — so every create was refused. */
+    ingressInboundId: null,
     settings: JSON.stringify({
       privateKey: form.privateKey,
       address: splitAddresses(form.address),

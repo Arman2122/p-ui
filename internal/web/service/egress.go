@@ -124,6 +124,18 @@ func (s *EgressService) Get(id int) (*model.Egress, error) {
 // this row stores that is not the operator's: everything else is derived.
 func (s *EgressService) Add(row *model.Egress) (*model.Egress, error) {
 	row.Id = 0
+	/*
+		A pointer at zero is not a selection. Inbound ids are autoincrement, so no
+		row can ever be 0 — but the column carries a foreign key onto inbounds(id),
+		and a JSON body with `"ingressInboundId": 0` binds to a NON-nil *int that
+		reaches it. Every such create was refused by Postgres with a 23503.
+
+		Normalised here rather than only in the caller that did it, because the
+		next caller sends JSON too.
+	*/
+	if row.IngressInboundId != nil && *row.IngressInboundId == 0 {
+		row.IngressInboundId = nil
+	}
 	if err := s.validate(row); err != nil {
 		return nil, err
 	}

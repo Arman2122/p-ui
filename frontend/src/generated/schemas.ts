@@ -1881,6 +1881,9 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "downloadSettings": {
+        "type": "string"
+      },
       "echConfigList": {
         "type": "string"
       },
@@ -2007,6 +2010,7 @@ export const SCHEMAS: Record<string, unknown> = {
     "required": [
       "allowInsecure",
       "alpn",
+      "downloadSettings",
       "echConfigList",
       "excludeFromSubTypes",
       "finalMask",

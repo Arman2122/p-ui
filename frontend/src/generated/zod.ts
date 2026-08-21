@@ -472,6 +472,7 @@ export type Host = z.infer<typeof HostSchema>;
 export const HostGroupSchema = z.object({
   allowInsecure: z.boolean(),
   alpn: z.array(z.string()),
+  downloadSettings: z.string(),
   echConfigList: z.string(),
   excludeFromSubTypes: z.array(z.string()),
   finalMask: z.string(),
