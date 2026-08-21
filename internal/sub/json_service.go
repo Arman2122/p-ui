@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
 	"github.com/Arman2122/p-ui/internal/util/random"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
@@ -542,6 +543,15 @@ func (s *SubJsonService) genHy(inbound *model.Inbound, newStream map[string]any,
 // and the peer routes the full tunnel. Returns nil when the client has no key.
 func (s *SubJsonService) genWireguard(inbound *model.Inbound, client model.Client) json_util.RawMessage {
 	if client.PrivateKey == "" {
+		return nil
+	}
+	// xray's wireguard outbound is plain WireGuard and has no field for this
+	// inbound's obfuscation, so a config emitted here would describe a tunnel
+	// that cannot complete a handshake. Omitted for the same reason clash omits
+	// it: nothing beats something that silently does not work.
+	if params := awgParamsOf(inbound); !params.IsZero() {
+		logger.Warning("sub json: omitting inbound", inbound.Id,
+			"— its AmneziaWG obfuscation has no representation in an xray wireguard outbound")
 		return nil
 	}
 

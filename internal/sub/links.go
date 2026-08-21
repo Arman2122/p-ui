@@ -63,3 +63,14 @@ func splitLinkLines(raw string) []string {
 	}
 	return out
 }
+
+// ConfigFileForSubId is the panel's door onto FileShare, which is the same call
+// the subscription's own file endpoint makes — so the Clients page and a
+// subscriber downloading the same client get identical bytes.
+func (p *LinkProvider) ConfigFileForSubId(host, subId string, inboundId int) (string, string, error) {
+	share, err := p.build(host).FileShare(subId, inboundId, host)
+	if err != nil {
+		return "", "", err
+	}
+	return share.Filename, share.Body, nil
+}

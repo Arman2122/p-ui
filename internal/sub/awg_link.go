@@ -22,16 +22,7 @@ so the config derived from a link and the config served as a file are the same
 file.
 */
 func awgLinkParams(inbound *model.Inbound, params map[string]string) {
-	if inbound == nil || inbound.Settings == "" {
-		return
-	}
-	var settings struct {
-		AWG awg.Params `json:"awg"`
-	}
-	if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
-		return
-	}
-	p := settings.AWG
+	p := awgParamsOf(inbound)
 	if p.IsZero() {
 		return
 	}
@@ -76,4 +67,25 @@ func awgLinkParams(inbound *model.Inbound, params map[string]string) {
 	if p.DisableCookies {
 		params["disablecookies"] = "on"
 	}
+}
+
+/*
+awgParamsOf reads an inbound's obfuscation.
+
+One reader, because the answer decides more than one thing: what a share link
+carries, and whether a renderer that has nowhere to put these parameters may
+describe this inbound at all. A second copy of the parse is how those two came
+to disagree.
+*/
+func awgParamsOf(inbound *model.Inbound) awg.Params {
+	if inbound == nil || inbound.Settings == "" {
+		return awg.Params{}
+	}
+	var settings struct {
+		AWG awg.Params `json:"awg"`
+	}
+	if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
+		return awg.Params{}
+	}
+	return settings.AWG
 }

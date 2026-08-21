@@ -9,6 +9,7 @@ import (
 	yaml "github.com/goccy/go-yaml"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
@@ -376,6 +377,20 @@ func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.
 // pre-shared key come from the client. Returns nil when the client has no key.
 func (s *SubClashService) buildWireguardProxy(subReq *SubService, inbound *model.Inbound, client model.Client, ep map[string]any) map[string]any {
 	if client.PrivateKey == "" {
+		return nil
+	}
+	/*
+		A mihomo `type: wireguard` proxy describes plain WireGuard, and this
+		builder has nowhere to put jc/jmin/jmax/s1..s4 — so for an obfuscated
+		inbound it produces an entry that looks right and never completes a
+		handshake, while the same client's raw-link subscription works. The
+		operator sees "Clash is broken for some users" and no error anywhere.
+
+		Omitted rather than shipped dead: a missing proxy is diagnosable.
+	*/
+	if params := awgParamsOf(inbound); !params.IsZero() {
+		logger.Warning("clash: omitting inbound", inbound.Id,
+			"— its AmneziaWG obfuscation has no representation in a mihomo wireguard proxy, and a plain one cannot connect")
 		return nil
 	}
 

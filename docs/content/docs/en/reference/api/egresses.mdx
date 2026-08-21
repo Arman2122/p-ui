@@ -46,6 +46,19 @@ _openapi:
         refused: it would move them to direct.'
       url: '#replace-the-editable-half-of-an-egress-the-id-and-so-the-routing-table-rule-priority-front-device-and-gateway-derived-from-it-are-fixed-for-the-rows-life-disabling-a-row-that-inbounds-still-select-is-refused-it-would-move-them-to-direct'
     - depth: 2
+      title: 'Time a real request out through each egress and report the exit it came
+        from, so an uplink answers the same question an outbound does. mode is
+        "tcp", "http" or "real"; "tcp" is promoted to the HTTP probe because a
+        bare dial proves nothing about a tunnel whose peer ignores
+        unauthenticated packets. Every probe is gated on the host agreeing that
+        this egress''s mark reaches its own device: a mark no rule catches falls
+        through to the main table and leaves with the server''s own address, so
+        a disabled row, a contained one, or one whose device is gone answers
+        with why rather than with a latency that measured the direct path. A
+        front is refused outright — it hands its traffic to an outbound tag, and
+        that outbound is testable on its own row.'
+      url: '#time-a-real-request-out-through-each-egress-and-report-the-exit-it-came-from-so-an-uplink-answers-the-same-question-an-outbound-does-mode-is-tcp-http-or-real-tcp-is-promoted-to-the-http-probe-because-a-bare-dial-proves-nothing-about-a-tunnel-whose-peer-ignores-unauthenticated-packets-every-probe-is-gated-on-the-host-agreeing-that-this-egresss-mark-reaches-its-own-device-a-mark-no-rule-catches-falls-through-to-the-main-table-and-leaves-with-the-servers-own-address-so-a-disabled-row-a-contained-one-or-one-whose-device-is-gone-answers-with-why-rather-than-with-a-latency-that-measured-the-direct-path-a-front-is-refused-outright--it-hands-its-traffic-to-an-outbound-tag-and-that-outbound-is-testable-on-its-own-row'
+    - depth: 2
       title: Delete an egress and bring down the kernel state its id owns. Refused
         while a routing rule still sends traffic to it.
       url: '#delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-a-routing-rule-still-sends-traffic-to-it'
@@ -78,6 +91,18 @@ _openapi:
           fixed for the row’s life. Disabling a row that inbounds still select
           is refused: it would move them to direct.'
         id: replace-the-editable-half-of-an-egress-the-id-and-so-the-routing-table-rule-priority-front-device-and-gateway-derived-from-it-are-fixed-for-the-rows-life-disabling-a-row-that-inbounds-still-select-is-refused-it-would-move-them-to-direct
+      - content: 'Time a real request out through each egress and report the exit it
+          came from, so an uplink answers the same question an outbound does.
+          mode is "tcp", "http" or "real"; "tcp" is promoted to the HTTP probe
+          because a bare dial proves nothing about a tunnel whose peer ignores
+          unauthenticated packets. Every probe is gated on the host agreeing
+          that this egress''s mark reaches its own device: a mark no rule
+          catches falls through to the main table and leaves with the server''s
+          own address, so a disabled row, a contained one, or one whose device
+          is gone answers with why rather than with a latency that measured the
+          direct path. A front is refused outright — it hands its traffic to an
+          outbound tag, and that outbound is testable on its own row.'
+        id: time-a-real-request-out-through-each-egress-and-report-the-exit-it-came-from-so-an-uplink-answers-the-same-question-an-outbound-does-mode-is-tcp-http-or-real-tcp-is-promoted-to-the-http-probe-because-a-bare-dial-proves-nothing-about-a-tunnel-whose-peer-ignores-unauthenticated-packets-every-probe-is-gated-on-the-host-agreeing-that-this-egresss-mark-reaches-its-own-device-a-mark-no-rule-catches-falls-through-to-the-main-table-and-leaves-with-the-servers-own-address-so-a-disabled-row-a-contained-one-or-one-whose-device-is-gone-answers-with-why-rather-than-with-a-latency-that-measured-the-direct-path-a-front-is-refused-outright--it-hands-its-traffic-to-an-outbound-tag-and-that-outbound-is-testable-on-its-own-row
       - content: Delete an egress and bring down the kernel state its id owns. Refused
           while a routing rule still sends traffic to it.
         id: delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-a-routing-rule-still-sends-traffic-to-it
@@ -93,7 +118,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/egresses/list","method":"get"},{"path":"/panel/api/egresses/get/{id}","method":"get"},{"path":"/panel/api/egresses/preflight","method":"get"},{"path":"/panel/api/egresses/add","method":"post"},{"path":"/panel/api/egresses/update/{id}","method":"post"},{"path":"/panel/api/egresses/del/{id}","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/egresses/list","method":"get"},{"path":"/panel/api/egresses/get/{id}","method":"get"},{"path":"/panel/api/egresses/preflight","method":"get"},{"path":"/panel/api/egresses/add","method":"post"},{"path":"/panel/api/egresses/update/{id}","method":"post"},{"path":"/panel/api/egresses/test","method":"post"},{"path":"/panel/api/egresses/del/{id}","method":"post"}]} showTitle />
     </>
   );
 }

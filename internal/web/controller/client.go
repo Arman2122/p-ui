@@ -52,6 +52,7 @@ func (a *ClientController) initRouter(g *gin.RouterGroup) {
 	g.GET("/traffic/:email", a.getTrafficByEmail)
 	g.GET("/localAddresses/:email", a.localAddresses)
 	g.GET("/subLinks/:subId", a.getSubLinks)
+	g.GET("/configFile/:subId/:inboundId", a.getClientConfigFile)
 	g.GET("/links/:email", a.getClientLinks)
 
 	g.POST("/add", a.create)
@@ -586,6 +587,29 @@ func (a *ClientController) getSubLinks(c *gin.Context) {
 		return
 	}
 	jsonObj(c, links, nil)
+}
+
+/*
+getClientConfigFile serves the file a client imports — today the .conf a
+WireGuard or AmneziaWG client needs — rendered by the core that owns the kind.
+
+The Clients page used to build this in the browser out of the few WireGuard
+fields InboundOption carries, so an AmneziaWG client got a plain WireGuard
+tunnel and no handshake. It is the same call the subscription file endpoint
+makes, so both hand out the same bytes.
+*/
+func (a *ClientController) getClientConfigFile(c *gin.Context) {
+	inboundId, err := strconv.Atoi(c.Param("inboundId"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	file, err := a.inboundService.GetClientConfigFile(resolveHost(c), c.Param("subId"), inboundId)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
+		return
+	}
+	jsonObj(c, file, nil)
 }
 
 func (a *ClientController) getClientLinks(c *gin.Context) {

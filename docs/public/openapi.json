@@ -1167,6 +1167,24 @@
         ],
         "type": "object"
       },
+      "ClientConfigFile": {
+        "description": "ClientConfigFile is one importable client config: what to call the file, and\nwhat is in it.",
+        "properties": {
+          "body": {
+            "example": "[Interface]\nPrivateKey = ...",
+            "type": "string"
+          },
+          "filename": {
+            "example": "peer-alice.conf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "filename"
+        ],
+        "type": "object"
+      },
       "ClientInbound": {
         "properties": {
           "clientId": {
@@ -2127,6 +2145,7 @@
               "hysteria",
               "mtproto",
               "wgkernel",
+              "awgkernel",
               "tun"
             ],
             "example": "vless",
@@ -8544,6 +8563,65 @@
         }
       }
     },
+    "/panel/api/clients/configFile/{subId}/{inboundId}": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Return the importable config file for one client on one inbound — today the .conf a WireGuard or AmneziaWG client imports, rendered by the core that owns the kind, so it carries that inbound's obfuscation parameters. Same bytes the subscription file endpoint serves. Errors when the subscription/inbound pair has nothing file-shaped to hand out.",
+        "operationId": "get_panel_api_clients_configFile_subId_inboundId",
+        "parameters": [
+          {
+            "name": "subId",
+            "in": "path",
+            "required": true,
+            "description": "Subscription ID, taken from the client's subId field.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inboundId",
+            "in": "path",
+            "required": true,
+            "description": "Inbound the config is for.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ClientConfigFile"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "body": "[Interface]\nPrivateKey = ...",
+                    "filename": "peer-alice.conf"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/clients/links/{email}": {
       "get": {
         "tags": [
@@ -10123,6 +10201,68 @@
                     "type": "xray-tun",
                     "updatedAt": 1700000000000
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/test": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Time a real request out through each egress and report the exit it came from, so an uplink answers the same question an outbound does. mode is \"tcp\", \"http\" or \"real\"; \"tcp\" is promoted to the HTTP probe because a bare dial proves nothing about a tunnel whose peer ignores unauthenticated packets. Every probe is gated on the host agreeing that this egress's mark reaches its own device: a mark no rule catches falls through to the main table and leaves with the server's own address, so a disabled row, a contained one, or one whose device is gone answers with why rather than with a latency that measured the direct path. A front is refused outright — it hands its traffic to an outbound tag, and that outbound is testable on its own row.",
+        "operationId": "post_panel_api_egresses_test",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "ids": [
+                  18
+                ],
+                "mode": "real"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "tag": "US-sfo | Surfshark (kernel)",
+                      "mode": "real",
+                      "success": true,
+                      "delay": 142,
+                      "httpStatus": 204,
+                      "egress": {
+                        "ipv4": "169.150.196.10",
+                        "country": "US"
+                      }
+                    }
+                  ]
                 }
               }
             }

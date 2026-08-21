@@ -267,6 +267,10 @@ export const EXAMPLES: Record<string, unknown> = {
     "totalGB": 0,
     "updated_at": 0
   },
+  "ClientConfigFile": {
+    "body": "[Interface]\nPrivateKey = ...",
+    "filename": "peer-alice.conf"
+  },
   "ClientInbound": {
     "clientId": 0,
     "createdAt": 0,

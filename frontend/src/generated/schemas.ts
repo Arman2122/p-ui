@@ -1141,6 +1141,24 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientConfigFile": {
+    "description": "ClientConfigFile is one importable client config: what to call the file, and\nwhat is in it.",
+    "properties": {
+      "body": {
+        "example": "[Interface]\nPrivateKey = ...",
+        "type": "string"
+      },
+      "filename": {
+        "example": "peer-alice.conf",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "filename"
+    ],
+    "type": "object"
+  },
   "ClientInbound": {
     "properties": {
       "clientId": {
