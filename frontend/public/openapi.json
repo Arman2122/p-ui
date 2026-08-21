@@ -1907,6 +1907,9 @@
             },
             "type": "array"
           },
+          "downloadSettings": {
+            "type": "string"
+          },
           "echConfigList": {
             "type": "string"
           },
@@ -2033,6 +2036,7 @@
         "required": [
           "allowInsecure",
           "alpn",
+          "downloadSettings",
           "echConfigList",
           "excludeFromSubTypes",
           "finalMask",
@@ -10780,6 +10784,7 @@
                       "alpn": [
                         ""
                       ],
+                      "downloadSettings": "",
                       "echConfigList": "",
                       "excludeFromSubTypes": [
                         ""
@@ -10874,6 +10879,7 @@
                     "alpn": [
                       ""
                     ],
+                    "downloadSettings": "",
                     "echConfigList": "",
                     "excludeFromSubTypes": [
                       ""
@@ -10971,6 +10977,7 @@
                       "alpn": [
                         ""
                       ],
+                      "downloadSettings": "",
                       "echConfigList": "",
                       "excludeFromSubTypes": [
                         ""

@@ -439,6 +439,7 @@ export interface Host {
 export interface HostGroup {
   allowInsecure: boolean;
   alpn: string[];
+  downloadSettings: string;
   echConfigList: string;
   excludeFromSubTypes: string[];
   finalMask: string;

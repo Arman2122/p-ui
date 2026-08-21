@@ -449,6 +449,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "alpn": [
       ""
     ],
+    "downloadSettings": "",
     "echConfigList": "",
     "excludeFromSubTypes": [
       ""
