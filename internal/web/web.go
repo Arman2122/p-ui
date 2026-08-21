@@ -212,7 +212,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	if sessionMaxAge, err := s.settingService.GetSessionMaxAge(); err == nil && sessionMaxAge > 0 {
 		sessionOptions.MaxAge = sessionMaxAge * 60 // minutes -> seconds
 	}
-	store.Options(sessionOptions)
+	configureSessionStore(store, sessionOptions)
 	engine.Use(sessions.Sessions("p-ui", store))
 	engine.Use(func(c *gin.Context) {
 		c.Set("base_path", basePath)
@@ -280,6 +280,31 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	})
 
 	return engine, nil
+}
+
+/*
+configureSessionStore applies the cookie options and re-keys the store's
+securecookie codecs, which is the only thing that makes MaxAge a lifetime the
+server enforces rather than a hint it hands the browser.
+
+gin-contrib/sessions' Options() assigns the struct field and stops there, while
+gorilla pins the codecs once at construction, at its own 30-day default. Apart,
+those two halves are exactly how the configured age came to be enforced on the
+browser and nowhere else: a cookie copied out of a profile, a backup or a proxy
+log replayed for thirty days whatever the operator set. So they are one call.
+*/
+func configureSessionStore(store sessions.Store, options sessions.Options) {
+	store.Options(options)
+	if options.MaxAge <= 0 {
+		// Zero is not a shorter lifetime — it is no expiry at all in
+		// securecookie's terms — so leave the store's own default alone.
+		return
+	}
+	if codecs, ok := store.(interface{ MaxAge(int) }); ok {
+		codecs.MaxAge(options.MaxAge)
+		return
+	}
+	logger.Warning("session store does not expose MaxAge; sessionMaxAge is a cookie attribute only")
 }
 
 // Background-job cadences. Centralized here as the single tuning surface; the
