@@ -1516,8 +1516,11 @@ install_p-ui() {
         rm ${pui_folder}/ -rf
     fi
 
-    # Extract resources and set permissions
-    tar zxvf p-ui-linux-$(arch).tar.gz
+    # Extract resources and set permissions.
+    # --no-same-owner: as root, tar restores the archive's uid/gid, and the
+    # release tarball is built by a non-root CI user. Without it every binary
+    # this panel execs as root ends up owned by that uid.
+    tar --no-same-owner -zxvf p-ui-linux-$(arch).tar.gz
     if [[ $? -ne 0 ]]; then
         rm p-ui-linux-$(arch).tar.gz -f
         rm -f "${pui_script_temp}"
@@ -1568,6 +1571,11 @@ install_p-ui() {
             echo -e "${yellow}Retry later with: ${pui_folder}/awg-dkms.sh install${plain}"
         fi
     fi
+
+    # The same sweep update.sh already makes, so an install that predates the
+    # extract flag above is repaired by the next run of either script.
+    echo -e "${green}Changing owner...${plain}"
+    chown -R root:root ${pui_folder} > /dev/null 2>&1
 
     # Update p-ui cli and se set permission
     mv -f "${pui_script_temp}" /usr/bin/p-ui
