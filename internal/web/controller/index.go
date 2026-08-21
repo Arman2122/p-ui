@@ -142,6 +142,19 @@ func (a *IndexController) logout(c *gin.Context) {
 	if user != nil {
 		logger.Infof("%s logged out successfully", user.Username)
 	}
+	/*
+		Expiring the browser's copy revokes nothing on its own — a cookie already
+		captured stays valid until it ages out. The epoch is the panel's one
+		server-side revocation, so logout has to move it.
+
+		It moves it for every row (the panel has a single admin), which means
+		logging out here ends that admin's sessions on every device. A failure is
+		logged loudly and the browser's copy is still cleared: logout must never
+		leave the operator looking signed in because the database hiccuped.
+	*/
+	if err := a.userService.BumpLoginEpoch(); err != nil {
+		logger.Error("logout: could not revoke outstanding sessions, they stay valid until they expire:", err)
+	}
 	if err := session.ClearSession(c); err != nil {
 		logger.Warning("Unable to clear session on logout:", err)
 	}
