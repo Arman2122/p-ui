@@ -2142,6 +2142,7 @@
     "answers": {
       "successfulOperation": "✅ Operation successful!",
       "errorOperation": "❗ Error in operation.",
+      "accessDenied": "Not your client",
       "getInboundsFailed": "❌ Failed to get inbounds.",
       "getClientsFailed": "❌ Failed to get clients.",
       "canceled": "❌ {{ .Email }}: Operation canceled.",

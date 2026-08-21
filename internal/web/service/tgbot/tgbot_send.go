@@ -172,6 +172,11 @@ func (t *Tgbot) SendMsgToTgbotAdmins(msg string, replyMarkup ...telego.ReplyMark
 
 // sendCallbackAnswerTgBot answers a callback query with a message.
 func (t *Tgbot) sendCallbackAnswerTgBot(id string, message string) {
+	// Same guard SendMsgToTgbot carries: there is no bot to answer through
+	// before start or after shutdown, and every caller is a request handler.
+	if !isRunning {
+		return
+	}
 	params := telego.AnswerCallbackQueryParams{
 		CallbackQueryID: id,
 		Text:            message,
