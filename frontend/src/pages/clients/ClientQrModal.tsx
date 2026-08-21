@@ -6,7 +6,7 @@ import { isPostQuantumLink } from '@/lib/xray/inbound-link';
 import { LinkTags, linkMetaText, parseLinkParts } from '@/lib/xray/link-label';
 import { QrPanel } from '@/pages/inbounds/qr';
 import type { ClientRecord, InboundOption } from '@/hooks/useClients';
-import { buildWireguardClientConfig, findWireguardInbound, isWireguardClient } from './wireguardConfig';
+import { findWireguardInbound, useWireguardClientConfig } from './wireguardConfig';
 
 interface SubSettings {
   enable: boolean;
@@ -54,10 +54,7 @@ export default function ClientQrModal({
   }, [client?.subId, subSettings?.enable, subSettings?.subJsonEnable, subSettings?.subJsonURI]);
 
   const wgInbound = useMemo(() => findWireguardInbound(client, inboundsById), [client, inboundsById]);
-  const wgConfigText = useMemo(() => {
-    if (!client || !wgInbound || !isWireguardClient(client)) return '';
-    return buildWireguardClientConfig(client, wgInbound, window.location.hostname, subSettings?.publicHost ?? '');
-  }, [client, wgInbound, subSettings?.publicHost]);
+  const wgConfigText = useWireguardClientConfig(open, client, wgInbound);
 
   const hasAnything = !!subLink || !!subJsonLink || !!wgConfigText || links.length > 0;
 

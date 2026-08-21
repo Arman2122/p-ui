@@ -277,6 +277,11 @@ export interface Client {
   updated_at?: number;
 }
 
+export interface ClientConfigFile {
+  body: string;
+  filename: string;
+}
+
 export interface ClientInbound {
   clientId: number;
   createdAt: number;

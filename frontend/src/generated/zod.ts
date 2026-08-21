@@ -297,6 +297,12 @@ export const ClientSchema = z.object({
 });
 export type Client = z.infer<typeof ClientSchema>;
 
+export const ClientConfigFileSchema = z.object({
+  body: z.string(),
+  filename: z.string(),
+});
+export type ClientConfigFile = z.infer<typeof ClientConfigFileSchema>;
+
 export const ClientInboundSchema = z.object({
   clientId: z.number().int(),
   createdAt: z.number().int(),

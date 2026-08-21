@@ -1167,6 +1167,24 @@
         ],
         "type": "object"
       },
+      "ClientConfigFile": {
+        "description": "ClientConfigFile is one importable client config: what to call the file, and\nwhat is in it.",
+        "properties": {
+          "body": {
+            "example": "[Interface]\nPrivateKey = ...",
+            "type": "string"
+          },
+          "filename": {
+            "example": "peer-alice.conf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "filename"
+        ],
+        "type": "object"
+      },
       "ClientInbound": {
         "properties": {
           "clientId": {
@@ -8538,6 +8556,65 @@
                     "vless://uuid@host:443?security=reality&...#user1",
                     "vmess://eyJ2IjoyLC..."
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/clients/configFile/{subId}/{inboundId}": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Return the importable config file for one client on one inbound — today the .conf a WireGuard or AmneziaWG client imports, rendered by the core that owns the kind, so it carries that inbound's obfuscation parameters. Same bytes the subscription file endpoint serves. Errors when the subscription/inbound pair has nothing file-shaped to hand out.",
+        "operationId": "get_panel_api_clients_configFile_subId_inboundId",
+        "parameters": [
+          {
+            "name": "subId",
+            "in": "path",
+            "required": true,
+            "description": "Subscription ID, taken from the client's subId field.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inboundId",
+            "in": "path",
+            "required": true,
+            "description": "Inbound the config is for.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ClientConfigFile"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "body": "[Interface]\nPrivateKey = ...",
+                    "filename": "peer-alice.conf"
+                  }
                 }
               }
             }

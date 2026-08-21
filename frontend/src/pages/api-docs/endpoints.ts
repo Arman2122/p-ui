@@ -917,6 +917,17 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/clients/configFile/:subId/:inboundId',
+        summary:
+          'Return the importable config file for one client on one inbound — today the .conf a WireGuard or AmneziaWG client imports, rendered by the core that owns the kind, so it carries that inbound\'s obfuscation parameters. Same bytes the subscription file endpoint serves. Errors when the subscription/inbound pair has nothing file-shaped to hand out.',
+        params: [
+          { name: 'subId', in: 'path', type: 'string', desc: "Subscription ID, taken from the client's subId field." },
+          { name: 'inboundId', in: 'path', type: 'integer', desc: 'Inbound the config is for.' },
+        ],
+        responseSchema: 'ClientConfigFile',
+      },
+      {
+        method: 'GET',
         path: '/panel/api/clients/links/:email',
         summary:
           "Return every URL for one client across all attached inbounds — the same strings the Copy URL button copies in the panel UI. Supported protocols: vmess, vless, trojan, shadowsocks, hysteria. If streamSettings.externalProxy is set, returns one URL per external proxy. Protocols without a URL form (socks, http, mixed, wireguard, dokodemo, tunnel) contribute nothing.",
