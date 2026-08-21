@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path"
 	"path/filepath"
 	"slices"
@@ -416,7 +417,16 @@ func validateInboundForXray(inbound *model.Inbound) error {
 	if err != nil {
 		return err
 	}
-	if err := xray.ValidateInboundConfig(raw); err != nil {
+	err = xray.ValidateInboundConfig(raw)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A certificate path that is not there YET is the ordinary order of
+		// operations — save the inbound, then issue the certificate. The shape of
+		// the certificate is still judged above (an empty one has no path to be
+		// missing), and the restart pre-flight refuses to swap a core that cannot
+		// read the file, so a still-missing one cannot become an outage.
+		return nil
+	}
+	if err != nil {
 		return common.NewError("xray core rejects this inbound:", err)
 	}
 	return nil

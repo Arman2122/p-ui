@@ -265,3 +265,51 @@ func TestSetInboundEnableRefusesABrokenRow(t *testing.T) {
 		t.Fatalf("disabling must always be allowed: %v", err)
 	}
 }
+
+/*
+TestSaveAcceptsACertificateNotIssuedYet is one half of a deliberate split.
+
+Pointing an inbound at a path certbot has not written yet is the ordinary order
+of operations, and the save boundary is the wrong place to break it: the file can
+appear at any time between the save and the restart. The restart pre-flight is
+the hard gate — internal/xray's TestConfig refuses to swap a running core for one
+that cannot read the certificate — so a file that never appears cannot become an
+outage either way.
+
+The shape of the certificate is still judged here. An empty one has no path that
+could be missing, which is what keeps F321 closed.
+*/
+func TestSaveAcceptsACertificateNotIssuedYet(t *testing.T) {
+	initTestDB(t)
+	svc := InboundService{}
+
+	pending := model.Inbound{
+		UserId: 1, Enable: true, Port: 20301, Protocol: model.VLESS, Tag: "cert-pending",
+		Settings: `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"pending@b"}],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"tls","tlsSettings":{"certificates":[` +
+			`{"certificateFile":"/etc/letsencrypt/live/example.com/fullchain.pem",` +
+			`"keyFile":"/etc/letsencrypt/live/example.com/privkey.pem"}]}}`,
+	}
+	if _, _, err := svc.AddInbound(&pending); err != nil {
+		t.Fatalf("an inbound whose certificate is not issued yet must save: %v", err)
+	}
+
+	// The structural refusal is untouched, which is what keeps F321 closed: a
+	// blank entry carries no path, so nothing about it is "not there yet".
+	// (Probing the pinned core showed this is the ONLY certificate shape its
+	// builder rejects — a real certificate with no key beside it, and even a
+	// tlsSettings with no certificates array at all, both build.)
+	blank := pending
+	blank.Id = 0
+	blank.Port = 20302
+	blank.Tag = "cert-blank"
+	blank.Settings = `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"blank@b"}],"decryption":"none"}`
+	blank.StreamSettings = `{"network":"tcp","security":"tls","tlsSettings":{"certificates":[{"certificate":[],"key":[]}]}}`
+	_, _, err := svc.AddInbound(&blank)
+	if err == nil {
+		t.Fatal("the blank certificate the TLS radio seeds was accepted")
+	}
+	if !strings.Contains(err.Error(), "both file and bytes are empty") {
+		t.Fatalf("error %q does not name the core's reason", err)
+	}
+}

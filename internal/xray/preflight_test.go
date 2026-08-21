@@ -107,6 +107,32 @@ func TestTestConfigAgreesWithTheCore(t *testing.T) {
 		assertRefused(t, TestConfig(cfg), "invalid port: abc")
 	})
 
+	// The other half of a deliberate split: the save boundary lets a not-yet-issued
+	// certificate through, because the file can appear between the save and the
+	// restart. This is where a file that never appeared has to be caught, or the
+	// core is swapped for one that cannot start.
+	t.Run("a certificate file that is not there", func(t *testing.T) {
+		cfg := loadableConfig(t)
+		cfg.InboundConfigs = append(cfg.InboundConfigs, InboundConfig{
+			Listen:   json_util.RawMessage(`"0.0.0.0"`),
+			Port:     20004,
+			Protocol: "vless",
+			Settings: rawJSON(t, map[string]any{
+				"clients":    []any{map[string]any{"id": "11111111-2222-3333-4444-555555555555"}},
+				"decryption": "none",
+			}),
+			StreamSettings: rawJSON(t, map[string]any{
+				"network": "tcp", "security": "tls",
+				"tlsSettings": map[string]any{"certificates": []any{map[string]any{
+					"certificateFile": filepath.Join(t.TempDir(), "never-issued.pem"),
+					"keyFile":         filepath.Join(t.TempDir(), "never-issued.key"),
+				}}},
+			}),
+			Tag: "cert-missing",
+		})
+		assertRefused(t, TestConfig(cfg), "never-issued.pem")
+	})
+
 	t.Run("an inbound the builder refuses", func(t *testing.T) {
 		cfg := loadableConfig(t)
 		cfg.InboundConfigs = append(cfg.InboundConfigs, InboundConfig{
