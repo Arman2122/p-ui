@@ -29,8 +29,8 @@ describe('a blank TLS certificate', () => {
   });
 
   it('does not reach the wire through the inbound form', () => {
-    // A certificate the operator did fill in is the control: without it the
-    // parse could be failing on some unrelated missing branch and prove nothing.
+    /* A certificate the operator did fill in is the control: without it the
+       parse could be failing on some unrelated missing branch and prove nothing. */
     const filled = createTlsSettingsWithDefaultCert();
     (filled.certificates as Record<string, unknown>[])[0] = {
       certificateFile: '/etc/ssl/x.pem',
