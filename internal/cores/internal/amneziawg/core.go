@@ -102,9 +102,9 @@ func (c *Core) applyParams(ctx context.Context, inst core.Instance) error {
 	if err != nil {
 		return err
 	}
-	if params.IsZero() {
-		return nil
-	}
+	// No IsZero() short-circuit: an inbound whose parameters were all cleared is
+	// exactly the case that has to reach the device, and skipping it is half of
+	// why a cleared one never did.
 	if err := awg.ConfigureParams(c.mgr.Name(inst.ID), params); err != nil {
 		return fmt.Errorf("awgkernel: inbound %d obfuscation: %w", inst.ID, err)
 	}

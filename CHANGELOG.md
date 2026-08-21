@@ -22,6 +22,18 @@ here; the git log is the full record.
   `restartXrayOnClientDisable` off if you would rather revocation applied only to
   new connections.
 
+- **Clearing an AmneziaWG obfuscation parameter now reaches the device.** The
+  panel could add a parameter but never take one away: an omitted value meant
+  "leave it alone" all the way to the kernel, so a device kept padding the form
+  no longer showed. Both populations of clients are affected by the correction,
+  in opposite directions.
+  **What you will notice:** clients holding the config the panel handed out
+  *after* the change have been unable to handshake ever since, and start working
+  on the next apply. Clients still holding a config from *before* the change have
+  been working against the stale device, and that same apply breaks them until
+  they re-fetch their config. If you cleared parameters on a live inbound at any
+  point, expect the second group to need a new .conf.
+
 - **A quota reset now actually restores access.** A client is disabled in three
   places and the core reads all of them; the periodic reset, the Clients page
   reset-all button, the Telegram bot's reset and an inbound's own reset each
