@@ -184,6 +184,52 @@ change is repaired by the next run of either script.
 
 ---
 
+## 6. F226 — how the parameter is cleared, measured
+
+The finding is confirmed above; this is the follow-up probe that decides the fix's
+shape. Run in-package against the loaded `amneziawg` module, sending the netlink
+attribute the panel's encoder currently refuses to emit.
+
+**Does the module accept an attribute carrying zero?** Yes, and the device drops
+the value:
+
+| cleared with an explicit zero | module | device afterwards |
+|---|---|---|
+| `jc` alone | accepted | `jc` gone, `jmin`/`jmax` untouched |
+| `jc` + `jmin` + `jmax` | accepted | all three gone |
+| `s1` + `s2` | accepted | both gone, `jc` untouched |
+| `s1` + `s2` + `s3` + `s4` | accepted | all four gone |
+| `h1` alone | accepted | — |
+| **`h1` + `h2` + `h3` + `h4` together** | **refused, EINVAL** | unchanged |
+
+An attribute the message does not carry is still "leave it alone", so clearing one
+parameter does not disturb the others — the second and third rows show `jc`
+surviving an `s1`/`s2` clear.
+
+**Why the header row refuses.** `third_party/amneziawg-kernel/src/netlink.c:865-907`
+validates the MERGED state: H1 must not overlap H2, H3 or H4, and so on for each.
+Sending all four as zero makes them identical, so the first check fails. Zero is
+therefore not the cleared state for the headers — WireGuard's own 1/2/3/4 is, which
+is what the device already holds when they were never set. That makes clearing
+H1..H4 a different job from clearing the rest, and it is entangled with F098 (the
+form's schema drops h1..h4 entirely), so it is out of this fix's scope.
+
+**What read-back-and-recreate would have cost.** Not needed — explicit zeros work
+for every parameter the form can clear — but measured for the record, since it was
+the alternative shape. Deleting and recreating the link loses everything the device
+was:
+
+```
+before: listening port 51997, jc/jmin/jmax/s1/s2 set, 1 peer, 10.77.0.1/24, UP
+after:  no port, no key, no parameters, no peers, no address, DOWN
+```
+
+Every peer's session state goes with it, and the panel would have to re-add the
+address and re-run its own addressing before anything could reconnect. Explicit
+zeros change one attribute and touch nothing else.
+
+---
+
 ## Refuted on re-read
 
 *(none yet)*
