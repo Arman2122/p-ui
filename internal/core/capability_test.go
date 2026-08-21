@@ -81,6 +81,17 @@ func TestCapabilityRules(t *testing.T) {
 		{"legacy shadowsocks cipher is not 2022", CapSS2022, Facts{Protocol: "shadowsocks", Settings: map[string]string{"method": "aes-256-gcm"}}, false},
 		{"ss2022 needs the shadowsocks protocol", CapSS2022, Facts{Protocol: "vless", Settings: map[string]string{"method": "2022-blake3-aes-128-gcm"}}, false},
 
+		// The one cipher xray's multi-user branch refuses. Confirmed against the
+		// shipped core: that method plus one client aborts the whole config.
+		{"no clients on 2022-blake3-chacha20", CapSSMultiUser, Facts{Protocol: "shadowsocks", Settings: map[string]string{"method": ssSingleUserMethod}}, false},
+		{"clients on the 2022 aes ciphers", CapSSMultiUser, Facts{Protocol: "shadowsocks", Settings: map[string]string{"method": "2022-blake3-aes-256-gcm"}}, true},
+		{"clients on a legacy shadowsocks cipher", CapSSMultiUser, Facts{Protocol: "shadowsocks", Settings: map[string]string{"method": "aes-256-gcm"}}, true},
+		{"clients on shadowsocks with no method yet", CapSSMultiUser, Facts{Protocol: "shadowsocks"}, true},
+		// Every other protocol is unaffected, which is what the predicate has
+		// always meant on the TypeScript side and what its callers rely on.
+		{"clients on vless", CapSSMultiUser, Facts{Protocol: "vless"}, true},
+		{"the chacha method name on another protocol means nothing", CapSSMultiUser, Facts{Protocol: "vless", Settings: map[string]string{"method": ssSingleUserMethod}}, true},
+
 		{"stream on trojan", CapStream, Facts{Protocol: "trojan"}, true},
 		{"no stream on mtproto", CapStream, Facts{Protocol: "mtproto"}, false},
 

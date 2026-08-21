@@ -140,7 +140,14 @@ const (
 	CapSniffing  = "sniffing"
 	CapFallbacks = "fallbacks"
 	CapSS2022    = "ss2022"
+	// CapSSMultiUser: may this inbound carry a clients array at all.
+	CapSSMultiUser = "ssMultiUser"
 )
+
+// ssSingleUserMethod is the one Shadowsocks-2022 cipher xray's multi-user
+// inbound refuses. Named once, here, because three copies of the literal is how
+// Go and TypeScript came to disagree about it in the first place.
+const ssSingleUserMethod = "2022-blake3-chacha20-poly1305"
 
 func in(field string, values ...string) Clause {
 	return Clause{Field: field, Op: OpIn, Values: values}
@@ -206,6 +213,23 @@ var capabilityRules = map[string]Rule{
 		{All: []Clause{
 			in("protocol", "shadowsocks"),
 			{Field: "settings.method", Op: OpPrefix, Values: []string{"2022"}},
+		}},
+	}},
+	/*
+		buildShadowsocks2022 takes its multi-user branch the moment a clients array
+		is present and then refuses every non-AES method, which aborts the whole
+		config rather than that one inbound. So the panel — which is client-based
+		end to end — cannot attach a client to that cipher.
+
+		True for every other protocol, which is what the predicate has always meant
+		on the TypeScript side: it answers "may this inbound carry clients", and
+		only shadowsocks has a method that says no.
+	*/
+	CapSSMultiUser: {Any: []Term{
+		{All: []Clause{{Field: "protocol", Op: OpIn, Values: []string{"shadowsocks"}, Not: true}}},
+		{All: []Clause{
+			in("protocol", "shadowsocks"),
+			{Field: "settings.method", Op: OpIn, Values: []string{ssSingleUserMethod}, Not: true},
 		}},
 	}},
 }
