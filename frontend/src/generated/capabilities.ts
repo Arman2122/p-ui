@@ -18,7 +18,7 @@ export interface CapabilityRule {
   any: CapabilityTerm[];
 }
 
-export const CAPABILITY_NAMES = ["fallbacks","reality","sniffing","ss2022","stream","tls","tlsFlow"] as const;
+export const CAPABILITY_NAMES = ["fallbacks","reality","sniffing","ss2022","ssMultiUser","stream","tls","tlsFlow"] as const;
 
 // Source of truth: internal/core/credentials.go. A core declares a subset per kind.
 export const CLIENT_CREDENTIAL_NAMES = ["adTag","allowedIPs","auth","password","preSharedKey","privateKey","publicKey","secret","security","uuid"] as const;
@@ -123,6 +123,41 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
             "values": [
               "2022"
             ]
+          }
+        ]
+      }
+    ]
+  },
+  "ssMultiUser": {
+    "any": [
+      {
+        "all": [
+          {
+            "field": "protocol",
+            "op": "in",
+            "values": [
+              "shadowsocks"
+            ],
+            "not": true
+          }
+        ]
+      },
+      {
+        "all": [
+          {
+            "field": "protocol",
+            "op": "in",
+            "values": [
+              "shadowsocks"
+            ]
+          },
+          {
+            "field": "settings.method",
+            "op": "in",
+            "values": [
+              "2022-blake3-chacha20-poly1305"
+            ],
+            "not": true
           }
         ]
       }

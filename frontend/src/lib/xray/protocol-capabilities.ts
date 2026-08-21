@@ -14,7 +14,6 @@ wrappers stay because callers pass form-shaped slices, not facts.
 */
 
 const VISION_FLOW = 'xtls-rprx-vision';
-const SS_BLAKE3_CHACHA20 = '2022-blake3-chacha20-poly1305';
 
 export interface CapabilityProtocolSlice {
   protocol: string;
@@ -94,11 +93,10 @@ export function canEnableVisionSeed(values: CapabilityVlessSlice): boolean {
 }
 
 /*
-Kept as code for parity with the legacy class: it returns true on non-SS
-protocols too, because the method getter resolved to "" there. Callers all narrow
-on protocol === shadowsocks first.
+May this inbound carry a clients array. True on every protocol but shadowsocks
+on the one 2022 cipher xray's multi-user branch refuses — which is why it also
+reads true on non-SS protocols, as it always has.
 */
 export function isSSMultiUser(values: CapabilityShadowsocksSlice): boolean {
-  const method = values.protocol === 'shadowsocks' ? (values.settings?.method ?? '') : '';
-  return method !== SS_BLAKE3_CHACHA20;
+  return can('ssMultiUser', toFacts(values));
 }

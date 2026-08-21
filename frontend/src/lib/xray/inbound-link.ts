@@ -12,7 +12,7 @@ import type { FinalMaskStreamSettings } from '@/schemas/protocols/stream/finalma
 import type { XHttpStreamSettings } from '@/schemas/protocols/stream/xhttp';
 
 import { getHeaderValue } from './headers';
-import { canEnableTlsFlow } from './protocol-capabilities';
+import { canEnableTlsFlow, isSSMultiUser as canCarryClients } from './protocol-capabilities';
 import { deriveSpiderX } from './spider-x';
 import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 import { awgInterfaceLines, awgLinesFromLinkParams, awgLinkParams } from '@/lib/xray/awg-conf';
@@ -667,7 +667,7 @@ export function genShadowsocksLink(input: GenShadowsocksLinkInput): string {
   }
 
   const isSS2022 = settings.method.substring(0, 4) === '2022';
-  const isSSMultiUser = settings.method !== '2022-blake3-chacha20-poly1305';
+  const isSSMultiUser = canCarryClients({ protocol: 'shadowsocks', settings });
   const passwords: string[] = [];
   if (isSS2022) passwords.push(settings.password);
   if (isSSMultiUser) passwords.push(clientPassword);
