@@ -69,9 +69,13 @@ func TestAddClientFailedPushSkipsRestartForSelfConvergingCore(t *testing.T) {
 	}
 }
 
-// TestUpdateInboundRebuildsAnXrayServedInbound is the other arm of the same gate.
-// An Xray inbound is converged by the panel's config, so an edit is delete+add,
-// not the in-place push a self-converging core takes.
+/*
+TestUpdateInboundRebuildsAnXrayServedInbound is the other arm of the same gate.
+
+It used to assert the opposite — delete+add — and so certified the defect: every
+edit closed the listener and dropped every live session on that inbound, for a
+change xray-core absorbs as a user diff. Renamed nothing; the invariant flipped.
+*/
 func TestUpdateInboundRebuildsAnXrayServedInbound(t *testing.T) {
 	setupConflictDB(t)
 
@@ -92,10 +96,43 @@ func TestUpdateInboundRebuildsAnXrayServedInbound(t *testing.T) {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
 
-	if n := fake.updateInbound.Load(); n != 0 {
-		t.Fatalf("in-place push ran %d time(s) for a vless inbound, want 0; the in-place branch drops the stale listener only when the rebuild it skips would have", n)
+	if n := fake.updateInbound.Load(); n != 1 {
+		t.Fatalf("in-place push ran %d time(s), want 1: a remark edit must converge, not tear the handler down", n)
 	}
-	if del, add := fake.delInbound.Load(), fake.addInbound.Load(); del != 1 || add != 1 {
-		t.Fatalf("delete+add ran %d/%d, want 1/1; an Xray inbound is converged by the panel's config and has to be replaced", del, add)
+	if del, add := fake.delInbound.Load(), fake.addInbound.Load(); del != 0 || add != 0 {
+		t.Fatalf("delete+add ran %d/%d, want 0/0: that closes the listener and every session on it, for an edit xray absorbs as a user diff", del, add)
+	}
+}
+
+/*
+The one edit that still has to remove it: disabling the inbound. There is no
+in-place convergence for "stop serving this", and leaving the listener up would
+keep every current client connected to an inbound the panel shows as off.
+*/
+func TestDisablingAnXrayInboundRemovesItFromTheCore(t *testing.T) {
+	setupConflictDB(t)
+
+	mgr := runtime.NewManager(runtime.LocalDeps{Cores: testCores(t)})
+	fake := &fakeNodeRuntime{}
+	mgr.SetLocalRuntimeOverride(fake)
+	runtime.SetManager(mgr)
+	t.Cleanup(func() { runtime.SetManager(nil) })
+
+	seedInboundConflict(t, "vless-off", "", 46172, model.VLESS, "",
+		`{"clients":[{"email":"off","id":"3a3d2f6e-6f1a-4b7c-9d2e-1f0a5c8b7d62","enable":true}],"decryption":"none"}`)
+	seeded := loadInboundByTag(t, "vless-off")
+	seedClientTraffic(t, seeded.Id, "off", true)
+
+	update := *loadInboundByTag(t, "vless-off")
+	update.Enable = false
+	if _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
+		t.Fatalf("UpdateInbound: %v", err)
+	}
+
+	if del := fake.delInbound.Load(); del != 1 {
+		t.Fatalf("del ran %d time(s), want 1: a disabled inbound has to leave the core", del)
+	}
+	if add := fake.addInbound.Load(); add != 0 {
+		t.Fatalf("add ran %d time(s) for a disabled inbound, want 0", add)
 	}
 }
