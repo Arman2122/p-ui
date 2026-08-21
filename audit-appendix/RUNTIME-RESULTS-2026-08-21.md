@@ -70,6 +70,27 @@ failed asset download take the whole rule editor down. The landed fix treats
 
 ---
 
+### F321's blast radius, measured
+
+F321 stands exactly as written — the blank entry the TLS radio seeds is refused.
+But probing the builder shows it is the **only** certificate shape refused:
+
+| `tlsSettings` | pinned core's answer |
+|---|---|
+| `certificates: [{certificate: [], key: []}]` | **rejected** — `both file and bytes are empty.` |
+| `certificates: [{certificateFile: <real>}]`, no key at all | accepted |
+| `certificates: [{certificateFile: <real>, keyFile: ""}]` | accepted |
+| no `certificates` key at all | accepted |
+| `certificates: [{certificateFile: <missing path>}]` | rejected, wrapping `fs.ErrNotExist` |
+
+The last row is why the save boundary now downgrades *file existence* only: pointing
+an inbound at a path certbot has not written yet is the ordinary order of
+operations, and the file can appear between the save and the restart. The restart
+pre-flight is the hard gate and still refuses it, so a file that never appears
+cannot become an outage.
+
+---
+
 ## 3. F335 — PLAUSIBLE → **CONFIRMED**, and worse than the finding claims
 
 Two real xray-core processes: a server with a VLESS/tcp inbound holding one client
