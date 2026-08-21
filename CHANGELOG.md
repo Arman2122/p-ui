@@ -22,6 +22,13 @@ here; the git log is the full record.
   `restartXrayOnClientDisable` off if you would rather revocation applied only to
   new connections.
 
+- **Per-client IP limits that survived an upgrade start being enforced once
+  fail2ban is available.** They were always meant to be, and the panel has
+  always ignored them while fail2ban was missing — but a limit set long ago,
+  under a capability that has been dead since, becomes live again the moment
+  the host can enforce it. Worth a look at the Clients page if that describes
+  your panel.
+
 - **An inbound whose TLS certificate file does not exist yet still saves.**
   Saving an inbound that points at a path certbot has not written is the ordinary
   order of operations and is no longer refused. The certificate's *shape* is still
@@ -29,6 +36,15 @@ here; the git log is the full record.
   config it cannot load, so a file that never appears cannot take the panel down.
 
 ### Security
+
+- An upgrade no longer wipes configured per-client IP limits. The boot-time
+  migration that zeroed them whenever fail2ban could not enforce is retired: it
+  destroyed stored configuration to reflect a host capability the panel already
+  handles at read time, and it fired on every upgrade because the panel starts
+  before setup_fail2ban runs. Affects existing panels that had limits set and
+  reached an upgrade with no working fail2ban, or with PUI_ENABLE_FAIL2BAN set
+  to anything but true. Limits already wiped by an earlier upgrade cannot be
+  recovered.
 
 - A Telegram user can no longer read another client's subscription URL, config
   URIs or QR codes by sending a crafted callback naming their email. Client link

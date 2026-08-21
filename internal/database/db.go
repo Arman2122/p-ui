@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
@@ -1419,6 +1417,21 @@ func backfillEmptyHostGroupIds() error {
 	})
 }
 
+/*
+Retired, and deliberately left in place so the name keeps its meaning.
+
+This seeder used to zero every client's limitIp — the settings JSON and the
+clients column both — whenever fail2ban could not enforce at boot. It destroyed
+stored configuration to reflect a host capability the panel already handles at
+read time: EvaluateIPLimits ignores limits when enforce is false, and the client
+form disables the field when fail2ban is unusable. It was also silent, one-way,
+and armed on every upgrade, because install.sh and update.sh both start the
+panel before setup_fail2ban runs.
+
+It records itself and touches nothing. The probe it used to consult is gone
+rather than improved: a better probe would have kept the destruction behind a
+different trigger, which is the one shape this must not come back in.
+*/
 func resetIpLimitsWithoutFail2ban() error {
 	var history []string
 	if err := db.Model(&model.HistoryOfSeeders{}).Pluck("seeder_name", &history).Error; err != nil {
@@ -1427,74 +1440,7 @@ func resetIpLimitsWithoutFail2ban() error {
 	if slices.Contains(history, "ResetIpLimitNoFail2ban") {
 		return nil
 	}
-
-	if fail2banCanEnforce() {
-		return db.Create(&model.HistoryOfSeeders{SeederName: "ResetIpLimitNoFail2ban"}).Error
-	}
-
-	var inbounds []model.Inbound
-	if err := db.Find(&inbounds).Error; err != nil {
-		return err
-	}
-
-	return db.Transaction(func(tx *gorm.DB) error {
-		for _, inbound := range inbounds {
-			if strings.TrimSpace(inbound.Settings) == "" {
-				continue
-			}
-			var settings map[string]any
-			if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
-				log.Printf("ResetIpLimitNoFail2ban: skip inbound %d (invalid settings json): %v", inbound.Id, err)
-				continue
-			}
-			clients, ok := settings["clients"].([]any)
-			if !ok {
-				continue
-			}
-			mutated := false
-			for i, raw := range clients {
-				obj, ok := raw.(map[string]any)
-				if !ok {
-					continue
-				}
-				v, present := obj["limitIp"]
-				if !present {
-					continue
-				}
-				if n, isNum := v.(float64); isNum && n == 0 {
-					continue
-				}
-				obj["limitIp"] = 0
-				clients[i] = obj
-				mutated = true
-			}
-			if !mutated {
-				continue
-			}
-			settings["clients"] = clients
-			newSettings, err := json.MarshalIndent(settings, "", "  ")
-			if err != nil {
-				log.Printf("ResetIpLimitNoFail2ban: skip inbound %d (marshal failed): %v", inbound.Id, err)
-				continue
-			}
-			if err := tx.Model(&model.Inbound{}).Where("id = ?", inbound.Id).
-				Update("settings", string(newSettings)).Error; err != nil {
-				return err
-			}
-		}
-		if err := tx.Model(&model.ClientRecord{}).Where("limit_ip <> ?", 0).
-			Update("limit_ip", 0).Error; err != nil {
-			return err
-		}
-		return tx.Create(&model.HistoryOfSeeders{SeederName: "ResetIpLimitNoFail2ban"}).Error
-	})
-}
-
-func fail2banCanEnforce() bool {
-	if v, ok := os.LookupEnv("PUI_ENABLE_FAIL2BAN"); ok && v != "true" {
-		return false
-	}
-	return exec.CommandContext(context.Background(), "fail2ban-client", "-h").Run() == nil
+	return db.Create(&model.HistoryOfSeeders{SeederName: "ResetIpLimitNoFail2ban"}).Error
 }
 
 func clearLegacyProxySettings() error {
