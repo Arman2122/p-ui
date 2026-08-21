@@ -93,7 +93,12 @@ func (j *XrayTrafficJob) Run() {
 			logger.Warning("get RestartXrayOnClientDisable failed:", settingErr)
 		}
 		if restartOnDisable {
-			if err := j.xrayService.RestartXray(false); err != nil {
+			// Forced, like the node path already is. A reconcile hot-applies the
+			// removal over the core API and never replaces the process, and
+			// RemoveUser does not close a connection that is already up — so the
+			// depleted client keeps its tunnel, which is the whole point of this
+			// setting. Replacing the process is the only lever the core exposes.
+			if err := j.xrayService.RestartXray(true); err != nil {
 				logger.Warning("reconcile xray after disabling clients failed:", err)
 				j.xrayService.SetToNeedRestart()
 			}
