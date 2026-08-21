@@ -32,6 +32,18 @@ here; the git log is the full record.
   Disabling an inbound still removes it from the core, which is the one edit that
   has to.
 
+- **AmneziaWG clients get a config that carries the obfuscation, and the two
+  subscription formats that cannot carry it now say nothing instead.** The .conf
+  the Clients page hands out is rendered by the panel rather than assembled in
+  the browser, so it finally includes the inbound's parameters. Clash and the
+  JSON subscription have no field for them at all, so an obfuscated AmneziaWG
+  inbound is left out of those two rather than shipped as plain WireGuard.
+  **What you will notice:** clients who downloaded a WireGuard config from the
+  Clients page for an obfuscated inbound could never connect and now can, after
+  re-downloading. And a subscriber on Clash or the JSON format will see that
+  inbound disappear from their profile — it was there before, and it never
+  worked. A plain WireGuard inbound is unaffected in every format.
+
 - **Clearing an AmneziaWG obfuscation parameter now reaches the device.** The
   panel could add a parameter but never take one away: an omitted value meant
   "leave it alone" all the way to the kernel, so a device kept padding the form
