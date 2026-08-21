@@ -988,7 +988,9 @@ update_p-ui() {
     fi
 
     echo -e "${green}Installing new p-ui version...${plain}"
-    tar zxvf p-ui-linux-$(arch).tar.gz > /dev/null 2>&1
+    # --no-same-owner: the chown further down repairs the tree, but only after
+    # every file has spent the length of an update owned by the archive's uid.
+    tar --no-same-owner -zxvf p-ui-linux-$(arch).tar.gz > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
         _fail "ERROR: Failed to extract the p-ui release archive -- the previous installation has already been removed, so the panel will not start until this is fixed; try running the update again"

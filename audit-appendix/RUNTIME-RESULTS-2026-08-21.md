@@ -164,6 +164,26 @@ only what came out of the tarball carries the uid.
 
 ---
 
+### The flag, measured on the box
+
+GNU tar 1.35, extracting an archive whose files are uid 1001, as root:
+
+| extraction | owner afterwards |
+|---|---|
+| `tar zxf` (what shipped) | `1001:1001` |
+| `tar --no-same-owner -zxf` | `0:0` |
+| `--no-same-owner` over a file that is already 1001-owned | `0:0` |
+
+**Refinement to the finding.** `update.sh` already ends with
+`chown -R root:root ${pui_folder}`, so an update repairs the tree. `install.sh`
+chowns the systemd unit and the env file but never the install tree — so this is
+a **fresh-install** defect that survives until the box is first updated, which
+matches the audit's wording. The fix therefore adds the same sweep to
+`install.sh` rather than only the extract flag, so a box installed before this
+change is repaired by the next run of either script.
+
+---
+
 ## Refuted on re-read
 
 *(none yet)*
