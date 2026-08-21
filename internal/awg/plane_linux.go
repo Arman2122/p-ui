@@ -79,7 +79,7 @@ func ConfigureParams(name string, params Params) error {
 		return err
 	}
 	defer client.Close()
-	return client.ConfigureDevice(name, Config{Params: params})
+	return client.ConfigureDevice(name, Config{Params: params, ReplaceParams: true})
 }
 
 // fromWgtypes translates the WireGuard half. Peers are carried across whole,

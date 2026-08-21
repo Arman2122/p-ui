@@ -27,6 +27,18 @@ type Config struct {
 	ReplacePeers bool
 	Peers        []Peer
 	Params       Params
+	/*
+		ReplaceParams makes Params authoritative the way ReplacePeers makes the
+		peer list authoritative: the panel-owned fields are written as given,
+		zero included, so clearing one in the form reaches the device.
+
+		Off by default, and it must stay off for every call that is not the panel
+		pushing obfuscation. The wireguard plane configures peers and keys on an
+		AmneziaWG device through the same client, carrying no parameters at all —
+		with this set, each of those would wipe the obfuscation it never meant to
+		touch.
+	*/
+	ReplaceParams bool
 }
 
 // Peer is one client on the device.
@@ -70,20 +82,48 @@ func encodeConfig(name string, cfg Config) ([]netlink.Attribute, error) {
 	if cfg.FirewallMark != nil {
 		attrs = append(attrs, netlink.Attribute{Type: devFwmark, Data: nlU32(uint32(*cfg.FirewallMark))})
 	}
-	attrs = append(attrs, encodeParams(cfg.Params)...)
+	attrs = append(attrs, encodeParams(cfg.Params, cfg.ReplaceParams)...)
 
 	return attrs, nil
 }
 
 /*
-encodeParams emits only the parameters that were set.
-
-Zero means "leave it alone" here, matching an absent attribute, so a device
-carrying no obfuscation emits nothing and is plain WireGuard. The alternative --
-emitting every field -- would make every reconcile rewrite parameters the
-operator never touched, and on a live device that is a rekey for every client.
+panelOwnedParams are the obfuscation fields the inbound form renders, so the
+panel decides their value — zero included. One declaration rather than a rule
+restated at each encode site, because the set is what grows: h1..h4 belong here
+the day the form stops dropping them (F098), and until then zero is not even
+their cleared state — the module validates that the four never overlap, so four
+zeros are refused outright.
 */
-func encodeParams(p Params) []netlink.Attribute {
+func panelOwnedParams(p Params) []struct {
+	kind  uint16
+	value uint16
+} {
+	return []struct {
+		kind  uint16
+		value uint16
+	}{
+		{devJc, p.Jc}, {devJmin, p.Jmin}, {devJmax, p.Jmax},
+		{devS1, p.S1}, {devS2, p.S2}, {devS3, p.S3}, {devS4, p.S4},
+	}
+}
+
+/*
+encodeParams emits only the parameters that were set, unless the caller is the
+panel writing the ones it owns.
+
+Zero means "leave it alone" by default, matching an absent attribute, so a call
+carrying no parameters — the wireguard plane pushing peers and keys — changes
+none. Emitting every field on every such call would rewrite parameters the
+operator never touched, and on a live device that is a rekey for every client.
+
+But the same rule made a CLEARED parameter unexpressible: the form has no way to
+say "back to none", the attribute is simply omitted, and the kernel keeps the
+old padding while every .conf the panel hands out has dropped it. A tunnel where
+one side pads and the other does not never completes a handshake, silently. So
+when the panel is the authority, its own fields go out as given.
+*/
+func encodeParams(p Params, replace bool) []netlink.Attribute {
 	var attrs []netlink.Attribute
 	u16 := func(kind uint16, value uint16) {
 		if value != 0 {
@@ -111,13 +151,13 @@ func encodeParams(p Params) []netlink.Attribute {
 		}
 	}
 
-	u16(devJc, p.Jc)
-	u16(devJmin, p.Jmin)
-	u16(devJmax, p.Jmax)
-	u16(devS1, p.S1)
-	u16(devS2, p.S2)
-	u16(devS3, p.S3)
-	u16(devS4, p.S4)
+	for _, owned := range panelOwnedParams(p) {
+		if replace {
+			attrs = append(attrs, netlink.Attribute{Type: owned.kind, Data: nlU16(owned.value)})
+			continue
+		}
+		u16(owned.kind, owned.value)
+	}
 	u64(devH1, p.H1)
 	u64(devH2, p.H2)
 	u64(devH3, p.H3)

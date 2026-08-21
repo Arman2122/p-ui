@@ -214,6 +214,11 @@ is what the device already holds when they were never set. That makes clearing
 H1..H4 a different job from clearing the rest, and it is entangled with F098 (the
 form's schema drops h1..h4 entirely), so it is out of this fix's scope.
 
+**Groundwork for F098.** When F098 gives the form back h1..h4, this is the
+semantics it inherits: their cleared state is 1/2/3/4, not zero, and the panel-owned
+set in internal/awg/encode.go is the one declaration that has to grow to include
+them. Recorded here so that disposition does not have to rediscover it.
+
 **What read-back-and-recreate would have cost.** Not needed — explicit zeros work
 for every parameter the form can clear — but measured for the record, since it was
 the alternative shape. Deleting and recreating the link loses everything the device
