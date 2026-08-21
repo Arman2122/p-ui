@@ -1572,15 +1572,27 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 						needRestart = true
 					}
 				}
+				/*
+					The same converge-in-place call the branch above already uses.
+					It used to be an unconditional delete followed by an add, which
+					closes the listener and every session on it — for any edit at
+					all, including one that changed only the remark.
+
+					Nothing here decides which edits are cosmetic. UpdateInbound
+					asks the core: PlanChange answers whether a rename would strand
+					the old listener, and Xray's own hot diff narrows the rest down
+					to the users that actually changed. A rule about which fields
+					matter would be a second opinion for the core to disagree with.
+				*/
 				postCommitApply = func() {
-					if err2 := rt.DelInbound(context.Background(), &oldSnapshot); err2 == nil {
-						logger.Debug("Old inbound deleted on", rt.Name(), ":", tag)
-					}
 					if runtimeInbound == nil {
+						if err2 := rt.DelInbound(context.Background(), &oldSnapshot); err2 == nil {
+							logger.Debug("Disabled inbound removed on", rt.Name(), ":", tag)
+						}
 						return
 					}
-					if err2 := rt.AddInbound(context.Background(), runtimeInbound); err2 == nil {
-						logger.Debug("Updated inbound added on", rt.Name(), ":", oldInbound.Tag)
+					if err2 := rt.UpdateInbound(context.Background(), &oldSnapshot, runtimeInbound); err2 == nil {
+						logger.Debug("Updated inbound applied on", rt.Name(), ":", oldInbound.Tag)
 					} else {
 						logger.Debug("Unable to update inbound on", rt.Name(), ":", err2)
 						needRestart = true

@@ -22,6 +22,16 @@ here; the git log is the full record.
   `restartXrayOnClientDisable` off if you would rather revocation applied only to
   new connections.
 
+- **Editing an Xray inbound no longer drops its live connections.** Saving the
+  inbound form used to remove that inbound from the running core and add it back,
+  whatever had changed — so renaming an inbound, or editing one client on it,
+  disconnected everyone using it. The edit is now converged in place and the core
+  decides what actually moved, which for a client change is a user diff and for a
+  remark is nothing at all.
+  **What you will notice:** nothing, except that the disconnections stop.
+  Disabling an inbound still removes it from the core, which is the one edit that
+  has to.
+
 - **Clearing an AmneziaWG obfuscation parameter now reaches the device.** The
   panel could add a parameter but never take one away: an omitted value meant
   "leave it alone" all the way to the kernel, so a device kept padding the form
