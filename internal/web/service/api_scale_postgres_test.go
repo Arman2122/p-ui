@@ -107,7 +107,7 @@ func TestAllAPIsPostgresScale(t *testing.T) {
 
 			run("ResetInboundTraffic", func() error { return inboundSvc.ResetInboundTraffic(ib.Id) })
 			run("Inbound.ResetAllTraffics", func() error { return inboundSvc.ResetAllTraffics() })
-			run("Client.ResetAllTraffics", func() error { _, err := svc.ResetAllTraffics(); return err })
+			run("Client.ResetAllTraffics", func() error { _, err := svc.ResetAllTraffics(inboundSvc); return err })
 			run("BulkResetTraffic(M)", func() error { _, err := svc.BulkResetTraffic(inboundSvc, emailsM); return err })
 
 			run("UpdateByEmail", func() error {
