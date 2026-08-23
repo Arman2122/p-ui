@@ -8,6 +8,29 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Turning automatic banning off no longer turns the IP log off with it.** With
+  `PUI_ENABLE_FAIL2BAN` set to false, or on a host where fail2ban was never
+  installed, the panel stopped asking the cores who was connected at all — so
+  every client's observed-address list, the `clientIps` endpoint behind it and
+  both info modals stayed permanently empty, and nothing recorded who had
+  exceeded their IP cap. Observing and deciding now always run; the toggle gates
+  only the two halves that act — the line fail2ban's jail reads, and the
+  disconnect.
+  **What you will notice:** on a panel with banning off, addresses appear under
+  each client again, and for a client past its cap the list includes the
+  over-cap addresses too, because nothing is cutting them. Nothing new is
+  banned: no line is written to the file the jail watches, so a jail left
+  installed after the toggle was turned off stays quiet.
+
+- **A client cut off for exceeding its IP limit is put back even if the core is
+  briefly busy.** The cut is remove-then-add, and a single failure on the way
+  back in used to leave the client removed from the running config with nothing
+  to restore them — they stayed off until an unrelated edit or a restart rebuilt
+  it. The re-add is now retried, and the whole inbound re-applied if every
+  attempt fails.
+  **What you will notice:** if a client has been unreachable since hitting its
+  IP limit, restarting the core brings them back, and it will not happen again.
+
 - **Quota and expiry depletion now really restarts the core.**
   `restartXrayOnClientDisable` has always defaulted to on and always fired, but
   it asked for a *reconcile*, which pushes the user removal through the core API
