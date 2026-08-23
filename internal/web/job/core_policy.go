@@ -67,9 +67,13 @@ func shapingIsAHostFact(err error) bool {
 // enforceIPLimits observes, decides and reports. Observation is per-core
 // fail-open inside the service, so one core being down no longer silences the rest.
 func (j *CorePolicyJob) enforceIPLimits(ctx context.Context) {
-	if !isFail2BanEnabled() {
-		return
-	}
+	/*
+		No early return on the toggle. PUI_ENABLE_FAIL2BAN gates ENFORCEMENT, which
+		it does through fail2BanIsInstalled below — returning here instead froze
+		observation as well, and with it the client IP log, /clientIps and both info
+		modals, for as long as the toggle was off. The tier just below this one
+		already keeps observing when it cannot enforce; this now agrees with it.
+	*/
 	scan := j.policyService.ObserveSessions(ctx)
 	if len(scan.ByEmail) == 0 {
 		return
@@ -83,7 +87,7 @@ func (j *CorePolicyJob) enforceIPLimits(ctx context.Context) {
 		logger.Warning("ip limit evaluation failed:", err)
 		return
 	}
-	j.reportOverLimit(ctx, verdicts)
+	j.reportOverLimit(ctx, verdicts, enforce)
 }
 
 /*
@@ -95,9 +99,11 @@ takes.
 
 AdvancedSince runs for EVERY evaluated client, not only the ones over a cap: it
 is what forgets a pair whose client came back under its limit, and a pair that is
-never forgotten can never be reported again once fail2ban's own ban lapses.
+never forgotten can never be reported again once fail2ban's own ban lapses. It
+runs with enforcement off too, so flipping the toggle on does not then report
+every frozen pair at once — a frozen pair is a dead connection, not a reconnect.
 */
-func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.IPLimitVerdict) {
+func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.IPLimitVerdict, enforce bool) {
 	if j.bannedSeen == nil {
 		j.bannedSeen = make(map[string]int64)
 	}
@@ -114,6 +120,18 @@ func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.
 		}
 	}
 	if len(reports) == 0 {
+		return
+	}
+
+	if !enforce {
+		// The line below is the jail's input, not a log message: a jail left
+		// installed would ban on it even though this host is set not to ban.
+		for _, entry := range reports {
+			// Debug, not Info: nothing cuts the connection, so it stays over its cap
+			// and would print this every tick for as long as it is up.
+			logger.Debugf("[LIMIT_IP] Client %s: %d address(es) over its cap, not reported (enforcement is off)",
+				entry.verdict.Email, len(entry.banned))
+		}
 		return
 	}
 

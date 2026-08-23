@@ -482,7 +482,19 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			row = &model.InboundClientIps{ClientEmail: email}
 		}
 		limit := limits[email]
-		if !enforce || limit <= 0 || !hosted[0].Enable {
+		/*
+			Deciding is not acting.
+
+			enforce says whether anything on this host can carry out a ban, and it
+			used to gate the verdict too — so on a box without fail2ban the panel
+			kept no record of who had exceeded their cap, only of which addresses
+			had been seen. The two are complements: the verdict is the record, and
+			the actuator is what turns it into a consequence.
+
+			A client with no cap, or on a disabled inbound, still has nothing to
+			decide.
+		*/
+		if limit <= 0 || !hosted[0].Enable {
 			// Nothing to enforce: record what was seen so the panel can show it.
 			row.Ips = encodeClientIPs(observationsToEntries(observed))
 			if err := tx.Save(row).Error; err != nil {
@@ -496,7 +508,13 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 
 		// Kept-live plus historical stays in the blob so the panel keeps showing
 		// recently seen addresses; a banned one reappears if it reconnects.
-		row.Ips = encodeClientIPs(observationsToEntries(append(slices.Clone(verdict.Keep), verdict.Retain...)))
+		shown := append(slices.Clone(verdict.Keep), verdict.Retain...)
+		if !enforce {
+			// Nothing cuts the over-cap addresses here, so dropping them would hide
+			// connections that are still up from the one list that reports them.
+			shown = append(slices.Clone(verdict.Ban), shown...)
+		}
+		row.Ips = encodeClientIPs(observationsToEntries(shown))
 		if err := tx.Save(row).Error; err != nil {
 			logger.Error("policy: save ip limit result:", err)
 			continue
@@ -504,7 +522,12 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 		// Every client the cap was actually applied to, an EMPTY ban included: the
 		// caller's re-ban memory is pruned by being handed the clients that are back
 		// under their cap, and a verdict it never sees can never be forgotten.
-		target := s.bounceTarget(hosted, scan, email, verdict.Ban)
+		// The bounce is the acting half, and it is the ONLY thing the actuator's
+		// availability still gates.
+		var target *model.Inbound
+		if enforce {
+			target = s.bounceTarget(hosted, scan, email, verdict.Ban)
+		}
 		verdicts = append(verdicts, IPLimitVerdict{
 			Email:   email,
 			Ban:     verdict.Ban,
@@ -526,10 +549,16 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 bounceTarget picks the inbound whose core actually observed the banned addresses.
 
 Cutting a client is per-CORE and not per-client: the runtime resolves the core
-from the inbound it is handed, and RemoveUser drops ALL of that client's sessions
-on it. Choosing by id instead would cut a compliant core's connections while the
-core that saw the breach carries on, and would do it silently — the retired job's
-protocol allowlist was the only thing that ever stopped a cross-core cut.
+from the inbound it is handed. Choosing by id instead would act on a compliant
+core while the core that saw the breach carries on, and would do it silently —
+the retired job's protocol allowlist was the only thing that ever stopped a
+cross-core cut.
+
+What the cut actually achieves is narrower than it reads. Measured against the
+shipped core (audit-appendix/RUNTIME-RESULTS-2026-08-21.md §3), RemoveUser closes
+nothing: a session already established keeps flowing, and a warmed mux connection
+keeps carrying new requests. Only a NEW connection is refused. So this chooses
+where the refusal lands, not whose sessions end.
 
 No observing core that can safely be cut means report-only, which is the same
 answer the fail2ban line already carries.
@@ -599,9 +628,50 @@ func (s *PolicyService) BounceClient(ctx context.Context, inbound *model.Inbound
 	}
 	// The daemon needs a moment to drop the sockets before the user is let back
 	// in, or the re-add races the disconnect it exists to force.
-	time.Sleep(100 * time.Millisecond)
-	return rt.AddUser(ctx, inbound, email)
+	time.Sleep(bounceSettle)
+
+	var addErr error
+	for attempt := range bounceAddAttempts {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * bounceRetryBackoff)
+		}
+		if addErr = rt.AddUser(ctx, inbound, email); addErr == nil {
+			return nil
+		}
+		logger.Warningf("[LIMIT_IP] re-adding %s after the cut failed (attempt %d/%d): %v",
+			email, attempt+1, bounceAddAttempts, addErr)
+	}
+
+	/*
+		Every retry failed, so the client is currently absent from the running core
+		— removed for exceeding an IP cap and never let back in. Nothing else
+		repairs that: the supervisor skips the panel-converged core, so it stands
+		until an unrelated edit rebuilds the config.
+
+		Re-applying the whole inbound rebuilds its user list from the panel's own
+		config, which is a stronger repair than a fourth AddUser of the same one.
+	*/
+	if repairErr := rt.UpdateInbound(ctx, inbound, inbound); repairErr != nil {
+		return fmt.Errorf("bounce: %s was removed from the core and could not be restored (add: %w, repair: %w)",
+			email, addErr, repairErr)
+	}
+	return fmt.Errorf("bounce: re-adding %s failed, the inbound was re-applied to restore it: %w", email, addErr)
 }
+
+/*
+The bounce's time budget, which is not its own to spend.
+
+The IP-limit pass runs @every 10s under SkipIfStillRunning, so a pass that
+overruns its tick has the next one dropped with nothing logged. The success path
+adds none of this — only a bounce whose re-add is already failing pays, and its
+worst case is 100ms + 100ms + 200ms = 400ms of sleeping, 4% of the tick, plus one
+repair call that does not sleep at all.
+*/
+const (
+	bounceSettle       = 100 * time.Millisecond
+	bounceAddAttempts  = 3
+	bounceRetryBackoff = 100 * time.Millisecond
+)
 
 // recordAttribution files this pass's observations under this panel's guid, so a
 // master can say which node an address is on. Advisory: it never blocks a ban.

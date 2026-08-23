@@ -45,9 +45,13 @@ func verdictFor(t *testing.T, verdicts []IPLimitVerdict, email string) IPLimitVe
 TestABounceNeverLandsOnACoreThatSawNothing.
 
 A client on two cores has ONE merged address list, and cutting them is per-core:
-the runtime resolves the core from the inbound it is handed, and RemoveUser drops
-every session that core holds. Choosing the inbound by id therefore cuts whichever
-inbound sorts first, which is independent of the core that observed the breach.
+the runtime resolves the core from the inbound it is handed. Choosing the inbound
+by id therefore acts on whichever inbound sorts first, which is independent of the
+core that observed the breach — which is what this pins.
+
+It does NOT pin what the cut achieves. RemoveUser closes no established session
+(RUNTIME-RESULTS-2026-08-21.md §3); it refuses the next connection. This test was
+written believing otherwise, and the belief was never what it asserted.
 */
 func TestABounceNeverLandsOnACoreThatSawNothing(t *testing.T) {
 	initTestDB(t)

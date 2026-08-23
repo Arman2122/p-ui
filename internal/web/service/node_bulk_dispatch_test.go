@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -23,11 +24,15 @@ type fakeNodeRuntime struct {
 	deleteUser    atomic.Int32
 	updateInbound atomic.Int32
 	updateUser    atomic.Int32
+	addUser       atomic.Int32
+	removeUser    atomic.Int32
 
-	// updateInboundErr and addUserErr drive the caller's failure handling; the
-	// zero values keep every existing test on the success path.
-	updateInboundErr error
-	addUserErr       error
+	// updateInboundErr and addUserErr drive the caller's failure handling, and
+	// addUserTransientFailures makes the first N AddUser calls fail and the rest
+	// succeed. The zero values keep every existing test on the success path.
+	updateInboundErr         error
+	addUserErr               error
+	addUserTransientFailures atomic.Int32
 }
 
 func (f *fakeNodeRuntime) Name() string { return "fake-node" }
@@ -48,10 +53,18 @@ func (f *fakeNodeRuntime) UpdateInbound(context.Context, *model.Inbound, *model.
 }
 
 func (f *fakeNodeRuntime) AddUser(context.Context, *model.Inbound, string) error {
+	f.addUser.Add(1)
+	if f.addUserTransientFailures.Load() > 0 {
+		f.addUserTransientFailures.Add(-1)
+		return errors.New("the core was busy")
+	}
 	return f.addUserErr
 }
 
-func (f *fakeNodeRuntime) RemoveUser(context.Context, *model.Inbound, string) error { return nil }
+func (f *fakeNodeRuntime) RemoveUser(context.Context, *model.Inbound, string) error {
+	f.removeUser.Add(1)
+	return nil
+}
 
 func (f *fakeNodeRuntime) UpdateUser(context.Context, *model.Inbound, string, model.Client) error {
 	f.updateUser.Add(1)

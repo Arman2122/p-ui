@@ -58,15 +58,15 @@ func TestAReBanIsReportedAgainAfterAPassUnderTheCap(t *testing.T) {
 	// the pass that must forget the pair.
 	under := []service.IPLimitVerdict{{Email: "alice"}}
 
-	job.reportOverLimit(context.Background(), over)
+	job.reportOverLimit(context.Background(), over, true)
 	if got := len(banLines(t)); got != 1 {
 		t.Fatalf("after the first over-cap pass: %d line(s), want 1", got)
 	}
-	job.reportOverLimit(context.Background(), under)
+	job.reportOverLimit(context.Background(), under, true)
 	if got := len(banLines(t)); got != 1 {
 		t.Fatalf("an under-cap pass must report nothing: %d line(s), want 1", got)
 	}
-	job.reportOverLimit(context.Background(), over)
+	job.reportOverLimit(context.Background(), over, true)
 
 	lines := banLines(t)
 	if len(lines) != 2 {
@@ -95,8 +95,8 @@ func TestAPairIsNotReportedTwiceWithinOneBan(t *testing.T) {
 		Email: "alice",
 		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
 	}}
-	job.reportOverLimit(context.Background(), over)
-	job.reportOverLimit(context.Background(), over)
+	job.reportOverLimit(context.Background(), over, true)
+	job.reportOverLimit(context.Background(), over, true)
 
 	if got := len(banLines(t)); got != 1 {
 		t.Fatalf("a frozen lastSeen is a connection the daemon has not reaped, not a reconnect: %d line(s), want 1", got)
@@ -112,11 +112,11 @@ func TestTheRememberedPairIsReleased(t *testing.T) {
 	job.reportOverLimit(context.Background(), []service.IPLimitVerdict{{
 		Email: "alice",
 		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
-	}})
+	}}, true)
 	if len(job.bannedSeen) != 1 {
 		t.Fatalf("the banned pair must be remembered, got %v", job.bannedSeen)
 	}
-	job.reportOverLimit(context.Background(), []service.IPLimitVerdict{{Email: "alice"}})
+	job.reportOverLimit(context.Background(), []service.IPLimitVerdict{{Email: "alice"}}, true)
 	if len(job.bannedSeen) != 0 {
 		t.Fatalf("a client back under its cap must release every pair it held, got %v", job.bannedSeen)
 	}
