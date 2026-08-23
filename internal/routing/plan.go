@@ -157,6 +157,13 @@ func Plan(in Input) Compiled {
 			// class of forwarded traffic exempt from the template's private block.
 			if in.Blackhole != "" {
 				out.XrayRules = append(out.XrayRules, guardRule(tag, in.Blackhole))
+			} else {
+				// Warn, not inert: refusing the front would take the ingress offline,
+				// which is worse than forwarding it without the private block.
+				out.Diags = append(out.Diags, Diag{
+					SubjectTag: subject.Tag, Severity: SeverityWarn, Pattern: pattern,
+					MessageKey: KeyNoDefaultOutbound, Args: map[string]string{"protocol": "blackhole"},
+				})
 			}
 		}
 
@@ -244,8 +251,18 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 	case DestBalancer:
 		body["balancerTag"] = mustJSON(rule.Dest.Tag)
 	case DestDirect:
+		if in.Direct == "" {
+			diag.Severity, diag.Pattern, diag.MessageKey = SeverityInert, PatternInert, KeyNoDefaultOutbound
+			diag.Args = map[string]string{"protocol": "freedom"}
+			return nil, diag, nil
+		}
 		body["outboundTag"] = mustJSON(in.Direct)
 	case DestBlock:
+		if in.Blackhole == "" {
+			diag.Severity, diag.Pattern, diag.MessageKey = SeverityInert, PatternInert, KeyNoDefaultOutbound
+			diag.Args = map[string]string{"protocol": "blackhole"}
+			return nil, diag, nil
+		}
 		body["outboundTag"] = mustJSON(in.Blackhole)
 	case DestExit:
 		exit, found := findExit(in.Exits, rule.Dest.ExitID)

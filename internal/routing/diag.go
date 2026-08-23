@@ -39,6 +39,7 @@ const (
 	KeyExitMissing          = "pages.xray.routing.refuse.exitMissing"
 	KeyNoExitDriver         = "pages.xray.routing.refuse.noExitDriver"
 	KeyNoSnat               = "pages.xray.routing.refuse.noSnat"
+	KeyNoDefaultOutbound    = "pages.xray.routing.refuse.noDefaultOutbound"
 	KeySelfLoop             = "pages.xray.routing.refuse.selfLoop"
 )
 
