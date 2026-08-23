@@ -103,8 +103,13 @@ func panelOwnedParams(p Params) []struct {
 		kind  uint16
 		value uint16
 	}{
-		{devJc, p.Jc}, {devJmin, p.Jmin}, {devJmax, p.Jmax},
-		{devS1, p.S1}, {devS2, p.S2}, {devS3, p.S3}, {devS4, p.S4},
+		{devJc, p.Jc},
+		{devJmin, p.Jmin},
+		{devJmax, p.Jmax},
+		{devS1, p.S1},
+		{devS2, p.S2},
+		{devS3, p.S3},
+		{devS4, p.S4},
 	}
 }
 
