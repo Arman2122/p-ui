@@ -44,8 +44,13 @@ func TestPanelOwnedParametersAreWrittenEvenWhenZero(t *testing.T) {
 		kind  uint16
 		value uint16
 	}{
-		{"jc", devJc, 4}, {"jmin", devJmin, 40}, {"jmax", devJmax, 70},
-		{"s1", devS1, 0}, {"s2", devS2, 0}, {"s3", devS3, 0}, {"s4", devS4, 0},
+		{"jc", devJc, 4},
+		{"jmin", devJmin, 40},
+		{"jmax", devJmax, 70},
+		{"s1", devS1, 0},
+		{"s2", devS2, 0},
+		{"s3", devS3, 0},
+		{"s4", devS4, 0},
 	} {
 		got, present := attrValue(t, attrs, kind.kind)
 		if !present {
