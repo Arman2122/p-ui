@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A routing rule with nowhere to send traffic is skipped instead of taking
+  Xray down.** `direct` and `block` resolve to whichever outbound in your Xray
+  template carries the `freedom` or `blackhole` protocol. A template with
+  neither — a "nothing goes out directly" setup, or one with the `blocked`
+  outbound removed — compiled those rules to an empty outbound tag, which
+  xray-core rejects outright: the core refused to start and every client on the
+  box went offline over one rule.
+  **What you will notice:** the core starts. The rule itself does nothing until
+  the template has an outbound to name, so traffic you meant to block now
+  follows the template's own routing instead — worth checking if you removed
+  either outbound deliberately. The same missing `blackhole` also drops the
+  private-address guard the panel puts in front of each WireGuard-family
+  inbound, which is now reported rather than silently skipped.
+
 - **Turning automatic banning off no longer turns the IP log off with it.** With
   `PUI_ENABLE_FAIL2BAN` set to false, or on a host where fail2ban was never
   installed, the panel stopped asking the cores who was connected at all — so
