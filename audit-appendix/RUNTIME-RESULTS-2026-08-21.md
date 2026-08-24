@@ -438,6 +438,42 @@ them.
 
 ---
 
+## 11. F085 — correction: there is no ENODEV, and the suggested swallow would have hidden F095
+
+The finding's second half asks for a missing device to be made "genuinely
+non-fatal (swallow the ENODEV/link-not-found case)" so `applyParams` matches its
+own doc comment. That cannot be done as written.
+
+Measured against the loaded module, from the panel's own `awg` package:
+
+```go
+err := ConfigureParams("awg-does-not-exist", Params{Jc: 4, Jmin: 40, Jmax: 70})
+
+err = awg: the module refused the configuration: netlink receive: invalid argument
+errors.Is(err, unix.ENODEV) = false
+errors.Is(err, unix.ENOENT) = false
+errors.Is(err, unix.EPERM)  = false
+```
+
+A missing device answers **EINVAL** — byte for byte the errno the module returns
+for a parameter set it refuses (§10). Nothing at this seam can tell the two
+apart, so a swallow keyed on the error would have swallowed F095's refusal as
+well: exactly the signal F266 exists to put in front of the operator, discarded
+one layer below it.
+
+What the comment was really protecting was the reconcile stopping on it, and
+that is fixed directly — the pass collects instead of early-returning. The false
+claim is removed rather than made true by guesswork.
+
+If a genuinely quiet "device not there yet" is wanted later, it has to be a
+**presence check** (ask the plane whether the link exists) rather than an errno
+test. That costs one extra netlink round trip per inbound per 10s pass, and it
+is only worth paying once F266 puts these errors in front of an operator, where
+a spurious "obfuscation failed" for an inbound still being created becomes
+noise. Deliberately deferred to that slice, not forgotten.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
