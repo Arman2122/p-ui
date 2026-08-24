@@ -1604,7 +1604,9 @@ func (s *ServerService) UpdateGeofile(fileName string) error {
 		}
 	}
 
-	client := s.settingService.NewProxiedHTTPClient(0)
+	// Not 0. These are 10-20 MB each over exactly the filtered links this panel
+	// targets, and a zero timeout has no deadline of any kind, body read included.
+	client := s.settingService.NewProxiedHTTPClient(5 * time.Minute)
 
 	downloadFile := func(url, destPath string) error {
 		var req *http.Request
@@ -1658,16 +1660,42 @@ func (s *ServerService) UpdateGeofile(fileName string) error {
 			return common.NewErrorf("Failed to download Geofile from %s: received status code %d", url, resp.StatusCode)
 		}
 
-		file, err := os.Create(destPath)
+		/*
+			Same shape as copyZipFile above: a temp file beside the destination, so
+			the rename is same-filesystem and atomic, and the live .dat is never the
+			thing being written into. os.Create truncated it to zero before a single
+			body byte had arrived, so a connection dropped mid-copy left a corrupt
+			geofile on disk and the panel then restarted Xray onto it.
+		*/
+		tmpFile, err := os.CreateTemp(filepath.Dir(destPath), ".geo-*")
 		if err != nil {
-			return common.NewErrorf("Failed to create Geofile %s: %v", destPath, err)
+			return common.NewErrorf("Failed to create a temporary Geofile beside %s: %v", destPath, err)
 		}
-		defer file.Close()
+		tmpPath := tmpFile.Name()
+		ok := false
+		defer func() {
+			_ = tmpFile.Close()
+			if !ok {
+				_ = os.Remove(tmpPath)
+			}
+		}()
 
-		_, err = io.Copy(file, resp.Body)
-		if err != nil {
+		if _, err = io.Copy(tmpFile, io.LimitReader(resp.Body, maxGeofileBytes+1)); err != nil {
 			return common.NewErrorf("Failed to save Geofile %s: %v", destPath, err)
 		}
+		if _, err = tmpFile.Seek(0, io.SeekStart); err != nil {
+			return common.NewErrorf("Failed to re-read Geofile %s: %v", destPath, err)
+		}
+		if err = verifyGeofile(tmpFile); err != nil {
+			return common.NewErrorf("Refusing to install Geofile %s: %v", destPath, err)
+		}
+		if err = tmpFile.Close(); err != nil {
+			return common.NewErrorf("Failed to finish writing Geofile %s: %v", destPath, err)
+		}
+		if err = os.Rename(tmpPath, destPath); err != nil {
+			return common.NewErrorf("Failed to install Geofile %s: %v", destPath, err)
+		}
+		ok = true
 
 		updateFileModTime()
 		return nil
@@ -1691,9 +1719,13 @@ func (s *ServerService) UpdateGeofile(fileName string) error {
 		}
 	}
 
-	err := s.RestartXrayService()
-	if err != nil {
-		errorMessages = append(errorMessages, fmt.Sprintf("Updated Geofile '%s' but Failed to start Xray: %v", fileName, err))
+	// Nothing was replaced, so there is nothing to pick up — and bouncing a
+	// healthy core to apply a download that did not happen is the whole of the
+	// outage this used to cause.
+	if len(errorMessages) == 0 {
+		if err := s.RestartXrayService(); err != nil {
+			errorMessages = append(errorMessages, fmt.Sprintf("Updated Geofile '%s' but Failed to start Xray: %v", fileName, err))
+		}
 	}
 
 	if len(errorMessages) > 0 {
