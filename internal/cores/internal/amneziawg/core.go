@@ -77,10 +77,14 @@ at all, which is a tunnel every client configured for AmneziaWG fails to use
 while the panel reports success.
 */
 func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
-	if err := c.Core.Reconcile(ctx, desired); err != nil {
-		return err
-	}
-	var failures []error
+	/*
+		Collected, not early-returned. The WireGuard core joins one error per
+		inbound, so returning on it let a single unparseable sibling skip the
+		obfuscation for every OTHER AmneziaWG inbound in the pass — and every
+		subsequent pass took the same exit, so those devices stayed plain
+		WireGuard while their clients were configured for AmneziaWG.
+	*/
+	failures := []error{c.Core.Reconcile(ctx, desired)}
 	for _, inst := range desired {
 		failures = append(failures, c.applyParams(ctx, inst))
 	}
@@ -94,9 +98,16 @@ func (c *Core) ApplyInstance(ctx context.Context, inst core.Instance) error {
 	return c.applyParams(ctx, inst)
 }
 
-// applyParams pushes one inbound's obfuscation onto its device. A device that is
-// not there yet is not an error: the next pass makes it, and refusing here would
-// fail a whole reconcile for an inbound still being created.
+/*
+applyParams pushes one inbound's obfuscation onto its device.
+
+A device that is not there yet IS reported, contrary to what this comment used
+to claim. The module answers a missing device with EINVAL, the same errno it
+uses for a parameter set it refuses (RUNTIME-RESULTS §10), so there is nothing
+here to tell the two apart — and swallowing it would swallow the refusal F095
+exists to surface. The reconcile no longer stops on it, which is what the claim
+was really protecting.
+*/
 func (c *Core) applyParams(ctx context.Context, inst core.Instance) error {
 	params, err := ParamsOf(inst)
 	if err != nil {
