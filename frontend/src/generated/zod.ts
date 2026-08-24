@@ -579,6 +579,7 @@ export const MsgSchema = z.object({
   msg: z.string(),
   obj: z.unknown(),
   success: z.boolean(),
+  warning: z.string().optional(),
 });
 export type Msg = z.infer<typeof MsgSchema>;
 

@@ -102,7 +102,7 @@ func TestAddInbound_PostgresCommitFailureMakesNoRuntimeCall(t *testing.T) {
 	installDeferredCommitFailure(t, db, "create", "durable:add_inbound_commit_failure", "inbounds", "durable_add_parent", "durable_add_child")
 
 	inbound := durableTestInbound(&nodeID, tag, 25443)
-	_, _, err := (&InboundService{}).AddInbound(inbound)
+	_, _, _, err := (&InboundService{}).AddInbound(inbound)
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "foreign key") {
 		t.Fatalf("AddInbound error = %v, want deferred foreign-key commit failure", err)
 	}
@@ -140,7 +140,7 @@ func TestUpdateInbound_PostgresCommitFailureMakesNoRuntimeCall(t *testing.T) {
 	update := durableTestInbound(&nodeID, original.Tag, original.Port)
 	update.Id = original.Id
 	update.Remark = "after"
-	_, _, err := (&InboundService{}).UpdateInbound(update)
+	_, _, _, err := (&InboundService{}).UpdateInbound(update)
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "foreign key") {
 		t.Fatalf("UpdateInbound error = %v, want deferred foreign-key commit failure", err)
 	}

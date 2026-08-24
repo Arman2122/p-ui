@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A save the core refused is no longer reported as a success.** For AmneziaWG,
+  WireGuard and MTProto the panel converges the device itself — the push *is* the
+  apply, and there is no later Xray restart that repairs it. A refused apply was
+  written to the debug log and nowhere else, so the panel said "Inbound has been
+  successfully updated", the row went green, and the device kept running the
+  previous configuration while every config the panel handed out described the
+  new one.
+  **What you will notice:** when the core refuses, the save still completes — the
+  row really is saved — and a warning appears on the Inbounds page next to the
+  success message, carrying the core's own reason and staying up for ten seconds.
+  Xray-served inbounds are unchanged: a failed push there still just schedules the
+  restart that fixes it, and says nothing.
+
 - **One broken AmneziaWG inbound no longer strips the obfuscation from the
   others.** The convergence pass applied every AmneziaWG inbound's parameters
   only if none of them had failed first — so one inbound with an unreadable

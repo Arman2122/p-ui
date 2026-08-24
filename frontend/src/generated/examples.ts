@@ -572,7 +572,8 @@ export const EXAMPLES: Record<string, unknown> = {
   "Msg": {
     "msg": "",
     "obj": null,
-    "success": false
+    "success": false,
+    "warning": "the device refused the configuration"
   },
   "Node": {
     "activeCount": 23,

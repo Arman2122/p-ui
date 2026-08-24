@@ -161,12 +161,17 @@ func (a *InboundController) addInbound(c *gin.Context) {
 		inbound.NodeID = nil
 	}
 
-	inbound, needRestart, err := a.inboundService.AddInbound(inbound)
+	inbound, needRestart, applyWarn, err := a.inboundService.AddInbound(inbound)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+	if applyWarn != "" {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound,
+			I18nWeb(c, "pages.inbounds.toasts.inboundSavedButNotApplied")+" "+applyWarn)
+	} else {
+		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+	}
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}
@@ -241,12 +246,17 @@ func (a *InboundController) updateInbound(c *gin.Context) {
 	if inbound.NodeID != nil && *inbound.NodeID == 0 {
 		inbound.NodeID = nil
 	}
-	inbound, needRestart, err := a.inboundService.UpdateInbound(inbound)
+	inbound, needRestart, applyWarn, err := a.inboundService.UpdateInbound(inbound)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, nil)
+	if applyWarn != "" {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound,
+			I18nWeb(c, "pages.inbounds.toasts.inboundSavedButNotApplied")+" "+applyWarn)
+	} else {
+		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, nil)
+	}
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}
@@ -400,12 +410,17 @@ func (a *InboundController) importInbound(c *gin.Context) {
 		inbound.ClientStats[index].Enable = true
 	}
 
-	inbound, needRestart, err := a.inboundService.AddInbound(inbound)
+	inbound, needRestart, applyWarn, err := a.inboundService.AddInbound(inbound)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+	if applyWarn != "" {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound,
+			I18nWeb(c, "pages.inbounds.toasts.inboundSavedButNotApplied")+" "+applyWarn)
+	} else {
+		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+	}
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}

@@ -80,7 +80,7 @@ func TestUpdateInboundRefusesEncryptionWhileFallbacksAreAttached(t *testing.T) {
 
 	update := *loadInboundByTag(t, "fb-edit")
 	update.Settings = `{"clients":[],"decryption":"` + vlessAuthDecryption + `"}`
-	_, _, err := (&InboundService{}).UpdateInbound(&update)
+	_, _, _, err := (&InboundService{}).UpdateInbound(&update)
 	if err == nil {
 		t.Fatal("encryption was turned on under attached fallbacks, which stops them being emitted with no trace")
 	}
@@ -104,7 +104,7 @@ func TestUpdateInboundAllowsAnEditThatKeepsFallbacksHostable(t *testing.T) {
 
 	update := *loadInboundByTag(t, "fb-keep")
 	update.Remark = "renamed"
-	if _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
+	if _, _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
 		t.Fatalf("an ordinary edit must still save: %v", err)
 	}
 }

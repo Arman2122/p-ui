@@ -32,7 +32,7 @@ func TestWgkernelClientSurvivesTheCredentialSwitches(t *testing.T) {
 			Settings: `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.0.0.1/24"],` +
 				`"clients":[{"email":"seed@wgk","enable":true,"publicKey":"` + seedPublic + `","allowedIPs":["10.0.0.2/32"]}]}`,
 		}
-		created, _, err = inboundSvc.AddInbound(in)
+		created, _, _, err = inboundSvc.AddInbound(in)
 		if err != nil {
 			t.Fatalf("AddInbound: %v", err)
 		}
@@ -103,10 +103,10 @@ func TestTwoHostWireguardInboundsCannotShareASubnet(t *testing.T) {
 	setupBulkDB(t)
 	svc := &InboundService{}
 
-	if _, _, err := svc.AddInbound(wgkernelInbound(51961, "10.0.0.1/24")); err != nil {
+	if _, _, _, err := svc.AddInbound(wgkernelInbound(51961, "10.0.0.1/24")); err != nil {
 		t.Fatalf("first AddInbound: %v", err)
 	}
-	_, _, err := svc.AddInbound(wgkernelInbound(51962, "10.0.0.1/24"))
+	_, _, _, err := svc.AddInbound(wgkernelInbound(51962, "10.0.0.1/24"))
 	if err == nil {
 		t.Fatal("a second wgkernel inbound was accepted on the same tunnel subnet; every client of one is answered over the other's device")
 	}
@@ -115,27 +115,27 @@ func TestTwoHostWireguardInboundsCannotShareASubnet(t *testing.T) {
 	}
 
 	t.Run("a subnet nothing else claims is accepted", func(t *testing.T) {
-		if _, _, err := svc.AddInbound(wgkernelInbound(51963, "10.9.0.1/24")); err != nil {
+		if _, _, _, err := svc.AddInbound(wgkernelInbound(51963, "10.9.0.1/24")); err != nil {
 			t.Fatalf("AddInbound on a free subnet: %v", err)
 		}
 	})
 
 	t.Run("a wider prefix containing one already served is rejected", func(t *testing.T) {
-		if _, _, err := svc.AddInbound(wgkernelInbound(51964, "10.0.1.1/16")); err == nil {
+		if _, _, _, err := svc.AddInbound(wgkernelInbound(51964, "10.0.1.1/16")); err == nil {
 			t.Fatal("a /16 covering an existing /24 was accepted; the two collide on every address the /24 hands out")
 		}
 	})
 
 	t.Run("editing an inbound onto a taken subnet is rejected", func(t *testing.T) {
 		free := wgkernelInbound(51965, "10.8.0.1/24")
-		created, _, addErr := svc.AddInbound(free)
+		created, _, _, addErr := svc.AddInbound(free)
 		if addErr != nil {
 			t.Fatalf("AddInbound: %v", addErr)
 		}
 		moved := wgkernelInbound(51965, "10.0.0.1/24")
 		moved.Id = created.Id
 		moved.Tag = created.Tag
-		if _, _, err := svc.UpdateInbound(moved); err == nil {
+		if _, _, _, err := svc.UpdateInbound(moved); err == nil {
 			t.Fatal("an inbound was edited onto a subnet another one already serves")
 		}
 	})
@@ -155,7 +155,7 @@ func TestTwoClientsCannotShareOnePublicKey(t *testing.T) {
 	in := wgkernelInbound(51971, "10.10.0.1/24")
 	in.Settings = `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.10.0.1/24"],` +
 		`"clients":[{"email":"seed@wgk","enable":true,"publicKey":"` + seedPublic + `","allowedIPs":["10.10.0.2/32"]}]}`
-	created, _, err := inboundSvc.AddInbound(in)
+	created, _, _, err := inboundSvc.AddInbound(in)
 	if err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}
@@ -237,11 +237,11 @@ func TestTwoInboundsDoNotHandTheirFirstClientOneAddress(t *testing.T) {
 	inboundSvc := &InboundService{}
 	clientSvc := &ClientService{}
 
-	first, _, err := inboundSvc.AddInbound(wgkernelInbound(51971, "10.20.0.1/24"))
+	first, _, _, err := inboundSvc.AddInbound(wgkernelInbound(51971, "10.20.0.1/24"))
 	if err != nil {
 		t.Fatalf("first AddInbound: %v", err)
 	}
-	second, _, err := inboundSvc.AddInbound(wgkernelInbound(51972, "10.21.0.1/24"))
+	second, _, _, err := inboundSvc.AddInbound(wgkernelInbound(51972, "10.21.0.1/24"))
 	if err != nil {
 		t.Fatalf("second AddInbound: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestAMetadataEditIsNotRefusedByAPreExistingDuplicateKey(t *testing.T) {
 			`{"email":"wg-two","enable":true,"publicKey":"` + shared + `","allowedIPs":["10.30.0.3/32"]},` +
 			`{"email":"wg-three","enable":true,"publicKey":"` + ownKey + `","allowedIPs":["10.30.0.4/32"]}]}`,
 	}
-	created, _, err := inboundSvc.AddInbound(in)
+	created, _, _, err := inboundSvc.AddInbound(in)
 	if err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}

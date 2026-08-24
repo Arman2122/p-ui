@@ -18,7 +18,7 @@ func TestClientCrudMtprotoAppliesImmediately(t *testing.T) {
 	inboundSvc := &InboundService{}
 	clientSvc := &ClientService{}
 
-	created, _, err := inboundSvc.AddInbound(&model.Inbound{
+	created, _, _, err := inboundSvc.AddInbound(&model.Inbound{
 		Enable:   true,
 		Listen:   "",
 		Port:     46201,

@@ -298,7 +298,7 @@ func TestUpdateInbound_PropagatesRoutingRuleOnPortChange(t *testing.T) {
 	update := existing
 	update.Port = 33000
 	update.Tag = "in-22435-tcp"
-	got, needRestart, err := svc.UpdateInbound(&update)
+	got, needRestart, _, err := svc.UpdateInbound(&update)
 	if err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}

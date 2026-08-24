@@ -57,7 +57,7 @@ func TestUpdateInboundMtprotoUnchangedDoesNotRestart(t *testing.T) {
 		t.Helper()
 		update := *loadInboundByTag(t, "mt-apply")
 		mutate(&update)
-		_, needRestart, err := svc.UpdateInbound(&update)
+		_, needRestart, _, err := svc.UpdateInbound(&update)
 		if err != nil {
 			t.Fatalf("UpdateInbound: %v", err)
 		}
@@ -84,7 +84,7 @@ func TestUpdateInboundMtprotoUnchangedDoesNotRestart(t *testing.T) {
 		if !strings.Contains(update.Settings, mtprotoTestSecretD) {
 			t.Fatal("fixture must contain the re-keyed secret")
 		}
-		_, needRestart, err := svc.UpdateInbound(&update)
+		_, needRestart, _, err := svc.UpdateInbound(&update)
 		if err != nil {
 			t.Fatalf("UpdateInbound: %v", err)
 		}

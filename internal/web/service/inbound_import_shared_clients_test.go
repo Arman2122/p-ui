@@ -47,7 +47,7 @@ func TestAddInbound_ImportTwoInboundsSharingClients(t *testing.T) {
 		{Email: "alice", Up: 100, Down: 200, Total: 1000},
 		{Email: "bob", Up: 1, Down: 2, Total: 1000},
 	})
-	if _, _, err := svc.AddInbound(in1); err != nil {
+	if _, _, _, err := svc.AddInbound(in1); err != nil {
 		t.Fatalf("import inbound #1: %v", err)
 	}
 
@@ -60,7 +60,7 @@ func TestAddInbound_ImportTwoInboundsSharingClients(t *testing.T) {
 		{Email: "alice", Up: 999, Down: 999, Total: 9999}, // would clobber the shared row if inserted
 		{Email: "carol", Up: 3, Down: 4, Total: 1000},
 	})
-	if _, _, err := svc.AddInbound(in2); err != nil {
+	if _, _, _, err := svc.AddInbound(in2); err != nil {
 		t.Fatalf("import inbound #2 (the reported failure): %v", err)
 	}
 
@@ -102,7 +102,7 @@ func TestAddInbound_ImportStatsMissingClientStillGetsTrafficRow(t *testing.T) {
 	in := makeImportInbound("in-9103-tcp", 9103, settings, []xray.ClientTraffic{
 		{Email: "dave", Up: 7, Down: 8, Total: 1000},
 	})
-	if _, _, err := svc.AddInbound(in); err != nil {
+	if _, _, _, err := svc.AddInbound(in); err != nil {
 		t.Fatalf("import inbound: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestAddInbound_ImportForcedEnableSurvivesDisabledSettingsClient(t *testing.
 	in := makeImportInbound("in-9104-tcp", 9104, settings, []xray.ClientTraffic{
 		{Email: "frank", Up: 10, Down: 20, Total: 5000},
 	})
-	if _, _, err := svc.AddInbound(in); err != nil {
+	if _, _, _, err := svc.AddInbound(in); err != nil {
 		t.Fatalf("import inbound: %v", err)
 	}
 

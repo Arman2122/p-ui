@@ -154,6 +154,16 @@ func callerOutsideUtil() (string, string) {
 }
 
 // jsonMsgObj sends a JSON response with a message, object, and error status.
+/*
+jsonMsgObjWarn answers a write that succeeded with something after it that did
+not. The row is saved, so this is not a failure; but for a core the panel
+converges directly there is no later restart that repairs it, so silence would
+leave the operator with a green panel and a dead inbound.
+*/
+func jsonMsgObjWarn(c *gin.Context, msg string, obj any, warning string) {
+	c.JSON(http.StatusOK, entity.Msg{Success: true, Msg: msg, Obj: obj, Warning: warning})
+}
+
 func jsonMsgObj(c *gin.Context, msg string, obj any, err error) {
 	m := entity.Msg{
 		Obj: obj,

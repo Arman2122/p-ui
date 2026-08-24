@@ -10,6 +10,7 @@ describe('API token creation date', () => {
     vi.spyOn(HttpUtil, 'get').mockResolvedValueOnce({
       success: true,
       msg: '',
+      warning: '',
       obj: [
         {
           id: 2,

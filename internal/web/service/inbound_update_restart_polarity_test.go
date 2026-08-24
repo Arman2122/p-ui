@@ -26,7 +26,7 @@ func TestUpdateInboundFailedPushSkipsRestartForSelfConvergingCore(t *testing.T) 
 
 	update := *loadInboundByTag(t, "mt-polarity")
 	update.Remark = "edited"
-	_, needRestart, err := (&InboundService{}).UpdateInbound(&update)
+	_, needRestart, _, err := (&InboundService{}).UpdateInbound(&update)
 	if err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestAddClientFailedPushSkipsRestartForSelfConvergingCore(t *testing.T) {
 	t.Cleanup(func() { runtime.SetManager(nil) })
 
 	inboundSvc := &InboundService{}
-	created, _, err := inboundSvc.AddInbound(wgkernelInbound(46172, "10.20.0.1/24"))
+	created, _, _, err := inboundSvc.AddInbound(wgkernelInbound(46172, "10.20.0.1/24"))
 	if err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestUpdateInboundRebuildsAnXrayServedInbound(t *testing.T) {
 
 	update := *loadInboundByTag(t, "vless-polarity")
 	update.Remark = "edited"
-	if _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
+	if _, _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
 
@@ -125,7 +125,7 @@ func TestDisablingAnXrayInboundRemovesItFromTheCore(t *testing.T) {
 
 	update := *loadInboundByTag(t, "vless-off")
 	update.Enable = false
-	if _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
+	if _, _, _, err := (&InboundService{}).UpdateInbound(&update); err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
 

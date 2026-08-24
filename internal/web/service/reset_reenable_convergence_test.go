@@ -81,7 +81,7 @@ func seedDepletableClient(t *testing.T, port int, tag, email string) *model.Inbo
 		Listen: "0.0.0.0", Settings: string(settings),
 		StreamSettings: `{"network":"tcp","security":"none"}`,
 	}
-	if _, _, err := (&InboundService{}).AddInbound(inbound); err != nil {
+	if _, _, _, err := (&InboundService{}).AddInbound(inbound); err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}
 	if err := db.Model(core.ClientTraffic{}).Where("email = ?", email).

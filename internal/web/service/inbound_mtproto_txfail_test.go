@@ -38,7 +38,7 @@ func TestUpdateInboundLocalMtprotoDefersPushUntilCommit(t *testing.T) {
 
 	update := *loadInboundByTag(t, "mt-txfail")
 	update.Remark = "edited"
-	if _, _, err := (&InboundService{}).UpdateInbound(&update); err == nil {
+	if _, _, _, err := (&InboundService{}).UpdateInbound(&update); err == nil {
 		t.Fatal("UpdateInbound: expected the injected transaction failure")
 	}
 

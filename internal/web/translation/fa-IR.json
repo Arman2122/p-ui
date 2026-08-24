@@ -405,6 +405,7 @@
         "logCleanSuccess": "لاگ پاکسازی شد",
         "inboundUpdateSuccess": "ورودی با موفقیت به‌روزرسانی شد",
         "inboundCreateSuccess": "ورودی با موفقیت ایجاد شد",
+        "inboundSavedButNotApplied": "ذخیره شد، اما دستگاه این پیکربندی را نپذیرفت و راه‌اندازی مجدد آن را درست نمی‌کند:",
         "bulkDeleted": "{count} اینباند حذف شد",
         "bulkDeletedMixed": "{ok} حذف، {failed} ناموفق",
         "inboundDeleteSuccess": "ورودی با موفقیت حذف شد",

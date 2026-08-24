@@ -3,17 +3,21 @@ import { httpRequest } from '@/api/http-init';
 import type { HttpResponse } from '@/api/http-init';
 import { getMessage } from './messageBus';
 
-type RespEnvelope = { success?: unknown; msg?: unknown; obj?: unknown };
+type RespEnvelope = { success?: unknown; msg?: unknown; obj?: unknown; warning?: unknown };
 
 export class Msg<T = unknown> {
   success: boolean;
   msg: string;
   obj: T | null;
+  /** A write that landed with something after it that did not, already localized
+   *  by the server. Never set on a failure -- that is what msg is for. */
+  warning: string;
 
-  constructor(success: boolean = false, msg: string = '', obj: T | null = null) {
+  constructor(success: boolean = false, msg: string = '', obj: T | null = null, warning: string = '') {
     this.success = success;
     this.msg = msg;
     this.obj = obj;
+    this.warning = warning;
   }
 }
 
@@ -47,6 +51,9 @@ export class HttpUtil {
       ) {
         getMessage().warning(i18next.t('pages.inbounds.toasts.savedNodeOfflineWillSync'));
       }
+      // Longer than the default: nobody can connect until the operator acts on
+      // it, so this is not a toast to blink past.
+      if (msg.warning) getMessage().warning(msg.warning, 10);
       return;
     }
     getMessage().error(msg.msg);
@@ -62,7 +69,7 @@ export class HttpUtil {
     }
     if (typeof data === 'object' && 'success' in (data as object)) {
       const d = data as RespEnvelope;
-      return new Msg(Boolean(d.success), typeof d.msg === 'string' ? d.msg : '', d.obj ?? null);
+      return new Msg(Boolean(d.success), typeof d.msg === 'string' ? d.msg : '', d.obj ?? null, typeof d.warning === 'string' ? d.warning : '');
     }
     return typeof data === 'object' ? (data as Msg) : new Msg(false, 'unknown data:', data);
   }
