@@ -8,6 +8,23 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An inbound can no longer take the panel's own port.** The conflict check
+  looked at other inbounds and at Xray's internal API port, but never at the two
+  ports the panel process binds itself — the web panel (2053 by default) and the
+  subscription server (2096, on every interface, enabled by default). Both are in
+  Cloudflare's proxied-HTTPS set, which is exactly why an operator picks them for
+  a CDN-frontable inbound. The panel accepted it, and Xray then failed to bind
+  and exited: not that one inbound, the whole process, so every client on the box
+  went offline and the watchdog restarted it into the same failure every couple
+  of seconds while the panel showed the inbound as enabled.
+  **What you will notice:** creating or editing such an inbound is refused, naming
+  which listener holds the port. A UDP-only inbound may still share it, since both
+  panel listeners are TCP. If you already have an inbound sitting on one of those
+  ports, it must be moved to a free port before any other edit to it will save —
+  it is already stopping Xray from starting. Turning the subscription server off
+  releases its port. Where `PUI_PORT` is set, that is the port reserved, not the
+  one stored in settings.
+
 - **Upgrading now builds the AmneziaWG kernel module.** `install.sh` registered
   it through DKMS; `update.sh` never mentioned it. So a panel installed before
   AmneziaWG shipped and upgraded the ordinary way never got the module, however
