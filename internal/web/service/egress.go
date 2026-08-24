@@ -28,6 +28,7 @@ import (
 var (
 	ErrEgressUnknownType      = errors.New("egress: no driver serves this type")
 	ErrEgressTargetUnresolved = errors.New("egress: the target names no outbound or balancer")
+	ErrEgressUnrealisable     = errors.New("egress: its own driver cannot derive what the kernel needs")
 	ErrEgressNoIngressDevice  = errors.New("egress: this protocol has no ingress device to select on")
 	ErrEgressMasterLocal      = errors.New("egress: egress is master-local while the id is a global key")
 	ErrEgressInUse            = errors.New("egress: the egress still serves inbounds")
@@ -398,6 +399,24 @@ func egressFronts(egressType string) bool {
 	return fronts
 }
 
+/*
+egressDriverFills asks the row's own driver to derive what the kernel needs.
+
+Fill is where a driver reads its settings, so this is the only thing that can
+tell a saveable row from one that will fail to be realised — and the manager
+zeroes a failed Fill and carries on, so nothing downstream ever says it again.
+*/
+func egressDriverFills(row *model.Egress) error {
+	driver, known := egressDriverRegistry.For(row.Type)
+	if !known {
+		return nil
+	}
+	if _, err := driver.Fill(egressRow(row)); err != nil {
+		return fmt.Errorf("%w: %w", ErrEgressUnrealisable, err)
+	}
+	return nil
+}
+
 func (s *EgressService) validate(row *model.Egress) error {
 	_, known := egressDriverRegistry.For(row.Type)
 	if !known {
@@ -408,8 +427,18 @@ func (s *EgressService) validate(row *model.Egress) error {
 	if !row.Enable {
 		return nil
 	}
+	/*
+		The half validate used to skip outright. An uplink's settings are read by
+		nothing but its own driver, so this is the only check that can refuse one
+		that cannot be realised — and until it existed, a typo in an Address saved
+		cleanly, Fill failed later at plan time, and the fwmark rule was silently
+		never installed while the rule still emitted a marked outbound.
+
+		Not applied to a front: its Fill derives a device Xray creates, so it
+		answers for the running process rather than for these settings.
+	*/
 	if !egressFronts(row.Type) {
-		return nil
+		return egressDriverFills(row)
 	}
 	resolves, err := egressTargetResolves(row.Target)
 	if err != nil {

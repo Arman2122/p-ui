@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An uplink the panel cannot actually configure is no longer offered as a
+  routing destination.** An uplink was saved without its own settings ever being
+  read, so a typo in its address was accepted — and the routing compiler kept
+  offering it, because the core reports a device name for an uplink without
+  looking at its configuration. The rule then compiled to a marked outbound
+  while the kernel rule that catches that mark was silently not installed, and a
+  mark nothing matches falls through to the ordinary route: every client on that
+  rule left with the server's own public address, with the rule shown as
+  healthy.
+  **What you will notice:** saving an uplink whose settings cannot be realised
+  now fails with the driver's own reason. An uplink already stored in that state
+  disappears from the destination picker and any rule naming it is refused until
+  it is fixed — the traffic stops rather than leaving with the wrong identity.
+
 - **A routing rule the compiler would drop is now refused instead of stored.**
   The compile ran on every config build and its diagnostics were thrown away, so
   a rule the planner marks inert saved cleanly, appeared in the list as active,
