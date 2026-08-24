@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { intentToRule, ruleToIntent } from '@/schemas/api/routing';
 import type { RoutingRuleRecord } from '@/schemas/api/routing';
+import { expectResolved } from './routing-intent-helpers';
 
 const RECORD: RoutingRuleRecord = {
   id: 7,
@@ -26,12 +27,12 @@ describe('a rule survives the editor round trip', () => {
   it('keeps the remark, which the panel also writes its own disable reason into', () => {
     const shape = intentToRule(RECORD, tagOf);
     expect(shape.remark).toBe('ads to the blackhole');
-    expect(ruleToIntent(shape, idOf).remark).toBe('ads to the blackhole');
+    expect(expectResolved(ruleToIntent(shape, idOf)).remark).toBe('ads to the blackhole');
   });
 
   it('keeps it across a toggle, which never opens the form at all', () => {
     const shape = intentToRule(RECORD, tagOf);
-    const payload = { ...ruleToIntent(shape, idOf), enable: false };
+    const payload = { ...expectResolved(ruleToIntent(shape, idOf)), enable: false };
     expect(payload.remark).toBe('ads to the blackhole');
     expect(payload.enable).toBe(false);
   });
@@ -52,6 +53,6 @@ describe('a rule survives the editor round trip', () => {
 
   it('leaves an empty remark empty rather than inventing one', () => {
     const shape = intentToRule({ ...RECORD, remark: '' }, tagOf);
-    expect(ruleToIntent(shape, idOf).remark).toBe('');
+    expect(expectResolved(ruleToIntent(shape, idOf)).remark).toBe('');
   });
 });

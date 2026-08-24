@@ -8,6 +8,29 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A routing rule scoped to one inbound can no longer be silently widened to
+  all of them.** The panel resolved a rule's inbound tags to ids before saving,
+  and read "nothing resolved" as "the operator chose every inbound". Three
+  ordinary situations produce exactly that, and each of them persisted the
+  widened rule on the very next click:
+  an inbound that has been **disabled** (it stops being a routing subject);
+  an inbound that has been **deleted** (its rule is left naming nothing);
+  and a page where the inbound list had **not finished loading** or its request
+  failed, which is silent by design and leaves the list empty.
+  A rule that blocked one customer began blocking every client on the box; a
+  rule sending one customer through an uplink sent everyone.
+  **What you will notice:** editing such a rule is now refused with a message
+  naming the inbound the panel could not resolve, and toggling one on or off
+  changes only that — it no longer recomputes the rule's scope, destination or
+  matchers.
+  **Worth a review:** the stored scope of a widened rule is indistinguishable
+  from one an operator deliberately set to every inbound, so the panel cannot
+  find them for you. Check the scope of any rule that named an inbound you have
+  since disabled or deleted, and of any rule you toggled while the page was
+  still loading. Re-enabling a rule whose inbound was deleted now fails with an
+  error rather than appearing to work; that rule needs its inbound list set
+  again.
+
 - **Switching the Xray version no longer takes the proxy down when it fails.**
   The update stopped Xray first and downloaded afterwards, and every failure in
   between — a release asset missing for your architecture, a checksum mismatch, a

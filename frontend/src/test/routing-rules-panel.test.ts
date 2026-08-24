@@ -6,10 +6,12 @@ import {
   ingressIdsToArray,
   intentToRule,
   intersectMask,
+  recordToPayload,
   ruleToIntent,
   type RoutingRuleRecord,
   type RoutingSubjectView,
 } from '@/schemas/api/routing';
+import { expectResolved } from './routing-intent-helpers';
 
 function record(over: Partial<RoutingRuleRecord> = {}): RoutingRuleRecord {
   return {
@@ -43,10 +45,10 @@ describe('intent and xray rule shapes', () => {
   });
 
   it('converts an edited rule back to intent, resolving tags to inbound ids', () => {
-    const payload = ruleToIntent(
+    const payload = expectResolved(ruleToIntent(
       { enabled: true, inboundTag: ['wg-home'], ip: ['1.1.1.1'], outboundTag: 'warp' },
       (tag) => (tag === 'wg-home' ? 2 : undefined),
-    );
+    ));
 
     expect(payload.ingressScope).toBe('selected');
     expect(JSON.parse(payload.ingressIds)).toEqual([2]);
@@ -58,13 +60,67 @@ describe('intent and xray rule shapes', () => {
   /* Naming no inbound means every inbound, which is a scope rather than an
      empty rule: emitting selected-with-nothing would be refused at save. */
   it('reads a rule that names no inbound as the all scope', () => {
-    expect(ruleToIntent({ outboundTag: 'warp' }, () => undefined).ingressScope).toBe('all');
+    expect(expectResolved(ruleToIntent({ outboundTag: 'warp' }, () => undefined)).ingressScope).toBe('all');
+  });
+
+  /*
+    And its opposite, which used to be indistinguishable from it.
+
+    A rule that NAMES an inbound whose tag no longer resolves is not a rule that
+    names none. Subjects() omits a disabled inbound, PruneInbound leaves a
+    deleted one's rule naming nothing, and the subjects query is silent with an
+    empty fallback while it is in flight — so all three came back as scope 'all'
+    and were persisted by the very next toggle. A rule written for one customer
+    started governing every client on the box.
+  */
+  it('refuses a rule whose named inbound cannot be resolved', () => {
+    const shape = intentToRule(record({ ingressIds: '[3]' }), () => undefined);
+    expect(shape.inboundTag).toEqual(['#3']);
+
+    const result = ruleToIntent(shape, () => undefined);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.unresolved).toEqual(['#3']);
+  });
+
+  // Narrowing silently is the same defect pointing the other way.
+  it('refuses when only some of the named inbounds resolve', () => {
+    const result = ruleToIntent(
+      { inboundTag: ['wg-home', 'gone'], outboundTag: 'warp' },
+      (tag) => (tag === 'wg-home' ? 2 : undefined),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.unresolved).toEqual(['gone']);
+  });
+
+  /*
+    A toggle must keep working for exactly the rules the refusal protects.
+
+    Once an unresolvable tag is refused, a toggle routed through the editor's
+    shape would refuse to flip a rule whose inbound is disabled — the right
+    answer for an edit, the wrong one for changing one flag. Reading the stored
+    row keeps the scope the operator set and never consults the map at all.
+  */
+  it('toggles a rule whose inbound cannot be resolved, without touching its scope', () => {
+    const stored = record({ ingressIds: '[3]', criteria: '{"domain":["x.com"]}', destTag: 'warp' });
+
+    // The round trip cannot serve this rule any more, which is the whole point.
+    expect(ruleToIntent(intentToRule(stored, () => undefined), () => undefined).ok).toBe(false);
+
+    const payload = { ...recordToPayload(stored), enable: false };
+
+    expect(payload.ingressScope).toBe('selected');
+    expect(payload.ingressIds).toBe('[3]');
+    expect(JSON.parse(payload.criteria)).toEqual({ domain: ['x.com'] });
+    expect(payload.destTag).toBe('warp');
+    expect(payload.enable).toBe(false);
   });
 
   it('survives a round trip without losing a matcher', () => {
     const before = record({ criteria: '{"domain":["x.com"],"ip":["10.0.0.0/8"],"port":"80"}' });
     const shape = intentToRule(before, () => 'wg-home');
-    const after = ruleToIntent(shape, () => 2);
+    const after = expectResolved(ruleToIntent(shape, () => 2));
 
     expect(JSON.parse(after.criteria)).toEqual({
       domain: ['x.com'], ip: ['10.0.0.0/8'], port: '80',
@@ -74,7 +130,7 @@ describe('intent and xray rule shapes', () => {
   it('keeps a balancer destination a balancer', () => {
     const shape = intentToRule(record({ destKind: 'balancer', destTag: 'lb' }), () => 'wg-home');
     expect(shape.balancerTag).toBe('lb');
-    expect(ruleToIntent(shape, () => 2).destKind).toBe('balancer');
+    expect(expectResolved(ruleToIntent(shape, () => 2)).destKind).toBe('balancer');
   });
 });
 

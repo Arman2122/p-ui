@@ -7,6 +7,7 @@ import {
   ruleToIntent,
   type RoutingRuleRecord,
 } from '@/schemas/api/routing';
+import { expectResolved } from './routing-intent-helpers';
 
 const NO_ID = () => undefined;
 
@@ -35,7 +36,7 @@ tag no Xray config contains and match nothing.
 */
 describe('choosing an uplink in the destination picker', () => {
   it('is stored as an exit id, not as an outbound tag', () => {
-    const payload = ruleToIntent({ outboundTag: exitTagFor(4) }, NO_ID);
+    const payload = expectResolved(ruleToIntent({ outboundTag: exitTagFor(4) }, NO_ID));
 
     expect(payload.destKind).toBe('exit');
     expect(payload.destExitId).toBe(4);
@@ -52,7 +53,7 @@ describe('choosing an uplink in the destination picker', () => {
   /* An ordinary outbound must be untouched by any of this: the prefix exists so
      the two can share one control, not so one can shadow the other. */
   it('leaves an ordinary outbound alone', () => {
-    const payload = ruleToIntent({ outboundTag: 'warp' }, NO_ID);
+    const payload = expectResolved(ruleToIntent({ outboundTag: 'warp' }, NO_ID));
 
     expect(payload.destKind).toBe('outbound');
     expect(payload.destTag).toBe('warp');
@@ -60,7 +61,7 @@ describe('choosing an uplink in the destination picker', () => {
   });
 
   it('leaves a balancer alone', () => {
-    const payload = ruleToIntent({ balancerTag: 'lb' }, NO_ID);
+    const payload = expectResolved(ruleToIntent({ balancerTag: 'lb' }, NO_ID));
 
     expect(payload.destKind).toBe('balancer');
     expect(payload.destTag).toBe('lb');
