@@ -31,6 +31,15 @@ secure_boot_blocks() {
     mokutil --sb-state 2>/dev/null | grep -qi "SecureBoot enabled"
 }
 
+# source_fingerprint identifies the vendored tree by CONTENT. Paths and bytes
+# only: cp -a and tar both preserve mtimes, which are not a semantic change.
+source_fingerprint() {
+    (cd "$1/src" && find . -type f -print0 | LC_ALL=C sort -z |
+        xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+}
+
+STAMP_FILE="/var/lib/misc/amneziawg-source.sha256"
+
 ensure_build_deps() {
     local missing=()
     command -v dkms >/dev/null 2>&1 || missing+=(dkms)
@@ -66,12 +75,17 @@ install_module() {
     fi
     ensure_build_deps || return 1
 
-    # Already built for THIS kernel: leave it alone. dkms status is the only
-    # honest source -- a loaded module says nothing about the next kernel.
+    # Built for this kernel AND from this source: dkms status alone is not
+    # identity, since MODULE_VERSION is pinned upstream at 1.0.0 forever.
+    want_fingerprint="$(source_fingerprint "$vendored")"
+    have_fingerprint="$(cat "$STAMP_FILE" 2>/dev/null || true)"
     if dkms status -m "$MODULE_NAME" -v "$MODULE_VERSION" 2>/dev/null | grep -q "$(uname -r)"; then
-        green "AmneziaWG $MODULE_VERSION already registered for $(uname -r)"
-        modprobe "$MODULE_NAME" 2>/dev/null || true
-        return 0
+        if [[ "$want_fingerprint" == "$have_fingerprint" ]]; then
+            green "AmneziaWG $MODULE_VERSION already registered for $(uname -r)"
+            modprobe "$MODULE_NAME" 2>/dev/null || true
+            return 0
+        fi
+        yellow "The vendored AmneziaWG source changed; rebuilding for $(uname -r)"
     fi
 
     # Re-register from scratch, so a half-registered tree left by an interrupted
@@ -100,12 +114,16 @@ install_module() {
     # every device creation fails until something happens to modprobe it.
     echo "$MODULE_NAME" > /etc/modules-load.d/amneziawg.conf
 
+    # Stamped only after a build that loaded, so a failed one is retried.
+    mkdir -p "$(dirname "$STAMP_FILE")"
+    echo "$want_fingerprint" > "$STAMP_FILE"
+
     green "AmneziaWG installed and loaded for $(uname -r)"
 }
 
 remove_module() {
     modprobe -r "$MODULE_NAME" 2>/dev/null || true
-    rm -f /etc/modules-load.d/amneziawg.conf
+    rm -f /etc/modules-load.d/amneziawg.conf "$STAMP_FILE"
     dkms remove -m "$MODULE_NAME" -v "$MODULE_VERSION" --all >/dev/null 2>&1 || true
     rm -rf "$SOURCE_DIR"
     green "AmneziaWG removed"

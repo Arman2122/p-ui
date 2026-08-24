@@ -1046,6 +1046,17 @@ update_p-ui() {
     echo -e "${green}Changing owner...${plain}"
     chown -R root:root ${pui_folder} > /dev/null 2>&1
 
+    # The same optional-by-design build install.sh runs. Without it an install
+    # that predates AmneziaWG never registers the module, however often it updates.
+    if [[ -x ${pui_folder}/awg-dkms.sh && -d ${pui_folder}/amneziawg/src ]]; then
+        chmod +x ${pui_folder}/awg-dkms.sh > /dev/null 2>&1
+        echo -e "${yellow}Building the AmneziaWG kernel module, which takes a minute${plain}"
+        if ! ${pui_folder}/awg-dkms.sh install ${pui_folder}/amneziawg; then
+            echo -e "${yellow}AmneziaWG is unavailable on this host; every other protocol still works${plain}"
+            echo -e "${yellow}Retry later with: ${pui_folder}/awg-dkms.sh install${plain}"
+        fi
+    fi
+
     if [ -f "${pui_folder}/bin/config.json" ]; then
         echo -e "${green}Changing on config file permissions...${plain}"
         chmod 640 ${pui_folder}/bin/config.json > /dev/null 2>&1
