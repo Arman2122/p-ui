@@ -28,7 +28,7 @@ import {
   useRoutingRulesQuery,
   useRoutingSubjectsQuery,
 } from '@/api/queries/useRoutingQuery';
-import { intentToRule, ruleToIntent, type XrayRuleShape } from '@/schemas/api/routing';
+import { intentToRule, recordToPayload, ruleToIntent, type XrayRuleShape } from '@/schemas/api/routing';
 import type { RoutingSubject, RuleRow } from './types';
 import type { XraySettingsValue, SetTemplate } from '@/hooks/useXraySetting';
 import type { RuleObject } from '@/schemas/routing';
@@ -304,9 +304,14 @@ export default function RoutingTab({
       return;
     }
     if (editingSource === 'intent') {
-      const payload = ruleToIntent(rule as XrayRuleShape, (tag) => idOfTagRef.current.get(tag));
+      const result = ruleToIntent(rule as XrayRuleShape, (tag) => idOfTagRef.current.get(tag));
+      if (!result.ok) {
+        // The modal stays open on purpose: the operator's edits are still in it.
+        message.error(t('pages.xray.routing.unresolvedInbound', { tags: result.unresolved.join(', ') }));
+        return;
+      }
       const record = editingIndex == null ? null : intentRecordsRef.current[editingIndex];
-      void (record ? routingMut.update(record.id, payload) : routingMut.add(payload));
+      void (record ? routingMut.update(record.id, result.payload) : routingMut.add(result.payload));
       setRuleModalOpen(false);
       return;
     }
@@ -375,12 +380,9 @@ export default function RoutingTab({
     const row = rowAt(idx);
     if (row?.source === 'intent') {
       const record = intentRecordsRef.current[row.storeIndex ?? 0];
-      if (record) {
-        const shape = intentToRule(record, (id) => tagOfInboundRef.current.get(id));
-        void routingMut.update(record.id, {
-          ...ruleToIntent(shape, (tag) => idOfTagRef.current.get(tag)), enable: enabled,
-        });
-      }
+      /* Straight from the stored row. Round-tripping through the editor's shape
+         recomputed scope, criteria and destination from a toggle of one flag. */
+      if (record) void routingMut.update(record.id, { ...recordToPayload(record), enable: enabled });
       return;
     }
     const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);

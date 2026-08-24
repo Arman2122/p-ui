@@ -189,10 +189,40 @@ function destTagFor(record: RoutingRuleRecord): string {
   return record.destTag ?? '';
 }
 
+/* A stored rule already IS the payload. Rebuilding one through the editor's
+   xray shape is what let a toggle rewrite scope, criteria and destination. */
+export function recordToPayload(record: RoutingRuleRecord): RoutingRulePayload {
+  return {
+    enable: record.enable,
+    remark: record.remark,
+    ingressScope: record.ingressScope,
+    ingressIds: jsonText(record.ingressIds, '[]'),
+    destKind: record.destKind,
+    destTag: record.destTag ?? '',
+    destExitId: record.destExitId ?? null,
+    criteria: jsonText(record.criteria, '{}'),
+    inspect: record.inspect,
+  };
+}
+
+/* Both columns are strings on the wire; the schema types them as unions because
+   the editor holds the parsed forms. */
+function jsonText(raw: string | unknown[] | Record<string, unknown>, empty: string): string {
+  if (typeof raw === 'string') return raw || empty;
+  return JSON.stringify(raw);
+}
+
+/* Refusing rather than returning a payload, because the scope used to be
+   INFERRED from what survived resolution: a rule naming one inbound whose tag
+   did not resolve came back naming every inbound instead. */
+export type IntentResult =
+  | { ok: true; payload: RoutingRulePayload }
+  | { ok: false; unresolved: string[] };
+
 export function ruleToIntent(
   rule: XrayRuleShape,
   idOf: (tag: string) => number | undefined,
-): RoutingRulePayload {
+): IntentResult {
   const criteria: Record<string, string> = {};
   for (const [formKey, ruleKey] of Object.entries(LIST_KEYS)) {
     const value = rule[ruleKey];
@@ -202,15 +232,24 @@ export function ruleToIntent(
     const value = rule[scalar];
     if (typeof value === 'string' && value !== '') criteria[scalar] = value;
   }
-  const ids = (rule.inboundTag ?? []).map((tag) => idOf(tag)).filter((id): id is number => id != null);
+  const tags = rule.inboundTag ?? [];
+  const ids = tags.map((tag) => idOf(tag)).filter((id): id is number => id != null);
+  /* Partial resolution refuses too: silently NARROWING a rule to the inbounds
+     that happened to resolve is the same defect pointing the other way. */
+  if (ids.length !== tags.length) {
+    return { ok: false, unresolved: tags.filter((tag) => idOf(tag) == null) };
+  }
   return {
-    enable: rule.enabled !== false,
-    remark: typeof rule.remark === 'string' ? rule.remark : '',
-    ingressScope: ids.length === 0 ? 'all' : 'selected',
-    ingressIds: JSON.stringify(ids),
-    ...destinationOf(rule),
-    criteria: criteriaFromForm(criteria),
-    inspect: false,
+    ok: true,
+    payload: {
+      enable: rule.enabled !== false,
+      remark: typeof rule.remark === 'string' ? rule.remark : '',
+      ingressScope: ids.length === 0 ? 'all' : 'selected',
+      ingressIds: JSON.stringify(ids),
+      ...destinationOf(rule),
+      criteria: criteriaFromForm(criteria),
+      inspect: false,
+    },
   };
 }
 

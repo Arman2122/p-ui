@@ -59,3 +59,4 @@ export function chooseSelectOption(fieldId: string, optionText: string) {
   if (!option) throw new Error(`Option '${optionText}' not found for field '${fieldId}'`);
   fireEvent.click(option);
 }
+
