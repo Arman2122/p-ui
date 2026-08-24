@@ -33,10 +33,8 @@ func (t *Tgbot) HandleEvent(e eventbus.Event) {
 	if !t.isEventEnabled(e.Type) {
 		return
 	}
-	if e.Type != eventbus.EventLoginAttempt {
-		if !tgEventLimiter.Allow(e.Type, e.Source) {
-			return
-		}
+	if !tgEventLimiter.Allow(e.Type, eventbus.LimiterKey(e)) {
+		return
 	}
 	msg := t.formatEventMessage(e)
 	if msg != "" {

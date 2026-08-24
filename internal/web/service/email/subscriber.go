@@ -37,10 +37,8 @@ func (s *Subscriber) HandleEvent(e eventbus.Event) {
 	if !s.isEventEnabled(e.Type) {
 		return
 	}
-	if e.Type != eventbus.EventLoginAttempt {
-		if !s.limiter.Allow(e.Type, e.Source) {
-			return
-		}
+	if !s.limiter.Allow(e.Type, eventbus.LimiterKey(e)) {
+		return
 	}
 	subject, body := s.formatMessage(e)
 	if subject == "" {

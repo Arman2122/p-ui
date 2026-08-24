@@ -50,3 +50,23 @@ func (r *RateLimiter) pruneLocked(now time.Time) {
 		}
 	}
 }
+
+/*
+LimiterKey is the cooldown bucket an event shares with its own kind.
+
+For everything else that is the source. For a login attempt it must not be:
+Source is the client IP, so an attacker rotating addresses — or rotating an
+X-Forwarded-For header behind a trusted proxy — mints a fresh bucket per
+request and the cooldown never applies. Keying on the outcome instead gives a
+closed two-value space the caller cannot influence, and keeps a real admin's
+success notification out of the same bucket as the flood drowning it.
+*/
+func LimiterKey(e Event) string {
+	if e.Type != EventLoginAttempt {
+		return e.Source
+	}
+	if data, ok := e.Data.(*LoginEventData); ok && data.Status != "" {
+		return data.Status
+	}
+	return "fail"
+}

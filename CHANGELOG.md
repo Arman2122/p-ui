@@ -197,6 +197,18 @@ here; the git log is the full record.
 
 ### Security
 
+- A login attempt can no longer be used to flood the operator's inbox or
+  Telegram admins. `login.attempt` was exempt from the notification cooldown on
+  both subscribers, and `/login` needs no authentication, so anyone could loop
+  requests against it and have the panel send one email and one Telegram message
+  per round trip for as long as they cared to. Both are on by default. The
+  Telegram half also risks the bot being rate-limited, which silently stops
+  `xray.crash` and `node.down` reaching anyone. Login notifications are now
+  held to the same one-per-minute cooldown as everything else, bucketed by
+  outcome rather than by client address so that rotating the address does not
+  reset it — and a real sign-in is still reported while failures are being
+  throttled alongside it.
+
 - An upgrade no longer wipes configured per-client IP limits. The boot-time
   migration that zeroed them whenever fail2ban could not enforce is retired: it
   destroyed stored configuration to reflect a host capability the panel already
