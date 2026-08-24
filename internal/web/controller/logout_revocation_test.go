@@ -11,6 +11,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	panelservice "github.com/Arman2122/p-ui/internal/web/service/panel"
 	"github.com/Arman2122/p-ui/internal/web/session"
 )
 
@@ -126,5 +127,24 @@ func TestLogoutStillClearsTheBrowserWhenRevocationFails(t *testing.T) {
 	}
 	if !cleared {
 		t.Fatal("the browser's copy was not expired, so the operator still looks signed in")
+	}
+}
+
+/*
+The panic the shuffle found.
+
+The test above closes the database, but CloseDB shuts the pool and leaves the
+global handle in place — so it only ever produced the error it was written for
+when some earlier test in this package had opened one. Run first, the handle is
+nil, BumpLoginEpoch dereferences it, and logout panics instead of logging and
+clearing the cookie. That is precisely the outcome its own doc comment forbids,
+and no ordering makes it not a bug.
+*/
+func TestRevokingSessionsWithNoDatabaseIsAnErrorNotAPanic(t *testing.T) {
+	if database.GetDB() != nil {
+		t.Skip("another test opened a database; this one is about there being none")
+	}
+	if err := (&panelservice.UserService{}).BumpLoginEpoch(); err == nil {
+		t.Fatal("revoking sessions with no database reported success")
 	}
 }

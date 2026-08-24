@@ -107,6 +107,11 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 
 func (s *UserService) BumpLoginEpoch() error {
 	db := database.GetDB()
+	if db == nil {
+		// logout's contract is that a failed revocation is logged and the browser
+		// is still cleared. A nil dereference here would defeat exactly that.
+		return errors.New("panel: no database connection to revoke sessions with")
+	}
 	return db.Model(model.User{}).
 		Where("1 = 1").
 		Update("login_epoch", gorm.Expr("login_epoch + 1")).
