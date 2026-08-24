@@ -130,6 +130,13 @@ func (p Params) Validate() error {
 		}
 	}
 
+	// Checked against what the encoder will actually send, not the literal
+	// fields: a cleared header goes out as WireGuard's own value, which can
+	// collide with a custom range the bare zero never would have.
+	if err := headersDoNotOverlapAfterClearing(p); err != nil {
+		return err
+	}
+
 	if p.HeaderProtectionKey != "" {
 		key, err := base64.StdEncoding.DecodeString(p.HeaderProtectionKey)
 		if err != nil || len(key) != HeaderProtectionKeySize {
@@ -214,4 +221,33 @@ func (p Params) WithDefaultHeaders() Params {
 		}
 	}
 	return p
+}
+
+/*
+headersDoNotOverlapAfterClearing repeats the overlap check over what the encoder
+will really send.
+
+The loop above skips a zero header, which is right while zero means "leave it
+alone". Once the panel substitutes WireGuard's own 1/2/3/4 for a cleared one,
+an operator's custom range can collide with a value that was never in the struct
+— H1 = 1-5 beside three cleared headers is refused by the module and accepted by
+a check that only reads the fields.
+*/
+func headersDoNotOverlapAfterClearing(p Params) error {
+	names := [4]string{"h1", "h2", "h3", "h4"}
+	values := [4]uint64{p.H1, p.H2, p.H3, p.H4}
+	for i, value := range values {
+		if value == 0 {
+			values[i] = wgHeaderDefaults[i]
+		}
+	}
+	for i, left := range values {
+		for j := i + 1; j < len(values); j++ {
+			if headersOverlap(left, values[j]) {
+				return fmt.Errorf("%w: %s and %s collide once the cleared headers fall back to WireGuard's own %d-%d",
+					ErrHeaderOverlap, names[i], names[j], uint32(values[j]), uint32(values[j]>>32))
+			}
+		}
+	}
+	return nil
 }

@@ -1,6 +1,8 @@
 package awg
 
 import (
+	"encoding/binary"
+	"errors"
 	"testing"
 
 	"github.com/mdlayher/netlink"
@@ -14,6 +16,21 @@ func attrValue(t *testing.T, attrs []netlink.Attribute, kind uint16) (uint16, bo
 				t.Fatalf("attribute %d carries %d bytes, want 2", kind, len(attr.Data))
 			}
 			return uint16(attr.Data[0]) | uint16(attr.Data[1])<<8, true
+		}
+	}
+	return 0, false
+}
+
+// attrValue64 reads a header, which is a packed (hi<<32|lo) range rather than a
+// scalar, so the 2-byte reader above would answer the wrong number silently.
+func attrValue64(t *testing.T, attrs []netlink.Attribute, kind uint16) (uint64, bool) {
+	t.Helper()
+	for _, attr := range attrs {
+		if attr.Type == kind {
+			if len(attr.Data) != 8 {
+				t.Fatalf("attribute %d carries %d bytes, want 8", kind, len(attr.Data))
+			}
+			return binary.LittleEndian.Uint64(attr.Data), true
 		}
 	}
 	return 0, false
@@ -62,15 +79,63 @@ func TestPanelOwnedParametersAreWrittenEvenWhenZero(t *testing.T) {
 		}
 	}
 
-	// Not the panel's to clear: the module refuses four overlapping zeros, so
-	// their cleared state is WireGuard's 1/2/3/4 and that is F098's job.
-	for _, kind := range []struct {
-		name string
-		kind uint16
-	}{{"h1", devH1}, {"h2", devH2}, {"h3", devH3}, {"h4", devH4}} {
-		if hasAttr(attrs, kind.kind) {
-			t.Errorf("%s was written as zero; the module refuses four of those at once", kind.name)
+	/*
+		The headers are the panel's to clear too, since F098 — but never as zero.
+		The module refuses four overlapping zeros, so a cleared header goes out as
+		WireGuard's own message type, which is what a client with no h1..h4 in its
+		.conf falls back to. Measured: setting 1/2/3/4 is accepted and awg-tools
+		then reports no headers at all (RUNTIME-RESULTS §12).
+	*/
+	for _, header := range []struct {
+		name  string
+		kind  uint16
+		value uint64
+	}{
+		{"h1", devH1, HeaderRange(1, 1)},
+		{"h2", devH2, HeaderRange(2, 2)},
+		{"h3", devH3, HeaderRange(3, 3)},
+		{"h4", devH4, HeaderRange(4, 4)},
+	} {
+		got, present := attrValue64(t, attrs, header.kind)
+		if !present {
+			t.Errorf("%s is not in the message, so a device that had a custom header keeps it while every .conf has dropped it", header.name)
+			continue
 		}
+		if got != header.value {
+			t.Errorf("%s = %d, want WireGuard's own %d", header.name, got, header.value)
+		}
+	}
+}
+
+// A custom header still goes out as itself; only an unset one is substituted.
+func TestACustomHeaderIsNotOverwrittenByItsClearedValue(t *testing.T) {
+	attrs := encodeParams(Params{H1: HeaderRange(10, 19)}, true)
+
+	got, present := attrValue64(t, attrs, devH1)
+	if !present {
+		t.Fatal("h1 is not in the message")
+	}
+	if want := HeaderRange(10, 19); got != want {
+		t.Fatalf("h1 = %d, want the operator's own %d", got, want)
+	}
+	// And its three cleared siblings do not collide with it.
+	if err := (Params{H1: HeaderRange(10, 19)}).Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+/*
+The substitution creates an overlap the bare fields never showed: a custom range
+covering 1, 2, 3 or 4 collides with the cleared siblings the encoder is about to
+send, and the module refuses the merged state.
+*/
+func TestACustomHeaderThatCoversAClearedOneIsRefused(t *testing.T) {
+	err := Params{H1: HeaderRange(1, 5)}.Validate()
+	if err == nil {
+		t.Fatal("h1 = 1-5 was accepted beside three cleared headers; the module refuses that merged state")
+	}
+	if !errors.Is(err, ErrHeaderOverlap) {
+		t.Fatalf("Validate() = %v, want %v", err, ErrHeaderOverlap)
 	}
 }
 

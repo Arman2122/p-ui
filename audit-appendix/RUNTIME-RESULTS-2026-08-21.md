@@ -474,6 +474,44 @@ noise. Deliberately deferred to that slice, not forgotten.
 
 ---
 
+## 12. F098 — what a CLEARED header is, measured
+
+Option (i) needed grounding before it could be encoded, because "cleared" has
+three candidate meanings and only one of them is a thing the module accepts.
+
+On a throwaway `awgh0` device:
+
+```
+1. awg set awgh0 h1 10 h2 20 h3 30 h4 40      ACCEPTED
+   awg show awgh0  ->  h1: 10  h2: 20  h3: 30  h4: 40
+
+2. awg set awgh0 h1 1 h2 2 h3 3 h4 4          ACCEPTED
+   awg show awgh0  ->  (no header lines at all)
+
+3. awg set awgh0 h1 0 h2 0 h3 0 h4 0          EINVAL
+   awg show awgh0  ->  (no header lines)
+```
+
+Line 2 is the answer and it is stronger than "1/2/3/4 happens to work":
+awg-tools **stops reporting the headers entirely** once they are set to
+WireGuard's own message types. The tooling's own definition of "this device has
+no custom headers" is exactly the values option (i) writes, so the panel and
+`awg show` agree about what a cleared inbound looks like.
+
+Zero is not available as a clearing value (line 3), for the reason already
+recorded in §6: `netlink.c` validates the four as ranges and four zeros collide.
+
+### The consequence the substitution creates
+
+`Params.Validate` skipped a zero header on the reasoning that unset headers
+cannot collide. Once cleared means 1/2/3/4, they can: `H1 = 1-5` beside three
+cleared siblings is refused by the module and accepted by a check that reads
+only the struct fields. So the overlap check now runs over the substituted set —
+the same lesson as F095, that the module validates the MERGED device state and
+the panel has to validate what it is really about to send.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.

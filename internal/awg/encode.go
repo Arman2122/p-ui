@@ -114,6 +114,43 @@ func panelOwnedParams(p Params) []struct {
 }
 
 /*
+wgHeaderDefaults is what a header CLEARED means, and it is not zero.
+
+A client handed a config with no h1..h4 falls back to WireGuard's own message
+types, so the device has to agree or nothing it sends is recognisable. Zero is
+not available to say it either: the module validates the four as ranges and
+four zeros overlap, so it refuses them outright (RUNTIME-RESULTS §12). Setting
+1/2/3/4 is accepted and awg-tools then stops reporting the headers at all,
+which is the module's own way of saying "plain WireGuard".
+*/
+var wgHeaderDefaults = [4]uint64{HeaderRange(1, 1), HeaderRange(2, 2), HeaderRange(3, 3), HeaderRange(4, 4)}
+
+// panelOwnedHeaders is panelOwnedParams for the four headers: the same "the
+// panel decides these" set, with the one difference that their cleared value is
+// WireGuard's default rather than zero.
+func panelOwnedHeaders(p Params) []struct {
+	kind  uint16
+	value uint64
+} {
+	kinds := [4]uint16{devH1, devH2, devH3, devH4}
+	values := [4]uint64{p.H1, p.H2, p.H3, p.H4}
+	out := make([]struct {
+		kind  uint16
+		value uint64
+	}, 0, len(kinds))
+	for i, value := range values {
+		if value == 0 {
+			value = wgHeaderDefaults[i]
+		}
+		out = append(out, struct {
+			kind  uint16
+			value uint64
+		}{kinds[i], value})
+	}
+	return out
+}
+
+/*
 encodeParams emits only the parameters that were set, unless the caller is the
 panel writing the ones it owns.
 
@@ -163,10 +200,17 @@ func encodeParams(p Params, replace bool) []netlink.Attribute {
 		}
 		u16(owned.kind, owned.value)
 	}
-	u64(devH1, p.H1)
-	u64(devH2, p.H2)
-	u64(devH3, p.H3)
-	u64(devH4, p.H4)
+	if replace {
+		for _, owned := range panelOwnedHeaders(p) {
+			attrs = append(attrs, netlink.Attribute{Type: owned.kind, Data: nlU64(owned.value)})
+		}
+	} else {
+		// A peer or key push carries no parameters, so it must change none.
+		u64(devH1, p.H1)
+		u64(devH2, p.H2)
+		u64(devH3, p.H3)
+		u64(devH4, p.H4)
+	}
 	str(devI1, p.I1)
 	str(devI2, p.I2)
 	str(devI3, p.I3)
