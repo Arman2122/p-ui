@@ -512,6 +512,56 @@ the panel has to validate what it is really about to send.
 
 ---
 
+## 13. F351 — the finding is right, and its fix was wrong in two directions
+
+Recorded next to §2, which is the same shape: a correct finding whose suggested
+remedy would not have held.
+
+### The scope is half the bug
+
+The finding names `internal/web/service/email/subscriber.go` and stops there.
+`internal/web/service/tgbot/tgbot_event.go:36` carries the **identical**
+exemption, byte for byte, against its own package-level limiter:
+
+```go
+if e.Type != eventbus.EventLoginAttempt {
+    if !tgEventLimiter.Allow(e.Type, e.Source) {
+        return
+    }
+}
+```
+
+Both ship enabled by default — `setting.go:155-156` puts `login.attempt` in the
+default value of *both* `tgEnabledEvents` and `smtpEnabledEvents`. So the email
+fix alone leaves the Telegram path flooding, and that path is the worse of the
+two: `SendMsgToTgbotAdmins` fans out to every admin, so the volume is multiplied,
+and exceeding the bot's own rate limit gets it throttled — which silently stops
+`xray.crash` and `node.down` reaching anyone at all. Denial of monitoring rather
+than an inbox nuisance.
+
+### The suggested key would have hidden the one event that matters
+
+The finding proposes `s.limiter.Allow(e.Type, "")` — a constant source, so a
+rotating attacker cannot mint a fresh bucket. That fixes the flood and creates a
+smaller problem: with one bucket for the whole event type, the attacker's
+failures and the operator's own successful sign-in share it. An admin logging in
+during an attack is inside the cooldown the attacker is holding open, and the one
+login notification an operator actually wants is the one that gets dropped.
+
+`LoginEventData.Status` is already normalised to exactly `"success"` or `"fail"`
+by the publisher (`tgbot_report.go:175-178`), so keying on it gives a closed
+two-value space that nothing outside the panel can influence, and keeps the two
+outcomes in separate buckets. That is what landed.
+
+### Why `e.Source` cannot be the key
+
+Worth stating explicitly, because it looks like a reasonable default: `Source` is
+`attempt.IP`, and `getRemoteIp` honours `X-Real-IP` / `X-Forwarded-For` when the
+peer is a trusted proxy. Behind a reverse proxy the bucket is chosen by a request
+header, so one attacker rotates it without rotating anything else.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
