@@ -8,6 +8,23 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **AmneziaWG custom headers survive a save, and clearing one reaches the
+  device.** h1..h4 and the rekey/keepalive timers are settable through the API
+  but not rendered by the inbound form, and the form saved only the fields it
+  knew — so the first innocuous edit in the panel, a rename or a port change,
+  deleted them from the stored config. The device did not lose them at the same
+  moment: an omitted value means "leave it alone" to the kernel, so it kept
+  running the operator's custom headers while every config the panel handed out
+  had none. Clearing a header was impossible for the same reason.
+  **What you will notice:** two groups of clients move in opposite directions on
+  the next apply, exactly as with the obfuscation-parameter fix. Clients holding
+  a config generated *after* the headers were silently dropped have been unable
+  to handshake ever since, and start working. Clients holding a config from
+  *before* that have been working against the stale device, and stop until they
+  re-fetch. If you set h1..h4 through the API and have since edited that inbound
+  in the panel, expect the second group. A cleared header now sets the device
+  back to WireGuard's own values rather than leaving the old ones in place.
+
 - **A save the core refused is no longer reported as a success.** For AmneziaWG,
   WireGuard and MTProto the panel converges the device itself — the push *is* the
   apply, and there is no later Xray restart that repairs it. A refused apply was
