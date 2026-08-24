@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -281,6 +283,17 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config) error {
 	if err != nil {
 		return err
 	}
+	/*
+		A floor, not a surface: nothing reads Diags at generate time, so a rule the
+		compiler drops here is otherwise invisible. Saving one is refused (F049) —
+		these are the ones that went inert afterwards, when an inbound or an exit
+		changed under them. L8 owns finding them a real home.
+	*/
+	for _, diag := range compiled.Refusals() {
+		logger.Warningf("routing: rule %d is inert for %s: %s %v",
+			diag.RuleID, diag.SubjectTag, diag.MessageKey, diag.Args)
+	}
+
 	if len(compiled.XrayRules) == 0 && len(compiled.Fronts) == 0 {
 		return nil
 	}
@@ -491,6 +504,14 @@ func (s *RoutingService) Add(ctx context.Context, rule *model.RoutingRule) (*mod
 		return nil, err
 	}
 	rule.Id = 0
+	candidate, cErr := s.candidateRules(rule)
+	if cErr != nil {
+		return nil, cErr
+	}
+	if err := s.refuseInertRule(ctx, candidate); err != nil {
+		return nil, err
+	}
+
 	var next int
 	if err := database.GetDB().Model(&model.RoutingRule{}).
 		Select("COALESCE(MAX(sort_index), -1) + 1").Scan(&next).Error; err != nil {
@@ -508,6 +529,13 @@ func (s *RoutingService) Update(ctx context.Context, rule *model.RoutingRule) (*
 		return nil, err
 	}
 	if err := destResolves(rule); err != nil {
+		return nil, err
+	}
+	candidate, cErr := s.candidateRules(rule)
+	if cErr != nil {
+		return nil, cErr
+	}
+	if err := s.refuseInertRule(ctx, candidate); err != nil {
 		return nil, err
 	}
 	err := database.GetDB().Model(&model.RoutingRule{}).Where("id = ?", rule.Id).Updates(map[string]any{
@@ -796,4 +824,107 @@ func exitLabel(row *model.Egress) string {
 		return row.Remark
 	}
 	return fmt.Sprintf("%s #%d", row.Type, row.Id)
+}
+
+/*
+RefusalError is a compile refusal on its way to the operator.
+
+It carries the diag's own message key and args rather than a sentence, because
+the panel ships two locales and the controller is where a key becomes text.
+*/
+type RefusalError struct {
+	Key  string
+	Args map[string]string
+}
+
+func (e *RefusalError) Error() string {
+	if len(e.Args) == 0 {
+		return e.Key
+	}
+	parts := make([]string, 0, len(e.Args))
+	for name, value := range e.Args {
+		parts = append(parts, name+"="+value)
+	}
+	sort.Strings(parts)
+	return e.Key + " (" + strings.Join(parts, " ") + ")"
+}
+
+/*
+refuseInertRule compiles a candidate rule set and refuses a save the planner
+would drop.
+
+Compiled.Refusals() had no production caller at all, so a rule the compiler
+marks inert was stored enabled, shown as active, and then silently not emitted —
+which for an exit rule means every client of that inbound leaves with the
+server's own address instead of through the uplink, with nothing anywhere saying
+so.
+
+Nothing is provisioned here. The real compile upserts a front row per device
+ingress; doing that for a rule that is about to be refused would leave the row
+behind, so this answers FrontIDFor unconditionally. KeyNoFront cannot fire as a
+result, which is correct: a missing front is an infrastructure failure the
+operator cannot fix by editing the rule.
+*/
+func (s *RoutingService) refuseInertRule(ctx context.Context, candidate []*model.RoutingRule) error {
+	subjects, err := s.Subjects(ctx)
+	if err != nil {
+		return err
+	}
+	exits, err := s.Exits(ctx)
+	if err != nil {
+		return err
+	}
+	blackhole, direct := outboundsByProtocol(templateOutbounds())
+	compiled := routing.Plan(routing.Input{
+		Rules: toPlanRules(candidate), Subjects: subjects, Exits: exits,
+		Blackhole: blackhole, Direct: direct,
+		FrontIDFor: func(int) (int, bool) { return 1, true },
+	})
+	for _, diag := range compiled.Refusals() {
+		if diag.MessageKey == "" {
+			continue
+		}
+		return &RefusalError{Key: diag.MessageKey, Args: diag.Args}
+	}
+	return nil
+}
+
+// templateOutbounds reads the operator's own outbound list, which is where
+// direct and block resolve from. An unreadable one answers nothing, and the
+// planner then refuses or synthesizes exactly as it does at generate time.
+func templateOutbounds() []map[string]any {
+	tmpl, err := (&SettingService{}).GetXrayConfigTemplate()
+	if err != nil || tmpl == "" {
+		return nil
+	}
+	var parsed struct {
+		Outbounds []map[string]any `json:"outbounds"`
+	}
+	if json.Unmarshal([]byte(tmpl), &parsed) != nil {
+		return nil
+	}
+	return parsed.Outbounds
+}
+
+// candidateRules is the stored set with one rule added or replacing its own id,
+// so a save is judged as the state it would produce.
+func (s *RoutingService) candidateRules(rule *model.RoutingRule) ([]*model.RoutingRule, error) {
+	stored, err := s.Rules()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*model.RoutingRule, 0, len(stored)+1)
+	replaced := false
+	for _, existing := range stored {
+		if rule.Id != 0 && existing.Id == rule.Id {
+			out = append(out, rule)
+			replaced = true
+			continue
+		}
+		out = append(out, existing)
+	}
+	if !replaced {
+		out = append(out, rule)
+	}
+	return out, nil
 }
