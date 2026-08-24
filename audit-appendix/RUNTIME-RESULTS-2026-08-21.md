@@ -374,6 +374,70 @@ said so.
 
 ---
 
+## 10. F095 — CONFIRMED, including the half-applied device
+
+Run on the VM against the loaded `amneziawg` module, on a throwaway
+`awgprobe0` device recreated between cases (device state MERGES, so reusing one
+silently answers a different question than the one asked).
+
+```
+s1..s4 all >= 12, with key            ACCEPTED   key on device: yes
+s3 unset (0), with key                EINVAL     key on device: no
+s3 = 5 (non-zero, below 12), key      EINVAL     key on device: no
+s3 = 12 exactly, with key             ACCEPTED   key on device: yes
+s3 = 11, with key                     EINVAL     key on device: no
+all four unset, with key              EINVAL     key on device: no
+s3 unset, NO key                      ACCEPTED   key on device: no
+s3 = 5, NO key                        ACCEPTED   key on device: no
+```
+
+So with a header-protection key set, **every** one of s1..s4 must be at least
+12, and zero is refused in exactly the same way as 5 — it is not "leave it
+alone". Without a key, any padding value passes. That is precisely the rule the
+panel's `Validate` was missing, and the `padding.value > 0 &&` guard was the
+whole of the gap.
+
+### The refusal does not roll back what it already wrote
+
+One call, `jc 4 jmin 40 jmax 70 s1 20 s2 30 header-protection-key <32B>`, s3/s4
+left unset:
+
+```
+$ awg set awgprobe0 jc 4 jmin 40 jmax 70 s1 20 s2 30 header-protection-key /root/hpk.key
+Unable to modify interface: Invalid argument
+
+$ awg show awgprobe0
+  jc: 4
+  jmin: 40
+  jmax: 70
+  s1: 20
+  s2: 30            <-- all of it landed
+  (no header protection key)
+```
+
+Everything except the key is applied and stays applied. So the pre-fix failure
+was not "the edit did nothing": it was a device carrying half the operator's
+obfuscation and none of the header protection, while every `.conf` the panel
+hands out claims a `HeaderProtectionKey` the server never installed. Header
+protection encrypts the header the server parses first, so not one packet from
+any client of that inbound is recognisable. Every 10s supervise pass replays the
+identical call and re-creates the identical half-state.
+
+### Correction to the finding's suggested check
+
+The audit says to "read dmesg for `S3 must be more then 12 to use
+headerProtection`". **No dmesg line is emitted at all** on this build — the
+module returns EINVAL silently. The operator's only signal is `awg`'s generic
+"Unable to modify interface: Invalid argument", and the panel does not even
+surface that (F266). Naming the field in the panel's own refusal is therefore
+the entire remedy, not a nicety.
+
+An operator who already has a half-applied device is repaired by the next apply
+once the parameters are valid, or by clearing the key; nothing needs to hunt for
+them.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.

@@ -139,7 +139,9 @@ func (p Params) Validate() error {
 			name  string
 			value uint16
 		}{{"s1", p.S1}, {"s2", p.S2}, {"s3", p.S3}, {"s4", p.S4}} {
-			if padding.value > 0 && padding.value < HeaderProtectionNonceSize {
+			// Zero is not "leave it alone" here: netlink.c validates the MERGED
+			// device state, so an unset padding is a refusal like any other short one.
+			if padding.value < HeaderProtectionNonceSize {
 				return fmt.Errorf("%w: %s is %d, and the nonce needs %d",
 					ErrPaddingTooSmall, padding.name, padding.value, HeaderProtectionNonceSize)
 			}
