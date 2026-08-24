@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A failed geofile update no longer corrupts the geofile or bounces Xray.**
+  The download opened the live `geoip.dat`/`geosite.dat` and truncated it to
+  zero before reading a single byte of the response, with no temporary file, no
+  verification and no rollback — and then restarted Xray whether or not the
+  download had succeeded. A connection dropped partway through, over exactly the
+  filtered links this panel is built for, left a corrupt geofile on disk and the
+  core restarted onto it. The fetch also had no timeout of any kind.
+  **What you will notice:** the file on disk is only ever replaced by a complete,
+  structurally verified download, and Xray is not restarted when an update
+  failed. A half-downloaded geofile is now refused with a message naming the
+  file; before, it was installed, and whether the core noticed depended on which
+  countries your routing rules happened to name.
+
 - **AmneziaWG custom headers survive a save, and clearing one reaches the
   device.** h1..h4 and the rekey/keepalive timers are settable through the API
   but not rendered by the inbound form, and the form saved only the fields it
