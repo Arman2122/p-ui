@@ -155,16 +155,18 @@ func Plan(in Input) Compiled {
 			out.NeedsRestart = true
 			// Strictly ahead of this front's own rules: a front is otherwise the one
 			// class of forwarded traffic exempt from the template's private block.
-			if in.Blackhole != "" {
-				out.XrayRules = append(out.XrayRules, guardRule(tag, in.Blackhole))
-			} else {
-				// Warn, not inert: refusing the front would take the ingress offline,
-				// which is worse than forwarding it without the private block.
-				out.Diags = append(out.Diags, Diag{
-					SubjectTag: subject.Tag, Severity: SeverityWarn, Pattern: pattern,
-					MessageKey: KeyNoDefaultOutbound, Args: map[string]string{"protocol": "blackhole"},
-				})
+			blackhole := in.Blackhole
+			if blackhole == "" {
+				// The guard is the whole reason a front is not exempt from the private
+				// block, so it is synthesized rather than skipped.
+				blackhole = synthBlockTag
+				if !emitted[synthBlockTag] {
+					emitted[synthBlockTag] = true
+					out.Outbounds = append(out.Outbounds, blackholeOutbound(synthBlockTag))
+					out.NeedsRestart = true
+				}
 			}
+			out.XrayRules = append(out.XrayRules, guardRule(tag, blackhole))
 		}
 
 		for _, rule := range rules {
@@ -258,10 +260,15 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 		}
 		body["outboundTag"] = mustJSON(in.Direct)
 	case DestBlock:
+		/*
+			A template with no blackhole outbound does not mean the operator wants
+			this rule to stop blocking. A blackhole has no egress, so supplying one
+			cannot leak anything the refusal was protecting.
+		*/
 		if in.Blackhole == "" {
-			diag.Severity, diag.Pattern, diag.MessageKey = SeverityInert, PatternInert, KeyNoDefaultOutbound
-			diag.Args = map[string]string{"protocol": "blackhole"}
-			return nil, diag, nil
+			outbound = blackholeOutbound(synthBlockTag)
+			body["outboundTag"] = mustJSON(synthBlockTag)
+			break
 		}
 		body["outboundTag"] = mustJSON(in.Blackhole)
 	case DestExit:
@@ -345,6 +352,14 @@ func findExit(exits []ResolvedExit, id int) (ResolvedExit, bool) {
 // exitOutboundTag names a synthesized outbound. The prefix round-trips through
 // this one function so nothing else has to know the shape.
 func exitOutboundTag(id int) string { return fmt.Sprintf("pex%d", id) }
+
+// synthBlockTag shares the reserved exit prefix but ends in letters, so it can
+// never collide with pex<id>. Validating operator tags against it is F202.
+const synthBlockTag = "pexblock"
+
+func blackholeOutbound(tag string) json.RawMessage {
+	return mustJSON(map[string]any{"tag": tag, "protocol": "blackhole"})
+}
 
 // synthesizedTag reads back the tag compileRule stamped, which is what identity
 // means for an outbound as far as xray-core's handler registry is concerned.
