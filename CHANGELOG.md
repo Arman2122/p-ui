@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **One broken AmneziaWG inbound no longer strips the obfuscation from the
+  others.** The convergence pass applied every AmneziaWG inbound's parameters
+  only if none of them had failed first — so one inbound with an unreadable
+  setting, a missing key or a device that would not come up meant every *other*
+  AmneziaWG inbound on the box came up as plain kernel WireGuard. Each pass took
+  the same exit, so it persisted for as long as the broken one did, and the panel
+  showed all of them as converged.
+  **What you will notice:** if you have more than one AmneziaWG inbound and one
+  of them is unhealthy, the rest start carrying their obfuscation again on the
+  next pass — which means their clients start connecting and any client that had
+  been getting through on plain WireGuard stops. Fix or disable the broken
+  inbound to see its own error.
+
 - **An AmneziaWG inbound with header protection now refuses to save unless all
   four padding sizes are set.** The kernel requires every one of s1..s4 to be at
   least 12 bytes once a header-protection key is present, and treats an unset
