@@ -38,7 +38,7 @@ func TestAddInbound_ImportConvertsExternalProxyToHosts(t *testing.T) {
 		StreamSettings: stream,
 		Settings:       settings,
 	}
-	created, _, err := svc.AddInbound(in)
+	created, _, _, err := svc.AddInbound(in)
 	if err != nil {
 		t.Fatalf("import inbound: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestAddInbound_NoExternalProxyCreatesNoHosts(t *testing.T) {
 		StreamSettings: `{"network":"tcp","security":"none"}`,
 		Settings:       `{"clients":[{"id":"77777777-7777-7777-7777-777777777777","email":"plain","subId":"s-plain","enable":true}],"decryption":"none","encryption":"none"}`,
 	}
-	created, _, err := svc.AddInbound(in)
+	created, _, _, err := svc.AddInbound(in)
 	if err != nil {
 		t.Fatalf("add inbound: %v", err)
 	}

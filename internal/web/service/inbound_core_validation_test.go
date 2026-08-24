@@ -175,7 +175,7 @@ func TestAddInboundRefusesConfigXrayCoreRejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			inbound := tc.inbound
 			inbound.UserId = 1
-			if _, _, err := svc.AddInbound(&inbound); err == nil {
+			if _, _, _, err := svc.AddInbound(&inbound); err == nil {
 				t.Fatal("AddInbound stored a config xray-core refuses to load")
 			}
 			var stored int64
@@ -202,7 +202,7 @@ func TestUpdateInboundRefusesConfigXrayCoreRejects(t *testing.T) {
 		Settings:       `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"edit@b"}],"decryption":"none"}`,
 		StreamSettings: `{"network":"tcp","security":"none"}`,
 	}
-	created, _, err := svc.AddInbound(&good)
+	created, _, _, err := svc.AddInbound(&good)
 	if err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestUpdateInboundRefusesConfigXrayCoreRejects(t *testing.T) {
 	broken := *created
 	broken.StreamSettings = `{"network":"tcp","security":"reality","realitySettings":` +
 		`{"target":"example.com:443","serverNames":["example.com"],"shortIds":["aa"],"privateKey":""}}`
-	if _, _, err := svc.UpdateInbound(&broken); err == nil {
+	if _, _, _, err := svc.UpdateInbound(&broken); err == nil {
 		t.Fatal("UpdateInbound stored a config xray-core refuses to load")
 	}
 
@@ -243,7 +243,7 @@ func TestSetInboundEnableRefusesABrokenRow(t *testing.T) {
 	broken.Port = 20201
 	broken.Tag = "enable-broken"
 	broken.Enable = false
-	created, _, err := svc.AddInbound(&broken)
+	created, _, _, err := svc.AddInbound(&broken)
 	if err != nil {
 		t.Fatalf("a disabled row must still save, that is the escape hatch: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestSaveAcceptsACertificateNotIssuedYet(t *testing.T) {
 			`{"certificateFile":"/etc/letsencrypt/live/example.com/fullchain.pem",` +
 			`"keyFile":"/etc/letsencrypt/live/example.com/privkey.pem"}]}}`,
 	}
-	if _, _, err := svc.AddInbound(&pending); err != nil {
+	if _, _, _, err := svc.AddInbound(&pending); err != nil {
 		t.Fatalf("an inbound whose certificate is not issued yet must save: %v", err)
 	}
 
@@ -305,7 +305,7 @@ func TestSaveAcceptsACertificateNotIssuedYet(t *testing.T) {
 	blank.Tag = "cert-blank"
 	blank.Settings = `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"blank@b"}],"decryption":"none"}`
 	blank.StreamSettings = `{"network":"tcp","security":"tls","tlsSettings":{"certificates":[{"certificate":[],"key":[]}]}}`
-	_, _, err := svc.AddInbound(&blank)
+	_, _, _, err := svc.AddInbound(&blank)
 	if err == nil {
 		t.Fatal("the blank certificate the TLS radio seeds was accepted")
 	}

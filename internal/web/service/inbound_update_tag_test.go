@@ -25,7 +25,7 @@ func TestUpdateInbound_RegeneratesAutoTagOnPortChange(t *testing.T) {
 	update := existing
 	update.Port = 33000
 	update.Tag = "in-22435-tcp"
-	got, _, err := svc.UpdateInbound(&update)
+	got, _, _, err := svc.UpdateInbound(&update)
 	if err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestUpdateInbound_NodeTagKeepsPrefixWhenNodeIdOmitted(t *testing.T) {
 	update.Port = 8443
 	update.Tag = "n1-in-443-tcp"
 	update.NodeID = nil
-	got, _, _ := svc.UpdateInbound(&update)
+	got, _, _, _ := svc.UpdateInbound(&update)
 	if got.Tag != "n1-in-8443-tcp" {
 		t.Fatalf("node prefix must survive a port change, got %q", got.Tag)
 	}
@@ -84,7 +84,7 @@ func TestUpdateInbound_NodeInboundNotBlockedByLocalSamePort(t *testing.T) {
 	update := nodeInbound
 	update.Listen = "10.0.0.5"
 	update.NodeID = nil
-	_, _, err := svc.UpdateInbound(&update)
+	_, _, _, err := svc.UpdateInbound(&update)
 
 	if err != nil && strings.Contains(err.Error(), "already used") {
 		t.Fatalf("node inbound edit wrongly rejected as a port conflict: %v", err)
@@ -106,7 +106,7 @@ func TestUpdateInbound_KeepsCustomTagOnPortChange(t *testing.T) {
 	update := existing
 	update.Port = 33000
 	update.Tag = "my-custom-tag"
-	got, _, err := svc.UpdateInbound(&update)
+	got, _, _, err := svc.UpdateInbound(&update)
 	if err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestUpdateInbound_PreservesShareAddressFieldsWhenOmitted(t *testing.T) {
 	update.ShareAddr = ""
 
 	svc := &InboundService{}
-	got, _, err := svc.UpdateInbound(&update)
+	got, _, _, err := svc.UpdateInbound(&update)
 	if err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}

@@ -78,7 +78,7 @@ func TestAddInbound_RejectsFinalMaskRealityCombo(t *testing.T) {
 		StreamSettings: realityFinalMaskStream,
 		Settings:       `{"clients":[]}`,
 	}
-	if _, _, err := svc.AddInbound(in); err == nil {
+	if _, _, _, err := svc.AddInbound(in); err == nil {
 		t.Fatal("AddInbound: want error for finalmask+reality, got nil")
 	}
 
@@ -96,13 +96,13 @@ func TestAddInbound_IgnoresBoundIdAndCreatesNewRow(t *testing.T) {
 	svc := &InboundService{}
 
 	first := &model.Inbound{Tag: "in-45100-tcp", Enable: true, Listen: "0.0.0.0", Port: 45100, Protocol: model.VLESS, Settings: `{"clients":[],"decryption":"none"}`}
-	created, _, err := svc.AddInbound(first)
+	created, _, _, err := svc.AddInbound(first)
 	if err != nil {
 		t.Fatalf("AddInbound first: %v", err)
 	}
 
 	second := &model.Inbound{Id: created.Id, Tag: "in-45101-tcp", Enable: true, Listen: "0.0.0.0", Port: 45101, Protocol: model.VLESS, Settings: `{"clients":[],"decryption":"none"}`}
-	if _, _, err := svc.AddInbound(second); err != nil {
+	if _, _, _, err := svc.AddInbound(second); err != nil {
 		t.Fatalf("AddInbound second: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestAddInbound_AcceptsWireguardClientWithKey(t *testing.T) {
 		Protocol: model.WireGuard,
 		Settings: settings,
 	}
-	if _, _, err := svc.AddInbound(in); err != nil {
+	if _, _, _, err := svc.AddInbound(in); err != nil {
 		t.Fatalf("AddInbound rejected a keyed WireGuard client: %v", err)
 	}
 
@@ -164,7 +164,7 @@ func TestUpdateInbound_RejectsFinalMaskRealityCombo(t *testing.T) {
 	svc := &InboundService{}
 	update := existing
 	update.StreamSettings = realityFinalMaskStream
-	if _, _, err := svc.UpdateInbound(&update); err == nil {
+	if _, _, _, err := svc.UpdateInbound(&update); err == nil {
 		t.Fatal("UpdateInbound: want error for finalmask+reality, got nil")
 	}
 

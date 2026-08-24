@@ -15,6 +15,9 @@ type Msg struct {
 	Success bool   `json:"success"`
 	Msg     string `json:"msg"`
 	Obj     any    `json:"obj"`
+	// Warning carries a post-commit failure: the write landed, something after it
+	// did not, and no retry of the write will repair it.
+	Warning string `json:"warning,omitempty" example:"the device refused the configuration"`
 }
 
 type AllSetting struct {

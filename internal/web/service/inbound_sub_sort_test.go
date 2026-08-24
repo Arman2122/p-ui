@@ -35,7 +35,7 @@ func TestUpdateInbound_PersistsSubSortIndex(t *testing.T) {
 	update.SubSortIndex = 7
 
 	svc := &InboundService{}
-	got, _, err := svc.UpdateInbound(&update)
+	got, _, _, err := svc.UpdateInbound(&update)
 	if err != nil {
 		t.Fatalf("UpdateInbound: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestUpdateInbound_SubSortIndexClampedToMinimum(t *testing.T) {
 		update := *ib
 		update.SubSortIndex = below
 
-		got, _, err := svc.UpdateInbound(&update)
+		got, _, _, err := svc.UpdateInbound(&update)
 		if err != nil {
 			t.Fatalf("UpdateInbound(%d): %v", below, err)
 		}
@@ -93,7 +93,7 @@ func TestAddInbound_SubSortIndexClampedToMinimum(t *testing.T) {
 
 	svc := &InboundService{}
 	ib := makeInboundWithSubSortIndex("in-7003-tcp", 7003, 0)
-	got, _, err := svc.AddInbound(ib)
+	got, _, _, err := svc.AddInbound(ib)
 	if err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}

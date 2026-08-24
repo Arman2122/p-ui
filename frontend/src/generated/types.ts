@@ -541,6 +541,7 @@ export interface Msg {
   msg: string;
   obj: unknown;
   success: boolean;
+  warning?: string;
 }
 
 export interface Node {

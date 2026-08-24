@@ -132,7 +132,7 @@ func TestUpdateInboundRefusesAnAddressEditThatStrandsClients(t *testing.T) {
 
 	rebase := *ib
 	rebase.Settings = wgSettings(t, []string{"10.91.0.1/24"}, "10.90.0.2/32")
-	_, _, err := svc.UpdateInbound(&rebase)
+	_, _, _, err := svc.UpdateInbound(&rebase)
 	if err == nil {
 		t.Fatal("the rebase was accepted; its client keeps working on a per-peer route while its .conf names an address the interface no longer has")
 	}
@@ -142,7 +142,7 @@ func TestUpdateInboundRefusesAnAddressEditThatStrandsClients(t *testing.T) {
 
 	widen := *ib
 	widen.Settings = wgSettings(t, []string{"10.90.0.1/22"}, "10.90.0.2/32")
-	if _, _, err := svc.UpdateInbound(&widen); err != nil {
+	if _, _, _, err := svc.UpdateInbound(&widen); err != nil {
 		t.Fatalf("widening strands nobody and must stay allowed: %v", err)
 	}
 }

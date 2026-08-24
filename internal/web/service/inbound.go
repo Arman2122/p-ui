@@ -912,9 +912,11 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 // AddInbound creates a new inbound configuration.
 // It validates port uniqueness, client email uniqueness, and required fields,
 // then saves the inbound to the database and optionally adds it to the running Xray instance.
-// Returns the created inbound, whether Xray needs restart, and any error.
-func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
+// Returns the created inbound, whether Xray needs restart, a post-commit apply
+// warning for a core the panel converges directly, and any error.
+func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, string, error) {
 	inbound.Id = 0
+	var applyWarn string
 	// Attaching an egress is its own operation, with its own refusals; letting a
 	// create carry the column would be a way past every one of them.
 	inbound.EgressID = nil
@@ -922,34 +924,34 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	// Normalize streamSettings based on protocol
 	s.normalizeStreamSettings(inbound)
 	if err := validateFinalMaskRealityCombo(inbound.StreamSettings); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if err := validateFinalMaskXmcProfiles(inbound.StreamSettings); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	s.normalizeMtprotoSecret(inbound)
 	if err := s.normalizeMtprotoXrayPort(inbound, ""); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
 	if err := normalizeInboundShareAddressStrict(inbound); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 
 	conflict, err := s.checkPortConflict(inbound, 0)
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if conflict != nil {
-		return inbound, false, common.NewError(conflict.String())
+		return inbound, false, "", common.NewError(conflict.String())
 	}
 	if err := s.checkWireguardAddressConflict(inbound, 0); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 
 	inbound.Tag, err = s.resolveInboundTag(inbound, 0)
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 
 	// xray would expect Vision while the generated link, which vlessFlowAllowed
@@ -961,14 +963,14 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 
 	clients, err := s.GetClients(inbound)
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	existEmail, err := s.clientService.checkEmailsExistForClients(s, clients, nil)
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if existEmail != "" {
-		return inbound, false, common.NewError("Duplicate email:", existEmail)
+		return inbound, false, "", common.NewError("Duplicate email:", existEmail)
 	}
 
 	// Ensure created_at and updated_at on clients in settings
@@ -1005,12 +1007,12 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	for _, client := range clients {
 		client := client
 		if err := validateClientForKind(inbound.Protocol, inbound.Settings, &client); err != nil {
-			return inbound, false, err
+			return inbound, false, "", err
 		}
 	}
 
 	if err := validateInboundForXray(inbound); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 
 	db := database.GetDB()
@@ -1078,15 +1080,23 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 						} else {
 							logger.Debug("Unable to prepare runtime inbound config:", bErr)
 							pushable = false
+							applyWarn = bErr.Error()
 						}
 					}
+					servedByXray := cores.ServedByXray(core.Kind(inbound.Protocol))
 					if pushable {
 						postCommitApply = func() {
 							if err1 := rt.AddInbound(context.Background(), payload); err1 == nil {
 								logger.Debug("New inbound added on", rt.Name(), ":", inbound.Tag)
-							} else {
+								return
+							} else if servedByXray {
 								logger.Debug("Unable to add inbound on", rt.Name(), ":", err1)
 								needRestart = true
+							} else {
+								// For a core the panel converges directly the push IS the apply:
+								// no restart repairs it, so the operator has to be told.
+								logger.Warning("Unable to add inbound on", rt.Name(), ":", err1)
+								applyWarn = err1.Error()
 							}
 						}
 					}
@@ -1099,7 +1109,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return nil
 	})
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if postCommitApply != nil {
 		postCommitApply()
@@ -1112,7 +1122,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		needRestart = true
 	}
 
-	return inbound, needRestart, err
+	return inbound, needRestart, applyWarn, err
 }
 
 func (s *InboundService) DelInbound(id int) (bool, error) {
@@ -1342,22 +1352,22 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 	return needRestart, nil
 }
 
-func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
+func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, string, error) {
 	inbound.TrafficResetDay = normalizeTrafficResetDay(inbound.TrafficResetDay)
 	// Normalize streamSettings based on protocol
 	s.normalizeStreamSettings(inbound)
 	if err := validateFinalMaskRealityCombo(inbound.StreamSettings); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if err := validateFinalMaskXmcProfiles(inbound.StreamSettings); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	s.normalizeMtprotoSecret(inbound)
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
 
 	oldInbound, err := s.GetInbound(inbound.Id)
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	// Restore the stored NodeID before the port-conflict check so a node inbound
 	// stays scoped to its own node (the payload's nodeId is unreliable, often absent).
@@ -1365,19 +1375,19 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 
 	conflict, err := s.checkPortConflict(inbound, inbound.Id)
 	if err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if conflict != nil {
-		return inbound, false, common.NewError(conflict.String())
+		return inbound, false, "", common.NewError(conflict.String())
 	}
 	if err := s.checkWireguardAddressConflict(inbound, inbound.Id); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if err := checkWireguardAddressCoverage(oldInbound, inbound); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 	if err := s.checkFallbacksSurviveEdit(inbound); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 
 	// Capture the pre-edit protocol and routing state before oldInbound is
@@ -1386,7 +1396,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	oldProtocol := oldInbound.Protocol
 	oldRoutedMtproto := mtprotoRoutesThroughXray(oldInbound)
 	if err := s.normalizeMtprotoXrayPort(inbound, oldInbound.Settings); err != nil {
-		return inbound, false, err
+		return inbound, false, "", err
 	}
 
 	tag := oldInbound.Tag
@@ -1394,6 +1404,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	oldTagWasAuto := isAutoGeneratedTag(tag, oldInbound.Port, oldInbound.NodeID, oldBits)
 
 	needRestart := false
+	var applyWarn string
 	var postCommitApply func()
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
@@ -1548,15 +1559,20 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 					}
 				}
 				newProtocolServedByXray := cores.ServedByXray(core.Kind(oldInbound.Protocol))
+				if !pushable {
+					applyWarn = "the runtime configuration for this inbound could not be prepared"
+				}
 				if pushable {
 					postCommitApply = func() {
 						if err2 := rt.UpdateInbound(context.Background(), &oldSnapshot, payload); err2 == nil {
 							logger.Debug("Updated inbound applied on", rt.Name(), ":", oldInbound.Tag)
-						} else {
+						} else if newProtocolServedByXray {
 							logger.Debug("Unable to update inbound on", rt.Name(), ":", err2)
-							if newProtocolServedByXray {
-								needRestart = true
-							}
+							needRestart = true
+						} else {
+							// The push IS the apply for this core, so nothing later repairs it.
+							logger.Warning("Unable to update inbound on", rt.Name(), ":", err2)
+							applyWarn = err2.Error()
 						}
 					}
 				}
@@ -1630,7 +1646,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		return nil
 	})
 	if txErr != nil {
-		return inbound, false, txErr
+		return inbound, false, "", txErr
 	}
 	if postCommitApply != nil {
 		postCommitApply()
@@ -1646,7 +1662,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			needRestart = true
 		}
 	}
-	return inbound, needRestart, nil
+	return inbound, needRestart, applyWarn, nil
 }
 
 // A node mirrors this payload into its own DB, so every client must survive:

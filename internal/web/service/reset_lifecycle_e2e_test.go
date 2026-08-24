@@ -275,7 +275,7 @@ func TestQuotaResetRestoresAccessEndToEnd(t *testing.T) {
 		StreamSettings: `{"network":"tcp","security":"none"}`,
 	}
 	inboundSvc := &InboundService{}
-	if _, _, err := inboundSvc.AddInbound(inbound); err != nil {
+	if _, _, _, err := inboundSvc.AddInbound(inbound); err != nil {
 		t.Fatalf("AddInbound: %v", err)
 	}
 

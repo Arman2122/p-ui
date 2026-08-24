@@ -2357,6 +2357,11 @@ export const SCHEMAS: Record<string, unknown> = {
       "obj": {},
       "success": {
         "type": "boolean"
+      },
+      "warning": {
+        "description": "Warning carries a post-commit failure: the write landed, something after it\ndid not, and no retry of the write will repair it.",
+        "example": "the device refused the configuration",
+        "type": "string"
       }
     },
     "required": [
