@@ -241,3 +241,54 @@ a new endpoint. Not costed further, because the choice comes first.
 
 ---
 
+## L9 — a boolean that defaults to true cannot be created false
+
+**Found:** by a test fixture that would not stay disabled, while writing F075.
+**Where:** `internal/database/model/model.go` — five models.
+
+GORM omits a zero-valued field from the INSERT when its column carries a
+`default`, so the database supplies the default instead. Measured against the
+throwaway Postgres:
+
+```
+created with Enable=false, read back Enable=true
+```
+
+For `RoutingRule` that means **`RoutingService.Add` cannot create a disabled
+rule**. An operator who stages a rule with the enable switch off gets one that is
+routing traffic the moment they save. It is not a display bug — the row really
+is enabled, and the compile really does emit it.
+
+Five models declare a `default:true` boolean:
+
+| model | field |
+|---|---|
+| `RoutingRule` | `Enable` |
+| `ApiToken` | `Enabled` |
+| `Node` | `Enable` |
+| `ClientRecord` | `Enable` |
+| `OutboundSubscription` | `Enabled` |
+
+Only the first is confirmed reachable, because it is the one I measured. The
+others share the mechanism and need checking one at a time — each depends on
+whether anything creates that row with an intended `false`, and `ClientRecord`
+in particular is created on a path that has already been the subject of several
+findings.
+
+**Why not folded into F075:** F075 repairs rules whose destination left the
+template. This is a create-path defect in a different function, with a blast
+radius across five models that has to be established before any of it is
+touched — and the fix shape (`Select("*")`, an explicit column map, or dropping
+the defaults and setting them in code) is a decision about the whole table
+rather than about one call site.
+
+**Disposition question:** which of the five are actually created with an
+intended false, and does the fix belong at each call site or once at the model
+layer? Answer the first before choosing the second.
+
+**Cost to close:** the audit is a morning; the fix is small per call site once
+the list is known. Note the migration angle — removing a `default` changes
+what an `AutoMigrate` writes for existing columns, so "drop the defaults" is
+not the free option it looks like.
+
+---

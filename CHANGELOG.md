@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Renaming or deleting an Xray outbound no longer leaves routing rules aimed
+  at nothing.** A rule pointing at a deleted or renamed outbound kept matching
+  traffic, and the core then dropped everything it matched — it does not fall
+  back to another outbound, it closes the connection. So an inbound's customers
+  went dark with the rule still shown as healthy and nothing explaining why.
+  **What you will notice:** saving an Xray template that no longer carries an
+  outbound or balancer a rule names disables that rule and says so in its remark,
+  naming the destination that went away. Rules aimed at an uplink are untouched —
+  an uplink is not a template tag — and so is a rule you had already disabled.
+
 - **An uplink the panel cannot actually configure is no longer offered as a
   routing destination.** An uplink was saved without its own settings ever being
   read, so a typo in its address was accepted — and the routing compiler kept
