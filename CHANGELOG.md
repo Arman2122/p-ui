@@ -8,6 +8,21 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Switching the Xray version no longer takes the proxy down when it fails.**
+  The update stopped Xray first and downloaded afterwards, and every failure in
+  between — a release asset missing for your architecture, a checksum mismatch, a
+  dropped connection — returned without restarting anything, leaving the box with
+  no proxy and the old binary still installed. It also broke the download it had
+  just prepared for: the panel's own egress proxy is hosted *by* Xray, so on a
+  filtered network the proxy an operator configured to reach GitHub was
+  guaranteed unavailable exactly when it was needed.
+  **What you will notice:** the download, checksum and extraction all happen with
+  the current version still running and serving clients, and the switch is a
+  single restart at the end. A failed update now leaves the panel exactly as it
+  was, with an error. If the new version cannot load your configuration, the
+  restart is refused and the running version keeps serving rather than the box
+  going dark.
+
 - **An inbound can no longer take the panel's own port.** The conflict check
   looked at other inbounds and at Xray's internal API port, but never at the two
   ports the panel process binds itself — the web panel (2053 by default) and the
