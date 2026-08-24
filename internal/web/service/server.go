@@ -848,6 +848,10 @@ func (s *ServerService) RestartXrayService() error {
 	return nil
 }
 
+// xrayReleaseBaseURL is a var so a test can point the download at an httptest
+// server, the same seam fetchXrayDigestSHA256 already takes its URL through.
+var xrayReleaseBaseURL = "https://github.com/XTLS/Xray-core/releases/download"
+
 func (s *ServerService) downloadXRay(version string) (string, error) {
 	arch := runtime.GOARCH
 
@@ -869,7 +873,7 @@ func (s *ServerService) downloadXRay(version string) (string, error) {
 	}
 
 	fileName := fmt.Sprintf("Xray-linux-%s.zip", arch)
-	url := fmt.Sprintf("https://github.com/XTLS/Xray-core/releases/download/%s/%s", version, fileName)
+	url := fmt.Sprintf("%s/%s/%s", xrayReleaseBaseURL, version, fileName)
 	client := s.settingService.NewProxiedHTTPClient(60 * time.Second)
 	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if reqErr != nil {
@@ -982,12 +986,24 @@ func (s *ServerService) UpdateXray(version string) error {
 		return fmt.Errorf("xray version %q is not in the fetched release list", version)
 	}
 
-	// 1. Stop xray before doing anything
-	if err := s.StopXrayService(); err != nil {
-		logger.Warning("failed to stop xray before update:", err)
-	}
+	/*
+		Nothing is stopped here, deliberately.
 
-	// 2. Download the zip
+		Stopping first made every failure below permanent: each is a bare return,
+		so a 404, a digest mismatch or a dropped connection left the box with xray
+		down and the old binary still in place. It also broke the download it was
+		preparing for — PanelEgressProxyURL answers "" while the process is not
+		running, because the panel's egress bridge is hosted BY xray, so the proxy
+		an operator configured to reach GitHub from a filtered network was
+		guaranteed unavailable exactly when the download needed it.
+
+		RestartXray(true) at the end owns the whole lifecycle instead. It runs the
+		-test pre-flight before it stops anything, so a binary that downloads and
+		verifies but cannot load this config is refused while the old core is still
+		serving.
+	*/
+
+	// 1. Download the zip
 	zipFileName, err := s.downloadXRay(version)
 	if err != nil {
 		return err
@@ -1009,7 +1025,7 @@ func (s *ServerService) UpdateXray(version string) error {
 		return err
 	}
 
-	// 3. Helper to extract files
+	// 2. Helper to extract files
 	copyZipFile := func(zipName string, fileName string) error {
 		zipFile, err := reader.Open(zipName)
 		if err != nil {
@@ -1051,12 +1067,13 @@ func (s *ServerService) UpdateXray(version string) error {
 		return nil
 	}
 
-	// 4. Extract correct binary
+	// 3. Extract correct binary
 	if err = copyZipFile("xray", xray.GetBinaryPath()); err != nil {
 		return err
 	}
 
-	// 5. Restart xray
+	// 4. Swap the process onto it. Renaming over a running executable is fine on
+	// Linux — the old process keeps its inode until it exits.
 	if err := s.xrayService.RestartXray(true); err != nil {
 		logger.Error("start xray failed:", err)
 		return err
