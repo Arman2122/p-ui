@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Upgrading now builds the AmneziaWG kernel module.** `install.sh` registered
+  it through DKMS; `update.sh` never mentioned it. So a panel installed before
+  AmneziaWG shipped and upgraded the ordinary way never got the module, however
+  many times it updated — the protocol was simply absent from the UI, with no
+  explanation, and the panel cannot build one for itself. Every AmneziaWG fix
+  released since was invisible on those hosts for the same reason.
+  **What you will notice:** the next update spends about a minute building the
+  module, and AmneziaWG appears. A host without kernel headers or a toolchain
+  still upgrades normally and keeps every other protocol; the build says so and
+  carries on. The module is also rebuilt when an update ships changed module
+  sources, which previously did not happen — DKMS keys on the kernel and on a
+  version upstream never changes, so the old module stayed registered.
+
 - **A failed geofile update no longer corrupts the geofile or bounces Xray.**
   The download opened the live `geoip.dat`/`geosite.dat` and truncated it to
   zero before reading a single byte of the response, with no temporary file, no
