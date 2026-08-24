@@ -265,6 +265,115 @@ part of the blast radius — the filter is not regenerated on update.
 
 ---
 
+## 8. F282 — a corrupt geofile DOES get past the pre-flight, and which one decides is arbitrary
+
+Run on the VM against the panel's own pinned binary
+(`/usr/local/p-ui/bin/xray-linux-amd64`, Xray 26.7.28 / 5ca6f4b), by truncating
+a 19,768,301-byte `geoip.dat` and running `xray -test` over a config whose only
+routing rule names one `geoip:` code.
+
+```
+                       geo rule   no geo rule
+intact                 exit 0     exit 0
+1 KB of 19 MB          exit 23    exit 0
+zero bytes             exit 23    exit 0
+half the file          exit 0     exit 0     <-- accepted
+```
+
+So the answer to "does F004 already block this" is **no, not reliably**. A
+50%-truncated file is accepted, and which codes survive is decided by where they
+sit in the protobuf, not by anything the operator can see:
+
+```
+code            cn  us  ir  ru  de  jp  br  za  zw
+intact          0   0   0   0   0   0   0   0   0
+half the file   0   23  0   23  0   0   0   23  23
+90% of the file 0   23  0   0   0   0   0   23  23
+```
+
+A panel whose rules name `geoip:ir` — this project's stated audience — starts
+cleanly on a half-downloaded file. One whose rules name `geoip:us` does not.
+
+### What a surviving code contains: all of it, or nothing
+
+`common/geodata/geodat_loader.go:81 find()` scans the file record by record: tag
+byte, varint length, then the code prefix. On a match it `io.ReadFull`s the
+**whole** record and `proto.Unmarshal`s that. So truncation is binary per code —
+a code either loads with its complete CIDR list, or the read fails and the
+config is refused. There is no silently under-populated `geoip:cn`, and so no
+rule that quietly stops matching most of its traffic. That is the one piece of
+good news here, and it means validation can be structural rather than semantic.
+
+### What this settles for the fix
+
+Shape (i) — temp file plus rename — is necessary and sufficient for the file
+never to be corrupt on disk. Validate-before-swap is also warranted, because the
+condition it guards ("corrupt but present, and the pre-flight lets it through")
+is measured above rather than hypothesised. Structural is enough: re-run the
+loader's own scan over the downloaded file before the rename and require it to
+reach EOF on a record boundary.
+
+Note the residual failure mode is not the one the finding describes. Post-F004
+the core is not taken down: it keeps running, and the corruption surfaces later
+as a restart the pre-flight refuses — visible, but at an unrelated time and
+naming a routing rule rather than a geofile.
+
+---
+
+## 9. F234 — REFUTED. The rotation takes, and the path the finding cites no longer exists
+
+Two independent reasons, either of which is sufficient.
+
+### The runtime premise is false on the pinned core
+
+Two xray processes on the box, both 26.7.28: a server holding a VLESS+REALITY
+inbound, and two clients differing **only** in their REALITY key. Rotation was
+performed with `xray api rmi` + `xray api adi` — the same HandlerService
+RemoveInbound/AddInbound pair the panel's runtime uses — against a process that
+never restarted (`MainPID` unchanged throughout).
+
+```
+                        client A (key A)   client B (key B)
+baseline, server = A    200                000
+after rmi+adi -> B      000                200
+after rmi+adi -> A      200                000
+after rmi+adi -> B      000                200
+```
+
+The old key is refused and the new one works, on every rotation. The claim that
+"the running listener keeps authenticating against the old REALITY parameters"
+does not reproduce.
+
+*Method note, because it nearly produced the opposite answer:* the first run of
+this probe left the two clients on different `serverName` values, so the clean
+flip it showed was SNI, not the key. Both clients must differ in exactly one
+field. The corrected run is the table above.
+
+*Second method note:* REALITY's post-handshake path sleeps 5s
+(`xtls/reality/tls.go`), and a target with a large certificate chain
+(www.microsoft.com) fails the relay entirely regardless of the key —
+`hs.c.conn == conn: true` with `isHandshakeComplete: false`. www.cloudflare.com,
+dl.google.com, addons.mozilla.org, www.lovelive-anime.jp and swdist.apple.com
+all work. A REALITY e2e that "fails" is far more likely to be the target than
+the key.
+
+### The code path the finding cites was already replaced
+
+F234 locates the bug at "postCommitApply's DelInbound+AddInbound pair
+(inbound.go:1554/1560)". f1c7071d (F227) replaced that pair with a single
+`rt.UpdateInbound`. That routes through `Core.PlanChange` /
+`Core.ApplyInstance`, both of which build old and new configs carrying the
+**same tag** — so `exists` is true in `diffInbounds`, and the REALITY guard the
+finding says never fires is now exactly the guard on the path. It returns false,
+the hot apply is refused, `UpdateInbound` errors, and `needRestart` is set.
+
+So the guard added by 892c06c8 now does its job, and F227 fixed F234 as a side
+effect. No change is needed. `TestAREALITYKeyRotationIsNeverHotApplied` pins the
+link, because F227's correctness now depends on this guard and nothing else
+said so.
+
+---
+
 ## Refuted on re-read
 
-*(none yet)*
+- **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
