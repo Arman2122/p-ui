@@ -8,19 +8,23 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
-- **A routing rule with nowhere to send traffic is skipped instead of taking
-  Xray down.** `direct` and `block` resolve to whichever outbound in your Xray
-  template carries the `freedom` or `blackhole` protocol. A template with
-  neither — a "nothing goes out directly" setup, or one with the `blocked`
-  outbound removed — compiled those rules to an empty outbound tag, which
-  xray-core rejects outright: the core refused to start and every client on the
-  box went offline over one rule.
-  **What you will notice:** the core starts. The rule itself does nothing until
-  the template has an outbound to name, so traffic you meant to block now
-  follows the template's own routing instead — worth checking if you removed
-  either outbound deliberately. The same missing `blackhole` also drops the
-  private-address guard the panel puts in front of each WireGuard-family
-  inbound, which is now reported rather than silently skipped.
+- **A routing rule with nowhere to send traffic no longer takes Xray down, and
+  a Block rule still blocks.** `direct` and `block` are not tags: they resolve
+  to whichever outbound in your Xray template carries the `freedom` or
+  `blackhole` protocol. A template with neither — a "nothing goes out directly"
+  setup, or one with the `blocked` outbound removed — compiled those rules to an
+  empty outbound tag, which xray-core rejects outright, so the core refused to
+  start and every client on the box went offline over one rule. The two cases
+  are now answered differently, both fail-closed: a Block rule gets a blackhole
+  supplied for it, because a blackhole has no egress and cannot leak anything;
+  a Direct rule is still refused, because a template with no freedom outbound is
+  plausibly the policy "nothing leaves this box directly" and inventing one would
+  punch through it.
+  **What you will notice:** the core starts, and rules you marked Block keep
+  blocking whatever your template looks like. The private-address guard the
+  panel puts in front of each WireGuard-family inbound is also no longer skipped
+  when the template has no blackhole. A Direct rule against a template with no
+  freedom outbound does nothing until you add one.
 
 - **Turning automatic banning off no longer turns the IP log off with it.** With
   `PUI_ENABLE_FAIL2BAN` set to false, or on a host where fail2ban was never

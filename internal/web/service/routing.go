@@ -268,8 +268,14 @@ Both are safe because every injected and intent rule is inboundTag-scoped.
 */
 func applyRoutingPlan(ctx context.Context, cfg *xray.Config) error {
 	var outbounds []map[string]any
+	readable := true
 	if len(cfg.OutboundConfigs) > 0 {
-		_ = json.Unmarshal(cfg.OutboundConfigs, &outbounds)
+		if err := json.Unmarshal(cfg.OutboundConfigs, &outbounds); err != nil {
+			// The contract mergeSubscriptionOutbounds spells out and the other three
+			// injectors keep: a template we cannot read is one we must not rewrite.
+			logger.Warning("routing: the template outbounds do not parse; leaving them untouched:", err)
+			readable = false
+		}
 	}
 	compiled, err := (&RoutingService{}).compile(ctx, outbounds)
 	if err != nil {
@@ -300,7 +306,7 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config) error {
 		cfg.InboundConfigs = append(cfg.InboundConfigs, inbound)
 	}
 
-	if len(compiled.Outbounds) > 0 {
+	if readable && len(compiled.Outbounds) > 0 {
 		merged := append([]map[string]any(nil), outbounds...)
 		for _, raw := range compiled.Outbounds {
 			var one map[string]any
