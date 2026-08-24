@@ -792,6 +792,18 @@ func (s *RoutingService) Exits(ctx context.Context) ([]routing.ResolvedExit, err
 		if kind == "" {
 			continue
 		}
+		/*
+			A row whose own driver cannot derive the kernel state is not routable,
+			whatever its core says. ExitHandle is unconditional for an uplink — it
+			returns a device name without reading settings — so without this the
+			planner emits a marked outbound while the manager, which zeroes a failed
+			Fill and carries on, installs no rule to catch the mark. The packets
+			leave with the server's own address.
+		*/
+		if err := egressDriverFills(row); err != nil {
+			logger.Warning("routing: exit", row.Id, "is not routable:", err)
+			continue
+		}
 		handleKind, handle, hErr := cores.ExitHandleFor(ctx, core.Exit{
 			ID: row.Id, Kind: kind, Enable: row.Enable, Settings: row.Settings,
 		})

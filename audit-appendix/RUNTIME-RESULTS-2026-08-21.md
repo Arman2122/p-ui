@@ -562,6 +562,51 @@ header, so one attacker rotates it without rotating anything else.
 
 ---
 
+## 14. F063 — the leak mechanism, measured, and what "fails closed" has to mean
+
+The finding says a marked outbound whose fwmark rule was never installed
+egresses with the server's own address. Confirmed directly on the box with
+`ip route get`, which asks the kernel the same question the socket asks:
+
+```
+the server's own egress
+  1.1.1.1 via 172.31.1.1 dev eth0 src 91.107.151.123
+
+marked, with its rule installed  (a realisable uplink)
+  1.1.1.1 dev puxprobe table 30099 src 10.77.99.1 mark 0x4d2
+
+the SAME marked packet, rule removed  (Fill failed, the manager zeroed it)
+  1.1.1.1 via 172.31.1.1 dev eth0 src 91.107.151.123 mark 0x4d2
+```
+
+The third line is the first line with a mark on it. A mark nothing matches does
+not fail, does not warn and does not drop — it falls through to the main table,
+and the packet leaves as if the uplink had never been configured. Every client
+on the rules pointing at that exit gets the server's identity, while the panel
+shows the rule as fine and its pattern chip as "marked".
+
+### Why both layers had to change
+
+`EgressService.validate` returned before reading `Settings` for anything that is
+not a front, so an uplink's own configuration was never checked at save.
+`RoutingService.Exits` then kept the row regardless, because
+`wireguard.Core.ExitHandle` is unconditional — it answers with a device name and
+a nil error without reading settings at all. So the planner emitted the marked
+outbound. Meanwhile `Manager.plan` catches the driver's `Fill` error, **zeroes
+the fill** and carries on, so `fill.Marked` is false and the rule is never
+installed.
+
+Three components each behaving reasonably in isolation, composing into a silent
+identity leak. Fixing one of them would have left the other path open: the save
+check does nothing for the rows already stored, and the plan-time check does
+nothing to stop an operator creating the next one.
+
+Both now ask the driver's own `Fill`, which is the only thing that reads the
+settings and therefore the only thing that can tell a saveable row from one that
+cannot be realised.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
