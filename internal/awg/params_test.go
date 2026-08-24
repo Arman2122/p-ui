@@ -2,6 +2,7 @@ package awg
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -31,11 +32,18 @@ func TestValidateMirrorsTheModulesOwnRefusals(t *testing.T) {
 		// each other -- otherwise every partial configuration would be refused.
 		{"unset headers do not collide", Params{H1: HeaderRange(10, 19)}, nil},
 		{"padding without header protection is free", Params{S1: 4}, nil},
+		{"any padding is free without header protection", Params{S1: 20, S2: 30, S4: 15}, nil},
 		{"padding too small for the nonce", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: 4}, ErrPaddingTooSmall},
-		{"padding exactly the nonce size", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: HeaderProtectionNonceSize}, nil},
-		// Zero padding is "unset", not "too small": a protected device that pads
-		// only the handshake messages is normal.
-		{"unset padding beside header protection", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: 20}, nil},
+		{"all four paddings exactly the nonce size", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: HeaderProtectionNonceSize, S2: HeaderProtectionNonceSize, S3: HeaderProtectionNonceSize, S4: HeaderProtectionNonceSize}, nil},
+		{"one padding a byte under", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: 20, S2: 30, S3: 11, S4: 15}, ErrPaddingTooSmall},
+		/*
+			The two rows below used to expect nil, on the reasoning that zero means
+			"leave it alone". It does not once a key is set: netlink.c validates the
+			MERGED device state, so the module refuses an unset padding exactly as it
+			refuses a short one -- measured, RUNTIME-RESULTS §10.
+		*/
+		{"one padding left unset", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", S1: 20, S2: 30, S4: 15}, ErrPaddingTooSmall},
+		{"every padding left unset", Params{HeaderProtectionKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="}, ErrPaddingTooSmall},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.params.Validate()
@@ -80,5 +88,26 @@ func TestABareHeaderValueDefeatsTheOverlapCheck(t *testing.T) {
 	ranged := Params{H1: HeaderRange(10, 10), H2: HeaderRange(10, 10)}
 	if err := ranged.Validate(); err == nil {
 		t.Fatal("the same two headers, encoded as ranges, must be refused")
+	}
+}
+
+/*
+The refusal has to name the field, because the alternative is what the module
+does: EINVAL and nothing else.
+
+Measured on the VM (RUNTIME-RESULTS §10) the kernel emits no dmesg line at all
+for this, and it applies jc/jmin/jmax/s1/s2 before refusing — so an operator who
+fills in the UI's header-protection key and takes its preset for the rest gets a
+device carrying half the obfuscation, no header protection, a panel that says
+"saved", and every client config claiming a key the server never installed.
+*/
+func TestThePaddingRefusalNamesTheFieldToFix(t *testing.T) {
+	const key = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+	err := Params{HeaderProtectionKey: key, S1: 20, S2: 30, S4: 15}.Validate()
+	if err == nil {
+		t.Fatal("an unset s3 beside a header-protection key was accepted; the kernel refuses it")
+	}
+	if !strings.Contains(err.Error(), "s3") {
+		t.Fatalf("error %q does not name s3, so the operator cannot act on it", err)
 	}
 }

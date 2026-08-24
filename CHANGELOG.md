@@ -8,6 +8,21 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An AmneziaWG inbound with header protection now refuses to save unless all
+  four padding sizes are set.** The kernel requires every one of s1..s4 to be at
+  least 12 bytes once a header-protection key is present, and treats an unset
+  value as zero rather than as "leave it alone" — so the panel's own preset,
+  which fills in s1 and s2 and leaves s3 and s4 empty, produced a device the
+  module refused. It refused *after* applying the junk parameters and without
+  logging anything, so the inbound came up carrying half its obfuscation and no
+  header protection at all, while every client config the panel handed out
+  claimed a key the server had never installed. Nobody could connect and the
+  panel reported the save as successful.
+  **What you will notice:** saving that combination now fails immediately and
+  names the field to fill in. If you have an inbound in this state, set the two
+  missing padding sizes (or clear the header-protection key) and save; the next
+  apply repairs the device.
+
 - **A routing rule with nowhere to send traffic no longer takes Xray down, and
   a Block rule still blocks.** `direct` and `block` are not tags: they resolve
   to whichever outbound in your Xray template carries the `freedom` or
