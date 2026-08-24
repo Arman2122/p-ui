@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -66,6 +68,25 @@ func (a *RoutingController) exits(c *gin.Context) {
 	jsonObj(c, exits, nil)
 }
 
+/*
+refusalMessage turns a compile refusal into the operator's own language.
+
+The service returns the diag's key and args rather than a sentence, because the
+panel ships two locales and this is the layer that has the request's.
+*/
+func refusalMessage(c *gin.Context, err error) (string, bool) {
+	var refusal *service.RefusalError
+	if !errors.As(err, &refusal) {
+		return "", false
+	}
+	params := make([]string, 0, len(refusal.Args))
+	for name, value := range refusal.Args {
+		params = append(params, name+"=="+value)
+	}
+	sort.Strings(params)
+	return I18nWeb(c, refusal.Key, params...), true
+}
+
 func (a *RoutingController) add(c *gin.Context) {
 	rule, ok := middleware.BindAndValidate[model.RoutingRule](c)
 	if !ok {
@@ -73,6 +94,10 @@ func (a *RoutingController) add(c *gin.Context) {
 	}
 	created, err := a.routingService.Add(context.Background(), rule)
 	if err != nil {
+		if msg, refused := refusalMessage(c, err); refused {
+			jsonMsg(c, msg, nil)
+			return
+		}
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
@@ -93,6 +118,10 @@ func (a *RoutingController) update(c *gin.Context) {
 	rule.Id = id
 	updated, err := a.routingService.Update(context.Background(), rule)
 	if err != nil {
+		if msg, refused := refusalMessage(c, err); refused {
+			jsonMsg(c, msg, nil)
+			return
+		}
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}

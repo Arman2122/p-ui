@@ -1681,6 +1681,13 @@
         "useComma": "Comma-separated list"
       },
       "routing": {
+        "refuse": {
+          "criterionUnsupported": "{{ .subject }} cannot match on {{ .criterion }}, so this rule would never fire for it.",
+          "exitMissing": "This rule points at an exit that no longer exists, or that cannot be reached from this host.",
+          "noExitDriver": "Nothing on this host knows how to route through {{ .exit }}.",
+          "noSnat": "{{ .exit }} has no source address to send from, so traffic would leave with this server's own address.",
+          "noDefaultOutbound": "Your Xray template has no {{ .protocol }} outbound for this rule to use."
+        },
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
         "scopeAll": "Every routable inbound",
         "dragToReorder": "Drag to reorder",

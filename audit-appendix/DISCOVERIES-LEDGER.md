@@ -111,6 +111,24 @@ failure — so it should be corrected by the change that acts on it.
 
 ---
 
+## L5 — two staticcheck deprecations
+
+**Found:** during the lint reconciliation.
+**Where:** `internal/web/service/tgbot/tgbot.go` (`fasthttp.RetryIf`) and
+`tools/openapigen/walker.go` (`go/parser.ParseDir`).
+
+Dispositioned by the operator already: they stay untouched until real work
+reaches those files, because a deprecation swap is work on the file rather than
+lint silence. Recorded here so "why are there two lint issues" has an answer
+that is not "nobody looked".
+
+**Cost to close:** whatever the replacement APIs cost, at the time something
+else is being changed in those files.
+
+---
+
+---
+
 ## L6 — `KeySelfLoop` is declared and emitted nowhere
 
 **Found:** while gathering F049's message keys.
@@ -144,18 +162,82 @@ already builds subjects, exits and rules directly.
 
 ---
 
-## L5 — two staticcheck deprecations
+## L7 — the dead-keys test cannot tell a live key from its own declaration
 
-**Found:** during the lint reconciliation.
-**Where:** `internal/web/service/tgbot/tgbot.go` (`fasthttp.RetryIf`) and
-`tools/openapigen/walker.go` (`go/parser.ParseDir`).
+**Found:** while landing F049's keys.
+**Where:** `frontend/src/test/i18n-dead-keys.test.ts`.
 
-Dispositioned by the operator already: they stay untouched until real work
-reaches those files, because a deprecation swap is work on the file rather than
-lint silence. Recorded here so "why are there two lint issues" has an answer
-that is not "nobody looked".
+The test reads every `.ts`/`.tsx` under `frontend/src` and every `.go` under
+`internal/`, concatenates them, and tokenises the whole thing with
+`/[A-Za-z][A-Za-z0-9_.]*/g`. A key passes if its dotted form appears anywhere in
+that token set — and a Go constant declaration like
 
-**Cost to close:** whatever the replacement APIs cost, at the time something
-else is being changed in those files.
+```go
+KeyNoSnat = "pages.xray.routing.refuse.noSnat"
+```
+
+produces exactly that token. So a key is "referenced" by the line that declares
+it. F049's six passed the gate before a single one of them had a reader.
+
+That is false assurance, and it is how `selfLoop` (L6) survived from
+`e30b1841` until someone read the file: it had a constant, so it looked used.
+
+**Why not fixed here:** the tokeniser is the gate every locale change in the repo
+runs through. Tightening it will fail keys that are legitimately referenced in
+ways it cannot see — template literals, the prefix-harvesting fallback it
+already carries for them — and triaging that is a task of its own, not a rider
+on a routing fix.
+
+**Disposition question:** can the scan distinguish a declaration from a use
+cheaply enough to be worth it? Excluding `internal/routing/diag.go`-style
+constant blocks is a one-line glob and would have caught `selfLoop`; excluding
+every declaration everywhere is a different and much larger problem. Answer the
+narrow version first.
+
+**Cost to close:** small if the answer is the narrow one, unknown otherwise —
+and the honest first step is running the tightened scan to see how many existing
+keys it fails.
 
 ---
+
+## L8 — nothing reads the compiler's diagnostics at generate time
+
+**Found:** while landing F049.
+**Where:** `internal/web/service/routing.go` `applyRoutingPlan`.
+
+F049 gave `Compiled.Refusals()` its first production caller, at **save** time: a
+rule the compiler would drop is now refused before it is stored. Generate time
+is untouched — `applyRoutingPlan` reads `Fronts`, `Outbounds` and `XrayRules`
+and never looks at `Diags`.
+
+That gap is not theoretical. A rule that was routable when it was saved goes
+inert later, when the inbound it names is disabled, when an exit stops
+resolving, or when the operator edits the Xray template out from under it. Those
+are exactly the rules an operator most needs told about, and they arrive after
+the only check that exists.
+
+F049 added a `logger.Warning` per generate-time refusal so the condition is at
+least discoverable. That is a floor, not a surface: it is a log line carrying a
+message key, not a translated sentence, and nobody watches the log for a rule
+that quietly stopped working.
+
+**`KeyNoFront` is the concrete casualty.** It can only fire at generate time —
+the save-time compile answers `FrontIDFor` unconditionally on purpose, because a
+missing front is infrastructure the operator cannot fix by editing the rule. So
+its **string was deliberately not shipped with the other six**: a translated
+string with no reader is L7's disease, and adding one while writing L7 would be
+absurd. It gets its string when it gets a surface.
+
+**Disposition question:** where do generate-time diags belong? F266's warning
+field is the obvious candidate and does not fit — it rides an HTTP save
+response, and generation happens on restart where there is none. The real
+options are a panel-status field the Routing page polls, a preview endpoint
+(which the audit costed as the full four-step endpoint dance), or a persisted
+per-rule health column. Pick one before writing any of it.
+
+**Cost to close:** the smallest honest version is a status field on the existing
+routing list response, so the Routing page can mark a stored rule inert without
+a new endpoint. Not costed further, because the choice comes first.
+
+---
+

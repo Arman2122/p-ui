@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A routing rule the compiler would drop is now refused instead of stored.**
+  The compile ran on every config build and its diagnostics were thrown away, so
+  a rule the planner marks inert saved cleanly, appeared in the list as active,
+  and then was simply not emitted. For an exit rule that means every client of
+  that inbound left with the server's own address instead of through the uplink,
+  with nothing in the panel saying so.
+  **What you will notice:** saving or editing a rule the planner cannot realise
+  now fails with the reason — a criterion the inbound cannot match on, an exit
+  that no longer resolves, an outbound your Xray template does not have. Nothing
+  is written and nothing is provisioned. Existing stored rules are untouched;
+  those that have gone inert since they were saved are now reported in the panel
+  log on each config build.
+
 - **A routing rule scoped to one inbound can no longer be silently widened to
   all of them.** The panel resolved a rule's inbound tags to ids before saving,
   and read "nothing resolved" as "the operator chose every inbound". Three
