@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/xray"
 )
@@ -39,7 +41,22 @@ func (s *XraySettingService) SaveXraySetting(newXraySettings string) error {
 	if synced, err := EnsureDnsServerRouting(newXraySettings); err == nil {
 		newXraySettings = synced
 	}
-	return s.saveSetting("xrayTemplateConfig", newXraySettings)
+	if err := s.saveSetting("xrayTemplateConfig", newXraySettings); err != nil {
+		return err
+	}
+	/*
+		Post-save, and non-fatal: the template is already stored, so a repair that
+		fails must not read as a failed save. A rule left naming a deleted outbound
+		has its traffic dropped by the dispatcher rather than misrouted, so it is
+		worth finding even if this pass cannot.
+	*/
+	if changed, pErr := (&RoutingService{}).PruneOutbound(context.Background(),
+		TemplateDestinations(newXraySettings)); pErr != nil {
+		logger.Warning("routing: could not repair rules after the template changed:", pErr)
+	} else if changed {
+		logger.Info("routing: disabled rules whose destination left the template")
+	}
+	return nil
 }
 
 func (s *XraySettingService) CheckXrayConfig(XrayTemplateConfig string) error {

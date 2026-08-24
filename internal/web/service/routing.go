@@ -598,10 +598,11 @@ func (s *RoutingService) converge(ctx context.Context) error {
 /*
 destResolves refuses a rule aimed at a tag nothing answers to.
 
-Xray does not fail an unknown outboundTag — it falls back to the first outbound,
-so a rule left pointing at a deleted or renamed one keeps matching and sends that
-traffic somewhere the operator never chose. Shape validation cannot see this: the
-tag is a non-empty string either way.
+A rule left pointing at a deleted or renamed tag keeps matching, and the pinned
+core then drops what it matched: app/dispatcher/default.go logs "non existing
+outTag", closes the writer and interrupts the reader, under a DO NOT CHANGE
+comment. Shape validation cannot see it — the tag is a non-empty string either
+way. This guards the rule-save direction; PruneOutbound guards the other one.
 
 A config this cannot read does not block the save. Refusing every rule write
 because the base config is unreadable trades one silent misroute for a total
@@ -939,4 +940,95 @@ func (s *RoutingService) candidateRules(rule *model.RoutingRule) ([]*model.Routi
 		out = append(out, rule)
 	}
 	return out, nil
+}
+
+/*
+PruneOutbound repairs the rules that named an outbound the template no longer
+carries.
+
+The rule-save direction has always been guarded — destResolves refuses a rule
+naming a tag that resolves to nothing. The outbound-CRUD direction had no guard
+at all, so renaming or deleting an outbound in the Xray settings left every rule
+pointing at it naming something that does not exist.
+
+That used to be survivable and is not any more: the doc on destResolves said
+Xray falls back to the first outbound, and in the pinned core it does not.
+app/dispatcher/default.go logs "non existing outTag", closes the writer and
+interrupts the reader, under a DO NOT CHANGE comment. So the rule's traffic is
+dropped rather than misrouted, silently, for as long as the rule stands.
+
+Same shape as PruneInbound and the same marker: the rule is disabled and its
+remark says why, so nothing needs a new column and the operator can find it.
+*/
+func (s *RoutingService) PruneOutbound(ctx context.Context, present map[string]bool) (bool, error) {
+	rules, err := s.Rules()
+	if err != nil {
+		return false, err
+	}
+	changed := false
+	db := database.GetDB()
+	for _, rule := range rules {
+		if !rule.Enable || rule.DestTag == "" {
+			continue
+		}
+		if rule.DestKind != model.RoutingDestOutbound && rule.DestKind != model.RoutingDestBalancer {
+			continue
+		}
+		if present[rule.DestTag] {
+			continue
+		}
+		updates := map[string]any{
+			"enable": false,
+			"remark": missingDestRemark(rule.Remark, rule.DestTag),
+		}
+		if err := db.Model(&model.RoutingRule{}).Where("id = ?", rule.Id).Updates(updates).Error; err != nil {
+			return changed, err
+		}
+		logger.Warning("routing: rule", rule.Id, "was disabled; its destination", rule.DestTag, "is no longer in the template")
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	return true, s.converge(ctx)
+}
+
+// missingDestRemark names the tag, because an operator looking at a disabled
+// rule needs to know which outbound went away rather than that one did.
+func missingDestRemark(existing, tag string) string {
+	note := "disabled: its destination " + tag + " is no longer in the Xray template"
+	if existing == "" {
+		return note
+	}
+	return existing + " (" + note + ")"
+}
+
+// TemplateDestinations is every tag a rule may name as its destination: the
+// template's own outbounds, plus its balancers.
+func TemplateDestinations(template string) map[string]bool {
+	out := map[string]bool{}
+	var parsed struct {
+		Outbounds []struct {
+			Tag string `json:"tag"`
+		} `json:"outbounds"`
+		Routing struct {
+			Balancers []struct {
+				Tag string `json:"tag"`
+			} `json:"balancers"`
+		} `json:"routing"`
+	}
+	if json.Unmarshal([]byte(template), &parsed) != nil {
+		return nil
+	}
+	for _, outbound := range parsed.Outbounds {
+		if outbound.Tag != "" {
+			out[outbound.Tag] = true
+		}
+	}
+	for _, balancer := range parsed.Routing.Balancers {
+		if balancer.Tag != "" {
+			out[balancer.Tag] = true
+		}
+	}
+	return out
 }
