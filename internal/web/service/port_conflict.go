@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
@@ -88,8 +89,14 @@ func (d *portConflictDetail) String() string {
 	if isAnyListen(listen) {
 		listen = "*"
 	}
-	return fmt.Sprintf("port %d (%s) already used by inbound %s on %s",
-		d.Port, transportTagSuffix(d.Transports), name, listen)
+	// The panel's own listeners and the Xray API have no row, so "inbound" would
+	// send the operator looking for one on a page that will never show it.
+	kind := "inbound"
+	if d.InboundID == 0 {
+		kind = "listener"
+	}
+	return fmt.Sprintf("port %d (%s) already used by %s %s on %s",
+		d.Port, transportTagSuffix(d.Transports), kind, name, listen)
 }
 
 // defaultXrayAPIPort is the loopback port of the internal Xray API inbound
@@ -121,6 +128,69 @@ func reservedAPIPort() int {
 	return defaultXrayAPIPort
 }
 
+/*
+panelListenerConflict names the two TCP ports the panel process binds itself.
+
+Neither is a row in inbounds, so nothing above sees them — and both defaults,
+2053 and 2096, are in Cloudflare's proxied-HTTPS set, which is exactly why an
+operator picks them for a CDN-frontable inbound. Xray cannot bind a port the
+panel already holds, and a failed listener is fatal to the WHOLE process rather
+than to that one inbound, so the box goes dark and the watchdog restarts it into
+the same failure every couple of seconds.
+
+Not caught anywhere else: the -test pre-flight is LoadConfig plus core.New, and
+binds nothing.
+*/
+func panelListenerConflict(inbound *model.Inbound, bits transportBits) (*portConflictDetail, error) {
+	// Same two conjuncts the api guard opens with: a node runs its own Xray, and
+	// both listeners are TCP, so a UDP-only inbound may share the port.
+	if inbound.NodeID != nil || bits&transportTCP == 0 {
+		return nil, nil
+	}
+
+	setting := &SettingService{}
+	webPort, err := setting.GetPort()
+	if err != nil {
+		return nil, err
+	}
+	// web.go binds PUI_PORT when it is set, so the stored setting is then neither
+	// the port in use nor a port anything will bind.
+	if envPort, configured, envErr := config.GetPortOverride(); configured && envErr == nil {
+		webPort = envPort
+	}
+	webListen, err := setting.GetListen()
+	if err != nil {
+		return nil, err
+	}
+	if inbound.Port == webPort && listenOverlaps(webListen, inbound.Listen) {
+		return &portConflictDetail{
+			Tag: "panel", Listen: webListen, Port: inbound.Port, Transports: transportTCP,
+		}, nil
+	}
+
+	subEnable, err := setting.GetSubEnable()
+	if err != nil {
+		return nil, err
+	}
+	if !subEnable {
+		return nil, nil
+	}
+	subPort, err := setting.GetSubPort()
+	if err != nil {
+		return nil, err
+	}
+	subListen, err := setting.GetSubListen()
+	if err != nil {
+		return nil, err
+	}
+	if inbound.Port == subPort && listenOverlaps(subListen, inbound.Listen) {
+		return &portConflictDetail{
+			Tag: "subscription", Listen: subListen, Port: inbound.Port, Transports: transportTCP,
+		}, nil
+	}
+	return nil, nil
+}
+
 func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int) (*portConflictDetail, error) {
 	newBits := inboundTransports(inbound.Protocol, inbound.StreamSettings, inbound.Settings)
 
@@ -136,6 +206,10 @@ func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int)
 			Port:       inbound.Port,
 			Transports: transportTCP,
 		}, nil
+	}
+
+	if hit, err := panelListenerConflict(inbound, newBits); err != nil || hit != nil {
+		return hit, err
 	}
 
 	db := database.GetDB()
