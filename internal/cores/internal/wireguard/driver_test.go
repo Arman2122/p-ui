@@ -265,7 +265,7 @@ func TestRemoveUserResolvesTheClientWithoutAUserSet(t *testing.T) {
 
 	t.Run("from the stored settings when the index is cold", func(t *testing.T) {
 		k := wgtest.New()
-		if err := (NewFor(Kind, engine.NewManager(k), engine.NewManager(k))).Reconcile(t.Context(), []core.Instance{inbound(a, b)}); err != nil {
+		if err := NewFor(Kind, engine.NewManager(k), engine.NewManager(k)).Reconcile(t.Context(), []core.Instance{inbound(a, b)}); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 		stored := inbound()

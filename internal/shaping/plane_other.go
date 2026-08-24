@@ -26,9 +26,12 @@ func (unsupportedPlane) DeleteIFB(context.Context, string) error { return ErrPla
 func (unsupportedPlane) AddQdisc(context.Context, QdiscSpec) error { return ErrPlatformUnsupported }
 func (unsupportedPlane) DelQdisc(context.Context, QdiscSpec) error { return ErrPlatformUnsupported }
 
-func (unsupportedPlane) AddClass(context.Context, ClassSpec) error    { return ErrPlatformUnsupported }
+func (unsupportedPlane) AddClass(context.Context, ClassSpec) error { return ErrPlatformUnsupported }
+
 func (unsupportedPlane) ChangeClass(context.Context, ClassSpec) error { return ErrPlatformUnsupported }
-func (unsupportedPlane) DelClass(context.Context, ClassSpec) error    { return ErrPlatformUnsupported }
+
+func (unsupportedPlane) DelClass(context.Context, ClassSpec) error { return ErrPlatformUnsupported }
 
 func (unsupportedPlane) AddFilter(context.Context, FilterSpec) error { return ErrPlatformUnsupported }
+
 func (unsupportedPlane) DelFilter(context.Context, FilterSpec) error { return ErrPlatformUnsupported }
