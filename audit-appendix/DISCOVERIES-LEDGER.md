@@ -111,6 +111,39 @@ failure — so it should be corrected by the change that acts on it.
 
 ---
 
+## L6 — `KeySelfLoop` is declared and emitted nowhere
+
+**Found:** while gathering F049's message keys.
+**Where:** `internal/routing/diag.go:43`.
+
+Six of the seven refusal keys have emit sites in `plan.go`.
+`pages.xray.routing.refuse.selfLoop` has none — a repo-wide search for the
+constant, for the string, and for "self-loop" in any casing finds only the
+declaration. It has been that way since `e30b1841`, the commit that introduced
+the whole diag vocabulary, so it is an intent that was declared and never built
+rather than a detector that was later removed.
+
+F049 ships the six that have emitters. Writing an eighth diagnostic inside it
+would grow the slice past its own finding, whose job is making the diags that
+*exist* refuse.
+
+**The disposition question, which needs a probe rather than an opinion:** can a
+self-loop actually be constructed through the panel's own forms — a rule whose
+destination resolves back to the ingress it is scoped to, or a chain of rules
+that does — or do the planner's existing refusals make it structurally
+impossible? `bounceable`, `destResolves` and the exit-handle checks already
+reject several shapes that would look like one.
+
+If a probe shows it is unreachable, the key is deleted for good and nothing
+replaces it. If it is reachable, the detector is its own small finding with its
+own description, and the key gets a string then.
+
+**Cost to close:** the probe. Constructing the candidate shapes against the
+compiler in `internal/routing` is cheap — `Plan` is pure and its test harness
+already builds subjects, exits and rules directly.
+
+---
+
 ## L5 — two staticcheck deprecations
 
 **Found:** during the lint reconciliation.
