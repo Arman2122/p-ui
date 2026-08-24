@@ -235,6 +235,36 @@ zeros change one attribute and touch nothing else.
 
 ---
 
+## 7. The `[LIMIT_IP]` line is the jail's input, not a log message
+
+Recorded here because it is a design constraint, not a finding, and it binds any
+future change to the IP-limit pass — slot 10 edits the jail config directly.
+
+`p-ui.sh`'s `create_iplimit_jails` writes `filter.d/p-ui-ipl.conf` on every
+installed box, whose `failregex` matches `IPLimitLogFormat` word for word, and
+points a jail at the file `xray.GetIPLimitLogPath()` returns. The fail2ban daemon
+reads that file on its own schedule. It does not read `PUI_ENABLE_FAIL2BAN`, it
+does not ask the panel whether enforcement is on, and it keeps running after the
+operator turns the panel's toggle off — nothing in the install or update path
+removes the jail when the env var changes.
+
+So **writing that line is enforcing**, in the same sense that calling
+`fail2ban-client` would be. Any "always record, gate only the action" design has
+to treat the file write as part of the action, or it arms enforcement on exactly
+the boxes whose operator switched it off. C2/H1 hit this: un-gating the verdict
+made the pass produce bans to report on a host set not to ban, and without the
+gate on the write those bans would have landed on the first tick after upgrade.
+
+The operator-facing record therefore has to live somewhere the jail cannot read:
+the `inbound_client_ips` row (which is what `/clientIps` and both info modals
+show) and the panel's own log. That is where it lives now.
+
+Corollary for slot 10: if a step changes `IPLimitLogFormat`, changes the log
+path, or adds a second writer, the deployed `failregex` on every existing box is
+part of the blast radius — the filter is not regenerated on update.
+
+---
+
 ## Refuted on re-read
 
 *(none yet)*
