@@ -8,6 +8,24 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A failed update no longer leaves the panel stopped with no service unit.**
+  The updater stopped p-ui, disabled it, deleted its systemd unit and reloaded
+  the daemon — and only then fetched its management script from GitHub. On a host
+  that cannot reach `raw.githubusercontent.com`, which is many of the hosts this
+  panel runs on, one failed request left the box with the panel down, no unit and
+  no autostart, in a state that survives a reboot. That script now comes out of
+  the release archive already downloaded, before anything is torn down, and a
+  refresh that fails is a warning rather than the end of the update — the copy
+  already installed still works.
+
+- **An unattended update no longer reconfigures TLS on its own.** Updating
+  without a terminal — from a script, a cron job, the panel's own update button —
+  reached a prompt that reads from standard input, got end-of-file, and took that
+  as agreement: it contended port 80 with whatever was already there, issued a
+  six-day IP certificate and switched the panel to direct TLS. That prompt is now
+  interactive-only, and the "SSL enabled" banner is printed only when a
+  certificate was actually issued rather than unconditionally.
+
 - **LDAP sync works on directories with more than about a thousand users, and
   auto-delete never acts before it has a trusted baseline.** Two changes that
   ship together because the second is what makes the first safe.
