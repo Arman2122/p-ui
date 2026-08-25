@@ -55,12 +55,39 @@ describe('i18n keys', () => {
   const enUS = JSON.parse(readFileSync(join(translationDir, 'en-US.json'), 'utf8'));
   const enKeys = flattenKeys(enUS);
 
-  const sources: string[] = [];
-  collectSources(join(repoRoot, 'frontend', 'src'), ['.ts', '.tsx'], sources);
-  collectSources(join(repoRoot, 'internal'), ['.go'], sources);
+  /*
+   * A Go constant that IS the key is not a use of it. This scan tokenises source
+   * text, so `KeyNoSnat = "pages.xray.routing.refuse.noSnat"` made the key look
+   * referenced by its own declaration - which is how selfLoop survived from
+   * e30b1841 with no emit site anywhere. Ledger L7.
+   */
+  const GO_KEY_DECLARATION = /^[ \t]*(?:const |var )?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+"[ \t]*$/gm;
+
+  const tsSources: string[] = [];
+  collectSources(join(repoRoot, 'frontend', 'src'), ['.ts', '.tsx'], tsSources);
+  const goSources: string[] = [];
+  collectSources(join(repoRoot, 'internal'), ['.go'], goSources);
+  /*
+   * A declaration is a use only if the constant it declares is used somewhere.
+   * The keys are emitted through their Go identifier, never through the dotted
+   * string, so stripping declarations outright would condemn every live one.
+   */
+  const declaredKeys = new Map<string, string>();
+  const sources = [
+    ...tsSources,
+    ...goSources.map((src) => src.replace(GO_KEY_DECLARATION, (line) => {
+      const parts = line.match(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]+)"/);
+      if (parts) declaredKeys.set(parts[1], parts[2]);
+      return '';
+    })),
+  ];
   const blob = sources.join('\n');
 
   const tokens = new Set(blob.match(/[A-Za-z][A-Za-z0-9_.]*/g) ?? []);
+
+  for (const [identifier, key] of declaredKeys) {
+    if (tokens.has(identifier)) tokens.add(key);
+  }
 
   const prefixes: string[] = [];
   for (const match of blob.matchAll(/['"`]([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\.?)['"`]\s*\+/g)) {

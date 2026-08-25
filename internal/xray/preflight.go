@@ -33,6 +33,20 @@ answer is nil, because this check must never become the reason a restart cannot
 happen.
 */
 func TestConfig(cfg *Config) error {
+	return TestConfigWith(GetBinaryPath(), cfg)
+}
+
+/*
+TestConfigWith is TestConfig against a named binary rather than the installed
+one.
+
+The version switcher downloads a replacement, renames it over the binary that
+works, and only then restarts — so a download that verifies but cannot load
+this config was refused with an unusable binary already in place, and every
+later restart refused too. Asking the staged file first is what keeps the
+failure recoverable. Ledger L2.
+*/
+func TestConfigWith(binary string, cfg *Config) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return common.NewErrorf("could not encode the generated xray config: %v", err)
@@ -46,7 +60,7 @@ func TestConfig(cfg *Config) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), xrayTestTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, GetBinaryPath(), "-test", "-c", path).CombinedOutput()
+	out, err := exec.CommandContext(ctx, binary, "-test", "-c", path).CombinedOutput()
 	if err == nil {
 		return nil
 	}
