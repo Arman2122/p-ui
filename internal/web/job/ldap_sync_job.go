@@ -162,33 +162,80 @@ func (j *LdapSyncJob) Run() {
 	}
 
 	// --- Auto delete clients not in LDAP ---
-	autoDelete := mustGetBool(j.settingService.GetLdapAutoDelete)
-	if autoDelete && j.autoDeleteSafeForFetch(len(flags)) {
-		ldapEmailSet := map[string]struct{}{}
-		for e := range flags {
-			ldapEmailSet[e] = struct{}{}
-		}
-		for _, tag := range inboundTags {
-			j.deleteClientsNotInLDAP(tag, ldapEmailSet)
+	// Read before the baseline is written, or a first sync judges itself.
+	believable := j.fetchLooksComplete(len(flags))
+	if mustGetBool(j.settingService.GetLdapAutoDelete) {
+		switch {
+		case !believable:
+			logger.Warningf("LDAP auto-delete skipped: fetched %d users against a previous %d (empty, or below %d%% retention)",
+				len(flags), j.lastFlagCount.Load(), ldapAutoDeleteMinRetainPercent)
+		case !j.autoDeleteAllowed(len(flags)):
+			logger.Warning("LDAP auto-delete skipped: no trusted baseline yet; this sync records one and the next may delete")
+		default:
+			ldapEmailSet := map[string]struct{}{}
+			for e := range flags {
+				ldapEmailSet[e] = struct{}{}
+			}
+			for _, tag := range inboundTags {
+				j.deleteClientsNotInLDAP(tag, ldapEmailSet)
+			}
 		}
 	}
-	j.lastFlagCount.Store(int64(len(flags)))
+	// Refuses an unbelievable count itself; see recordBaseline.
+	j.recordBaseline(len(flags))
 }
 
-// FetchVlessFlags returns (empty, nil) when the bind succeeds but the search
-// yields nothing — a renamed OU, a lost read grant — which is not "all gone".
-func (j *LdapSyncJob) autoDeleteSafeForFetch(fetched int) bool {
+/*
+fetchLooksComplete reports whether this fetch can be believed.
+
+FetchVlessFlags returns (empty, nil) when the bind succeeds but the search
+yields nothing — a renamed OU, a lost read grant — which is not "all gone". A
+partial answer is the same lie with a smaller number.
+
+Pure, and deliberately separate from autoDeleteAllowed: the answer decides two
+different things. A believable fetch becomes the new baseline whether or not
+auto-delete is even switched on; only a believable fetch WITH a baseline behind
+it may delete.
+*/
+func (j *LdapSyncJob) fetchLooksComplete(fetched int) bool {
 	if fetched == 0 {
-		logger.Warning("LDAP auto-delete skipped: directory returned no usable users")
 		return false
 	}
 	previous := j.lastFlagCount.Load()
-	if previous > 0 && int64(fetched)*100 < previous*ldapAutoDeleteMinRetainPercent {
-		logger.Warningf("LDAP auto-delete skipped: fetched %d users, previous successful sync saw %d (below %d%% retention)",
-			fetched, previous, ldapAutoDeleteMinRetainPercent)
-		return false
+	return previous == 0 || int64(fetched)*100 >= previous*ldapAutoDeleteMinRetainPercent
+}
+
+/*
+autoDeleteAllowed is the delete consumer, and it needs one thing more.
+
+A first sync has nothing to compare against, so fetchLooksComplete cannot refuse
+it — and lastFlagCount lives in memory, so EVERY panel restart is a first sync.
+Without this, a restart re-armed mass deletion against whatever the next fetch
+happened to return.
+
+So the first believable sync after a start establishes the baseline and deletes
+nothing. The second one, judged against it, may delete. That is also the way out
+of a legitimate mass off-boarding: restart the panel, let one sync record the
+smaller directory, and deletion resumes on the next tick.
+*/
+/*
+recordBaseline is the only writer, and it makes its own judgement.
+
+Deciding believability here rather than at the call site means the baseline
+cannot be advanced by a caller who forgot to ask — which is precisely the bug:
+the old code stored every successful fetch at the tail of a long function, so a
+sync the guard had just refused became the thing the next one was measured
+against.
+*/
+func (j *LdapSyncJob) recordBaseline(fetched int) {
+	if !j.fetchLooksComplete(fetched) {
+		return
 	}
-	return true
+	j.lastFlagCount.Store(int64(fetched))
+}
+
+func (j *LdapSyncJob) autoDeleteAllowed(fetched int) bool {
+	return j.fetchLooksComplete(fetched) && j.lastFlagCount.Load() > 0
 }
 
 func truthyValuesOrDefault(s string) []string {

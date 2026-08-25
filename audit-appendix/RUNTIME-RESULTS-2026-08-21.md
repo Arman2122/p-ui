@@ -607,6 +607,56 @@ cannot be realised.
 
 ---
 
+## 15. F370 — paging, proved against a real limit-enforcing directory
+
+The finding's own test note said only a real directory would settle it. One was
+stood up on the box: OpenLDAP with 1200 seeded users and a bind subject to a
+500-entry limit.
+
+The first attempt **failed to prove anything**, and the reason matters. Stock
+OpenLDAP applies `sizelimit` to the whole result set regardless of paging, so a
+paged search hit the same wall as an unpaged one:
+
+```
+WITH the fix (SearchWithPaging)   -> 0 users, Size Limit Exceeded
+WITHOUT the fix (plain Search)    -> 0 users, Size Limit Exceeded
+```
+
+That is not this finding's directory. Active Directory's `MaxPageSize` is a
+limit **per page**, which is why paging is the documented way past it. Modelling
+that shape in OpenLDAP takes one `olcLimits` line — a hard total limit for
+unpaged searches, an unlimited total for paged ones:
+
+```
+olcLimits: dn.exact="cn=reader,dc=nodomain"
+           size.soft=500 size.hard=500 size.pr=500 size.prtotal=unlimited
+```
+
+Against that directory, through the panel's own `FetchVlessFlags`:
+
+```
+WITH the fix (SearchWithPaging)   -> 1200 users, err=<nil>
+WITHOUT the fix (plain Search)    ->    0 users, LDAP Result Code 4 "Size Limit Exceeded"
+```
+
+Zero, not five hundred. The error aborts the whole fetch, so the sync applies no
+flag, creates no client and deletes none — which is the finding's claim, now
+measured rather than reasoned.
+
+### The directory class this does NOT fix, recorded because it is real
+
+The first attempt is a finding of its own shape: **a directory that caps the
+total result set rather than the page size is not helped by paging at all.**
+Stock OpenLDAP with `olcSizeLimit: 500` and no per-DN limits is exactly that,
+and on one of those the sync still fails completely after this fix.
+
+There is nothing the panel can do about it from the client side — the fix for
+that operator is a directory-side limit for the panel's bind DN. Worth a
+sentence in the changelog rather than letting them read "LDAP paging fixed" and
+conclude their case was covered.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.

@@ -8,6 +8,28 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **LDAP sync works on directories with more than about a thousand users, and
+  auto-delete never acts before it has a trusted baseline.** Two changes that
+  ship together because the second is what makes the first safe.
+  The user search was unpaged, so a directory that limits how many entries one
+  search may return answered "size limit exceeded" and the whole sync failed —
+  no flag applied, no client created, no client deleted, ever, with one log line
+  a minute as the only symptom. It is now paged. *(A directory that caps the
+  total result set rather than the page size is a different case and is not
+  helped by paging; there the fix is a directory-side limit for the panel's bind
+  account.)*
+  Auto-delete's safety guard also protected for exactly one run: a sync that came
+  back with too few users was correctly refused, and then that same small number
+  was recorded as the count the next sync would be measured against — which
+  passed, and detached everyone. Only a sync the guard believed now updates that
+  baseline. And because the baseline is held in memory, every panel start is a
+  first sync: the first one after a start now records a baseline and deletes
+  nothing, so auto-delete never acts against a number it has not seen twice.
+  **What you will notice:** on a large directory, sync starts working. If you
+  deliberately off-board most of your directory at once, auto-delete will refuse
+  it as a suspicious collapse — restart the panel, let one sync record the new
+  smaller size, and deletion resumes on the next run.
+
 - **A VLESS client added with the `xtls-rprx-vision-udp443` flow can now
   connect.** That flow is a client-side setting: the client shortens it before it
   goes on the wire, and the server refuses any account whose stored flow is not
