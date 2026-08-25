@@ -657,6 +657,45 @@ conclude their case was covered.
 
 ---
 
+## 16. F281 — a v7a binary really does SIGILL on an armv5 board
+
+The audit warns "do not silently map arm→one variant: a v7a binary will SIGILL
+on an armv5 board". Verified rather than trusted, because that warning is the
+whole reason the cheap fix is not available.
+
+`qemu-user-static` on the box, against the two real published assets from
+Xray v26.3.27:
+
+```
+                     ARMv5 CPU (arm926)                ARMv7 CPU (cortex-a15)
+Xray-linux-arm32-v5  Xray 26.3.27 ... linux/arm        Xray 26.3.27 ... linux/arm
+Xray-linux-arm32-v7a uncaught target signal 4          Xray 26.3.27 ... linux/arm
+                     (Illegal instruction) - core dumped
+```
+
+So the asymmetry is real and it is one-way: the v5 build runs on both, the v7a
+build runs only on v7. Shipping v7a to every `GOARCH=arm` host would brick
+armv5 and armv6 boxes at the first exec — worse than today's 404, which at
+least leaves the old binary in place.
+
+### The check that does NOT work, recorded because it is the obvious one
+
+`readelf -A` prints **nothing** for either binary — Go does not emit the ARM
+build-attributes section, so `Tag_CPU_arch` is unavailable and `file` cannot tell
+the two apart either. Executing under an emulated CPU is the only test that
+distinguishes them, which is why the verification plan is qemu rather than
+inspection.
+
+### What this makes checkable
+
+The fix stamps the sub-arch at build time. Its correctness is therefore testable
+end to end without an ARM board: build the panel for each ARM platform, ask it
+which asset name it would download, and confirm that asset runs under the
+matching emulated CPU and fails under a lower one. The table above is the
+reference answer.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
