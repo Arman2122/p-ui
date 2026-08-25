@@ -311,27 +311,48 @@ explicitly and works. The mechanism is present and inert.
 The original finding. `RoutingService.Add` cannot create a disabled rule, so a
 rule staged with the switch off starts routing traffic on save.
 
-### The fix shape, now that the audit scopes it
+### The fix, and the two shapes that do not work
 
-Four call sites, one of them a `CreateInBatches`. Three candidate shapes:
+**Status: FIXED.** Recorded here rather than deleted, because two of the three
+candidate shapes were measured NOT to work and the next person will reach for
+them.
 
-- **`Select("*")` at each reachable create.** Local, greppable, changes no
-  schema and no reader. Does not stop the next model from acquiring the same
-  bug.
-- **Drop `default:true` and set the default in code.** Removes the mechanism
-  outright, but a `default` also governs what `AutoMigrate` writes for an
-  existing column and what any INSERT that genuinely omits the field gets —
-  changing it is a migration question, not a tag edit.
-- **Make the fields `*bool`.** Nil means "take the default", `&false` means
-  false. Correct by construction and the largest diff, touching every reader.
+```
+plain Create                    -> true   (the bug)
+Select("*").Create              -> true   does NOT fix it
+Select(the column).Create       -> true   does NOT fix it
+Omit(the column).Create         -> true   does NOT fix it
+Select("*").CreateInBatches     -> true   does NOT fix it
 
-My recommendation is the first, plus an `internal/arch` guard that fails when a
-`Create` on one of these models is not `Select("*")`-qualified — the pattern is
-silent, uniform, and will recur the next time someone adds a `default:true`
-column. Whether the guard is worth its own maintenance is the decision to make
-alongside the fix.
+Create + an explicit Update     -> false  works
+Create from a map               -> false  works
+*bool field, set to &false      -> false  works, and nil still takes the default
+plain bool with NO default tag  -> false  works
+```
 
-**Note for whoever writes it:** the two access-control-shaped consequences
-(ClientRecord, Node) deserve a changelog entry naming what an operator should
-re-check, because rows already created in this state are indistinguishable from
-rows deliberately enabled.
+GORM skips a default-tagged field at the schema level; no call-level `Select`
+or `Omit` reaches it. **And it writes the default back into the struct after the
+insert**, so a fix that reads the field afterwards to decide whether to repair
+it sees `true` and does nothing — which is how the first attempt at this passed
+review and failed its own test.
+
+What landed is the second row: capture the intended value *before* the insert,
+then write the column explicitly when it was false. One helper,
+`applyStagedOff`, at the four reachable creates. Chosen over the two structural
+shapes because dropping the tag silently flips what an omitting caller gets
+(true today, false after) across every construction site, and `*bool` is correct
+by construction but rewrites every reader of a field the codebase reads
+constantly. Both remain available if this proves too easy to forget.
+
+The guard against forgetting is `internal/arch`'s
+`TestEveryTrueDefaultedBooleanHasACreateProof`, which derives its model set from
+the tags rather than a list — and immediately found two fields a hand-written
+grep had missed (`Host.IsDisabled`, `Host.IsHidden`, both `default:false` and
+therefore safe, which is why the scan narrowed to `default:true`). It cannot
+check the call sites, because proving a given `Create` is safe needs the
+argument's type and these tests parse rather than type-check; so it requires the
+checkable next-best thing, a named regression test per model.
+
+**Not repaired: rows already created this way.** There is no record of intent to
+repair from — a row stored enabled is indistinguishable from one deliberately
+enabled. The changelog says so and tells operators what to re-check by hand.

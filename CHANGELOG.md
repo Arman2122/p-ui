@@ -302,6 +302,24 @@ here; the git log is the full record.
 
 ### Security
 
+- **A client, node, subscription or routing rule created with its switch off is
+  no longer stored switched on.** A zero-valued boolean was dropped from the
+  INSERT whenever its column carried a database-side default, so the database
+  supplied `true` instead. The consequences differed by row: a **client** staged
+  as disabled was stored enabled, was therefore not stripped from the push to
+  the core, and could connect; a **node** staged as off was heartbeated and had
+  inbounds synced to it; an outbound **subscription** staged as off was fetched
+  and its outbounds merged into the config; a **routing rule** staged as off
+  started routing traffic on save.
+  **What you will notice:** the switch is respected on create. Nothing else
+  changes.
+  **Worth checking by hand:** rows created this way before the fix are
+  indistinguishable from rows that were deliberately enabled — there is no record
+  of what was intended, so the panel cannot find them for you. If you ever added
+  a client, node or subscription with its switch off and later found it active,
+  that is this. The fix governs new creates only, for the same reason: there is
+  nothing to repair from.
+
 - A login attempt can no longer be used to flood the operator's inbox or
   Telegram admins. `login.attempt` was exempt from the notification cooldown on
   both subscribers, and `/login` needs no authentication, so anyone could loop

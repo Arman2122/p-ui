@@ -142,11 +142,29 @@ func (s *ClientService) SyncInbound(tx *gorm.DB, inboundId int, clients []model.
 	}
 
 	if len(toCreate) > 0 {
+		// Which ones were staged off, read BEFORE the insert: GORM writes the
+		// column's default back into each struct, erasing the operator's intent.
+		stagedOff := make([]int, 0, len(toCreate))
+		offAt := make([]int, 0, len(toCreate))
+		for i := range toCreate {
+			if !toCreate[i].Enable {
+				offAt = append(offAt, i)
+			}
+		}
 		if err := tx.CreateInBatches(toCreate, 200).Error; err != nil {
 			return err
 		}
+		for _, i := range offAt {
+			toCreate[i].Enable = false
+			stagedOff = append(stagedOff, toCreate[i].Id)
+		}
 		for _, rec := range toCreate {
 			idByEmail[rec.Email] = rec.Id
+		}
+		// A client staged as disabled is stored ENABLED without this, so it is
+		// not stripped from the runtime push and can connect. See applyStagedOff.
+		if err := applyStagedOff(tx, &model.ClientRecord{}, "enable", false, stagedOff...); err != nil {
+			return err
 		}
 	}
 

@@ -429,7 +429,13 @@ func (s *NodeService) Create(n *model.Node) error {
 		return err
 	}
 	db := database.GetDB()
-	return db.Create(n).Error
+	// Read before the insert; GORM writes the default back into the struct.
+	staged := n.Enable
+	if err := db.Create(n).Error; err != nil {
+		return err
+	}
+	n.Enable = staged
+	return applyStagedOff(db, &model.Node{}, "enable", staged, n.Id)
 }
 
 func (s *NodeService) CreateFromRequest(req *NodeMutationRequest) (*NodeView, error) {
