@@ -28,6 +28,13 @@ func tlsConfig(cfg Config) *tls.Config {
 }
 
 // FetchVlessFlags returns map[email]enabled
+/*
+ldapSearchPageSize is a page, not a cap: SearchWithPaging keeps asking until the
+directory says there is no more, so this only sets how many come back per round
+trip. Active Directory's own MaxPageSize default is 1000.
+*/
+const ldapSearchPageSize = 500
+
 func FetchVlessFlags(cfg Config) (map[string]bool, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
@@ -74,7 +81,9 @@ func FetchVlessFlags(cfg Config) (map[string]bool, error) {
 		nil,
 	)
 
-	res, err := conn.Search(req)
+	// Paged, or a directory enforcing MaxPageSize answers Size Limit Exceeded and
+	// the whole sync errors out — no flags, no creates, no deletes, ever.
+	res, err := conn.SearchWithPaging(req, ldapSearchPageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +149,9 @@ func AuthenticateUser(cfg Config, username, password string) (bool, error) {
 		[]string{"dn"},
 		nil,
 	)
+	// Not paged, unlike the sync's search: this asks for one user with a size
+	// limit of 1, so no page limit can bite and paging alongside one is refused
+	// by some servers.
 	res, err := conn.Search(req)
 	if err != nil {
 		return false, err
