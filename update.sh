@@ -818,8 +818,12 @@ config_after_update() {
         echo -e "${green}New WebBasePath: ${config_webBasePath}${plain}"
     fi
 
-    # Check and prompt for SSL if missing
-    if [[ -z "$existing_cert" ]]; then
+    # Interactive only. prompt_and_setup_ssl reads from stdin; at EOF the read
+    # returns empty and the branch below it falls through to issuing an IP
+    # certificate — so an unattended update on a panel behind the operator's own
+    # reverse proxy contended port 80 with it, swapped the panel to direct TLS
+    # and announced success, none of it asked for.
+    if [[ -z "$existing_cert" && -t 0 ]]; then
         echo ""
         echo -e "${red}═══════════════════════════════════════════${plain}"
         echo -e "${red}      ⚠ NO SSL CERTIFICATE DETECTED ⚠     ${plain}"
@@ -835,9 +839,16 @@ config_after_update() {
         echo -e "${green}═══════════════════════════════════════════${plain}"
         echo -e "${green}     Panel Access Information              ${plain}"
         echo -e "${green}═══════════════════════════════════════════${plain}"
-        echo -e "${green}Access URL: https://${SSL_HOST}:${existing_port}/${existing_webBasePath}${plain}"
-        echo -e "${green}═══════════════════════════════════════════${plain}"
-        echo -e "${yellow}⚠ SSL Certificate: Enabled and configured${plain}"
+        # Only claim what happened: prompt_and_setup_ssl can decline or fail, and
+        # announcing https either way sends the operator to a URL that refuses.
+        if [[ -n "${SSL_HOST}" ]]; then
+            echo -e "${green}Access URL: https://${SSL_HOST}:${existing_port}/${existing_webBasePath}${plain}"
+            echo -e "${green}═══════════════════════════════════════════${plain}"
+            echo -e "${yellow}⚠ SSL Certificate: Enabled and configured${plain}"
+        else
+            echo -e "${yellow}No certificate was issued; the panel is still on http${plain}"
+            echo -e "${green}═══════════════════════════════════════════${plain}"
+        fi
     else
         echo -e "${green}SSL certificate is already configured${plain}"
         # Show access URL with existing certificate
@@ -952,6 +963,19 @@ update_p-ui() {
         _fail "ERROR: Downloaded p-ui release archive is empty, please be sure that your server can access GitHub"
     fi
 
+    # Staged BEFORE the teardown, and from the archive we already downloaded.
+    # This used to be a GitHub fetch AFTER the unit was stopped, disabled and
+    # deleted — so one 403 from a host that cannot reach raw.githubusercontent
+    # left the panel down with no unit and no autostart, surviving a reboot.
+    local pui_script_temp="/usr/bin/p-ui-temp.$$"
+    rm -f "${pui_script_temp}"
+    if tar tzf p-ui-linux-$(arch).tar.gz p-ui/p-ui.sh >/dev/null 2>&1; then
+        tar xzf p-ui-linux-$(arch).tar.gz -O p-ui/p-ui.sh >"${pui_script_temp}"
+    else
+        echo -e "${yellow}Release archive has no p-ui.sh; falling back to the main branch${plain}"
+        ${curl_bin} -fLRo "${pui_script_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.sh > /dev/null 2>&1 || true
+    fi
+
     if [[ -e ${pui_folder}/ ]]; then
         echo -e "${green}Stopping p-ui...${plain}"
         if [ -f "${pui_service}/p-ui.service" ]; then
@@ -1021,22 +1045,14 @@ update_p-ui() {
         chmod +x bin/mtg-linux-$(arch) > /dev/null 2>&1
     fi
 
-    echo -e "${green}Downloading and installing p-ui.sh script...${plain}"
-    local pui_script_temp="/usr/bin/p-ui-temp.$$"
-    rm -f "${pui_script_temp}"
-    ${curl_bin} -fLRo "${pui_script_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.sh > /dev/null 2>&1
-    if [[ $? -ne 0 ]]; then
+    # A warning, not a failure: the panel is mid-upgrade and refusing here would
+    # leave it torn down over a management script the old copy can still be.
+    echo -e "${green}Installing the p-ui.sh script...${plain}"
+    if [[ -s "${pui_script_temp}" ]] && mv -f "${pui_script_temp}" /usr/bin/p-ui; then
+        :
+    else
         rm -f "${pui_script_temp}"
-        _fail "ERROR: Failed to download p-ui.sh script, please be sure that your server can access GitHub"
-    fi
-    if [[ ! -s "${pui_script_temp}" ]]; then
-        rm -f "${pui_script_temp}"
-        _fail "ERROR: Downloaded p-ui.sh script is empty, please be sure that your server can access GitHub"
-    fi
-    mv -f "${pui_script_temp}" /usr/bin/p-ui
-    if [[ $? -ne 0 ]]; then
-        rm -f "${pui_script_temp}"
-        _fail "ERROR: Failed to install p-ui.sh script"
+        echo -e "${yellow}Could not refresh /usr/bin/p-ui; the existing one is kept${plain}"
     fi
 
     chmod +x ${pui_folder}/p-ui.sh > /dev/null 2>&1
