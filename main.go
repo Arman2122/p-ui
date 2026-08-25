@@ -301,6 +301,30 @@ func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime stri
 }
 
 // updateSetting updates various panel settings including port, credentials, base path, listen IP, and two-factor authentication.
+/*
+showFirewallPorts prints what this host binds on the panel's behalf.
+
+Read-only, and it talks to the database rather than to a running panel — the
+installer calls it with the service stopped. The format is an interface: one
+record per line, "<port>/<proto> <role>", stable field order, no header and no
+decoration, because a shell script reads it with `while read spec role`.
+*/
+func showFirewallPorts() error {
+	if err := database.InitDB(); err != nil {
+		fmt.Fprintln(os.Stderr, "Database initialization failed:", err)
+		return err
+	}
+	ports, err := (&service.InboundService{}).FirewallPorts()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to list ports:", err)
+		return err
+	}
+	for _, p := range ports {
+		fmt.Println(p)
+	}
+	return nil
+}
+
 func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool) error {
 	err := database.InitDB()
 	if err != nil {
@@ -535,6 +559,7 @@ func main() {
 	var getCert bool
 	var getApiToken bool
 	var resetTwoFactor bool
+	var listPorts bool
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
 	settingCmd.IntVar(&port, "port", 0, "Set panel port number")
@@ -546,6 +571,7 @@ func main() {
 	settingCmd.BoolVar(&getListen, "getListen", false, "Display current panel listenIP IP")
 	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
 	settingCmd.BoolVar(&getApiToken, "getApiToken", false, "Display current API token")
+	settingCmd.BoolVar(&listPorts, "listPorts", false, "List the ports this host binds, one per line, as \"<port>/<proto> <role>\"")
 	settingCmd.StringVar(&webCertFile, "webCert", "", "Set path to public key file for panel")
 	settingCmd.StringVar(&webKeyFile, "webCertKey", "", "Set path to private key file for panel")
 	settingCmd.StringVar(&tgbottoken, "tgbottoken", "", "Set token for Telegram bot")
@@ -583,6 +609,14 @@ func main() {
 		err := settingCmd.Parse(os.Args[2:])
 		if err != nil {
 			fmt.Println(err)
+			return
+		}
+		if listPorts {
+			// Answered before any write path, so a read cannot be a mutation and
+			// the installer can ask a stopped panel what to open.
+			if err = showFirewallPorts(); err != nil {
+				os.Exit(1)
+			}
 			return
 		}
 		if reset {

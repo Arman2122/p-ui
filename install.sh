@@ -1215,7 +1215,31 @@ config_after_install() {
                 fi
             fi
 
-            ${pui_folder}/p-ui setting -username "${config_username}" -password "${config_password}" -port "${config_port}" -webBasePath "${config_webBasePath}"
+            # Validated before use, with the same check setup_ip_certificate
+            # already carries. A port the panel cannot bind used to be stored and
+            # then crash-loop it at every start.
+            if ! [[ "${config_port}" =~ ^[0-9]+$ ]] || ((config_port < 1 || config_port > 65535)); then
+                echo -e "${red}Invalid panel port '${config_port}'. Using a random one instead.${plain}"
+                config_port=$(shuf -i 1024-62000 -n 1)
+                echo -e "${yellow}Generated random port: ${config_port}${plain}"
+            fi
+
+            # Split, and each exit status checked. These used to be one call, and
+            # main.go builds the setting command with flag.ExitOnError — so an
+            # unparseable port exited the process before the credentials were
+            # applied, leaving the box on admin/admin while the installer printed
+            # the random ones it never set and wrote them to install-result.env.
+            if ! ${pui_folder}/p-ui setting -port "${config_port}"; then
+                echo -e "${red}Failed to set the panel port; aborting before credentials are applied.${plain}"
+                exit 1
+            fi
+            if ! ${pui_folder}/p-ui setting -username "${config_username}" -password "${config_password}"; then
+                echo -e "${red}Failed to set the panel credentials. The panel may still accept the default login — set them by hand with: p-ui setting -username <u> -password <p>${plain}"
+                exit 1
+            fi
+            if ! ${pui_folder}/p-ui setting -webBasePath "${config_webBasePath}"; then
+                echo -e "${yellow}Failed to set the panel base path; the default is in use.${plain}"
+            fi
 
             echo ""
             echo -e "${green}═══════════════════════════════════════════${plain}"

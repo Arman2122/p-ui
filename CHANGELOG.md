@@ -8,6 +8,40 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The firewall menu no longer locks you out of your own server.** "Install
+  Firewall" allowed ssh, http, https, 2053 and 2096 and then force-enabled ufw —
+  but the installer assigns the panel port at random, so 2053 was almost never
+  the real one and no inbound port was in the list at all. Menu option 5 was
+  worse: a bare `ufw enable` with no rules, which default-denies everything the
+  moment it runs. And `allow ssh` means port 22, so anyone who had moved sshd
+  was locked out regardless.
+  **What you will notice:** both entries now read the real ports from the panel
+  — including inbounds you have switched off, so enabling one later is not eaten
+  by a firewall nothing re-runs — print exactly what they will apply, and refuse
+  to enable anything unless the port your own SSH session is on is in that list.
+  A host that also serves another panel's inbounds still needs those added by
+  hand; the menu says so before it asks.
+
+- **Switching the Xray version works on 32-bit ARM.** The download built its
+  filename from a list of architecture names Go never produces, so every armv5,
+  armv6 and armv7 panel asked GitHub for a file that has never existed and got a
+  404 — every time, on three platforms this project ships and documents. The
+  correct name is now recorded when the panel is built, because it cannot be
+  worked out afterwards and must not be guessed: the armv7 build of Xray crashes
+  with an illegal instruction on an armv5 board.
+  **What you will notice:** the version switcher works on those platforms. A
+  panel built outside the release pipeline still refuses to download rather than
+  installing a binary the board may not be able to run.
+
+- **A mistyped panel port during install no longer leaves the box on default
+  credentials.** The installer set the port, username, password and base path in
+  a single command, and an unusable port aborted that command before the
+  credentials were applied — so the panel stayed reachable on admin/admin while
+  the installer printed the random credentials it had not set and wrote them to
+  `install-result.env` as though the machine were secured. The port is checked
+  first, and the credentials are applied by their own command whose result is
+  checked.
+
 - **A failed update no longer leaves the panel stopped with no service unit.**
   The updater stopped p-ui, disabled it, deleted its systemd unit and reloaded
   the daemon — and only then fetched its management script from GitHub. On a host

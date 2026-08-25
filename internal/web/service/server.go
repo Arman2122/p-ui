@@ -853,26 +853,7 @@ func (s *ServerService) RestartXrayService() error {
 var xrayReleaseBaseURL = "https://github.com/XTLS/Xray-core/releases/download"
 
 func (s *ServerService) downloadXRay(version string) (string, error) {
-	arch := runtime.GOARCH
-
-	switch arch {
-	case "amd64":
-		arch = "64"
-	case "arm64":
-		arch = "arm64-v8a"
-	case "armv7":
-		arch = "arm32-v7a"
-	case "armv6":
-		arch = "arm32-v6"
-	case "armv5":
-		arch = "arm32-v5"
-	case "386":
-		arch = "32"
-	case "s390x":
-		arch = "s390x"
-	}
-
-	fileName := fmt.Sprintf("Xray-linux-%s.zip", arch)
+	fileName := fmt.Sprintf("Xray-linux-%s.zip", xray.ReleaseAssetArch())
 	url := fmt.Sprintf("%s/%s/%s", xrayReleaseBaseURL, version, fileName)
 	client := s.settingService.NewProxiedHTTPClient(60 * time.Second)
 	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)

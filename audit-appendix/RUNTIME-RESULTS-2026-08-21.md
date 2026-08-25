@@ -696,6 +696,39 @@ reference answer.
 
 ---
 
+## 17. F281 — the fix verified end to end, without an ARM board
+
+Steps 1 and 2 of the plan, on top of §16's SIGILL measurement.
+
+**The stamped binary computes the right name.** Cross-built for each ARM level
+with the link-time stamp, then executed under `qemu-user-static`:
+
+```
+armv7   computes arm32-v7a   want arm32-v7a   OK
+armv6   computes arm32-v6    want arm32-v6    OK
+armv5   computes arm32-v5    want arm32-v5    OK
+amd64   computes 64          want 64          OK
+```
+
+**Every name it computes is a real published asset**, and the one the old code
+produced is not:
+
+```
+Xray-linux-64.zip          200      Xray-linux-arm32-v6.zip    200
+Xray-linux-arm64-v8a.zip   200      Xray-linux-arm32-v5.zip    200
+Xray-linux-arm32-v7a.zip   200      Xray-linux-32.zip          200
+Xray-linux-s390x.zip       200      Xray-linux-arm.zip         404
+```
+
+That 404 is what every armv5, armv6 and armv7 install has been getting, 100% of
+the time, since the switch was written over values Go does not produce.
+
+So the chain is closed without hardware: release.yml stamps the platform, the
+binary resolves it to a name, the name resolves to an asset, and §16 says which
+asset each board can actually execute.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
