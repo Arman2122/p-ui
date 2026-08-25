@@ -611,7 +611,18 @@ func (s *SettingService) GetPort() (int, error) {
 	return s.getInt("webPort")
 }
 
+/*
+SetPort refuses a port the panel could not bind.
+
+`p-ui setting -port 99999` parsed, stored and then crash-looped the panel on
+net.Listen — and the installer sets the port and the admin credentials in one
+invocation, so a fat-fingered port took the credentials down with it and left
+the box on admin/admin while printing the random ones it never applied.
+*/
 func (s *SettingService) SetPort(port int) error {
+	if port < 1 || port > 65535 {
+		return common.NewErrorf("web port must be between 1 and 65535, got %d", port)
+	}
 	return s.setInt("webPort", port)
 }
 
