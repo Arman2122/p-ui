@@ -30,15 +30,20 @@ const DevicePrefix = "pawg"
 type Core struct {
 	*wgcore.Core
 	mgr *engine.Manager
+	// Kept alongside the manager so applyParams can ask whether a device exists.
+	// The module cannot be asked: it answers a missing device and a refused
+	// parameter set with the same errno.
+	plane engine.Plane
 }
 
 // New returns a core over its own device manager: the AmneziaWG plane, under
 // this core's prefix.
 func New() *Core {
-	mgr := engine.NewNamedManager(awg.NewPlane(), DevicePrefix)
+	plane := awg.NewPlane()
+	mgr := engine.NewNamedManager(plane, DevicePrefix)
 	// Its own uplink manager too, so a dialled AmneziaWG device is named in this
 	// module's namespace rather than kernel WireGuard's.
-	return &Core{Core: wgcore.NewFor(Kind, mgr, awg.UplinkManager()), mgr: mgr}
+	return &Core{Core: wgcore.NewFor(Kind, mgr, awg.UplinkManager()), mgr: mgr, plane: plane}
 }
 
 // Describe reuses the WireGuard core's capability claims -- they are the same
@@ -101,22 +106,30 @@ func (c *Core) ApplyInstance(ctx context.Context, inst core.Instance) error {
 /*
 applyParams pushes one inbound's obfuscation onto its device.
 
-A device that is not there yet IS reported, contrary to what this comment used
-to claim. The module answers a missing device with EINVAL, the same errno it
-uses for a parameter set it refuses (RUNTIME-RESULTS §10), so there is nothing
-here to tell the two apart — and swallowing it would swallow the refusal F095
-exists to surface. The reconcile no longer stops on it, which is what the claim
-was really protecting.
+A device that is not there yet is genuinely not an error, and the module cannot
+say so: it answers a missing device with EINVAL, the same errno it uses for a
+parameter set it refuses (RUNTIME-RESULTS §10). So the presence question is
+asked of the plane, which answers it without an error, and only a device that
+exists is configured. Swallowing the errno instead would have swallowed the
+refusal F095 exists to surface. Ledger L3.
 */
 func (c *Core) applyParams(ctx context.Context, inst core.Instance) error {
 	params, err := ParamsOf(inst)
 	if err != nil {
 		return err
 	}
+	name := c.mgr.Name(inst.ID)
+	snap, err := c.plane.Snapshot(ctx, name)
+	if err != nil {
+		return fmt.Errorf("awgkernel: inbound %d device state: %w", inst.ID, err)
+	}
+	if !snap.Exists {
+		return nil
+	}
 	// No IsZero() short-circuit: an inbound whose parameters were all cleared is
 	// exactly the case that has to reach the device, and skipping it is half of
 	// why a cleared one never did.
-	if err := awg.ConfigureParams(c.mgr.Name(inst.ID), params); err != nil {
+	if err := awg.ConfigureParams(name, params); err != nil {
 		return fmt.Errorf("awgkernel: inbound %d obfuscation: %w", inst.ID, err)
 	}
 	return nil

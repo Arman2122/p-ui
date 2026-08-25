@@ -33,6 +33,9 @@ const (
 
 // Message keys. Translation keys rather than sentences: the panel ships two
 // locales and these reach the operator.
+// A key here must have an emit site. selfLoop sat in this block from e30b1841
+// with none, and nothing could see it: the dead-keys scan starts from the
+// locale file, and no string was ever shipped for it either. Ledger L6.
 const (
 	KeyNoFront              = "pages.xray.routing.refuse.noFront"
 	KeyCriterionUnsupported = "pages.xray.routing.refuse.criterionUnsupported"
@@ -40,7 +43,6 @@ const (
 	KeyNoExitDriver         = "pages.xray.routing.refuse.noExitDriver"
 	KeyNoSnat               = "pages.xray.routing.refuse.noSnat"
 	KeyNoDefaultOutbound    = "pages.xray.routing.refuse.noDefaultOutbound"
-	KeySelfLoop             = "pages.xray.routing.refuse.selfLoop"
 )
 
 // Refusals returns the diags that must block a save. A preview shows every diag;

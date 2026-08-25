@@ -1067,19 +1067,20 @@ func (s *ServerService) UpdateXray(version string) error {
 		return err
 	}
 
-	// 2. Helper to extract files
-	copyZipFile := func(zipName string, fileName string) error {
+	// 2. Extract one file from the zip to a temp path beside its destination.
+	//    The caller renames it into place once it is satisfied with it.
+	stageZipFile := func(zipName string, fileName string) (string, error) {
 		zipFile, err := reader.Open(zipName)
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer zipFile.Close()
 		if err := os.MkdirAll(filepath.Dir(fileName), 0o755); err != nil {
-			return err
+			return "", err
 		}
 		tmpFile, err := os.CreateTemp(filepath.Dir(fileName), ".xray-*")
 		if err != nil {
-			return err
+			return "", err
 		}
 		tmpPath := tmpFile.Name()
 		ok := false
@@ -1091,31 +1092,54 @@ func (s *ServerService) UpdateXray(version string) error {
 		}()
 		n, err := io.Copy(tmpFile, io.LimitReader(zipFile, maxXrayBinaryBytes+1))
 		if err != nil {
-			return err
+			return "", err
 		}
 		if n > maxXrayBinaryBytes {
-			return fmt.Errorf("xray binary exceeds %d bytes", maxXrayBinaryBytes)
+			return "", fmt.Errorf("xray binary exceeds %d bytes", maxXrayBinaryBytes)
 		}
 		if err := tmpFile.Chmod(0o755); err != nil {
-			return err
+			return "", err
 		}
 		if err := tmpFile.Close(); err != nil {
-			return err
-		}
-		if err := os.Rename(tmpPath, fileName); err != nil {
-			return err
+			return "", err
 		}
 		ok = true
-		return nil
+		return tmpPath, nil
 	}
 
-	// 3. Extract correct binary
-	if err = copyZipFile("xray", xray.GetBinaryPath()); err != nil {
+	// 3. Stage the binary beside its destination, without replacing anything yet.
+	stagedPath, err := stageZipFile("xray", xray.GetBinaryPath())
+	if err != nil {
 		return err
 	}
+	defer func() { _ = os.Remove(stagedPath) }()
 
-	// 4. Swap the process onto it. Renaming over a running executable is fine on
-	// Linux — the old process keeps its inode until it exits.
+	/*
+		4. Ask the NEW binary whether it can load the config this box is running,
+		while the old one is still the installed one.
+
+		RestartXray's own pre-flight runs after the rename, so a download that
+		verifies but cannot load was refused with the unusable binary already in
+		place — every later restart refused too, and nothing put the old one back.
+		Asking here keeps the failure recoverable. Ledger L2.
+
+		Being unable to ask is not a refusal, matching the pre-flight's own rule:
+		if the config cannot be built the check is skipped rather than blocking an
+		upgrade.
+	*/
+	if cfg, cfgErr := s.xrayService.GetXrayConfig(); cfgErr == nil {
+		if err := xray.TestConfigWith(stagedPath, cfg); err != nil {
+			return fmt.Errorf("xray %s cannot load this panel's config, so it was not installed: %w", version, err)
+		}
+	} else {
+		logger.Warning("xray update pre-flight skipped:", cfgErr)
+	}
+
+	// 5. Move it into place and swap the process onto it. Renaming over a running
+	// executable is fine on Linux — the old process keeps its inode until it exits.
+	if err := os.Rename(stagedPath, xray.GetBinaryPath()); err != nil {
+		return err
+	}
 	if err := s.xrayService.RestartXray(true); err != nil {
 		logger.Error("start xray failed:", err)
 		return err

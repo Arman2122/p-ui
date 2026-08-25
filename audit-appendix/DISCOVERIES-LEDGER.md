@@ -22,6 +22,15 @@ reasoning stays here.
 
 ## L1 — `PruneInbound` rewrites a rule's ids and enable flag but never its scope
 
+**Status 2026-08-26: CLOSED, and the disposition changed on measurement.** It was
+dispositioned *fix* on my summary, which overstated the harm: the row is disabled,
+its remark already says *"disabled: its last inbound was deleted"*, and
+`TestAnOrphanedRuleCanBeRepairedByNamingALiveInbound` proves against a live
+database that an operator can name a live inbound and save. Re-enabling it empty
+is still refused, which is F048 working. Both proposed fixes cost more than the
+odd-looking row does — one destroys the operator's rule, the other adds a schema
+value every reader must learn. The test is the evidence and stays.
+
 **Found:** during F048's shape work.
 **Where:** `internal/web/service/routing.go:399-403`.
 
@@ -47,6 +56,9 @@ says so in the response. That choice is the work; the code is small.
 ---
 
 ## L2 — `TestConfig` cannot be pointed at a staged binary
+
+**Status 2026-08-26: FIXED.** `TestConfigWith(binary, cfg)` split out; `UpdateXray`
+stages the download, asks it about the running config, and renames only then.
 
 **Found:** during F280.
 **Where:** `internal/xray/preflight.go:51` — `exec.CommandContext(ctx, GetBinaryPath(), "-test", ...)`.
@@ -75,6 +87,9 @@ pre-flight still fails open when the staged binary is unrunnable.
 ---
 
 ## L3 — a missing AmneziaWG device cannot be told from a refused parameter set
+
+**Status 2026-08-26: FIXED.** The presence question goes to the plane, which
+answers it without an error; only a device that exists is configured.
 
 **Found:** during F085, recorded in RUNTIME-RESULTS §11.
 **Where:** `internal/cores/internal/amneziawg/core.go` `applyParams`.
@@ -136,6 +151,22 @@ else is being changed in those files.
 
 ## L6 — `KeySelfLoop` is declared and emitted nowhere
 
+**Status 2026-08-26: CLOSED — probed, then deleted.** The probe answered it:
+`Dest` is `{Kind, Tag, ExitID}` and no destination kind names an ingress, so a
+self-loop is **not expressible as a rule shape** and the planner — which sees
+handles, never addresses — could not detect one if it were. The key is deleted
+and nothing replaces it, per the disposition.
+
+The one adjacent shape that IS constructible: an operator egress whose *target*
+is one of this panel's own inbounds. That belongs to egress validation, not to
+routing diagnostics, and is recorded here rather than dropped.
+
+`internal/arch/diag_keys_emitted_test.go` now fails on any `Key*` constant with
+no emit site outside its declaration. **Its first version passed while the bug
+was present**, because the guard's own doc comment quoted the key it was looking
+for — the same disease, in the guard written to cure it. Tests are excluded from
+the scan now, and that story is in its comment.
+
 **Found:** while gathering F049's message keys.
 **Where:** `internal/routing/diag.go:43`.
 
@@ -168,6 +199,19 @@ already builds subjects, exits and rules directly.
 ---
 
 ## L7 — the dead-keys test cannot tell a live key from its own declaration
+
+**Status 2026-08-26: FIXED, and this entry's own claim was wrong.** It said
+excluding declaration blocks "would have caught `selfLoop`". It would not:
+the scan starts from the **locale file**, and `selfLoop` never had a shipped
+string, so it was invisible to this test in both directions. L6 needed the Go
+guard instead.
+
+What the tightening is genuinely worth is the other direction — a key that HAS a
+string and whose only reference is its own declaration, i.e. one whose emitter
+was deleted. Measured during the fix: stripping declarations outright condemned
+**five live keys**, because they are emitted through their Go identifier and
+never through the dotted string. So a declaration counts as a use only when the
+identifier it declares is used somewhere else.
 
 **Found:** while landing F049's keys.
 **Where:** `frontend/src/test/i18n-dead-keys.test.ts`.
@@ -206,6 +250,11 @@ keys it fails.
 ---
 
 ## L8 — nothing reads the compiler's diagnostics at generate time
+
+**Decided 2026-08-26, not yet built.** The surface is **a status field on the
+existing routing list response** — the smallest of the three options, and truth
+on a page the operator already reads. No new endpoint. `KeyNoFront`'s held
+translation ships with it, which is when it stops being a string with no reader.
 
 **Found:** while landing F049.
 **Where:** `internal/web/service/routing.go` `applyRoutingPlan`.
@@ -474,6 +523,9 @@ invisibility as an unfiled discovery.
 ---
 
 ## L12 — 15 tests fail on the maintainer's own machine, every run
+
+**Status 2026-08-26: FIXED.** `requirePosixHost` on all 15. Windows now exits 0;
+all 15 still execute and pass on Linux, 0 skipped there.
 
 **Found:** while gathering the gate results for the p-ui.sh pass.
 **Where:** `internal/cores/internal/mtproto`, `internal/cores/internal/xray`,
