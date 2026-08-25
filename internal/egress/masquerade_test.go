@@ -69,3 +69,34 @@ func TestMasqueradeCoversEveryDevice(t *testing.T) {
 		}
 	}
 }
+
+/*
+Tearing the table down must work on the oldest nft this project supports.
+
+`destroy` landed in nft 1.0.8. Ubuntu 22.04 ships 1.0.2 and Debian 12 ships
+1.0.6, and on the 1.0.2 binary the command does not parse at all — measured as
+exit 1 with "syntax error, unexpected table, expecting string". So on two of
+five supported targets the masquerade table was left on the box forever, with
+its rules still translating.
+*/
+func TestMasqueradeTeardownRunsOnEveryTarget(t *testing.T) {
+	got := masqueradeTeardown()
+
+	if strings.Contains(got, "destroy") {
+		t.Fatalf("teardown uses `destroy`, which is a syntax error on nft < 1.0.8 (Ubuntu 22.04, Debian 12):\n%s", got)
+	}
+	add := strings.Index(got, "add table inet "+masqueradeTable)
+	del := strings.Index(got, "delete table inet "+masqueradeTable)
+	if add < 0 || del < 0 {
+		t.Fatalf("teardown must add-then-delete so it is idempotent without `destroy`:\n%s", got)
+	}
+	if add > del {
+		t.Fatalf("the add must come first, or deleting an absent table is an error:\n%s", got)
+	}
+	// And it must still confine itself to the panel's own table.
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		if !strings.Contains(line, masqueradeTable) {
+			t.Fatalf("teardown touches something other than the panel's table: %q", line)
+		}
+	}
+}

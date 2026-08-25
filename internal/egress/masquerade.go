@@ -53,11 +53,22 @@ func EnsureMasquerade(ctx context.Context, devices []string) error {
 		return ErrNoNft
 	}
 	if len(devices) == 0 {
-		// Idempotent by construction: `destroy` is a no-op on a table that is
-		// already gone, where `delete` would be an error to parse and ignore.
-		return runNft(ctx, nft, "destroy table inet "+masqueradeTable+"\n")
+		return runNft(ctx, nft, masqueradeTeardown())
 	}
 	return runNft(ctx, nft, masqueradeRuleset(devices))
+}
+
+/*
+masqueradeTeardown removes the panel's table without needing `destroy`.
+
+nft only learned `destroy` in 1.0.8. Ubuntu 22.04 ships 1.0.2 and Debian 12
+ships 1.0.6, where it is a parse error — measured: exit 1, "syntax error,
+unexpected table" — so on two of five supported targets the table was never
+torn down. `add` is a no-op on a table that exists, so the `delete` after it
+always has a target, on every version.
+*/
+func masqueradeTeardown() string {
+	return "add table inet " + masqueradeTable + "\ndelete table inet " + masqueradeTable + "\n"
 }
 
 /*
