@@ -98,9 +98,23 @@ os_version=""
 os_version=$(grep "^VERSION_ID" /etc/os-release | cut -d '=' -f2 | tr -d '"' | tr -d '.')
 
 # Declare Variables
+pui_env_file="/etc/default/p-ui"
+
+# The menu is the only entry point that never loaded the panel's environment,
+# so it ran with none of PUI_DB_DSN, PUI_LOG_FOLDER or PUI_MAIN_FOLDER set.
+# Every variable below reads one of those, which is why this comes first.
+load_pui_env() {
+    if [[ -r "${pui_env_file}" ]]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "${pui_env_file}"
+        set +a
+    fi
+}
+load_pui_env
+
 pui_folder="${PUI_MAIN_FOLDER:=/usr/local/p-ui}"
 pui_service="${PUI_SERVICE:=/etc/systemd/system}"
-pui_env_file="/etc/default/p-ui"
 log_folder="${PUI_LOG_FOLDER:=/var/log/p-ui}"
 mkdir -p "${log_folder}"
 iplimit_log_path="${log_folder}/pui-ipl.log"
@@ -2092,13 +2106,10 @@ setup_fail2ban_iplimit() {
         # even though our own p-ui-ipl jail uses iptables. Bundling the binary
         # at install time prevents that confusing log spam for new installs.
         apt-get update
+        # Debian needs python3-systemd for the systemd backend. Ubuntu needs
+        # nothing extra: fail2ban 1.0.2-3ubuntu0.1 vendors its own asynchat
+        # shim and Depends on python3-pyasyncore, both from the archive.
         case "${release}" in
-            ubuntu)
-                if [[ "${os_version}" -ge 2400 ]]; then
-                    apt-get install python3-pip -y
-                    python3 -m pip install pyasynchat --break-system-packages
-                fi
-                ;;
             debian)
                 apt-get install -y python3-systemd
                 ;;
@@ -2173,7 +2184,12 @@ remove_iplimit() {
             before_show_menu
             ;;
         2)
-            rm -rf /etc/fail2ban
+            # Remove what p-ui owns, then let apt purge what apt owns. This
+            # used to rm -rf /etc/fail2ban, taking every jail, filter and
+            # .local override the operator wrote with it.
+            rm -f /etc/fail2ban/filter.d/p-ui-ipl.conf
+            rm -f /etc/fail2ban/action.d/p-ui-ipl.conf
+            rm -f /etc/fail2ban/jail.d/p-ui-ipl.conf
             systemctl stop fail2ban
             apt-get remove -y fail2ban
             apt-get purge -y fail2ban
@@ -2229,9 +2245,6 @@ create_iplimit_jails() {
     # Uncomment 'allowipv6 = auto' in fail2ban.conf
     sed -i 's/#allowipv6 = auto/allowipv6 = auto/g' /etc/fail2ban/fail2ban.conf
 
-    # On every supported release (Debian 12+, Ubuntu 22.04+) fail2ban's default
-    # backend has to be changed to systemd.
-    sed -i '0,/action =/s/backend = auto/backend = systemd/' /etc/fail2ban/jail.conf
 
     cat << EOF > /etc/fail2ban/jail.d/p-ui-ipl.conf
 [p-ui-ipl]
@@ -2256,8 +2269,21 @@ EOF
     # the administrator out of SSH or the panel. The ban still covers every other
     # TCP and UDP port (including all Xray inbounds, e.g. UDP-based Hysteria2), so
     # IP-limit keeps working for inbounds added later without regenerating these files.
+    # sshd -T resolves the whole effective config, including the
+    # Include /etc/ssh/sshd_config.d/*.conf every cloud image ships — which the
+    # grep below cannot see, so a box with SSH on 2222 exempted port 22.
     local ssh_ports
-    ssh_ports=$(grep -oP '^[[:space:]]*Port[[:space:]]+\K[0-9]+' /etc/ssh/sshd_config 2>/dev/null | paste -sd, -)
+    ssh_ports=$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | paste -sd, -)
+    if [[ -z "${ssh_ports}" ]]; then
+        ssh_ports=$(grep -rhoP '^[[:space:]]*Port[[:space:]]+\K[0-9]+' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null | paste -sd, -)
+    fi
+    # And the port this session is on, whatever the config says: sshd can be
+    # socket-activated, and a ban that takes SSH out is not recoverable remotely.
+    local live_ssh_port
+    live_ssh_port=$(ssh_listen_port)
+    if [[ -n "${live_ssh_port}" && ",${ssh_ports}," != *",${live_ssh_port},"* ]]; then
+        ssh_ports="${ssh_ports:+${ssh_ports},}${live_ssh_port}"
+    fi
     [[ -z "${ssh_ports}" ]] && ssh_ports="22"
     local panel_port
     panel_port=$(${pui_folder}/p-ui setting -show true 2>/dev/null | grep -Eo 'port: .+' | awk '{print $2}')
@@ -2305,7 +2331,14 @@ iplimit_remove_conflicts() {
     for file in "${jail_files[@]}"; do
         # Check for [p-ui-ipl] config in jail file then remove it
         if test -f "${file}" && grep -qw 'p-ui-ipl' ${file}; then
-            sed -i "/\[p-ui-ipl\]/,/^$/d" ${file}
+            # Delete the section, not everything after it. The old range ended
+            # at the first blank line, and an INI file whose next section
+            # follows immediately has none — so this ate [sshd] and [recidive].
+            awk '
+              BEGIN { keep = 1 }
+              /^[[:space:]]*\[/ { keep = ($0 !~ /^[[:space:]]*\[p-ui-ipl\]/) }
+              keep
+            ' "${file}" > "${file}.pui-tmp" && mv "${file}.pui-tmp" "${file}"
             echo -e "${yellow}Removing conflicts of [p-ui-ipl] in jail (${file})!${plain}\n"
         fi
     done

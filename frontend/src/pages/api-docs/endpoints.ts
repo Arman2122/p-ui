@@ -293,8 +293,8 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/server/fail2banStatus',
-        summary: 'Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the "IP Limit" field, since enforcement depends on Fail2ban being installed.',
-        response: '{\n  "success": true,\n  "obj": {\n    "enabled": true,\n    "installed": true,\n    "usable": true\n  }\n}',
+        summary: 'Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the "IP Limit" field. installed reports the client binary; jailActive reports whether p-ui’s jail is loaded in the daemon, which is what decides whether a ban lands. usable is all three.',
+        response: '{\n  "success": true,\n  "obj": {\n    "enabled": true,\n    "installed": true,\n    "jailActive": true,\n    "usable": true\n  }\n}',
       },
       {
         method: 'GET',

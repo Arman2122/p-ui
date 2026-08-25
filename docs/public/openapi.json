@@ -4834,7 +4834,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the \"IP Limit\" field, since enforcement depends on Fail2ban being installed.",
+        "summary": "Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the \"IP Limit\" field, installed reports the client binary; jailActive reports whether p-ui’s jail is loaded in the daemon, which is what decides whether a ban lands. usable is all three.",
         "operationId": "get_panel_api_server_fail2banStatus",
         "responses": {
           "200": {
@@ -4858,6 +4858,7 @@
                   "obj": {
                     "enabled": true,
                     "installed": true,
+                    "jailActive": true,
                     "usable": true
                   }
                 }

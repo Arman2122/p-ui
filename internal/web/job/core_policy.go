@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"os"
-	"os/exec"
 
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/policy"
@@ -80,7 +79,7 @@ func (j *CorePolicyJob) enforceIPLimits(ctx context.Context) {
 	}
 	// Without fail2ban nothing can act on the log line, so the pass collects the
 	// addresses for the panel to display and enforces nothing.
-	enforce := service.AnyClientHasAnIPLimit() && fail2BanIsInstalled()
+	enforce := service.AnyClientHasAnIPLimit() && fail2BanCanEnforce()
 
 	verdicts, err := j.policyService.EvaluateIPLimits(scan, enforce)
 	if err != nil {
@@ -167,11 +166,19 @@ SECONDS, which is what the persisted blob and every node sync also carry.
 */
 const IPLimitLogFormat = "[LIMIT_IP] Email = %s || Disconnecting OLD IP = %s || Timestamp = %d"
 
-func fail2BanIsInstalled() bool {
+/*
+fail2BanCanEnforce answers whether a reported address would actually be banned.
+
+The probe used to be `fail2ban-client -h`, which the client's own argparse
+answers with the daemon stopped and with p-ui's jail files deleted — something
+the panel's own menu offers to do. So `enforce` went true on boxes where no
+packet could be dropped, and the job logged bans that never happened.
+*/
+func fail2BanCanEnforce() bool {
 	if !isFail2BanEnabled() {
 		return false
 	}
-	return exec.CommandContext(context.Background(), "fail2ban-client", "-h").Run() == nil
+	return service.Fail2banJailIsRunning()
 }
 
 func isFail2BanEnabled() bool {
