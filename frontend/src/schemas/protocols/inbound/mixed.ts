@@ -16,6 +16,8 @@ export const MixedInboundSettingsSchema = z.object({
   auth: MixedAuthSchema.default('password'),
   accounts: z.array(MixedAccountSchema).optional(),
   udp: z.boolean().default(false),
-  ip: z.string().default('127.0.0.1'),
+  // No default. xray maps this to the SOCKS UDP hub's bind address and
+  // advertises it back to the client; absent, it uses the real local address.
+  ip: z.string().optional(),
 });
 export type MixedInboundSettings = z.infer<typeof MixedInboundSettingsSchema>;

@@ -127,7 +127,10 @@ describe('createDefault*InboundSettings factories', () => {
     const s = createDefaultMixedInboundSettings();
     expect(s.auth).toBe('password');
     expect(s.udp).toBe(false);
-    expect(s.ip).toBe('127.0.0.1');
+    // xray maps settings.ip to the SOCKS UDP hub's bind address AND advertises
+    // it to the client, so any default here kills UDP for every remote user.
+    expect('ip' in s).toBe(false);
+    expect(MixedInboundSettingsSchema.parse({ auth: 'password', udp: true })).not.toHaveProperty('ip');
     const accounts = s.accounts ?? [];
     expect(accounts).toHaveLength(1);
     expect(accounts[0].user.length).toBe(8);

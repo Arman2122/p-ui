@@ -304,6 +304,10 @@ export function dropLegacyOptionalEmpties(
   const fb = settings.fallbacks;
   if (Array.isArray(fb) && fb.length === 0) delete settings.fallbacks;
 
+  // A cleared "UDP IP" must reach xray as an absent key, not "". An empty
+  // Address still builds, and binds the SOCKS UDP hub to a nameless host.
+  if (settings.ip === '') delete settings.ip;
+
   if (stream) {
     // StreamSettings emits `finalmask` only when at least one transport
     // mask exists (legacy `hasFinalMask`). Drop the whole block when all

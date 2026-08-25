@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A mixed (SOCKS+HTTP) inbound no longer breaks its own UDP.** The panel
+  filled in a "UDP IP" of `127.0.0.1` on every mixed inbound it created. Xray
+  binds the SOCKS UDP relay to that address *and* hands it back to the client as
+  where to send datagrams, so every remote user was told to send UDP to itself
+  while the relay listened on the server's loopback. TCP worked, so the inbound
+  looked healthy; DNS, QUIC and games over UDP were dead.
+  **What you will notice:** new mixed inbounds leave the field empty, and Xray
+  advertises the address the client actually connected to. **Inbounds you
+  already created keep the stored `127.0.0.1` and are not changed for you** —
+  the panel cannot tell its own default apart from a local-only proxy somebody
+  set on purpose. If you have a mixed inbound with UDP switched on, open it,
+  clear the UDP IP field and save.
+
 - **The firewall menu no longer locks you out of your own server.** "Install
   Firewall" allowed ssh, http, https, 2053 and 2096 and then force-enabled ufw —
   but the installer assigns the panel port at random, so 2053 was almost never
