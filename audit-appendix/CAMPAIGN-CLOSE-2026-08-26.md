@@ -1,6 +1,8 @@
 # Closing the audit campaign
 
-**Baseline `219a6de4` → `351114e1`. 69 commits, 206 files, 51 new test files, 8 new architecture guards.**
+**Baseline `219a6de4` → `351114e1`, the last commit of campaign work; this
+document and its corrections follow it. 69 commits, 206 files, 51 new test
+files, 8 new architecture guards.**
 Started 2026-08-20 from `AUDIT-2026-08-20.md` (394 verified findings: 3 Critical,
 62 High, 187 Medium, 142 Low) and `IP-LIMIT-ACTUATOR-RESEARCH.md` (2 further
 Criticals). Closed 2026-08-26.
@@ -414,7 +416,7 @@ taken with that family, not with the Mediums.
 
 **Take, in this order:**
 
-1. **The nine access-control call-outs**, F317 and F208 first. Highest harm,
+1. **The ten access-control call-outs**, F317 and F208 first. Highest harm,
    individually small, and none of them benefits from clustering.
 2. **Cause 3, the `runtime.Runtime` bypass** (7 findings). One arch guard plus
    seven mechanical call sites, half a day, and it closes the gap between "green
@@ -449,7 +451,7 @@ to consult when you are already in the file — not as a backlog.
 
 ## 7. Honest limits of this campaign
 
-- **64 audit findings were cited across the 69 commits**, plus both Criticals and
+- **64 audit findings were cited across those 69 commits**, plus both Criticals and
   all eight Highs from `IP-LIMIT-ACTUATOR-RESEARCH` — including H5's rider, the
   false `BounceClient` doc comment and the test that pinned the wrong semantic as
   if it had been verified. The Criticals and the Highs carrying outage or lockout
