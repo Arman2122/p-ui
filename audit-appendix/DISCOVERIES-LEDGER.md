@@ -245,50 +245,93 @@ a new endpoint. Not costed further, because the choice comes first.
 
 **Found:** by a test fixture that would not stay disabled, while writing F075.
 **Where:** `internal/database/model/model.go` — five models.
+**Status:** reachability audit complete. **Four of five are reachable, one of
+them on an access-control path.** Promoted out of "ledger" and awaiting a fix
+description.
 
 GORM omits a zero-valued field from the INSERT when its column carries a
-`default`, so the database supplies the default instead. Measured against the
-throwaway Postgres:
+`default`, so the database supplies the default instead. Every one of the five
+exhibits it, measured against the throwaway Postgres rather than inferred:
 
 ```
-created with Enable=false, read back Enable=true
+ApiToken.Enabled              created=false  read back=true
+Node.Enable                   created=false  read back=true
+ClientRecord.Enable           created=false  read back=true
+OutboundSubscription.Enabled  created=false  read back=true
+RoutingRule.Enable            created=false  read back=true
 ```
 
-For `RoutingRule` that means **`RoutingService.Add` cannot create a disabled
-rule**. An operator who stages a rule with the enable switch off gets one that is
-routing traffic the moment they save. It is not a display bug — the row really
-is enabled, and the compile really does emit it.
+The mechanism is uniform. What is not uniform is whether anything creates the
+row with an intended `false`, and that is what decides severity.
 
-Five models declare a `default:true` boolean:
+### ClientRecord — REACHABLE, and it is an access-control defect
 
-| model | field |
-|---|---|
-| `RoutingRule` | `Enable` |
-| `ApiToken` | `Enabled` |
-| `Node` | `Enable` |
-| `ClientRecord` | `Enable` |
-| `OutboundSubscription` | `Enabled` |
+Measured end to end through the operator's own path, not through a raw
+`db.Create`: an inbound is created, a client is added to it with the enable
+switch **off**, and the stored row is read back.
 
-Only the first is confirmed reachable, because it is the one I measured. The
-others share the mechanism and need checking one at a time — each depends on
-whether anything creates that row with an intended `false`, and `ClientRecord`
-in particular is created on a path that has already been the subject of several
-findings.
+```
+operator added the client with enable OFF; stored Enable=true
+```
 
-**Why not folded into F075:** F075 repairs rules whose destination left the
-template. This is a create-path defect in a different function, with a blast
-radius across five models that has to be established before any of it is
-touched — and the fix shape (`Select("*")`, an explicit column map, or dropping
-the defaults and setting them in code) is a decision about the whole table
-rather than about one call site.
+`Client.ToRecord()` carries `Enable: false` into `toCreate`, and
+`client_link.go` writes it with `CreateInBatches` — same omission, same default.
+The row is then enabled, so `buildInboundForLocalRuntime` does not strip it and
+the client is pushed to the core. **A client an operator staged as disabled can
+connect immediately.** The enable field is real and editable on the add form; it
+is not a control that only exists on edit.
 
-**Disposition question:** which of the five are actually created with an
-intended false, and does the fix belong at each call site or once at the model
-layer? Answer the first before choosing the second.
+### Node — REACHABLE
 
-**Cost to close:** the audit is a morning; the fix is small per call site once
-the list is known. Note the migration angle — removing a `default` changes
-what an `AutoMigrate` writes for existing columns, so "drop the defaults" is
-not the free option it looks like.
+`NodeMutationRequest.Enable` (`node_contract.go:126`) maps through `toNode()`
+(`:174`) into `NodeService.Create`, which is a bare `db.Create(n)`
+(`node.go:427-432`). A node added with the enable switch off is stored enabled,
+so the panel begins heartbeating and syncing inbounds to a node the operator
+staged as off. Operational rather than access-control, but it contacts a remote
+host that was not meant to be contacted yet.
 
----
+### OutboundSubscription — REACHABLE
+
+`createOutboundSub` reads `enabled := c.PostForm("enabled") != "false"`
+(`xray_setting.go:417`) and passes it to `Create`, which builds the row and
+inserts it. A subscription created disabled is stored enabled, so the panel
+immediately fetches the remote URL and merges whatever outbounds it returns into
+the generated config. Config-injection surface rather than access control, and
+the URL is operator-supplied, so the blast radius is bounded by who could set it.
+
+### ApiToken — NOT reachable
+
+`ApiTokenService.Create(name)` hardcodes `Enabled: true` (`api_token.go:78`)
+and takes no enable parameter at all. There is no path that intends `false` at
+creation; disabling is a later `Updates(map)`, which writes the column
+explicitly and works. The mechanism is present and inert.
+
+### RoutingRule — REACHABLE
+
+The original finding. `RoutingService.Add` cannot create a disabled rule, so a
+rule staged with the switch off starts routing traffic on save.
+
+### The fix shape, now that the audit scopes it
+
+Four call sites, one of them a `CreateInBatches`. Three candidate shapes:
+
+- **`Select("*")` at each reachable create.** Local, greppable, changes no
+  schema and no reader. Does not stop the next model from acquiring the same
+  bug.
+- **Drop `default:true` and set the default in code.** Removes the mechanism
+  outright, but a `default` also governs what `AutoMigrate` writes for an
+  existing column and what any INSERT that genuinely omits the field gets —
+  changing it is a migration question, not a tag edit.
+- **Make the fields `*bool`.** Nil means "take the default", `&false` means
+  false. Correct by construction and the largest diff, touching every reader.
+
+My recommendation is the first, plus an `internal/arch` guard that fails when a
+`Create` on one of these models is not `Select("*")`-qualified — the pattern is
+silent, uniform, and will recur the next time someone adds a `default:true`
+column. Whether the guard is worth its own maintenance is the decision to make
+alongside the fix.
+
+**Note for whoever writes it:** the two access-control-shaped consequences
+(ClientRecord, Node) deserve a changelog entry naming what an operator should
+re-check, because rows already created in this state are indistinguishable from
+rows deliberately enabled.
