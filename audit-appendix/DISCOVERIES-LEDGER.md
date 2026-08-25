@@ -356,3 +356,74 @@ checkable next-best thing, a named regression test per model.
 **Not repaired: rows already created this way.** There is no record of intent to
 repair from — a row stored enabled is indistinguishable from one deliberately
 enabled. The changelog says so and tells operators what to re-check by hand.
+
+---
+
+## L10 — the same mechanism on every non-boolean defaulted column
+
+**Found:** asked for after L9, on the reasoning that the mechanism is not about
+booleans at all.
+**Where:** `internal/database/model/model.go`.
+**Sized as a ledger entry, not work:** the triage below found nothing reachable.
+
+GORM's omission is about the zero value, not the type: any column whose
+`default` differs from its Go zero value cannot be created with that zero value.
+The tag scan L9's guard already builds lists them in seconds.
+
+**31 non-boolean defaulted columns. 18 declare a zero-agreeing default and are
+structurally safe.** The 13 that do not:
+
+| model | column | type | default |
+|---|---|---|---|
+| Egress | Owner | string | `'operator'` |
+| Host | Security | string | `same` |
+| Inbound | ShareAddrStrategy | string | `node` |
+| Inbound | SubSortIndex | int | `1` |
+| Inbound | TrafficReset | string | `never` |
+| Inbound | TrafficResetDay | int | `1` |
+| Node | InboundSyncMode | string | `all` |
+| Node | Status | string | `unknown` |
+| Node | TlsVerifyMode | string | `verify` |
+| OutboundSubscription | UpdateInterval | int | `600` |
+| RoutingRule | Criteria | string | `'{}'` |
+| RoutingRule | DestKind | string | `'direct'` |
+| RoutingRule | IngressScope | string | `'selected'` |
+
+### Where zero is plausibly a meaningful stored value — triaged
+
+Three of the thirteen have a zero value an operator could genuinely mean. All
+three turn out to be normalised in code before the insert, so the column default
+never gets a chance to disagree with intent:
+
+- **`Inbound.SubSortIndex` (`default:1`)** — 0 is a legitimate sort position.
+  `normalizeSubSortIndex` runs on both the create and the update path
+  (`inbound.go:936`, `:1366`), so the stored value is already non-zero.
+- **`RoutingRule.DestKind` (`default:'direct'`)** — the sharpest-looking one,
+  because an unset destination silently becoming "send it out directly" is
+  exactly L9's shape. `normalizeRule` refuses an unrecognised kind outright
+  (`routing.go:678`), so `""` cannot reach the insert.
+- **`OutboundSubscription.UpdateInterval` (`default:600`)** — `Create` clamps
+  `updateInterval <= 0` to 600 before building the row.
+
+`Egress.Owner` deserves a line because it looks worse than it is: an ownerless
+egress becomes an *operator* egress, which is the kind `RoutingService.Exits`
+offers as a destination. Panel-owned fronts set it explicitly
+(`routing.go:150`), and 'operator' is the designed fallback for a row the
+operator created, so this is intent rather than accident.
+
+One is safe in the useful direction: **`Node.TlsVerifyMode` (`default:verify`)**
+— an empty value becomes `verify`, not `skip`. Had the default been the other
+way round it would have been a security finding.
+
+**Disposition question for the campaign-end pass:** the triage above covers the
+three columns where zero is plausibly meaningful. The remaining ten have zero
+values that are not meaningful for their column (an empty security mode, an
+empty sync mode, an empty JSON blob), so the question is whether a per-column
+reachability audit is worth running at all, or whether "no meaningful zero"
+retires them. My reading is that it retires them, and that L9's arch guard is
+what actually protects the future — but a boolean guard does not cover these,
+and extending it would mean deciding what "meaningful zero" means per column
+rather than deriving it.
+
+**Cost to close:** the scan is minutes and is already written; the judgement is
+the work.
