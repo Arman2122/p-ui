@@ -18,6 +18,7 @@ import (
 )
 
 func TestWriteFileAtomicModeAndRenameFailure(t *testing.T) {
+	requirePosixHost(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
@@ -64,6 +65,7 @@ func TestWriteFileAtomicModeAndRenameFailure(t *testing.T) {
 }
 
 func TestStopWaitsForGracefulExit(t *testing.T) {
+	requirePosixHost(t)
 	initProcessTestLogger(t)
 
 	p := startProcessHelper(t, "delayed-term")
@@ -81,6 +83,7 @@ func TestStopWaitsForGracefulExit(t *testing.T) {
 }
 
 func TestIntentionalStopDoesNotRecordExitError(t *testing.T) {
+	requirePosixHost(t)
 	initProcessTestLogger(t)
 
 	p := startProcessHelper(t, "default-term")
@@ -97,6 +100,7 @@ func TestIntentionalStopDoesNotRecordExitError(t *testing.T) {
 }
 
 func TestStopKillsProcessThatIgnoresSIGTERM(t *testing.T) {
+	requirePosixHost(t)
 	initProcessTestLogger(t)
 
 	oldGraceful := xrayGracefulStopTimeout

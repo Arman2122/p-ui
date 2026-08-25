@@ -287,6 +287,7 @@ func TestWaitForCommand_CrashExitRecordsError(t *testing.T) {
 // Stop (so test runs never disturb the main config.json). A mutated guard
 // (`== ""`) would skip the removal and leak the temp file.
 func TestStop_RemovesTempConfigFile(t *testing.T) {
+	requirePosixHost(t)
 	t.Setenv("PUI_LOG_FOLDER", t.TempDir())
 
 	tmpCfg := filepath.Join(t.TempDir(), "test-config.json")

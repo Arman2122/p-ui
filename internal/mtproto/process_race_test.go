@@ -54,6 +54,7 @@ func TestProcessLifecycleFieldsRaceSafe(t *testing.T) {
 }
 
 func TestProcessStatusDuringExit(t *testing.T) {
+	requirePosixHost(t)
 	pidFile := installFakeMtg(t)
 	exitFile := filepath.Join(t.TempDir(), "exit")
 	t.Setenv("MTG_FAKE_EXIT_FILE", exitFile)

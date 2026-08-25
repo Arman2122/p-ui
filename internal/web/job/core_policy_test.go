@@ -127,6 +127,7 @@ panel's own menu offers as option 1. On such a box the UI showed the cap
 enabled, the job logged addresses over their cap, and nothing was dropped.
 */
 func TestFail2BanProbe(t *testing.T) {
+	requirePosixHost(t)
 	t.Run("disabled by env, the client is never executed", func(t *testing.T) {
 		t.Setenv("PUI_ENABLE_FAIL2BAN", "false")
 		probe := fakeFail2BanClient(t, jailRunning)

@@ -454,6 +454,7 @@ func (r *rig) asRig() coretest.Rig {
 // TestXrayConformsToTheContract is the acceptance test for the port. The suite
 // is the same one mtproto passes; a failure here is the contract's problem.
 func TestXrayConformsToTheContract(t *testing.T) {
+	requirePosixHost(t)
 	coretest.RunAdapterSuite(t, newRig(t).asRig())
 }
 
