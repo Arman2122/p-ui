@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A VLESS client added with the `xtls-rprx-vision-udp443` flow can now
+  connect.** That flow is a client-side setting: the client shortens it before it
+  goes on the wire, and the server refuses any account whose stored flow is not
+  what arrived. The panel already stripped it when it rebuilt the whole
+  configuration, but not when it added a single client to the running core — so
+  the client was accepted, reported as created, and could not connect, with no
+  restart scheduled because nothing had failed. It stayed that way until some
+  unrelated edit happened to rebuild the inbound.
+  **What you will notice:** clients added with that flow work immediately. If you
+  have one that has never connected, removing and re-adding it is enough.
+
 - **Renaming or deleting an Xray outbound no longer leaves routing rules aimed
   at nothing.** A rule pointing at a deleted or renamed outbound kept matching
   traffic, and the core then dropped everything it matched — it does not fall

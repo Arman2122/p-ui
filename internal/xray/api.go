@@ -593,6 +593,13 @@ func isShadowsocks2022Cipher(cipher string) bool {
 // 2022 inbounds take different account types and cast whatever they receive
 // without checking, so an unrecognized cipher is an error rather than a guess
 // that would panic the core and kill every connection on the server.
+// The client-only flow and what it becomes on the wire. Named rather than
+// repeated, because the pair is now asserted in three places.
+const (
+	vlessFlowVision       = "xtls-rprx-vision"
+	vlessFlowVisionUDP443 = "xtls-rprx-vision-udp443"
+)
+
 func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMessage, error) {
 	switch protocolName {
 	case "vmess":
@@ -613,6 +620,16 @@ func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMe
 		userFlow, err := getOptionalUserString(user, "flow")
 		if err != nil {
 			return nil, err
+		}
+		/*
+			-udp443 is a CLIENT-side flow. The client truncates it to 16 bytes
+			before it goes on the wire, and the inbound refuses any account whose
+			flow does not equal what arrived — so a user added with it can never
+			connect. RenderInbound already strips it for the generated config;
+			this is the funnel the single-user hot paths share.
+		*/
+		if userFlow == vlessFlowVisionUDP443 {
+			userFlow = vlessFlowVision
 		}
 
 		vlessAccount := &vless.Account{
