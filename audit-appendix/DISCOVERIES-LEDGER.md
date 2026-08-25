@@ -13,6 +13,11 @@ by going quiet.
 Each entry names: what it is, where it was found, why it was left, and what
 closing it would cost.
 
+**Dispositioned 2026-08-26.** Every entry now carries close / fix / keep-open
+with a reason and, for the fixes, a size. The summary table and the argument
+for each disposition are in `CAMPAIGN-CLOSE-2026-08-26.md` §3; the full
+reasoning stays here.
+
 ---
 
 ## L1 — `PruneInbound` rewrites a rule's ids and enable flag but never its scope
@@ -465,3 +470,36 @@ together.
 **Cost to close:** the feature-gaps entries carry their own suggested shapes.
 This entry exists so the campaign-end pass does not treat the LDAP guard's
 invisibility as an unfiled discovery.
+
+---
+
+## L12 — 15 tests fail on the maintainer's own machine, every run
+
+**Found:** while gathering the gate results for the p-ui.sh pass.
+**Where:** `internal/cores/internal/mtproto`, `internal/cores/internal/xray`,
+`internal/mtproto`, `internal/web/job`, `internal/xray`.
+**Disposition: fix.** ~20 lines, one chore commit.
+
+`go test ./...` on the maintainer's Windows box fails 15 tests across five
+packages. All of them pass on Linux; all of them are Linux-*target* tests in a
+project whose CLAUDE.md declares Linux-only:
+
+- process management that sends SIGTERM and expects a graceful exit
+- stand-in binaries written as `#!/bin/sh` scripts, which Windows cannot exec
+- file-mode and atomic-rename assertions with no Windows equivalent
+
+They were verified as pre-existing by checking out `9d433de0` and reproducing
+the same failures, so none is campaign damage — though this campaign widened
+`TestFail2BanProbe` from one failing subtest to three by adding cases that also
+execute the stand-in.
+
+**Why it is worth fixing rather than tolerating.** The failures are harmless.
+The habit is not: a maintainer who sees 15 red on every local run stops reading
+red. That is exactly how the mid-campaign `&&`-chain incident happened — a
+commit landed while a panic was on screen — and why gate-on-exit-code became a
+standing rule afterwards. A gate nobody believes is not a gate.
+
+**Cost to close:** an explicit `runtime.GOOS != "linux"` skip with a stated
+reason on each, so a clean local run means something and an unexpected failure
+is visible again. The alternative — a ledger entry saying "ignore these" —
+documents the noise instead of removing it.

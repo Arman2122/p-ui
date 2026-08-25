@@ -762,10 +762,19 @@ Not merely the wrong address — the wrong host header, path and SNI too, i.e.
 the fronting is absent rather than misaddressed. A two-host inbound returned
 one link instead of two.
 
-**Correction to F136:** its *What* section is accurate about the frontend but
-its scope is understated. The Go renderer had the same defect on one endpoint,
-and that half is fixed independently of the browser work.
----
+**Correction to F136:** its *What* section is accurate about the frontend, and
+its scope is understated — the Go renderer had the same defect on one endpoint.
+
+**Correction to this section, made at campaign end.** The paragraph above
+originally said the audit did not name the Go half. It does: **F137**, filed as
+a Medium under *Hosts* — "GET /panel/api/clients/links/:email returns links
+without any host override" — is the same endpoint in the same words.
+`5c5d976d`'s commit body carries the same wrong claim and cannot be edited.
+
+The fix and every measurement here stand; only the claim of novelty was wrong.
+It happened because the Medium appendix is a separate file that was not read
+until the closing pass, which is worth knowing: **a High finding's appendix twin
+can be sitting in a file you have not opened.**
 
 ## 19. H2 — the two probes, measured against a live daemon
 
