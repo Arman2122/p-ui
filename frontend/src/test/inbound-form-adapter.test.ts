@@ -273,6 +273,31 @@ describe('formValuesToWirePayload', () => {
     expect(settings.clients[0]).not.toHaveProperty('flow');
   });
 
+  /* An existing mixed inbound already carries the panel's old 127.0.0.1 in its
+     stored settings; clearing the field is the operator's repair, and it has to
+     reach xray as an absent key. "" still builds an Address. */
+  it('drops a cleared UDP IP rather than sending an empty one', () => {
+    const values = rawInboundToFormValues({
+      ...vlessRow,
+      protocol: 'mixed',
+      settings: { auth: 'password', udp: true, ip: '127.0.0.1' },
+    });
+    (values.settings as Record<string, unknown>).ip = '';
+    const settings = JSON.parse(formValuesToWirePayload(values).settings) as Record<string, unknown>;
+    expect('ip' in settings).toBe(false);
+    expect(settings.udp).toBe(true);
+  });
+
+  it('keeps a UDP IP the operator deliberately set', () => {
+    const values = rawInboundToFormValues({
+      ...vlessRow,
+      protocol: 'mixed',
+      settings: { auth: 'password', udp: true, ip: '10.8.0.1' },
+    });
+    const settings = JSON.parse(formValuesToWirePayload(values).settings) as Record<string, unknown>;
+    expect(settings.ip).toBe('10.8.0.1');
+  });
+
   it('omits nodeId when null', () => {
     const values = rawInboundToFormValues({ ...vlessRow, nodeId: null });
     const payload = formValuesToWirePayload(values);
