@@ -9,6 +9,7 @@ import (
 )
 
 func TestRefreshVersionTimesOut(t *testing.T) {
+	requirePosixHost(t)
 	dir := t.TempDir()
 	t.Setenv("PUI_BIN_FOLDER", dir)
 	binaryPath := filepath.Join(dir, GetBinaryName())

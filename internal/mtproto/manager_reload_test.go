@@ -99,6 +99,7 @@ func mtgInst(id int, secrets ...SecretEntry) Instance {
 // TestCollectTrafficSurvivesAnMtgRestart is the bug this manager shipped with:
 // clamping the negative delta discarded every byte moved since an mtg restart.
 func TestCollectTrafficSurvivesAnMtgRestart(t *testing.T) {
+	requirePosixHost(t)
 	for _, tc := range []struct {
 		name         string
 		bootA, bootB string
@@ -229,6 +230,7 @@ func TestApplySecrets(t *testing.T) {
 }
 
 func TestEnsureHotReloadKeepsProcess(t *testing.T) {
+	requirePosixHost(t)
 	pidFile := installFakeMtg(t)
 	mgr := &Manager{procs: map[int]*managed{}, swept: true}
 
@@ -291,6 +293,7 @@ func TestEnsureHotReloadKeepsProcess(t *testing.T) {
 }
 
 func TestEnsureReloadFallbackRestarts(t *testing.T) {
+	requirePosixHost(t)
 	pidFile := installFakeMtg(t)
 	mgr := &Manager{procs: map[int]*managed{}, swept: true}
 
@@ -313,6 +316,7 @@ func TestEnsureReloadFallbackRestarts(t *testing.T) {
 }
 
 func TestEnsureNoopKeepsProcess(t *testing.T) {
+	requirePosixHost(t)
 	pidFile := installFakeMtg(t)
 	mgr := &Manager{procs: map[int]*managed{}, swept: true}
 

@@ -295,6 +295,7 @@ func (r *rig) asRig() coretest.Rig {
 // TestMtprotoConformsToTheContract is the acceptance test for the port. A failure
 // here means the contract is wrong, not that mtproto is special.
 func TestMtprotoConformsToTheContract(t *testing.T) {
+	requirePosixHost(t)
 	coretest.RunAdapterSuite(t, newRig(t).asRig())
 }
 
@@ -312,6 +313,7 @@ func TestPreflightRejectsAMissingBinary(t *testing.T) {
 // TestAddUserIsAppliedWithoutRestarting is what UserHotAdd claims. A restart drops
 // every other client, so the claim is checked against a running daemon.
 func TestAddUserIsAppliedWithoutRestarting(t *testing.T) {
+	requirePosixHost(t)
 	r := newRig(t)
 	c := New()
 	inst := r.instance(1)
