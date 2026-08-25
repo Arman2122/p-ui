@@ -91,4 +91,38 @@ describe('OutboundFormModal', () => {
     };
     expect(payload.settings.reverse?.tag).toBe('r1');
   });
+
+  /* The panel authors `pex<id>` for exits and `api` for Xray's API service, and
+     appends them to the same outbound array. Two outbounds on one tag is not a
+     config the panel should be able to write. */
+  const tagCases: { tag: string; accepted: boolean }[] = [
+    { tag: 'pex4', accepted: false },
+    { tag: 'pexblock', accepted: false },
+    { tag: 'api', accepted: false },
+    { tag: '_bl_main', accepted: false },
+    { tag: 'apex-1', accepted: true },
+    { tag: 'my-proxy', accepted: true },
+  ];
+  tagCases.forEach(({ tag, accepted }) => {
+    it(`${accepted ? 'accepts' : 'refuses'} the outbound tag ${tag}`, async () => {
+      const onConfirm = vi.fn();
+      renderWithProviders(
+        <OutboundFormModal
+          open
+          outbound={{ protocol: 'freedom', tag, settings: {}, streamSettings: {} }}
+          existingTags={[]}
+          onClose={() => {}}
+          onConfirm={onConfirm}
+        />,
+      );
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      const ok = document.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLElement;
+      await act(async () => { fireEvent.click(ok); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+      expect(onConfirm).toHaveBeenCalledTimes(accepted ? 1 : 0);
+      const shouted = document.body.textContent ?? '';
+      expect(shouted.includes('reserved')).toBe(!accepted);
+    });
+  });
 });

@@ -14,7 +14,7 @@ import {
 } from 'antd';
 import { Controller, FormProvider, useForm, useWatch } from 'react-hook-form';
 import { FinalMaskField, SniffingField } from '@/lib/xray/forms/fields';
-import { FormField, rhfZodValidate } from '@/components/form/rhf';
+import { FormField } from '@/components/form/rhf';
 import { JsonEditor } from '@/components/form';
 import { Wireguard } from '@/utils';
 import {
@@ -23,10 +23,8 @@ import {
 } from '@/lib/xray/outbound-form-adapter';
 import { parseOutboundLink } from '@/lib/xray/outbound-link-parser';
 import { XMUX_FRESH_DEFAULTS } from '@/schemas/protocols/stream/xhttp';
-import {
-  OutboundFormBaseSchema,
-  type OutboundFormValues,
-} from '@/schemas/forms/outbound-form';
+import { type OutboundFormValues } from '@/schemas/forms/outbound-form';
+import { reservedOutboundTagMessage } from '@/schemas/xray';
 import {
   canEnableReality,
   canEnableStream,
@@ -390,14 +388,15 @@ export default function OutboundFormModal({
       messageApi.error(t('pages.xray.outboundForm.tagRequired'));
       return;
     }
-    if (tagValue.startsWith('_bl_')) {
-      messageApi.error(t('pages.xray.balancer.reservedPrefix'));
+    const reserved = reservedOutboundTagMessage(tagValue);
+    if (reserved) {
+      messageApi.error(t(reserved));
       return;
     }
     const isDuplicateTag = (existingTags || []).includes(tagValue)
       && !(isEdit && (outboundProp?.tag as string | undefined) === tagValue);
     if (isDuplicateTag) {
-      messageApi.error('Tag already used by another outbound');
+      messageApi.error(t('pages.xray.outboundForm.tagDuplicate'));
       return;
     }
     onConfirm(formValuesToWirePayload(values));
@@ -436,7 +435,6 @@ export default function OutboundFormModal({
                       <FormField
                         label={t('protocol')}
                         name="protocol"
-                        rules={{ validate: rhfZodValidate(OutboundFormBaseSchema.shape.tag) }}
                       >
                         <Select id="protocol" showSearch optionFilterProp="value" options={protocolOptions} />
                       </FormField>

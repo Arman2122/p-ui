@@ -1590,6 +1590,7 @@
       },
       "outboundForm": {
         "tagDuplicate": "این تگ توسط خروجی دیگری استفاده شده است",
+        "tagReserved": "این تگ برای پنل رزرو شده است: نام‌هایی که با pex شروع می‌شوند به اتصال‌های خروجی تعلق دارند و api به سرویس API هسته Xray.",
         "tagRequired": "تگ الزامی است",
         "tagPlaceholder": "تگ-منحصربه‌فرد",
         "localIpPlaceholder": "IP محلی",

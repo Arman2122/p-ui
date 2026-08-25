@@ -132,14 +132,30 @@ export const BalancerFormSchema = z.object({
   settings: BalancerStrategySettingsSchema.optional(),
 });
 
+// Tags the panel authors itself: `pex<id>` is an exit's synthesized outbound
+// (internal/routing/plan.go) and `api` is Xray's own API service.
+const BALANCER_LOOPBACK_PREFIX = '_bl_';
+const RESERVED_TAG_PREFIXES = ['pex'] as const;
+const RESERVED_TAGS = ['api'] as const;
+
+// Returns the i18n key for the refusal, or null when the tag is the operator's
+// to use. One table, so the modal and the schema cannot drift apart.
+export function reservedOutboundTagMessage(tag: string): string | null {
+  const value = tag.trim();
+  if (value.startsWith(BALANCER_LOOPBACK_PREFIX)) return 'pages.xray.balancer.reservedPrefix';
+  const taken = RESERVED_TAG_PREFIXES.some((prefix) => value.startsWith(prefix))
+    || (RESERVED_TAGS as readonly string[]).includes(value);
+  return taken ? 'pages.xray.outboundForm.tagReserved' : null;
+}
+
 export const OutboundTagSchema = z
   .string()
   .trim()
   .min(1, 'pages.xray.outboundTagRequired')
-  .refine(
-    (val) => !val.startsWith('_bl_'),
-    { message: 'pages.xray.balancer.reservedPrefix' },
-  );
+  .superRefine((val, ctx) => {
+    const message = reservedOutboundTagMessage(val);
+    if (message) ctx.addIssue({ code: 'custom', message });
+  });
 
 export type BalancerFormValues = z.infer<typeof BalancerFormSchema>;
 export type RuleFormValues = z.infer<typeof RuleFormSchema>;

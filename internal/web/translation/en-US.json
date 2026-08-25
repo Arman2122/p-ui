@@ -1710,6 +1710,7 @@
       },
       "outboundForm": {
         "tagDuplicate": "Tag already used by another outbound",
+        "tagReserved": "That tag is reserved by the panel: names starting with pex belong to exits, and api belongs to Xray's API service.",
         "tagRequired": "Tag is required",
         "tagPlaceholder": "unique-tag",
         "localIpPlaceholder": "local IP",
