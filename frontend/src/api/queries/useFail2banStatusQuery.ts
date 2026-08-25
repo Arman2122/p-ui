@@ -6,12 +6,14 @@ import { keys } from '@/api/queryKeys';
 export interface Fail2banStatus {
   enabled: boolean;
   installed: boolean;
+  jailActive: boolean;
   usable: boolean;
 }
 
 const FAIL_OPEN_STATUS: Fail2banStatus = {
   enabled: true,
   installed: true,
+  jailActive: true,
   usable: true,
 };
 
@@ -24,7 +26,10 @@ async function fetchFail2banStatus(): Promise<Fail2banStatus> {
 export function getLimitIpNotice(status: Fail2banStatus, t: (key: string) => string): string {
   if (status.usable) return '';
   if (!status.enabled) return t('pages.clients.limitIpDisabled');
-  return t('pages.clients.limitIpFail2banMissing');
+  if (!status.installed) return t('pages.clients.limitIpFail2banMissing');
+  // Installed but the jail is gone: the binary answers -h either way, so this
+  // is the state that used to read as enforcing while dropping nothing.
+  return t('pages.clients.limitIpJailMissing');
 }
 
 export function useFail2banStatusQuery() {

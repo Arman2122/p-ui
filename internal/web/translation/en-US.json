@@ -769,6 +769,7 @@
       "limitIp": "IP Limit",
       "limitIpDesc": "How many addresses may use this client at once. Unlimited places no cap.",
       "limitIpFail2banMissing": "Fail2ban is not installed, so the IP limit cannot be enforced. Install Fail2ban from the p-ui bash menu to enable this option.",
+      "limitIpJailMissing": "Fail2ban is installed, but p-ui's IP-limit jail is not running — so nothing would be blocked. Re-run \"IP Limit Management\" in the p-ui bash menu to reinstall it.",
       "limitIpDisabled": "The IP limit feature is disabled on this server.",
       "password": "Password",
       "passwordDesc": "Only used by Trojan and Shadowsocks clients; ignored for VLESS, VMess, Hysteria, and WireGuard.",

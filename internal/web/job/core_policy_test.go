@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // repoRoot walks up to the module root so the test reads the installer that
@@ -115,68 +117,126 @@ func TestIPLimitLogTimestampIsSeconds(t *testing.T) {
 	}
 }
 
+/*
+The enforce gate must ask whether a ban would land, not whether Python is
+installed.
+
+`fail2ban-client -h` is answered by the client's own argparse. It stays green
+with the daemon stopped and with p-ui's three jail files deleted — which the
+panel's own menu offers as option 1. On such a box the UI showed the cap
+enabled, the job logged addresses over their cap, and nothing was dropped.
+*/
 func TestFail2BanProbe(t *testing.T) {
 	t.Run("disabled by env, the client is never executed", func(t *testing.T) {
 		t.Setenv("PUI_ENABLE_FAIL2BAN", "false")
-		marker := fakeFail2BanClient(t)
-		if fail2BanIsInstalled() {
+		probe := fakeFail2BanClient(t, jailRunning)
+		if fail2BanCanEnforce() {
 			t.Fatal("fail2ban should be unavailable when PUI_ENABLE_FAIL2BAN=false")
 		}
-		if _, err := os.Stat(marker); !os.IsNotExist(err) {
-			t.Fatalf("fail2ban-client should not have been executed, stat error: %v", err)
+		if probe.called() {
+			t.Fatal("fail2ban-client should not have been executed")
 		}
 	})
 
 	t.Run("an empty env value is not enabled", func(t *testing.T) {
 		t.Setenv("PUI_ENABLE_FAIL2BAN", "")
-		marker := fakeFail2BanClient(t)
-		if fail2BanIsInstalled() {
+		probe := fakeFail2BanClient(t, jailRunning)
+		if fail2BanCanEnforce() {
 			t.Fatal("fail2ban should be unavailable when PUI_ENABLE_FAIL2BAN is empty")
 		}
-		if _, err := os.Stat(marker); !os.IsNotExist(err) {
-			t.Fatalf("fail2ban-client should not have been executed, stat error: %v", err)
+		if probe.called() {
+			t.Fatal("fail2ban-client should not have been executed")
 		}
 	})
 
-	t.Run("enabled by env, the client is probed", func(t *testing.T) {
+	t.Run("enabled and the jail is loaded", func(t *testing.T) {
 		t.Setenv("PUI_ENABLE_FAIL2BAN", "true")
-		marker := fakeFail2BanClient(t)
-		if !fail2BanIsInstalled() {
-			t.Fatal("fail2ban should be available when the client probe succeeds")
+		probe := fakeFail2BanClient(t, jailRunning)
+		if !fail2BanCanEnforce() {
+			t.Fatal("fail2ban should be usable when the jail answers")
 		}
-		if _, err := os.Stat(marker); err != nil {
-			t.Fatalf("fail2ban-client should have been executed: %v", err)
+		if argv := probe.argv(); !strings.Contains(argv, "status p-ui-ipl") {
+			t.Fatalf("the probe must ask the daemon about the jail, got %q", argv)
+		}
+	})
+
+	// The H2 case: the binary is there and the jail is not.
+	t.Run("enabled, client present, jail gone", func(t *testing.T) {
+		t.Setenv("PUI_ENABLE_FAIL2BAN", "true")
+		probe := fakeFail2BanClient(t, jailMissing)
+		if fail2BanCanEnforce() {
+			t.Fatal("a deleted jail must disable enforcement: -h answers, but no packet is dropped")
+		}
+		if argv := probe.argv(); !strings.Contains(argv, "status p-ui-ipl") {
+			t.Fatalf("the probe must ask the daemon about the jail, got %q", argv)
 		}
 	})
 
 	t.Run("unset defaults to enabled", func(t *testing.T) {
-		value, ok := os.LookupEnv("PUI_ENABLE_FAIL2BAN")
 		os.Unsetenv("PUI_ENABLE_FAIL2BAN")
-		t.Cleanup(func() {
-			if ok {
-				os.Setenv("PUI_ENABLE_FAIL2BAN", value)
-			} else {
-				os.Unsetenv("PUI_ENABLE_FAIL2BAN")
-			}
-		})
-		if !isFail2BanEnabled() {
-			t.Fatal("fail2ban should default to enabled when PUI_ENABLE_FAIL2BAN is unset")
+		probe := fakeFail2BanClient(t, jailRunning)
+		if !fail2BanCanEnforce() {
+			t.Fatal("fail2ban should default to enabled when the var is unset")
+		}
+		if !probe.called() {
+			t.Fatal("fail2ban-client should have been executed")
 		}
 	})
 }
 
-func fakeFail2BanClient(t *testing.T) string {
+const (
+	jailRunning = false
+	jailMissing = true
+)
+
+type fail2banProbe struct {
+	t          *testing.T
+	markerPath string
+	argvPath   string
+}
+
+func (p fail2banProbe) called() bool {
+	_, err := os.Stat(p.markerPath)
+	return err == nil
+}
+
+func (p fail2banProbe) argv() string {
+	p.t.Helper()
+	b, err := os.ReadFile(p.argvPath)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// fakeFail2BanClient puts a stand-in client on PATH that records its argv and,
+// when jailMissing, fails the jail query while still answering -h.
+func fakeFail2BanClient(t *testing.T, jailMissing bool) fail2banProbe {
 	t.Helper()
+	service.ResetFail2banJailProbeCache()
+	t.Cleanup(service.ResetFail2banJailProbeCache)
 
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "probe-called")
+	argvFile := filepath.Join(dir, "probe-argv")
 	fakeClient := filepath.Join(dir, "fail2ban-client")
-	script := "#!/bin/sh\n: > \"$FAIL2BAN_PROBE_MARKER\"\nexit 0\n"
+	script := `#!/bin/sh
+: > "$FAIL2BAN_PROBE_MARKER"
+echo "$@" >> "$FAIL2BAN_PROBE_ARGV"
+[ "$1" = status ] && exit "$FAIL2BAN_JAIL_EXIT"
+exit 0
+`
 	if err := os.WriteFile(fakeClient, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake fail2ban-client: %v", err)
 	}
 
+	jailExit := "0"
+	if jailMissing {
+		jailExit = "1"
+	}
+	t.Setenv("FAIL2BAN_JAIL_EXIT", jailExit)
 	t.Setenv("FAIL2BAN_PROBE_MARKER", marker)
+	t.Setenv("FAIL2BAN_PROBE_ARGV", argvFile)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	return marker
+	return fail2banProbe{t: t, markerPath: marker, argvPath: argvFile}
 }

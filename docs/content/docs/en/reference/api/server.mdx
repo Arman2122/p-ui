@@ -34,9 +34,10 @@ _openapi:
       url: '#real-time-machine-snapshot-cpu-memory-swap-disk-network-io-load-averages-open-connections-xray-state-cached-and-refreshed-every-2-seconds-in-the-background'
     - depth: 2
       title: Reports whether per-client IP limits can be enforced on this host. The
-        panel uses it to gate the "IP Limit" field, since enforcement depends on
-        Fail2ban being installed.
-      url: '#reports-whether-per-client-ip-limits-can-be-enforced-on-this-host-the-panel-uses-it-to-gate-the-ip-limit-field-since-enforcement-depends-on-fail2ban-being-installed'
+        panel uses it to gate the "IP Limit" field, installed reports the client
+        binary; jailActive reports whether p-ui’s jail is loaded in the daemon,
+        which is what decides whether a ban lands. usable is all three.
+      url: '#reports-whether-per-client-ip-limits-can-be-enforced-on-this-host-the-panel-uses-it-to-gate-the-ip-limit-field-installed-reports-the-client-binary-jailactive-reports-whether-p-uis-jail-is-loaded-in-the-daemon-which-is-what-decides-whether-a-ban-lands-usable-is-all-three'
     - depth: 2
       title: 'Legacy: aggregated CPU history. Use /history/cpu/:bucket instead — same
         data with a uniform {t, v} shape.'
@@ -205,9 +206,11 @@ _openapi:
           seconds in the background.'
         id: real-time-machine-snapshot-cpu-memory-swap-disk-network-io-load-averages-open-connections-xray-state-cached-and-refreshed-every-2-seconds-in-the-background
       - content: Reports whether per-client IP limits can be enforced on this host. The
-          panel uses it to gate the "IP Limit" field, since enforcement depends
-          on Fail2ban being installed.
-        id: reports-whether-per-client-ip-limits-can-be-enforced-on-this-host-the-panel-uses-it-to-gate-the-ip-limit-field-since-enforcement-depends-on-fail2ban-being-installed
+          panel uses it to gate the "IP Limit" field, installed reports the
+          client binary; jailActive reports whether p-ui’s jail is loaded in the
+          daemon, which is what decides whether a ban lands. usable is all
+          three.
+        id: reports-whether-per-client-ip-limits-can-be-enforced-on-this-host-the-panel-uses-it-to-gate-the-ip-limit-field-installed-reports-the-client-binary-jailactive-reports-whether-p-uis-jail-is-loaded-in-the-daemon-which-is-what-decides-whether-a-ban-lands-usable-is-all-three
       - content: 'Legacy: aggregated CPU history. Use /history/cpu/:bucket instead —
           same data with a uniform {t, v} shape.'
         id: legacy-aggregated-cpu-history-use-historycpubucket-instead--same-data-with-a-uniform-t-v-shape
