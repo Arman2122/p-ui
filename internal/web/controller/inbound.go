@@ -67,6 +67,7 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/allLinks", a.getAllInboundLinks)
 	g.GET("/get/:id", a.getInbound)
 	g.GET("/:id/fallbacks", a.getFallbacks)
+	g.GET("/:id/links", a.getInboundLinks)
 
 	g.POST("/add", a.addInbound)
 	g.POST("/del/:id", a.delInbound)
@@ -143,6 +144,28 @@ func (a *InboundController) getInbound(c *gin.Context) {
 		return
 	}
 	jsonObj(c, inbound, nil)
+}
+
+/*
+getInboundLinks returns one inbound's share links, rendered by the subscription
+engine so the panel's own QR and export surfaces show the inbound's hosts.
+
+The browser used to build these itself and has no concept of a Host row, so a
+CDN-fronted inbound handed out the origin address from the same page that lists
+the hosts. ?email= narrows the answer to one client.
+*/
+func (a *InboundController) getInboundLinks(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	links, err := a.inboundService.GetInboundLinks(resolveHost(c), id, c.Query("email"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
+		return
+	}
+	jsonObj(c, links, nil)
 }
 
 // addInbound creates a new inbound configuration.

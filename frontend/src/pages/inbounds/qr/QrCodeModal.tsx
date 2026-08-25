@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Collapse, Modal } from 'antd';
+import { Alert, Collapse, Modal, Spin } from 'antd';
 import type { CollapseProps } from 'antd';
 
 import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 import {
-  genAllLinks,
   genWireguardConfigs,
   genWireguardLinks,
   isPostQuantumLink,
   preferPublicHost,
 } from '@/lib/xray/inbound-link';
+import { fetchInboundLinks, remarkFromLink } from '@/lib/xray/server-links';
 import { inboundFromDb, type DbInboundLike } from '@/lib/xray/inbound-from-db';
 import QrPanel from './QrPanel';
 import type { SubSettings } from '../useInbounds';
@@ -24,7 +24,7 @@ interface ClientSetting {
 interface QrCodeModalProps {
   open: boolean;
   onClose: () => void;
-  dbInbound: (DbInboundLike & { remark?: string }) | null;
+  dbInbound: (DbInboundLike & { remark?: string; id: number }) | null;
   client?: ClientSetting | null;
   nodeAddress?: string;
   subSettings?: SubSettings;
@@ -53,8 +53,11 @@ export default function QrCodeModal({
   const [subLink, setSubLink] = useState('');
   const [subJsonLink, setSubJsonLink] = useState('');
   const [activeKey, setActiveKey] = useState<string[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [linksError, setLinksError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     if (!open || !dbInbound) return;
     const inbound = inboundFromDb(dbInbound);
     const fallbackHostname = preferPublicHost(window.location.hostname, subSettings?.publicHost ?? '');
@@ -79,18 +82,25 @@ export default function QrCodeModal({
         }).split('\r\n'),
       );
       setLinks([]);
+      setLinksError('');
+      setLoadingLinks(false);
     } else {
-      setLinks(
-        genAllLinks({
-          inbound,
-          remark: dbInbound.remark || '',
-          client: client ?? {},
-          hostOverride: nodeAddress,
-          fallbackHostname,
-        }),
-      );
       setWireguardConfigs([]);
       setWireguardLinks([]);
+      setLinks([]);
+      setLinksError('');
+      setLoadingLinks(true);
+      /* Links come from the server because it is the only renderer that applies
+         Host rows. A failure shows as a failure — never a local re-render. */
+      void fetchInboundLinks(dbInbound.id, client?.email).then((result) => {
+        if (cancelled) return;
+        setLoadingLinks(false);
+        if (result.status === 'error') {
+          setLinksError(result.message);
+          return;
+        }
+        setLinks(result.links.map((link) => ({ remark: remarkFromLink(link), link })));
+      });
     }
 
     const subId = client?.subId;
@@ -102,6 +112,7 @@ export default function QrCodeModal({
     }
     setSubLink(nextSub);
     setSubJsonLink(nextSubJson);
+    return () => { cancelled = true; };
   }, [open, dbInbound, client, nodeAddress, subSettings]);
 
   const qrItems = useMemo<QrItem[]>(() => {
@@ -155,6 +166,12 @@ export default function QrCodeModal({
 
   return (
     <Modal open={open} onCancel={onClose} title={t('qrCode')} footer={null} width={420} destroyOnHidden>
+      {loadingLinks && (
+        <div style={{ padding: '24px 0', textAlign: 'center' }}><Spin /></div>
+      )}
+      {linksError && (
+        <Alert type="error" showIcon message={t('pages.inbounds.linksUnavailable')} description={linksError} />
+      )}
       {dbInbound && collapseItems && collapseItems.length > 0 && (
         <Collapse
           ghost

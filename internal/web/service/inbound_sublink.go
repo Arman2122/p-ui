@@ -68,6 +68,23 @@ func (s *InboundService) GetAllInboundLinks(host string, userId int) ([]string, 
 	return registeredSubLinkProvider.LinksForInbounds(host, inbounds), nil
 }
 
+// GetInboundLinks renders one inbound through the same engine a subscriber
+// hits, so the panel's QR and export surfaces show its hosts. An email narrows
+// the answer to that client.
+func (s *InboundService) GetInboundLinks(host string, inboundId int, email string) ([]string, error) {
+	if registeredSubLinkProvider == nil {
+		return nil, common.NewError("sub link provider not registered")
+	}
+	inbound, err := s.GetInbound(inboundId)
+	if err != nil {
+		return nil, err
+	}
+	if email != "" {
+		return registeredSubLinkProvider.LinksForClient(host, inbound, email), nil
+	}
+	return registeredSubLinkProvider.LinksForInbounds(host, []*model.Inbound{inbound}), nil
+}
+
 func (s *InboundService) GetAllClientLinks(host string, email string) ([]string, error) {
 	if email == "" {
 		return nil, common.NewError("client email is required")

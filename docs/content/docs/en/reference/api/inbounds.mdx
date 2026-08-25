@@ -43,6 +43,15 @@ _openapi:
         Used by the panel’s "Export all inbound links" action.
       url: '#return-every-protocol-url-vless-vmess-trojan-ss-hysteria-mtproto-across-all-inbounds-and-all-of-their-clients-links-are-rendered-through-the-subscription-engine-so-the-configured-remark-template-name-only-display-part-is-applied-per-client--the-same-output-the-client-infoqr-pages-use-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing-used-by-the-panels-export-all-inbound-links-action'
     - depth: 2
+      title: Return one inbound’s protocol URLs, rendered through the subscription
+        engine so the inbound’s hosts are applied — the same links a subscriber
+        receives. Pass ?email= to narrow the answer to a single client. This is
+        what the panel’s QR, inbound info and “Export links” surfaces call; the
+        browser cannot render these itself because it has no concept of a Host
+        row. Protocols without a URL form (socks, http, mixed, dokodemo, tunnel)
+        contribute nothing.
+      url: '#return-one-inbounds-protocol-urls-rendered-through-the-subscription-engine-so-the-inbounds-hosts-are-applied--the-same-links-a-subscriber-receives-pass-email-to-narrow-the-answer-to-a-single-client-this-is-what-the-panels-qr-inbound-info-and-export-links-surfaces-call-the-browser-cannot-render-these-itself-because-it-has-no-concept-of-a-host-row-protocols-without-a-url-form-socks-http-mixed-dokodemo-tunnel-contribute-nothing'
+    - depth: 2
       title: Fetch a single inbound by numeric ID.
       url: '#fetch-a-single-inbound-by-numeric-id'
     - depth: 2
@@ -134,6 +143,14 @@ _openapi:
           (socks, http, mixed, wireguard, dokodemo, tunnel) contribute nothing.
           Used by the panel’s "Export all inbound links" action.
         id: return-every-protocol-url-vless-vmess-trojan-ss-hysteria-mtproto-across-all-inbounds-and-all-of-their-clients-links-are-rendered-through-the-subscription-engine-so-the-configured-remark-template-name-only-display-part-is-applied-per-client--the-same-output-the-client-infoqr-pages-use-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing-used-by-the-panels-export-all-inbound-links-action
+      - content: Return one inbound’s protocol URLs, rendered through the subscription
+          engine so the inbound’s hosts are applied — the same links a
+          subscriber receives. Pass ?email= to narrow the answer to a single
+          client. This is what the panel’s QR, inbound info and “Export links”
+          surfaces call; the browser cannot render these itself because it has
+          no concept of a Host row. Protocols without a URL form (socks, http,
+          mixed, dokodemo, tunnel) contribute nothing.
+        id: return-one-inbounds-protocol-urls-rendered-through-the-subscription-engine-so-the-inbounds-hosts-are-applied--the-same-links-a-subscriber-receives-pass-email-to-narrow-the-answer-to-a-single-client-this-is-what-the-panels-qr-inbound-info-and-export-links-surfaces-call-the-browser-cannot-render-these-itself-because-it-has-no-concept-of-a-host-row-protocols-without-a-url-form-socks-http-mixed-dokodemo-tunnel-contribute-nothing
       - content: Fetch a single inbound by numeric ID.
         id: fetch-a-single-inbound-by-numeric-id
       - content: Create a new inbound. Send the full inbound payload (protocol, port,
@@ -194,7 +211,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/inbounds/list","method":"get"},{"path":"/panel/api/inbounds/list/slim","method":"get"},{"path":"/panel/api/inbounds/options","method":"get"},{"path":"/panel/api/inbounds/allLinks","method":"get"},{"path":"/panel/api/inbounds/get/{id}","method":"get"},{"path":"/panel/api/inbounds/add","method":"post"},{"path":"/panel/api/inbounds/del/{id}","method":"post"},{"path":"/panel/api/inbounds/bulkDel","method":"post"},{"path":"/panel/api/inbounds/update/{id}","method":"post"},{"path":"/panel/api/inbounds/setEnable/{id}","method":"post"},{"path":"/panel/api/inbounds/{id}/resetTraffic","method":"post"},{"path":"/panel/api/inbounds/{id}/delAllClients","method":"post"},{"path":"/panel/api/inbounds/resetAllTraffics","method":"post"},{"path":"/panel/api/inbounds/import","method":"post"},{"path":"/panel/api/inbounds/pushClientTraffics","method":"post"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"get"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/inbounds/list","method":"get"},{"path":"/panel/api/inbounds/list/slim","method":"get"},{"path":"/panel/api/inbounds/options","method":"get"},{"path":"/panel/api/inbounds/allLinks","method":"get"},{"path":"/panel/api/inbounds/{id}/links","method":"get"},{"path":"/panel/api/inbounds/get/{id}","method":"get"},{"path":"/panel/api/inbounds/add","method":"post"},{"path":"/panel/api/inbounds/del/{id}","method":"post"},{"path":"/panel/api/inbounds/bulkDel","method":"post"},{"path":"/panel/api/inbounds/update/{id}","method":"post"},{"path":"/panel/api/inbounds/setEnable/{id}","method":"post"},{"path":"/panel/api/inbounds/{id}/resetTraffic","method":"post"},{"path":"/panel/api/inbounds/{id}/delAllClients","method":"post"},{"path":"/panel/api/inbounds/resetAllTraffics","method":"post"},{"path":"/panel/api/inbounds/import","method":"post"},{"path":"/panel/api/inbounds/pushClientTraffics","method":"post"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"get"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"post"}]} showTitle />
     </>
   );
 }

@@ -8,6 +8,22 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **QR codes and “Export links” now show your hosts.** The panel built those
+  links in the browser, and the browser has no concept of a Host row — so on a
+  CDN-fronted inbound the QR you scanned and the links you exported named the
+  origin address and port, from the same page that lists the hosts. Where the
+  origin is firewalled to CDN ranges that link cannot connect at all; everywhere
+  else it publishes the address the hosts existed to hide. The Inbounds page
+  contradicted itself: “Export all links” (rendered on the server) and “Export
+  links” on a single inbound (rendered in the browser) disagreed about the same
+  inbound.
+  **What you will notice:** both now come from the server, so they match the
+  subscription and each other. If the panel cannot reach that renderer it says
+  so and shows nothing, rather than quietly falling back to the origin link —
+  a wrong address that looks exactly like a right one is the failure this
+  change exists to remove. Kernel WireGuard peers are unaffected either way:
+  they are not host-fronted.
+
 - **`GET /panel/api/clients/links/:email` now returns the client's host links.**
   It rendered straight from the inbound, with no host lookup at all, so on a
   CDN-fronted inbound it handed back the origin address and port — the one the

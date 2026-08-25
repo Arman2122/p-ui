@@ -25,6 +25,7 @@ import {
 import { HttpUtil, SizeFormatter, RandomUtil } from '@/utils';
 import { createDefaultInboundSettings } from '@/lib/xray/inbound-defaults';
 import { genInboundLinks, genWireguardLinks, preferPublicHost } from '@/lib/xray/inbound-link';
+import { fetchInboundLinks } from '@/lib/xray/server-links';
 import { inboundFromDb } from '@/lib/xray/inbound-from-db';
 import { coerceInboundJsonField, type DBInbound } from '@/models/dbinbound';
 import { useTheme } from '@/hooks/useTheme';
@@ -260,26 +261,38 @@ export default function InboundsPage() {
     return idx >= 0 ? idx : 0;
   }, []);
 
-  const exportInboundLinks = useCallback((dbInbound: DBInbound) => {
+  const exportInboundLinks = useCallback(async (dbInbound: DBInbound) => {
     const projected = checkFallback(dbInbound);
-    const genInput = {
-      inbound: inboundFromDb(projected),
-      remark: projected.remark,
-      hostOverride: hostOverrideFor(dbInbound),
-      fallbackHostname: preferPublicHost(window.location.hostname, subSettings.publicHost),
-    };
-    const content = genInboundLinks(genInput);
-    const tabs: TextModalTab[] | undefined = projected.isWireguard
-      ? [
-        { key: 'config', label: t('pages.clients.config'), content },
-        { key: 'links', label: t('pages.clients.tabLinks'), content: genWireguardLinks(genInput) },
-      ]
-      : undefined;
+    // A kernel WireGuard peer is not host-fronted and its .conf has no link
+    // form, so the local renderer stays the right one for this branch only.
+    if (projected.isWireguard) {
+      const genInput = {
+        inbound: inboundFromDb(projected),
+        remark: projected.remark,
+        hostOverride: hostOverrideFor(dbInbound),
+        fallbackHostname: preferPublicHost(window.location.hostname, subSettings.publicHost),
+      };
+      const content = genInboundLinks(genInput);
+      openText({
+        title: t('pages.inbounds.exportLinksTitle'),
+        content,
+        fileName: projected.remark || 'inbound',
+        tabs: [
+          { key: 'config', label: t('pages.clients.config'), content },
+          { key: 'links', label: t('pages.clients.tabLinks'), content: genWireguardLinks(genInput) },
+        ],
+      });
+      return;
+    }
+    const result = await fetchInboundLinks(dbInbound.id);
+    if (result.status === 'error') {
+      openText({ title: t('pages.inbounds.exportLinksTitle'), content: result.message });
+      return;
+    }
     openText({
       title: t('pages.inbounds.exportLinksTitle'),
-      content,
+      content: result.links.join('\r\n'),
       fileName: projected.remark || 'inbound',
-      tabs,
     });
   }, [checkFallback, hostOverrideFor, subSettings.publicHost, openText, t]);
 
@@ -517,7 +530,7 @@ export default function InboundsPage() {
         setQrOpen(true);
         break;
       case 'export':
-        exportInboundLinks(target);
+        void exportInboundLinks(target);
         break;
       case 'subs':
         exportInboundSubs(target);
