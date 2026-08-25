@@ -24,11 +24,14 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/proc"
 )
 
-// GetBinaryName returns the Xray binary filename for the current OS and architecture.
+// GetBinaryName returns the Xray binary filename for the current OS and
+// architecture. It shares assetArchFor with the download path deliberately —
+// install.sh renames every ARM level to xray-linux-arm32, so the two must agree
+// about what "arm" is called or one of them silently looks for the wrong file.
 func GetBinaryName() string {
 	arch := runtime.GOARCH
 	if arch == "arm" {
-		arch = "arm32"
+		arch = assetArchFor(arch)
 	}
 	return fmt.Sprintf("xray-%s-%s", runtime.GOOS, arch)
 }

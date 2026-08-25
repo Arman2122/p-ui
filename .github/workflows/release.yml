@@ -89,7 +89,19 @@ jobs:
           esac
           # Stamp the commit into per-commit (dev channel) builds only; tagged
           # stable releases stay unstamped so config.IsDevBuild() returns false.
-          LDFLAGS="-w -s"
+          # The XTLS asset suffix for this platform. GOARCH cannot answer it —
+          # 32-bit ARM is always "arm" and GOARM carries the level — and guessing
+          # is unsafe: a v7a binary SIGILLs on ARMv5 (RUNTIME-RESULTS §16).
+          case "${{ matrix.platform }}" in
+            amd64) ASSET_ARCH=64 ;;
+            arm64) ASSET_ARCH=arm64-v8a ;;
+            armv7) ASSET_ARCH=arm32-v7a ;;
+            armv6) ASSET_ARCH=arm32-v6 ;;
+            armv5) ASSET_ARCH=arm32-v5 ;;
+            386) ASSET_ARCH=32 ;;
+            *) ASSET_ARCH="${{ matrix.platform }}" ;;
+          esac
+          LDFLAGS="-w -s -X github.com/Arman2122/p-ui/internal/xray.releaseAssetArch=${ASSET_ARCH}"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/Arman2122/p-ui/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi

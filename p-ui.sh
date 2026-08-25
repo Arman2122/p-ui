@@ -874,7 +874,10 @@ firewall_menu() {
             firewall_menu
             ;;
         5)
-            ufw enable
+            # Never a bare enable. With no rules configured this default-denies
+            # incoming immediately, which locks the operator out of SSH whatever
+            # the panel's ports happen to be.
+            install_firewall
             firewall_menu
             ;;
         6)
@@ -892,6 +895,58 @@ firewall_menu() {
     esac
 }
 
+# ssh_listen_port is what the operator is actually connected on.
+#
+# sshd_config can lie: on Ubuntu 24.04 sshd is socket-activated, so the Port
+# directive is not necessarily what is bound. For a live session the server-port
+# field of SSH_CONNECTION is ground truth; a console run has no session, so fall
+# back to the config and cross-check it against what is really listening.
+ssh_listen_port() {
+    if [[ -n "${SSH_CONNECTION:-}" ]]; then
+        awk '{print $4}' <<< "${SSH_CONNECTION}"
+        return
+    fi
+    local configured
+    configured=$(awk '/^[[:space:]]*Port[[:space:]]+[0-9]+/ {print $2}' /etc/ssh/sshd_config 2>/dev/null | tail -1)
+    [[ -z "${configured}" ]] && configured=22
+    if ss -ltn 2>/dev/null | grep -qE "[:.]${configured}[[:space:]]"; then
+        echo "${configured}"
+    fi
+}
+
+# panel_firewall_ports asks the panel itself, which answers from its database
+# with the service stopped. Format is "<port>/<proto> <role>", one per line.
+panel_firewall_ports() {
+    "${pui_folder}/p-ui" setting -listPorts 2>/dev/null || true
+}
+
+# confirm_firewall_rules prints what would be applied and refuses unless the
+# operator's own SSH port is in it. A firewall that declines to enable is a
+# support ticket; one that enables without SSH is a site visit.
+confirm_firewall_rules() {
+    local ssh_port="$1"; shift
+    local -a rules=("$@")
+
+    echo -e "${yellow}These rules will be applied before the firewall is enabled:${plain}"
+    printf '  ufw allow %s
+' "${rules[@]}"
+    echo -e "${yellow}This list covers the panel's own inbounds. A host that also serves${plain}"
+    echo -e "${yellow}inbounds for another panel must add those ports by hand.${plain}"
+
+    if [[ -z "${ssh_port}" ]]; then
+        echo -e "${red}Could not determine which port sshd is listening on.${plain}"
+        echo -e "${red}Refusing to enable the firewall: add the rule by hand, then re-run.${plain}"
+        return 1
+    fi
+    local rule
+    for rule in "${rules[@]}"; do
+        [[ "${rule}" == "${ssh_port}/tcp" ]] && return 0
+    done
+    echo -e "${red}Your SSH port (${ssh_port}) is not in the list above.${plain}"
+    echo -e "${red}Refusing to enable the firewall: enabling it now would lock you out.${plain}"
+    return 1
+}
+
 install_firewall() {
     if ! command -v ufw &> /dev/null; then
         echo "ufw firewall is not installed. Installing now..."
@@ -904,18 +959,30 @@ install_firewall() {
     # Check if the firewall is inactive
     if ufw status | grep -q "Status: active"; then
         echo "Firewall is already active"
-    else
-        echo "Activating firewall..."
-        # Open the necessary ports
-        ufw allow ssh
-        ufw allow http
-        ufw allow https
-        ufw allow 2053/tcp #webPort
-        ufw allow 2096/tcp #subport
-
-        # Enable the firewall
-        ufw --force enable
+        return
     fi
+
+    # The ports are read from the panel, not guessed. install.sh assigns the
+    # panel port with shuf, so the 2053/2096 this used to allow were almost
+    # never the real ones and no inbound port was in the list at all.
+    local ssh_port
+    ssh_port=$(ssh_listen_port)
+    local -a rules=()
+    [[ -n "${ssh_port}" ]] && rules+=("${ssh_port}/tcp")
+    local spec role
+    while read -r spec role; do
+        [[ -z "${spec}" ]] && continue
+        rules+=("${spec}")
+    done < <(panel_firewall_ports)
+
+    confirm_firewall_rules "${ssh_port}" "${rules[@]}" || return 1
+
+    echo "Activating firewall..."
+    local rule
+    for rule in "${rules[@]}"; do
+        ufw allow "${rule}" > /dev/null 2>&1
+    done
+    ufw --force enable
 }
 
 open_ports() {
