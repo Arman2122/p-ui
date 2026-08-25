@@ -8,6 +8,59 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Removing a tunnel now removes its NAT rules on Ubuntu 22.04 and Debian 12.**
+  The teardown used the nftables `destroy` command, which those releases' nft
+  has never heard of — measured as a parse error, not a runtime failure — so
+  the panel's masquerade table stayed on the box with its rules still
+  translating after the last tunnel was gone. Newer releases were unaffected.
+  **What you will notice:** on those two releases the table is now actually
+  removed. Nothing changes on 24.04 or 26.04.
+
+- **The IP Limit field now tells you when it would do nothing.** The panel
+  checked `fail2ban-client -h` to decide whether a per-client IP limit could be
+  enforced — a question the client answers out of its own argument parser, with
+  the daemon stopped and with p-ui's jail deleted. Measured on a real box: with
+  the jail removed (which this menu's own “Only remove IP Limit
+  configurations” does), `-h` still exits 0 while asking about the jail exits
+  255. So the field stayed green, the log said addresses were over their cap,
+  and no packet was ever dropped.
+  **What you will notice:** a third state. If fail2ban is installed but p-ui's
+  jail is not loaded, the IP Limit control is disabled and says so, with what to
+  re-run. **On upgrade this can look like a regression — it is not.** A box
+  showing that message was never enforcing; it just had no way to tell you.
+
+- **The fail2ban menu stops deleting configuration it does not own.**
+  “Uninstall Fail2ban and IP Limit” ran `rm -rf /etc/fail2ban`, taking every
+  jail, filter and `.local` override on the box — while the option above it
+  already removed p-ui's three files surgically. Separately, the cleanup that
+  runs on update deleted from `[p-ui-ipl]` to the next blank line, and a jail
+  file whose next section follows immediately has none: it ran to end of file
+  and took the operator's `[sshd]` and `[recidive]` jails with it.
+  **What you will notice:** both paths now remove exactly p-ui's own section
+  and files. The uninstall leaves the rest to apt.
+
+- **Fail2ban installs entirely from your distribution.** The Ubuntu path ran
+  `pip install pyasynchat --break-system-packages` — the only step in the whole
+  install that left the distro archive, and it fails wherever PyPI is
+  unreachable. It worked around a bug fixed in Ubuntu's own package in June
+  2024; the shipped package carries its own replacement module and depends on
+  the other one. The pip copies were also installed where they take precedence
+  over the packaged ones.
+  **What you will notice:** the install works on networks that cannot reach
+  PyPI, and stops shadowing an apt-managed dependency.
+
+- **The menu reads the panel's settings, and the real SSH port.** `p-ui.sh`
+  never loaded `/etc/default/p-ui`, so from an ordinary login shell “Change Ban
+  Duration” rewrote the ban rules with no database connection — dropping the
+  panel port from the exemption list — and pointed the jail at
+  `/var/log/p-ui` even when the panel logs elsewhere, leaving it watching a file
+  nobody writes. The SSH exemption was scraped from `sshd_config` alone, missing
+  the `Include sshd_config.d/*.conf` every cloud image ships, so SSH on 2222
+  exempted port 22.
+  **What you will notice:** the ban rules exempt the ports that are really in
+  use — including the port your current session is on, whatever the config
+  says — and the jail watches the file the panel actually writes.
+
 - **QR codes and “Export links” now show your hosts.** The panel built those
   links in the browser, and the browser has no concept of a Host row — so on a
   CDN-fronted inbound the QR you scanned and the links you exported named the
