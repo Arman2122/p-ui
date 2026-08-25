@@ -427,3 +427,41 @@ rather than deriving it.
 
 **Cost to close:** the scan is minutes and is already written; the judgement is
 the work.
+
+---
+
+## L11 — the LDAP safety guard has no surface, and that is already filed
+
+**Found:** while describing F367.
+**Where:** `audit-appendix/feature-gaps.md`, the LDAP section — **not a new
+entry.** Cross-checked before writing this, which is the point of the pointer.
+
+Two of the 114 gaps already cover it:
+
+- *"No 'Test LDAP connection' action, unlike SMTP and Telegram which both have
+  one"* — and LDAP has strictly more ways to be misconfigured than either.
+- *"No visibility into LDAP sync state: last run, last result, users fetched,
+  clients created/enabled/disabled/deleted"* — the job computes every one of
+  those numbers and only logs them.
+
+What F367 adds is a reason to raise their priority rather than a new gap. After
+this slice the panel has a guard that will **refuse to delete and say so only in
+the log**, and a baseline that lives in memory and resets on restart. Both are
+correct; neither is visible. An operator whose auto-delete has quietly stopped
+acting — because their directory legitimately shrank — has no way to see that
+from the UI, and the escape path (restart, let one sync record the new size) is
+something they can only learn from the changelog.
+
+The second gap's own *Suggested* text already anticipates this: it proposes that
+"the same settings row that should hold the retention baseline can carry a JSON
+blob". That row does not exist yet, which is why the baseline is still in memory.
+
+**Disposition question:** does the retention baseline become persistent as part
+of building that status surface, or before it? Persisting it changes behaviour —
+it would survive restarts, which removes the escape path this slice just
+documented — so the two decisions are the same decision and should be made
+together.
+
+**Cost to close:** the feature-gaps entries carry their own suggested shapes.
+This entry exists so the campaign-end pass does not treat the LDAP guard's
+invisibility as an unfiled discovery.
