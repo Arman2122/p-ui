@@ -136,6 +136,18 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/inbounds/:id/links',
+        summary:
+          'Return one inbound’s protocol URLs, rendered through the subscription engine so the inbound’s hosts are applied — the same links a subscriber receives. Pass ?email= to narrow the answer to a single client. This is what the panel’s QR, inbound info and “Export links” surfaces call; the browser cannot render these itself because it has no concept of a Host row. Protocols without a URL form (socks, http, mixed, dokodemo, tunnel) contribute nothing.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' },
+          { name: 'email', in: 'query', type: 'string', desc: 'Optional. Limit the links to this client’s.' },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    "vless://uuid@cdn.example.com:2096?security=tls&...#Germany-alice"\n  ]\n}',
+      },
+      {
+        method: 'GET',
         path: '/panel/api/inbounds/get/:id',
         summary: 'Fetch a single inbound by numeric ID.',
         params: [

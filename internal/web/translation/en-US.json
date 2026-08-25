@@ -330,6 +330,7 @@
       "inboundJsonTitle": "Inbound JSON",
       "resetTrafficContent": "Are you sure you want to reset traffic?",
       "copyLink": "Copy URL",
+      "linksUnavailable": "The panel could not load this inbound's links. They are rendered on the server so your hosts are applied; nothing is shown here rather than an address that may be wrong.",
       "address": "Address",
       "network": "Network",
       "destinationPort": "Destination Port",

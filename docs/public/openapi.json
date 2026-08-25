@@ -3911,6 +3911,62 @@
         }
       }
     },
+    "/panel/api/inbounds/{id}/links": {
+      "get": {
+        "tags": [
+          "Inbounds"
+        ],
+        "summary": "Return one inbound’s protocol URLs, rendered through the subscription engine so the inbound’s hosts are applied — the same links a subscriber receives. Pass ?email= to narrow the answer to a single client. This is what the panel’s QR, inbound info and “Export links” surfaces call; the browser cannot render these itself because it has no concept of a Host row. Protocols without a URL form (socks, http, mixed, dokodemo, tunnel) contribute nothing.",
+        "operationId": "get_panel_api_inbounds_id_links",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Inbound ID.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "description": "Optional. Limit the links to this client’s.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    "vless://uuid@cdn.example.com:2096?security=tls&...#Germany-alice"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/inbounds/get/{id}": {
       "get": {
         "tags": [

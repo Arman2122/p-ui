@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Divider, Modal, Space, Tabs, Tag, Tooltip } from 'antd';
+import { Alert, Button, Divider, Modal, Space, Spin, Tabs, Tag, Tooltip } from 'antd';
 import { CopyOutlined, SyncOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 
 import { HttpUtil, IntlUtil, SizeFormatter, ColorUtils, Wireguard } from '@/utils';
@@ -9,11 +9,11 @@ import { Protocols } from '@/schemas/primitives';
 import { InfinityIcon } from '@/components/ui';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import {
-  genAllLinks,
   genWireguardConfigs,
   genWireguardLinks,
   preferPublicHost,
 } from '@/lib/xray/inbound-link';
+import { fetchInboundLinks, remarkFromLink } from '@/lib/xray/server-links';
 import { inboundFromDb } from '@/lib/xray/inbound-from-db';
 import { formatIpLimit } from '@/lib/policies/labels';
 
@@ -49,6 +49,8 @@ export default function InboundInfoModal({
   const [clientSettings, setClientSettings] = useState<ClientSetting | null>(null);
   const [clientStats, setClientStats] = useState<ClientStats | null>(null);
   const [links, setLinks] = useState<{ remark?: string; link: string }[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [linksError, setLinksError] = useState('');
   const [wireguardConfigs, setWireguardConfigs] = useState<string[]>([]);
   const [wireguardLinks, setWireguardLinks] = useState<string[]>([]);
   const [subLink, setSubLink] = useState('');
@@ -102,6 +104,7 @@ export default function InboundInfoModal({
   }, [clientStats, t]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!open || !dbInbound) return;
     const info = buildInboundInfo(dbInbound);
     setInbound(info);
@@ -135,18 +138,25 @@ export default function InboundInfoModal({
         }).split('\r\n'),
       );
       setLinks([]);
+      setLinksError('');
+      setLoadingLinks(false);
     } else {
-      setLinks(
-        genAllLinks({
-          inbound: inboundForLinks,
-          remark: dbInbound.remark,
-          client: (clientSet ?? {}) as Parameters<typeof genAllLinks>[0]['client'],
-          hostOverride: nodeAddress,
-          fallbackHostname,
-        }),
-      );
       setWireguardConfigs([]);
       setWireguardLinks([]);
+      setLinks([]);
+      setLinksError('');
+      setLoadingLinks(true);
+      /* The server is the only renderer that applies Host rows, so a failure
+         must show as one rather than quietly become an origin link again. */
+      void fetchInboundLinks(dbInbound.id, clientSet?.email).then((result) => {
+        if (cancelled) return;
+        setLoadingLinks(false);
+        if (result.status === 'error') {
+          setLinksError(result.message);
+          return;
+        }
+        setLinks(result.links.map((link) => ({ remark: remarkFromLink(link), link })));
+      });
     }
 
     if (clientSet?.subId) {
@@ -188,6 +198,7 @@ export default function InboundInfoModal({
         }
       });
     }
+    return () => { cancelled = true; };
   }, [open, dbInbound, clientIndex, nodeAddress, subSettings, ipLimitEnable, t]);
 
   const isEnable = useMemo(() => {
@@ -400,6 +411,20 @@ export default function InboundInfoModal({
               <Button size="small" icon={<CopyOutlined />} aria-label={t('copy')} onClick={() => copyText(clientSettings.tgId, t)} />
             </Tooltip>
           </div>
+        </>
+      )}
+
+      {hasShareLink(dbInbound.protocol) && loadingLinks && (
+        <>
+          <Divider>{t('pages.inbounds.copyLink')}</Divider>
+          <div style={{ padding: '16px 0', textAlign: 'center' }}><Spin /></div>
+        </>
+      )}
+
+      {linksError && (
+        <>
+          <Divider>{t('pages.inbounds.copyLink')}</Divider>
+          <Alert type="error" showIcon message={t('pages.inbounds.linksUnavailable')} description={linksError} />
         </>
       )}
 
