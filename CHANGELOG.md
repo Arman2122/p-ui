@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **`GET /panel/api/clients/links/:email` now returns the client's host links.**
+  It rendered straight from the inbound, with no host lookup at all, so on a
+  CDN-fronted inbound it handed back the origin address and port — the one the
+  hosts exist to replace, and on an origin firewalled to CDN ranges the one
+  address that cannot connect. The subscription endpoint rendered the same
+  client correctly at the same moment.
+  **What you will notice:** the endpoint returns one link per enabled host, in
+  host order, matching what a subscriber gets. An inbound with no hosts returns
+  exactly what it returned before.
+
 - **A mixed (SOCKS+HTTP) inbound no longer breaks its own UDP.** The panel
   filled in a "UDP IP" of `127.0.0.1` on every mixed inbound it created. Xray
   binds the SOCKS UDP relay to that address *and* hands it back to the client as

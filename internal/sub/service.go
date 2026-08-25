@@ -350,6 +350,32 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 // {{HOST}} and per-host variants render — but across all clients rather than a
 // single subId. Dedups duplicate client JSON entries by email (#5134). Backs the
 // panel's "Export all inbound links" so it matches the client/QR pages.
+/*
+linkForEmail renders one client's raw link, through the inbound's hosts when it
+has any.
+
+The panel's per-client link endpoint used to call GetLink directly, so it handed
+out the origin address on exactly the deployments hosts exist for. Every step
+below mirrors inboundLinks, which is the renderer a subscriber gets; the two
+must not disagree about the same client. Anything it cannot resolve falls back
+to the pre-host behaviour rather than to no link at all.
+*/
+func (s *SubService) linkForEmail(inbound *model.Inbound, email string) string {
+	clients, err := s.inboundService.GetClients(inbound)
+	if err == nil {
+		s.primeLinkClients(inbound.Id, clients, true)
+	}
+	s.projectThroughFallbackMaster(inbound)
+	if hostEps := s.hostEndpoints(inbound, "raw"); len(hostEps) > 0 {
+		for _, client := range clients {
+			if strings.EqualFold(client.Email, email) {
+				return s.linkFromHosts(inbound, client, hostEps)
+			}
+		}
+	}
+	return s.GetLink(inbound, email)
+}
+
 func (s *SubService) inboundLinks(inbound *model.Inbound) []string {
 	clients, err := s.inboundService.GetClients(inbound)
 	if err != nil {
