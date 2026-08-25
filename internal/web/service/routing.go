@@ -518,7 +518,14 @@ func (s *RoutingService) Add(ctx context.Context, rule *model.RoutingRule) (*mod
 		return nil, err
 	}
 	rule.SortIndex = next
+	// Read before the insert: GORM writes the column's default back into the
+	// struct, so afterwards the caller's own intent is gone.
+	staged := rule.Enable
 	if err := database.GetDB().Create(rule).Error; err != nil {
+		return nil, err
+	}
+	rule.Enable = staged
+	if err := applyStagedOff(database.GetDB(), &model.RoutingRule{}, "enable", staged, rule.Id); err != nil {
 		return nil, err
 	}
 	return rule, s.converge(ctx)

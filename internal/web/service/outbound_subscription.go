@@ -194,6 +194,12 @@ func (s *OutboundSubscriptionService) Create(remark, rawURL, tagPrefix string, e
 	if err := database.GetDB().Create(sub).Error; err != nil {
 		return nil, err
 	}
+	// enabled, not sub.Enabled: the insert writes the column's default back into
+	// the struct, so the parameter is the only surviving copy of the intent.
+	sub.Enabled = enabled
+	if err := applyStagedOff(database.GetDB(), &model.OutboundSubscription{}, "enabled", enabled, sub.Id); err != nil {
+		return nil, err
+	}
 	return sub, nil
 }
 

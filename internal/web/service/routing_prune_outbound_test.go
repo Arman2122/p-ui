@@ -106,15 +106,9 @@ func TestPruneOutboundLeavesWhatIsNotItsToJudge(t *testing.T) {
 		DestKind: model.RoutingDestExit, DestExitId: &exitID,
 	})
 	offRule := seedRoutingRule(t, &model.RoutingRule{
-		Remark: "off on purpose", IngressScope: model.RoutingScopeAll,
+		Enable: false, Remark: "off on purpose", IngressScope: model.RoutingScopeAll,
 		DestKind: model.RoutingDestOutbound, DestTag: "warp",
 	})
-	// Written after the insert on purpose: the column defaults to true and GORM
-	// omits a zero value, so Create(Enable: false) stores an enabled rule (L9).
-	if err := database.GetDB().Model(&model.RoutingRule{}).
-		Where("id = ?", offRule.Id).Update("enable", false).Error; err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := (&RoutingService{}).PruneOutbound(context.Background(), map[string]bool{"direct": true}); err != nil {
 		t.Fatalf("PruneOutbound: %v", err)
@@ -127,9 +121,17 @@ func TestPruneOutboundLeavesWhatIsNotItsToJudge(t *testing.T) {
 	}
 }
 
+// seedRoutingRule inserts the way the service does, applyStagedOff included: a
+// raw Create cannot store a disabled rule, so a fixture that skipped it would
+// silently seed an enabled one.
 func seedRoutingRule(t *testing.T, rule *model.RoutingRule) *model.RoutingRule {
 	t.Helper()
+	staged := rule.Enable
 	if err := database.GetDB().Create(rule).Error; err != nil {
+		t.Fatalf("seed routing rule: %v", err)
+	}
+	rule.Enable = staged
+	if err := applyStagedOff(database.GetDB(), &model.RoutingRule{}, "enable", staged, rule.Id); err != nil {
 		t.Fatalf("seed routing rule: %v", err)
 	}
 	return rule
