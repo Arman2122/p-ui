@@ -729,6 +729,44 @@ asset each board can actually execute.
 
 ---
 
+## 18. F136 — the finding names the browser; the same hole was in Go
+
+F136 is filed against `frontend/src/lib/xray/inbound-link.ts` and reads as a
+frontend-only defect: the browser has no concept of a Host row, so QR codes and
+Export links hand out the origin. Verifying that turned up a second instance
+the audit does not mention, on the server side of the same feature.
+
+`LinkProvider.LinksForClient` — behind `GET /panel/api/clients/links/:email`,
+a documented REST endpoint with no frontend consumer — called `GetLink`
+directly with no `hostEndpoints` lookup:
+
+```go
+svc := p.build(host)
+svc.projectThroughFallbackMaster(inbound)
+return splitLinkLines(svc.GetLink(inbound, email))
+```
+
+`inboundLinks`, three functions away in the same package and reached through
+`/inbounds/allLinks` and every subscription, does the lookup and branches on it.
+So the panel rendered the same client two different ways depending on the door.
+
+Measured on a live PostgreSQL (`internal/sub`, seeded inbound at
+`203.0.113.5:4451` with one host `a.cdn.com:2096`), with the fix reverted:
+
+```
+want:  vless://...@a.cdn.com:2096?host=a.host&path=%2Fa&sni=a.sni&type=ws#...
+got:   vless://...@203.0.113.5:4451?host=base.host&path=%2Fbase&sni=base.sni&type=ws#...
+```
+
+Not merely the wrong address — the wrong host header, path and SNI too, i.e.
+the fronting is absent rather than misaddressed. A two-host inbound returned
+one link instead of two.
+
+**Correction to F136:** its *What* section is accurate about the frontend but
+its scope is understated. The Go renderer had the same defect on one endpoint,
+and that half is fixed independently of the browser work.
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
