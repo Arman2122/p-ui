@@ -767,6 +767,168 @@ its scope is understated. The Go renderer had the same defect on one endpoint,
 and that half is fixed independently of the browser work.
 ---
 
+## 19. H2 — the two probes, measured against a live daemon
+
+H2 says `fail2ban-client -h` proves only that a Python binary exists. Measured
+on the VM (Ubuntu 24.04, fail2ban 1.0.2-3ubuntu0.1), in the two states that
+matter:
+
+```
+                              -h        status p-ui-ipl
+jail file deleted              0             255
+daemon stopped                 0             255
+jail present, daemon up        0               0
+```
+
+Deleting the jail file is not hypothetical: it is what the panel's own menu
+option 1 ("Only remove IP Limit configurations") does. On that box the old
+probe returned green, `enforce` went true, the UI showed the cap enabled and
+the job logged addresses over their cap — while nothing was dropped.
+
+The daemon-stopped row explains why: `-h` never reaches the socket at all. It
+is answered by the client's own argparse.
+
+**Cost of the fix, which the §7 warning called correctly:** `status` DOES reach
+the socket, so this is the panel's first synchronous dependency on fail2ban's
+daemon inside `enforceIPLimits`. Both probes are now
+`context.WithTimeout`-bounded at 5s and share one 30s cache, because the cron
+chain is built with `SkipIfStillRunning` and a `DiscardLogger` — a hung call
+would discard every later tick, silently, and freeze speed-ladder convergence
+with it.
+
+---
+
+## 20. H8 — the PyPI step was not just risky, it shadowed the archive
+
+H8 says the `pip install pyasynchat --break-system-packages` workaround is
+unnecessary on current Ubuntu. It is worse than unnecessary. On the VM:
+
+- the archive candidate is `1.0.2-3ubuntu0.1` — the patched build
+- that package **vendors** `fail2ban/compat/asynchat.py`, and its import site
+  reads `try: import asynchat / except ImportError: from ..compat import asynchat`
+- it **Depends on** `python3-pyasyncore`, supplying the other module Python
+  3.12 removed
+
+With `/usr/local/lib` (pip's install root) stripped from `sys.path`,
+`fail2ban.server.asyncserver` imports cleanly — `asynchat` resolving to the
+vendored shim and `asyncore` to the deb. So apt already installs everything
+needed, and the pip copies in `/usr/local` take precedence over the
+apt-managed ones on a normal path. The workaround shadowed the distro's own
+dependency with an unmanaged copy, on the one step that also requires PyPI to
+be reachable.
+
+---
+
+## 21. H7 — the range delete, on real files
+
+`sed -i "/[p-ui-ipl]/,/^$/d"` against a jail.conf whose next section follows
+with no blank line between:
+
+```
+before                 after (old sed)        after (new awk)
+# operator preamble    # operator preamble    # operator preamble
+[DEFAULT]              [DEFAULT]              [DEFAULT]
+bantime = 10m          bantime = 10m          bantime = 10m
+
+[p-ui-ipl] ...         (nothing follows)      [sshd]
+[sshd] ...                                    enabled = true
+[recidive] ...                                port = 2222
+                                              [recidive]
+                                              enabled = true
+```
+
+`[sshd]` and `[recidive]` gone, on a routine update, silently. The replacement
+was checked against four shapes: no blank line, blank line present (what the
+old range handled correctly), `[p-ui-ipl]` last in the file, and absent
+entirely.
+---
+
+## 22. The §8 checklist, on the box
+
+IP-LIMIT-ACTUATOR-RESEARCH §8 lists eight things that cannot be settled by
+reading. Box: the penhoon VM, Ubuntu 24.04.4, fail2ban 1.0.2-3ubuntu0.1,
+nftables 1.0.9. Every ban used TEST-NET addresses and was unbanned afterwards.
+
+**Coverage — this is 5 of 8 fully closed, not 8 of 8.** Read the three below as
+still open before treating the checklist as discharged:
+
+| # | State | Why |
+|---|---|---|
+| 1 | **partial** | Answered for fail2ban 1.0.x. Ubuntu 22.04's 0.11.2-6 is untested — no such box was available. |
+| 7 | **open** | §8 scopes it to "before shipping the cut", i.e. step 11's actuator swap, which is not in this pass. It also needs a real proxy client reconnecting. |
+| 8 | **partial** | Answered for the VM. The prod panel was deliberately not probed — it is not this campaign's to touch — so the panel-side allowlist question for step 11 stays open there. |
+
+Items 2, 3, 4, 5 and 6 are closed on measurement below.
+
+**1. Multi-IP `banip` — YES, on 1.0.2.**
+`fail2ban-client set p-ui-ipl banip 203.0.113.7 203.0.113.8` returns `2`, exit
+0, and both land in the banned list. *Gap:* Ubuntu 22.04's 0.11.2-6 was not
+tested — no such box. The multi-IP floor is proven for 1.0.x only.
+
+**2. Email field after a manual `banip` — EMPTY. The finding is confirmed.**
+
+```
+2026/08/25 21:32:43   BAN   [Email] =  [IP] = 203.0.113.7 banned for 1800 seconds.
+```
+
+The line appears; the field does not. `<F-USER>` is populated only by a filter
+match against a log line. This is the audit-trail loss step 11 has to decide
+explicitly, and it is now measured rather than predicted.
+
+**3. Jail with an unwritten logpath — loads and STAYS loaded.**
+`/var/log/p-ui/pui-ipl.log` is 0 bytes. Across `systemctl restart fail2ban`,
+`status p-ui-ipl` exits 0 and `get p-ui-ipl logpath` reports the file as
+monitored. So `backend = polling` is **not** needed and the no-migration
+property holds.
+
+**4. `blocktype` — REJECT, not DROP.** From the live chain:
+
+```
+-A f2b-p-ui-ipl -s 203.0.113.7/32 -p tcp -m multiport ! --dports 22,16109 -j REJECT --reject-with icmp-port-unreachable
+```
+
+**5. IPv6 — banned, not silently dropped.** `banip 2001:db8::1` returns 1 and
+creates the ip6tables chain with `--reject-with icmp6-port-unreachable`. The
+worry is refuted.
+
+**6. `nft destroy` on old nft — the finding is confirmed, and now fixed.**
+The jammy `nftables 1.0.2` binary was extracted from its .deb and run on the
+VM beside the system 1.0.9:
+
+```
+nft 1.0.2:  destroy table inet p-ui-nat  -> exit 1
+            /dev/stdin:1:9-13: Error: syntax error, unexpected table, expecting string
+nft 1.0.9:  destroy table inet p-ui-nat  -> exit 0
+```
+
+Not a runtime failure — the parser has never heard of `destroy`. Ubuntu 22.04
+(1.0.2) and Debian 12 (1.0.6) are both below the 1.0.8 that introduced it, so
+on two of five supported targets the masquerade table was never torn down.
+
+The replacement is `add table` + `delete table`, applied for real against the
+kernel on both binaries, with the table present and absent, using a scratch
+table name so the panel's own was never touched:
+
+```
+                              1.0.2   1.0.9
+table absent, add+delete       0       0
+table absent, run again        0       0
+table present, add+delete      0       0
+leftover afterwards           none    none
+```
+
+**7. Ban/reconnect/re-ban cycle — NOT measured, and not required here.**
+§8 scopes it to "before shipping the cut", i.e. step 11's actuator swap, which
+is not in this pass. It also needs a real proxy client reconnecting, which this
+box cannot stage. It stays open, attached to step 11.
+
+**8. Operator `ignoreip` — none on the VM.**
+No `/etc/fail2ban/jail.local` exists and no `ignoreip` appears in `jail.d/`.
+The prod panel was **deliberately not probed**: it is not this campaign's to
+touch. So this answers one of the two boxes §8 names, and the panel-side
+allowlist question for step 11 stays open on the other.
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
