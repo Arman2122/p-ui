@@ -102,6 +102,12 @@ func initModels() error {
 	if err := pruneOrphanedHosts(); err != nil {
 		return err
 	}
+	if err := pruneOrphanedClientCredentials(); err != nil {
+		return err
+	}
+	if err := pruneOrphanedInboundFallbacks(); err != nil {
+		return err
+	}
 	if err := normalizeInboundSubSortIndex(); err != nil {
 		return err
 	}
@@ -897,6 +903,47 @@ func pruneOrphanedHosts() error {
 	}
 	if res.RowsAffected > 0 {
 		log.Printf("Pruned %d orphaned hosts row(s)", res.RowsAffected)
+	}
+	return nil
+}
+
+/*
+pruneOrphanedClientCredentials and pruneOrphanedInboundFallbacks clear the
+backlog DelInbound left behind before it learned to take these rows with it.
+
+Every database that has ever deleted an inbound holds some, and the fix at the
+delete site cannot reach them. They run before resyncPostgresSequences, which is
+what rewinds the sequence and lets a NEW inbound be created on a deleted id --
+the moment an orphan stops being dead weight and becomes another inbound's
+credentials.
+
+This is also how the node-sync delete path is covered without editing it, the
+same way orphaned hosts already are.
+*/
+func pruneOrphanedClientCredentials() error {
+	res := db.Exec("DELETE FROM client_credentials WHERE inbound_id NOT IN (SELECT id FROM inbounds)")
+	if res.Error != nil {
+		log.Printf("Error pruning orphaned client_credentials rows: %v", res.Error)
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("Pruned %d orphaned client_credentials row(s)", res.RowsAffected)
+	}
+	return nil
+}
+
+func pruneOrphanedInboundFallbacks() error {
+	// child_id = 0 is the live "dest-only fallback" sentinel, not a dangling
+	// reference, which is also why a plain foreign key cannot express this.
+	res := db.Exec(`DELETE FROM inbound_fallbacks
+		 WHERE master_id NOT IN (SELECT id FROM inbounds)
+		    OR (child_id <> 0 AND child_id NOT IN (SELECT id FROM inbounds))`)
+	if res.Error != nil {
+		log.Printf("Error pruning orphaned inbound_fallbacks rows: %v", res.Error)
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("Pruned %d orphaned inbound_fallbacks row(s)", res.RowsAffected)
 	}
 	return nil
 }
@@ -2205,4 +2252,14 @@ func GetDB() *gorm.DB {
 
 func IsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+// PruneOrphansForTest runs the per-inbound orphan pruners on demand. Exported
+// for tests: the pruners run inside initModels, which a test cannot re-enter
+// without rebuilding the whole schema.
+func PruneOrphansForTest() error {
+	if err := pruneOrphanedClientCredentials(); err != nil {
+		return err
+	}
+	return pruneOrphanedInboundFallbacks()
 }

@@ -8,6 +8,25 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A client that runs out of quota stays cut off.** The depletion pass rewrote
+  the inbound's stored settings without taking the lock every other writer
+  takes, so a client being added at the same moment could restore the depleted
+  client's `enable: true`. That did not heal: the panel only re-checks clients
+  it still believes are enabled, and this one had already been marked disabled
+  elsewhere — so no later pass noticed, and an exhausted quota was served until
+  someone reset that client's traffic by hand.
+  **What you will notice:** depletions hold. The settings update now happens
+  just after the traffic save rather than during it, so a client added at the
+  same time keeps its place and the depleted one still gets cut off. A client
+  you reset in that same instant is left alone.
+
+- **Deleting an inbound removes its stored credentials and fallbacks.** They
+  were left behind, and the panel reuses inbound ids — so a new inbound created
+  later could inherit a deleted one's credentials and fallback entries.
+  **What you will notice:** the rows go with the inbound. Anything already
+  orphaned by an earlier delete is cleared once, at the next startup, before any
+  id can be handed out again.
+
 - **The routing-rules migration runs once, not on every restart.** The one-time
   conversion that turns template routing rules into panel rules had no record
   that it had already run, so it re-consumed the template on every boot. If you

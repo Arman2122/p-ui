@@ -1185,6 +1185,20 @@ func (s *InboundService) DelInbound(id int) (bool, error) {
 		if err := tx.Where("inbound_id = ?", id).Delete(&model.Host{}).Error; err != nil {
 			return err
 		}
+		/*
+			The per-inbound rows go with the inbound, or a recycled id adopts them.
+
+			resyncPostgresSequences hands ids back after a delete, so a NEW inbound can
+			be created on the id the old one had — and it inherits whatever these two
+			tables still hold for that id. Credentials from a deleted inbound, and
+			fallbacks pointing at something that no longer exists.
+		*/
+		if err := tx.Where("inbound_id = ?", id).Delete(&model.ClientCredential{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("master_id = ? OR child_id = ?", id, id).Delete(&model.InboundFallback{}).Error; err != nil {
+			return err
+		}
 		if loadErr == nil && ib.NodeID != nil {
 			return (&NodeService{}).MarkNodeDirtyTx(tx, *ib.NodeID)
 		}

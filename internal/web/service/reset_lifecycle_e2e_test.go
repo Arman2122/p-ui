@@ -296,8 +296,9 @@ func TestQuotaResetRestoresAccessEndToEnd(t *testing.T) {
 		Updates(map[string]any{"total": 100, "up": 60, "down": 60}).Error; err != nil {
 		t.Fatalf("spend the allowance: %v", err)
 	}
-	if _, _, err := inboundSvc.disableInvalidClients(database.GetDB()); err != nil {
-		t.Fatalf("disableInvalidClients: %v", err)
+	// The whole pass, because the settings-JSON sync moved after the commit.
+	if _, _, err := inboundSvc.AddTraffic(nil, nil); err != nil {
+		t.Fatalf("AddTraffic: %v", err)
 	}
 
 	depletedCfg, err := xraySvc.GetXrayConfig()

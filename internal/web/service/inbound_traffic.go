@@ -23,9 +23,10 @@ import (
 
 func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, err error) {
 	var renewed []string
+	var pending pendingClientDisable
 	err = submitTrafficWrite(func() error {
 		var inner error
-		needRestart, clientsDisabled, renewed, inner = s.addTrafficLocked(inboundTraffics, clientTraffics)
+		needRestart, clientsDisabled, renewed, pending, inner = s.addTrafficLocked(inboundTraffics, clientTraffics)
 		return inner
 	})
 	/*
@@ -40,8 +41,13 @@ func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraff
 		Skipped when the write failed: quotas must not be cleared in a daemon for
 		a renewal the database rolled back.
 	*/
-	if err == nil && len(renewed) > 0 {
-		resetCoreQuotas(context.Background(), renewed)
+	if err == nil {
+		if len(renewed) > 0 {
+			resetCoreQuotas(context.Background(), renewed)
+		}
+		// Rewriting inbounds.settings needs lockInbound, which cannot be taken
+		// from inside the serial writer without deadlocking it.
+		s.applyPendingClientDisables(pending)
 	}
 	return
 }
@@ -56,7 +62,7 @@ transaction never landed was indistinguishable from one that did — the deltas
 were gone, the caller was told the write succeeded, and the next poll started
 from counters that had already been zeroed in the core.
 */
-func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, renewedEmails []string, err error) {
+func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, renewedEmails []string, pending pendingClientDisable, err error) {
 	db := database.GetDB()
 	tx := db.Begin()
 
@@ -74,11 +80,11 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 	}()
 	err = s.addInboundTraffic(tx, inboundTraffics)
 	if err != nil {
-		return false, false, nil, err
+		return false, false, nil, pending, err
 	}
 	err = s.addClientTraffic(tx, clientTraffics)
 	if err != nil {
-		return false, false, nil, err
+		return false, false, nil, pending, err
 	}
 
 	needRestart0, count, renewed, renewErr := s.autoRenewClients(tx)
@@ -92,7 +98,7 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 	}
 
 	disabledClientsCount := int64(0)
-	needRestart1, count, disableClientsErr := s.disableInvalidClients(tx)
+	needRestart1, count, pendingDisables, disableClientsErr := s.disableInvalidClients(tx)
 	if disableClientsErr != nil {
 		logger.Warning("Error in disabling invalid clients:", disableClientsErr)
 	} else if count > 0 {
@@ -106,7 +112,8 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 	} else if count > 0 {
 		logger.Debugf("%v inbounds disabled", count)
 	}
-	return needRestart0 || needRestart1 || needRestart2, disabledClientsCount > 0, renewedEmails, nil
+	pending = pendingDisables
+	return needRestart0 || needRestart1 || needRestart2, disabledClientsCount > 0, renewedEmails, pending, nil
 }
 
 func (s *InboundService) addInboundTraffic(tx *gorm.DB, traffics []*xray.Traffic) error {
