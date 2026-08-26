@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A WireGuard or AmneziaWG exit can now complete its handshake.** Every exit
+  the panel dials was given a new source port every ten seconds, so the far end's
+  handshake reply always arrived at the socket the device had a moment earlier.
+  The tunnel came up in the few seconds after it was created and then never
+  again, which made a correctly configured exit look permanently dead — no
+  latency, no real delay, no HTTP.
+  **What you will notice:** exits connect and stay connected, and the Test
+  buttons return real numbers. Nothing to reconfigure; existing exits start
+  working on upgrade.
+
 - **Importing a WireGuard link no longer invents a tunnel address.** `address`
   on a WireGuard outbound is the tunnel interface's own local address. A link
   that did not carry one was imported with `0.0.0.0/0` — which is an *allowedIPs*

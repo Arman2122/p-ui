@@ -416,7 +416,11 @@ func diffDevice(cur wgtypes.Device, key wgtypes.Key, port, fwmark int, full bool
 	if full || cur.PrivateKey != key {
 		d.PrivateKey = &key
 	}
-	if full || cur.ListenPort != port {
+	// A dialling uplink configures no listen port, and 0 does not mean "leave it
+	// alone" to the kernel -- it means "assign a fresh one". Writing it on every
+	// reconcile gave the device a new source port every pass, so the far end's
+	// handshake reply always arrived at the socket of the previous one.
+	if port != 0 && (full || cur.ListenPort != port) {
 		d.ListenPort = &port
 	}
 	if full || cur.FirewallMark != fwmark {
