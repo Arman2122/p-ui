@@ -555,3 +555,31 @@ standing rule afterwards. A gate nobody believes is not a gate.
 reason on each, so a clean local run means something and an unexpected failure
 is visible again. The alternative — a ledger entry saying "ignore these" —
 documents the noise instead of removing it.
+
+---
+
+## L13 — every inbound save refusal is English-only
+
+**Found:** while shaping F317's refusal, deciding whether it needed a locale key.
+**Where:** `internal/web/service/inbound.go` and its neighbours.
+**Disposition: keep open**, and it is a surface decision rather than a defect.
+
+F317's refusal was described as needing a message key in both locales. It does
+not — and shipping one would have made it the **only** localised refusal on that
+path. Every sibling is a plain English `common.NewError`: the port conflict, the
+REALITY combination, the Shadowsocks cipher, the share-address check. The
+inbound controller has no `RefusalError` handling either; only
+`controller/routing.go` does, from F049.
+
+So one Persian sentence among a dozen English ones would read as a bug, not as
+care. F317 follows the convention it landed in.
+
+**Disposition question:** localising this surface means a `RefusalError`-style
+typed error for the inbound path, a key per refusal, and the controller plumbing
+to render them — perhaps a dozen keys in two locales. That is a feature-sized
+piece of work with a clear owner-facing benefit, and it belongs in
+`feature-gaps.md` rather than in a defect list. Cross-check that file before
+opening it, the way L11 was cross-checked.
+
+**Cost to close:** the typed error and controller plumbing are small; the
+translation pass over every existing refusal is the actual work.

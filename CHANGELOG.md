@@ -8,6 +8,33 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A SOCKS/mixed inbound can no longer show credentials it is not enforcing.**
+  Xray treats `auth: "password"` as “check the accounts” and **every other
+  value, including no value at all**, as “accept everyone” — while still
+  parsing the accounts and showing them in the panel. An inbound saved that way
+  was an open proxy on a public port that looked password-protected. The panel's
+  own form always sets the field, so this could only arrive through the REST
+  API, through Import, or by hand-editing the JSON in the advanced editor.
+  **What you will notice:** saving such an inbound is now refused, and the
+  refusal says which of the two you meant. Editing an affected inbound — even to
+  change something unrelated — refuses until you fix it, so the state cannot
+  survive being touched. HTTP inbounds are unaffected: they have no such switch
+  and always enforce their accounts.
+
+- **The panel now reports an open proxy it finds at startup, on every start.**
+  Nothing is disabled and nothing is rewritten — the settings are yours — but a
+  line is logged at **Error** level for each affected inbound. **To check your
+  own box:**
+
+  ```
+  journalctl -u p-ui | grep OPEN_PROXY
+  ```
+
+  Each line is `[OPEN_PROXY] inbound id=<id> tag="<tag>" port=<port>:` followed
+  by the count of accounts and the auth value found. Open the inbound the id
+  names, set its auth to `password`, and save — or remove the accounts if it was
+  meant to be open. No output means no affected inbound.
+
 - **Removing a tunnel now removes its NAT rules on Ubuntu 22.04 and Debian 12.**
   The teardown used the nftables `destroy` command, which those releases' nft
   has never heard of — measured as a parse error, not a runtime failure — so

@@ -938,6 +938,11 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 
+	// Credentials the core would parse and never check make this an open proxy.
+	if err := refuseUnenforcedAccounts(inbound); err != nil {
+		return inbound, false, "", err
+	}
+
 	conflict, err := s.checkPortConflict(inbound, 0)
 	if err != nil {
 		return inbound, false, "", err
@@ -1372,6 +1377,11 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	// Restore the stored NodeID before the port-conflict check so a node inbound
 	// stays scoped to its own node (the payload's nodeId is unreliable, often absent).
 	inbound.NodeID = oldInbound.NodeID
+
+	// Credentials the core would parse and never check make this an open proxy.
+	if err := refuseUnenforcedAccounts(inbound); err != nil {
+		return inbound, false, "", err
+	}
 
 	conflict, err := s.checkPortConflict(inbound, inbound.Id)
 	if err != nil {

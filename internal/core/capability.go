@@ -142,6 +142,11 @@ const (
 	CapSS2022    = "ss2022"
 	// CapSSMultiUser: may this inbound carry a clients array at all.
 	CapSSMultiUser = "ssMultiUser"
+
+	// CapAccountAuthGate: does settings.auth decide whether this protocol's
+	// accounts are checked? Only the SocksServerConfig kinds, where anything
+	// other than "password" parses the accounts and never consults them.
+	CapAccountAuthGate = "accountAuthGate"
 )
 
 // ssSingleUserMethod is the one Shadowsocks-2022 cipher xray's multi-user
@@ -231,6 +236,9 @@ var capabilityRules = map[string]Rule{
 			in("protocol", "shadowsocks"),
 			{Field: "settings.method", Op: OpIn, Values: []string{ssSingleUserMethod}, Not: true},
 		}},
+	}},
+	CapAccountAuthGate: {Any: []Term{
+		{All: []Clause{in("protocol", "mixed", "socks")}},
 	}},
 }
 
