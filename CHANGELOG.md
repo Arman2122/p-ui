@@ -8,6 +8,25 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The AmneziaWG config the panel hands out now carries every obfuscation
+  setting.** The downloadable `.conf` left out H1-H4 and all six timer ranges —
+  while the share link beside it, the subscription and the server itself all had
+  them. A client importing that file used WireGuard's default header values
+  against a device configured with custom ones, and a mismatched pair does not
+  connect slowly, it never connects at all.
+  **What you will notice:** the downloaded config matches the link and the
+  server. If you have been handing out `.conf` files for an AmneziaWG inbound
+  with custom headers or timers, re-download them.
+
+- **A WireGuard share link now carries its DNS, pre-shared key and keepalive.**
+  The subscription page rebuilds a config from the link rather than from the
+  inbound, and it reads exactly those three keys — which the link never wrote.
+  So a config rebuilt that way silently fell back to `1.1.1.1`, no pre-shared
+  key and no keepalive, and a peer whose server requires a pre-shared key cannot
+  connect without it.
+  **What you will notice:** links are slightly longer, and a config built from
+  one describes the same tunnel as the config downloaded directly.
+
 - **A subscription server that cannot start no longer takes the panel with it.**
   If its port was already in use, the whole process exited — after the panel's
   own interface was already running. So the one page you would use to change
