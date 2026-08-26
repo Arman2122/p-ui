@@ -1013,6 +1013,44 @@ named.
 
 ---
 
+## 25. F066 — measured, and the fix measured with it
+
+F066 was the one finding whose verdict said in as many words that the last step
+could not be settled from source: does `nat postrouting` masquerade rewrite the
+source **before** a tun device hands the packet to its userspace reader? Every
+other link in it had been traced in-repo.
+
+Settled with a probe in a throwaway network namespace — a veth pair standing in
+for `pwg<M>`, a tun standing in for `peg<N>`, the ruleset verbatim from
+`masqueradeRuleset`, and a reader printing the source of what arrives on the tun.
+Ubuntu 24.04, kernel 6.8.0-137, nftables 1.0.9.
+
+```
+client 10.66.1.2, front 10.66.2.1, target 10.66.2.99
+--- ruleset: none      reader saw src=10.66.1.2   the client's own address
+--- ruleset: plain     reader saw src=10.66.2.1   the front device's address
+--- ruleset: exempt    reader saw src=10.66.1.2   the client's address, restored
+```
+
+**CONFIRMED.** With the rule the panel installs today, Xray reads the front's
+gateway address off `peg<N>` and never the client's. A routing rule carrying a
+`source` criterion on an L3 inbound therefore matches nothing — while the form
+offers the field ungated, `forbiddenCriterion` accepts it, and the rule saves
+clean with diag severity OK. Silent by construction: nothing anywhere reports a
+criterion that cannot match.
+
+**The third row is the fix, measured rather than argued.** Adding
+`oifname != "<front>"` to the same rule restores the client's address end to
+end. It is also what the file already said was correct — `masquerade.go:21-23`:
+*"This is NOT needed for a routed inbound. A rule sends that traffic through a
+front, Xray re-originates it."* The rule was installed per-device regardless.
+
+The probe lives outside the repo (it needs root and creates namespaces, so it is
+not a `go test`); the ruleset it validates is pinned by
+`internal/egress/masquerade_front_test.go`.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.

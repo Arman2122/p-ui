@@ -761,16 +761,39 @@ func (s *RoutingService) EnsureHostForwarding(ctx context.Context) error {
 	}
 	// Forwarding without translation is a tunnel that hands out addresses and
 	// drops every packet: the client's in-tunnel source never survives upstream.
-	if err := egress.EnsureMasquerade(ctx, devices); err != nil && !errors.Is(err, egress.ErrNoNft) {
+	// Fronts are exempt -- Xray re-originates that traffic, and translating it
+	// first is what hid the client's address from every source criterion. F066.
+	fronts, fErr := panelFrontDevices()
+	if fErr != nil {
+		failures = append(failures, fErr)
+	}
+	if err := egress.EnsureMasquerade(ctx, devices, fronts); err != nil && !errors.Is(err, egress.ErrNoNft) {
 		failures = append(failures, err)
 	}
 	return errors.Join(failures...)
 }
 
+// panelFrontDevices names the xray-tun devices this panel owns. Panel-owned
+// egress rows ARE the fronts: reapFronts removes one no rule names any more.
+func panelFrontDevices() ([]string, error) {
+	var ids []int
+	err := database.GetDB().Model(&model.Egress{}).
+		Where("owner = ?", model.EgressOwnerPanel).
+		Pluck("id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	devices := make([]string, 0, len(ids))
+	for _, id := range ids {
+		devices = append(devices, egress.Device(id))
+	}
+	return devices, nil
+}
+
 // dropMasquerade removes the panel's nat table, tolerating a host that never
 // had nft to begin with.
 func dropMasquerade(ctx context.Context) error {
-	if err := egress.EnsureMasquerade(ctx, nil); err != nil && !errors.Is(err, egress.ErrNoNft) {
+	if err := egress.EnsureMasquerade(ctx, nil, nil); err != nil && !errors.Is(err, egress.ErrNoNft) {
 		return err
 	}
 	return nil
