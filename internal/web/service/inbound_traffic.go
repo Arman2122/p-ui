@@ -22,16 +22,41 @@ import (
 )
 
 func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, err error) {
+	var renewed []string
 	err = submitTrafficWrite(func() error {
 		var inner error
-		needRestart, clientsDisabled, inner = s.addTrafficLocked(inboundTraffics, clientTraffics)
+		needRestart, clientsDisabled, renewed, inner = s.addTrafficLocked(inboundTraffics, clientTraffics)
 		return inner
 	})
+	/*
+		After the commit AND after the serial writer releases, which is what the
+		call inside used to claim and was not.
+
+		It was a `defer resetCoreQuotas(...)` registered inside addTrafficLocked,
+		after the commit/rollback defer. Go runs defers LIFO, so it ran BEFORE the
+		commit — a network round trip to the mtg sidecar with the traffic
+		transaction still open, on every renew. Its own comment said the opposite.
+
+		Skipped when the write failed: quotas must not be cleared in a daemon for
+		a renewal the database rolled back.
+	*/
+	if err == nil && len(renewed) > 0 {
+		resetCoreQuotas(context.Background(), renewed)
+	}
 	return
 }
 
-func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (bool, bool, error) {
-	var err error
+/*
+addTrafficLocked writes one poll's traffic, renewals and depletions in one
+transaction.
+
+The returns are NAMED so the deferred commit can report its own failure. They
+were not: the defer logged a commit error and returned nil, so a poll whose
+transaction never landed was indistinguishable from one that did — the deltas
+were gone, the caller was told the write succeeded, and the next poll started
+from counters that had already been zeroed in the core.
+*/
+func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, renewedEmails []string, err error) {
 	db := database.GetDB()
 	tx := db.Begin()
 
@@ -40,17 +65,20 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 			if rbErr := tx.Rollback().Error; rbErr != nil {
 				logger.Warning("Error rolling back traffic tx:", rbErr)
 			}
-		} else if cErr := tx.Commit().Error; cErr != nil {
+			return
+		}
+		if cErr := tx.Commit().Error; cErr != nil {
 			logger.Warning("Error committing traffic tx:", cErr)
+			err = cErr
 		}
 	}()
 	err = s.addInboundTraffic(tx, inboundTraffics)
 	if err != nil {
-		return false, false, err
+		return false, false, nil, err
 	}
 	err = s.addClientTraffic(tx, clientTraffics)
 	if err != nil {
-		return false, false, err
+		return false, false, nil, err
 	}
 
 	needRestart0, count, renewed, renewErr := s.autoRenewClients(tx)
@@ -58,9 +86,9 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 		logger.Warning("Error in renew clients:", renewErr)
 	} else if count > 0 {
 		logger.Debugf("%v clients renewed", count)
-		/* After the commit, not inside it: the daemon call is a network round
-		   trip and must not hold the traffic transaction open. */
-		defer resetCoreQuotas(context.Background(), renewed)
+		// Handed to the caller, which clears the core quotas once this transaction
+		// has committed and the serial writer has released.
+		renewedEmails = renewed
 	}
 
 	disabledClientsCount := int64(0)
@@ -78,7 +106,7 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 	} else if count > 0 {
 		logger.Debugf("%v inbounds disabled", count)
 	}
-	return needRestart0 || needRestart1 || needRestart2, disabledClientsCount > 0, nil
+	return needRestart0 || needRestart1 || needRestart2, disabledClientsCount > 0, renewedEmails, nil
 }
 
 func (s *InboundService) addInboundTraffic(tx *gorm.DB, traffics []*xray.Traffic) error {

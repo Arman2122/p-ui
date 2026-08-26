@@ -21,16 +21,24 @@ import (
 // It handles outbound traffic monitoring and statistics.
 type OutboundService struct{}
 
-func (s *OutboundService) AddTraffic(traffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (error, bool) {
-	var err error
+// The returns are NAMED so the deferred commit can report its own failure. They
+// were not, and the commit error was discarded entirely: an outbound poll whose
+// transaction never landed was reported as a success. Same defect as F109 on the
+// inbound writer, in the sibling that does the same job.
+func (s *OutboundService) AddTraffic(traffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (err error, needRestart bool) {
 	db := database.GetDB()
 	tx := db.Begin()
 
 	defer func() {
 		if err != nil {
-			tx.Rollback()
-		} else {
-			tx.Commit()
+			if rbErr := tx.Rollback().Error; rbErr != nil {
+				logger.Warning("Error rolling back outbound traffic tx:", rbErr)
+			}
+			return
+		}
+		if cErr := tx.Commit().Error; cErr != nil {
+			logger.Warning("Error committing outbound traffic tx:", cErr)
+			err = cErr
 		}
 	}()
 
@@ -42,9 +50,9 @@ func (s *OutboundService) AddTraffic(traffics []*xray.Traffic, clientTraffics []
 	return nil, false
 }
 
-// saturatingAdd caps counters at database.TrafficMax: unlike the SQL paths,
-// this read-modify-write add happens in Go, where an int64 overflow silently
-// wraps negative instead of erroring (#5762).
+// saturatingAdd caps a delta at database.TrafficMax before it reaches SQL,
+// where an int64 overflow would silently wrap negative instead of erroring
+// (#5762). The accumulation itself is done by the database.
 func saturatingAdd(a, b int64) int64 {
 	if b > database.TrafficMax-a {
 		return database.TrafficMax
@@ -57,28 +65,37 @@ func (s *OutboundService) addOutboundTraffic(tx *gorm.DB, traffics []*xray.Traff
 		return nil
 	}
 
-	var err error
+	/*
+		Accumulated in the database, not in Go.
 
+		This read the row, added the delta in memory and wrote the absolute result
+		back with Save. A reset landing between the read and the write was silently
+		undone: the Save carried the pre-reset total forward, so an operator who
+		cleared an outbound's counters watched them reappear. Every other traffic
+		writer in the panel uses this same clamped in-place add, which cannot lose a
+		concurrent write because the database does the arithmetic.
+	*/
 	for _, traffic := range traffics {
-		if traffic.IsOutbound {
+		if !traffic.IsOutbound {
+			continue
+		}
 
-			var outbound model.OutboundTraffics
+		// The row has to exist before it can be added to. Created empty, so a
+		// concurrent create races to a row rather than to a value.
+		var outbound model.OutboundTraffics
+		if err := tx.Where(model.OutboundTraffics{Tag: traffic.Tag}).
+			FirstOrCreate(&outbound).Error; err != nil {
+			return err
+		}
 
-			err = tx.Model(&model.OutboundTraffics{}).Where("tag = ?", traffic.Tag).
-				FirstOrCreate(&outbound).Error
-			if err != nil {
-				return err
-			}
-
-			outbound.Tag = traffic.Tag
-			outbound.Up = saturatingAdd(outbound.Up, traffic.Up)
-			outbound.Down = saturatingAdd(outbound.Down, traffic.Down)
-			outbound.Total = saturatingAdd(outbound.Up, outbound.Down)
-
-			err = tx.Save(&outbound).Error
-			if err != nil {
-				return err
-			}
+		if err := tx.Model(&model.OutboundTraffics{}).
+			Where("tag = ?", traffic.Tag).
+			Updates(map[string]any{
+				"up":    gorm.Expr(database.ClampedAddExpr("up"), traffic.Up),
+				"down":  gorm.Expr(database.ClampedAddExpr("down"), traffic.Down),
+				"total": gorm.Expr(database.ClampedAddExpr("total"), saturatingAdd(traffic.Up, traffic.Down)),
+			}).Error; err != nil {
+			return err
 		}
 	}
 	return nil
