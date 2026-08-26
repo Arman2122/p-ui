@@ -58,6 +58,23 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 			return nil, errors.New("invalid credentials")
 		}
 
+		/*
+			Panel login through LDAP is its own opt-in, and an empty filter is off.
+
+			ldapEnable is the CLIENT-SYNC switch. Letting it also authorise
+			administrators meant every account the directory returns for
+			ldapUserFilter — which defaults to (objectClass=person), i.e. everyone —
+			could sign in here as the panel admin with their own password, because
+			AuthenticateUser proves only that the person exists and knows their own
+			credentials. It proves nothing about administering this panel.
+
+			Nobody is locked out by this: LDAP is only reached AFTER the local
+			password fails, so the panel account always works.
+		*/
+		adminFilter, _ := s.settingService.GetLdapAdminFilter()
+		if strings.TrimSpace(adminFilter) == "" {
+			return nil, errors.New("invalid credentials")
+		}
 		host, _ := s.settingService.GetLdapHost()
 		port, _ := s.settingService.GetLdapPort()
 		useTLS, _ := s.settingService.GetLdapUseTLS()
@@ -78,6 +95,7 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 			BaseDN:             baseDN,
 			UserFilter:         userFilter,
 			UserAttr:           userAttr,
+			AdminFilter:        strings.TrimSpace(adminFilter),
 		}
 		ok, err := ldaputil.AuthenticateUser(cfg, username, password)
 		if err != nil || !ok {

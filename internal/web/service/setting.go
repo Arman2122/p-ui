@@ -139,6 +139,7 @@ var defaultValueMap = map[string]string{
 	"ldapBaseDN":             "",
 	"ldapUserFilter":         "(objectClass=person)",
 	"ldapUserAttr":           "mail",
+	"ldapAdminFilter":        "",
 	"ldapVlessField":         "vless_enabled",
 	"ldapSyncCron":           "@every 1m",
 	"ldapFlagField":          "",
@@ -998,6 +999,23 @@ func (s *SettingService) GetLdapBaseDN() (string, error) {
 
 func (s *SettingService) GetLdapUserFilter() (string, error) {
 	return s.getString("ldapUserFilter")
+}
+
+/*
+GetLdapAdminFilter returns the filter an account must ALSO match to sign in as a
+panel administrator.
+
+Empty means panel login through LDAP is off. ldapEnable is the client-sync
+switch, and letting it also authorise administrators meant every person the
+directory returns for ldapUserFilter — which defaults to (objectClass=person) —
+could sign in as this panel's admin with their own password.
+*/
+func (s *SettingService) GetLdapAdminFilter() (string, error) {
+	return s.getString("ldapAdminFilter")
+}
+
+func (s *SettingService) SetLdapAdminFilter(value string) error {
+	return s.setString("ldapAdminFilter", value)
 }
 
 func (s *SettingService) GetLdapUserAttr() (string, error) {

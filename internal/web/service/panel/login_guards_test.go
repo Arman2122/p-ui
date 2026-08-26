@@ -75,6 +75,79 @@ func TestLoginStillComparesTheSubmittedCodeRaw(t *testing.T) {
 	}
 }
 
+/*
+LDAP must not authorise a panel administrator without its own opt-in.
+
+ldapEnable is the CLIENT-SYNC switch. AuthenticateUser proves a directory
+account exists and knows its own password — nothing about administering this
+panel — so with ldapEnable on, every account matching ldapUserFilter (default
+`(objectClass=person)`) could sign in here as admin. F375.
+
+The assertion is that the directory is never CONTACTED when no admin filter is
+set. An earlier version of this test asserted on elapsed time instead and passed
+with the guard removed, because a refused connection returns instantly: the
+listener below is what makes the difference observable.
+*/
+func TestLdapIsNotEvenContactedWithoutAnAdminFilter(t *testing.T) {
+	initTestDB(t)
+	seedPanelUser(t, "admin", "correct-horse")
+
+	host, port, dialed := recordingListener(t)
+	setSettings(t, map[string]string{
+		"ldapEnable":      "true",
+		"ldapHost":        host,
+		"ldapPort":        strconv.Itoa(port),
+		"ldapAdminFilter": "",
+	})
+
+	if _, err := (&UserService{}).CheckUser("admin", "wrong-password", ""); err == nil {
+		t.Fatal("a wrong panel password fell through to LDAP and was accepted")
+	}
+	if dialed() {
+		t.Fatal("the panel contacted the directory with no admin filter set: ldapEnable alone must not authorise a panel administrator")
+	}
+
+	// With a filter set, the directory IS consulted — proving the gate is the
+	// filter and not something else refusing earlier.
+	setSettings(t, map[string]string{"ldapAdminFilter": "(memberOf=cn=panel-admins,dc=example,dc=test)"})
+	_, _ = (&UserService{}).CheckUser("admin", "wrong-password", "")
+	if !dialed() {
+		t.Fatal("with an admin filter set the directory must be consulted; nothing reached the listener")
+	}
+
+	// The local password is untouched by all of this, which is why failing closed
+	// locks nobody out.
+	if _, err := (&UserService{}).CheckUser("admin", "correct-horse", ""); err != nil {
+		t.Fatalf("the panel's own password must still work: %v", err)
+	}
+}
+
+// recordingListener accepts and immediately closes, reporting whether anything
+// ever connected. That single bit is the whole assertion above.
+func recordingListener(t *testing.T) (host string, port int, dialed func() bool) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	var hits atomic.Bool
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			hits.Store(true)
+			_ = conn.Close()
+		}
+	}()
+
+	addr := listener.Addr().(*net.TCPAddr)
+	return "127.0.0.1", addr.Port, hits.Load
+}
+
 // seedPanelUser points the panel's single admin row at a known password.
 // InitDB seeds a default user, so this UPDATES rather than inserts — a second
 // row with the same username would leave CheckUser's First() reading the seeded

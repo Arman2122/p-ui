@@ -29,4 +29,12 @@ func (s *SettingService) LogAuthPosture() {
 				"Re-enrol it from Settings, or clear it from a root shell with: p-ui setting -resetTwoFactor", authPostureLogPrefix)
 		}
 	}
+
+	if enabled, err := s.GetLdapEnable(); err == nil && enabled {
+		if filter, err := s.GetLdapAdminFilter(); err == nil && strings.TrimSpace(filter) == "" {
+			logger.Errorf("%s LDAP is enabled but ldapAdminFilter is empty, so signing in to the PANEL through LDAP is off. "+
+				"Client sync is unaffected. This is the safe default: without a filter, every account matching ldapUserFilter could sign in here as an administrator. "+
+				`Set one from a root shell, e.g: p-ui setting -ldapAdminFilter "(memberOf=cn=panel-admins,ou=groups,dc=example,dc=com)"`, authPostureLogPrefix)
+		}
+	}
 }
