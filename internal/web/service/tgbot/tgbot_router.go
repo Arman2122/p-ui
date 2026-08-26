@@ -66,7 +66,7 @@ func (t *Tgbot) OnReceive() {
 				t.answerCommand(&message, message.Chat.ID, checkAdmin(message.From.ID))
 			}()
 			return nil
-		}, th.AnyCommand())
+		}, th.AnyCommand(), th.AnyMessageWithFrom())
 
 		h.HandleCallbackQuery(func(ctx *th.Context, query telego.CallbackQuery) error {
 			// Use goroutine with worker pool for concurrent callback processing
@@ -178,7 +178,7 @@ func (t *Tgbot) OnReceive() {
 				}
 			}
 			return nil
-		}, th.AnyMessage())
+		}, th.AnyMessage(), th.AnyMessageWithFrom())
 
 		_ = h.Start()
 	}()
@@ -186,6 +186,12 @@ func (t *Tgbot) OnReceive() {
 
 // answerCommand processes incoming command messages from Telegram users.
 func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin bool) {
+	// Message.From is optional in the Bot API and a nil deref below runs in a
+	// bare goroutine, so it kills the panel rather than the bot. F299.
+	from, ok := messageSender(message)
+	if !ok {
+		return
+	}
 	msg, onlyMessage := "", false
 
 	command, _, commandArgs := tu.ParseCommand(message.Text)
@@ -201,7 +207,7 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 		msg += t.I18nBot("tgbot.commands.help")
 		msg += t.I18nBot("tgbot.commands.pleaseChoose")
 	case "start":
-		msg += t.I18nBot("tgbot.commands.start", "Firstname=="+html.EscapeString(message.From.FirstName))
+		msg += t.I18nBot("tgbot.commands.start", "Firstname=="+html.EscapeString(from.FirstName))
 		if isAdmin {
 			msg += t.I18nBot("tgbot.commands.welcome", "Hostname=="+hostname)
 		}
@@ -211,14 +217,14 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 		msg += t.I18nBot("tgbot.commands.status")
 	case "id":
 		onlyMessage = true
-		msg += t.I18nBot("tgbot.commands.getID", "ID=="+strconv.FormatInt(message.From.ID, 10))
+		msg += t.I18nBot("tgbot.commands.getID", "ID=="+strconv.FormatInt(from.ID, 10))
 	case "usage":
 		onlyMessage = true
 		if len(commandArgs) > 0 {
 			if isAdmin {
 				t.searchClient(chatId, commandArgs[0])
 			} else {
-				t.getClientUsage(chatId, message.From.ID, commandArgs[0])
+				t.getClientUsage(chatId, from.ID, commandArgs[0])
 			}
 		} else {
 			msg += t.I18nBot("tgbot.commands.usage")
@@ -273,6 +279,15 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 	if msg != "" {
 		t.sendResponse(chatId, msg, onlyMessage, isAdmin)
 	}
+}
+
+// messageSender answers who sent a message. Absent for a channel post, which is
+// why telego ships AnyMessageWithFrom and why this exists as well. F299.
+func messageSender(message *telego.Message) (telego.User, bool) {
+	if message == nil || message.From == nil {
+		return telego.User{}, false
+	}
+	return *message.From, true
 }
 
 func (t *Tgbot) isCommandForCurrentBot(message *telego.Message) bool {
