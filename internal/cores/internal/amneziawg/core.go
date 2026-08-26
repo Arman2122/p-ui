@@ -96,6 +96,23 @@ func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
 	return errors.Join(failures...)
 }
 
+/*
+ValidateInstance refuses obfuscation the module would refuse, at the save.
+
+awg.Params.Validate mirrors src/netlink.c rule for rule, and until now it was
+reached only when the device was configured. The kernel answers a failed check
+with EINVAL and a ratelimited dmesg line nobody reads, so the panel stored the
+row, said success, and the inbound quietly did not work — while the .conf handed
+to clients described the parameters the operator asked for.
+*/
+func (c *Core) ValidateInstance(_ core.Kind, settings string) error {
+	params, err := ParamsOf(core.Instance{Settings: settings})
+	if err != nil {
+		return err
+	}
+	return params.Validate()
+}
+
 func (c *Core) ApplyInstance(ctx context.Context, inst core.Instance) error {
 	if err := c.Core.ApplyInstance(ctx, inst); err != nil {
 		return err

@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An AmneziaWG inbound the kernel would reject is refused when you save it.**
+  The obfuscation settings were only checked when the device was created — and
+  the kernel module reports a bad combination with an error code and a log line
+  you will never see. So the panel saved the inbound, said it worked, and the
+  tunnel quietly did not come up, while the config handed to clients described
+  the settings you asked for.
+  **What you will notice:** an impossible combination (a junk range with its
+  bounds the wrong way round, two headers covering the same value, a
+  header-protection key of the wrong length) is refused at the save, naming what
+  is wrong. Inbounds with no obfuscation block are unaffected, and no other
+  protocol gains a new refusal.
+
 - **A failed restore now tells you what actually failed.** If `pg_restore`
   rejected your dump, the panel reported that it could not reopen the database
   — a different problem with a different fix. **What you will notice:** the

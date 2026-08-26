@@ -93,6 +93,16 @@ func TransportAuthority(kind core.Kind) (core.TransportDeclarer, bool) {
 	return bound.Transports, true
 }
 
+// InstanceValidatorFor returns the core that can refuse an inbound of this kind,
+// when it declares one. Mirrors ClientCredentialAuthority.
+func InstanceValidatorFor(kind core.Kind) (core.InstanceValidator, bool) {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Validate == nil {
+		return nil, false
+	}
+	return bound.Validate, true
+}
+
 // ClientCredentialAuthority is the core that answers for one kind's client
 // credentials, when any does. The caller keeps its own fallback for a kind no
 // core owns — a quarantined inbound's clients are neither loosened nor newly

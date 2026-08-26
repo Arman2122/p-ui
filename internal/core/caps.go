@@ -63,6 +63,27 @@ type WholeSetUserProvisioner interface {
 }
 
 /*
+InstanceValidator refuses an inbound this kind cannot serve, with the reason as
+the operator reads it.
+
+The sibling of CredentialDeclarer.ValidateClient, one level up: that one answers
+"can this kind serve this client", this one "can it serve this inbound at all".
+Both exist for the same reason — what makes a configuration invalid is protocol
+knowledge, and only the core that owns the kind can word the refusal.
+
+Without it, an invalid setting is discovered when the device is created. For a
+kernel core that means the module answers EINVAL and a ratelimited dmesg line
+the operator will never see, so the panel saves the row, reports success, and
+the inbound simply does not work.
+
+Optional. A kind whose core does not implement it is saved unvalidated, exactly
+as every kind was before.
+*/
+type InstanceValidator interface {
+	ValidateInstance(kind Kind, settings string) error
+}
+
+/*
 CredentialDeclarer names the credential fields one kind's clients carry, so the
 client form renders from what a core declares instead of from its own protocol
 branches. Names come from the closed vocabulary in credentials.go.
