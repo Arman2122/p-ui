@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A message with no sender no longer crashes the panel.** Telegram omits the
+  sender on a message posted to a channel. Every command handler read it anyway,
+  inside a goroutine with no recovery — so the dereference took down the whole
+  process, not just the bot, and the same message was redelivered on the next
+  poll, which made it a restart loop rather than one crash.
+  **What you will notice:** nothing, unless your bot is in a channel — in which
+  case the panel stops falling over. Senderless messages are ignored.
+
 - **Importing a share link no longer strips its XHTTP settings and its
   certificate rules.** The panel writes every client-side XHTTP field into a
   link it generates, and its own importer read four of them from a `vless://`
