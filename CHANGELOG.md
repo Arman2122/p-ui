@@ -8,6 +8,39 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The login attempt limit now holds when attempts arrive at once.** The
+  five-failure cap checked your budget, released its lock while the password was
+  verified, and only counted the failure afterwards — so requests sent
+  simultaneously all passed the check together. Measured: **50 of 50 concurrent
+  attempts admitted against a cap of 5.**
+  **What you will notice:** nothing, unless someone was doing this to you. The
+  cap behaves the same for ordinary use.
+
+- **A forwarded client address can no longer be forged.** Behind a reverse proxy
+  the panel read the *first* entry of `X-Forwarded-For`. That header is
+  append-only — each hop adds what it saw — so the first entry is whatever the
+  caller sent, and the real address is on the *right*. The login limiter keys on
+  this value, so a fresh, unblocked identity was one header away.
+  **What you will notice:** the address in your login logs and Telegram alerts
+  is now the nearest one your proxies did not vouch for. If you run a chain of
+  proxies, list all of them in **Trusted proxy CIDRs** so the panel can tell
+  yours from a client's.
+
+- **`Trusted proxy CIDRs` now means what it says on the subscription server.**
+  It was ignored at two values — empty, and the shipped default — and at either
+  one the server accepted `X-Forwarded-Host` from **any address on the
+  internet**, then built subscription URLs from it.
+  **What you will notice:** most people, nothing. The shipped default is
+  `127.0.0.1/32,::1/128`, which is exactly the same-box reverse proxy nearly
+  every deployment runs, and that keeps working. **If your reverse proxy is on a
+  different machine**, add its address to that setting or your subscription
+  links will use the panel's own host instead. The panel already logs a warning
+  naming the address it ignored:
+
+  ```
+  journalctl -u p-ui | grep trustedProxyCIDRs
+  ```
+
 - **Two-factor authentication with no secret no longer lets anyone in.** If 2FA
   was switched on while the secret was empty, the panel compared your code
   against one computed from an empty key — a six-digit number anybody could work

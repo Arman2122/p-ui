@@ -30,6 +30,11 @@ type loginLimiter struct {
 type loginLimitRecord struct {
 	failures     []time.Time
 	blockedUntil time.Time
+	// inFlight is one timestamp per admitted attempt whose outcome is not known
+	// yet. They count toward the cap the moment they are admitted, which is what
+	// makes it hold under concurrency; they are pruned by age so a handler that
+	// dies between admission and outcome cannot leak budget forever.
+	inFlight []time.Time
 }
 
 func newLoginLimiter(maxFailures int, window, cooldown time.Duration) *loginLimiter {
@@ -42,25 +47,48 @@ func newLoginLimiter(maxFailures int, window, cooldown time.Duration) *loginLimi
 	}
 }
 
+/*
+allow admits one login attempt, RESERVING it against the cap.
+
+It used to check and return, leaving the caller to count only after the password
+check had finished. Between those two points the lock is not held, so N
+simultaneous requests all read the same under-cap state and all proceeded: the
+5-attempt limit became "5 per round, unbounded rounds in parallel". Counting the
+attempt at admission is what closes that — the reservation is visible to every
+other request the instant it is taken.
+*/
 func (l *loginLimiter) allow(ip, username string) (time.Time, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	now := l.now()
 	key := loginLimitKey(ip, username)
 	record := l.attempts[key]
 	if record == nil {
-		return time.Time{}, true
+		l.evictForRoom(now)
+		record = &loginLimitRecord{}
+		l.attempts[key] = record
 	}
-	now := l.now()
 	if now.Before(record.blockedUntil) {
 		return record.blockedUntil, false
 	}
 	record.blockedUntil = time.Time{}
-	record.failures = pruneLoginFailures(record.failures, now.Add(-l.window))
-	if len(record.failures) == 0 {
-		delete(l.attempts, key)
+	horizon := now.Add(-l.window)
+	record.failures = pruneLoginFailures(record.failures, horizon)
+	record.inFlight = pruneLoginFailures(record.inFlight, horizon)
+
+	if len(record.failures)+len(record.inFlight) >= l.maxFailures {
+		return time.Time{}, false
 	}
+	record.inFlight = append(record.inFlight, now)
 	return time.Time{}, true
+}
+
+// releaseInFlight drops one reservation. Callers hold l.mu.
+func (record *loginLimitRecord) releaseInFlight() {
+	if len(record.inFlight) > 0 {
+		record.inFlight = record.inFlight[1:]
+	}
 }
 
 func (l *loginLimiter) registerFailure(ip, username string) (time.Time, bool) {
@@ -75,6 +103,9 @@ func (l *loginLimiter) registerFailure(ip, username string) (time.Time, bool) {
 		record = &loginLimitRecord{}
 		l.attempts[key] = record
 	}
+	// The reservation this outcome resolves becomes a recorded failure, so it is
+	// released rather than counted twice.
+	record.releaseInFlight()
 	record.failures = pruneLoginFailures(record.failures, now.Add(-l.window))
 	record.failures = append(record.failures, now)
 	if len(record.failures) >= l.maxFailures {
