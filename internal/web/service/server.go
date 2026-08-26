@@ -1652,13 +1652,34 @@ func (s *ServerService) restorePostgresDump(file multipart.File) error {
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
 
-	if errInit := database.InitDB(); errInit != nil {
-		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
+	/*
+		The pool was closed for the restore, so it is reopened either way — but
+		pg_restore's own failure is reported FIRST.
+
+		Returning the reopen error early hid the real one: an operator whose restore
+		failed on a bad dump was told the database could not be reopened, which is a
+		different problem with a different fix. When both fail the message carries
+		both, or this would merely swap which one is hidden.
+	*/
+	errInit := database.InitDB()
+	if errInit == nil {
+		// Never on a handle that failed to open, which the early return used to
+		// guarantee for free.
+		s.inboundService.MigrateDB()
 	}
-	s.inboundService.MigrateDB()
 
 	if runErr != nil {
+		if errInit != nil {
+			return common.NewErrorf("pg_restore failed: %v: %s (and reopening the database failed: %v -- restart the panel)",
+				runErr, strings.TrimSpace(stderr.String()), errInit)
+		}
 		return common.NewErrorf("pg_restore failed (database left unchanged): %v: %s", runErr, strings.TrimSpace(stderr.String()))
+	}
+
+	// The restore itself worked; a handle that would not reopen is still an
+	// outage, and saying so beats a success message the panel cannot honour.
+	if errInit != nil {
+		return common.NewErrorf("Restore finished but reopening the database failed: %v -- restart the panel", errInit)
 	}
 
 	xrayStopped = false
