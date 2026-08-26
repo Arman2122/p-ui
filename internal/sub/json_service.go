@@ -240,6 +240,12 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			}
 		}
 
+		// A kind Xray has no outbound for produces no profile, the way the Clash
+		// renderer's default arm already refuses one. F126 / F214.
+		if len(newOutbounds) == 0 {
+			continue
+		}
+
 		newOutbounds = append(newOutbounds, s.defaultOutbounds...)
 		newConfigJson := make(map[string]any)
 		maps.Copy(newConfigJson, s.configJson)
