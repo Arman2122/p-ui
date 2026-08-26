@@ -616,8 +616,9 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 	// Only clients present in [secrets] may appear here: mtg rejects a config
 	// whose [secret-ad-tags] names an unknown secret, so a disabled client's
 	// override must vanish together with its secret.
+	secrets := dedupSecrets(inst.Secrets)
 	tagged := false
-	for _, e := range inst.Secrets {
+	for _, e := range secrets {
 		if e.AdTag == "" {
 			continue
 		}
@@ -627,7 +628,7 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 		}
 		fmt.Fprintf(&b, "%q = %q\n", e.Name, e.AdTag)
 	}
-	for _, e := range inst.Secrets {
+	for _, e := range secrets {
 		if e.QuotaBytes <= 0 && e.ExpiresUnix <= 0 {
 			continue
 		}
@@ -640,10 +641,28 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 		}
 	}
 	b.WriteString("\n[secrets]\n")
-	for _, e := range inst.Secrets {
+	for _, e := range secrets {
 		fmt.Fprintf(&b, "%q = %q\n", e.Name, e.Secret)
 	}
 	return b.String()
+}
+
+// dedupSecrets collapses entries sharing a name, the last winning, which is what
+// secretsPayload's map already does. A repeated TOML key is a parse error. F220.
+func dedupSecrets(entries []SecretEntry) []SecretEntry {
+	at := make(map[string]int, len(entries))
+	out := make([]SecretEntry, 0, len(entries))
+	for _, e := range entries {
+		if i, dup := at[e.Name]; dup {
+			logger.Warning("mtproto: two clients share the name", e.Name,
+				"- keeping the last; the config would otherwise repeat a TOML key and the process would not start")
+			out[i] = e
+			continue
+		}
+		at[e.Name] = len(out)
+		out = append(out, e)
+	}
+	return out
 }
 
 func writeConfig(path string, inst Instance, apiPort int, apiToken string) error {

@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An MTProto inbound with two clients on one email now starts.** The sidecar's
+  config keys its secrets by client email, and two clients sharing one wrote the
+  same key twice — which the config parser refuses, so the process exited at
+  startup and the inbound served nobody. Editing a client had always worked,
+  because that path collapses the pair silently, so the inbound only died at the
+  next restart.
+  **What you will notice:** the inbound comes up with one of the two clients
+  served — the same one the live edit path was already keeping — and the log
+  names the duplicate:
+
+  ```
+  journalctl -u p-ui | grep "share the name"
+  ```
+
 - **Stopping the panel now really stops the sidecars it supervises.** The
   supervision job runs every ten seconds and starts anything it finds stopped.
   Shutdown stopped the cores first and the scheduler second — and stopping a
