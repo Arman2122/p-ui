@@ -371,7 +371,11 @@ func (s *SubJsonService) realityData(rData map[string]any, clientKey string) map
 		rltyData["shortId"] = ""
 	}
 	serverNames, ok := rData["serverNames"].([]any)
-	if ok && len(serverNames) > 0 {
+	// A pinned settings.serverName wins over the list, as it does in every
+	// renderer outside this package. F023.
+	if pinned, _ := rltyClientSettings["serverName"].(string); pinned != "" {
+		rltyData["serverName"] = pinned
+	} else if ok && len(serverNames) > 0 {
 		rltyData["serverName"], _ = serverNames[random.Num(len(serverNames))].(string)
 	} else {
 		rltyData["serverName"] = ""

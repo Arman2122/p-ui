@@ -699,6 +699,7 @@ func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) stri
 	// tunnel, and the config the subscription page derives from it cannot
 	// connect to the server that issued it.
 	awgLinkParams(inbound, params)
+
 	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", ""))
 }
 
@@ -1479,9 +1480,18 @@ func applyShareRealityParams(stream map[string]any, params map[string]string, cl
 	realitySetting, _ := stream["realitySettings"].(map[string]any)
 	realitySettings, _ := searchKey(realitySetting, "settings")
 	if realitySetting != nil {
-		if sniValue, ok := searchKey(realitySetting, "serverNames"); ok {
-			if sNames, _ := sniValue.([]any); len(sNames) > 0 {
-				params["sni"], _ = sNames[random.Num(len(sNames))].(string)
+		// A pinned settings.serverName wins; the random pick over serverNames stays
+		// for the unpinned case, a deliberate posture ledger L17 carries. F023.
+		if pinned, ok := searchKey(realitySettings, "serverName"); ok {
+			if name, _ := pinned.(string); name != "" {
+				params["sni"] = name
+			}
+		}
+		if _, pinned := params["sni"]; !pinned {
+			if sniValue, ok := searchKey(realitySetting, "serverNames"); ok {
+				if sNames, _ := sniValue.([]any); len(sNames) > 0 {
+					params["sni"], _ = sNames[random.Num(len(sNames))].(string)
+				}
 			}
 		}
 		if pbkValue, ok := searchKey(realitySettings, "publicKey"); ok {
