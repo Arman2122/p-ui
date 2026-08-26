@@ -414,6 +414,22 @@ taken with that family, not with the Mediums.
 
 ## 6. The verdict
 
+> **Status, updated 2026-08-26 as campaign 2 works through this list.** Items 1
+> and 2 are closed; item 3 is half done. The ordering below survived contact —
+> nothing in it was re-ranked — but **§4's Cause 3 reasoning did not**: see
+> `RUNTIME-RESULTS` §23, which found the seven-finding cluster misdiagnosed. The
+> rule and the fix were right; the mechanism is multi-CORE, not multi-node, and
+> the severity was understated.
+>
+> | Item | State |
+> |---|---|
+> | 1 — access control (10) | **closed** |
+> | 2 — `runtime.Runtime` bypass (7) | **closed**, with §23's correction |
+> | 3 — data destruction (10) | F109, F108/F246, F111 closed; F381, F241, F158, F272, F274/F275 open |
+> | 4 — validation off the path | import half closed (F031/F312); AWG half open |
+> | 5 — lockout family | open |
+> | 6 — renderer corpus (15) | open |
+
 **Take, in this order:**
 
 1. **The ten access-control call-outs**, F317 and F208 first. Highest harm,
