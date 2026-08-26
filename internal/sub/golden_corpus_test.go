@@ -29,10 +29,10 @@ fixture the other is now held to.
 */
 
 type goldenFixture struct {
-	Name     string `json:"name"`
-	Why      string `json:"why"`
-	Email    string `json:"email"`
-	Inbound  struct {
+	Name    string `json:"name"`
+	Why     string `json:"why"`
+	Email   string `json:"email"`
+	Inbound struct {
 		Protocol       string `json:"protocol"`
 		Listen         string `json:"listen"`
 		Port           int    `json:"port"`
