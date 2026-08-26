@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An MTProto inbound no longer puts a dead profile in a JSON subscription.**
+  The JSON format is an Xray client config, and Xray has no MTProto outbound to
+  write — so the profile it produced carried the inbound's name, a routing rule
+  pointing at a `proxy` outbound that was not in the file, and nothing else but
+  the defaults. A client importing it saw a server in its list and sent every
+  byte direct.
+  **What you will notice:** MTProto clients are served by the raw subscription
+  and the `tg://proxy` link, as they always were. If a subscription contained
+  only MTProto inbounds, its JSON endpoint is now empty rather than misleading.
+
 - **A REALITY inbound with a pinned SNI now hands that SNI out.** When you name
   one `serverName` under the REALITY settings rather than leaving the
   `serverNames` list to speak, the panel's own link honoured it and all three
