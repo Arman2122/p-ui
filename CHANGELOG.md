@@ -18,6 +18,27 @@ here; the git log is the full record.
   **What you will notice:** if you pinned a `serverName`, every format now emits
   it. If you did not, nothing changes — the list is still used exactly as before.
 
+- **Hosts now apply to WireGuard and MTProto links.** A Host row was stored,
+  listed in the panel, and honoured by the JSON and Clash formats — but the
+  `wireguard://` and `tg://proxy` links kept the server's own address and port
+  regardless. There was nothing to tell you: the Hosts tab looked configured and
+  the link quietly pointed somewhere else.
+  **What you will notice:** these inbounds now render one link per enabled Host,
+  the same as every other protocol. If you added Hosts to a WireGuard or MTProto
+  inbound, the links your clients hold are wrong until they re-import.
+
+- **A Host's SNI, fingerprint and ALPN now reach a Hysteria link.** The Hosts
+  page offers all three per host; the Hysteria link carried only the certificate
+  pins and the insecure flag and ignored the rest.
+  **What you will notice:** a Host that fills those fields changes the link. A
+  Host that leaves them blank renders exactly what it rendered before.
+
+- **Adding a Host to a Hysteria2 inbound no longer switches off port hopping.**
+  The `mport` range was written only on the path taken when an inbound has no
+  Hosts, so turning on a single Host row silently dropped it for every client of
+  that inbound — while the panel went on showing the range.
+  **What you will notice:** port hopping keeps working with Hosts configured.
+
 - **The AmneziaWG config the panel hands out now carries every obfuscation
   setting.** The downloadable `.conf` left out H1-H4 and all six timer ranges —
   while the share link beside it, the subscription and the server itself all had

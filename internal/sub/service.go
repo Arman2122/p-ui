@@ -700,7 +700,41 @@ func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) stri
 	// connect to the server that issued it.
 	awgLinkParams(inbound, params)
 
+	// One link per Host row, like every L4 generator. Without this a Host
+	// configured for a WireGuard inbound was silently ignored.
+	if endpoints := externalProxyEndpoints(unmarshalStreamSettings(inbound.StreamSettings)); len(endpoints) > 0 {
+		links := make([]string, 0, len(endpoints))
+		for _, ep := range endpoints {
+			dest, _ := ep["dest"].(string)
+			port, _ := ep["port"].(float64)
+			hosted := fmt.Sprintf("wireguard://%s@%s", encodeUserinfo(client.PrivateKey), joinHostPort(dest, int(port)))
+			links = append(links, buildLinkWithParams(hosted, cloneStringMap(params), s.endpointRemark(inbound, email, ep, "")))
+		}
+		return strings.Join(links, "\n")
+	}
+
 	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", ""))
+}
+
+// externalProxyEndpoints returns the address/port pairs the inbound's Host rows
+// declare. wireguard:// and tg://proxy ignored them entirely. F129 / F143.
+func externalProxyEndpoints(stream map[string]any) []map[string]any {
+	raw, _ := stream["externalProxy"].([]any)
+	out := make([]map[string]any, 0, len(raw))
+	for _, entry := range raw {
+		ep, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if dest, _ := ep["dest"].(string); dest == "" {
+			continue
+		}
+		if _, ok := ep["port"].(float64); !ok {
+			continue
+		}
+		out = append(out, ep)
+	}
+	return out
 }
 
 // genMtprotoLink builds a per-client Telegram proxy deep link for an mtproto
@@ -717,6 +751,21 @@ func (s *SubService) genMtprotoLink(inbound *model.Inbound, email string) string
 	if !ok || resolved.Secret == "" {
 		return ""
 	}
+	// One link per Host row, same reason as the WireGuard generator above.
+	if endpoints := externalProxyEndpoints(unmarshalStreamSettings(inbound.StreamSettings)); len(endpoints) > 0 {
+		links := make([]string, 0, len(endpoints))
+		for _, ep := range endpoints {
+			dest, _ := ep["dest"].(string)
+			port, _ := ep["port"].(float64)
+			links = append(links, buildLinkWithParams("tg://proxy", map[string]string{
+				"server": dest,
+				"port":   fmt.Sprintf("%d", int(port)),
+				"secret": resolved.Secret,
+			}, ""))
+		}
+		return strings.Join(links, "\n")
+	}
+
 	params := map[string]string{
 		"server": s.resolveInboundAddress(inbound),
 		"port":   fmt.Sprintf("%d", inbound.Port),
@@ -1093,6 +1142,11 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 			}
 			epParams := cloneStringMap(params)
 			applyExternalProxyHysteriaParams(ep, epParams)
+			// Port hopping was applied only on the no-host tail, so adding a Host
+			// to a Hysteria2 inbound silently turned it off for clients. F138.
+			if hopPorts := hysteriaHopPortsForEndpoint(stream, ep); hopPorts != "" {
+				epParams["mport"] = hopPorts
+			}
 
 			link := fmt.Sprintf("%s://%s@%s", protocol, auth, joinHostPort(dest, int(portF)))
 			links = append(links, buildLinkWithParams(link, epParams, s.endpointRemark(inbound, email, ep, "quic")))
@@ -1107,6 +1161,20 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 	}
 	link := fmt.Sprintf("%s://%s@%s", protocol, auth, joinHostPort(s.resolveInboundAddress(inbound), inbound.Port))
 	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", "quic"))
+}
+
+// hysteriaHopPortsForEndpoint resolves the hop range for one Host row the way
+// the JSON renderer merges finalmask, so the two formats cannot disagree. F138.
+func hysteriaHopPortsForEndpoint(stream, ep map[string]any) string {
+	fm, _ := ep["finalMask"].(string)
+	if fm == "" {
+		return hysteriaHopPorts(stream)
+	}
+	var masks map[string]any
+	if json.Unmarshal([]byte(fm), &masks) != nil || len(masks) == 0 {
+		return hysteriaHopPorts(stream)
+	}
+	return hysteriaHopPorts(map[string]any{"finalmask": mergeFinalMask(stream["finalmask"], masks)})
 }
 
 // hysteriaHopPorts returns the configured Hysteria2 UDP port-hopping range
@@ -1602,12 +1670,8 @@ func applyExternalProxyTLSParams(ep map[string]any, params map[string]string, se
 	}
 }
 
-// applyExternalProxyHysteriaParams overrides the cert pin for a single
-// external-proxy entry on a Hysteria link. Hysteria carries the pin as a hex
-// `pinSHA256` (not the `pcs` the URL-param protocols use), so each entry is
-// coerced through hysteriaPinHex like the main pin. sni/fp/alpn are left as
-// the inbound's own — Hysteria external proxies are typically alternate
-// endpoints (port-hop / CDN) fronting the same certificate.
+// applyExternalProxyHysteriaParams overrides a Hysteria link from one Host row;
+// the pin is hex `pinSHA256`, not the `pcs` URL-param protocols use. F139.
 func applyExternalProxyHysteriaParams(ep map[string]any, params map[string]string) {
 	if pins, ok := externalProxyPins(ep["pinnedPeerCertSha256"]); ok {
 		hexPins := make([]string, 0, len(pins))
@@ -1621,6 +1685,31 @@ func applyExternalProxyHysteriaParams(ep map[string]any, params map[string]strin
 	if ai, ok := ep["allowInsecure"].(bool); ok && ai {
 		params["insecure"] = "1"
 	}
+	if sni, ok := ep["sni"].(string); ok && sni != "" {
+		params["sni"] = sni
+	}
+	if fp, ok := ep["fingerprint"].(string); ok && fp != "" {
+		params["fp"] = fp
+	}
+	if alpn := externalProxyAlpn(ep["alpn"]); alpn != "" {
+		params["alpn"] = alpn
+	}
+}
+
+// externalProxyAlpn flattens a host row's ALPN list into the comma-joined form
+// a link carries.
+func externalProxyAlpn(value any) string {
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if text, ok := item.(string); ok && text != "" {
+			out = append(out, text)
+		}
+	}
+	return strings.Join(out, ",")
 }
 
 // cloneStreamForExternalProxy returns a shallow clone of stream with

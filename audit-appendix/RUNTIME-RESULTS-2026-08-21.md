@@ -985,6 +985,34 @@ The rate is worth knowing: the audit's *locations* have been reliable, its
 *explanations* have not.
 ---
 
+## 24. F138's deferral was based on a premise that does not hold
+
+F138 was set aside earlier in this campaign as "genuinely ambiguous", on the
+stated ground that fixing it would break `internal/sub/characterization_test.go`
+at `TestChar_C6_HysteriaExternalProxy` — whose contract is that it "must pass on
+unchanged code and stay green, unedited, through every later phase".
+
+That is wrong, and reading C6 settles it in one step: its stream carries no
+`finalmask` at all. `hysteriaHopPorts` therefore returns `""` for it, no `mport`
+is written on either path, and C6's output is byte-identical with the fix in
+place. Measured, not reasoned: the full `internal/sub` suite including every
+characterization test is green at 63.4s with F138 fixed.
+
+The genuine question underneath the deferral was different and is worth keeping
+separate: **should a Host inherit the origin's port-hop range at all?** A range
+describes ports the destination forwards, and a Host pointing at a CDN may not
+forward them. The answer taken is the one the JSON renderer already gives —
+resolve through `mergeFinalMask`, where the inbound's `quicParams` wins and a
+Host may supply one only when the inbound has none. That makes the raw link and
+the JSON config agree, which they did not before, and it restores the behaviour
+every Hysteria2 inbound had before Hosts existed.
+
+**Correction to my own deferral, not to the finding.** F138's description was
+accurate. The reason given for postponing it was not checked against the file it
+named.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
