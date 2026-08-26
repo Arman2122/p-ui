@@ -176,12 +176,7 @@ func parseVmess(link string) (*ParseResult, error) {
 		if m := getString(j, "mode", ""); m != "" {
 			xh["mode"] = m
 		}
-		// xhttp advanced keys are passed through if present in the json
-		for _, k := range []string{"xPaddingBytes", "scMaxEachPostBytes", "scMinPostsIntervalMs"} {
-			if v, ok := j[k]; ok {
-				xh[k] = v
-			}
-		}
+		applyXhttpClientKeysFromJSON(xh, j)
 	case "tcp":
 		if getString(j, "type", "") == "http" {
 			stream["tcpSettings"] = map[string]any{
@@ -205,6 +200,9 @@ func parseVmess(link string) (*ParseResult, error) {
 		if alpn := getString(j, "alpn", ""); alpn != "" {
 			tls["alpn"] = splitComma(alpn)
 		}
+		tls["echConfigList"] = getString(j, "ech", "")
+		tls["verifyPeerCertByName"] = getString(j, "vcn", "")
+		tls["pinnedPeerCertSha256"] = getString(j, "pcs", "")
 	}
 
 	port := num(j["port"])
@@ -601,6 +599,92 @@ func setHTTPUpgrade(stream map[string]any, host, path string) {
 	h["path"] = path
 }
 
+/*
+The SplitHTTPConfig knobs a CLIENT reads, which is exactly the set
+internal/sub's buildXhttpExtra writes into a link. Server-only fields
+(noSSEHeader, scMaxBufferedPosts, scStreamUpServerSecs, serverMaxHeaderBytes)
+are deliberately absent: a client never reads them, so importing them would
+only put values into an outbound that nothing acts on.
+
+The parser used to read four of these from query params and three from a vmess
+object, so the panel could not re-import its own link. F081.
+*/
+var (
+	xhttpClientStringKeys = []string{
+		"xPaddingBytes", "xPaddingKey", "xPaddingHeader", "xPaddingPlacement", "xPaddingMethod",
+		"uplinkHTTPMethod",
+		"sessionIDPlacement", "sessionIDKey", "sessionIDTable", "sessionIDLength",
+		"seqPlacement", "seqKey",
+		"uplinkDataPlacement", "uplinkDataKey",
+		"scMaxEachPostBytes", "scMinPostsIntervalMs", "uplinkChunkSize",
+	}
+	xhttpClientBoolKeys   = []string{"xPaddingObfsMode", "noGRPCHeader"}
+	xhttpClientObjectKeys = []string{"xmux", "downloadSettings"}
+	// Links from before xray-core #6258 carry the pre-rename spellings.
+	xhttpLegacyAliases = map[string]string{
+		"sessionPlacement": "sessionIDPlacement",
+		"sessionKey":       "sessionIDKey",
+	}
+)
+
+// applyXhttpClientKeys lifts those knobs out of a link's own query params,
+// which win over the extra blob because they are applied after it.
+func applyXhttpClientKeys(xh map[string]any, p url.Values) {
+	for _, k := range xhttpClientStringKeys {
+		if v := p.Get(k); v != "" {
+			xh[k] = v
+		}
+	}
+	// bool-typed in xray's conf: a "true" string fails the whole config decode.
+	for _, k := range xhttpClientBoolKeys {
+		if v := p.Get(k); v != "" {
+			xh[k] = v == "true" || v == "1"
+		}
+	}
+	for legacy, renamed := range xhttpLegacyAliases {
+		if _, ok := xh[renamed]; ok {
+			continue
+		}
+		if v := p.Get(legacy); v != "" {
+			xh[renamed] = v
+		}
+	}
+}
+
+// applyXhttpClientKeysFromJSON is applyXhttpClientKeys for a vmess link, where
+// the same knobs arrive already typed instead of as query strings.
+func applyXhttpClientKeysFromJSON(xh map[string]any, j map[string]any) {
+	for _, k := range xhttpClientStringKeys {
+		// The range-valued ones ("1-50") may arrive as a bare number.
+		switch v := j[k].(type) {
+		case string:
+			if v != "" {
+				xh[k] = v
+			}
+		case float64:
+			xh[k] = v
+		}
+	}
+	for _, k := range xhttpClientBoolKeys {
+		if v, ok := j[k].(bool); ok {
+			xh[k] = v
+		}
+	}
+	for _, k := range xhttpClientObjectKeys {
+		if v, ok := j[k].(map[string]any); ok && len(v) > 0 {
+			xh[k] = v
+		}
+	}
+	for legacy, renamed := range xhttpLegacyAliases {
+		if _, ok := xh[renamed]; ok {
+			continue
+		}
+		if v, ok := j[legacy].(string); ok && v != "" {
+			xh[renamed] = v
+		}
+	}
+}
+
 func applyTransport(stream map[string]any, p url.Values) {
 	net := stream["network"].(string)
 	host := p.Get("host")
@@ -631,11 +715,7 @@ func applyTransport(stream map[string]any, p url.Values) {
 				maps.Copy(xh, parsed)
 			}
 		}
-		for _, k := range []string{"xPaddingBytes", "scMaxEachPostBytes", "scMinPostsIntervalMs", "uplinkChunkSize"} {
-			if v := p.Get(k); v != "" {
-				xh[k] = v
-			}
-		}
+		applyXhttpClientKeys(xh, p)
 	case "tcp":
 		if p.Get("headerType") == "http" || p.Get("type") == "http" {
 			stream["tcpSettings"] = map[string]any{
@@ -664,6 +744,9 @@ func applySecurity(stream map[string]any, p url.Values) {
 			tls["alpn"] = splitComma(alpn)
 		}
 		tls["echConfigList"] = p.Get("ech")
+		// vcn is how xray-core replaced allowInsecure; without it an imported
+		// outbound cannot accept the certificate the link named. F081.
+		tls["verifyPeerCertByName"] = p.Get("vcn")
 		tls["pinnedPeerCertSha256"] = p.Get("pcs")
 	case "reality":
 		re := stream["realitySettings"].(map[string]any)
