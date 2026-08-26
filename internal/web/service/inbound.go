@@ -936,6 +936,12 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 
+	// Settings the core that owns this kind would refuse. Asked of the core, not
+	// decided here: what makes a configuration invalid is protocol knowledge.
+	if err := validateInstanceForKind(inbound); err != nil {
+		return inbound, false, "", err
+	}
+
 	// Credentials the core would parse and never check make this an open proxy.
 	if err := refuseUnenforcedAccounts(inbound); err != nil {
 		return inbound, false, "", err
@@ -1389,6 +1395,12 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	// Restore the stored NodeID before the port-conflict check so a node inbound
 	// stays scoped to its own node (the payload's nodeId is unreliable, often absent).
 	inbound.NodeID = oldInbound.NodeID
+
+	// Settings the core that owns this kind would refuse. Asked of the core, not
+	// decided here: what makes a configuration invalid is protocol knowledge.
+	if err := validateInstanceForKind(inbound); err != nil {
+		return inbound, false, "", err
+	}
 
 	// Credentials the core would parse and never check make this an open proxy.
 	if err := refuseUnenforcedAccounts(inbound); err != nil {

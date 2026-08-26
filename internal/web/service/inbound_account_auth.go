@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -122,4 +123,24 @@ func (s *InboundService) OpenProxyInbounds() []*model.Inbound {
 		}
 	}
 	return open
+}
+
+/*
+validateInstanceForKind refuses an inbound its own core cannot serve.
+
+The sibling of validateClientForKind, one level up. A kind whose core declares
+no validator is saved unvalidated, exactly as every kind was before — this adds
+a refusal where one is available, it does not invent a policy for kinds that
+have none.
+*/
+func validateInstanceForKind(inbound *model.Inbound) error {
+	if inbound == nil {
+		return nil
+	}
+	kind := core.Kind(inbound.Protocol)
+	validator, ok := cores.InstanceValidatorFor(kind)
+	if !ok {
+		return nil
+	}
+	return validator.ValidateInstance(kind, inbound.Settings)
 }
