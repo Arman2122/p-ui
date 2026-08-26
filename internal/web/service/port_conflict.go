@@ -330,6 +330,10 @@ func (s *InboundService) generateInboundTag(inbound *model.Inbound, ignoreId int
 
 func (s *InboundService) resolveInboundTag(inbound *model.Inbound, ignoreId int) (string, error) {
 	if inbound.Tag != "" {
+		if reserved := reservedTagOwner(inbound.Tag); reserved != "" {
+			return "", common.NewError("the tag \"" + inbound.Tag + "\" is reserved for " + reserved +
+				". Inbound and outbound tags share one namespace in the generated config, so this would replace it. Pick another tag.")
+		}
 		taken, err := s.tagExists(inbound.Tag, ignoreId)
 		if err != nil {
 			return "", err
@@ -339,6 +343,65 @@ func (s *InboundService) resolveInboundTag(inbound *model.Inbound, ignoreId int)
 		}
 	}
 	return s.generateInboundTag(inbound, ignoreId)
+}
+
+/*
+reservedTagOwner names what already owns a tag, or "" when it is the
+operator's to use.
+
+tagExists only counts rows in `inbounds`, and the tags that matter here belong
+to objects that have no row: the panel's own egress bridge, and the template's
+api/direct/blocked outbounds. So an inbound tagged "panel-egress" was accepted,
+and injectPanelEgress then found the tag already present and skipped injection —
+the panel's SOCKS bridge and its routing rule silently vanished from the
+generated config behind a single Warning line.
+
+Derived from the template rather than hardcoded a second time, the way
+reservedAPIPort is: an operator who renames the api outbound must not have the
+stale name reserved and the live one free.
+*/
+func reservedTagOwner(tag string) string {
+	if tag == PanelEgressInboundTag {
+		return "the panel's own egress bridge"
+	}
+	for _, templateTag := range templateReservedTags() {
+		if tag == templateTag {
+			return "an outbound in the Xray config template"
+		}
+	}
+	return ""
+}
+
+// templateReservedTags lists the tags the config template already declares, so
+// a renamed template moves the reservation with it.
+func templateReservedTags() []string {
+	fallback := []string{"api", "direct", "blocked"}
+	tmpl, err := (&SettingService{}).GetXrayConfigTemplate()
+	if err != nil || tmpl == "" {
+		return fallback
+	}
+	var parsed struct {
+		Inbounds  []struct{ Tag string } `json:"inbounds"`
+		Outbounds []struct{ Tag string } `json:"outbounds"`
+	}
+	if json.Unmarshal([]byte(tmpl), &parsed) != nil {
+		return fallback
+	}
+	out := make([]string, 0, len(parsed.Inbounds)+len(parsed.Outbounds))
+	for _, in := range parsed.Inbounds {
+		if in.Tag != "" {
+			out = append(out, in.Tag)
+		}
+	}
+	for _, outbound := range parsed.Outbounds {
+		if outbound.Tag != "" {
+			out = append(out, outbound.Tag)
+		}
+	}
+	if len(out) == 0 {
+		return fallback
+	}
+	return out
 }
 
 func (s *InboundService) tagExists(tag string, ignoreId int) (bool, error) {
