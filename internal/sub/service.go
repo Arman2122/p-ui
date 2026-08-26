@@ -683,8 +683,14 @@ func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) stri
 	if joined := strings.Join(client.AllowedIPs, ","); joined != "" {
 		params["address"] = joined
 	}
-	if mtu, ok := settings["mtu"].(float64); ok && mtu > 0 {
-		params["mtu"] = strconv.Itoa(int(mtu))
+	// The client must be told the same MTU the device runs at, or it sends
+	// oversized packets in the other direction. S4 is prepended to every data
+	// packet, so a device carrying one needs less than the module's own default
+	// and a client left to guess picks the default. F103.
+	configuredMTU, _ := settings["mtu"].(float64)
+	awgParams := awgParamsOf(inbound)
+	if configuredMTU > 0 || awgParams.S4 > 0 {
+		params["mtu"] = strconv.Itoa(awgParams.DeviceMTU(int(configuredMTU)))
 	}
 	if dns, ok := settings["dns"].(string); ok && dns != "" {
 		params["dns"] = dns

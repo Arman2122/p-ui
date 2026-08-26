@@ -15,7 +15,7 @@ import { getHeaderValue } from './headers';
 import { canEnableTlsFlow, isSSMultiUser as canCarryClients } from './protocol-capabilities';
 import { deriveSpiderX } from './spider-x';
 import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
-import { awgInterfaceLines, awgLinesFromLinkParams, awgLinkParams } from '@/lib/xray/awg-conf';
+import { awgInterfaceLines, awgLinesFromLinkParams, awgLinkParams, deviceMTU, needsExplicitMTU } from '@/lib/xray/awg-conf';
 import type { AwgParams } from '@/schemas/protocols/inbound/awgkernel';
 
 // Share-link generators. Each per-protocol fn takes a typed inbound plus
@@ -844,8 +844,14 @@ export function genWireguardLink(input: GenWireguardLinkInput): string {
   if (peer.allowedIPs.length > 0) {
     url.searchParams.set('address', peer.allowedIPs.join(','));
   }
-  if (typeof settings.mtu === 'number' && settings.mtu > 0) {
-    url.searchParams.set('mtu', String(settings.mtu));
+  /* The client must be told the same MTU the device runs at. S4 is prepended to
+     every data packet, so a device carrying one needs less than the module's
+     default, and a client left to guess picks the default. F103. */
+  {
+    const awg = (settings as { awg?: AwgParams }).awg;
+    if (needsExplicitMTU(settings.mtu, awg)) {
+      url.searchParams.set('mtu', String(deviceMTU(settings.mtu, awg)));
+    }
   }
   /*
    * The three keys wireguardConfigFromLink reads back and this never wrote.
@@ -891,8 +897,11 @@ export function genWireguardConfig(input: GenWireguardLinkInput): string {
   txt += `PrivateKey = ${peer.privateKey ?? ''}\n`;
   txt += `Address = ${peer.allowedIPs.join(', ')}\n`;
   txt += `DNS = ${settings.dns || '1.1.1.1, 1.0.0.1'}\n`;
-  if (typeof settings.mtu === 'number' && settings.mtu > 0) {
-    txt += `MTU = ${settings.mtu}\n`;
+  {
+    const awg = (settings as { awg?: AwgParams }).awg;
+    if (needsExplicitMTU(settings.mtu, awg)) {
+      txt += `MTU = ${deviceMTU(settings.mtu, awg)}\n`;
+    }
   }
   /* AmneziaWG only. Every value has to match the server, so a config handed out
      without them completes no handshake at all -- and says nothing about why. */

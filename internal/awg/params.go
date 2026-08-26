@@ -16,6 +16,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+
+	"github.com/Arman2122/p-ui/internal/wireguard"
 )
 
 // The refusals an operator has to be able to tell apart, each mirroring a check
@@ -250,4 +252,11 @@ func headersDoNotOverlapAfterClearing(p Params) error {
 		}
 	}
 	return nil
+}
+
+
+// DeviceMTU answers the interface MTU a device with these parameters needs. The
+// arithmetic lives in internal/wireguard, which this package already imports.
+func (p Params) DeviceMTU(configured int) int {
+	return wireguard.DeviceMTU(configured, int(p.S4))
 }

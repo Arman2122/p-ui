@@ -335,7 +335,7 @@ func (m *Manager) ensureLocked(ctx context.Context, inst Instance) error {
 // the snapshot the peer diff is computed from and whether the link is new.
 func (m *Manager) ensureDeviceLocked(ctx context.Context, inst Instance, key wgtypes.Key) (Snapshot, bool, error) {
 	name := m.Name(inst.ID)
-	state, err := m.plane.EnsureLink(ctx, LinkSpec{Name: name, MTU: linkMTU(inst.MTU)})
+	state, err := m.plane.EnsureLink(ctx, LinkSpec{Name: name, MTU: linkMTU(inst.MTU, inst.TransportPadding)})
 	if err != nil {
 		return Snapshot{}, false, m.note(err)
 	}

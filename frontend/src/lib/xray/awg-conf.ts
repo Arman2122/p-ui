@@ -122,3 +122,32 @@ export function awgLinkParams(params: AwgParams | undefined): [string, string][]
   }
   return out;
 }
+
+/*
+deviceMTU answers the interface MTU a device with these parameters needs.
+
+Mirrors DeviceMTU in internal/wireguard. Only S4 matters: it is prepended to
+every data packet and nothing clamps it against the path, while
+ContentPaddingAddition is clamped to the device MTU by the module and
+RandomTrailers is bounded by the largest packet already sent.
+
+Header protection forces S4 >= 12, so at S4=12 over an IPv6 outer header the
+wire packet is 1420+16+16+12+8+40 = 1512 against a 1500 path. It connects, small
+packets are fine, and large transfers stall. F103.
+*/
+export const DEFAULT_DEVICE_MTU = 1420;
+export const MIN_DEVICE_MTU = 1280;
+
+export function deviceMTU(configured: number | undefined, params: AwgParams | undefined): number {
+  if (typeof configured === 'number' && configured > 0) return configured;
+  const s4 = typeof params?.s4 === 'number' ? params.s4 : 0;
+  const derived = DEFAULT_DEVICE_MTU - s4;
+  return derived < MIN_DEVICE_MTU ? MIN_DEVICE_MTU : derived;
+}
+
+// needsExplicitMTU reports whether a client must be TOLD the MTU rather than
+// left to pick the module's default, which would be too large.
+export function needsExplicitMTU(configured: number | undefined, params: AwgParams | undefined): boolean {
+  if (typeof configured === 'number' && configured > 0) return true;
+  return typeof params?.s4 === 'number' && params.s4 > 0;
+}
