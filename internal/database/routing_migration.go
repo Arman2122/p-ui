@@ -1,10 +1,9 @@
 package database
 
 import (
-	"slices"
-
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gorm.io/gorm"

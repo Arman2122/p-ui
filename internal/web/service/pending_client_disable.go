@@ -1,10 +1,11 @@
 package service
 
 import (
+	"gorm.io/gorm"
+
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"gorm.io/gorm"
 )
 
 /*
