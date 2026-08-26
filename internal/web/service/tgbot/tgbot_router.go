@@ -1569,9 +1569,10 @@ func checkAdmin(tgId int64) bool {
 	return slices.Contains(adminIds, tgId)
 }
 
-// isClientSelfCallback reports whether a callback is one of the per-user client
-// actions that resolve their own data from the caller's Telegram id, and so are
-// safe to run for a non-admin. Every other callback is admin-only (default-deny).
+// isClientSelfCallback is the FIRST of two stages, not the authorisation itself:
+// it whitelists the per-user callback shapes a non-admin may send at all. The
+// forms carrying an email are then checked against the caller by ownsEmail
+// before anything is served. Every other callback is admin-only (default-deny).
 func isClientSelfCallback(data string) bool {
 	switch data {
 	case "client_traffic", "client_commands", "client_sub_links",

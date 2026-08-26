@@ -583,3 +583,72 @@ opening it, the way L11 was cross-checked.
 
 **Cost to close:** the typed error and controller plumbing are small; the
 translation pass over every existing refusal is the actual work.
+
+---
+
+## L14 — the two TOTP verifiers disagree about whitespace
+
+**Found:** while shaping F208, and kept out of it on external review.
+**Where:** `internal/web/service/panel/user.go` (login) vs
+`internal/web/service/setting.go` `VerifyTwoFactorCode` (settings).
+**Disposition: keep open** — a deliberate decision, not a defect.
+
+The settings-side verifier trims the submitted code
+(`gotp.NewDefaultTOTP(token).Verify(strings.TrimSpace(code), ...)`). The login
+path compares raw (`...Now() != twoFactorCode`). A code pasted with a trailing
+space is accepted on one path and refused on the other.
+
+**Why it did not ride with F208.** The first draft of that fix mirrored the
+settings verifier onto the login path — switching to `Verify` and trimming — and
+justified it as symmetry. That was wrong twice over:
+
+- `Verify` is `otp == t.At(timestamp)`. Measured: no skew tolerance, not
+  constant-time. Switching to it buys nothing, and claiming a security benefit
+  for it would have been a claim the measurement contradicts.
+- Trimming changes how an authentication input is handled. That is a behaviour
+  change on the login path, arriving as a rider on a security fix, which is the
+  shape this campaign refuses everywhere else.
+
+F208 therefore adds the empty-secret guard and changes nothing else, and
+`TestLoginStillComparesTheSubmittedCodeRaw` pins that so the trim cannot happen
+by accident.
+
+**Disposition question:** should both paths trim? Almost certainly yes — a
+pasted code is a real user event and the settings page already accepts one — but
+it is a UX decision about an auth input and deserves to be made once, on both
+paths, with its own line in the changelog. Not smuggled.
+
+**Cost to close:** two lines and a test, once the decision is made.
+
+---
+
+## L15 — the Telegram ownership gate lives in a `default:` branch
+
+**Found:** while re-verifying F288 for campaign 2, which turned out to be
+already closed by `b700ae49`.
+**Where:** `internal/web/service/tgbot/tgbot_router.go`, the callback switch.
+**Disposition: keep open** — latent, not a live defect.
+
+`b700ae49` closed the callback auth bypass by adding `ownsEmail`, which every
+email-carrying callback passes through. But that gate sits in the switch's
+`default:` branch, reached by `CutPrefix` over the three known prefixes
+(`client_sub_links `, `client_individual_links `, `client_qr_links `).
+
+**A future email-carrying callback added as an explicit `case` sidesteps it
+entirely** — and would look completely ordinary next to the cases already there.
+The bug is not present; the shape that reintroduces it is one plausible edit
+away.
+
+Secondary: `isClientSelfCallback`'s doc comment and
+`TestIsClientSelfCallback` still read as if the payload prefix were the
+authorisation. Both are now true statements about a *whitelist* whose second
+stage is `ownsEmail`, and neither says so.
+
+**Disposition question:** is a guard cheap enough? An `internal/arch` or unit
+test asserting that every email-carrying callback prefix routes through
+`ownsEmail` would turn "latent" into "cannot regress". If resolving which
+prefixes carry an email needs more than a source scan, the doc-comment fix plus
+this entry is the right weight instead.
+
+**Cost to close:** one clarifying comment either way; the guard is small if the
+prefix set is derivable, unknown if it is not.
