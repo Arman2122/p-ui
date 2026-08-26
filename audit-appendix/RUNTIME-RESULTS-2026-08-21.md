@@ -938,6 +938,53 @@ touch. So this answers one of the two boxes §8 names, and the panel-side
 allowlist question for step 11 stays open on the other.
 ---
 
+## 23. The runtime.Runtime cluster — right rule, wrong diagnosis
+
+Seven findings (F044, F086, F110, F121, F240, F247, F339) over **three** call
+sites; five of them name the same line. All seven are filed as the CLAUDE.md
+layering violation, whose stated consequence is that a direct call *"passes
+every local test and silently breaks every multi-node deployment"*.
+
+**That consequence is not what these sites do.** Read at HEAD:
+
+- `disableInvalidInbounds` scopes its query `and node_id IS NULL`
+- `disableInvalidClients` splits `localTargets` from `remoteByInbound` and
+  pushes the remote half through `disableRemoteClients`
+- `autoRenewClients` joins through `client_inbounds ... WHERE i.node_id IS NULL`
+
+`git log -S remoteByInbound` puts the split before the campaign baseline, and
+`git show 219a6de4:...` finds six occurrences already there. Node correctness
+was handled.
+
+**What no site had is a filter on protocol**, and that is the real defect:
+
+```
+s.xrayApi.DelInbound(tag)              // every depleted local inbound
+s.xrayApi.RemoveUser(tag, email)       // every depleted local client
+s.xrayApi.AddUser(protocol, tag, ...)  // every renewed local client
+```
+
+For an MTProto or kernel-WireGuard inbound Xray has never heard of the tag, so
+the call fails, `needRestart` goes true — bouncing the core on every poll — and
+the client is struck from the database while staying connected in the core that
+serves them. A quota that cuts nobody off, with a restart loop reporting it.
+
+**Correction to the seven findings:** the rule they cite is the right rule and
+the fix they ask for is the right fix. The severity is understated and the
+mechanism is misattributed — this is multi-CORE, not multi-node, and it is a
+live enforcement failure rather than a latent deployment risk.
+
+**Correction to `CAMPAIGN-CLOSE-2026-08-26.md` §4 and §6:** its Cause 3 repeats
+the multi-node framing and ranks the cluster second on that basis. The ranking
+survives — it is arguably higher now — but the reason given there is wrong.
+That document should be read with this section.
+
+This is the third time in two campaigns that a finding's stated mechanism did
+not survive reading the code (after F234's refutation and F137's mislabelling).
+The rate is worth knowing: the audit's *locations* have been reliable, its
+*explanations* have not.
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
