@@ -1051,6 +1051,41 @@ not a `go test`); the ruleset it validates is pinned by
 
 ---
 
+## 26. F018's refusal does not exist on the pinned core
+
+F018 says the JSON subscription's `"encryption": ""` makes the subscriber's own
+xray refuse to start. Checked against the core this panel pins (26.7.28), that
+does not happen.
+
+`proxy/vless/outbound/outbound.go:87` is the only place the outbound reads the
+field:
+
+```go
+if a.Encryption != "" && a.Encryption != "none" {
+```
+
+The empty string takes the same branch as `"none"`. There is no config-time
+check on an outbound's encryption either — `infra/conf/vless.go`'s only refusals
+around it are for an encryption in **inbound** settings (line 85), a vnext with
+the wrong number of members, and a missing address. A grep for every
+`errors.New` in `proxy/vless/` and `infra/conf/vless.go` mentioning encryption
+returns nothing that fires on an absent value.
+
+**The fix landed anyway, reframed.** What is real is a renderer disagreement,
+which is Cause 1's subject: the raw link omits the key, the Clash proxy drops
+it, and the JSON config alone emitted a value the operator never chose. That is
+worth closing for its own sake, it is one line, and it costs nothing. But it is
+not the outage the finding describes, and the commit says so rather than
+inheriting a severity it cannot support.
+
+**Sixth mechanism correction.** The running tally is worth keeping in view: the
+audit's *locations* have been reliable every time — F018's line number was right
+— and its *explanations* have now been wrong six times (F234 refuted, F137
+mislabelled, §23's multi-node framing, §24's characterization premise, F103's
+ContentPaddingAddition claim, and this).
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
