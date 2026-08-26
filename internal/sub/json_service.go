@@ -433,6 +433,11 @@ func (s *SubJsonService) genVless(subReq *SubService, inbound *model.Inbound, st
 	// Add encryption for VLESS outbound from inbound settings
 	inboundSettings := subReq.linkSettings(inbound)
 	encryption, _ := inboundSettings["encryption"].(string)
+	// "none" rather than "": the raw link omits the key and Clash drops it, so
+	// only this renderer was handing out a value no operator chose. F018.
+	if strings.TrimSpace(encryption) == "" {
+		encryption = "none"
+	}
 
 	settings := map[string]any{
 		"address":    inbound.Listen,
