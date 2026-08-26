@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A fallback path without a leading slash is refused when you save it.**
+  Xray rejects one outright, and that rejection fails the *whole* configuration
+  — every inbound of every protocol, not just the one with the fallback. The
+  Fallbacks card itself wrote such a value: for a gRPC child it filled the path
+  in with the bare service name. Two clicks, and the panel would not bring Xray
+  back up after a reboot.
+  **What you will notice:** the form now fills in `/GunService` rather than
+  `GunService`, and a path typed without a slash is refused with a reason.
+  **If you already saved one**, it is still stored — this guard stops new ones,
+  it does not clean old ones. A restart from the panel is safe (the pre-flight
+  added earlier this release refuses to stop a working Xray for a config that
+  will not load), but a reboot is not. Open the Fallbacks card on any inbound
+  that has one and re-save it.
+
 - **A routing rule that matches on source address now works on a WireGuard or
   AmneziaWG inbound.** Traffic from those inbounds was source-translated on its
   way to the router, so by the time the rule was evaluated every packet carried
