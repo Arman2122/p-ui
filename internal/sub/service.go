@@ -828,10 +828,10 @@ func normalizeVmessSecurity(security string) string {
 	return security
 }
 
-// vlessFlowAllowed reports whether a client's XTLS Vision flow belongs in
-// generated links/configs. The rule lives in internal/core, shared with
-// internal/web/service and the frontend; all three used to carry a copy.
-func vlessFlowAllowed(protocol model.Protocol, network, security string, settings map[string]any) bool {
+// tlsFlowAllowed reports whether a client's XTLS Vision flow belongs in
+// generated links/configs. Asked by Trojan too, which is why it is no longer
+// named for VLESS: the rule answers false there, and the core refuses one.
+func tlsFlowAllowed(protocol model.Protocol, network, security string, settings map[string]any) bool {
 	return core.Can(core.CapTLSFlow, core.Facts{
 		Protocol: string(protocol),
 		Stream:   map[string]string{"network": network, "security": security},
@@ -874,7 +874,7 @@ func (s *SubService) genVlessLink(inbound *model.Inbound, email string) string {
 	default:
 		params["security"] = "none"
 	}
-	if len(client.Flow) > 0 && vlessFlowAllowed(inbound.Protocol, streamNetwork, security, settings) {
+	if len(client.Flow) > 0 && tlsFlowAllowed(inbound.Protocol, streamNetwork, security, settings) {
 		params["flow"] = client.Flow
 	}
 
@@ -924,7 +924,9 @@ func (s *SubService) genTrojanLink(inbound *model.Inbound, email string) string 
 		applyShareTLSParams(stream, params)
 	case "reality":
 		applyShareRealityParams(stream, params, subKey(client))
-		if streamNetwork == "tcp" && len(client.Flow) > 0 {
+		// Asked of the capability table rather than re-derived: it is what the
+		// VLESS generator asks, and Trojan flow is removed from the core. F323.
+		if len(client.Flow) > 0 && tlsFlowAllowed(inbound.Protocol, streamNetwork, security, s.linkSettings(inbound)) {
 			params["flow"] = client.Flow
 		}
 	default:

@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A Trojan client no longer carries an XTLS flow.** Xray removed the feature
+  for Trojan and now refuses a config that contains one — and it refuses the
+  *whole* config, so a single such account stopped every inbound on the box from
+  starting. The panel emitted it into both the generated config and the share
+  link.
+  **What you will notice:** nothing, if your Trojan clients were created in this
+  panel — saving one has stripped the field for some time. If you imported or
+  restored an older configuration, this is the difference between the panel
+  starting and not. A Trojan link that used to carry `&flow=` loses it, which is
+  correct: no current client can use it either.
+
 - **A fallback path without a leading slash is refused when you save it.**
   Xray rejects one outright, and that rejection fails the *whole* configuration
   — every inbound of every protocol, not just the one with the fallback. The

@@ -1,0 +1,30 @@
+{
+  "name": "trojan-reality-tcp-flow",
+  "why": "A Trojan client carrying a stored XTLS flow. The pinned core removed Flow for Trojan and answers one with PrintRemovedFeatureError, which fails the whole config — so the field must reach neither the generated inbound nor the link. The stream is otherwise the exact shape that DOES allow a flow for VLESS (tcp + reality), which is what makes this fixture worth having: it pins the protocol half of the rule, not the transport half.",
+  "email": "golden",
+  "inbound": {
+    "protocol": "trojan",
+    "listen": "203.0.113.13",
+    "port": 8443,
+    "remark": "golden-trojan",
+    "settings": "{\"clients\":[{\"password\":\"tr0jan-p4ss\",\"email\":\"golden\",\"flow\":\"xtls-rprx-vision\"}]}",
+    "streamSettings": "{\"network\":\"tcp\",\"security\":\"reality\",\"tcpSettings\":{\"header\":{\"type\":\"none\"}},\"realitySettings\":{\"serverNames\":[\"tj.golden.test\"],\"shortIds\":[\"cd34ef\"],\"settings\":{\"publicKey\":\"PBKTROJAN\",\"fingerprint\":\"chrome\",\"spiderX\":\"/seed\"}}}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "trojan",
+    "userinfo": "tr0jan-p4ss",
+    "host": "203.0.113.13",
+    "port": 8443,
+    "params": {
+      "type": "tcp",
+      "security": "reality",
+      "sni": "tj.golden.test",
+      "pbk": "PBKTROJAN",
+      "sid": "cd34ef",
+      "fp": "chrome"
+    }
+  },
+  "presentOnly": ["spx"],
+  "absentParams": ["flow"]
+}

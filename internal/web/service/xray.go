@@ -285,11 +285,10 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 				entry["security"] = c.Security
 			}
 		case model.Trojan:
+			// No flow: the pinned core answers one with PrintRemovedFeatureError
+			// (infra/conf/trojan.go:74) and that fails the whole config. F323.
 			if c.Password != "" {
 				entry["password"] = c.Password
-			}
-			if flow != "" {
-				entry["flow"] = flow
 			}
 		case model.Shadowsocks:
 			if c.Password != "" {

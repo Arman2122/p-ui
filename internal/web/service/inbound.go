@@ -963,7 +963,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 
-	// xray would expect Vision while the generated link, which vlessFlowAllowed
+	// xray would expect Vision while the generated link, which tlsFlowAllowed
 	// strips, never sends it, so the client connects to nothing.
 	if stripped, changed := stripVisionFlowForIneligibleInbound(inbound.Settings, inbound.StreamSettings, inbound.Protocol); changed {
 		inbound.Settings = stripped

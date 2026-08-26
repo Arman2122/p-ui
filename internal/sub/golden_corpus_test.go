@@ -49,6 +49,10 @@ type goldenFixture struct {
 		Params   map[string]string `json:"params"`
 	} `json:"expected"`
 	PresentOnly []string `json:"presentOnly"`
+	// AbsentParams is the other half of the contract: a field the renderer must
+	// NOT emit. Named separately because Go reads an absent param as "" and the
+	// frontend reads it as null, so no declared value expresses it on both.
+	AbsentParams []string `json:"absentParams"`
 }
 
 func loadGoldenCorpus(t *testing.T) []goldenFixture {
@@ -123,6 +127,12 @@ func TestEveryCorpusFixtureRendersItsDeclaredLink(t *testing.T) {
 			for _, key := range fixture.PresentOnly {
 				if !query.Has(key) {
 					t.Errorf("param %q is absent; the fixture requires it to be emitted", key)
+				}
+			}
+			for _, key := range fixture.AbsentParams {
+				if query.Has(key) {
+					t.Errorf("param %q = %q was emitted; the fixture requires it to be absent — %s",
+						key, query.Get(key), fixture.Why)
 				}
 			}
 		})
