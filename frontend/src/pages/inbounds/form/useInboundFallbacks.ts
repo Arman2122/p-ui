@@ -7,6 +7,55 @@ import { coerceInboundJsonField, type DBInbound } from '@/models/dbinbound';
 // Fallback rows for VLESS/Trojan TLS inbounds: state + the load/save/derive
 // and add/update/remove/move handlers, plus the eligible-child option list.
 // Lifted out of InboundFormModal so the modal body stays focused on layout.
+/*
+fallbackDefaultsFromChild reads a child inbound's transport and answers what a
+fallback row pointing at it should say.
+
+Pulled out of the hook so it can be tested as what it is — a pure function of
+one inbound row — rather than through a rendered form.
+
+The path is the part with a rule attached: xray-core refuses a non-empty
+fallback path that does not start with "/" (infra/conf/vless.go:185), and that
+refusal fails the WHOLE config. ws / httpupgrade / xhttp store their path with
+the slash already on it; a gRPC serviceName does not, and this used to hand the
+bare name straight to the form. F326.
+*/
+export function fallbackDefaultsFromChild(child: DBInbound): Partial<FallbackRow> {
+  const stream = coerceInboundJsonField(child.streamSettings);
+  const tls = (stream.tlsSettings as Record<string, unknown> | undefined) ?? {};
+  const network = typeof stream.network === 'string' ? stream.network : '';
+  const sni = typeof tls.serverName === 'string' ? tls.serverName : '';
+  const alpnArr = Array.isArray(tls.alpn) ? tls.alpn : [];
+  const alpn = alpnArr.filter((v) => typeof v === 'string').join(',');
+
+  const settingsPath = (key: string, field: string): string => {
+    const block = (stream[key] as Record<string, unknown> | undefined) ?? {};
+    return typeof block[field] === 'string' ? (block[field] as string) : '';
+  };
+
+  const pathForNetwork = (): string => {
+    switch (network) {
+      case 'ws':
+        return settingsPath('wsSettings', 'path');
+      case 'grpc': {
+        /* The gRPC request path is /{serviceName}/{method}, so the slash is both
+           what the core requires and what it matches against. */
+        const service = settingsPath('grpcSettings', 'serviceName');
+        if (service === '' || service.startsWith('/')) return service;
+        return `/${service}`;
+      }
+      case 'httpupgrade':
+        return settingsPath('httpupgradeSettings', 'path');
+      case 'xhttp':
+        return settingsPath('xhttpSettings', 'path');
+      default:
+        return '';
+    }
+  };
+
+  return { name: sni, alpn, path: pathForNetwork(), xver: 0 };
+}
+
 export function useInboundFallbacks(dbInbound: DBInbound | null, dbInbounds: DBInbound[]) {
   const fallbackKeyRef = useRef(0);
   const [fallbacks, setFallbacks] = useState<FallbackRow[]>([]);
@@ -79,28 +128,7 @@ export function useInboundFallbacks(dbInbound: DBInbound | null, dbInbounds: DBI
   // PROXY-protocol sockopt.
   const deriveFallbackDefaults = (childId: number): Partial<FallbackRow> => {
     const child = (dbInbounds || []).find((ib) => ib.id === childId);
-    if (!child) return {};
-    const stream = coerceInboundJsonField(child.streamSettings);
-    const tls = (stream.tlsSettings as Record<string, unknown> | undefined) ?? {};
-    const network = typeof stream.network === 'string' ? stream.network : '';
-    const sni = typeof tls.serverName === 'string' ? tls.serverName : '';
-    const alpnArr = Array.isArray(tls.alpn) ? tls.alpn : [];
-    const alpn = alpnArr.filter((v) => typeof v === 'string').join(',');
-    let path = '';
-    if (network === 'ws') {
-      const ws = (stream.wsSettings as Record<string, unknown> | undefined) ?? {};
-      if (typeof ws.path === 'string') path = ws.path;
-    } else if (network === 'grpc') {
-      const grpc = (stream.grpcSettings as Record<string, unknown> | undefined) ?? {};
-      if (typeof grpc.serviceName === 'string') path = grpc.serviceName;
-    } else if (network === 'httpupgrade') {
-      const hu = (stream.httpupgradeSettings as Record<string, unknown> | undefined) ?? {};
-      if (typeof hu.path === 'string') path = hu.path;
-    } else if (network === 'xhttp') {
-      const xh = (stream.xhttpSettings as Record<string, unknown> | undefined) ?? {};
-      if (typeof xh.path === 'string') path = xh.path;
-    }
-    return { name: sni, alpn, path, xver: 0 };
+    return child ? fallbackDefaultsFromChild(child) : {};
   };
 
   const addFallback = () => {

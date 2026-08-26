@@ -21,6 +21,10 @@ type FallbackService struct{}
 // config, not just this inbound.
 const errFallbackHostShape = "fallbacks need an inbound on raw TCP with TLS or REALITY, and without VLESS encryption"
 
+// errFallbackPathShape mirrors xray-core's own refusal, which fails the WHOLE
+// config rather than this inbound: vless.go:185 and trojan.go:175. F326.
+const errFallbackPathShape = "a fallback path must be empty or start with \"/\""
+
 // FallbackInput is the payload shape POSTed by the inbound form.
 type FallbackInput struct {
 	ChildId   int    `json:"childId"`
@@ -90,6 +94,9 @@ func (s *FallbackService) SetByMaster(masterId int, items []FallbackInput) error
 			}
 			if childId <= 0 && strings.TrimSpace(c.Dest) == "" {
 				continue
+			}
+			if path := strings.TrimSpace(c.Path); path != "" && !strings.HasPrefix(path, "/") {
+				return common.NewError(errFallbackPathShape, ":", c.Path)
 			}
 			row := model.InboundFallback{
 				MasterId:  masterId,
