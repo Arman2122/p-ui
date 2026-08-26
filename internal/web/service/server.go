@@ -1469,8 +1469,39 @@ func pgConnEnv(dsn string) (env []string, dbname string, err error) {
 	if pass, ok := u.User.Password(); ok {
 		env = append(env, "PGPASSWORD="+pass)
 	}
-	if sslmode := u.Query().Get("sslmode"); sslmode != "" {
-		env = append(env, "PGSSLMODE="+sslmode)
+	/*
+		Every libpq parameter the DSN carries, not just sslmode.
+
+		pgx honours the whole URL when the panel connects, so a DSN naming a CA
+		bundle — sslmode=verify-full&sslrootcert=/etc/p-ui/ca.crt, which is what a
+		managed Postgres hands you — boots and runs fine. pg_dump then received
+		PGSSLMODE with no PGSSLROOTCERT, fell back to ~/.postgresql/root.crt, and
+		failed: Back Up, the scheduled Telegram backup and Import DB all broken on
+		a panel that was otherwise healthy.
+
+		A parameter absent from the DSN emits nothing, and one libpq does not know
+		stays dropped — the panel's own test helpers append search_path, which pgx
+		accepts and libpq would hard-error on, so forwarding the DSN verbatim is not
+		an option.
+	*/
+	query := u.Query()
+	for parameter, variable := range map[string]string{
+		"sslmode":              "PGSSLMODE",
+		"sslrootcert":          "PGSSLROOTCERT",
+		"sslcert":              "PGSSLCERT",
+		"sslkey":               "PGSSLKEY",
+		"sslpassword":          "PGSSLPASSWORD",
+		"sslsni":               "PGSSLSNI",
+		"connect_timeout":      "PGCONNECT_TIMEOUT",
+		"application_name":     "PGAPPNAME",
+		"target_session_attrs": "PGTARGETSESSIONATTRS",
+		"options":              "PGOPTIONS",
+		"gssencmode":           "PGGSSENCMODE",
+		"channel_binding":      "PGCHANNELBINDING",
+	} {
+		if value := query.Get(parameter); value != "" {
+			env = append(env, variable+"="+value)
+		}
 	}
 	return env, dbname, nil
 }
