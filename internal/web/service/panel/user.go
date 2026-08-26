@@ -2,6 +2,7 @@ package panel
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/xlzd/gotp"
 	"gorm.io/gorm"
@@ -95,6 +96,25 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 		if err != nil {
 			logger.Warning("check two factor token err:", err)
 			return nil, err
+		}
+
+		/*
+			An empty secret is not a second factor.
+
+			gotp base32-decodes "" to an empty key without error and HMACs the time
+			counter under it, so .Now() returns a well-defined six-digit code that
+			anyone can compute offline from the clock. Measured: "843635" for the
+			window it was run in. Refuse rather than compare against it.
+
+			Only the guard is added. The comparison below is left exactly as it was:
+			switching it to gotp.Verify would buy symmetry with the settings-side
+			verifier and nothing else — measured, Verify is `otp == t.At(ts)`, with no
+			skew tolerance and not constant-time — while silently changing how
+			whitespace in a submitted code is handled. That divergence is real and is
+			ledger L14, to be decided on its own.
+		*/
+		if strings.TrimSpace(twoFactorToken) == "" {
+			return nil, errors.New("invalid 2fa code")
 		}
 
 		if gotp.NewDefaultTOTP(twoFactorToken).Now() != twoFactorCode {
