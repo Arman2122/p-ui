@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A typo in the panel egress proxy no longer disables checks on your outbound
+  subscriptions.** When that setting cannot be parsed the panel falls back to a
+  direct connection — which is intended — but the subscription fetcher then lost
+  two things it had been given: the "allow insecure" tick on the subscription
+  itself, and the dialer that refuses a hostname resolving to a private address.
+  One mistyped setting quietly turned off a check on a different one.
+  **What you will notice:** nothing, unless your egress proxy setting is invalid.
+  If it is, the log has been saying so all along:
+
+  ```
+  journalctl -u p-ui | grep "Invalid panel egress proxy"
+  ```
+
 - **An MTProto inbound with two clients on one email now starts.** The sidecar's
   config keys its secrets by client email, and two clients sharing one wrote the
   same key twice — which the config parser refuses, so the process exited at

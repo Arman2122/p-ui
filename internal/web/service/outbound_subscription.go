@@ -309,17 +309,31 @@ func (s *OutboundSubscriptionService) subscriptionFetchClient(timeout time.Durat
 			Transport: &http.Transport{DialContext: netsafe.SSRFGuardedDialContext},
 		}
 	}
-	if allowInsecure {
-		if tr, ok := client.Transport.(*http.Transport); ok && tr != nil {
-			cloned := tr.Clone()
-			if cloned.TLSClientConfig == nil {
-				cloned.TLSClientConfig = &tls.Config{}
-			}
-			cloned.TLSClientConfig.InsecureSkipVerify = true
-			client.Transport = cloned
-		}
-	}
+	client.Transport = subscriptionFetchTransport(client.Transport, allowInsecure)
 	return client
+}
+
+/*
+subscriptionFetchTransport resolves the transport a subscription fetch uses.
+
+NewProxiedHTTPClient answers an unparseable proxy URL with a client that has NO
+transport, so the type assertion here used to fail and take two things with it:
+the caller's allowInsecure, and the guarded dialer that closes the DNS-rebinding
+gap. Both were silently absent, on a setting the operator changed elsewhere. F363.
+*/
+func subscriptionFetchTransport(current http.RoundTripper, allowInsecure bool) http.RoundTripper {
+	transport, _ := current.(*http.Transport)
+	if transport == nil {
+		transport = &http.Transport{DialContext: netsafe.SSRFGuardedDialContext}
+	}
+	if allowInsecure {
+		transport = transport.Clone()
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		}
+		transport.TLSClientConfig.InsecureSkipVerify = true
+	}
+	return transport
 }
 
 // fetchAndStore does the actual network + parse + stability + persist work.
