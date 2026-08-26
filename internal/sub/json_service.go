@@ -201,6 +201,9 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			if newStream["security"] != "none" {
 				newStream["security"] = "none"
 				delete(newStream, "tlsSettings")
+				// Beside its sibling, as the Clash renderer already does: a host
+				// forcing plaintext leaves no security block behind. F148.
+				delete(newStream, "realitySettings")
 			}
 		}
 		security, _ := newStream["security"].(string)
