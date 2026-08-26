@@ -652,3 +652,45 @@ this entry is the right weight instead.
 
 **Cost to close:** one clarifying comment either way; the guard is small if the
 prefix set is derivable, unknown if it is not.
+
+---
+
+## L16 — `internal/web/service` runs against Go's default test timeout
+
+**Found:** while gating F381, when the full suite failed at `600.302s`.
+**Where:** `internal/web/service`, the package as a whole.
+**Disposition: keep open** — a fragility, not a defect, and the fix is a choice.
+
+Measured on the VM against live PostgreSQL, `-skip 'Scale$'`:
+
+```
+at the F158/F272 commit      ~395s
+with F381 + F241 added       ~600s, i.e. over Go's 10-minute default
+```
+
+The first failure read as a deadlock and cost real time to diagnose. It was not:
+the package is simply slow — several hundred DB-backed tests, each creating and
+dropping its own PostgreSQL schema — and the additions pushed it past the line.
+
+**Why it matters more than the number suggests.** A suite that fails on duration
+produces the same red as a suite that fails on a bug, and the first instinct is
+to look for a hang. That is the L12 problem wearing different clothes: a gate
+whose failures are not trustworthy stops being read. It also means every future
+test added to this package is spending a budget nobody is tracking.
+
+**Disposition question — three shapes, none obviously right:**
+
+- **Raise the timeout** in CI and in the documented command. Cheapest, and it
+  concedes that the number will keep growing.
+- **Split the package's tests**, e.g. move the DB-backed reset/depletion/traffic
+  cluster into its own package. Buys parallelism across packages, and is a real
+  refactor of test-only code.
+- **Share one schema per package instead of per test.** The biggest win —
+  `CREATE SCHEMA` + full `AutoMigrate` per test is most of the cost — and by far
+  the riskiest, because per-test isolation is exactly what makes `-shuffle=on`
+  meaningful here.
+
+**Cost to close:** the first is minutes and settles nothing; the third is the
+real fix and needs its own description. Measure before choosing: the split
+between schema setup and test body has not been profiled, and the third option
+is only worth its risk if setup dominates.

@@ -88,7 +88,18 @@ func TestTheCoreQuotaResetIsNotDeferredInsideTheTransaction(t *testing.T) {
 	if !strings.Contains(add, "resetCoreQuotas(context.Background(), renewed)") {
 		t.Fatal("AddTraffic no longer clears core quotas after a renewal; a renewed MTProto client stays blocked by the sidecar's own counter")
 	}
-	if !strings.Contains(add, "if err == nil && len(renewed) > 0 {") {
-		t.Fatal("core quotas must be cleared only when the write committed: clearing them for a rolled-back renewal un-blocks a client whose quota was never actually reset")
+	// Asserted structurally, not on a literal condition: the point is that the
+	// call sits inside the success branch, whatever that branch has grown to
+	// contain. An earlier version pinned the exact `if` line and went red when
+	// F381 added a second post-commit step beside it.
+	success := strings.Index(add, "if err == nil")
+	// The CALL, not the word — the comment above it names the old shape, and
+	// matching that made this test fail on correct code.
+	reset := strings.Index(add, "resetCoreQuotas(context.Background(), renewed)")
+	if success < 0 || reset < 0 {
+		t.Fatal("AddTraffic no longer guards its post-commit work on success; this guard is now vacuous")
+	}
+	if reset < success {
+		t.Fatal("core quotas are cleared before the write is known to have committed: clearing them for a rolled-back renewal un-blocks a client whose quota was never actually reset")
 	}
 }

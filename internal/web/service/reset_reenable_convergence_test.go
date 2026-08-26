@@ -148,8 +148,11 @@ func TestEveryResetPathRestoresAllThreeEnableLocations(t *testing.T) {
 			inbound := seedDepletableClient(t, tc.port, tc.tag, tc.email)
 
 			svc := &InboundService{}
-			if _, _, err := svc.disableInvalidClients(database.GetDB()); err != nil {
-				t.Fatalf("disableInvalidClients: %v", err)
+			// Through AddTraffic, not disableInvalidClients: the settings-JSON sync
+			// now happens after the traffic transaction commits, under lockInbound.
+			// Calling the sub-step directly would assert on a half-finished pass.
+			if _, _, err := svc.AddTraffic(nil, nil); err != nil {
+				t.Fatalf("AddTraffic: %v", err)
 			}
 			if got := readEnableLocations(t, inbound.Id, tc.email); got.traffic || got.client || got.settings {
 				t.Fatalf("depletion left the client enabled somewhere: %+v", got)
@@ -211,8 +214,8 @@ func TestResetDoesNotReviveAnExpiredClient(t *testing.T) {
 		Update("expiry_time", time.Now().Add(-time.Hour).UnixMilli()).Error; err != nil {
 		t.Fatalf("seed expiry: %v", err)
 	}
-	if _, _, err := (&InboundService{}).disableInvalidClients(db); err != nil {
-		t.Fatalf("disableInvalidClients: %v", err)
+	if _, _, err := (&InboundService{}).AddTraffic(nil, nil); err != nil {
+		t.Fatalf("AddTraffic: %v", err)
 	}
 
 	if err := (&ClientService{}).ResetAllClientTraffics(&InboundService{}, inbound.Id); err != nil {

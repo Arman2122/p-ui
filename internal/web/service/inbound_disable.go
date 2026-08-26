@@ -130,7 +130,8 @@ func depletedCond(tx *gorm.DB) (string, []any) {
 	return depletedCondFrom(used), append(args, time.Now().UnixMilli())
 }
 
-func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error) {
+func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, pendingClientDisable, error) {
+	var pending pendingClientDisable
 	needRestart := false
 	cond, condArgs := depletedCond(tx)
 
@@ -139,10 +140,10 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 		Where(cond+" AND enable = ?", append(condArgs, true)...).
 		Find(&depletedRows).Error
 	if err != nil {
-		return false, 0, err
+		return false, 0, pending, err
 	}
 	if len(depletedRows) == 0 {
-		return false, 0, nil
+		return false, 0, pending, nil
 	}
 
 	depletedEmails := make([]string, 0, len(depletedRows))
@@ -170,7 +171,7 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 			WHERE clients.email IN ?
 		`, depletedEmails).Scan(&targets).Error
 		if err != nil {
-			return false, 0, err
+			return false, 0, pending, err
 		}
 	}
 
@@ -222,11 +223,25 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 		}
 	}
 
-	for inboundID, emails := range localByInbound {
-		if _, _, mErr := s.markClientsDisabledInSettings(tx, inboundID, emails); mErr != nil {
-			logger.Warning("disableInvalidClients: settings.JSON sync failed for inbound", inboundID, ":", mErr)
-		}
-	}
+	/*
+		The settings-JSON writes do NOT happen here. They are handed to the caller,
+		which performs them after this transaction commits, under lockInbound.
+
+		Doing them here was a read-modify-write on inbounds.settings with no lock,
+		racing every admin mutation: an add that had read the blob before this poll
+		saved its own copy afterwards and restored the depleted client's
+		"enable": true. Permanently — the add's SyncInbound flips clients.enable back
+		too, and the depleted predicate only ever selects rows already enabled, so no
+		later poll re-detects it. A client with an exhausted quota served until
+		someone resets its traffic by hand.
+
+		Taking lockInbound here instead would DEADLOCK the panel: an admin mutation
+		holds that lock while waiting for the serial writer, and the writer is what
+		executes this pass. Neither side can advance and no timeout fires. The lock
+		has to be taken in the same order every other writer takes it — lock first,
+		writer second — which is only possible once this transaction is done.
+	*/
+	pending.local = localByInbound
 
 	// Flip the rows already collected above by primary key instead of
 	// re-evaluating the depleted predicate, which was a second full scan of
@@ -242,7 +257,7 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 			Where("id IN ? AND enable = ?", batch, true).
 			Update("enable", false)
 		if result.Error != nil {
-			return needRestart, count, result.Error
+			return needRestart, count, pending, result.Error
 		}
 		count += result.RowsAffected
 	}
@@ -255,18 +270,18 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 		}
 	}
 
+	// Likewise deferred. It is a node push, and runSerializedTx's own doc comment
+	// asks for network I/O to stay out of the writer.
+	pending.remote = make(map[int]map[string]struct{}, len(remoteByInbound))
 	for inboundID, group := range remoteByInbound {
 		emails := make(map[string]struct{}, len(group))
 		for _, t := range group {
 			emails[t.Email] = struct{}{}
 		}
-		if pushErr := s.disableRemoteClients(tx, inboundID, emails); pushErr != nil {
-			logger.Warning("disableInvalidClients: push to remote failed for inbound", inboundID, ":", pushErr)
-			needRestart = true
-		}
+		pending.remote[inboundID] = emails
 	}
 
-	return needRestart, count, nil
+	return needRestart, count, pending, nil
 }
 
 // markClientsDisabledInSettings flips client.enable=false in the inbound's
