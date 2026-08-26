@@ -18,9 +18,12 @@ type Config struct {
 	BaseDN             string
 	UserFilter         string
 	UserAttr           string
-	FlagField          string
-	TruthyVals         []string
-	Invert             bool
+	// AdminFilter additionally constrains who may authenticate as a PANEL
+	// administrator. A complete parenthesised filter, ANDed with UserFilter.
+	AdminFilter string
+	FlagField   string
+	TruthyVals  []string
+	Invert      bool
 }
 
 func tlsConfig(cfg Config) *tls.Config {
@@ -140,8 +143,9 @@ func AuthenticateUser(cfg Config, username, password string) (bool, error) {
 		cfg.UserAttr = "uid"
 	}
 
-	// Build filter to find specific user
-	filter := fmt.Sprintf("(&%s(%s=%s))", cfg.UserFilter, cfg.UserAttr, ldap.EscapeFilter(username))
+	// The admin filter is ANDed in, never substituted: an account must satisfy
+	// the directory's own user filter AND whatever authorises it to administer.
+	filter := fmt.Sprintf("(&%s(%s=%s)%s)", cfg.UserFilter, cfg.UserAttr, ldap.EscapeFilter(username), cfg.AdminFilter)
 	req := ldap.NewSearchRequest(
 		cfg.BaseDN,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, 0, false,

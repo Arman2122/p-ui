@@ -21,8 +21,29 @@ here; the git log is the full record.
   p-ui setting -resetTwoFactor
   ```
 
-- **The panel says at startup when 2FA cannot work.** If 2FA is on with no
-  secret, a line is logged at **Error** on every start. Nothing is changed for
+- **LDAP no longer signs people in to the panel unless you say who may.**
+  `ldapEnable` is the switch for *syncing clients* from your directory. It was
+  also, silently, the switch for signing in to the panel — and the check behind
+  it only proved the person exists in the directory and knows their own
+  password. With the default user filter of `(objectClass=person)`, that is
+  everyone.
+  **What you will notice:** panel sign-in through LDAP is now off unless you set
+  a filter saying which accounts may administer this panel. **Client sync is
+  completely unaffected**, and your panel password still works — LDAP is only
+  consulted after the local password fails, so nobody is locked out. To turn it
+  on, from a root shell:
+
+  ```
+  p-ui setting -ldapAdminFilter "(memberOf=cn=panel-admins,ou=groups,dc=example,dc=com)"
+  ```
+
+  Pass `-` to turn it off again. It is deliberately not on the Settings page:
+  granting panel administration is a decision to make from the server, and
+  keeping it out of the settings form means a settings save can never clear it.
+
+- **The panel says at startup when an authentication setting cannot work.**
+  If 2FA is on with no secret, or LDAP is on with no admin filter, a line is
+  logged at **Error** on every start. Nothing is changed for
   you — turning a security setting off on your behalf is worse than leaving it
   misconfigured. **To check your own box:**
 

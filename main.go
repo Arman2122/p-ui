@@ -325,7 +325,7 @@ func showFirewallPorts() error {
 	return nil
 }
 
-func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool) error {
+func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool, ldapAdminFilter string) error {
 	err := database.InitDB()
 	if err != nil {
 		fmt.Println("Database initialization failed:", err)
@@ -359,6 +359,23 @@ func updateSetting(port int, username string, password string, webBasePath strin
 			fmt.Println("Failed to set base URI path:", err)
 		} else {
 			fmt.Println("Base URI path set successfully")
+		}
+	}
+
+	// The one way to turn PANEL sign-in through LDAP on. Deliberately not in the
+	// settings UI: granting panel administration is a root-shell decision, and
+	// keeping it out of AllSetting means a settings save can never clear it.
+	if ldapAdminFilter != "" {
+		value := ldapAdminFilter
+		if value == "-" {
+			value = ""
+		}
+		if err := settingService.SetLdapAdminFilter(value); err != nil {
+			fmt.Println("Failed to set the LDAP admin filter:", err)
+		} else if value == "" {
+			fmt.Println("LDAP panel sign-in disabled (admin filter cleared)")
+		} else {
+			fmt.Println("LDAP admin filter set; panel sign-in through LDAP is now restricted to accounts matching it")
 		}
 	}
 
@@ -559,6 +576,7 @@ func main() {
 	var getCert bool
 	var getApiToken bool
 	var resetTwoFactor bool
+	var ldapAdminFilter string
 	var listPorts bool
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
@@ -568,6 +586,7 @@ func main() {
 	settingCmd.StringVar(&webBasePath, "webBasePath", "", "Set base path for Panel")
 	settingCmd.StringVar(&listenIP, "listenIP", "", "set panel listenIP IP")
 	settingCmd.BoolVar(&resetTwoFactor, "resetTwoFactor", false, "Reset two-factor authentication settings")
+	settingCmd.StringVar(&ldapAdminFilter, "ldapAdminFilter", "", "LDAP filter an account must also match to sign in to the PANEL (empty = off; pass \"-\" to clear)")
 	settingCmd.BoolVar(&getListen, "getListen", false, "Display current panel listenIP IP")
 	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
 	settingCmd.BoolVar(&getApiToken, "getApiToken", false, "Display current API token")
@@ -624,7 +643,7 @@ func main() {
 				return
 			}
 		} else {
-			if err = updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor); err != nil {
+			if err = updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor, ldapAdminFilter); err != nil {
 				return
 			}
 		}
