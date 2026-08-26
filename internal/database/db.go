@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
@@ -25,7 +26,26 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var db *gorm.DB
+/*
+db is the one handle every service, controller and cron job reads through
+GetDB.
+
+Guarded because it is REPLACED at runtime, not only at boot: a database restore
+closes the pool and re-opens it while eighteen cron jobs are calling GetDB. An
+unsynchronised pointer swap there is a data race, and the Go memory model gives
+no guarantee about which handle a reader sees.
+*/
+var (
+	db   *gorm.DB
+	dbMu sync.RWMutex
+)
+
+// setDB replaces the handle. Only InitDB should call it.
+func setDB(conn *gorm.DB) {
+	dbMu.Lock()
+	db = conn
+	dbMu.Unlock()
+}
 
 const (
 	defaultUsername = "admin"
@@ -2163,7 +2183,15 @@ func InitDB() error {
 		gormLogger = logger.Discard
 	}
 
-	db, err = openPostgresWithRetry(dsn, &gorm.Config{Logger: gormLogger, DisableForeignKeyConstraintWhenMigrating: true})
+	conn, err := openPostgresWithRetry(dsn, &gorm.Config{Logger: gormLogger, DisableForeignKeyConstraintWhenMigrating: true})
+	if err != nil {
+		// The old handle is KEPT. This used to assign nil on failure, so a restore
+		// whose re-open failed turned every handler and cron job into a nil-pointer
+		// panic. A stale pool answers "sql: database is closed" instead — still
+		// broken until a restart, but diagnosable rather than a panic storm.
+		return err
+	}
+	setDB(conn)
 	if err != nil {
 		return err
 	}
@@ -2236,17 +2264,24 @@ func envInt(key string, def int) int {
 }
 
 func CloseDB() error {
-	if db != nil {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		return sqlDB.Close()
+	// The pointer is taken under the lock; the close happens outside it, so a
+	// slow shutdown cannot block every reader.
+	dbMu.RLock()
+	conn := db
+	dbMu.RUnlock()
+	if conn == nil {
+		return nil
 	}
-	return nil
+	sqlDB, err := conn.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }
 
 func GetDB() *gorm.DB {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
 	return db
 }
 

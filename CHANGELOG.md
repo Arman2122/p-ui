@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A failed restore now tells you what actually failed.** If `pg_restore`
+  rejected your dump, the panel reported that it could not reopen the database
+  — a different problem with a different fix. **What you will notice:** the
+  restore error names the real cause, and if both go wrong the message carries
+  both. A restore that succeeds but leaves the database unreachable now says so
+  instead of reporting success.
+
+- **Restoring a database no longer risks crashing the panel.** The connection
+  handle was swapped while eighteen background jobs were using it, with no
+  synchronisation — and a reopen that failed replaced a working connection with
+  nothing, turning every page and job into a crash. **What you will notice:** a
+  restore is safe to run on a busy panel, and a reopen that fails leaves you
+  with errors you can read rather than a panel that falls over.
+
 - **A client that runs out of quota stays cut off.** The depletion pass rewrote
   the inbound's stored settings without taking the lock every other writer
   takes, so a client being added at the same moment could restore the depleted
