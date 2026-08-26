@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A routing rule that matches on source address now works on a WireGuard or
+  AmneziaWG inbound.** Traffic from those inbounds was source-translated on its
+  way to the router, so by the time the rule was evaluated every packet carried
+  the panel's own internal gateway address instead of the client's tunnel
+  address. The rule form offered the field, the rule saved without complaint, and
+  it matched nothing. Traffic that leaves through a routing front is no longer
+  translated — it does not need to be, because it is re-originated on the way out.
+  **What you will notice:** if you wrote a "from 10.x.y.z" rule on one of these
+  inbounds and gave up on it, it will start matching. Nothing else changes: an
+  inbound with no routing rule is translated exactly as before.
+
 - **A typo in the panel egress proxy no longer disables checks on your outbound
   subscriptions.** When that setting cannot be parsed the panel falls back to a
   direct connection — which is intended — but the subscription fetcher then lost

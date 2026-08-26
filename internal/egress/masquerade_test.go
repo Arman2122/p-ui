@@ -11,7 +11,7 @@ contract. These assert the three properties that decide whether a tunnel works
 and whether anything else on the box survives.
 */
 func TestMasqueradeRulesetTranslatesOnlyWhatLeaves(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2"})
+	got := masqueradeRuleset([]string{"pwg2"}, nil)
 
 	if !strings.Contains(got, `iifname "pwg2" oifname != "pwg2" masquerade`) {
 		t.Fatalf("the rule must translate what ARRIVED on the device and is LEAVING elsewhere:\n%s", got)
@@ -29,7 +29,7 @@ that table alone. `flush ruleset` would take ufw, docker and fail2ban with it â€
 fail2ban owns table inet f2b-table on the very host this was measured on.
 */
 func TestMasqueradeNeverTouchesAnotherWritersRules(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2", "pwg7"})
+	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil)
 
 	if strings.Contains(got, "flush ruleset") {
 		t.Fatal("flush ruleset would delete every other writer's rules on the host")
@@ -48,8 +48,8 @@ func TestMasqueradeNeverTouchesAnotherWritersRules(t *testing.T) {
 // Deterministic output: the reconcile job applies this every ten seconds, and a
 // ruleset whose text depends on map order would rewrite the table forever.
 func TestMasqueradeRulesetIsStable(t *testing.T) {
-	first := masqueradeRuleset([]string{"pwg7", "pwg2"})
-	second := masqueradeRuleset([]string{"pwg2", "pwg7"})
+	first := masqueradeRuleset([]string{"pwg7", "pwg2"}, nil)
+	second := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil)
 
 	if first != second {
 		t.Fatalf("the same devices in a different order must produce the same script:\n%s\n---\n%s", first, second)
@@ -61,7 +61,7 @@ func TestMasqueradeRulesetIsStable(t *testing.T) {
 
 // One rule per device, so a second inbound is covered without a second table.
 func TestMasqueradeCoversEveryDevice(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2", "pwg7", "ptun3"})
+	got := masqueradeRuleset([]string{"pwg2", "pwg7", "ptun3"}, nil)
 
 	for _, device := range []string{"pwg2", "pwg7", "ptun3"} {
 		if !strings.Contains(got, `iifname "`+device+`"`) {

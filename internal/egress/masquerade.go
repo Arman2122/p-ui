@@ -44,7 +44,7 @@ The whole table is replaced on every call rather than diffed. It is small, it is
 ours alone, and `nft -f` applies it atomically -- so there is no window where
 half the devices translate, and no drift for a reconciler to chase.
 */
-func EnsureMasquerade(ctx context.Context, devices []string) error {
+func EnsureMasquerade(ctx context.Context, devices, fronts []string) error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
@@ -55,7 +55,7 @@ func EnsureMasquerade(ctx context.Context, devices []string) error {
 	if len(devices) == 0 {
 		return runNft(ctx, nft, masqueradeTeardown())
 	}
-	return runNft(ctx, nft, masqueradeRuleset(devices))
+	return runNft(ctx, nft, masqueradeRuleset(devices, fronts))
 }
 
 /*
@@ -77,18 +77,32 @@ masqueradeRuleset is the whole table, flushed and rewritten in one atomic apply.
 `oifname != <dev>` keeps traffic between two of this panel's own tunnels from
 being translated: a client reaching another client is not leaving the host, and
 rewriting its source would break the return path.
+
+A front is exempted for a different reason. Traffic leaving on one is read by
+Xray and re-originated, so it needs no translation -- and translating it costs
+something: postrouting runs before the tun device hands the packet to userspace,
+so Xray sees the front's own address and a `source` criterion can never match.
+Measured on the VM: with the plain rule the reader sees the gateway address,
+without it and with this exemption it sees the client's. F066.
 */
-func masqueradeRuleset(devices []string) string {
+func masqueradeRuleset(devices, fronts []string) string {
 	sorted := append([]string(nil), devices...)
 	sort.Strings(sorted)
+	exempt := append([]string(nil), fronts...)
+	sort.Strings(exempt)
 
 	var b strings.Builder
 	b.WriteString("table inet " + masqueradeTable + " {\n")
 	b.WriteString("\tchain postrouting {\n")
 	b.WriteString("\t\ttype nat hook postrouting priority srcnat; policy accept;\n")
 	for _, device := range sorted {
-		fmt.Fprintf(&b, "\t\tiifname %q oifname != %q masquerade comment %q\n",
-			device, device, "p-ui: forwarded out of "+device)
+		fmt.Fprintf(&b, "\t\tiifname %q oifname != %q", device, device)
+		for _, front := range exempt {
+			// One clause per front rather than a negated set: an anonymous set
+			// is another thing to be wrong about on nft 1.0.2.
+			fmt.Fprintf(&b, " oifname != %q", front)
+		}
+		fmt.Fprintf(&b, " masquerade comment %q\n", "p-ui: forwarded out of "+device)
 	}
 	b.WriteString("\t}\n}\n")
 
