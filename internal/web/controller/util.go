@@ -28,16 +28,47 @@ func getRemoteIp(c *gin.Context) string {
 			return ip
 		}
 
-		if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
-			for part := range strings.SplitSeq(xff, ",") {
-				if ip, ok := extractTrustedIP(part); ok {
-					return ip
-				}
-			}
+		if ip, ok := clientIPFromForwardedFor(c.GetHeader("X-Forwarded-For")); ok {
+			return ip
 		}
 	}
 
 	return remoteIP
+}
+
+/*
+clientIPFromForwardedFor reads X-Forwarded-For from the RIGHT.
+
+The header is append-only by design: each proxy adds the peer it saw, so the
+list is `<client>, <proxy1>, <proxy2>`. Everything a client sends arrives at the
+LEFT — a request carrying `X-Forwarded-For: 1.2.3.4` reaches the panel as
+`1.2.3.4, <the real client>`. Taking the leftmost entry therefore takes whatever
+the caller wrote, which is why the login rate limiter keyed on a value the
+attacker chose and a fresh key was one header away.
+
+Walking right-to-left and skipping entries that are themselves trusted proxies
+yields the nearest address this deployment did not vouch for. That is the
+closest thing to a client identity the header can support.
+*/
+func clientIPFromForwardedFor(header string) (string, bool) {
+	if header == "" {
+		return "", false
+	}
+	parts := strings.Split(header, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		ip, ok := extractTrustedIP(parts[i])
+		if !ok {
+			continue
+		}
+		if isTrustedProxy(ip) {
+			// One of our own hops; keep walking left for the client behind it.
+			continue
+		}
+		return ip, true
+	}
+	// Every hop was a trusted proxy, so the header names no client. The direct
+	// peer is the honest answer.
+	return "", false
 }
 
 func isTrustedForwardedRequest(c *gin.Context) bool {

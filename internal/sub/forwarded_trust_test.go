@@ -50,28 +50,50 @@ func TestResolveRequest_ForwardedHeaderTrust(t *testing.T) {
 		wantHostWithPort string
 		wantHostHeader   string
 	}{
+		/*
+			trustedProxyCIDRs is honoured at EVERY value, and these three cases used
+			to assert the opposite: an absent row, an empty value and the shipped
+			default all short-circuited to "trusted", so a panel nobody had
+			configured accepted X-Forwarded-Host from any address on the internet.
+			The subscription URLs it hands out are built from that host.
+
+			These assertions defended the fail-open. They are inverted here rather
+			than deleted, because the shape they describe is exactly what must not
+			come back. F207.
+		*/
 		{
-			name:             "no stored row keeps trusting forwarded headers",
+			name:             "no stored row falls back to the default boundary, not to trust",
 			stored:           nil,
 			remoteAddr:       "203.0.113.9:51000",
-			wantScheme:       "https",
-			wantHost:         "sub.example.net",
-			wantHostWithPort: "sub.example.net",
-			wantHostHeader:   "sub.example.net",
+			wantScheme:       "http",
+			wantHost:         "panel.example.com",
+			wantHostWithPort: "panel.example.com:2096",
+			wantHostHeader:   "panel.example.com",
 		},
 		{
-			name:             "empty stored value keeps trusting forwarded headers",
+			name:             "an explicitly emptied value trusts nobody",
 			stored:           new(""),
 			remoteAddr:       "203.0.113.9:51000",
-			wantScheme:       "https",
-			wantHost:         "sub.example.net",
-			wantHostWithPort: "sub.example.net",
-			wantHostHeader:   "sub.example.net",
+			wantScheme:       "http",
+			wantHost:         "panel.example.com",
+			wantHostWithPort: "panel.example.com:2096",
+			wantHostHeader:   "panel.example.com",
 		},
 		{
-			name:             "stored shipped default keeps trusting forwarded headers",
+			name:             "the shipped default is a real boundary and a public peer is outside it",
 			stored:           new(service.DefaultTrustedProxyCIDRs),
 			remoteAddr:       "203.0.113.9:51000",
+			wantScheme:       "http",
+			wantHost:         "panel.example.com",
+			wantHostWithPort: "panel.example.com:2096",
+			wantHostHeader:   "panel.example.com",
+		},
+		{
+			// The case the default exists for: nginx on the same box. This is what
+			// keeps the fix from being a breaking change for most deployments.
+			name:             "the shipped default trusts a same-box reverse proxy",
+			stored:           new(service.DefaultTrustedProxyCIDRs),
+			remoteAddr:       "127.0.0.1:51000",
 			wantScheme:       "https",
 			wantHost:         "sub.example.net",
 			wantHostWithPort: "sub.example.net",
