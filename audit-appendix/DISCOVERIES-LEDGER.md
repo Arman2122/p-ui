@@ -869,3 +869,49 @@ does; refusing is more honest about a field whose contents are security-relevant
 **Cost to close:** small either way. `hysteriaPinHex` is the algorithm already
 written; what it needs is a home outside the Hysteria renderer and a schema-level
 check to match.
+
+---
+
+## L22 — an unparseable panel egress proxy degrades every panel fetch to direct
+
+**Found:** while fixing F363, reading `NewProxiedHTTPClient`'s error arm.
+**Where:** `internal/web/service/setting.go` `NewProxiedHTTPClient`.
+**Disposition: keep open** — the behaviour may be the right one; what is missing
+is the operator knowing it is in effect.
+
+```go
+client, err := netproxy.NewHTTPClient(proxyUrl, timeout)
+if err != nil {
+    logger.Warningf("Invalid panel egress proxy %q, using direct connection: %v", proxyUrl, err)
+    return &http.Client{Timeout: timeout}
+}
+```
+
+Seven call sites take that client: the WARP integration, two version/geo checks
+in `panel.go`, three fetches in `server.go` (update download, IP lookup, restore)
+and the outbound-subscription fetcher. F363 fixed the last one, which had a
+second problem — it also lost its SSRF-guarded dialer — but the others still fall
+back to a direct connection on a typo'd proxy URL.
+
+**Why that might matter more than it looks.** An operator sets a panel egress
+proxy because the panel is on a network where direct connections to GitHub, to
+Cloudflare's API or to an IP-lookup service are blocked, throttled or *observed*.
+A typo turns all of those back into direct connections. The panel keeps working —
+which is the point of the fallback — and the only signal is one Warning line per
+call, in a log nobody reads until something else breaks.
+
+**The three shapes:**
+
+- **Refuse at save.** `netproxy.NewHTTPClient` already returns a typed parse
+  error; the settings page could refuse an unparseable value the way it refuses
+  other malformed fields. Closes the typo case entirely and changes nothing at
+  runtime.
+- **Surface it.** A panel-visible warning beside the setting, the way the auth
+  posture line added this campaign surfaces 2FA-with-no-secret at boot.
+- **Fail the fetch instead of falling back.** Honest, and the wrong call: a bad
+  proxy setting would then also break the update check that tells the operator
+  something is wrong.
+
+**Cost to close:** the first is small and is probably the answer; it needs the
+validator seam the settings page already has, plus one locale key in both files,
+which means the Persian rule applies before it lands.
