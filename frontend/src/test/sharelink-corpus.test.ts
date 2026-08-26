@@ -49,6 +49,10 @@ interface Fixture {
     params: Record<string, string>;
   };
   presentOnly: string[];
+  /* The other half of the contract: a param the renderer must NOT emit. Named
+     separately because Go reads an absent param as '' and this reads it as
+     null, so no declared value expresses it on both harnesses. */
+  absentParams?: string[];
 }
 
 function loadCorpus(): Fixture[] {
@@ -127,6 +131,12 @@ describe('every corpus fixture renders its declared link', () => {
       fixture.presentOnly.forEach((key) => {
         it(`emits ${key} at some value`, () => {
           expect(url.searchParams.has(key)).toBe(true);
+        });
+      });
+
+      (fixture.absentParams ?? []).forEach((key) => {
+        it(`does not emit ${key}`, () => {
+          expect(url.searchParams.has(key), `${key} — ${fixture.why}`).toBe(false);
         });
       });
     });

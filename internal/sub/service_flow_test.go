@@ -35,8 +35,8 @@ func TestVlessFlowAllowed(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := vlessFlowAllowed(model.VLESS, tc.network, tc.security, tc.settings); got != tc.want {
-				t.Fatalf("vlessFlowAllowed(%q, %q, %v) = %v, want %v", tc.network, tc.security, tc.settings, got, tc.want)
+			if got := tlsFlowAllowed(model.VLESS, tc.network, tc.security, tc.settings); got != tc.want {
+				t.Fatalf("tlsFlowAllowed(%q, %q, %v) = %v, want %v", tc.network, tc.security, tc.settings, got, tc.want)
 			}
 		})
 	}

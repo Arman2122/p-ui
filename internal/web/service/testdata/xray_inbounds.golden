@@ -80,7 +80,6 @@ protocol: trojan
   "clients": [
     {
       "email": "trojan-a@x",
-      "flow": "xtls-rprx-vision",
       "password": "trojan-pass"
     }
   ],

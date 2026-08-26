@@ -35,7 +35,8 @@ whichever renderer does not yet emit it.
     "port": 443,
     "params": { "type": "ws", … }  // the REQUIRED subset, not the whole query
   },
-  "presentOnly": ["spx"]           // params that must exist, value unchecked
+  "presentOnly": ["spx"],          // params that must exist, value unchecked
+  "absentParams": ["flow"]         // params that must NOT be emitted
 }
 ```
 
@@ -44,6 +45,11 @@ and the corpus grows by declaring more rather than by freezing whatever one
 implementation happens to do today. A value that is derived but deterministic
 (`spx`) belongs in `params` with its computed value, not in `presentOnly` —
 that is where a divergence in the derivation itself gets caught.
+
+`absentParams` is how a fixture pins a field the renderer must stop emitting.
+It is a separate list rather than a declared empty value because Go reads an
+absent query param as `""` and the browser reads it as `null`, so no single
+declared value passes on both harnesses.
 
 The `#fragment` is **not** compared. Go composes it from the panel's remark
 template while the frontend takes it as an input, so the two are answering
