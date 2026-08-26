@@ -414,21 +414,29 @@ taken with that family, not with the Mediums.
 
 ## 6. The verdict
 
-> **Status, updated 2026-08-26 as campaign 2 works through this list.** Items 1
-> and 2 are closed; item 3 is half done. The ordering below survived contact —
-> nothing in it was re-ranked — but **§4's Cause 3 reasoning did not**: see
-> `RUNTIME-RESULTS` §23, which found the seven-finding cluster misdiagnosed. The
-> rule and the fix were right; the mechanism is multi-CORE, not multi-node, and
-> the severity was understated.
+> **Status, updated 2026-08-26 as campaign 2 works through this list.** All six
+> items are closed. The ordering survived contact — nothing in it was re-ranked —
+> but **two of §4's explanations did not**: `RUNTIME-RESULTS` §23 found Cause 3's
+> seven-finding cluster misdiagnosed (multi-CORE, not multi-node, and understated),
+> and §24 found the ground for deferring F138 simply false. In both cases the
+> finding was right and the reasoning about it was not.
 >
 > | Item | State |
 > |---|---|
 > | 1 — access control (10) | **closed** |
 > | 2 — `runtime.Runtime` bypass (7) | **closed**, with §23's correction |
-> | 3 — data destruction (10) | F109, F108/F246, F111 closed; F381, F241, F158, F272, F274/F275 open |
-> | 4 — validation off the path | import half closed (F031/F312); AWG half open |
-> | 5 — lockout family | open |
-> | 6 — renderer corpus (15) | open |
+> | 3 — data destruction (10) | **closed** |
+> | 4 — validation off the path | **closed** — import through the validator, AWG at the API boundary via a core capability |
+> | 5 — lockout family | **closed** — F394, F224, plus the `p-ui setting` escapes |
+> | 6 — renderer corpus (15) | **closed** — F023, F129/F143, F138, F139, F126/F214, F081, and the corpus itself |
+>
+> **What item 6 did NOT close, deliberately:** the corpus is Tier A only — two
+> harnesses over inbound rows. `docs/lib/xray` turned out to be a URL assembler
+> rather than a third renderer of an inbound, so it needs a second tier keyed on
+> flattened inputs; ledger L19 carries the design and the `ci.yml` wiring it will
+> need. Three further open questions came out of the same work: L17 (REALITY sni
+> and sid randomised per fetch), L18 (a Host's Final Mask dropped from the
+> Hysteria salamander block), L20 and L21.
 
 **Take, in this order:**
 
@@ -492,9 +500,10 @@ to consult when you are already in the file — not as a backlog.
 |---|---|
 | `AUDIT-2026-08-20.md` | The original audit: Criticals, Highs, prioritised order |
 | `IP-LIMIT-ACTUATOR-RESEARCH.md` | The fail2ban actuator study, its 2 Criticals, the §7 step order and §8 checklist |
-| `audit-appendix/RUNTIME-RESULTS-2026-08-21.md` | 23 sections of measurement, plus every finding-correction and the one refutation |
-| `audit-appendix/DISCOVERIES-LEDGER.md` | L1–L12 in full, with the reasoning this document summarises |
+| `audit-appendix/RUNTIME-RESULTS-2026-08-21.md` | 24 sections of measurement, plus every finding-correction and the one refutation |
+| `audit-appendix/DISCOVERIES-LEDGER.md` | L1–L21 in full, with the reasoning this document summarises |
 | `audit-appendix/findings-medium.md` | The 187 Mediums, grouped by area |
 | `audit-appendix/feature-gaps.md` | 114 gaps in shipped features, with suggested shapes |
 | `internal/arch/` | The eight guards. Read these first when a fix "stops working" |
+| `testdata/sharelink/` | The share-link golden corpus, read by a harness in each renderer |
 | `CHANGELOG.md` | Everything operator-visible this campaign changed |
