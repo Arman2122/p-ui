@@ -694,3 +694,78 @@ test added to this package is spending a budget nobody is tracking.
 real fix and needs its own description. Measure before choosing: the split
 between schema setup and test body has not been profiled, and the third option
 is only worth its risk if setup dominates.
+
+---
+
+## L17 — REALITY `sni` and `sid` are randomised per fetch in two of four renderers
+
+**Found:** while fixing F023, once the pinned-`serverName` half was closed.
+**Where:** `internal/sub/service.go` `applyShareRealityParams`,
+`internal/sub/json_service.go` `realityData`.
+**Disposition: keep open** — a posture question, not a defect, and the answer
+changes what every existing client holds.
+
+F023 bundled two claims. One was unambiguous and is fixed: a pinned
+`realitySettings.settings.serverName` was ignored by all three Go renderers
+though the frontend has always preferred it. The other is this.
+
+With nothing pinned, the four renderers disagree about which member of the list
+to hand out:
+
+```
+raw link (Go)      random member of serverNames, random member of shortIds, per fetch
+JSON (Go)          random member of both, per fetch
+Clash (Go)         serverNames[0], shortIds[0]
+frontend builder   serverNames[0], shortIds[0]
+```
+
+**Why it was left alone.** Spreading clients across the declared names is a
+plausible deliberate choice — it is what the lists are for, and a single name
+handed to every client is a single thing to block. But randomising *per fetch*
+rather than per client means one client's link changes every time the
+subscription is polled, which is why the same code was already changed once for
+`spiderX` (#5718): a value that moves under a client is a value that cannot be
+diffed, cached, or supported.
+
+**The three shapes:**
+
+- **Deterministic, first entry.** Matches Clash and the frontend, and makes all
+  four agree. Loses the spread entirely.
+- **Deterministic per client**, derived from the subscription id the way
+  `deriveSpiderX` already is. Keeps the spread across the client base, makes each
+  client's own link stable, and is the shape this file already reaches for.
+- **Leave it.** Defensible only if the per-fetch churn is the point.
+
+**Cost to close:** small — `deriveSpiderX` is the template and the seam is two
+functions. What it needs first is a decision, because option two changes the
+`sni` and `sid` in every REALITY link already in circulation.
+
+---
+
+## L18 — a Host's Final Mask is dropped entirely from a Hysteria raw link
+
+**Found:** while fixing F138, reading what else the Hysteria fan-out skips.
+**Where:** `internal/sub/service.go` `genHysteriaLink`, the salamander block.
+**Disposition: keep open** — out of F138's size, and one shape of it is arguably
+correct.
+
+The Hysteria generator does not use the unified endpoint builder, so
+`applyEndpointFinalMask` never runs for it — deliberately, because the `fm=`
+JSON dump it writes breaks mihomo. Instead the generator reads the *inbound's*
+`finalmask` directly to pull out the salamander obfs password.
+
+F138 fixed the port-hop range for a Host by resolving it through the same
+`mergeFinalMask` the JSON renderer uses. The salamander block was left reading
+the inbound's masks only, so a Host row carrying its own Final Mask with a
+different obfs password renders a link with the inbound's password instead.
+
+**Why it was not folded into F138.** The fix is one more call to the same
+helper, but it changes output for a configuration that is currently rendered
+wrong rather than not at all, and F138's claim was about `mport`. Shipping a
+second behaviour change unasked next to a named one is the thing the size rule
+forbids.
+
+**Cost to close:** small, and it should be described before it lands: a host
+overriding an obfs password is a different operator intent from a host
+overriding an address, and it is worth confirming the Hosts page means to offer
+it.
