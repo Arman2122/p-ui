@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Quota and expiry now actually cut off MTProto and WireGuard clients.** When
+  a client or inbound ran out of quota or reached its expiry date, the panel
+  disabled the row and then told **Xray** to drop them — whichever core was
+  really serving them. For an MTProto or kernel-WireGuard inbound Xray has never
+  heard of that tag, so the call failed, the panel scheduled a core restart, and
+  **the client stayed connected**. Every poll repeated it.
+  **What you will notice:** a depleted or expired client on those protocols is
+  now disconnected, and the restarts that failure was causing stop. The same
+  applies in reverse — a renewed client is restored in the core that serves
+  them rather than being enabled in the database and left cut off.
+
 - **An inbound can no longer take a tag the panel generates.** Tagging an
   inbound `panel-egress` made the panel skip injecting its own outbound bridge —
   the bridge and its routing rule silently vanished from the generated config,
