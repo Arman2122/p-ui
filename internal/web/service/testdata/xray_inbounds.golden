@@ -194,6 +194,34 @@ protocol: vless
 }
 --- sniffing ---
 
+=== golden-both-security-blocks ===
+listen: "0.0.0.0"
+port: 43310
+protocol: vless
+--- settings ---
+{
+  "clients": [],
+  "decryption": "none"
+}
+--- streamSettings ---
+{
+  "network": "tcp",
+  "realitySettings": {
+    "dest": "example.com:443",
+    "serverNames": [
+      "example.com"
+    ],
+    "shortIds": [
+      "ab"
+    ]
+  },
+  "security": "reality",
+  "tlsSettings": {
+    "serverName": "leftover.example"
+  }
+}
+--- sniffing ---
+
 === golden-fallback-child ===
 listen: "0.0.0.0"
 port: 43309

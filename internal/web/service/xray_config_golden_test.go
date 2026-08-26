@@ -143,6 +143,18 @@ func seedGoldenFixture(t *testing.T) {
 		Settings: `{"clients":[],"decryption":"none"}`,
 	}, nil)
 
+	// A row carrying BOTH security blocks. No panel surface makes one -- the form
+	// deletes the inactive block on save -- but an imported config or a restored
+	// backup can, and the panel-only `settings` key must leave both. F010.
+	seedGoldenInbound(t, &model.Inbound{
+		Tag: "golden-both-security-blocks", Enable: true, Port: 43310, Protocol: model.VLESS,
+		Settings: `{"clients":[],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"reality",` +
+			`"tlsSettings":{"serverName":"leftover.example","settings":{"fingerprint":"chrome"}},` +
+			`"realitySettings":{"dest":"example.com:443","serverNames":["example.com"],"shortIds":["ab"],` +
+			`"settings":{"publicKey":"PBKLEFTOVER","spiderX":"/seed","fingerprint":"chrome"}}}`,
+	}, nil)
+
 	fallbackChild := seedGoldenInbound(t, &model.Inbound{
 		Tag: "golden-fallback-child", Enable: true, Port: 43309, Protocol: model.VLESS,
 		Settings: `{"clients":[],"decryption":"none"}`,

@@ -351,9 +351,13 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 		// Panel-only bookkeeping that Xray must never see.
 		tlsSettings, hasTLS := stream["tlsSettings"].(map[string]any)
 		realitySettings, hasReality := stream["realitySettings"].(map[string]any)
+		// Independent, not else-if: a row carrying both blocks kept the reality
+		// one's bookkeeping. No panel surface makes such a row, but an imported
+		// config or a restored backup can. F010.
 		if hasTLS {
 			delete(tlsSettings, "settings")
-		} else if hasReality {
+		}
+		if hasReality {
 			delete(realitySettings, "settings")
 		}
 		delete(stream, "externalProxy")
