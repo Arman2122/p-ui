@@ -8,6 +8,31 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A subscription server that cannot start no longer takes the panel with it.**
+  If its port was already in use, the whole process exited — after the panel's
+  own interface was already running. So the one page you would use to change
+  that port went down with it, on every boot, and the only way out was editing
+  the database by hand.
+  **What you will notice:** the panel stays up and logs the reason. Subscription
+  links are not served until you fix the port, and the log line says so:
+
+  ```
+  journalctl -u p-ui | grep SUB_SERVER
+  ```
+
+- **A wrong Listen Domain can be undone from the command line.** Setting
+  `webDomain` to something that does not match how you actually reach the panel
+  makes every request return 403 after a restart — including the settings page
+  that would fix it. There was no flag for it.
+  **If you are locked out**, from a root shell on the server:
+
+  ```
+  p-ui setting -webDomain -
+  ```
+
+  That clears it and the panel answers on any host again. Pass a domain instead
+  of `-` to set one.
+
 - **An AmneziaWG inbound the kernel would reject is refused when you save it.**
   The obfuscation settings were only checked when the device was created — and
   the kernel module reports a bad combination with an error code and a log line
