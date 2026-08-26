@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Stopping the panel now really stops the sidecars it supervises.** The
+  supervision job runs every ten seconds and starts anything it finds stopped.
+  Shutdown stopped the cores first and the scheduler second — and stopping a
+  scheduler only prevents new runs, so a tick already underway brought the
+  sidecars back after the panel had let go of them. They kept serving with
+  nothing supervising them, and the next start found their ports taken.
+  **What you will notice:** MTProto sidecars exit with the panel. If you have
+  been killing leftover `mtg-multi` processes by hand after a restart, you can
+  stop.
+
 - **A message with no sender no longer crashes the panel.** Telegram omits the
   sender on a message posted to a channel. Every command handler read it anyway,
   inside a goroutine with no recovery — so the dereference took down the whole
