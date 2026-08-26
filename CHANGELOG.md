@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Importing a share link no longer strips its XHTTP settings and its
+  certificate rules.** The panel writes every client-side XHTTP field into a
+  link it generates, and its own importer read four of them from a `vless://`
+  link's query and three from a `vmess://` one. A `vmess://` import lost the
+  padding, session, sequence and uplink knobs, the XMUX block, the split
+  download endpoint, and `ech` / `pcs` / `vcn`; a `vless://` import lost `vcn`.
+  Since xray-core removed `allowInsecure` in favour of `pcs` and `vcn`, losing
+  `vcn` does not weaken the outbound — it stops it connecting.
+  **What you will notice:** an outbound imported from a link now matches the
+  link. Re-import any outbound you created from a `vmess://` XHTTP link; the one
+  you have is missing settings the link carried.
+
 - **An MTProto inbound no longer puts a dead profile in a JSON subscription.**
   The JSON format is an Xray client config, and Xray has no MTProto outbound to
   write — so the profile it produced carried the inbound's name, a routing rule
