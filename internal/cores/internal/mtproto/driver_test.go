@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 var tomlValue = regexp.MustCompile(`(?m)^(\S+)\s*=\s*"([^"]*)"`)
 
-// serveFakeMtg impersonates mtg-multi: it binds the api address from its own
+// serveFakeMtg impersonates mtg-proxy: it binds the api address from its own
 // generated config and answers /stats from a file the test rewrites.
 func serveFakeMtg() {
 	if f, err := os.OpenFile(os.Getenv("MTG_FAKE_PIDFILE"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {

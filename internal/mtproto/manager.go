@@ -23,7 +23,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 )
 
-// SecretEntry is one named FakeTLS secret served by an mtg-multi process. Name is
+// SecretEntry is one named FakeTLS secret served by an mtg-proxy process. Name is
 // the client email, used both as the [secrets] key and as the per-user key in the
 // /stats API so traffic can be attributed back to the client. AdTag is the
 // client's own advertising-tag override, emitted into the [secret-ad-tags]
@@ -37,7 +37,7 @@ type SecretEntry struct {
 }
 
 // Instance is the desired runtime configuration of one mtproto inbound. A single
-// mtg-multi process serves every active client's secret through the [secrets]
+// mtg-proxy process serves every active client's secret through the [secrets]
 // section, so one inbound maps to one process with many named secrets.
 type Instance struct {
 	Id      int
@@ -563,7 +563,7 @@ func FreeLocalPort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// renderConfig builds the mtg-multi TOML for an instance. Top-level keys must
+// renderConfig builds the mtg-proxy TOML for an instance. Top-level keys must
 // precede any [section] header in TOML, and [secrets] must be the final section
 // so trailing keys are not swallowed by another table. The layout is therefore:
 // top-level scalars (incl. api-bind-to and api-token), then [domain-fronting],
@@ -672,7 +672,7 @@ func writeConfig(path string, inst Instance, apiPort int, apiToken string) error
 	return os.WriteFile(path, []byte(renderConfig(inst, apiPort, apiToken)), 0o640)
 }
 
-// statsUser is one entry of the mtg-multi /stats users map. bytes_in is traffic
+// statsUser is one entry of the mtg-proxy /stats users map. bytes_in is traffic
 // the client sent to the proxy (upload) and bytes_out is what the proxy returned
 // (download).
 type statsUser struct {
@@ -744,7 +744,7 @@ func authorize(req *http.Request, token string) {
 }
 
 // applySecrets pushes the desired secret set and advertising tags to a running
-// mtg-multi through its management API (PUT /secrets on the same loopback port
+// mtg-proxy through its management API (PUT /secrets on the same loopback port
 // that serves /stats), so a client add, removal, re-key, or ad-tag change is
 // applied in place. mtg keeps every connection whose secret is unchanged and
 // closes only the removed or re-keyed ones. It returns true only on a 200: an
@@ -770,7 +770,7 @@ func applySecrets(port int, token string, inst Instance) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// scrapeStats reads the mtg-multi /stats JSON API and returns the per-user
+// scrapeStats reads the mtg-proxy /stats JSON API and returns the per-user
 // cumulative counters. Best-effort: an unreachable endpoint or unparseable body
 // yields ok=false.
 func scrapeStats(port int, token string) (mtgStats, bool) {

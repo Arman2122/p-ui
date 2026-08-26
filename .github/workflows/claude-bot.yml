@@ -414,7 +414,7 @@ jobs:
             - internal/config/         embedded name/version, env parsing
             - internal/database/       GORM init, migrations
               - internal/database/model/  models + inbound Protocol enum
-            - internal/mtproto/        MTProto proxy inbounds (mtg-multi worker)
+            - internal/mtproto/        MTProto proxy inbounds (mtg-proxy worker)
             - internal/sub/            subscription server
             - internal/xray/           Xray child-process + config + gRPC
             - internal/eventbus/       in-process pub/sub event bus

@@ -53,7 +53,7 @@ here; the git log is the full record.
   sidecars back after the panel had let go of them. They kept serving with
   nothing supervising them, and the next start found their ports taken.
   **What you will notice:** MTProto sidecars exit with the panel. If you have
-  been killing leftover `mtg-multi` processes by hand after a restart, you can
+  been killing leftover `mtg-proxy` processes by hand after a restart, you can
   stop.
 
 - **A message with no sender no longer crashes the panel.** Telegram omits the

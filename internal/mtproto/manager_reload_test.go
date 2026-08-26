@@ -15,7 +15,7 @@ import (
 
 // TestMain lets the test binary re-exec itself as a stand-in for the mtg
 // child process: with MTG_FAKE_CHILD=1 it records its pid and blocks, so the
-// manager can start and stop it without a real mtg-multi binary.
+// manager can start and stop it without a real mtg-proxy binary.
 func TestMain(m *testing.M) {
 	if os.Getenv("MTG_FAKE_CHILD") == "1" {
 		if f, err := os.OpenFile(os.Getenv("MTG_FAKE_PIDFILE"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
