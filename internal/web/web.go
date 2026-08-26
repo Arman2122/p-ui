@@ -759,6 +759,25 @@ func (s *Server) StopPanelOnly() error {
 	return s.stop(false, true)
 }
 
+// cronDrainTimeout bounds the wait for a job already running at shutdown. A
+// wedged job must not be why the panel cannot exit.
+const cronDrainTimeout = 10 * time.Second
+
+// stopCron stops the scheduler and waits for whatever was already running.
+// Stop() only prevents NEW runs, so without the wait a supervise tick already in
+// flight outlives stopCores and leaves its sidecars orphaned. F262.
+func (s *Server) stopCron() {
+	if s.cron == nil {
+		return
+	}
+	drained := s.cron.Stop()
+	select {
+	case <-drained.Done():
+	case <-time.After(cronDrainTimeout):
+		logger.Warning("cron jobs still running after", cronDrainTimeout, "; continuing shutdown")
+	}
+}
+
 // stopCores stops the processes of every registered core. Registry-driven so a
 // core added later is stopped on shutdown without editing this file.
 func (s *Server) stopCores() {
@@ -777,12 +796,12 @@ func (s *Server) stopCores() {
 
 func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	s.cancel()
+	// The supervise job reconciles every 10s and relaunches a core it finds
+	// stopped, so the scheduler has to be quiet before the cores go down. F262.
+	s.stopCron()
 	if stopXray {
 		_ = s.xrayService.StopXray()
 		s.stopCores()
-	}
-	if s.cron != nil {
-		s.cron.Stop()
 	}
 	if s.bus != nil {
 		s.bus.Stop()
