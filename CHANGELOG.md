@@ -8,6 +8,23 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An inbound can no longer take a tag the panel generates.** Tagging an
+  inbound `panel-egress` made the panel skip injecting its own outbound bridge —
+  the bridge and its routing rule silently vanished from the generated config,
+  behind one warning line in the log. `api`, `direct` and `blocked` were
+  claimable the same way.
+  **What you will notice:** saving such an inbound is refused and the message
+  names what owns the tag. The reserved set is read from your Xray config
+  template, so renaming an outbound there moves the reservation with it rather
+  than leaving the old name locked and the new one free.
+
+- **In a Telegram group, only an admin can fill in a client being added.** The
+  add-client form remembers which *chat* it is waiting on, not which person — so
+  in a group chat any member's next message was written into the admin's
+  in-progress client as its email, Telegram id or comment.
+  **What you will notice:** messages from non-admins are ignored while a form is
+  open, as they already were for the contact-sharing step.
+
 - **A per-client IP limit now applies wherever that client connects.** The cap
   belongs to the client, but enforcement was decided by whichever of their
   inbounds happened to have the lowest id. Disable that one while the same

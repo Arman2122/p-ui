@@ -82,7 +82,21 @@ func (t *Tgbot) OnReceive() {
 
 		h.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 			userStateMgr.maybePrune(time.Hour)
-			if userState, exists := userStateMgr.get(message.Chat.ID); exists {
+			/*
+				The in-progress client draft is admin-only, and the state it belongs to
+				is keyed by CHAT, not by sender.
+
+				In a group chat every member's next text message lands here, so without
+				this check any member could write the email, Telegram id or comment that
+				the admin is about to save. The UsersShared branch below has always
+				checked the sender; this one did not.
+
+				A non-admin message simply falls through and is ignored, which is what
+				should happen to someone chatting in a group where an admin is midway
+				through a form.
+			*/
+			userState, exists := userStateMgr.get(message.Chat.ID)
+			if exists && checkAdmin(message.From.ID) {
 				switch userState {
 				case "awaiting_email":
 					if client_Email == strings.TrimSpace(message.Text) {
