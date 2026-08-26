@@ -435,6 +435,13 @@ func (s *SettingService) GetWebDomain() (string, error) {
 	return s.getString("webDomain")
 }
 
+// SetWebDomain is the CLI's way back in: a Listen Domain that does not match
+// how the panel is reached makes every request 403, including the settings page
+// that would repair it.
+func (s *SettingService) SetWebDomain(value string) error {
+	return s.setString("webDomain", value)
+}
+
 func (s *SettingService) GetTgBotToken() (string, error) {
 	return s.getString("tgBotToken")
 }

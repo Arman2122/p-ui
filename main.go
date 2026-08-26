@@ -82,9 +82,18 @@ func runWebServer() {
 	service.RegisterSubLinkProvider(sub.NewLinkProvider())
 	subServer := sub.NewServer()
 	global.SetSubServer(subServer)
-	err = subServer.Start()
-	if err != nil {
-		log.Fatalf("Error starting sub server: %v", err)
+	/*
+		A subscription server that cannot bind is not a reason to kill the panel.
+
+		This was log.Fatalf, reached AFTER the panel's own HTTP server is already
+		serving — so a port conflict on the subscription port took down the one
+		interface an operator would use to change that port, and did it again on
+		every boot. The panel is the way back in; it stays up.
+	*/
+	if err = subServer.Start(); err != nil {
+		logger.Errorf("[SUB_SERVER] the subscription server did not start: %v. "+
+			"The panel is running and subscription links will not be served until this is fixed — "+
+			"change the subscription port in Settings, or disable the subscription server there.", err)
 	}
 
 	sigCh := make(chan os.Signal, 8)
@@ -325,7 +334,7 @@ func showFirewallPorts() error {
 	return nil
 }
 
-func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool, ldapAdminFilter string) error {
+func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool, ldapAdminFilter string, webDomain string) error {
 	err := database.InitDB()
 	if err != nil {
 		fmt.Println("Database initialization failed:", err)
@@ -365,6 +374,28 @@ func updateSetting(port int, username string, password string, webBasePath strin
 	// The one way to turn PANEL sign-in through LDAP on. Deliberately not in the
 	// settings UI: granting panel administration is a root-shell decision, and
 	// keeping it out of AllSetting means a settings save can never clear it.
+	/*
+		The way back in from a Listen Domain that does not match how you reach the
+		panel.
+
+		A wrong value makes every request 403 after a restart — including the
+		settings page that would fix it. There was no flag for it, so the only
+		recovery was editing the database by hand.
+	*/
+	if webDomain != "" {
+		value := webDomain
+		if value == "-" {
+			value = ""
+		}
+		if err := settingService.SetWebDomain(value); err != nil {
+			fmt.Println("Failed to set the listen domain:", err)
+		} else if value == "" {
+			fmt.Println("Listen domain cleared; the panel answers on any host again")
+		} else {
+			fmt.Println("Listen domain set to", value)
+		}
+	}
+
 	if ldapAdminFilter != "" {
 		value := ldapAdminFilter
 		if value == "-" {
@@ -577,6 +608,7 @@ func main() {
 	var getApiToken bool
 	var resetTwoFactor bool
 	var ldapAdminFilter string
+	var webDomain string
 	var listPorts bool
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
@@ -586,6 +618,7 @@ func main() {
 	settingCmd.StringVar(&webBasePath, "webBasePath", "", "Set base path for Panel")
 	settingCmd.StringVar(&listenIP, "listenIP", "", "set panel listenIP IP")
 	settingCmd.BoolVar(&resetTwoFactor, "resetTwoFactor", false, "Reset two-factor authentication settings")
+	settingCmd.StringVar(&webDomain, "webDomain", "", "Set the panel Listen Domain (pass \"-\" to clear it and answer on any host)")
 	settingCmd.StringVar(&ldapAdminFilter, "ldapAdminFilter", "", "LDAP filter an account must also match to sign in to the PANEL (empty = off; pass \"-\" to clear)")
 	settingCmd.BoolVar(&getListen, "getListen", false, "Display current panel listenIP IP")
 	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
@@ -643,7 +676,7 @@ func main() {
 				return
 			}
 		} else {
-			if err = updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor, ldapAdminFilter); err != nil {
+			if err = updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor, ldapAdminFilter, webDomain); err != nil {
 				return
 			}
 		}
