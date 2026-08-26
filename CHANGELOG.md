@@ -8,6 +8,31 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Traffic that fails to save is now reported as a failure.** The traffic
+  writer committed inside a deferred function and only logged a commit error —
+  it could not return one, so a poll whose transaction rolled back was reported
+  as a success. The counters had already been zeroed in the core, so those bytes
+  were gone: silently unbilled, with one warning line as the only trace.
+  **What you will notice:** nothing, on a healthy panel. On a struggling
+  database the traffic job now logs a real error instead of quietly losing a
+  poll. The same defect was fixed in the outbound traffic writer alongside it.
+
+- **Resetting an outbound's counters sticks.** Outbound traffic was accumulated
+  by reading the row, adding in memory and writing the total back. A reset that
+  landed between those two steps was erased — the poll wrote back a total it had
+  computed moments earlier, and the cleared counters reappeared with the new
+  traffic added on top. Measured: a reset of 1000 bytes came back as 1008.
+  **What you will notice:** a reset holds, even under a busy poll. Every other
+  traffic counter in the panel already worked this way.
+
+- **A renewed MTProto client's quota is cleared after the save, not during it.**
+  The call that clears the sidecar's own quota counter ran inside the open
+  traffic transaction rather than after it — a network round trip to the
+  sidecar holding a database transaction open, on every renewal. It also ran
+  even when the save then failed.
+  **What you will notice:** less database contention during renewals, and a
+  renewal the database rejected no longer un-blocks the client in the sidecar.
+
 - **Quota and expiry now actually cut off MTProto and WireGuard clients.** When
   a client or inbound ran out of quota or reached its expiry date, the panel
   disabled the row and then told **Xray** to drop them — whichever core was
