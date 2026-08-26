@@ -56,13 +56,15 @@ var dispatchBudget = map[string]int{
 	"internal/web/service/inbound_migration.go":    2,
 	"internal/mtproto/manager.go":                  1,
 	"internal/web/service/inbound_flow_restore.go": 1,
-	"internal/web/service/inbound_traffic.go":      1,
+	// 1 -> 0: the auto-renew path stopped reading settings["method"] itself when it
+	// moved to runtime.Runtime, whose core derives the cipher from the inbound.
+	"internal/web/service/inbound_traffic.go": 0,
 }
 
 // dispatchTotal guards the guard. If the detector stops matching the code — a
 // rename of Protocol, a moved const block — every per-file budget silently goes
 // green, and only a total that must still be met catches it.
-const dispatchTotal = 79
+const dispatchTotal = 78
 
 // frozenDispatch are sites that must NOT migrate to the registry. Historical
 // migrations are frozen facts about data written by past releases; rewriting

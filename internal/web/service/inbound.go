@@ -25,14 +25,12 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/netsafe"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
-	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type InboundService struct {
-	xrayApi         xray.XrayAPI
 	clientService   ClientService
 	fallbackService FallbackService
 }

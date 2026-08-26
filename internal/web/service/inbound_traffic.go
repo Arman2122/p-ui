@@ -290,28 +290,19 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 	return dbClientTraffics, newExpiryByEmail, nil
 }
 
-// apiUserFromClient prepares a stored client object for the runtime AddUser
-// call. The copy matters twice over: the stored object keeps being mutated and
-// marshalled back into the inbound's settings, which must not gain an API-only
-// key, and shadowsocks clients carry no cipher of their own — it lives on the
-// inbound, and without it the API cannot tell which of xray's two shadowsocks
-// account types the running inbound expects.
-func apiUserFromClient(client map[string]any, cipher string) map[string]any {
-	user := maps.Clone(client)
-	if user == nil {
-		user = map[string]any{}
-	}
-	if cipher != "" {
-		user["cipher"] = cipher
-	}
-	return user
+// renewedClient names a client whose quota window has rolled over, and the
+// inbound it has to be restored on. The inbound rather than its tag, because
+// only the inbound identifies which core serves it.
+type renewedClient struct {
+	inbound *model.Inbound
+	email   string
 }
 
 func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, []string, error) {
 	// check for time expired
 	var traffics []*xray.ClientTraffic
 	now := time.Now().Unix() * 1000
-	var err, err1 error
+	var err error
 
 	// Filter to clients that have at least one local inbound. Using
 	// client_traffics.inbound_id is wrong: it goes stale after an inbound is
@@ -337,11 +328,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, []string, e
 	var inbound_ids []int
 	var inbounds []*model.Inbound
 	needRestart := false
-	var clientsToAdd []struct {
-		protocol string
-		tag      string
-		client   map[string]any
-	}
+	var clientsToAdd []renewedClient
 
 	// Resolve the inbounds to renew through the client_inbounds link rather than
 	// client_traffics.inbound_id, which goes stale after an inbound is deleted and
@@ -387,10 +374,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, []string, e
 		if len(clients) == 0 {
 			continue
 		}
-		cipher := ""
-		if inbounds[inbound_index].Protocol == model.Shadowsocks {
-			cipher, _ = settings["method"].(string)
-		}
+
 		for client_index := range clients {
 			c := clients[client_index].(map[string]any)
 			email, _ := c["email"].(string)
@@ -409,16 +393,10 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, []string, e
 			if !traffic.Enable {
 				traffic.Enable = true
 				c["enable"] = true
-				clientsToAdd = append(clientsToAdd,
-					struct {
-						protocol string
-						tag      string
-						client   map[string]any
-					}{
-						protocol: string(inbounds[inbound_index].Protocol),
-						tag:      inbounds[inbound_index].Tag,
-						client:   apiUserFromClient(c, cipher),
-					})
+				clientsToAdd = append(clientsToAdd, renewedClient{
+					inbound: inbounds[inbound_index],
+					email:   traffic.Email,
+				})
 			}
 			clients[client_index] = any(c)
 		}
@@ -455,18 +433,27 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB) (bool, int64, []string, e
 	if err = clearGlobalTraffic(tx, renewEmails...); err != nil {
 		return false, 0, nil, err
 	}
-	if process := currentXrayProcess(); process != nil {
-		err1 = s.xrayApi.Init(process.GetAPIPort())
-		if err1 != nil {
-			return true, int64(len(traffics)), renewEmails, nil
+	/*
+		Re-added through runtime.Runtime, which resolves the core that serves each
+		inbound. The direct s.xrayApi.AddUser call sent a renewed MTProto or kernel
+		WireGuard client to Xray, which does not serve that inbound: the client was
+		enabled in the database and never restored in the core, so a paying customer
+		stayed cut off until something unrelated rebuilt the config.
+	*/
+	for _, renewed := range clientsToAdd {
+		if renewed.inbound == nil {
+			continue
 		}
-		for _, clientToAdd := range clientsToAdd {
-			err1 = s.xrayApi.AddUser(clientToAdd.protocol, clientToAdd.tag, clientToAdd.client)
-			if err1 != nil {
-				needRestart = true
-			}
+		rt, rtErr := s.runtimeFor(renewed.inbound)
+		if rtErr != nil {
+			logger.Warning("autoRenewClients: no runtime for inbound", renewed.inbound.Tag, rtErr)
+			needRestart = true
+			continue
 		}
-		s.xrayApi.Close()
+		if addErr := rt.AddUser(context.Background(), renewed.inbound, renewed.email); addErr != nil {
+			logger.Warning("autoRenewClients: restoring", renewed.email, "on", renewed.inbound.Tag, "failed:", addErr)
+			needRestart = true
+		}
 	}
 	return needRestart, int64(len(traffics)), renewEmails, nil
 }

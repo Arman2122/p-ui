@@ -19,26 +19,39 @@ func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, error
 	now := time.Now().Unix() * 1000
 	needRestart := false
 
-	if process := currentXrayProcess(); process != nil {
-		var tags []string
-		err := tx.Table("inbounds").
-			Select("inbounds.tag").
-			Where("((total > 0 and up + down >= total) or (expiry_time > 0 and expiry_time <= ?)) and enable = ? and node_id IS NULL", now, true).
-			Scan(&tags).Error
-		if err != nil {
-			return false, 0, err
+	/*
+		Dropped through runtime.Runtime, which resolves the core that serves each
+		inbound.
+
+		This used to call s.xrayApi.DelInbound(tag) for every depleted local
+		inbound, with no filter on protocol — so a depleted MTProto or kernel
+		WireGuard inbound had its tag sent to Xray, which has never heard of it.
+		The call failed, needRestart went true, and the inbound was never actually
+		torn down in the core that serves it: a restart every poll, and traffic
+		still flowing on a quota that had run out.
+
+		The audit filed this as a multi-NODE defect. It is not — the query has
+		always been node-scoped. It is multi-CORE.
+	*/
+	var doomed []*model.Inbound
+	if err := tx.Model(model.Inbound{}).
+		Where("((total > 0 and up + down >= total) or (expiry_time > 0 and expiry_time <= ?)) and enable = ? and node_id IS NULL", now, true).
+		Find(&doomed).Error; err != nil {
+		return false, 0, err
+	}
+	for _, ib := range doomed {
+		rt, rtErr := s.runtimeFor(ib)
+		if rtErr != nil {
+			logger.Debug("Error resolving the runtime for inbound:", ib.Tag, rtErr)
+			needRestart = true
+			continue
 		}
-		_ = s.xrayApi.Init(process.GetAPIPort())
-		for _, tag := range tags {
-			err1 := s.xrayApi.DelInbound(tag)
-			if err1 == nil {
-				logger.Debug("Inbound disabled by api:", tag)
-			} else {
-				logger.Debug("Error in disabling inbound by api:", err1)
-				needRestart = true
-			}
+		if dropErr := rt.DelInbound(context.Background(), ib); dropErr != nil {
+			logger.Debug("Error in disabling inbound by api:", dropErr)
+			needRestart = true
+			continue
 		}
-		s.xrayApi.Close()
+		logger.Debug("Inbound disabled by api:", ib.Tag)
 	}
 
 	result := tx.Model(model.Inbound{}).
@@ -176,20 +189,37 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, error)
 		}
 	}
 
-	if process := currentXrayProcess(); process != nil && len(localTargets) > 0 {
-		_ = s.xrayApi.Init(process.GetAPIPort())
-		for _, t := range localTargets {
-			err1 := s.xrayApi.RemoveUser(t.Tag, t.Email)
-			if err1 == nil {
-				logger.Debug("Client disabled by api:", t.Email)
-			} else if restartCannotFix(err1, t.Email) {
-				logger.Debug("Nothing for xray to remove:", err1)
-			} else {
-				logger.Debug("Error in disabling client by api:", err1)
-				needRestart = true
-			}
+	/*
+		Revoked through runtime.Runtime, for the same reason the inbound teardown
+		above is: s.xrayApi.RemoveUser(tag, email) went to Xray whatever core owned
+		the inbound, so a depleted MTProto or kernel WireGuard client was struck
+		from the database and left connected in the core that actually serves them.
+
+		The local/remote split above is untouched and is why this is safe: remote
+		targets never reach here, they go through disableRemoteClients below.
+	*/
+	for _, t := range localTargets {
+		ib, getErr := s.GetInbound(t.InboundID)
+		if getErr != nil {
+			logger.Debug("Error loading the inbound to revoke on:", t.InboundID, getErr)
+			needRestart = true
+			continue
 		}
-		s.xrayApi.Close()
+		rt, rtErr := s.runtimeFor(ib)
+		if rtErr != nil {
+			logger.Debug("Error resolving the runtime for inbound:", ib.Tag, rtErr)
+			needRestart = true
+			continue
+		}
+		err1 := rt.RemoveUser(context.Background(), ib, t.Email)
+		if err1 == nil {
+			logger.Debug("Client disabled by api:", t.Email)
+		} else if restartCannotFix(err1, t.Email) {
+			logger.Debug("Nothing for xray to remove:", err1)
+		} else {
+			logger.Debug("Error in disabling client by api:", err1)
+			needRestart = true
+		}
 	}
 
 	for inboundID, emails := range localByInbound {
