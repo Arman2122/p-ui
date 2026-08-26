@@ -42,6 +42,10 @@ type Instance struct {
 	MTU        int
 	FWMark     int
 	Peers      []Peer
+
+	// TransportPadding is AmneziaWG's S4: bytes prepended to every data packet,
+	// and the only obfuscation parameter that changes what MTU the device needs.
+	TransportPadding int
 }
 
 /*
@@ -77,18 +81,47 @@ func ownedIDIn(prefix, name string) (int, bool) {
 	return id, true
 }
 
-// defaultMTU is what the wireguard module gives a new link: 1500 less its own
-// 32-byte header, 8 for UDP and 40 for the outer IPv6 header.
-const defaultMTU = 1420
+const (
+	// DefaultMTU is what the module gives a new link: 1500 less its own 32-byte
+	// header, 8 for UDP and 40 for the outer IPv6 header.
+	DefaultMTU = 1420
 
-// linkMTU resolves an absent MTU into the kernel's own default rather than
-// leaving whatever the device holds, so clearing the field is an edit that lands.
-func linkMTU(mtu int) int {
-	if mtu <= 0 {
-		return defaultMTU
+	// MinMTU is IPv6's own minimum. Reaching it means the transport padding is
+	// too large to work over a 1500-byte path, which is a validation question.
+	MinMTU = 1280
+)
+
+/*
+DeviceMTU answers the interface MTU a device needs, given the transport padding
+its obfuscation prepends to every data packet.
+
+The module fixes dev->mtu at DefaultMTU when the device is created
+(src/device.c:324) and never revises it, but AmneziaWG's S4 is pushed onto every
+data packet afterwards by skb_push (src/send.c:320) with nothing clamping it
+against the path. Its two neighbours look like they would and do not:
+ContentPaddingAddition is clamped to the device MTU by randomize_skb_padding,
+and RandomTrailers is bounded by the largest packet already sent.
+
+Header protection FORCES S4 >= 12, so at S4=12 over an IPv6 outer header the
+wire packet is 1420+16+16+12+8+40 = 1512 against a 1500 path -- every
+header-protected device was over the limit by construction. It connects, small
+packets are fine, and large transfers stall. F103.
+
+Lives here rather than in internal/awg because awg imports this package and the
+arithmetic must have one home.
+*/
+func DeviceMTU(configured, transportPadding int) int {
+	if configured > 0 {
+		return configured
 	}
-	return mtu
+	derived := DefaultMTU - transportPadding
+	if derived < MinMTU {
+		return MinMTU
+	}
+	return derived
 }
+
+func linkMTU(mtu, transportPadding int) int { return DeviceMTU(mtu, transportPadding) }
 
 // Interface names the device this instance owns in the default (inbound)
 // namespace. A manager with its own namespace uses Manager.Name instead.
@@ -101,6 +134,11 @@ type deviceSettings struct {
 	Address   []string `json:"address"`
 	MTU       int      `json:"mtu"`
 	FWMark    int      `json:"fwmark"`
+	// Only s4 is read here, and only for its effect on the MTU. What to DO with
+	// the obfuscation belongs to the AmneziaWG core, not the device plane.
+	AWG struct {
+		S4 int `json:"s4"`
+	} `json:"awg"`
 }
 
 // ApplySettings fills the device half of an Instance from the inbound's stored
@@ -116,6 +154,7 @@ func (inst *Instance) ApplySettings(settings string) error {
 	inst.PrivateKey = strings.TrimSpace(parsed.SecretKey)
 	inst.Address = parsed.Address
 	inst.MTU = parsed.MTU
+	inst.TransportPadding = parsed.AWG.S4
 	inst.FWMark = parsed.FWMark
 	return nil
 }

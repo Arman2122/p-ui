@@ -1,0 +1,30 @@
+{
+  "name": "awgkernel-s4-mtu",
+  "why": "An AmneziaWG device carrying S4. The module fixes the interface MTU at 1420 when the device is created and never revises it, but S4 is prepended to every data packet afterwards, so the wire packet outgrows a 1500-byte path. Header protection FORCES S4 >= 12, which puts every header-protected device over the limit by construction: it connects, small packets are fine, and large transfers stall. The client has to be told the same reduced MTU or it overflows in the other direction. F103.",
+  "email": "golden",
+  "peerIndex": 0,
+  "inbound": {
+    "protocol": "awgkernel",
+    "listen": "203.0.113.14",
+    "port": 51821,
+    "remark": "golden-s4",
+    "settings": "{\"secretKey\":\"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=\",\"clients\":[{\"email\":\"golden\",\"privateKey\":\"yMfGxcTDwsHAv769vLu6ubi3trW0s7KxsK+urakq\",\"allowedIPs\":[\"10.9.0.2/32\"]}],\"awg\":{\"jc\":4,\"jmin\":10,\"jmax\":50,\"s1\":15,\"s2\":16,\"s3\":17,\"s4\":50}}",
+    "streamSettings": "{}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "wireguard",
+    "userinfo": "yMfGxcTDwsHAv769vLu6ubi3trW0s7KxsK+urakq",
+    "host": "203.0.113.14",
+    "port": 51821,
+    "params": {
+      "publickey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9/AsrhtHHw=",
+      "address": "10.9.0.2/32",
+      "mtu": "1370",
+      "s4": "50",
+      "jc": "4"
+    }
+  },
+  "presentOnly": [],
+  "absentParams": []
+}

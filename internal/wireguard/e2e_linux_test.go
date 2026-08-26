@@ -548,8 +548,8 @@ func TestLiveClearingTheMTUReturnsTheKernelDefault(t *testing.T) {
 	if err := m.Ensure(context.Background(), in); err != nil {
 		t.Fatalf("Ensure after clearing the mtu: %v", err)
 	}
-	if got := deviceMTU(t, name); got != defaultMTU {
-		t.Fatalf("mtu = %d after the operator cleared the field, want the kernel default %d", got, defaultMTU)
+	if got := deviceMTU(t, name); got != DefaultMTU {
+		t.Fatalf("mtu = %d after the operator cleared the field, want the kernel default %d", got, DefaultMTU)
 	}
 
 	t.Run("that default is the kernel's own", func(t *testing.T) {
@@ -558,8 +558,8 @@ func TestLiveClearingTheMTUReturnsTheKernelDefault(t *testing.T) {
 		if out, err := exec.Command("ip", "link", "add", probe, "type", "wireguard").CombinedOutput(); err != nil {
 			t.Fatalf("ip link add: %v: %s", err, out)
 		}
-		if got := deviceMTU(t, probe); got != defaultMTU {
-			t.Fatalf("a plain `ip link add type wireguard` gives mtu %d, but the engine writes %d back when the field is cleared", got, defaultMTU)
+		if got := deviceMTU(t, probe); got != DefaultMTU {
+			t.Fatalf("a plain `ip link add type wireguard` gives mtu %d, but the engine writes %d back when the field is cleared", got, DefaultMTU)
 		}
 	})
 }

@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An AmneziaWG tunnel with transport padding now sets an MTU that fits.** The
+  kernel module fixes the interface MTU at 1420 when the device is created — a
+  budget computed for plain WireGuard — and never revises it, while the S4
+  parameter is added to every data packet afterwards. Turning on **header
+  protection forces S4 to at least 12**, which put every such tunnel over a
+  1500-byte path by construction. It connected, small packets were fine, and
+  anything large stalled: the failure nobody diagnoses.
+  **What you will notice:** the device and the client config now agree on a
+  reduced MTU (1370 for S4=50, for instance), and large transfers complete. An
+  MTU you set yourself is left alone. If you have an AmneziaWG inbound with
+  header protection or S4, hand your clients a fresh config — the old one has
+  the wrong MTU on it.
+
 - **A WireGuard or AmneziaWG exit can now complete its handshake.** Every exit
   the panel dials was given a new source port every ten seconds, so the far end's
   handshake reply always arrived at the socket the device had a moment earlier.
