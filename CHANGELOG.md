@@ -8,6 +8,28 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Two-factor authentication with no secret no longer lets anyone in.** If 2FA
+  was switched on while the secret was empty, the panel compared your code
+  against one computed from an empty key — a six-digit number anybody could work
+  out from the clock alone. **What you will notice:** that state now refuses
+  every login instead of accepting a public constant, and enabling 2FA without a
+  secret is refused at the settings page. Nothing else about how a code is
+  checked has changed.
+  **If you are locked out**, from a root shell on the server:
+
+  ```
+  p-ui setting -resetTwoFactor
+  ```
+
+- **The panel says at startup when 2FA cannot work.** If 2FA is on with no
+  secret, a line is logged at **Error** on every start. Nothing is changed for
+  you — turning a security setting off on your behalf is worse than leaving it
+  misconfigured. **To check your own box:**
+
+  ```
+  journalctl -u p-ui | grep AUTH_POSTURE
+  ```
+
 - **A SOCKS/mixed inbound can no longer show credentials it is not enforcing.**
   Xray treats `auth: "password"` as “check the accounts” and **every other
   value, including no value at all**, as “accept everyone” — while still

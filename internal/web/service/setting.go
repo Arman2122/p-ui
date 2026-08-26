@@ -1176,8 +1176,29 @@ type SecretClears struct {
 	SmtpPassword bool
 }
 
+/*
+refuseTwoFactorWithoutASecret stops 2FA being switched on with no secret.
+
+gotp turns an empty secret into an empty HMAC key rather than an error, so the
+expected code becomes a public function of the clock. The login path now refuses
+that state outright; this stops it being created in the first place, which is
+the half that keeps an operator from locking themselves out by accident.
+*/
+func refuseTwoFactorWithoutASecret(allSetting *entity.AllSetting) error {
+	if allSetting.TwoFactorEnable && strings.TrimSpace(allSetting.TwoFactorToken) == "" {
+		return common.NewError("two-factor authentication cannot be enabled without a secret: scan the QR code or paste a token first")
+	}
+	return nil
+}
+
 func (s *SettingService) UpdateAllSetting(allSetting *entity.AllSetting, clears SecretClears) error {
 	if err := s.preserveRedactedSecrets(allSetting, clears); err != nil {
+		return err
+	}
+	// Checked on the EFFECTIVE token, i.e. after preserveRedactedSecrets has
+	// carried a stored secret forward, because a blank submission means "keep
+	// what is stored" and is blank only when nothing ever was.
+	if err := refuseTwoFactorWithoutASecret(allSetting); err != nil {
 		return err
 	}
 	if err := validateSettingsURLs(allSetting); err != nil {

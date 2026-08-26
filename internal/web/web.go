@@ -538,6 +538,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	// check is an open proxy, and the save-time refusal only protects new
 	// writes. Reported, never repaired — the settings are the operator's.
 	(&service.InboundService{}).LogOpenProxyInbounds()
+	s.settingService.LogAuthPosture()
 
 	// SkipIfStillRunning stops a slow job (e.g. the 5s traffic poll on a large
 	// install) from overlapping itself: two concurrent runs of the same job race
