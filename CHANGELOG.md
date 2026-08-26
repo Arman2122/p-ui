@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Importing a WireGuard link no longer invents a tunnel address.** `address`
+  on a WireGuard outbound is the tunnel interface's own local address. A link
+  that did not carry one was imported with `0.0.0.0/0` — which is an *allowedIPs*
+  value and means nothing as a local address, so the outbound could not carry
+  traffic. The panel's own browser-side importer had the opposite half of the
+  same bug: it wrote an empty list, which stops Xray falling back to the address
+  it would otherwise choose.
+  **What you will notice:** a WireGuard outbound imported from a link that omits
+  the address now works. If you have one that never did, delete and re-import it.
+
 - **A Trojan client no longer carries an XTLS flow.** Xray removed the feature
   for Trojan and now refuses a config that contains one — and it refuses the
   *whole* config, so a single such account stopped every inbound on the box from

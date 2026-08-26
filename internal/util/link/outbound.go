@@ -488,10 +488,10 @@ func parseWireguard(link string) (*ParseResult, error) {
 
 	addrRaw := firstParam(params, "address", "ip")
 	allowedRaw := firstParam(params, "allowedips", "allowed_ips")
+	// No fallback for the tunnel's own address: 0.0.0.0/0 is an allowedIPs value
+	// and means nothing as a local address. The core picks a bogon when the key
+	// is ABSENT, so it has to be omitted rather than set empty. F080.
 	addrs := splitComma(addrRaw)
-	if len(addrs) == 0 {
-		addrs = []string{"0.0.0.0/0", "::/0"}
-	}
 	allowed := splitComma(allowedRaw)
 	if len(allowed) == 0 {
 		allowed = []string{"0.0.0.0/0", "::/0"}
@@ -513,8 +513,10 @@ func parseWireguard(link string) (*ParseResult, error) {
 
 	settings := map[string]any{
 		"secretKey": secret,
-		"address":   addrs,
 		"peers":     []any{peer},
+	}
+	if len(addrs) > 0 {
+		settings["address"] = addrs
 	}
 	if mtu := params.Get("mtu"); mtu != "" {
 		if n, err := strconv.Atoi(mtu); err == nil {

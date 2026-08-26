@@ -576,7 +576,11 @@ export function parseWireguardLink(link: string): Raw | null {
     if (Number.isFinite(k)) peer.keepAlive = k;
   }
 
-  const settings: Raw = { secretKey, address, peers: [peer] };
+  /* The address key is omitted, not emptied: xray picks a bogon local address
+     when it is ABSENT (infra/conf/wireguard.go:80), and a JSON [] is non-nil,
+     so emitting one leaves the outbound with no endpoint at all. F080. */
+  const settings: Raw = { secretKey, peers: [peer] };
+  if (address.length > 0) settings.address = address;
   const mtuRaw = firstParam(params, 'mtu');
   if (mtuRaw !== null) {
     const m = Number(mtuRaw);
