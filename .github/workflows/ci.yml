@@ -17,6 +17,9 @@ on:
       - "go.sum"
       - "frontend/**"
       - ".nvmrc"
+      # The share-link corpus is data, not code: both harnesses read it, so a
+      # fixture edit must run CI or it lands unchecked in either renderer.
+      - "testdata/sharelink/**"
       - ".github/workflows/ci.yml"
   push:
     branches:
@@ -27,6 +30,9 @@ on:
       - "go.sum"
       - "frontend/**"
       - ".nvmrc"
+      # The share-link corpus is data, not code: both harnesses read it, so a
+      # fixture edit must run CI or it lands unchecked in either renderer.
+      - "testdata/sharelink/**"
       - ".github/workflows/ci.yml"
 
 permissions:

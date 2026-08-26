@@ -1,0 +1,31 @@
+{
+  "name": "vless-ws-tls",
+  "why": "The baseline every renderer implements: WebSocket transport plus TLS. If the harnesses disagree here, they disagree about everything.",
+  "email": "golden",
+  "inbound": {
+    "protocol": "vless",
+    "listen": "203.0.113.10",
+    "port": 443,
+    "remark": "golden-ws",
+    "settings": "{\"clients\":[{\"id\":\"11111111-2222-4333-8444-555555555555\",\"email\":\"golden\",\"flow\":\"\"}],\"decryption\":\"none\",\"encryption\":\"none\"}",
+    "streamSettings": "{\"network\":\"ws\",\"security\":\"tls\",\"wsSettings\":{\"path\":\"/golden\",\"host\":\"ws.golden.test\",\"headers\":{}},\"tlsSettings\":{\"serverName\":\"tls.golden.test\",\"alpn\":[\"h2\",\"http/1.1\"],\"settings\":{\"fingerprint\":\"chrome\"}}}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "vless",
+    "userinfo": "11111111-2222-4333-8444-555555555555",
+    "host": "203.0.113.10",
+    "port": 443,
+    "params": {
+      "type": "ws",
+      "security": "tls",
+      "path": "/golden",
+      "host": "ws.golden.test",
+      "sni": "tls.golden.test",
+      "alpn": "h2,http/1.1",
+      "fp": "chrome",
+      "encryption": "none"
+    }
+  },
+  "presentOnly": []
+}
