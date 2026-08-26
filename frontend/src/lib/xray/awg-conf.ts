@@ -21,6 +21,13 @@ export function awgInterfaceLines(params: AwgParams | undefined): string {
   const text = (key: string, value: string | undefined) => {
     if (value) out.push(`${key} = ${value}`);
   };
+  /* A range crosses the API as text ("10-19") or as a bare number meaning
+     [n, n]. Zero and empty both mean cleared, and a cleared header is written
+     by omission — the module supplies WireGuard's own value for it. */
+  const range = (key: string, value: string | number | undefined) => {
+    if (value === undefined || value === '' || value === 0) return;
+    out.push(`${key} = ${value}`);
+  };
 
   num('Jc', params.jc);
   num('Jmin', params.jmin);
@@ -35,6 +42,28 @@ export function awgInterfaceLines(params: AwgParams | undefined): string {
   text('I4', params.i4);
   text('I5', params.i5);
   text('HeaderProtectionKey', params.headerProtectionKey);
+
+  /*
+   * H1-H4 and the six timers are range TEXT, and this function used to stop
+   * before them — while awgLinesFromLinkParams below, in this same file, has
+   * always listed every one of them in LINK_TO_CONF.
+   *
+   * So the panel's own downloadable .conf described a weaker device than the
+   * link beside it, the subscription, and the server itself. A client importing
+   * the .conf got default header values against a device configured with custom
+   * ones, and the handshake is unrecognisable when they disagree.
+   */
+  range('H1', params.h1);
+  range('H2', params.h2);
+  range('H3', params.h3);
+  range('H4', params.h4);
+  range('ContentPaddingAddition', params.contentPaddingAddition);
+  range('RekeyAfterTime', params.rekeyAfterTime);
+  range('RekeyTimeout', params.rekeyTimeout);
+  range('RejectAfterTime', params.rejectAfterTime);
+  range('KeepaliveTimeout', params.keepaliveTimeout);
+  range('MaxHandshakeAttempts', params.maxHandshakeAttempts);
+
   if (params.randomTrailers) out.push('RandomTrailers = on');
   if (params.disableCookies) out.push('DisableCookies = on');
 

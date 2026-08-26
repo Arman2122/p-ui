@@ -847,6 +847,21 @@ export function genWireguardLink(input: GenWireguardLinkInput): string {
   if (typeof settings.mtu === 'number' && settings.mtu > 0) {
     url.searchParams.set('mtu', String(settings.mtu));
   }
+  /*
+   * The three keys wireguardConfigFromLink reads back and this never wrote.
+   *
+   * That rebuilder picks `dns`, `presharedkey` and `keepalive` out of the link
+   * to reconstruct a .conf — so the frontend disagreed with ITSELF, not merely
+   * with the Go renderer. A config rebuilt from one of these links silently fell
+   * back to 1.1.1.1, no pre-shared key and no keepalive: a peer whose server
+   * requires a PSK cannot complete a handshake without it.
+   */
+  if (settings.dns) url.searchParams.set('dns', settings.dns);
+  if (peer.preSharedKey) url.searchParams.set('presharedkey', peer.preSharedKey);
+  if (typeof peer.keepAlive === 'number' && peer.keepAlive > 0) {
+    url.searchParams.set('keepalive', String(peer.keepAlive));
+  }
+
   /* So a config built from this link can still connect: the subscription page
      derives one from the link, not from the inbound. */
   for (const [key, value] of awgLinkParams((settings as { awg?: AwgParams }).awg)) {
