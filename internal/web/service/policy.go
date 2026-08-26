@@ -491,10 +491,14 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			had been seen. The two are complements: the verdict is the record, and
 			the actuator is what turns it into a consequence.
 
-			A client with no cap, or on a disabled inbound, still has nothing to
-			decide.
+			A client with no cap, or with no ENABLED inbound carrying it, still has
+			nothing to decide. Any enabled inbound, not hosted[0]: the cap is per
+			client (limit_ip is keyed by email alone), while hosted[0] is merely the
+			lowest-id local one. Disabling that inbound while the same client stayed
+			live on a second, enabled one skipped it entirely — the cap silently
+			stopped applying to a client who was still connecting.
 		*/
-		if limit <= 0 || !hosted[0].Enable {
+		if limit <= 0 || !slices.ContainsFunc(hosted, func(inbound *model.Inbound) bool { return inbound.Enable }) {
 			// Nothing to enforce: record what was seen so the panel can show it.
 			row.Ips = encodeClientIPs(observationsToEntries(observed))
 			if err := tx.Save(row).Error; err != nil {
@@ -758,8 +762,13 @@ local ones first and then by id.
 
 Every one of them, not the best one: a client can be attached to two cores and
 only one of them observed the addresses being banned, so the caller picks by
-attribution rather than by a sort order. The first entry is still the local,
-lowest-id inbound, which is the one whose enable flag governs the client here.
+attribution rather than by a sort order.
+
+The head of the list carries no authority. It used to be documented as "the
+one whose enable flag governs the client", and EvaluateIPLimits read it that
+way — which meant disabling the lowest-id inbound let a client on a second,
+enabled one out of its cap. The caller now asks whether ANY of them is
+enabled, because the cap is per client rather than per inbound.
 */
 func (s *InboundService) inboundsByEmail(emails []string) map[string][]*model.Inbound {
 	db := database.GetDB()

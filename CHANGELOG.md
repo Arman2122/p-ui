@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A per-client IP limit now applies wherever that client connects.** The cap
+  belongs to the client, but enforcement was decided by whichever of their
+  inbounds happened to have the lowest id. Disable that one while the same
+  client keeps connecting through another, and their cap silently stopped
+  applying — no ban, no record, no warning.
+  **What you will notice:** a client attached to several inbounds is now capped
+  as long as *any* of them is enabled. If you relied on disabling one inbound to
+  lift someone's cap, that no longer works — clear the limit on the client
+  instead.
+
 - **The login attempt limit now holds when attempts arrive at once.** The
   five-failure cap checked your budget, released its lock while the password was
   verified, and only counted the failure afterwards — so requests sent
