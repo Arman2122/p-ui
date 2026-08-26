@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A REALITY inbound with a pinned SNI now hands that SNI out.** When you name
+  one `serverName` under the REALITY settings rather than leaving the
+  `serverNames` list to speak, the panel's own link honoured it and all three
+  subscription formats did not — raw and JSON picked a random member of the list
+  on every fetch, Clash took the first. So the panel displayed one name and the
+  subscription handed out another, and a REALITY handshake offering the wrong
+  `serverName` is refused by the server.
+  **What you will notice:** if you pinned a `serverName`, every format now emits
+  it. If you did not, nothing changes — the list is still used exactly as before.
+
 - **The AmneziaWG config the panel hands out now carries every obfuscation
   setting.** The downloadable `.conf` left out H1-H4 and all six timer ranges —
   while the share link beside it, the subscription and the server itself all had
