@@ -1,6 +1,8 @@
 package database
 
 import (
+	"slices"
+
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -20,7 +22,32 @@ Nothing is imported that the compile could not realise, and nothing is imported
 that would change the meaning of what stays behind — which is why the walk stops
 at the first inexpressible rule rather than skipping past it.
 */
+// routingIntentSeeder is this migration's row in history_of_seeders. It is what
+// stops a one-time conversion running on every boot.
+const routingIntentSeeder = "RoutingIntent"
+
 func migrateRoutingIntent() error {
+	/*
+		Once, ever — recorded in the data, not inferred from the schema.
+
+		This had no gate at all and ran on every InitDB, so importTemplateRoutingRules
+		re-consumed the template's routing rules on every restart: an operator who had
+		since edited that template watched their rules converted and removed again.
+
+		The obvious alternative — gate on the unique constraint this function adds —
+		is wrong twice: addConstraintOnce commits OUTSIDE the transaction below, so a
+		failed conversion would latch the gate forever, and a data-only restore of a
+		pre-migration dump into an existing schema keeps the constraint and would skip
+		the conversion permanently.
+	*/
+	var history []string
+	if err := db.Model(&model.HistoryOfSeeders{}).Pluck("seeder_name", &history).Error; err != nil {
+		return err
+	}
+	if slices.Contains(history, routingIntentSeeder) {
+		return nil
+	}
+
 	migrator := db.Migrator()
 	if !migrator.HasTable(&model.RoutingRule{}) || !migrator.HasTable(&model.Egress{}) {
 		return nil
@@ -36,7 +63,12 @@ func migrateRoutingIntent() error {
 		if err := importTemplateRoutingRules(tx); err != nil {
 			return err
 		}
-		return dropUnattachedFronts(tx)
+		if err := dropUnattachedFronts(tx); err != nil {
+			return err
+		}
+		// Inside the transaction: a marker written outside it would survive a
+		// conversion that rolled back, and the migration would never run again.
+		return tx.Create(&model.HistoryOfSeeders{SeederName: routingIntentSeeder}).Error
 	})
 }
 

@@ -1225,13 +1225,24 @@ func initUser() error {
 }
 
 func runSeeders(isUsersEmpty bool) error {
-	empty, err := isTableEmpty("history_of_seeders")
-	if err != nil {
-		log.Printf("Error checking if users table is empty: %v", err)
+	/*
+		Counted excluding RoutingIntent, not with isTableEmpty.
+
+		initModels runs before this and now writes a RoutingIntent row, so on a
+		fresh install history_of_seeders is never empty by the time we get here. The
+		fast path below is what stops a NEW database running the legacy
+		template-mutating seeders against the current default template; losing it
+		would mean every fresh install rewrites its own shipped template.
+	*/
+	var priorSeeders int64
+	if err := db.Model(&model.HistoryOfSeeders{}).
+		Where("seeder_name <> ?", routingIntentSeeder).
+		Count(&priorSeeders).Error; err != nil {
+		log.Printf("Error counting seeder history: %v", err)
 		return err
 	}
 
-	if empty && isUsersEmpty {
+	if priorSeeders == 0 && isUsersEmpty {
 		seeders := []string{"UserPasswordHash", "ClientsTable", "InboundClientsArrayFix", "InboundClientTgIdFix2", "InboundClientSubIdFix", "FreedomFinalRulesReverseFix", "FreedomFinalRulesPrivateEgressBlock", "InboundRealityFinalmaskTcpStrip", "ApiTokensHash", "LegacyProxySettingsCleanup", "WireguardPeersToClients", "MtprotoSecretsToClients", "NodeInboundsAdopted", "ResetIpLimitNoFail2ban"}
 		for _, name := range seeders {
 			if err := db.Create(&model.HistoryOfSeeders{SeederName: name}).Error; err != nil {

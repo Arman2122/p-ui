@@ -8,6 +8,24 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The routing-rules migration runs once, not on every restart.** The one-time
+  conversion that turns template routing rules into panel rules had no record
+  that it had already run, so it re-consumed the template on every boot. If you
+  edited your Xray template afterwards, those edits were converted away and
+  removed — again, every time the panel came up.
+  **What you will notice:** your template stays as you left it. Panels that
+  already converted are unaffected; the marker is written the first time this
+  version starts.
+
+- **Back Up and Import DB work on a database that needs TLS options.** They
+  passed only `sslmode` to `pg_dump` / `pg_restore` and dropped everything else
+  in your connection string — so a managed PostgreSQL needing a CA bundle
+  (`sslrootcert`), a client certificate, a connect timeout or a session
+  attribute failed to back up on a panel that was otherwise connected and
+  healthy. The scheduled Telegram backup failed the same way.
+  **What you will notice:** backup and restore now use the same connection
+  parameters the panel itself connects with.
+
 - **Traffic that fails to save is now reported as a failure.** The traffic
   writer committed inside a deferred function and only logged a commit error —
   it could not return one, so a poll whose transaction rolled back was reported

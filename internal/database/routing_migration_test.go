@@ -2,6 +2,7 @@ package database
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -19,6 +20,13 @@ func seedTemplate(t *testing.T, rules []any) {
 	}
 	if err := db.Create(&setting).Error; err != nil {
 		t.Fatalf("seed template: %v", err)
+	}
+	// InitDB latches the one-time gate on this fresh schema before the test calls
+	// migrateRoutingIntent itself, so the marker has to go for the call to do
+	// anything. Without this every case here would silently assert nothing.
+	if err := db.Where("seeder_name = ?", routingIntentSeeder).
+		Delete(&model.HistoryOfSeeders{}).Error; err != nil {
+		t.Fatalf("clear the routing-intent gate: %v", err)
 	}
 }
 
@@ -216,5 +224,73 @@ func TestMigrationDropsAnUnattachedFront(t *testing.T) {
 	}
 	if left != 0 {
 		t.Fatal("an xray-tun row with no attachment routed nothing and must not survive")
+	}
+}
+
+/*
+The conversion runs once, ever.
+
+migrateRoutingIntent had no gate and ran on every InitDB, so
+importTemplateRoutingRules re-consumed the template's routing rules on every
+restart. An operator who edited that template afterwards watched their rules
+converted and removed again, every time the panel came up. F158.
+*/
+func TestRoutingIntentMigrationRunsOnlyOnce(t *testing.T) {
+	initTestDB(t)
+	seedRoutedInbound(t, "vless-in", 24601, model.VLESS, nil)
+	seedTemplate(t, []any{
+		map[string]any{"type": "field", "inboundTag": []any{"vless-in"}, "outboundTag": "direct"},
+	})
+
+	if err := migrateRoutingIntent(); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	var afterFirst int64
+	if err := db.Model(&model.RoutingRule{}).Count(&afterFirst).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if afterFirst == 0 {
+		t.Fatal("the first run converted nothing; this test would prove nothing about the second")
+	}
+
+	// The operator writes their own rule into the template afterwards. The gate
+	// stays latched, which is the state every restart is in.
+	seedTemplateWithoutClearingGate(t, []any{
+		map[string]any{"type": "field", "inboundTag": []any{"vless-in"}, "outboundTag": "blocked"},
+	})
+
+	if err := migrateRoutingIntent(); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	var afterSecond int64
+	if err := db.Model(&model.RoutingRule{}).Count(&afterSecond).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if afterSecond != afterFirst {
+		t.Fatalf("the migration ran again: rules went %d -> %d, consuming a template the operator had since edited", afterFirst, afterSecond)
+	}
+
+	var template model.Setting
+	if err := db.Where("key = ?", "xrayTemplateConfig").First(&template).Error; err != nil {
+		t.Fatalf("reload template: %v", err)
+	}
+	if !strings.Contains(template.Value, "blocked") {
+		t.Fatal("the operator's own template rule was consumed by a migration that had already run")
+	}
+}
+
+// seedTemplateWithoutClearingGate writes a template but leaves the one-time
+// marker in place, which is the state a restart is actually in.
+func seedTemplateWithoutClearingGate(t *testing.T, rules []any) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"routing": map[string]any{"rules": rules}})
+	if err != nil {
+		t.Fatalf("marshal template: %v", err)
+	}
+	if err := db.Where("key = ?", "xrayTemplateConfig").Delete(&model.Setting{}).Error; err != nil {
+		t.Fatalf("clear template: %v", err)
+	}
+	if err := db.Create(&model.Setting{Key: "xrayTemplateConfig", Value: string(body)}).Error; err != nil {
+		t.Fatalf("seed template: %v", err)
 	}
 }
