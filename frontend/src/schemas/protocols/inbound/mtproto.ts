@@ -11,7 +11,7 @@ export const MtprotoDomainFrontingSchema = z.object({
 export type MtprotoDomainFronting = z.infer<typeof MtprotoDomainFrontingSchema>;
 
 // An MTProto (Telegram) inbound client (multi-client model). Each client is one
-// named FakeTLS secret the mtg-multi sidecar serves through its [secrets]
+// named FakeTLS secret the mtg-proxy sidecar serves through its [secrets]
 // section; `secret` is the ee-prefixed FakeTLS secret whose trailing domain the
 // backend rebuilds on save. `fakeTlsDomain` is stored on the inbound as the
 // default domain used when generating a new client's secret.
@@ -36,7 +36,7 @@ export const MtprotoClientSchema = z.object({
 });
 export type MtprotoClient = z.infer<typeof MtprotoClientSchema>;
 
-// MTProto (Telegram) inbound. Served by an mtg-multi sidecar process, not Xray,
+// MTProto (Telegram) inbound. Served by an mtg-proxy sidecar process, not Xray,
 // so it has no stream settings. Each client carries its own FakeTLS secret and
 // is served on the shared inbound port. The remaining fields map to optional mtg
 // config knobs and are written to the generated mtg config only when set.

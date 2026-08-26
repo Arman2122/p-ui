@@ -833,7 +833,7 @@ present: `wireguard`, `l2tp_ppp`, `l2tp_netlink`, `ppp_mppe`, `gre`, `xfrm_user`
 | Core | apt (26.04) | Per-user accounting | Hot user add | Enforcement | Priority |
 |---|---|---|---|---|---|
 | **xray** | vendored | gRPC stats, monotonic | `AlterInbound` | RemoveUser | shipped |
-| **mtproto** (mtg-multi) | bundled binary | HTTP `/stats` | `PUT /secrets` | `[secret-limits]` | shipped |
+| **mtproto** (mtg-proxy) | bundled binary | HTTP `/stats` | `PUT /secrets` | `[secret-limits]` | shipped |
 | **wireguard / amnezia** | `wireguard-tools 1.0.2025` | `wg show transfer` (per-peer, monotonic) | `ConfigureDevice(ReplacePeers=false)` | remove peer | **1st** |
 | **ocserv** | `1.3.0` | `occtl -j show users` (RX/TX) | append to `ocpasswd`, immediate | `occtl disconnect user` | **2nd** |
 | **openvpn** | `2.7.0` | management `bytecount` / `status 3` | `--management-client-auth`, CCD | `client-kill` | **3rd** |
@@ -1699,7 +1699,7 @@ The build order, converged on independently by two roster passes:
    panel infrastructure — authenticator and accounting for ocserv, the accounting fold
    for accel-ppp, optional exact accounting for IKEv2.
 5. **PPP family last** — accel-ppp source-built and bundled (packaged in no archive the
-   panel supports; musl-static like mtg-multi); SSTP rides its `[sstp]` section, the only
+   panel supports; musl-static like mtg-proxy); SSTP rides its `[sstp]` section, the only
    live path anywhere; PPTP only behind a typed-confirmation gate, because MS-CHAPv2/MPPE
    is broken and captured traffic is decryptable.
 
@@ -1865,7 +1865,7 @@ Install(ctx, version) error
 Three properties are deliberate.
 
 **A core owns its release channel.** Xray's is `XTLS/Xray-core`, mtg's is
-`mhsanaei/mtg-multi`, and a future core's may be an apt repository or a vendor tarball. The
+`Arman2122/mtg-proxy`, and a future core's may be an apt repository or a vendor tarball. The
 panel asks *which versions* and *install this one*; it never learns where they come from. That
 is what keeps the GitHub client out of `ServerService` and stops core #11 adding a fourth
 copy.
@@ -1881,7 +1881,7 @@ core the admin has never used, and the UI has to render it rather than error.
 
 1. `xray` implements it by moving the existing `ServerService` logic behind the interface —
    behaviour-preserving, and `installXray/:version` keeps working by delegating.
-2. `mtproto` implements it against the `mtg-multi` releases the release workflow already
+2. `mtproto` implements it against the `mtg-proxy` releases the release workflow already
    consumes, which is the first time that binary becomes updatable at all.
 3. One pair of endpoints replaces the per-core one: `GET /panel/api/cores/:id/versions` and
    `POST /panel/api/cores/:id/install/:version`, with `Bound.Versions == nil` meaning the UI

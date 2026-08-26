@@ -1,4 +1,4 @@
-// Package mtproto adapts the mtg-multi engine to the core contract. It is the
+// Package mtproto adapts the mtg-proxy engine to the core contract. It is the
 // first core ported, so the contract was shaped to fit a real daemon.
 package mtproto
 

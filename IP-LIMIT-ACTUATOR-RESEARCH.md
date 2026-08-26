@@ -68,7 +68,7 @@ removing a kernel-WireGuard peer zeroes the byte counters the panel bills from. 
 `wgkernel`/`awgkernel` inbounds **the firewall ban is the only enforcement that exists**.
 
 And the cores cannot absorb it either. Researched, with sources: Xray-core has no per-user
-concurrent-connection or per-user source-IP limit in any current release; `mtg-multi`'s
+concurrent-connection or per-user source-IP limit in any current release; `mtg-proxy`'s
 `[throttle]` is global overload protection, not a device cap; kernel WireGuard keeps exactly
 one auto-roaming endpoint per peer with no concurrency limit. **"Bounce only" is dead on
 arrival.**

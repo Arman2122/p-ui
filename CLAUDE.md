@@ -11,7 +11,7 @@ file locations when it can answer in one hop.
 - Backend: Go 1.26 (`module github.com/Arman2122/p-ui`), Gin, GORM.
   Runs Xray-core as a managed child process (`internal/xray/process.go`) and
   imports `github.com/xtls/xray-core` for config types + gRPC stats/handler/router
-  API. MTProto inbounds run a second managed child — the `mtg-multi` binary
+  API. MTProto inbounds run a second managed child — the `mtg-proxy` binary
   (a multi-secret mtg fork — NOT a Go dependency; its prebuilt release binary is
   fetched at release build time by `release.yml`,
   panel-side code in `internal/mtproto/`) — outside Xray, one process per inbound
@@ -40,7 +40,7 @@ file locations when it can answer in one hop.
   Inbound, Client, Setting, User are the core), inbound Protocol enum,
   AutoMigrate + hand-written migrations in `db.go`.
 - `internal/xray/` — Xray child-process lifecycle, config generation, gRPC API.
-- `internal/mtproto/` — MTProto inbounds via the bundled `mtg-multi` binary.
+- `internal/mtproto/` — MTProto inbounds via the bundled `mtg-proxy` binary.
 - `internal/core/` — the multi-core contract: `Core` (3 methods) + optional
   capability interfaces in `caps.go`, resolved once by `bind.go` into `Bound`;
   `Counter` (the ONE cumulative→delta engine); `capability.go` (the ONE table

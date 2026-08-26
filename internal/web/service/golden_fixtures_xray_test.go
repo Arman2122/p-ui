@@ -31,7 +31,7 @@ import (
 // section. A fixture xray-core refuses is a config the panel would let an
 // admin save and then fail to start the core with, taking every inbound down.
 //
-// mtproto is excluded: it is served by the bundled mtg-multi sidecar, not by
+// mtproto is excluded: it is served by the bundled mtg-proxy sidecar, not by
 // xray, so xray-core has no config id for it.
 
 func goldenFixtureDir(t *testing.T, category string) string {
