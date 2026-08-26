@@ -769,3 +769,103 @@ forbids.
 overriding an obfs password is a different operator intent from a host
 overriding an address, and it is worth confirming the Hosts page means to offer
 it.
+
+---
+
+## L19 — `docs/lib/xray` is not a third renderer of the same thing
+
+**Found:** while building the share-link golden corpus.
+**Where:** `docs/lib/xray/links.ts`, and the framing in `CLAUDE.md` and
+`CAMPAIGN-CLOSE-2026-08-26.md` §"Cause 1".
+**Disposition: keep open** — a correction plus a second corpus tier, not a bug.
+
+Both documents say share links are generated three times: the frontend builder,
+the Go subscription renderer, and a copy in the docs site. The first two take an
+inbound row and derive every link parameter from it. The third does not.
+
+```
+buildVless(input)   // credential, address, port, params ALREADY FLATTENED, name
+buildTrojan(input)  // the same
+buildShadowsocks(input)
+buildVmess(obj)
+```
+
+`docs/lib/xray` is a **URL assembler**. It never sees `streamSettings`, so it
+cannot omit a field derived from one — which is the failure mode every one of
+Cause 1's fourteen findings had. A corpus keyed on inbound rows cannot drive it,
+and pretending otherwise would produce a harness that asserts nothing.
+
+**What it CAN be held to, and should be.** Given the same credential, address,
+port, parameter map and remark, all three must produce the same string: the same
+percent-encoding of the userinfo, the same bracketing of an IPv6 host, the same
+handling of an empty parameter, the same fragment encoding. That is exactly
+where F021 and F022 lived — Hysteria passwords interpolated raw so `/ # ? @`
+corrupted the URL.
+
+**Tier B, the encoding corpus.** Fixtures of `{scheme, credential, address,
+port, params, remark} -> expected string`, with three harnesses. Unlike Tier A
+this one CAN assert byte equality, because there is no derivation to disagree
+about. When it lands, `ci.yml` needs `docs/lib/xray/**` in both `paths:` lists —
+today a change there runs only `docs-ci.yml`, which does not know about the
+corpus.
+
+**Cost to close:** the fixtures are an hour; the docs harness is another, since
+`docs/` is a separate pnpm project with its own vitest. Worth doing before the
+next protocol lands, not urgent this week.
+
+---
+
+## L20 — the frontend link importer reads `uplinkChunkSize` as a number
+
+**Found:** while fixing F081, choosing types for the Go parser's key list.
+**Where:** `frontend/src/lib/xray/outbound-link-parser.ts`, `XHTTP_NUMBER_KEYS`.
+**Disposition: keep open** — small, and it is the frontend that is wrong.
+
+`uplinkChunkSize` is `Int32Range` in xray-core's conf struct, so it takes a
+range like `64-128` as readily as a bare number. The frontend importer coerces
+it with `Number(v) || 0`, which turns `64-128` into `0` — and 0 is not "unset"
+here, it is a value the normalizer then clamps.
+
+The Go parser now stores it as the string it arrived as, which `Int32Range`
+accepts either way. `scMaxEachPostBytes` and `scMinPostsIntervalMs` are the same
+type and the frontend already treats those as strings, so this is a
+one-key inconsistency inside one array rather than a design choice.
+
+**Cost to close:** move the key from `XHTTP_NUMBER_KEYS` to
+`XHTTP_STRING_KEYS`, plus a test importing a ranged value. Ten minutes. It was
+not folded into F081 because F081 is a Go-side finding and this is a separate
+importer with its own tests.
+
+---
+
+## L21 — a certificate pin is normalised for Hysteria and nowhere else
+
+**Found:** while confirming the wire type of `pcs` for F081.
+**Where:** `frontend/src/schemas/protocols/security/tls.ts` (and the host and
+external-proxy schemas), against `internal/sub/service.go` `hysteriaPinHex`.
+**Disposition: keep open** — Cause 2's shape, and the fix needs a decision about
+which layer owns the normalisation.
+
+xray-core parses `pinnedPeerCertSha256` as comma-separated **hex**, 32 bytes
+each, colons permitted. The panel stores `z.array(z.string())` with no format
+check at all. Most tooling prints a pin in base64, so pasting one is the natural
+mistake.
+
+For Hysteria the panel already forgives it: `hysteriaPinHex` accepts hex or any
+of four base64 alphabets and emits hex. Every other protocol passes the stored
+value through untouched, so the same paste that works on a Hysteria inbound
+produces a config xray refuses on a VLESS one.
+
+It is not silent — the `xray -test` pre-flight added this campaign (F335) fails
+the start with the core's own message — so this is a usability and consistency
+defect rather than an outage. But the panel offering a field, accepting a value,
+and then refusing to start is the pattern Cause 2 is about.
+
+**The decision:** normalise on save (one place, all protocols, and stored data
+becomes uniform) or validate on save and refuse (the operator learns the
+required format). Normalising is friendlier and matches what Hysteria already
+does; refusing is more honest about a field whose contents are security-relevant.
+
+**Cost to close:** small either way. `hysteriaPinHex` is the algorithm already
+written; what it needs is a home outside the Hysteria renderer and a schema-level
+check to match.

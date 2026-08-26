@@ -1,0 +1,48 @@
+{
+  "name": "awgkernel-full",
+  "why": "AmneziaWG with every obfuscation knob set. This family produced four of the renderer-disagreement findings on its own (F019, F020, F102, F269): the panel's own .conf described a weaker device than the link beside it, and a mismatched AmneziaWG pair never completes a handshake rather than degrading.",
+  "email": "golden",
+  "peerIndex": 0,
+  "inbound": {
+    "protocol": "awgkernel",
+    "listen": "203.0.113.12",
+    "port": 51820,
+    "remark": "golden-awg",
+    "settings": "{\"secretKey\":\"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=\",\"mtu\":1380,\"dns\":\"9.9.9.9,149.112.112.112\",\"clients\":[{\"email\":\"golden\",\"privateKey\":\"yMfGxcTDwsHAv769vLu6ubi3trW0s7KxsK+urakq\",\"allowedIPs\":[\"10.7.0.2/32\"],\"preSharedKey\":\"cHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHM=\",\"keepAlive\":25}],\"awg\":{\"jc\":4,\"jmin\":10,\"jmax\":50,\"s1\":15,\"s2\":16,\"s3\":17,\"s4\":18,\"h1\":\"10-19\",\"h2\":\"20-29\",\"h3\":\"30-39\",\"h4\":\"40-49\",\"headerProtectionKey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8=\",\"contentPaddingAddition\":\"5-9\",\"rekeyAfterTime\":\"120\",\"rekeyTimeout\":\"5\",\"rejectAfterTime\":\"180\",\"keepaliveTimeout\":\"25\",\"maxHandshakeAttempts\":\"18\"}}",
+    "streamSettings": "{}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "wireguard",
+    "userinfo": "yMfGxcTDwsHAv769vLu6ubi3trW0s7KxsK+urakq",
+    "host": "203.0.113.12",
+    "port": 51820,
+    "params": {
+      "publickey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9/AsrhtHHw=",
+      "address": "10.7.0.2/32",
+      "mtu": "1380",
+      "dns": "9.9.9.9,149.112.112.112",
+      "presharedkey": "cHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHM=",
+      "keepalive": "25",
+      "jc": "4",
+      "jmin": "10",
+      "jmax": "50",
+      "s1": "15",
+      "s2": "16",
+      "s3": "17",
+      "s4": "18",
+      "h1": "10-19",
+      "h2": "20-29",
+      "h3": "30-39",
+      "h4": "40-49",
+      "headerprotectionkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8=",
+      "contentpaddingaddition": "5-9",
+      "rekeyaftertime": "120",
+      "rekeytimeout": "5",
+      "rejectaftertime": "180",
+      "keepalivetimeout": "25",
+      "maxhandshakeattempts": "18"
+    }
+  },
+  "presentOnly": []
+}

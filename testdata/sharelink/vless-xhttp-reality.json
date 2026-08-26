@@ -1,0 +1,34 @@
+{
+  "name": "vless-xhttp-reality",
+  "why": "REALITY plus XHTTP. Carries the pinned serverName that two renderers ignored (F023) and the per-client spiderX, which is derived rather than stored and so is where a divergence in the derivation itself shows up.",
+  "email": "golden",
+  "inbound": {
+    "protocol": "vless",
+    "listen": "203.0.113.11",
+    "port": 8443,
+    "remark": "golden-reality",
+    "settings": "{\"clients\":[{\"id\":\"22222222-3333-4444-8555-666666666666\",\"email\":\"golden\",\"flow\":\"\"}],\"decryption\":\"none\",\"encryption\":\"none\"}",
+    "streamSettings": "{\"network\":\"xhttp\",\"security\":\"reality\",\"xhttpSettings\":{\"path\":\"/rx\",\"host\":\"x.golden.test\",\"mode\":\"auto\"},\"realitySettings\":{\"serverNames\":[\"decoy.golden.test\"],\"shortIds\":[\"ab12cd\"],\"settings\":{\"publicKey\":\"PBKGOLDEN\",\"fingerprint\":\"firefox\",\"serverName\":\"pinned.golden.test\",\"spiderX\":\"/seed\"}}}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "vless",
+    "userinfo": "22222222-3333-4444-8555-666666666666",
+    "host": "203.0.113.11",
+    "port": 8443,
+    "params": {
+      "type": "xhttp",
+      "security": "reality",
+      "path": "/rx",
+      "host": "x.golden.test",
+      "mode": "auto",
+      "sni": "pinned.golden.test",
+      "pbk": "PBKGOLDEN",
+      "sid": "ab12cd",
+      "fp": "firefox",
+      "spx": "/c68cc1313da0c25",
+      "encryption": "none"
+    }
+  },
+  "presentOnly": []
+}
