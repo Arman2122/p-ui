@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Flipping a client's enable switch no longer deletes its MTProto ad tag.**
+  The toggle rebuilt the whole client and sent it to the editor's endpoint,
+  where an absent ad tag means *clear it* — correct for the editor, where you
+  need to be able to clear one, and destructive for a switch that never carried
+  the value in the first place. One flip removed the tag from every inbound the
+  client was attached to, with nothing to undo it.
+  **What you will notice:** the switch keeps the ad tag. It also gets faster, as
+  it no longer fetches the whole client first. **Worth checking by hand:** an
+  MTProto client whose ad tag went missing after someone toggled it needs the
+  tag setting again — the panel has no record of what it was.
+
 - **A config that lost your routing rules is no longer deployed.** If the panel
   could not compile your rules — a database error, an exit that stopped
   resolving — it logged a warning and shipped the config anyway. That config is
