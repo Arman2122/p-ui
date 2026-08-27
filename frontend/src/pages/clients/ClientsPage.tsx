@@ -492,8 +492,11 @@ export default function ClientsPage() {
     setTogglingEmail(row.email);
     try {
       const msg = await setEnable(row, next);
-      if (!msg?.success) {
-        messageApi.error(msg?.msg || t('somethingWentWrong'));
+      /* This endpoint answers success:true with per-client failures inside obj,
+         so checking success alone would report a toggle that did nothing. */
+      const skipped = msg?.obj?.skipped ?? [];
+      if (!msg?.success || skipped.length > 0 || (msg?.obj?.changed ?? 0) === 0) {
+        messageApi.error(skipped[0]?.reason || msg?.msg || t('somethingWentWrong'));
       }
     } finally {
       setTogglingEmail(null);

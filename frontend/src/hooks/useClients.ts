@@ -593,33 +593,22 @@ export function useClients(options: UseClientsOptions = {}) {
     return Array.isArray(msg.obj) ? msg.obj : [];
   }, []);
 
-  const setEnable = useCallback(async (client: ClientRecord, enable: boolean) => {
-    if (!client?.email) return null;
-    const full = await hydrate(client.email);
-    const base = full?.client;
-    if (!base) return null;
-    const payload: Record<string, unknown> = {
-      email: base.email,
-      subId: base.subId,
-      id: base.uuid,
-      password: base.password,
-      auth: base.auth,
-      flow: base.flow || '',
-      security: base.security || 'auto',
-      totalGB: base.totalGB || 0,
-      expiryTime: base.expiryTime || 0,
-      limitIp: base.limitIp || 0,
-      tgId: Number(base.tgId) || 0,
-      reset: Number(base.reset) || 0,
-      group: base.group || '',
-      comment: base.comment || '',
-      enable: !!enable,
-    };
-    if (base.reverse?.tag) {
-      payload.reverse = { tag: base.reverse.tag };
-    }
-    return update(client.email, payload);
-  }, [hydrate, update]);
+  /* A flip of one switch goes through the field-level endpoint, not the editor's.
+
+     It used to rebuild a whole client payload and POST it to update, where an
+     absent adTag is read as "clear it" (client_crud.go:517) while an absent
+     secret is restored (:383). That asymmetry is right for the editor -- clearing
+     a tag has to be possible -- and wrong for a toggle: one flip hard-deleted an
+     MTProto client's ad tag on every inbound it was attached to.
+
+     Re-sending the tag is not the fix either. ClientRecord has no adTag column,
+     so the value is not on this row; and the credential map flattens every
+     inbound first-write-wins, so echoing it back would stamp one inbound's tag
+     onto the others -- a silent overwrite in place of a silent delete. F169. */
+  const setEnable = useCallback((client: ClientRecord, enable: boolean) => {
+    if (!client?.email) return Promise.resolve(null);
+    return bulkSetEnableMut.mutateAsync({ emails: [client.email], enable });
+  }, [bulkSetEnableMut]);
 
   // WS-driven in-place merges. Page wires these via useWebSocket; the bridge
   // covers coarse 'invalidate' and 'inbounds' events centrally.
