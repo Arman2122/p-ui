@@ -1722,13 +1722,7 @@ func applyExternalProxyTLSParams(ep map[string]any, params map[string]string, se
 // the pin is hex `pinSHA256`, not the `pcs` URL-param protocols use. F139.
 func applyExternalProxyHysteriaParams(ep map[string]any, params map[string]string) {
 	if pins, ok := externalProxyPins(ep["pinnedPeerCertSha256"]); ok {
-		hexPins := make([]string, 0, len(pins))
-		for _, p := range pins {
-			if s, ok := p.(string); ok {
-				hexPins = append(hexPins, link.NormalizePinHex(s))
-			}
-		}
-		params["pinSHA256"] = strings.Join(hexPins, ",")
+		params["pinSHA256"] = joinAnyStrings(pins)
 	}
 	if ai, ok := ep["allowInsecure"].(bool); ok && ai {
 		params["insecure"] = "1"
@@ -1916,16 +1910,18 @@ func externalProxyALPNList(value any) ([]any, bool) {
 }
 
 // externalProxyPins extracts an external-proxy entry's pinnedPeerCertSha256
-// as a []any of non-empty strings. The []any element type matches what the
-// JSON/Clash sub builders expect when reading the value back off the cloned
-// stream's tlsSettings.settings.
+// as a []any of non-empty strings, in the one form the core reads.
+//
+// Normalised HERE for the same reason pinnedSha256List does it: a pin crosses
+// into a link at four call sites, and doing it at each of them is how this
+// ended up hex for Hysteria and base64 everywhere else. Ledger L21.
 func externalProxyPins(value any) ([]any, bool) {
 	switch v := value.(type) {
 	case []string:
 		out := make([]any, 0, len(v))
 		for _, item := range v {
 			if item != "" {
-				out = append(out, item)
+				out = append(out, link.NormalizePinHex(item))
 			}
 		}
 		return out, len(out) > 0
@@ -1933,7 +1929,7 @@ func externalProxyPins(value any) ([]any, bool) {
 		out := make([]any, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok && s != "" {
-				out = append(out, s)
+				out = append(out, link.NormalizePinHex(s))
 			}
 		}
 		return out, len(out) > 0
