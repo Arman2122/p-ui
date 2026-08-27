@@ -2608,6 +2608,23 @@ pg_ensure_hba_password_auth() {
     sudo -u postgres psql -tAc 'SELECT pg_reload_conf()' > /dev/null 2>&1 || true
 }
 
+# Echoes the panel's stored DSN when it still authenticates as this role on this
+# database, empty otherwise. Rotating a password the running panel is holding is
+# an outage the operator only meets at the next restart.
+pg_stored_dsn_if_working() {
+    local want_user="$1" want_db="$2" dsn="" ident=""
+    command -v psql > /dev/null 2>&1 || return 0
+    [[ -r "${pui_env_file}" ]] || return 0
+    dsn="$(grep -E '^PUI_DB_DSN=' "${pui_env_file}" | head -1 | cut -d= -f2-)"
+    dsn="${dsn#[\"']}"
+    dsn="${dsn%[\"']}"
+    [[ -n "${dsn}" ]] || return 0
+    ident="$(PGCONNECT_TIMEOUT=5 psql "${dsn}" -tAc \
+        "SELECT current_user || '/' || current_database()" 2> /dev/null | tr -d '[:space:]')"
+    [[ "${ident}" == "${want_user}/${want_db}" ]] || return 0
+    echo "${dsn}"
+}
+
 # Installs a local PostgreSQL server and creates a dedicated pui user/database.
 # Progress goes to stderr; on success the connection DSN is printed to stdout so
 # callers can capture it. Mirrors install_postgres_local() from install.sh, so the
@@ -2638,18 +2655,36 @@ pg_install_local() {
         pg_user=$(gen_random_string 8)
     fi
 
-    sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${pg_user}'" 2> /dev/null \
-        | grep -q 1 \
-        || sudo -u postgres psql -c "CREATE USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
+    local role_existed="no"
+    if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${pg_user}'" 2> /dev/null | grep -q 1; then
+        role_existed="yes"
+    else
+        sudo -u postgres psql -c "CREATE USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
+    fi
 
     sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${pg_db}'" 2> /dev/null \
         | grep -q 1 \
         || sudo -u postgres psql -c "CREATE DATABASE \"${pg_db}\" OWNER \"${pg_user}\";" >&2 || return 1
 
-    sudo -u postgres psql -c "ALTER USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
+    # "Run setup anyway" promises idempotence, so a role this run did not create
+    # keeps the password the panel is already connecting with.
+    local keep_dsn=""
+    if [[ "${role_existed}" == "yes" ]]; then
+        keep_dsn=$(pg_stored_dsn_if_working "${pg_user}" "${pg_db}")
+    fi
+    if [[ -n "${keep_dsn}" ]]; then
+        LOGI "Role \"${pg_user}\" already exists and the panel's stored DSN authenticates with it; its password was left unchanged." >&2
+    else
+        sudo -u postgres psql -c "ALTER USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
+    fi
 
     pg_ensure_hba_password_auth "${pg_db}" \
         || echo -e "${yellow}Warning: could not update pg_hba.conf; PostgreSQL may reject the panel's TCP login (ident auth).${plain}" >&2
+
+    if [[ -n "${keep_dsn}" ]]; then
+        echo "${keep_dsn}"
+        return 0
+    fi
 
     local pg_pass_enc
     pg_pass_enc=$(printf '%s' "${pg_pass}" | sed -e 's/%/%25/g' -e 's/:/%3A/g' -e 's/@/%40/g' -e 's|/|%2F|g' -e 's/?/%3F/g' -e 's/#/%23/g')
@@ -2777,6 +2812,7 @@ pg_install_server_action() {
         pg_apply_dsn "$dsn"
     else
         echo -e "${yellow}Set PUI_DB_DSN in ${pui_env_file} yourself, then restart the panel.${plain}"
+        echo -e "${yellow}If this run set a new password for the database role, the panel keeps working on its open connections and fails at its NEXT restart until you do.${plain}"
     fi
 }
 

@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Re-running the PostgreSQL setup no longer changes the database password out
+  from under a working panel.** Menu option 25 -> 1 offers to "run setup anyway"
+  on a machine that already has PostgreSQL, describing itself as ensuring the
+  database and user exist. It also set a brand-new password on the role, before
+  asking whether to point the panel at the new connection string. Declining left
+  the panel running on connections it had already opened and unable to log in at
+  its next restart -- an outage that arrived hours later with no obvious cause.
+  **What you will notice:** when the role already exists and the panel is
+  connecting with it, the password is left alone and the run reports that.
+  Declining the prompt now also warns what declining costs if a password was set.
+
 - **A malformed client entry no longer stops the panel from upgrading.** If an
   inbound's stored settings held a `clients` entry that was not an object — a
   `null`, a bare string, a number, which a hand-edited row, a restored dump or a
