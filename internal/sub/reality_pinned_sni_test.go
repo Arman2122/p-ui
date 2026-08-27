@@ -17,6 +17,9 @@ raw and JSON at random on every fetch, Clash the first entry. The frontend's own
 builder has always preferred it, so the panel displayed one SNI while the
 subscription handed out another, and a REALITY handshake offering the wrong
 serverName is refused by the server. F023.
+
+The unpinned pick is no longer random either — every renderer now derives one
+member per client and holds it. Ledger L17.
 */
 
 const pinnedRealityStream = `{
@@ -69,16 +72,24 @@ func TestRawRealityLinkHonoursThePinnedServerName(t *testing.T) {
 	}
 }
 
-func TestRawRealityLinkStillSpreadsAcrossTheListWhenNothingIsPinned(t *testing.T) {
+func TestRawRealityLinkStillUsesTheListWhenNothingIsPinned(t *testing.T) {
 	s := &SubService{}
-	for range 20 {
+	first := ""
+	for i := range 20 {
 		link := s.genVlessLink(shareLinkInbound(unpinnedRealityStream), "user")
 		u, err := url.Parse(link)
 		if err != nil {
 			t.Fatalf("link does not parse: %v\n got: %s", err, link)
 		}
-		if got := u.Query().Get("sni"); !slices.Contains(realityDecoys, got) {
+		got := u.Query().Get("sni")
+		if !slices.Contains(realityDecoys, got) {
 			t.Fatalf("sni = %q, want a member of serverNames %v", got, realityDecoys)
+		}
+		// Twenty renders of one client's link, all identical. Ledger L17.
+		if i == 0 {
+			first = got
+		} else if got != first {
+			t.Fatalf("render %d gave sni %q after %q; the same client's link moved between fetches", i+1, got, first)
 		}
 	}
 }
@@ -99,15 +110,23 @@ func TestJsonRealityConfigStillUsesTheListWhenNothingIsPinned(t *testing.T) {
 }
 
 func TestClashRealityProxyHonoursThePinnedServerName(t *testing.T) {
-	out := (&SubClashService{}).realityData(realitySettingsMap(t, pinnedRealityStream))
+	out := (&SubClashService{}).realityData(realitySettingsMap(t, pinnedRealityStream), "clientKey")
 	if got, _ := out["serverName"].(string); got != "pinned.example.com" {
 		t.Fatalf("serverName = %q, want the pinned pinned.example.com", got)
 	}
 }
 
+// Clash was always deterministic here and still is, but the value is now the
+// client's own rather than index 0 — so it agrees with the raw and JSON links
+// that same client holds. Ledger L17.
 func TestClashRealityProxyStillUsesTheListWhenNothingIsPinned(t *testing.T) {
-	out := (&SubClashService{}).realityData(realitySettingsMap(t, unpinnedRealityStream))
-	if got, _ := out["serverName"].(string); got != "decoy-a.example.com" {
-		t.Fatalf("serverName = %q, want the first of serverNames; Clash has always been deterministic here", got)
+	out := (&SubClashService{}).realityData(realitySettingsMap(t, unpinnedRealityStream), "clientKey")
+	got, _ := out["serverName"].(string)
+	if !slices.Contains(realityDecoys, got) {
+		t.Fatalf("serverName = %q, want a member of serverNames %v", got, realityDecoys)
+	}
+	again := (&SubClashService{}).realityData(realitySettingsMap(t, unpinnedRealityStream), "clientKey")
+	if second, _ := again["serverName"].(string); second != got {
+		t.Fatalf("the same client got %q then %q; Clash has always been deterministic here", got, second)
 	}
 }

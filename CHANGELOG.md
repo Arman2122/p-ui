@@ -8,6 +8,24 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A REALITY client's `sni` and `sid` stop changing on every subscription
+  fetch.** With more than one `serverName` or `shortId` configured, the panel
+  drew a fresh random member on every render, so a client polling its
+  subscription got a different link each time with nothing on the server having
+  changed. Every link API did it — `/sub/`, `/json/`, and the three
+  `/panel/api/…/links` endpoints — and so did the panel's own QR and Export,
+  which re-rolled each time you opened them.
+  Each client now derives one member and keeps it, the way `spx` already did.
+  Different clients still land on different names, so a decoy domain that gets
+  blocked costs a fraction of your users rather than all of them.
+  **What you will notice:** **every REALITY link in circulation changes once.**
+  Nothing breaks — the new value is a member of the same list, and the server
+  accepts any member — but a saved QR code or a pasted link will no longer
+  match what the panel shows, and clients will pick up the new one on their next
+  fetch. If you want every client on one name instead, set
+  `realitySettings.settings.serverName`; that has always won over the list.
+  Inbounds with a single `serverName` and `shortId` are unaffected.
+
 - **A host's overrides no longer leak into the host rows after it.** On an
   inbound with more than one Host row, the Clash and JSON subscriptions gave
   every row the *first* row's path, Host header and REALITY SNI — whether or

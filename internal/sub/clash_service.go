@@ -146,7 +146,7 @@ func fallbackProxyName(proxy map[string]any, idx int) string {
 }
 
 func (s *SubClashService) getProxies(subReq *SubService, inbound *model.Inbound, client model.Client, host string) []map[string]any {
-	stream := s.streamData(inbound.StreamSettings)
+	stream := s.streamData(inbound.StreamSettings, subKey(client))
 	// Hysteria reads the stream unpruned (streamData flattens tlsSettings and
 	// drops allowInsecure), so the host merge has to be applied to both shapes.
 	var rawStream map[string]any
@@ -726,7 +726,7 @@ func (s *SubClashService) applySecurity(proxy map[string]any, security string, s
 	}
 }
 
-func (s *SubClashService) streamData(stream string) map[string]any {
+func (s *SubClashService) streamData(stream string, clientKey string) map[string]any {
 	var streamSettings map[string]any
 	_ = json.Unmarshal([]byte(stream), &streamSettings)
 	security, _ := streamSettings["security"].(string)
@@ -737,7 +737,7 @@ func (s *SubClashService) streamData(stream string) map[string]any {
 		}
 	case "reality":
 		if realitySettings, ok := streamSettings["realitySettings"].(map[string]any); ok {
-			streamSettings["realitySettings"] = s.realityData(realitySettings)
+			streamSettings["realitySettings"] = s.realityData(realitySettings, clientKey)
 		}
 	}
 	delete(streamSettings, "sockopt")
@@ -758,7 +758,7 @@ func (s *SubClashService) tlsData(tData map[string]any) map[string]any {
 	return tlsData
 }
 
-func (s *SubClashService) realityData(rData map[string]any) map[string]any {
+func (s *SubClashService) realityData(rData map[string]any, clientKey string) map[string]any {
 	rDataOut := make(map[string]any, 1)
 	realityClientSettings, _ := rData["settings"].(map[string]any)
 	if publicKey, ok := realityClientSettings["publicKey"].(string); ok {
@@ -770,10 +770,10 @@ func (s *SubClashService) realityData(rData map[string]any) map[string]any {
 	if pinned, _ := realityClientSettings["serverName"].(string); pinned != "" {
 		rDataOut["serverName"] = pinned
 	} else if serverNames, ok := rData["serverNames"].([]any); ok && len(serverNames) > 0 {
-		rDataOut["serverName"] = fmt.Sprint(serverNames[0])
+		rDataOut["serverName"] = fmt.Sprint(serverNames[deriveListIndex("sni", clientKey, len(serverNames))])
 	}
 	if shortIDs, ok := rData["shortIds"].([]any); ok && len(shortIDs) > 0 {
-		rDataOut["shortId"] = fmt.Sprint(shortIDs[0])
+		rDataOut["shortId"] = fmt.Sprint(shortIDs[deriveListIndex("sid", clientKey, len(shortIDs))])
 	}
 	return rDataOut
 }

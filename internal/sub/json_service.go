@@ -10,7 +10,6 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/json_util"
-	"github.com/Arman2122/p-ui/internal/util/random"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
@@ -358,7 +357,7 @@ func (s *SubJsonService) realityData(rData map[string]any, clientKey string) map
 	rltyData["spiderX"] = deriveSpiderX(seed, clientKey)
 	shortIds, ok := rData["shortIds"].([]any)
 	if ok && len(shortIds) > 0 {
-		rltyData["shortId"], _ = shortIds[random.Num(len(shortIds))].(string)
+		rltyData["shortId"], _ = shortIds[deriveListIndex("sid", clientKey, len(shortIds))].(string)
 	} else {
 		rltyData["shortId"] = ""
 	}
@@ -368,7 +367,7 @@ func (s *SubJsonService) realityData(rData map[string]any, clientKey string) map
 	if pinned, _ := rltyClientSettings["serverName"].(string); pinned != "" {
 		rltyData["serverName"] = pinned
 	} else if ok && len(serverNames) > 0 {
-		rltyData["serverName"], _ = serverNames[random.Num(len(serverNames))].(string)
+		rltyData["serverName"], _ = serverNames[deriveListIndex("sni", clientKey, len(serverNames))].(string)
 	} else {
 		rltyData["serverName"] = ""
 	}
