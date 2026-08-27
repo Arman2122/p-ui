@@ -1740,18 +1740,36 @@ func externalProxyAlpn(value any) string {
 // tlsSettings (and its nested settings map) deep-copied. The external
 // proxy loop mutates tlsSettings per iteration, so without isolating
 // those maps each proxy's SNI/fingerprint/ALPN would leak into the next.
+// cloneStreamForExternalProxy returns a stream one endpoint can be merged into
+// without reaching the next one. The merge writes DEEP -- a host's path into
+// wsSettings, its Host header into xhttpSettings, its SNI into realitySettings
+// -- so anything short of a deep copy shares the very maps it mutates.
 func cloneStreamForExternalProxy(stream map[string]any) map[string]any {
-	out := cloneMap(stream)
-	ts, ok := out["tlsSettings"].(map[string]any)
-	if !ok || ts == nil {
-		return out
+	if stream == nil {
+		return nil
 	}
-	clonedTs := cloneMap(ts)
-	if inner, ok := clonedTs["settings"].(map[string]any); ok && inner != nil {
-		clonedTs["settings"] = cloneMap(inner)
-	}
-	out["tlsSettings"] = clonedTs
+	out, _ := deepCloneJSON(stream).(map[string]any)
 	return out
+}
+
+// deepCloneJSON copies a decoded-JSON tree. Scalars are immutable and shared.
+func deepCloneJSON(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, inner := range v {
+			out[key] = deepCloneJSON(inner)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, inner := range v {
+			out[i] = deepCloneJSON(inner)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 func applyExternalProxyTLSToStream(ep map[string]any, stream map[string]any, security string) {
