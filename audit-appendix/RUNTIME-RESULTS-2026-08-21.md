@@ -1120,3 +1120,45 @@ nobody re-read it.
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.
+
+---
+
+## F340 — settled from source, now that the source is ours
+
+F340 was filed as the one question in the campaign that could not be answered
+statically: does the mtg sidecar's quota block cut a **live** connection, or
+only refuse new ones? The enforcing component was a prebuilt binary, so the
+finding named the limit rather than inventing a verdict — which was the right
+call at the time.
+
+The fork is ours now, so it is answerable, and the answer is in the code rather
+than in an experiment.
+
+**A quota overrun does not cut a live connection.** `Proxy.closeDeniedConns`
+(`mtglib/proxy.go:489-519`) walks every live stream and closes the ones whose
+secret is now denied, but skips the quota case explicitly:
+
+```go
+if allowed, reason := p.checkLimits(name, lim); allowed || reason == DenyQuota {
+    continue
+}
+```
+
+Only `DenyDisabled` and `DenyExpired` kill a live stream. `checkLimits`
+(`:468-482`) is also consulted at accept time, so a client past its quota gets
+no **new** connection — its existing ones run until they end on their own.
+
+**What that means for the panel.** When p-ui depletes an MTProto client, the
+sidecar stops it opening anything new immediately and lets whatever is already
+open finish. A client on one long-lived session can therefore keep transferring
+past its quota until that session drops.
+
+**Disposition: answered, not a defect.** The fork's own comment names it as a
+deliberate choice, consistent with how it treats the throttle: existing
+connections are never killed mid-flight. Whether p-ui wants a harder cut for
+MTProto is a product decision, and it now has a known lever — `Disabled` on the
+secret does cut live streams, and the panel already pushes that field.
+
+This closes the second of the two PLAUSIBLE items that were still open. The
+remaining one is F276 (pg_dump buffered whole in RAM), which stays open because
+fixing it changes an exported signature and that is the operator's call.
