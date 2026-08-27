@@ -1011,6 +1011,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 
 	// Defensively fix any Shadowsocks-2022 client PSK whose length doesn't match
 	// the inbound method (e.g. an API caller supplied a wrong-size key).
+	if err := refuseShortShadowsocksServerKey(inbound.Settings); err != nil {
+		return inbound, false, "", err
+	}
 	if normalized, changed := normalizeShadowsocksClientKeys(inbound.Settings); changed {
 		inbound.Settings = normalized
 	}
@@ -1508,6 +1511,11 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			}
 		}
 
+		// The server key is refused rather than re-minted: rotating it would
+		// invalidate every link already handed out. F329.
+		if err := refuseShortShadowsocksServerKey(inbound.Settings); err != nil {
+			return err
+		}
 		// A Shadowsocks-2022 method change resizes the key, but existing client PSKs
 		// keep their old length and would be rejected by xray. Regenerate mismatched
 		// client keys so the inbound stays connectable.
