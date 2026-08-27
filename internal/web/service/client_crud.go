@@ -91,9 +91,11 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	if client.SubID == "" {
 		client.SubID = uuid.NewString()
 	}
-	if !client.Enable {
-		client.Enable = true
-	}
+	// Enable is taken as given. It used to be forced on, which stored a client
+	// staged disabled as enabled -- and every caller already sets it, so the
+	// forcing served none of them and overrode three: the panel's own switch,
+	// an import of a client that was disabled when it was exported, and the
+	// bot's "submit disable" button. F046/F170.
 	now := time.Now().UnixMilli()
 	if client.CreatedAt == 0 {
 		client.CreatedAt = now

@@ -1200,9 +1200,9 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 		if client.SubID == "" {
 			client.SubID = uuid.NewString()
 		}
-		if !client.Enable {
-			client.Enable = true
-		}
+		// Enable is taken as given; see the note in Create. This is the import
+		// path too, so forcing it turned a client that was disabled when it was
+		// exported into an enabled one on the way back in. F046/F170.
 		now := time.Now().UnixMilli()
 		if client.CreatedAt == 0 {
 			client.CreatedAt = now
