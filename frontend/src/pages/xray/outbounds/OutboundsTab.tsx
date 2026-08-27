@@ -414,7 +414,7 @@ export default function OutboundsTab({
     setPreviewing(true);
     setPreviewData(null);
     try {
-      const r = await HttpUtil.post<{ tag?: string; protocol?: string }[]>('/panel/api/xray/outbound-subs/parse', { url: newSub.url, allowPrivate: newSub.allowPrivate });
+      const r = await HttpUtil.post<{ tag?: string; protocol?: string }[]>('/panel/api/xray/outbound-subs/parse', { url: newSub.url, allowPrivate: newSub.allowPrivate, allowInsecure: newSub.allowInsecure });
       if (r?.success && Array.isArray(r.obj)) {
         setPreviewData(r.obj);
         if (r.obj.length === 0) messageApi.info(t('pages.xray.outboundSub.previewEmpty'));

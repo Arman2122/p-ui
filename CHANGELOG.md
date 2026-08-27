@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A subscription id containing `#`, `?` or `%` is refused when you set it.**
+  The id becomes a path segment of the subscription URL, and those three break
+  it: `#` truncates the address to a fragment, `?` starts a query, and `%` opens
+  an escape the router decodes before looking the id up. A client with one got a
+  404 for a subscription that exists.
+  **What you will notice:** almost certainly nothing — generated ids are random
+  and nothing unprivileged sets one. If you have a client already holding such
+  an id, it stays editable and importable on purpose; only setting a *new* one
+  is refused, so you can still open that client and correct it. `&` and `+` are
+  still allowed: they are legal in a path segment and have always worked.
+
 - **An outbound subscription can no longer take a tag you already use.** The
   three sources of outbounds — your template, your subscriptions, and the ones
   the panel generates — were concatenated with no check that a tag appeared once.

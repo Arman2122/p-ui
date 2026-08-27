@@ -64,7 +64,7 @@ describe('a wireguard outbound imported from a link', () => {
         peers: [{ publicKey: 'cHVia2V5', psk: '', allowedIPs: '0.0.0.0/0', endpoint: 'vpn.example:51820', keepAlive: 0 }],
       },
     };
-    const payload = formValuesToWirePayload(values as Parameters<typeof formValuesToWirePayload>[0]);
+    const payload = formValuesToWirePayload(values as unknown as Parameters<typeof formValuesToWirePayload>[0]);
     /* Asserted on the SERIALISED payload, because that is what reaches the
        panel. A key whose value is undefined survives hasOwnProperty and is
        dropped by JSON.stringify, so only this says what the server receives. */
@@ -88,7 +88,7 @@ describe('a wireguard outbound imported from a link', () => {
         peers: [{ publicKey: 'cHVia2V5', psk: '', allowedIPs: '0.0.0.0/0', endpoint: 'vpn.example:51820', keepAlive: 0 }],
       },
     };
-    const payload = formValuesToWirePayload(values as Parameters<typeof formValuesToWirePayload>[0]);
+    const payload = formValuesToWirePayload(values as unknown as Parameters<typeof formValuesToWirePayload>[0]);
     const settings = JSON.parse(JSON.stringify(payload)).settings as Record<string, unknown>;
     expect(settings.address).toEqual(['10.7.0.2/32', 'fd00::2/128']);
   });
