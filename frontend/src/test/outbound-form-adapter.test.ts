@@ -590,3 +590,55 @@ describe('outbound-form-adapter: full optional-block round-trip', () => {
     expect(back.mux).toMatchObject({ enabled: true });
   });
 });
+
+/*
+proxySettings is the one standard OutboundDetourConfig key the form has no
+control for, and the adapter rebuilds the payload from scratch rather than
+spreading the raw row — so editing an outbound that carried one silently
+deleted it, and the chain it described stopped happening.
+
+Carried verbatim now, with one exception: the core refuses a config that sets
+both proxySettings.tag and sockopt.dialerProxy ("proxySettings.tag is
+conflicted with sockopt.dialerProxy", infra/conf/xray.go:229). dialerProxy is
+the key the form manages, so the carried one yields. A silent degradation is
+better than a hard preflight refusal with an opaque core error. F194.
+*/
+describe('proxySettings round trip', () => {
+  const base = {
+    protocol: 'vless',
+    tag: 'chained',
+    settings: { vnext: [{ address: 'a.example', port: 443, users: [{ id: 'u' }] }] },
+  };
+
+  it('survives an edit that touches nothing', () => {
+    const back = formValuesToWirePayload(rawOutboundToFormValues({
+      ...base,
+      proxySettings: { tag: 'upstream', transportLayer: true },
+    }));
+    expect(back.proxySettings).toEqual({ tag: 'upstream', transportLayer: true });
+  });
+
+  it('is dropped when the form sets a dialerProxy, which the core refuses alongside it', () => {
+    const back = formValuesToWirePayload(rawOutboundToFormValues({
+      ...base,
+      proxySettings: { tag: 'upstream' },
+      streamSettings: { network: 'tcp', sockopt: { dialerProxy: 'front' } },
+    }));
+    expect(back.proxySettings).toBeUndefined();
+    expect((back.streamSettings as Record<string, Record<string, unknown>>).sockopt.dialerProxy).toBe('front');
+  });
+
+  it('keeps a tagless proxySettings next to a dialerProxy, which the core allows', () => {
+    const back = formValuesToWirePayload(rawOutboundToFormValues({
+      ...base,
+      proxySettings: { transportLayer: true },
+      streamSettings: { network: 'tcp', sockopt: { dialerProxy: 'front' } },
+    }));
+    expect(back.proxySettings).toEqual({ transportLayer: true });
+  });
+
+  it('emits no key at all when the row never had one', () => {
+    const back = formValuesToWirePayload(rawOutboundToFormValues(base));
+    expect('proxySettings' in back).toBe(false);
+  });
+});
