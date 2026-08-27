@@ -1623,7 +1623,8 @@
         "presharedKeyHint": "Optional, only if the provider issued one.",
         "mtuHint": "Leave empty for the kernel's default of 1420.",
         "keepAlive": "Keepalive",
-        "keepAliveHint": "Seconds between keepalives, to hold the tunnel open through NAT. 25 is what providers suggest."
+        "keepAliveHint": "Seconds between keepalives, to hold the tunnel open through NAT. 25 is what providers suggest.",
+        "noEditableFields": "This kind of exit has no editable settings here. Its parameters come from the uplink or front it belongs to."
       },
       "balancerTagRequired": "Tag is required",
       "balancerSelectorRequired": "Pick at least one outbound",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Form, Input, Modal } from 'antd';
+import { Alert, Form, Input, Modal } from 'antd';
 import { FormProvider, useForm } from 'react-hook-form';
 
 import { FormField } from '@/components/form/rhf';
@@ -59,6 +59,10 @@ export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProp
       mask={{ closable: false }}
       width="520px"
       onOk={onOk}
+      /* Only wg-client has a field module. An xray-tun front or an awg-client
+         uplink rendered an empty form whose OK saved nothing and closed as if
+         it had worked. Refuse visibly instead. F196. */
+      okButtonProps={{ disabled: !module }}
       onCancel={() => { if (!submitting) onClose(); }}
       destroyOnHidden
     >
@@ -67,7 +71,9 @@ export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProp
           <FormField label={t('remark')} name="remark">
             <Input placeholder={t('pages.xray.egress.remarkPlaceholder')} />
           </FormField>
-          {module && <module.Fields />}
+          {module
+            ? <module.Fields />
+            : <Alert type="info" showIcon message={t('pages.xray.egress.noEditableFields')} />}
         </Form>
       </FormProvider>
     </Modal>

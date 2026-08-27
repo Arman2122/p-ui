@@ -8,6 +8,22 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Typing a subscription id into bulk-add no longer collapses the batch to one
+  client.** The id was stamped onto every client in the batch, and since the
+  panel refuses a duplicate subscription id, the first one claimed it and the
+  rest were skipped — asking for 50 clients produced 1. Leaving the field alone
+  always worked, which is why this went unnoticed.
+  **What you will notice:** a typed id is used when you are creating exactly one
+  client, and each client of a batch gets its own. The failure list you would
+  have seen before does not appear, because nothing fails now.
+
+- **Opening an exit the editor cannot edit now says so.** Only one kind of exit
+  has an edit form. Opening any other — a panel-owned front, or an AmneziaWG
+  uplink — showed an empty form whose OK saved nothing and closed as if it had
+  worked.
+  **What you will notice:** OK is disabled and the dialog explains that this
+  kind of exit takes its settings from the uplink or front it belongs to.
+
 - **A WireGuard client attached to two kernel-WireGuard inbounds can be edited
   again.** Each inbound gives such a client its own tunnel address and its own
   keypair, but the client row holds one of each, written by whichever inbound
