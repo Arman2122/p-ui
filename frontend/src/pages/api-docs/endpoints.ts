@@ -920,7 +920,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/clients/subLinks/:subId',
         summary:
-          'Return every protocol URL (vless://, vmess://, trojan://, ss://, hysteria://, hy2://) for clients matching the subscription ID. Same result set as /sub/<subId>, but as a JSON array — no base64. When an inbound has streamSettings.externalProxy set, one URL is emitted per external proxy. Empty array when the subId has no enabled clients.',
+          'Return every protocol URL (vless://, vmess://, trojan://, ss://, hysteria://, hy2://) for clients matching the subscription ID. Same result set as /sub/<subId>, but as a JSON array — no base64. When an inbound has streamSettings.externalProxy set, one URL is emitted per external proxy. Empty array when the subId matches no client on an enabled inbound. A disabled client is still listed — its credential is stripped from the running core, so the link cannot connect; use the {{STATUS}} remark token to label it.',
         params: [
           { name: 'subId', in: 'path', type: 'string', desc: "Subscription ID, taken from the client's subId field." },
         ],
@@ -1708,7 +1708,7 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/{subPath}:subid',
-        summary: 'Return base64-encoded subscription links for all enabled clients matching the subscription ID. When the request has an Accept: text/html header or ?html=1, renders a styled info page instead. With ?format=info, returns the page view-model as JSON (traffic, expiry, online status; no links) for live polling. Default path: /sub/:subid.',
+        summary: 'Return base64-encoded subscription links for every client matching the subscription ID on an enabled inbound. A disabled client is still listed — its credential is stripped from the running core, so the link cannot connect; use the {{STATUS}} remark token to label it. When the request has an Accept: text/html header or ?html=1, renders a styled info page instead. With ?format=info, returns the page view-model as JSON (traffic, expiry, online status; no links) for live polling. Default path: /sub/:subid.',
         params: [
           { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
           { name: 'format', in: 'query', type: 'string', optional: true, desc: 'Set to "info" to get the subscription status view-model as JSON instead of the links.' },
@@ -1717,7 +1717,7 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/{jsonPath}:subid',
-        summary: 'Return subscription as a JSON array of proxy configs (one per enabled client). Only when JSON subscription is enabled in settings. Default path: /json/:subid.',
+        summary: 'Return subscription as a JSON array of proxy configs, one per client on an enabled inbound (a disabled client is still listed, but cannot connect). Only when JSON subscription is enabled in settings. Default path: /json/:subid.',
         params: [
           { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
         ],
