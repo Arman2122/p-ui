@@ -106,7 +106,14 @@ func (s *InboundService) MigrationRequirements() {
 			newClients := make([]any, 0, len(clients))
 			hasVisionFlow := false
 			for client_index := range clients {
-				c := clients[client_index].(map[string]any)
+				// Dropped, and said out loud. Keeping it re-breaks the row for
+				// ParseInboundSettingsClients, which every client read goes through.
+				c, isObject := clients[client_index].(map[string]any)
+				if !isObject {
+					logger.Warningf("MigrationRequirements: inbound %d clients[%d] is %T, not an object; dropping it so the inbound's clients can be read at all",
+						inbounds[inbound_index].Id, client_index, clients[client_index])
+					continue
+				}
 
 				// Add email='' if it is not exists
 				if _, ok := c["email"]; !ok {

@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A malformed client entry no longer stops the panel from upgrading.** If an
+  inbound's stored settings held a `clients` entry that was not an object — a
+  `null`, a bare string, a number, which a hand-edited row, a restored dump or a
+  migration from another panel can all produce — `p-ui migrate` panicked. Both
+  `install.sh` and `update.sh` run that command and stop when it fails, so one
+  such row blocked the upgrade of a panel that was serving traffic.
+  **What you will notice:** the migration drops those entries and logs each one
+  with its inbound id and position. That inbound's client list also becomes
+  readable again — a non-object entry breaks every client read of the inbound,
+  so pages that were failing to load its clients start working.
+
 - **Typing a subscription id into bulk-add no longer collapses the batch to one
   client.** The id was stamped onto every client in the batch, and since the
   panel refuses a duplicate subscription id, the first one claimed it and the
