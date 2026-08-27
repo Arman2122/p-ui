@@ -1210,7 +1210,7 @@ whole of the enforcement.
 | core | a NEW connection | an ESTABLISHED session |
 |---|---|---|
 | Xray (every protocol) | refused | **keeps running** |
-| MTProto (mtg) | refused | **keeps running** |
+| MTProto (mtg) | refused | **stops immediately** |
 | kernel WireGuard | refused | **stops immediately** |
 
 **Xray.** `RemoveUser` is `RemoveReverse` plus `validator.Del`
@@ -1221,13 +1221,17 @@ API to close one user's connections — `RemoveUser` is the whole surface
 xray-core exposes — so the panel could only cut an established session by
 restarting the core, which would drop every other client on the box.
 
-**MTProto.** `closeDeniedConns` exists precisely so a change applied through the
-API takes effect immediately, and it does close live streams for Disabled and
-Expired. But it skips a name that is no longer in the set at all
-(`mtglib/proxy.go:526-529`, `if !ok { continue }`), and a panel-side revocation
-removes the secret rather than disabling it. So the one path the panel uses is
-the one path that does not disconnect. Unlike the Xray case this is fixable —
-see the fork note below.
+**MTProto.** A panel revocation removes the secret from the set, and
+`closeStaleConns` (`mtglib/proxy.go:456-487`) closes every live stream whose name
+is absent from the new set — it runs one line before `closeDeniedConns`, on the
+same set swap. So the session stops.
+
+*Corrected.* This entry first claimed the opposite, on `closeDeniedConns`'
+`if !ok { continue }` (`:526-529`) read in isolation. That skip is right: the
+sibling above it already owns removals, and `closeDeniedConns` handles only
+names still IN the set that are now denied. Reading one of a pair and concluding
+about the pair is the same mistake this campaign keeps finding in the audit's
+own explanations.
 
 **kernel WireGuard.** Removing a peer is enough: WireGuard authenticates every
 packet against a peer's key, so a mid-transfer session stops with the removal.
@@ -1238,6 +1242,6 @@ mid-transfer finishes that transfer, so a single long-lived download can
 overshoot its quota. On kernel WireGuard it cannot.
 
 **Disposition:** answered, and NOT a panel defect — the panel does the only
-thing its cores expose. The Xray half is an upstream limitation. The MTProto
-half is ours and is worth closing in the fork, where revocation and "disabled"
-should behave alike.
+thing its cores expose. Xray is the sole core that cannot cut an established
+session, and that is an upstream limitation: `RemoveUser` is the entire surface
+xray-core offers. Nothing to fix in the fork either; it already disconnects.
