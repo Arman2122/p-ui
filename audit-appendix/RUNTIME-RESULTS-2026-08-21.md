@@ -1192,3 +1192,52 @@ can move to the same temp file. Nothing structurally requires `[]byte`.
 a hung dump holds the request and its buffer indefinitely. Worth fixing with the
 streaming change rather than separately, since the right timeout depends on
 whether memory is bounded.
+
+---
+
+## F122 — answered from source, and the answer differs per core
+
+F122 was filed as unanswerable statically: does an established session actually
+stop when a client depletes its quota? It is answerable, the same way F340 turned
+out to be, because every enforcer is source we have.
+
+**Enforcement is a hot removal with no restart.** `disableInvalidClients`
+(`internal/web/service/inbound_disable.go:202-224`) calls `rt.RemoveUser` per
+target and sets `needRestart` **only on failure** — the success path leaves it
+false. So nothing tears the core down; whatever removal does by itself is the
+whole of the enforcement.
+
+| core | a NEW connection | an ESTABLISHED session |
+|---|---|---|
+| Xray (every protocol) | refused | **keeps running** |
+| MTProto (mtg) | refused | **keeps running** |
+| kernel WireGuard | refused | **stops immediately** |
+
+**Xray.** `RemoveUser` is `RemoveReverse` plus `validator.Del`
+(`proxy/vless/inbound/inbound.go:245-248`). The validator is consulted at
+**line 194 only**, inside the request decode; the relay below it is
+`buf.Copy` in both directions (`:491`, `:501`) and never asks again. There is no
+API to close one user's connections — `RemoveUser` is the whole surface
+xray-core exposes — so the panel could only cut an established session by
+restarting the core, which would drop every other client on the box.
+
+**MTProto.** `closeDeniedConns` exists precisely so a change applied through the
+API takes effect immediately, and it does close live streams for Disabled and
+Expired. But it skips a name that is no longer in the set at all
+(`mtglib/proxy.go:526-529`, `if !ok { continue }`), and a panel-side revocation
+removes the secret rather than disabling it. So the one path the panel uses is
+the one path that does not disconnect. Unlike the Xray case this is fixable —
+see the fork note below.
+
+**kernel WireGuard.** Removing a peer is enough: WireGuard authenticates every
+packet against a peer's key, so a mid-transfer session stops with the removal.
+
+**What an operator should take from this.** A depleted or revoked client opens
+nothing new immediately, on every core. On Xray and MTProto a client already
+mid-transfer finishes that transfer, so a single long-lived download can
+overshoot its quota. On kernel WireGuard it cannot.
+
+**Disposition:** answered, and NOT a panel defect — the panel does the only
+thing its cores expose. The Xray half is an upstream limitation. The MTProto
+half is ours and is worth closing in the fork, where revocation and "disabled"
+should behave alike.
