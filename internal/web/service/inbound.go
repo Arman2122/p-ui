@@ -432,7 +432,10 @@ func inboundMtprotoDomain(protocol string, settings string) string {
 func (s *InboundService) GetAllInbounds() ([]*model.Inbound, error) {
 	db := database.GetDB()
 	var inbounds []*model.Inbound
-	err := db.Model(model.Inbound{}).Preload("ClientStats").Find(&inbounds).Error
+	// Ordered like GetInbounds: without it the generated config's inbound array
+	// follows PostgreSQL's heap order, so an unrelated row update reshuffles an
+	// otherwise identical config. F230.
+	err := db.Model(model.Inbound{}).Preload("ClientStats").Order("id ASC").Find(&inbounds).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
