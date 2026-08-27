@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The client form now says when an Auto Renew period can never run.** Auto
+  Renew moves a client'''s expiry date forward -- so a client given a renew
+  period and no expiry date has nothing to renew. It is disabled the moment its
+  quota runs out and stays that way: nothing renews it, and the depleted-client
+  cleanup skips it too because that only removes clients with no renew period.
+  The form took the number without a word.
+  **What you will notice:** typing an Auto Renew value with no expiry date set
+  shows a note under the field explaining that it will not run. Nothing is
+  refused, and existing clients are untouched.
+
 - **The installer no longer reports HTTPS after a certificate failed to issue.**
   When Let'''s Encrypt could not issue for your domain or your IP, the installer
   printed the red failure line and then went on to print an `https://` access

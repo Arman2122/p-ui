@@ -118,6 +118,10 @@ export default function ClientBulkAddModal({
     [inbounds],
   );
 
+  const watchedReset = useWatch({ control: methods.control, name: 'reset' });
+  const watchedExpiry = useWatch({ control: methods.control, name: 'expiryTime' });
+  const renewWithoutExpiry = (Number(watchedReset) || 0) > 0 && (Number(watchedExpiry) || 0) === 0;
+
   const expiryDate = useMemo<Dayjs | null>(
     () => (expiryTime > 0 ? dayjs(expiryTime) : null),
     [expiryTime],
@@ -357,6 +361,7 @@ export default function ClientBulkAddModal({
               name="reset"
               label={t('pages.clients.renew')}
               tooltip={t('pages.clients.renewDesc')}
+              extra={renewWithoutExpiry ? t('pages.clients.renewNeedsExpiry') : undefined}
               transform={{ output: (v) => Number(v) || 0 }}
             >
               <InputNumber min={0} />

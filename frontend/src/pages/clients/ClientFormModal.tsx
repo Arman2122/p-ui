@@ -201,6 +201,8 @@ export default function ClientFormModal({
   const secret = useWatch({ control: methods.control, name: 'secret' });
   const email = useWatch({ control: methods.control, name: 'email' });
   const uuid = useWatch({ control: methods.control, name: 'uuid' });
+  const resetDays = useWatch({ control: methods.control, name: 'reset' });
+  const delayedDays = useWatch({ control: methods.control, name: 'delayedDays' });
   const password = useWatch({ control: methods.control, name: 'password' });
   const subId = useWatch({ control: methods.control, name: 'subId' });
   const auth = useWatch({ control: methods.control, name: 'auth' });
@@ -418,6 +420,10 @@ export default function ClientFormModal({
       })),
     [inbounds, inboundIds],
   );
+
+  const renewWithoutExpiry =
+    (Number(resetDays) || 0) > 0 &&
+    (delayedStart ? (Number(delayedDays) || 0) === 0 : (Number(expiryDate) || 0) === 0);
 
   const expiryDayjs = useMemo<Dayjs | null>(
     () => (expiryDate > 0 ? dayjs(expiryDate) : null),
@@ -728,6 +734,7 @@ export default function ClientFormModal({
                             name="reset"
                             label={t('pages.clients.renewDays')}
                             tooltip={t('pages.clients.renewDesc')}
+                            extra={renewWithoutExpiry ? t('pages.clients.renewNeedsExpiry') : undefined}
                             transform={{ output: (v) => Number(v) || 0 }}
                           >
                             <InputNumber min={0} style={{ width: '100%' }} />
