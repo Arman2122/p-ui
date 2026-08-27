@@ -797,8 +797,7 @@ on `sni`).
 
 **Found:** while fixing F138, reading what else the Hysteria fan-out skips.
 **Where:** `internal/sub/service.go` `genHysteriaLink`, the salamander block.
-**Disposition: keep open** — out of F138's size, and one shape of it is arguably
-correct.
+**Disposition: CLOSED** 2026-08-27, and the entry understated it — see the coda.
 
 The Hysteria generator does not use the unified endpoint builder, so
 `applyEndpointFinalMask` never runs for it — deliberately, because the `fm=`
@@ -820,6 +819,41 @@ forbids.
 overriding an obfs password is a different operator intent from a host
 overriding an address, and it is worth confirming the Hosts page means to offer
 it.
+
+---
+
+### Coda — closed, and it was not only the raw link
+
+**The open question answers itself.** The Hosts page ships a Final Mask tab with
+its own editor, and that editor's own comment reads "The masks are merged into
+this host's JSON stream" (`frontend/src/pages/hosts/json-forms/HostFinalMaskForm.tsx`).
+The intent is not in doubt.
+
+**Both renderers were wrong, not one.** Measured before the fix, on an inbound
+whose salamander password is `INBOUND-PW` with a host declaring `HOST-PW`:
+
+```
+raw    host A -> INBOUND-PW    host B -> INBOUND-PW
+clash  host A -> INBOUND-PW    host B -> INBOUND-PW
+```
+
+The raw generator never merged the host's mask at all, which is what this entry
+recorded. But Clash *did* merge it and still emitted the inbound's, because
+`mergeFinalMask` APPENDS a host's udp masks after the inbound's and both readers
+`break` on the first salamander in the list — which is always the inbound's. So
+the field was inert on every surface, and fixing only the merge would have
+changed nothing.
+
+**The rule that resolves it:** last match wins. Once the merge is an append,
+"the host's entry is later" is what "a host override wins" means, and it is what
+every other host override already does. One reader, `salamanderPassword`, now
+serves both renderers.
+
+**Observed and deliberately left:** `mergeFinalMask` treats `quicParams`
+base-wins (`if _, exists := merged[key]; !exists`), so a host's UDP hop range
+applies only when the inbound declares none. That is a different key with a
+different merge rule, it was not what this entry was about, and changing it
+would move F138's output as a side effect.
 
 ---
 
