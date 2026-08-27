@@ -404,6 +404,9 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 
 	prevSettings := oldInbound.Settings
 	oldInbound.Settings = string(newSettings)
+	// The inbound save path normalises mtproto secrets; the client save path is
+	// the second door into the same settings blob and skipped it. F172.
+	inboundSvc.normalizeMtprotoSecret(oldInbound)
 
 	needRestart := false
 
@@ -708,6 +711,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 
 	prevSettings := oldInbound.Settings
 	oldInbound.Settings = string(newSettings)
+	// The inbound save path normalises mtproto secrets; the client save path is
+	// the second door into the same settings blob and skipped it. F172.
+	inboundSvc.normalizeMtprotoSecret(oldInbound)
 
 	needRestart := false
 
