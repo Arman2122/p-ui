@@ -566,17 +566,18 @@ header, so one attacker rotates it without rotating anything else.
 
 The finding says a marked outbound whose fwmark rule was never installed
 egresses with the server's own address. Confirmed directly on the box with
-`ip route get`, which asks the kernel the same question the socket asks:
+`ip route get`, which asks the kernel the same question the socket asks. The
+host's own address is shown as 203.0.113.9 rather than the test box's real one:
 
 ```
 the server's own egress
-  1.1.1.1 via 172.31.1.1 dev eth0 src 91.107.151.123
+  1.1.1.1 via 172.31.1.1 dev eth0 src 203.0.113.9
 
 marked, with its rule installed  (a realisable uplink)
   1.1.1.1 dev puxprobe table 30099 src 10.77.99.1 mark 0x4d2
 
 the SAME marked packet, rule removed  (Fill failed, the manager zeroed it)
-  1.1.1.1 via 172.31.1.1 dev eth0 src 91.107.151.123 mark 0x4d2
+  1.1.1.1 via 172.31.1.1 dev eth0 src 203.0.113.9 mark 0x4d2
 ```
 
 The third line is the first line with a mark on it. A mark nothing matches does
