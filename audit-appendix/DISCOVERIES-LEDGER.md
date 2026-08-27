@@ -659,7 +659,8 @@ prefix set is derivable, unknown if it is not.
 
 **Found:** while gating F381, when the full suite failed at `600.302s`.
 **Where:** `internal/web/service`, the package as a whole.
-**Disposition: keep open** — a fragility, not a defect, and the fix is a choice.
+**Disposition: CLOSED** 2026-08-27, on the cheapest of the three shapes — and
+the choice was narrower than this entry made it look; see the coda.
 
 Measured on the VM against live PostgreSQL, `-skip 'Scale$'`:
 
@@ -696,6 +697,30 @@ between schema setup and test body has not been profiled, and the third option
 is only worth its risk if setup dominates.
 
 ---
+
+---
+
+### Coda — closed, and the repo had already made this decision once
+
+The three shapes below read as an open design question. They were not equally
+open: **this repo had already picked one and applied it in exactly one place.**
+`make race` carries `-timeout 30m`, and so does CI's race job, with a comment
+that states the reason in full — "Go's default is 10 minutes PER PACKAGE and the
+race-instrumented service suite sits right on it: a real hang still gets a stack
+dump, well before the job's own cap."
+
+The plain `go test` paths — `make test-go` and CI's `go-test` job — simply did
+not have the flag. That is not a third option, it is the same decision applied
+inconsistently, and the non-race suite is nearer the line than the race one
+because it has no 45-minute job cap above it.
+
+Both now carry `-timeout 30m`, citing the same reasoning. A real hang still
+produces a stack dump; a slow run no longer produces the same red as a bug,
+which was the actual complaint.
+
+**Left open deliberately:** splitting the package and sharing one schema per
+package are real improvements to a suite that will keep growing, and neither is
+forced by anything today. They stay unfixed rather than half-done.
 
 ## L17 — REALITY `sni` and `sid` are randomised per fetch in two of four renderers
 

@@ -46,8 +46,10 @@ typecheck: ## tsc --noEmit
 	cd $(FRONTEND) && npm run typecheck
 
 .PHONY: test-go
+# -timeout for the same reason `race` carries one: Go's default is 10 minutes
+# PER PACKAGE and internal/web/service already measures ~600s. Ledger L16.
 test-go: dist-stub ## Go tests (shuffle, no cache)
-	go test -shuffle=on -count=1 $(GO_PKGS)
+	go test -shuffle=on -count=1 -timeout 30m $(GO_PKGS)
 
 # The race detector is the one thing that still needs cgo, so this target opts
 # back in. It is a local-only tool; the PR gate (`verify`) does not run it.
