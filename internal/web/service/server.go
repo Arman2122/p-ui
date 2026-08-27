@@ -1239,11 +1239,16 @@ func (s *ServerService) GetXrayLogs(
 		Proxied
 	)
 
-	countInt, _ := strconv.Atoi(count)
-	var entries []LogEntry
+	// Same range GetLogs enforces on the same parameter. Without an upper bound the
+	// trim below can never fire, which is what let one modal open read the whole file.
+	countInt, err := strconv.Atoi(count)
+	if err != nil || countInt < 1 || countInt > 10000 {
+		return nil
+	}
+	entries := make([]LogEntry, 0, countInt)
 
-	pathToAccessLog, err := xray.GetAccessLogPath()
-	if err != nil {
+	pathToAccessLog, pathErr := xray.GetAccessLogPath()
+	if pathErr != nil {
 		return nil
 	}
 
@@ -1288,6 +1293,11 @@ func (s *ServerService) GetXrayLogs(
 		}
 
 		entries = append(entries, entry)
+		// Only the newest countInt survive, so the peak is the requested page
+		// rather than the file. Compacting at 2x keeps the copying amortised.
+		if len(entries) >= 2*countInt {
+			entries = append(entries[:0], entries[countInt:]...)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
