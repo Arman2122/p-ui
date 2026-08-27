@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A fallback child on a unix socket gets its master's address again.** An
+  inbound listening on an `@abstract-socket` has no address a client can reach,
+  so the subscription substitutes the address of the inbound that fronts it.
+  For a configuration written before the panel had a fallbacks table, that
+  lookup searched the stored settings — using SQL that only SQLite understands,
+  on a panel that only runs PostgreSQL. It failed on every call and the error
+  was discarded, so those clients were handed `@socket` as their server address.
+  **What you will notice:** nothing, unless you have an inbound listening on a
+  unix socket that is fronted through another inbound's stored `fallbacks`
+  rather than through the Fallbacks card. Those links start working. The lookup
+  now logs when it fails for any reason other than finding nothing.
+
 - **A Shadowsocks-2022 inbound whose server key is too short for its method is
   refused when you save it.** The key size is fixed by the method — 16 bytes for
   `aes-128-gcm`, 32 for `aes-256-gcm` and `chacha20-poly1305` — so switching an

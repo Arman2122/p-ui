@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-json"
+	"gorm.io/gorm"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
@@ -582,12 +584,21 @@ func (s *SubService) projectThroughFallbackMaster(inbound *model.Inbound) bool {
 	}
 
 	if master == nil && len(inbound.Listen) > 0 && inbound.Listen[0] == '@' {
+		// jsonb, not SQLite's JSON_TYPE/json_each/json_extract: this is a
+		// PostgreSQL-only codebase and the SQLite form errored on every call,
+		// silently, because the error was compared to nil and dropped. F127.
 		var m model.Inbound
-		if err := db.Model(model.Inbound{}).
-			Where("JSON_TYPE(settings, '$.fallbacks') = 'array'").
-			Where("EXISTS (SELECT * FROM json_each(settings, '$.fallbacks') WHERE json_extract(value, '$.dest') = ?)", inbound.Listen).
-			First(&m).Error; err == nil {
+		err := db.Model(model.Inbound{}).
+			Where("jsonb_typeof(settings::jsonb -> 'fallbacks') = 'array'").
+			Where("EXISTS (SELECT 1 FROM jsonb_array_elements(settings::jsonb -> 'fallbacks') AS f(value) WHERE f.value ->> 'dest' = ?)", inbound.Listen).
+			First(&m).Error
+		switch {
+		case err == nil:
 			master = &m
+		case !errors.Is(err, gorm.ErrRecordNotFound):
+			// Not finding a master is the ordinary case; anything else is the
+			// class of failure that hid this bug for as long as it existed.
+			logger.Warning("SubService - fallback master lookup for", inbound.Listen, ":", err)
 		}
 	}
 
