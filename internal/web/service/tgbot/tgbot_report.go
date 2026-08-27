@@ -2,6 +2,7 @@ package tgbot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -439,22 +440,37 @@ func (t *Tgbot) sendBackupData(chatId int64, dbData []byte, dbFilename string) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Send config.json backup
-	file, err := os.Open(xray.GetConfigPath())
+	var running *xray.Config
+	if proc := service.XrayProcess(); proc != nil && proc.IsRunning() {
+		running = proc.GetConfig()
+	}
+	configData, err := configBackup(running, xray.GetConfigPath())
 	if err == nil {
-		defer file.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		document := tu.Document(
 			tu.ID(chatId),
-			tu.File(file),
+			tu.FileFromBytes(configData, "config.json"),
 		)
 		_, err = bot.SendDocument(ctx, document)
 		if err != nil {
 			logger.Error("Error in uploading config.json: ", err)
 		}
 	} else {
-		logger.Error("Error in opening config.json file for backup: ", err)
+		logger.Error("Error in building config.json backup: ", err)
 	}
+}
+
+// configBackup renders the config.json to ship. The on-disk file is rewritten
+// only when the core starts, so after a hot apply it no longer describes what
+// is running; the process's own snapshot does. Disk is the fallback.
+func configBackup(running *xray.Config, diskPath string) ([]byte, error) {
+	if running != nil {
+		// Same call Process.Start uses to write the file, so a running backup
+		// is byte-identical to a restarted one.
+		return json.MarshalIndent(running, "", "  ")
+	}
+	return os.ReadFile(diskPath)
 }
 
 // sendBanLogs sends the ban logs to the specified chat.
