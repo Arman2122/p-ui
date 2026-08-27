@@ -25,8 +25,10 @@ crosses into a link at four sites, and normalising at each of them is how the
 divergence happened.
 */
 
-const hostPinBase64 = "yEfdI5XQl4wHgLggHEsomosoFZfUfCdfLXfT+W2N6cQ="
-const hostPinHex = "c847dd2395d0978c0780b8201c4b289a8b281597d47c275f2d77d3f96d8de9c4"
+const (
+	hostPinBase64 = "yEfdI5XQl4wHgLggHEsomosoFZfUfCdfLXfT+W2N6cQ="
+	hostPinHex    = "c847dd2395d0978c0780b8201c4b289a8b281597d47c275f2d77d3f96d8de9c4"
+)
 
 func hostPinInbound(proto model.Protocol, settings, stream string) *model.Inbound {
 	return &model.Inbound{

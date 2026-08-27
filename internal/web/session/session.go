@@ -24,11 +24,27 @@ func init() {
 	gob.Register(model.User{})
 }
 
+/*
+SetLoginUser marks the session authenticated, and mints a new CSRF token doing it.
+
+The store is a cookie store, so there is no session id to regenerate and classic
+session fixation does not apply -- Save re-signs the whole cookie, and a value an
+attacker planted before login carries no user id afterwards. The CSRF token is
+the one thing that does survive: it is issued to anonymous visitors on demand,
+and carrying it into the authenticated session lets whoever planted it forge
+this admin's requests. Rotated here, before the one Save, so it stays a single
+cookie write. F209.
+*/
 func SetLoginUser(c *gin.Context, user *model.User) error {
 	if user == nil {
 		return nil
 	}
 	s := sessions.Default(c)
+	token, err := newCSRFToken()
+	if err != nil {
+		return err
+	}
+	s.Set(csrfTokenKey, token)
 	s.Set(loginUserKey, user.Id)
 	s.Set(loginEpochKey, user.LoginEpoch)
 	return s.Save()
