@@ -1174,12 +1174,6 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", "quic"))
 }
 
-// hysteriaHopPortsForEndpoint resolves the hop range for one Host row the way
-// the JSON renderer merges finalmask, so the two formats cannot disagree. F138.
-func hysteriaHopPortsForEndpoint(stream, ep map[string]any) string {
-	return hysteriaHopPorts(endpointFinalMaskStream(stream, ep))
-}
-
 // endpointFinalMaskStream returns the stream one endpoint reads its masks from:
 // the inbound's, with that endpoint's own Final Mask merged in. The Hosts page
 // offers the field precisely so a host can carry its own.
