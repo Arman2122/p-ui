@@ -15,12 +15,12 @@ that way does not carry traffic.
 Omission is the fix, not emptiness. xray-core picks its own bogon when the key
 is ABSENT:
 
-    // infra/conf/wireguard.go:80
-    if c.Address == nil {
-        config.Endpoint = []string{"10.0.0.1", "fd59:...:0001"}
-    } else {
-        config.Endpoint = c.Address
-    }
+	// infra/conf/wireguard.go:80
+	if c.Address == nil {
+	    config.Endpoint = []string{"10.0.0.1", "fd59:...:0001"}
+	} else {
+	    config.Endpoint = c.Address
+	}
 
 A JSON `[]` unmarshals to a non-nil empty slice, so emitting one takes the else
 branch and leaves the outbound with no endpoint at all — worse than the invented

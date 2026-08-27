@@ -254,7 +254,6 @@ func headersDoNotOverlapAfterClearing(p Params) error {
 	return nil
 }
 
-
 // DeviceMTU answers the interface MTU a device with these parameters needs. The
 // arithmetic lives in internal/wireguard, which this package already imports.
 func (p Params) DeviceMTU(configured int) int {
