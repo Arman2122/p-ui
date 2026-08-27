@@ -112,7 +112,12 @@ func run(root, outDir string) error {
 				"RoutingExitView",
 				"RoutingSubject",
 				"RoutingSubjectView",
+				"RuleView",
 			),
+		},
+		{
+			Path:        resolveRel(root, "internal/routing"),
+			StructAllow: setOf("Diag"),
 		},
 		{
 			Path:        resolveRel(root, "internal/web/service/panel"),

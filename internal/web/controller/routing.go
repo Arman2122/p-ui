@@ -39,7 +39,7 @@ func (a *RoutingController) initRouter(g *gin.RouterGroup) {
 }
 
 func (a *RoutingController) rules(c *gin.Context) {
-	rules, err := a.routingService.Rules()
+	rules, err := a.routingService.RuleViews()
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

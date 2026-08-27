@@ -251,7 +251,7 @@ keys it fails.
 
 ## L8 — nothing reads the compiler's diagnostics at generate time
 
-**Decided 2026-08-26, not yet built.** The surface is **a status field on the
+**BUILT 2026-08-27.** The surface is **a status field on the
 existing routing list response** — the smallest of the three options, and truth
 on a page the operator already reads. No new endpoint. `KeyNoFront`'s held
 translation ships with it, which is when it stops being a string with no reader.
@@ -294,6 +294,34 @@ routing list response, so the Routing page can mark a stored rule inert without
 a new endpoint. Not costed further, because the choice comes first.
 
 ---
+
+---
+
+### Coda — built, and the shape held
+
+`GET /panel/api/routing/rules` now answers `RuleView` rather than the bare model:
+the rule's own fields, flat and unchanged, plus a `diags` array when the LAST
+generate could not realise it. The key is **omitted** for a realised rule rather
+than sent empty, which is what lets the frontend schema be a plain optional with
+no null handling.
+
+The snapshot lives in `internal/web/service/routing_health.go` and is rebuilt on
+every generate, including an empty one — a rule that came back is as much news as
+one that went inert. It is deliberately not persisted: it describes the running
+config, so losing it on restart is correct, because a restart regenerates.
+
+**`KeyNoFront` ships its string, in both locales, in the same commit** — which is
+the condition this entry set for it, and the reason it was held back from the
+other six. It also gained the `subject` arg its siblings all carry; it was the
+only refusal that named nothing.
+
+**One thing the build turned up.** `RuleView` embedded `*model.RoutingRule` at
+first, and openapigen documented the response as a nested `routingRule` object —
+a schema describing a shape the wire does not have. `flattenEmbedded`
+(`tools/openapigen/schema.go:174`) promotes an embedded struct's fields only for
+a VALUE embed. Embedding by value uses the mechanism that already existed rather
+than teaching the generator a second one; a test pins the flat shape and the
+omitted key, and both halves were proved red.
 
 ## L9 — a boolean that defaults to true cannot be created false
 

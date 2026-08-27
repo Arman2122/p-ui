@@ -284,12 +284,15 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config) error {
 		return err
 	}
 	/*
-		A floor, not a surface: nothing reads Diags at generate time, so a rule the
-		compiler drops here is otherwise invisible. Saving one is refused (F049) —
-		these are the ones that went inert afterwards, when an inbound or an exit
-		changed under them. L8 owns finding them a real home.
+		Saving a rule the compiler would drop is refused (F049); these are the ones
+		that went inert AFTERWARDS, when an inbound or an exit changed under them.
+		The log line is the floor. The snapshot is the surface: the rules list the
+		Routing page polls serves it, because generation happens on restart and has
+		no response of its own to attach a warning to. Ledger L8.
 	*/
-	for _, diag := range compiled.Refusals() {
+	refusals := compiled.Refusals()
+	recordRoutingRefusals(refusals)
+	for _, diag := range refusals {
 		logger.Warningf("routing: rule %d is inert for %s: %s %v",
 			diag.RuleID, diag.SubjectTag, diag.MessageKey, diag.Args)
 	}

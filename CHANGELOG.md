@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A routing rule that stopped working now says so on the Routing page.** Saving
+  a rule the router cannot realise has been refused for a while, but a rule that
+  was fine when you saved it can go inert later — the inbound it names gets
+  disabled, its exit stops resolving, the Xray template changes under it. Those
+  arrive after the only check that existed, and the only trace was a log line.
+  A rule in that state now carries a warning beside its switch, with the reason,
+  in your language. The rule is still switched on; it is simply not being
+  applied, and those are two different facts.
+  **What you will notice:** a warning triangle on affected rules. It appears
+  after the first config generation following a restart, and clears by itself
+  when the rule becomes realisable again.
+
 - **A Host's Final Mask can now set its own Hysteria2 obfuscation password.**
   The Hosts page has always offered the field and told you it saved, but every
   link kept the inbound's password: the raw generator never looked at a host's

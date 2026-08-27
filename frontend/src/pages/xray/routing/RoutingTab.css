@@ -239,3 +239,16 @@
   opacity: 0.5;
   filter: grayscale(1);
 }
+
+/* The inert marker sits beside the enable switch: a rule can be switched on and
+   still not be realised, and those are two different facts. */
+.rule-enable-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rule-inert-warning {
+  color: var(--ant-color-warning, #faad14);
+  cursor: help;
+}
