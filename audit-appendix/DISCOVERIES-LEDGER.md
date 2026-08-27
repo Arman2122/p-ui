@@ -131,6 +131,19 @@ failure — so it should be corrected by the change that acts on it.
 
 ---
 
+### Coda — closed 2026-08-24, and this entry did not notice
+
+`7e5a8849` ("repair the rules an outbound left behind") rewrote the comment as
+part of the work that acts on it, which is exactly what this entry asked for.
+It now reads: the pinned core "logs 'non existing outTag', closes the writer and
+interrupts the reader, under a DO NOT CHANGE comment."
+
+So the substance was done three days before the entry was re-read, and only the
+record was stale. Noted rather than quietly deleted: an entry that says a thing
+is open when it is not costs the next reader the same minutes it cost this one.
+
+---
+
 ## L5 — two staticcheck deprecations
 
 **Found:** during the lint reconciliation.
