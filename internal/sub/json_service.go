@@ -190,27 +190,7 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			inbound.Port = int(port)
 		}
 		newStream := cloneStreamForExternalProxy(stream)
-		forceTls, _ := extPrxy["forceTls"].(string)
-		switch forceTls {
-		case "tls":
-			if newStream["security"] != "tls" {
-				newStream["security"] = "tls"
-				newStream["tlsSettings"] = map[string]any{}
-			}
-		case "none":
-			if newStream["security"] != "none" {
-				newStream["security"] = "none"
-				delete(newStream, "tlsSettings")
-				// Beside its sibling, as the Clash renderer already does: a host
-				// forcing plaintext leaves no security block behind. F148.
-				delete(newStream, "realitySettings")
-			}
-		}
-		security, _ := newStream["security"].(string)
-		if hasExternalProxy {
-			applyExternalProxyTLSToStream(extPrxy, newStream, security)
-		}
-		applyHostStreamOverrides(extPrxy, newStream)
+		applyEndpointToStream(extPrxy, newStream, hasExternalProxy)
 		streamSettings, _ := json.MarshalIndent(newStream, "", "  ")
 		hostMux := hostMuxOverride(extPrxy)
 
@@ -226,7 +206,10 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 			// over from a transport Vision supported produces an outbound
 			// xray refuses to start.
 			newNetwork, _ := newStream["network"].(string)
-			if vc.Flow != "" && !tlsFlowAllowed(inbound.Protocol, newNetwork, security, subReq.linkSettings(inbound)) {
+			// Read after the merge, which is where forceTls has already landed --
+			// the same point the old inline block captured it.
+			newSecurity, _ := newStream["security"].(string)
+			if vc.Flow != "" && !tlsFlowAllowed(inbound.Protocol, newNetwork, newSecurity, subReq.linkSettings(inbound)) {
 				vc.Flow = ""
 			}
 			newOutbounds = append(newOutbounds, s.genVless(subReq, inbound, streamSettings, vc, jsonMux(mux, hostMux)))
