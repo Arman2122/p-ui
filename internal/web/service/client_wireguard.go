@@ -305,7 +305,7 @@ func allocateWireguardAddress(used []string, base string, blocked []netip.Prefix
 			// The widened scope reaches past this inbound's own subnet, so an address
 			// another host device already answers for has to be stepped over.
 			if _, ok := taken[addr]; !ok && !insideAny(addr, blocked) {
-				return addr.String() + "/32", nil
+				return netip.PrefixFrom(addr, addr.BitLen()).String(), nil
 			}
 			addr = addr.Next()
 		}
