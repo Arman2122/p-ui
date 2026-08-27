@@ -269,7 +269,9 @@ export function normalizeXhttpForWire(
 
   dropEmptyStrings(out, PLACEMENT_STRING_FIELDS);
   // Empty tuning fields mean "use xray-core's default" — never emit them.
-  dropEmptyStrings(out, ['scMaxEachPostBytes', 'scMinPostsIntervalMs', 'scStreamUpServerSecs']);
+  dropEmptyStrings(out, [
+    'scMaxEachPostBytes', 'scMinPostsIntervalMs', 'scStreamUpServerSecs', 'uplinkChunkSize',
+  ]);
 
   if (!hasMeaningfulHeaders(out.headers)) {
     delete out.headers;
@@ -288,7 +290,6 @@ export function normalizeXhttpForWire(
   if (out.noGRPCHeader !== true) delete out.noGRPCHeader;
   if (out.noSSEHeader !== true) delete out.noSSEHeader;
   if (out.serverMaxHeaderBytes === 0) delete out.serverMaxHeaderBytes;
-  if (out.uplinkChunkSize === 0) delete out.uplinkChunkSize;
 
   if (mode === 'stream-one') {
     for (const key of PACKET_UP_FIELDS) delete out[key];

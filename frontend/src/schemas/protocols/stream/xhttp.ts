@@ -118,6 +118,11 @@ function migrateLegacyXhttp(v: unknown): unknown {
   }
   delete o.sessionPlacement;
   delete o.sessionKey;
+  // uplinkChunkSize was modelled as a number here while xray-core reads it as
+  // an Int32Range, so a stored row can hold either. Ledger L20.
+  if (typeof o.uplinkChunkSize === 'number') {
+    o.uplinkChunkSize = o.uplinkChunkSize === 0 ? '' : String(o.uplinkChunkSize);
+  }
   return o;
 }
 
@@ -159,7 +164,9 @@ export const XHttpStreamSettingsSchema = z.preprocess(migrateLegacyXhttp, z.obje
   // - scMinPostsIntervalMs: preserved when non-default (stripped at '' or '30')
   // - uplinkChunkSize & noGRPCHeader: outbound-only; stripped from inbound wire
   scMinPostsIntervalMs: z.string().default(''),
-  uplinkChunkSize: z.number().int().min(0).default(0),
+  // A string because xray-core reads it as Int32Range, so "64-128" is as legal
+  // as "64" -- the same shape as scMaxEachPostBytes beside it. Ledger L20.
+  uplinkChunkSize: z.string().default(''),
   noGRPCHeader: z.boolean().default(false),
   xmux: XHttpXmuxSchema.optional(),
   // UI-only toggle controlling whether the XMUX sub-form is expanded.

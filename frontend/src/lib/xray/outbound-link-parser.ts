@@ -27,7 +27,7 @@ const XHTTP_STRING_KEYS = [
   'xPaddingMethod', 'sessionIDPlacement', 'sessionIDKey', 'sessionIDTable',
   'sessionIDLength', 'seqPlacement', 'seqKey', 'uplinkDataPlacement',
   'uplinkDataKey', 'scMaxEachPostBytes', 'scMinPostsIntervalMs',
-  'scStreamUpServerSecs', 'uplinkHTTPMethod',
+  'scStreamUpServerSecs', 'uplinkHTTPMethod', 'uplinkChunkSize',
 ] as const;
 // Legacy share links (pre xray-core #6258) carry sessionPlacement/sessionKey.
 // Map them onto the renamed keys so old links still import. Mirrors the
@@ -37,7 +37,7 @@ const XHTTP_LEGACY_ALIASES: Record<string, string> = {
   sessionKey: 'sessionIDKey',
 };
 const XHTTP_NUMBER_KEYS = [
-  'scMaxBufferedPosts', 'serverMaxHeaderBytes', 'uplinkChunkSize',
+  'scMaxBufferedPosts', 'serverMaxHeaderBytes',
 ] as const;
 const XHTTP_BOOL_KEYS = [
   'xPaddingObfsMode', 'noSSEHeader', 'noGRPCHeader',
@@ -100,7 +100,12 @@ function applyXhttpStringFromParams(xhttp: Raw, params: URLSearchParams): void {
 
 function applyXhttpStringFromJson(xhttp: Raw, json: Record<string, unknown>): void {
   for (const k of XHTTP_STRING_KEYS) {
+    // A number here is a range field written in its scalar form -- xray-core
+    // reads xPaddingBytes, scMaxEachPostBytes and uplinkChunkSize as Int32Range,
+    // so `8192` and `"64-128"` are both legal. Dropping the number lost it
+    // silently. Ledger L20.
     if (typeof json[k] === 'string') xhttp[k] = json[k];
+    else if (typeof json[k] === 'number') xhttp[k] = String(json[k]);
   }
   for (const [legacy, renamed] of Object.entries(XHTTP_LEGACY_ALIASES)) {
     if (xhttp[renamed] === undefined && typeof json[legacy] === 'string') {
