@@ -1044,8 +1044,9 @@ purpose and is fuzz-tested; consolidating that one is a separate question.
 
 **Found:** while fixing F363, reading `NewProxiedHTTPClient`'s error arm.
 **Where:** `internal/web/service/setting.go` `NewProxiedHTTPClient`.
-**Disposition: keep open** — the behaviour may be the right one; what is missing
-is the operator knowing it is in effect.
+**Disposition: STAYS OPEN, but re-read 2026-08-27 — its premise is wrong and its
+costed fix does not apply. The real exposure is different and larger. See the
+coda.
 
 ```go
 client, err := netproxy.NewHTTPClient(proxyUrl, timeout)
@@ -1164,3 +1165,44 @@ place.
 **Disposition: closed** by 29efca43. Reversible with one `git revert` if
 host-aware preview is in fact wanted; the reasoning above is the thing to argue
 with, not the deletion.
+
+---
+
+### Coda — the typo this entry is built on cannot happen
+
+**There is no operator-typed proxy URL.** `PanelEgressProxyURL`
+(`internal/web/service/setting.go:474-495`) returns either `""` or a string it
+builds itself: `fmt.Sprintf("socks5://127.0.0.1:%d", port)`, with the port read
+out of the running core's own inbound list. The operator sets a *tag*, not a
+URL. And `netproxy.NewHTTPClient` returns a direct client with no error for `""`
+(`internal/util/netproxy/netproxy.go:29-31`).
+
+So the `err != nil` branch this entry quotes is unreachable in production, and
+"a typo turns all of those back into direct connections" describes nothing that
+can occur. **Refuse at save** — the shape this entry called "probably the
+answer" and costed — has nothing to refuse.
+
+**What is actually exposed is worse than a typo, because it is normal.** The two
+`return ""` paths above it are the live ones: the panel egress silently degrades
+to a direct connection whenever Xray is not running, or whenever the bridge
+inbound is not in the running config yet. Both happen routinely — during a
+restart, after a failed config load, before the first successful start. An
+operator who configured a panel outbound *because* direct connections to GitHub
+or Cloudflare are filtered or observed gets direct connections at exactly those
+moments, and the only signal is a `logger.Warning` among many.
+
+**Which kills the second shape too.** A boot-time posture line like
+`LogAuthPosture` does not fit a condition that is *expected* to be true at boot:
+Xray is often not up yet when the panel starts, so it would fire on every clean
+start and teach the operator to ignore it. Auth posture works because its two
+states are permanent misconfigurations; this one is transient by design.
+
+**What is left is a runtime surface** — the Settings page saying, while you look
+at it, whether the configured panel outbound is in effect right now. That is a
+feature with an endpoint and locale keys in both files, not a bug fix, and it is
+the operator's call whether it is worth building. It stays open on those terms
+rather than the ones this entry originally set.
+
+**Not a security hole, and worth stating plainly:** the fallback never sends the
+panel's traffic somewhere unintended. It sends it directly, which is where it
+would go with the feature switched off.
