@@ -15,6 +15,7 @@ import {
   BulkCreateResultSchema,
   BulkDeleteResultSchema,
   BulkSetEnableResultSchema,
+  BulkResetTrafficResultSchema,
   BulkDetachResultSchema,
   DelDepletedResultSchema,
   type ClientHydrate,
@@ -29,6 +30,7 @@ import {
   type BulkCreateResult,
   type BulkDeleteResult,
   type BulkSetEnableResult,
+  type BulkResetTrafficResult,
   type BulkDetachResult,
 } from '@/schemas/client';
 import { DefaultsPayloadSchema } from '@/schemas/defaults';
@@ -448,6 +450,14 @@ export function useClients(options: UseClientsOptions = {}) {
     onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
   });
 
+  const bulkResetTrafficMut = useMutation({
+    mutationFn: async (emails: string[]): Promise<Msg<BulkResetTrafficResult>> => {
+      const raw = await HttpUtil.post('/panel/api/clients/bulkResetTraffic', { emails }, JSON_HEADERS);
+      return parseMsg(raw, BulkResetTrafficResultSchema, 'clients/bulkResetTraffic');
+    },
+    onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
+  });
+
   const attachMut = useMutation({
     mutationFn: ({ email, inboundIds }: { email: string; inboundIds: number[] }) =>
       HttpUtil.post(`/panel/api/clients/${encodeURIComponent(email)}/attach`, { inboundIds }, { ...JSON_HEADERS, silentSuccess: true }),
@@ -547,6 +557,10 @@ export function useClients(options: UseClientsOptions = {}) {
     if (!Array.isArray(emails) || emails.length === 0) return Promise.resolve(null as unknown as Msg<BulkSetEnableResult>);
     return bulkSetEnableMut.mutateAsync({ emails, enable: false });
   }, [bulkSetEnableMut]);
+  const bulkResetTraffic = useCallback((emails: string[]) => {
+    if (!Array.isArray(emails) || emails.length === 0) return Promise.resolve(null as unknown as Msg<BulkResetTrafficResult>);
+    return bulkResetTrafficMut.mutateAsync(emails);
+  }, [bulkResetTrafficMut]);
   const bulkAddToGroup = useCallback((emails: string[], group: string) => {
     if (!Array.isArray(emails) || emails.length === 0) return Promise.resolve(null);
     return bulkAddToGroupMut.mutateAsync({ emails, group });
@@ -716,6 +730,7 @@ export function useClients(options: UseClientsOptions = {}) {
     bulkAdjust,
     bulkEnable,
     bulkDisable,
+    bulkResetTraffic,
     bulkAddToGroup,
     bulkRemoveFromGroup,
     attach,

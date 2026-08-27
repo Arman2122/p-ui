@@ -234,7 +234,7 @@ export default function ClientsPage() {
     setQuery,
     inbounds, onlines, transitioning, fetched, fetchError, subSettings,
     tgBotEnable, expireDiff, trafficDiff, pageSize, settingsReady,
-    create, update, remove, bulkDelete, bulkAdjust, bulkEnable, bulkDisable, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
+    create, update, remove, bulkDelete, bulkAdjust, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
     resetTraffic, resetAllTraffics, delDepleted, delOrphans, exportClients, importClients, setEnable,
     clientSpeed,
     applyTrafficEvent, applyClientStatsEvent,
@@ -621,6 +621,21 @@ export default function ClientsPage() {
       setPromptLoading(false);
     }
   }, [promptHandler]);
+
+  function onResetSelectedTraffics() {
+    const emails = [...selectedRowKeys];
+    modal.confirm({
+      title: t('pages.clients.resetSelectedTrafficsTitle', { count: emails.length }),
+      content: t('pages.clients.resetSelectedTrafficsContent'),
+      okText: t('reset'),
+      okType: 'danger',
+      cancelText: t('cancel'),
+      onOk: async () => {
+        const msg = await bulkResetTraffic(emails);
+        if (msg?.success) messageApi.success(t('pages.clients.toasts.allTrafficsReset'));
+      },
+    });
+  }
 
   function onResetAllTraffics() {
     modal.confirm({
@@ -1167,6 +1182,12 @@ export default function ClientsPage() {
                                     icon: <ClockCircleOutlined />,
                                     label: t('pages.clients.adjust'),
                                     onClick: () => setBulkAdjustOpen(true),
+                                  },
+                                  {
+                                    key: 'resetSelectedTraffics',
+                                    icon: <RetweetOutlined />,
+                                    label: t('pages.clients.resetSelectedTraffics'),
+                                    onClick: onResetSelectedTraffics,
                                   },
                                   {
                                     key: 'subLinks',

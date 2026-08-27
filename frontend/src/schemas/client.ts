@@ -133,6 +133,10 @@ export const BulkDeleteResultSchema = z.object({
     .optional(),
 });
 
+export const BulkResetTrafficResultSchema = z.object({
+  affected: z.number(),
+});
+
 export const BulkSetEnableResultSchema = z.object({
   changed: z.number(),
   skipped: z
@@ -276,6 +280,7 @@ export type ClientPageResponse = z.infer<typeof ClientPageResponseSchema>;
 export type ClientHydrate = z.infer<typeof ClientHydrateSchema>;
 export type BulkAdjustResult = z.infer<typeof BulkAdjustResultSchema>;
 export type BulkDeleteResult = z.infer<typeof BulkDeleteResultSchema>;
+export type BulkResetTrafficResult = z.infer<typeof BulkResetTrafficResultSchema>;
 export type BulkSetEnableResult = z.infer<typeof BulkSetEnableResultSchema>;
 export type BulkCreateResult = z.infer<typeof BulkCreateResultSchema>;
 export type BulkAttachResult = z.infer<typeof BulkAttachResultSchema>;

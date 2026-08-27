@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **You can reset the traffic of the clients you selected.** The panel offered
+  "reset this one client" on a row and "reset all client traffic" in the menu,
+  with nothing in between -- so resetting forty renewed subscriptions meant
+  either forty clicks or zeroing every client on the panel. The API for it had
+  shipped long ago and nothing in the interface called it.
+  **What you will notice:** a "Reset Traffic for Selected" item in the bulk menu
+  whenever rows are selected. It zeroes their counters and re-enables any client
+  that was disabled for reaching its quota, exactly as the single-client reset
+  does.
+
 - **Opening the Xray log viewer no longer reads the whole access log into
   memory.** Every line that survived the filters was collected first and the row
   count you asked for was applied only at the end, so asking for the newest 20
