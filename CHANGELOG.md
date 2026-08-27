@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The Shadowsocks inbound form no longer offers `ivCheck`.** The switch wrote
+  a key nothing has ever read: the core's JSON config parser has no `ivCheck`
+  field for a Shadowsocks inbound, and the only trace of it left in the core is
+  a protobuf field with no readers. Turning it on or off changed nothing.
+  **What you will notice:** the control is gone. An inbound saved with the key
+  still carries it in its stored settings until the next time you save that
+  inbound, at which point it is dropped — there is no migration, and none is
+  needed, because nothing reads it either way.
+
 - **A subscription id containing `#`, `?` or `%` is refused when you set it.**
   The id becomes a path segment of the subscription URL, and those three break
   it: `#` truncates the address to a fragment, `?` starts a query, and `%` opens

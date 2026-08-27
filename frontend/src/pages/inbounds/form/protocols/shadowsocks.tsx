@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Button, Form, Input, Select, Space, Switch } from 'antd';
+import { Button, Form, Input, Select, Space } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useFormContext } from 'react-hook-form';
 
@@ -56,13 +56,6 @@ export default function ShadowsocksFields({ isSSWith2022 }: ShadowsocksFieldsPro
             { value: 'udp', label: 'UDP' },
           ]}
         />
-      </FormField>
-      <FormField
-        name={['settings', 'ivCheck']}
-        label="ivCheck"
-        valueProp="checked"
-      >
-        <Switch />
       </FormField>
     </>
   );

@@ -36,8 +36,7 @@
         "comment": "",
         "reset": 0
       }
-    ],
-    "ivCheck": false
+    ]
   },
   "streamSettings": {
     "network": "tcp",

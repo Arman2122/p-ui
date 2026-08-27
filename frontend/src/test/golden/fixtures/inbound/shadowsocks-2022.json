@@ -18,7 +18,6 @@
         "comment": "multi-user shadowsocks 2022",
         "reset": 0
       }
-    ],
-    "ivCheck": false
+    ]
   }
 }
