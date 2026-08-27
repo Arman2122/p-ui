@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A host's overrides no longer leak into the host rows after it.** On an
+  inbound with more than one Host row, the Clash and JSON subscriptions gave
+  every row the *first* row's path, Host header and REALITY SNI — whether or
+  not that row set any of them. The raw subscription beside it was correct,
+  which is why this read as a server fault rather than a subscription one.
+  **What you will notice:** if you run several CDN or domain fronts on one
+  inbound and your Clash or JSON subscribers could only reach the first of
+  them, this was why. They start working on the next fetch. Raw subscribers
+  were never affected and see no change.
+
 - **A restart that would leave you with no proxy is now refused.** xray-core
   loads its config whole: one malformed inbound, routing rule or outbound aborts
   the load, and the panel had already stopped the core it was replacing. A
