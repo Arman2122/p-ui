@@ -954,8 +954,8 @@ accepts a number for a string key and stores its string form.
 **Found:** while confirming the wire type of `pcs` for F081.
 **Where:** `frontend/src/schemas/protocols/security/tls.ts` (and the host and
 external-proxy schemas), against `internal/sub/service.go` `hysteriaPinHex`.
-**Disposition: keep open** — Cause 2's shape, and the fix needs a decision about
-which layer owns the normalisation.
+**Disposition: CLOSED** 2026-08-27 — the decision dissolved once the boundaries
+were named; see the coda.
 
 xray-core parses `pinnedPeerCertSha256` as comma-separated **hex**, 32 bytes
 each, colons permitted. The panel stores `z.array(z.string())` with no format
@@ -982,6 +982,38 @@ written; what it needs is a home outside the Hysteria renderer and a schema-leve
 check to match.
 
 ---
+
+---
+
+### Coda — closed, and the decision it was waiting on was a false choice
+
+This entry framed it as normalise-on-save versus refuse-on-save. Neither is
+right, and naming the boundaries dissolves it: a pin is normalised where it
+CROSSES into something with a required format, and never in the row the operator
+typed.
+
+Two such boundaries, and both were wrong:
+
+- **Out, into a share link.** `pinnedSha256List` returned the stored strings and
+  only the Hysteria generator mapped them through `hysteriaPinHex`, so a base64
+  pin produced a working Hysteria link and an unusable one everywhere else. The
+  normalisation now lives in the reader every renderer shares, and the Clash
+  path -- which had its own raw read of the array -- goes through it too.
+- **In, out of an imported link.** `internal/util/link/outbound.go` wrote the
+  link's `pcs` / `pinSHA256` verbatim into the generated outbound at three
+  sites. That is the half that produces a config the core refuses, because the
+  core parses `pinnedPeerCertSha256` as hex only
+  (`infra/conf/transport_security.go:364-378`) and returns an error on anything
+  else. Normalised at all three.
+
+Nothing rewrites what is stored. An unrecognised value still passes through
+untouched, so the core reports the operator's typo rather than the panel
+swallowing it -- which is the honest half of the refuse-on-save option, kept.
+
+`hysteriaPinHex` is gone; `link.NormalizePinHex` and `link.NormalizePinList`
+replace it, and its table test moved with it. A third copy still exists,
+`runtime.DecodeCertPin`, which returns raw bytes and an error for a different
+purpose and is fuzz-tested; consolidating that one is a separate question.
 
 ## L22 — an unparseable panel egress proxy degrades every panel fetch to direct
 

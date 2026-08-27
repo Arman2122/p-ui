@@ -24,6 +24,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/link"
 	"github.com/Arman2122/p-ui/internal/util/random"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 	"github.com/Arman2122/p-ui/internal/web/service"
@@ -1113,9 +1114,6 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 			params["vcn"] = vcn
 		}
 		if pins, ok := pinnedSha256List(tlsSettings); ok {
-			for i, p := range pins {
-				pins[i] = hysteriaPinHex(p)
-			}
 			params["pinSHA256"] = strings.Join(pins, ",")
 		}
 	}
@@ -1563,42 +1561,15 @@ func pinnedSha256List(tlsClientSettings any) ([]string, bool) {
 		if !ok || s == "" {
 			continue
 		}
-		out = append(out, s)
+		// Rendered in the one form the core reads. Hysteria already did this and
+		// nothing else did, so the same paste worked there and nowhere else.
+		// Ledger L21.
+		out = append(out, link.NormalizePinHex(s))
 	}
 	if len(out) == 0 {
 		return nil, false
 	}
 	return out, true
-}
-
-// hysteriaPinHex normalises a pinnedPeerCertSha256 entry into the 64-character
-// lowercase hex form that Xray-core's Hysteria2 pinSHA256 parser requires.
-//
-// The panel stores pins in several shapes: base64 (xray-core's native TLS
-// format, used by the generate button and the JSON subscription) and hex —
-// either bare or colon-separated as `openssl x509 -fingerprint -sha256` emits
-// it. Hysteria2 clients hex-decode pinSHA256 and crash on a base64 value, so
-// each entry is coerced to bare hex here. Anything that is neither a 32-byte
-// hex nor a 32-byte base64 SHA-256 is returned unchanged so unexpected data is
-// not silently dropped. Mirrors decodeCertPin in internal/web/service/node.go.
-func hysteriaPinHex(pin string) string {
-	pin = strings.TrimSpace(pin)
-	if h := strings.ReplaceAll(pin, ":", ""); len(h) == hex.EncodedLen(sha256.Size) {
-		if _, err := hex.DecodeString(h); err == nil {
-			return strings.ToLower(h)
-		}
-	}
-	for _, enc := range []*base64.Encoding{
-		base64.StdEncoding,
-		base64.RawStdEncoding,
-		base64.URLEncoding,
-		base64.RawURLEncoding,
-	} {
-		if b, err := enc.DecodeString(pin); err == nil && len(b) == sha256.Size {
-			return hex.EncodeToString(b)
-		}
-	}
-	return pin
 }
 
 func applyShareRealityParams(stream map[string]any, params map[string]string, clientKey string) {
@@ -1760,7 +1731,7 @@ func applyExternalProxyHysteriaParams(ep map[string]any, params map[string]strin
 		hexPins := make([]string, 0, len(pins))
 		for _, p := range pins {
 			if s, ok := p.(string); ok {
-				hexPins = append(hexPins, hysteriaPinHex(s))
+				hexPins = append(hexPins, link.NormalizePinHex(s))
 			}
 		}
 		params["pinSHA256"] = strings.Join(hexPins, ",")
