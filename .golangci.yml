@@ -30,9 +30,18 @@ linters:
           - noctx
       # tools/openapigen relies on go/parser.ParseDir; migrating it to
       # golang.org/x/tools/go/packages is a generator change, out of scope here.
+      # Matched loosely: staticcheck qualifies the name as `go/parser.ParseDir`
+      # in newer releases and as `parser.ParseDir` in older ones.
       - linters:
           - staticcheck
-        text: "SA1019: parser.ParseDir"
+        text: "SA1019: (go/)?parser.ParseDir"
+      # fasthttp's Client.RetryIf is deprecated in favour of RetryIfErr, which
+      # takes the error as well. Migrating means deciding what the bot should do
+      # with an error it currently never sees, which is real work rather than a
+      # rename. Ledger L5 dispositioned both of these to stay until then.
+      - linters:
+          - staticcheck
+        text: "SA1019: .*fasthttp.Client.*RetryIf"
       # ST1005 (capitalized error strings) conflicts with intentional
       # user-facing error copy that tests assert verbatim.
       - linters:

@@ -262,13 +262,20 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          # Pinned, not latest. "latest" shipped a staticcheck release candidate
-          # whose nilness analyzer PANICS on a recover() builtin: the linter
-          # crashed on internal/util/common and took the job to its timeout with
-          # nothing wrong in the tree. A linter that cannot parse the language is
-          # not a gate, and an unpinned one turns somebody else's release into a
-          # red build here.
-          version: v2.6.0
+          # Pinned, not latest. "latest" once shipped a staticcheck release
+          # candidate whose nilness analyzer PANICS on a recover() builtin: the
+          # linter crashed on internal/util/common and took the job to its
+          # timeout with nothing wrong in the tree. A linter that cannot parse
+          # the language is not a gate, and an unpinned one turns somebody
+          # else's release into a red build here.
+          #
+          # Moved off v2.6.0 because it is BUILT WITH go1.25 and this module
+          # targets 1.26.6, which golangci-lint refuses outright: "the Go
+          # language version used to build golangci-lint is lower than the
+          # targeted Go version". Nothing to do with the tree. v2.13.1 is built
+          # with go1.27.0 and was run over this exact commit before the pin
+          # moved -- no panic, and only the two SA1019s .golangci.yml excludes.
+          version: v2.13.1
 
   frontend:
     runs-on: ubuntu-latest
