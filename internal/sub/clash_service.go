@@ -2,7 +2,6 @@ package sub
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/goccy/go-json"
@@ -768,15 +767,6 @@ func (s *SubClashService) realityData(rData map[string]any, clientKey string) ma
 		rDataOut["shortId"] = fmt.Sprint(shortIDs[deriveListIndex("sid", clientKey, len(shortIDs))])
 	}
 	return rDataOut
-}
-
-func cloneMap(src map[string]any) map[string]any {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]any, len(src))
-	maps.Copy(dst, src)
-	return dst
 }
 
 func mergeClashRulesYAML(base map[string]any, raw string) error {
