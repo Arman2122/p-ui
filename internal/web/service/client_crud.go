@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -386,6 +387,42 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			return false, sErr
 		}
 		updated.Secret = stored[model.CredentialSecret]
+	}
+
+	/*
+		A WireGuard credential the caller did not change is not an edit.
+
+		Each of these is per INBOUND, but the record carries one column for each,
+		stamped by whichever inbound synced last. The editor reads the record and
+		echoes every field back, so a client on two kernel-WG inbounds sent one
+		inbound's address and keys to both -- and the far inbound refused it,
+		"allowedIPs entry already used by another client", on every save of any
+		field. Its own sibling copy was the other client.
+
+		Blanked rather than compared downstream: UpdateInboundClient already
+		restores an omitted WireGuard credential from that inbound's OWN stored
+		client, so blanking makes each inbound keep its own.
+
+		The keys have to go with the address. Nil only AllowedIPs and the save
+		stops failing but starts rewriting one inbound's peer keypair to the
+		other's -- every .conf handed out for it silently stops authenticating,
+		which is worse than a loud refusal. F175.
+	*/
+	prev := existing.ToClient()
+	if slices.Equal(updated.AllowedIPs, prev.AllowedIPs) {
+		updated.AllowedIPs = nil
+	}
+	if updated.PrivateKey == prev.PrivateKey {
+		updated.PrivateKey = ""
+	}
+	if updated.PublicKey == prev.PublicKey {
+		updated.PublicKey = ""
+	}
+	if updated.PreSharedKey == prev.PreSharedKey {
+		updated.PreSharedKey = ""
+	}
+	if updated.KeepAlive == prev.KeepAlive {
+		updated.KeepAlive = 0
 	}
 
 	if updated.Email != existing.Email {

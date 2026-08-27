@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A WireGuard client attached to two kernel-WireGuard inbounds can be edited
+  again.** Each inbound gives such a client its own tunnel address and its own
+  keypair, but the client row holds one of each, written by whichever inbound
+  saved last. The editor read that row and sent it to both, so the second
+  inbound refused the save — *allowedIPs entry already used by another client* —
+  where the other client was the same client's own copy on the first inbound.
+  Renaming it, changing its quota, editing its comment: all refused, on a client
+  that was working fine.
+  **What you will notice:** those edits go through. Each inbound keeps its own
+  address and keys, so nothing a client has already been given stops working.
+
 - **Flipping a client's enable switch no longer deletes its MTProto ad tag.**
   The toggle rebuilt the whole client and sent it to the editor's endpoint,
   where an absent ad tag means *clear it* — correct for the editor, where you
