@@ -263,8 +263,11 @@ _openapi:
         hysteria://, hy2://) for clients matching the subscription ID. Same
         result set as /sub/<subId>, but as a JSON array — no base64. When an
         inbound has streamSettings.externalProxy set, one URL is emitted per
-        external proxy. Empty array when the subId has no enabled clients.
-      url: '#return-every-protocol-url-vless-vmess-trojan-ss-hysteria-hy2-for-clients-matching-the-subscription-id-same-result-set-as-subsubid-but-as-a-json-array--no-base64-when-an-inbound-has-streamsettingsexternalproxy-set-one-url-is-emitted-per-external-proxy-empty-array-when-the-subid-has-no-enabled-clients'
+        external proxy. Empty array when the subId matches no client on an
+        enabled inbound. A disabled client is still listed — its credential is
+        stripped from the running core, so the link cannot connect; use the
+        {{STATUS}} remark token to label it.
+      url: '#return-every-protocol-url-vless-vmess-trojan-ss-hysteria-hy2-for-clients-matching-the-subscription-id-same-result-set-as-subsubid-but-as-a-json-array--no-base64-when-an-inbound-has-streamsettingsexternalproxy-set-one-url-is-emitted-per-external-proxy-empty-array-when-the-subid-matches-no-client-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it'
     - depth: 2
       title: Return the importable config file for one client on one inbound — today
         the .conf a WireGuard or AmneziaWG client imports, rendered by the core
@@ -502,8 +505,11 @@ _openapi:
           hysteria://, hy2://) for clients matching the subscription ID. Same
           result set as /sub/<subId>, but as a JSON array — no base64. When an
           inbound has streamSettings.externalProxy set, one URL is emitted per
-          external proxy. Empty array when the subId has no enabled clients.
-        id: return-every-protocol-url-vless-vmess-trojan-ss-hysteria-hy2-for-clients-matching-the-subscription-id-same-result-set-as-subsubid-but-as-a-json-array--no-base64-when-an-inbound-has-streamsettingsexternalproxy-set-one-url-is-emitted-per-external-proxy-empty-array-when-the-subid-has-no-enabled-clients
+          external proxy. Empty array when the subId matches no client on an
+          enabled inbound. A disabled client is still listed — its credential is
+          stripped from the running core, so the link cannot connect; use the
+          {{STATUS}} remark token to label it.
+        id: return-every-protocol-url-vless-vmess-trojan-ss-hysteria-hy2-for-clients-matching-the-subscription-id-same-result-set-as-subsubid-but-as-a-json-array--no-base64-when-an-inbound-has-streamsettingsexternalproxy-set-one-url-is-emitted-per-external-proxy-empty-array-when-the-subid-matches-no-client-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it
       - content: Return the importable config file for one client on one inbound — today
           the .conf a WireGuard or AmneziaWG client imports, rendered by the
           core that owns the kind, so it carries that inbound's obfuscation

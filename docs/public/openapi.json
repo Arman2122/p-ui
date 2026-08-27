@@ -4834,7 +4834,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the \"IP Limit\" field, installed reports the client binary; jailActive reports whether p-ui’s jail is loaded in the daemon, which is what decides whether a ban lands. usable is all three.",
+        "summary": "Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the \"IP Limit\" field. installed reports the client binary; jailActive reports whether p-ui’s jail is loaded in the daemon, which is what decides whether a ban lands. usable is all three.",
         "operationId": "get_panel_api_server_fail2banStatus",
         "responses": {
           "200": {
@@ -8586,7 +8586,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Return every protocol URL (vless://, vmess://, trojan://, ss://, hysteria://, hy2://) for clients matching the subscription ID. Same result set as /sub/<subId>, but as a JSON array — no base64. When an inbound has streamSettings.externalProxy set, one URL is emitted per external proxy. Empty array when the subId has no enabled clients.",
+        "summary": "Return every protocol URL (vless://, vmess://, trojan://, ss://, hysteria://, hy2://) for clients matching the subscription ID. Same result set as /sub/<subId>, but as a JSON array — no base64. When an inbound has streamSettings.externalProxy set, one URL is emitted per external proxy. Empty array when the subId matches no client on an enabled inbound. A disabled client is still listed — its credential is stripped from the running core, so the link cannot connect; use the {{STATUS}} remark token to label it.",
         "operationId": "get_panel_api_clients_subLinks_subId",
         "parameters": [
           {
@@ -13126,7 +13126,7 @@
         "tags": [
           "Subscription Server"
         ],
-        "summary": "Return base64-encoded subscription links for all enabled clients matching the subscription ID. When the request has an Accept: text/html header or ?html=1, renders a styled info page instead. With ?format=info, returns the page view-model as JSON (traffic, expiry, online status; no links) for live polling. Default path: /sub/:subid.",
+        "summary": "Return base64-encoded subscription links for every client matching the subscription ID on an enabled inbound. A disabled client is still listed — its credential is stripped from the running core, so the link cannot connect; use the {{STATUS}} remark token to label it. When the request has an Accept: text/html header or ?html=1, renders a styled info page instead. With ?format=info, returns the page view-model as JSON (traffic, expiry, online status; no links) for live polling. Default path: /sub/:subid.",
         "operationId": "get_subPath_subid",
         "parameters": [
           {
@@ -13185,7 +13185,7 @@
         "tags": [
           "Subscription Server"
         ],
-        "summary": "Return subscription as a JSON array of proxy configs (one per enabled client). Only when JSON subscription is enabled in settings. Default path: /json/:subid.",
+        "summary": "Return subscription as a JSON array of proxy configs, one per client on an enabled inbound (a disabled client is still listed, but cannot connect). Only when JSON subscription is enabled in settings. Default path: /json/:subid.",
         "operationId": "get_jsonPath_subid",
         "parameters": [
           {

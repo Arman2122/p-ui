@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The API reference no longer claims a subscription lists only enabled
+  clients.** It always listed every client on an *enabled inbound*, disabled
+  ones included; only the inbound is filtered on `enable`, never the client.
+  That is deliberate — a disabled client's credential is stripped from the
+  running core, so the link it holds is already dead, and keeping the link
+  visible is what lets the panel show it and lets `{{STATUS}}` label it as
+  disabled. Nothing changed in what is served; three summaries now say what has
+  always happened.
+
 - **The Shadowsocks inbound form no longer offers `ivCheck`.** The switch wrote
   a key nothing has ever read: the core's JSON config parser has no `ivCheck`
   field for a Shadowsocks inbound, and the only trace of it left in the core is
