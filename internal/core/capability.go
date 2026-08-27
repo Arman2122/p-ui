@@ -194,6 +194,8 @@ var capabilityRules = map[string]Rule{
 			{Field: "settings.decryption", Op: OpSet},
 		}},
 	}},
+	// wireguard is here for finalmask UDP masks and sockopt on its listener;
+	// tunnel for sockopt, notably sockopt.tproxy in TProxy/redirect mode.
 	CapStream: {Any: []Term{
 		{All: []Clause{in("protocol", "vmess", "vless", "trojan", "shadowsocks", "hysteria", "wireguard", "tunnel")}},
 	}},

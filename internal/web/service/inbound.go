@@ -514,24 +514,11 @@ func (s *InboundService) getAllEmailSubIDs() (map[string]string, error) {
 }
 
 // normalizeStreamSettings clears StreamSettings for protocols that don't use it.
-// Only vmess, vless, trojan, shadowsocks, hysteria, wireguard, and tunnel
-// protocols use streamSettings (wireguard for finalmask UDP masks and sockopt on
-// its listener; tunnel for sockopt, notably sockopt.tproxy for its TProxy/redirect
-// mode). Streams keyed on "method" — xray-core v26.7.11's preferred alias for
-// "network" — are canonicalized to "network", which every panel reader (link
-// generation, port-conflict detection, flow eligibility) keys on.
+// Which those are is CapStream's answer, not a second list here. Streams keyed on
+// "method" — xray-core v26.7.11's preferred alias for "network" — are canonicalized
+// to "network", which every panel reader keys on.
 func (s *InboundService) normalizeStreamSettings(inbound *model.Inbound) {
-	protocolsWithStream := map[model.Protocol]bool{
-		model.VMESS:       true,
-		model.VLESS:       true,
-		model.Trojan:      true,
-		model.Shadowsocks: true,
-		model.Hysteria:    true,
-		model.WireGuard:   true,
-		model.Tunnel:      true,
-	}
-
-	if !protocolsWithStream[inbound.Protocol] {
+	if !core.Can(core.CapStream, core.Facts{Protocol: string(inbound.Protocol)}) {
 		inbound.StreamSettings = ""
 		return
 	}
