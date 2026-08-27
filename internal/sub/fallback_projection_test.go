@@ -46,8 +46,8 @@ func TestALegacyFallbackChildFindsItsMasterThroughTheSettingsBlob(t *testing.T) 
 
 	child := &model.Inbound{
 		UserId: 1, Tag: "legacy-child", Enable: true, Listen: "@legacy-child-socket", Port: 0,
-		Protocol: model.VLESS,
-		Settings: `{"clients":[{"id":"11111111-2222-4333-8444-555555555555","email":"legacy@e"}],"decryption":"none"}`,
+		Protocol:       model.VLESS,
+		Settings:       `{"clients":[{"id":"11111111-2222-4333-8444-555555555555","email":"legacy@e"}],"decryption":"none"}`,
 		StreamSettings: `{"network":"ws","wsSettings":{"path":"/legacy"}}`,
 	}
 	if err := db.Create(child).Error; err != nil {

@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A host's overrides now reach a Clash subscription for a Hysteria inbound.**
+  They already reached the raw and JSON renderings. The Clash one rebuilt the
+  entry from the inbound as stored and ignored the host entirely, so its SNI,
+  ALPN, fingerprint, Salamander obfuscation password and UDP hop range were all
+  silently dropped — only the address and port came through.
+  **What you will notice:** if you have a Hysteria inbound with a host row and
+  Clash subscribers, their config changes to match the host. That is the
+  configuration you asked for; it may differ from what those clients have been
+  using.
+
 - **The API reference no longer claims a subscription lists only enabled
   clients.** It always listed every client on an *enabled inbound*, disabled
   ones included; only the inbound is filtered on `enable`, never the client.

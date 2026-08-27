@@ -163,7 +163,7 @@ func TestWgkernelIsServedByEverySubscriptionFormat(t *testing.T) {
 
 	t.Run("clash proxy", func(t *testing.T) {
 		svc := &SubClashService{SubService: &SubService{}}
-		proxy := svc.buildProxy(svc.SubService, inbound, client, map[string]any{}, nil)
+		proxy := svc.buildProxy(svc.SubService, inbound, client, map[string]any{}, nil, nil)
 		if proxy == nil {
 			t.Fatal("buildProxy = nil, want a wireguard proxy for a wgkernel client with a key")
 		}
