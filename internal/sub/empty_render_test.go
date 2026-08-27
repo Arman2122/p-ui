@@ -6,7 +6,11 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
+
+// A distinctive figure, so the assertion cannot pass on an incidental zero.
+const unrenderableUpBytes int64 = 7_654_321
 
 /*
 A client whose link cannot be rendered must not become a blank line.
@@ -34,7 +38,15 @@ func TestASubscriptionSkipsAnInboundThatRendersNothing(t *testing.T) {
 	// and is what used to contribute the blank line.
 	seedSubInbound(t, "emptysub", "renders", 24801, 1,
 		`{"network":"tcp","security":"none","tcpSettings":{"header":{"type":"none"}}}`)
-	seedMixedInbound(t, "emptysub", "renders-nothing", 24802)
+	mixed := seedMixedInbound(t, "emptysub", "renders-nothing", 24802)
+
+	// Traffic for the client whose link cannot be rendered. If it survives into
+	// the aggregate, the guard kept it in seenEmails.
+	if err := database.GetDB().Create(&xray.ClientTraffic{
+		InboundId: mixed.Id, Email: "renders-nothing@e", Enable: true, Up: unrenderableUpBytes,
+	}).Error; err != nil {
+		t.Fatalf("seed traffic: %v", err)
+	}
 
 	links, emails, _, traffic, err := NewSubService("").GetSubs("emptysub", "req.example.com")
 	if err != nil {
@@ -53,10 +65,13 @@ func TestASubscriptionSkipsAnInboundThatRendersNothing(t *testing.T) {
 		t.Fatalf("emails = %#v, want just the client that rendered", emails)
 	}
 
-	// The half a bare `continue` would have broken: the client whose inbound
-	// rendered nothing is still counted, so the traffic header does not shrink.
-	if !traffic.Enable {
-		t.Fatal("the subscription reports no enabled client; the unrenderable one was dropped from the traffic aggregate too")
+	// The half a bare `continue` would have broken. traffic.Enable is derived
+	// from hasEnabledClient and is true either way, so it proves nothing --
+	// an audit caught that. The bytes are the real evidence: they can only be
+	// there if the unrenderable client survived into uniqueEmails.
+	if traffic.Up != unrenderableUpBytes {
+		t.Fatalf("Subscription-Userinfo upload is %d, want %d: the client whose inbound rendered nothing was dropped from the traffic aggregate, which is what a bare `continue` here would do",
+			traffic.Up, unrenderableUpBytes)
 	}
 }
 

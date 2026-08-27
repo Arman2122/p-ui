@@ -28,6 +28,23 @@ func BindAndValidate[T any](c *gin.Context) (*T, bool) {
 	return &dst, true
 }
 
+/*
+ValidateStruct runs the validator over a struct the caller already decoded, and
+answers with the same payload a bind failure would.
+
+For a handler whose body is not the struct -- /inbounds/import carries its
+inbound as a JSON string inside a form field -- ShouldBind cannot be used, so
+without this the only options were to skip validation or to grow a second
+validator. It was skipped. F031 / F312.
+*/
+func ValidateStruct(c *gin.Context, dst any) bool {
+	if err := validate.Struct(dst); err != nil {
+		writeBindFailure(c, err)
+		return false
+	}
+	return true
+}
+
 func BindAndValidateInto(c *gin.Context, dst any) bool {
 	if err := c.ShouldBind(dst); err != nil {
 		writeBindFailure(c, err)

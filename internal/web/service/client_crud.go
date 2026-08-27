@@ -205,8 +205,13 @@ func refuseShortShadowsocksServerKey(settings string) error {
 	if err := json.Unmarshal([]byte(settings), &m); err != nil {
 		return nil
 	}
+	// comma-ok, not a bare assertion: the blob may carry no password at all, and
+	// asserting would panic on exactly the malformed input this catches. An
+	// EMPTY string is a different case and must fall through -- it decodes to
+	// zero bytes, which is shorter than any method needs, and the core answers
+	// it with "missing key" and refuses the whole config.
 	key, ok := m["password"].(string)
-	if !ok || key == "" {
+	if !ok {
 		return nil
 	}
 	decoded, err := base64.StdEncoding.DecodeString(key)

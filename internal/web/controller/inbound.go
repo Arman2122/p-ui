@@ -413,6 +413,12 @@ func (a *InboundController) importInbound(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
+	// The body is a JSON string inside a form field, so ShouldBind cannot reach
+	// it and this endpoint honoured no `validate:` tag at all -- port range and
+	// protocol enum included. F031 / F312.
+	if !middleware.ValidateStruct(c, inbound) {
+		return
+	}
 	user := session.GetLoginUser(c)
 	inbound.Id = 0
 	inbound.UserId = user.Id

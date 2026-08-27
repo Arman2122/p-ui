@@ -199,10 +199,13 @@ function buildWireguardSettings(o: OutboundInput): Record<string, unknown> {
 
   const settings: Record<string, unknown> = {
     secretKey: w?.secretKey ?? '',
-    address: w?.address ?? [],
     peers: [peer],
     mtu: w?.mtu ?? 1420,
   };
+  /* Omitted rather than emptied: xray picks a bogon local address when the key
+     is ABSENT, and a JSON [] is non-nil so it takes the else branch and leaves
+     the outbound with no endpoint. Mirrors the panel. F080. */
+  if (w?.address && w.address.length > 0) settings.address = w.address;
   if (w?.reserved && w.reserved.length > 0) settings.reserved = w.reserved;
   return settings;
 }

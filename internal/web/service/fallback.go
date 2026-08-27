@@ -95,7 +95,12 @@ func (s *FallbackService) SetByMaster(masterId int, items []FallbackInput) error
 			if childId <= 0 && strings.TrimSpace(c.Dest) == "" {
 				continue
 			}
-			if path := strings.TrimSpace(c.Path); path != "" && !strings.HasPrefix(path, "/") {
+			// Trimmed BEFORE validating and stored trimmed, so what the core sees
+			// is what was checked. xray tests fb.Path[0] on the raw string, so
+			// validating a trimmed copy while storing " /ws" passed the guard and
+			// still failed the config.
+			path := strings.TrimSpace(c.Path)
+			if path != "" && !strings.HasPrefix(path, "/") {
 				return common.NewError(errFallbackPathShape, ":", c.Path)
 			}
 			row := model.InboundFallback{
@@ -103,7 +108,7 @@ func (s *FallbackService) SetByMaster(masterId int, items []FallbackInput) error
 				ChildId:   childId,
 				Name:      c.Name,
 				Alpn:      c.Alpn,
-				Path:      c.Path,
+				Path:      path,
 				Dest:      c.Dest,
 				Xver:      c.Xver,
 				SortOrder: c.SortOrder,
