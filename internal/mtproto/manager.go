@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -191,10 +192,11 @@ func InstanceFromInbound(ib *model.Inbound) (Instance, bool) {
 	parsed.applyTo(&inst)
 	inst.Secrets = make([]SecretEntry, 0, len(parsed.Clients))
 	for _, c := range parsed.Clients {
-		if !c.Enable || c.Secret == "" || c.Email == "" {
+		usable := UsableSecret(c.Secret)
+		if !c.Enable || usable == "" || c.Email == "" {
 			continue
 		}
-		entry := SecretEntry{Name: c.Email, Secret: c.Secret, AdTag: UsableAdTag(c.AdTag)}
+		entry := SecretEntry{Name: c.Email, Secret: usable, AdTag: UsableAdTag(c.AdTag)}
 		if c.TotalGB > 0 {
 			entry.QuotaBytes = c.TotalGB
 		}
@@ -272,6 +274,25 @@ func UsableAdTag(tag string) string {
 		return ""
 	}
 	return tag
+}
+
+// UsableSecret returns a stored client secret only in the shape the sidecar
+// accepts, mirroring mtglib.Secret.Set: hex or raw-URL base64, first byte 0xee,
+// then at least 16 key bytes and a non-empty hostname.
+//
+// A malformed one is not a per-client problem. It 400s the whole PUT /secrets,
+// so no client's edit hot-applies, and it fails Config.Validate at cold start,
+// so mtg refuses to run and the entire inbound goes down.
+func UsableSecret(secret string) string {
+	secret = strings.TrimSpace(secret)
+	decoded, err := hex.DecodeString(secret)
+	if err != nil {
+		decoded, err = base64.RawURLEncoding.DecodeString(secret)
+	}
+	if err != nil || len(decoded) < 1+mtgSecretKeyLength+1 || decoded[0] != mtgFakeTLSFirstByte {
+		return ""
+	}
+	return secret
 }
 
 // Ensure starts the mtg process for an instance, or restarts it when its
@@ -809,3 +830,10 @@ func (m *Manager) RoutedTags() map[string]bool {
 	}
 	return out
 }
+
+// Mirrors mtglib's own constants (secretFakeTLSFirstByte, SecretKeyLength). The
+// sidecar is a binary, not a dependency, so the values are restated here.
+const (
+	mtgFakeTLSFirstByte = 0xee
+	mtgSecretKeyLength  = 16
+)
