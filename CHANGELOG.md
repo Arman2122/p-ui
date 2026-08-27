@@ -1131,6 +1131,22 @@ here; the git log is the full record.
 
 ### Security
 
+- **A client created with its switch off is now genuinely stored off.** This was
+  reported as fixed earlier in this release and it was not. That fix was real
+  — the database was supplying `true` for a boolean the INSERT had dropped —
+  but a second mechanism sat above it: three creation paths carried an explicit
+  “if it is off, turn it on” that overrode the caller before the database ever
+  saw the value.
+  It overrode three deliberate things: the enable switch on the client form, an
+  import of a client that was **disabled when you exported it**, and the
+  Telegram bot's own “add disabled” button. Nothing depended on it — every
+  caller already set the value, including the LDAP sync.
+  **What you will notice:** staging a client disabled works everywhere now, and
+  importing a backup no longer switches your disabled clients back on. **Worth
+  checking by hand:** a client created or imported disabled before this fix was
+  stored enabled and could connect. There is no record of what was intended, so
+  the panel cannot find them for you.
+
 - **A certificate that fails to load no longer degrades the panel silently.**
   Both the panel and the subscription server bind their socket before deciding
   on TLS, so when the key pair failed to load they kept serving — in cleartext,
@@ -1155,9 +1171,11 @@ here; the git log is the full record.
   at that moment, its next action costs one extra round trip while it refetches.
 
 - **A client, node, subscription or routing rule created with its switch off is
-  no longer stored switched on.** A zero-valued boolean was dropped from the
-  INSERT whenever its column carried a database-side default, so the database
-  supplied `true` instead. The consequences differed by row: a **client** staged
+  no longer stored switched on.** *(For clients this entry was incomplete when
+  written — a second mechanism overrode the switch above this one. See “A client
+  created with its switch off is now genuinely stored off” above.)* A
+  zero-valued boolean was dropped from the INSERT whenever its column carried a
+  database-side default, so the database supplied `true` instead. The consequences differed by row: a **client** staged
   as disabled was stored enabled, was therefore not stripped from the push to
   the core, and could connect; a **node** staged as off was heartbeated and had
   inbounds synced to it; an outbound **subscription** staged as off was fetched

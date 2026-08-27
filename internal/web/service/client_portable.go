@@ -149,9 +149,9 @@ func (s *ClientService) ImportClients(inboundSvc *InboundService, items []Client
 				continue
 			}
 		}
-		if !client.Enable {
-			client.Enable = true
-		}
+		// Enable is taken as given; see the note in Create. On this path in
+		// particular, forcing it meant a client exported while disabled came
+		// back enabled. F046/F170.
 		now := time.Now().UnixMilli()
 		if client.CreatedAt == 0 {
 			client.CreatedAt = now
