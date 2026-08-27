@@ -1162,3 +1162,32 @@ secret does cut live streams, and the panel already pushes that field.
 This closes the second of the two PLAUSIBLE items that were still open. The
 remaining one is F276 (pg_dump buffered whole in RAM), which stays open because
 fixing it changes an exported signature and that is the operator's call.
+
+### F276 stays open — but the trap in it is named, so the fix is pre-designed
+
+F276 is deliberately not fixed: streaming the dump changes `GetDb`'s exported
+signature, which is the operator's call. What follows is so that when the answer
+is yes, the hazard is already known rather than discovered.
+
+**Do not stream straight to the response.** `cmd.Stdout = c.Writer` is the
+obvious shape and it is wrong. Gin has already sent `200 OK` by the time
+`pg_dump` fails, so the client saves a truncated archive believing the backup
+succeeded. `pg_restore` does detect the truncation — the archive carries its own
+header and offsets — so the failure surfaces at restore time, which is during a
+disaster. Trading an OOM the operator sees immediately for a failure that waits
+for the worst moment is not an improvement.
+
+**The safe shape:** dump to a temp file, check the process exit status, and only
+then serve the file with a `Content-Length`. Peak memory becomes O(1), a failed
+dump never reaches the client, and the browser gets a progress bar it does not
+have today.
+
+**The bytes API is not load-bearing forever.** The two Telegram callers use
+`tu.FileFromBytes` today, but telego's `tu.File` takes an `*os.File`, so both
+can move to the same temp file. Nothing structurally requires `[]byte`.
+
+**One defect inside the same function that is independent of all this:**
+`exec.CommandContext(context.Background(), ...)` gives `pg_dump` no deadline, so
+a hung dump holds the request and its buffer indefinitely. Worth fixing with the
+streaming change rather than separately, since the right timeout depends on
+whether memory is bounded.
