@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,6 +182,45 @@ func clientWithInboundFlow(c model.Client, ib *model.Inbound) model.Client {
 // aes-256↔aes-128). A wrong-length uPSK makes xray reject the user, so the link
 // fails to connect; regenerating restores a valid key (clients must re-fetch).
 // Non-Shadowsocks / legacy-SS settings pass through unchanged.
+/*
+refuseShortShadowsocksServerKey rejects an SS-2022 inbound whose SERVER key is
+too short for its method.
+
+The normalizer below re-mints a CLIENT key of the wrong size; the server key
+beside it was never looked at. Switching an existing inbound from
+2022-blake3-aes-128-gcm to -aes-256-gcm leaves a 16-byte key on a method that
+needs 32, and xray refuses the whole config at the next cold start.
+
+Refused rather than re-minted: rotating the server key silently invalidates
+every link already handed out. And SHORTER only -- the core derives an over-long
+key down, so an exact-length check would refuse saves that work today. F329.
+*/
+func refuseShortShadowsocksServerKey(settings string) error {
+	method := xray.ShadowsocksMethodFromSettings(settings)
+	want := xray.ShadowsocksKeyBytes(method)
+	if want == 0 {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(settings), &m); err != nil {
+		return nil
+	}
+	key, ok := m["password"].(string)
+	if !ok || key == "" {
+		return nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return common.NewError("the Shadowsocks server key is not valid base64, and", method, "cannot use it")
+	}
+	if len(decoded) < want {
+		return common.NewErrorf(
+			"the Shadowsocks server key is %d bytes and %s needs at least %d; generate a new key for this method (every existing link keeps working until you do)",
+			len(decoded), method, want)
+	}
+	return nil
+}
+
 func normalizeShadowsocksClientKeys(settings string) (string, bool) {
 	method := xray.ShadowsocksMethodFromSettings(settings)
 	if xray.ShadowsocksKeyBytes(method) == 0 {

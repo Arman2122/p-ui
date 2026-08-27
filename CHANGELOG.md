@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A Shadowsocks-2022 inbound whose server key is too short for its method is
+  refused when you save it.** The key size is fixed by the method — 16 bytes for
+  `aes-128-gcm`, 32 for `aes-256-gcm` and `chacha20-poly1305` — so switching an
+  existing inbound from the 128 method to a 256 one left a key Xray rejects, and
+  it rejects the *whole* configuration over it.
+  **What you will notice:** that switch now fails with a reason instead of
+  succeeding and stopping the panel at its next cold start. The key is **not**
+  regenerated for you, deliberately: that would invalidate every link you have
+  already handed out. Generate a new one when you are ready to reissue. A key
+  longer than the method needs is still accepted — Xray derives it down, and that
+  has always worked.
+
 - **An AmneziaWG tunnel with transport padding now sets an MTU that fits.** The
   kernel module fixes the interface MTU at 1420 when the device is created — a
   budget computed for plain WireGuard — and never revises it, while the S4
