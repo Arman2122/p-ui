@@ -73,7 +73,10 @@ func TestInstanceFromInbound(t *testing.T) {
 		t.Fatal("an inbound with no active secret should not produce an instance")
 	}
 
-	badTags := &model.Inbound{Protocol: model.MTProto, Settings: `{"clients":[{"email":"x","secret":"ee00","adTag":"deadbeef","enable":true}]}`}
+	// A full secret, not a stub: UsableSecret drops one the sidecar would refuse,
+	// and a truncated stub here would test the secret rule instead of the tag one.
+	const wholeSecret = "ee00112233445566778899aabbccddeeff676f6f642e6578616d706c65"
+	badTags := &model.Inbound{Protocol: model.MTProto, Settings: `{"clients":[{"email":"x","secret":"` + wholeSecret + `","adTag":"deadbeef","enable":true}]}`}
 	badInst, ok := InstanceFromInbound(badTags)
 	if !ok {
 		t.Fatal("expected a usable instance despite a malformed ad tag")
