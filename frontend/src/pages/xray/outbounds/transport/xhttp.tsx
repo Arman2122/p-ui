@@ -270,11 +270,7 @@ export default function XhttpForm({ onXmuxToggle }: XhttpFormProps) {
                 label={t('pages.xray.outboundForm.uplinkChunkSize')}
                 name={['streamSettings', 'xhttpSettings', 'uplinkChunkSize']}
               >
-                <InputNumber
-                  min={0}
-                  placeholder="0 (unlimited)"
-                  style={{ width: '100%' }}
-                />
+                <Input placeholder="65536 or a range like 64-128" />
               </FormField>
             </>
           )}

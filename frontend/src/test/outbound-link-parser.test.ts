@@ -10,6 +10,7 @@ import {
   parseWireguardLink,
 } from '@/lib/xray/outbound-link-parser';
 import { Base64 } from '@/utils';
+import { XHttpStreamSettingsSchema } from '@/schemas/protocols/stream/xhttp';
 
 // Focused acceptance tests for the share-link parsers — one happy-path
 // case per protocol family, plus a few common edge cases. The parsers
@@ -73,7 +74,7 @@ describe('parseVmessLink — XHTTP advanced fields', () => {
     expect(xhttp.xPaddingBytes).toBe('500-1500');
     expect(xhttp.scMaxEachPostBytes).toBe('2000000');
     expect(xhttp.scMinPostsIntervalMs).toBe('60');
-    expect(xhttp.uplinkChunkSize).toBe(8192);
+    expect(xhttp.uplinkChunkSize).toBe('8192');
     expect(xhttp.noGRPCHeader).toBe(true);
   });
 
@@ -127,7 +128,7 @@ describe('parseVlessLink — XHTTP advanced fields', () => {
     expect(xhttp.xPaddingBytes).toBe('500-1500');
     expect(xhttp.scMaxEachPostBytes).toBe('2000000');
     expect(xhttp.scMinPostsIntervalMs).toBe('60');
-    expect(xhttp.uplinkChunkSize).toBe(8192);
+    expect(xhttp.uplinkChunkSize).toBe('8192');
     expect(xhttp.noGRPCHeader).toBe(true);
   });
 
@@ -561,5 +562,43 @@ describe('parseOutboundLink dispatcher', () => {
   it('returns null for empty input', () => {
     expect(parseOutboundLink('')).toBeNull();
     expect(parseOutboundLink('   ')).toBeNull();
+  });
+});
+
+/*
+uplinkChunkSize is Int32Range in xray-core, so `64-128` is as legal as `64` --
+the same type as scMaxEachPostBytes and scMinPostsIntervalMs beside it, which
+the panel already models as strings.
+
+The importer coerced it with `Number(v) || 0`, which turned a range into 0. And
+0 is not "unset" here, it is a value the normalizer then clamps, so importing a
+link with a ranged chunk size silently replaced the operator's setting with a
+different one. The Go parser (internal/util/link/outbound.go) has always kept it
+as the string it arrived as. Ledger L20.
+*/
+describe('uplinkChunkSize is a range, not a number', () => {
+  const base =
+    'vless://11111111-2222-4333-8444-555555555555@example.test:443'
+    + '?type=xhttp&security=none&path=%2Fx';
+
+  it('keeps a ranged value instead of collapsing it to zero', () => {
+    const parsed = parseOutboundLink(`${base}&uplinkChunkSize=64-128`);
+    const xhttp = (parsed?.streamSettings as Record<string, Record<string, unknown>>)?.xhttpSettings;
+    expect(xhttp?.uplinkChunkSize).toBe('64-128');
+  });
+
+  it('keeps a scalar value too, as its string form', () => {
+    const parsed = parseOutboundLink(`${base}&uplinkChunkSize=8192`);
+    const xhttp = (parsed?.streamSettings as Record<string, Record<string, unknown>>)?.xhttpSettings;
+    expect(xhttp?.uplinkChunkSize).toBe('8192');
+  });
+
+  it('survives the schema, which a stored number must also do', () => {
+    const migrated = XHttpStreamSettingsSchema.parse({ uplinkChunkSize: 8192 });
+    expect(migrated.uplinkChunkSize).toBe('8192');
+    const unset = XHttpStreamSettingsSchema.parse({ uplinkChunkSize: 0 });
+    expect(unset.uplinkChunkSize).toBe('');
+    const ranged = XHttpStreamSettingsSchema.parse({ uplinkChunkSize: '64-128' });
+    expect(ranged.uplinkChunkSize).toBe('64-128');
   });
 });

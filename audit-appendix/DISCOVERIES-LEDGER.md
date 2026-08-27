@@ -904,7 +904,8 @@ next protocol lands, not urgent this week.
 
 **Found:** while fixing F081, choosing types for the Go parser's key list.
 **Where:** `frontend/src/lib/xray/outbound-link-parser.ts`, `XHTTP_NUMBER_KEYS`.
-**Disposition: keep open** — small, and it is the frontend that is wrong.
+**Disposition: CLOSED** 2026-08-27 — the frontend was wrong in three places,
+not one; see the coda.
 
 `uplinkChunkSize` is `Int32Range` in xray-core's conf struct, so it takes a
 range like `64-128` as readily as a bare number. The frontend importer coerces
@@ -920,6 +921,31 @@ one-key inconsistency inside one array rather than a design choice.
 `XHTTP_STRING_KEYS`, plus a test importing a ranged value. Ten minutes. It was
 not folded into F081 because F081 is a Go-side finding and this is a separate
 importer with its own tests.
+
+---
+
+### Coda — closed, and the estimate was wrong
+
+Moving the key between two arrays does not compile into a working fix, because
+the *schema* also modelled the field as a number:
+`uplinkChunkSize: z.number().int().min(0).default(0)`. A string importer feeding
+a number schema fails at parse. Four places had to agree, not one:
+
+- `frontend/src/schemas/protocols/stream/xhttp.ts` — now `z.string().default('')`,
+  matching `scMaxEachPostBytes` beside it, which is the same core type.
+- `migrateLegacyXhttp` — the preprocess already in that file now folds a stored
+  number to its string form and `0` to `''`. Without it every outbound holding
+  the old numeric value would have failed to load in the form.
+- `stream-wire-normalize.ts` — the `=== 0` strip became a `dropEmptyStrings`.
+- the outbound form — `InputNumber` became `Input`, since a range cannot be typed
+  into a number control.
+
+**And it found a second, pre-existing loss.** `applyXhttpStringFromJson` took a
+string key only when `typeof json[k] === 'string'`, so a vmess JSON carrying
+`uplinkChunkSize: 8192` matched neither list and was dropped. The same was
+already true of `scMaxEachPostBytes: 1000000` and every other Int32Range field
+written in scalar form — a silent loss that predates this entry. The reader now
+accepts a number for a string key and stores its string form.
 
 ---
 
