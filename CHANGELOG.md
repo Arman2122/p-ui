@@ -1131,6 +1131,29 @@ here; the git log is the full record.
 
 ### Security
 
+- **A certificate that fails to load no longer degrades the panel silently.**
+  Both the panel and the subscription server bind their socket before deciding
+  on TLS, so when the key pair failed to load they kept serving — in cleartext,
+  on the very port HTTPS was configured on — with one generic log line. Session
+  cookies stop being Secure, HSTS is not sent, and on the panel node mTLS client
+  certificate verification is never configured. A truncated certbot renewal is
+  enough to cause it, and the panel reports itself as up, because it is.
+  **What you will notice:** the failure is now one greppable line naming the
+  files, the load error, the address and everything that is off:
+  `journalctl -u p-ui | grep TLS_POSTURE`. It still starts — refusing to boot
+  would lock you out of the settings page that fixes it, which is the trap the
+  earlier lockout fixes exist to avoid.
+
+- **The CSRF token you were given before signing in is replaced when you sign
+  in.** A token is handed to anonymous visitors so the login form can post, and
+  it used to be carried into the authenticated session unchanged — so anyone who
+  could plant one in your browser beforehand held a valid token for your
+  authenticated session afterwards.
+  **What you will notice:** nothing. The token is rotated inside the same cookie
+  write, and the page reloads after login with a fresh one. Changing your
+  username or password rotates it too; if the interface is open in another tab
+  at that moment, its next action costs one extra round trip while it refetches.
+
 - **A client, node, subscription or routing rule created with its switch off is
   no longer stored switched on.** A zero-valued boolean was dropped from the
   INSERT whenever its column carried a database-side default, so the database

@@ -640,8 +640,14 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 			listener = tls.NewListener(listener, c)
 			logger.Info("Web server running HTTPS on", listener.Addr())
 		} else {
-			logger.Error("Error loading certificates:", err)
-			logger.Info("Web server running HTTP on", listener.Addr())
+			// Reported, never repaired -- the same contract as LogAuthPosture.
+			// Refusing to boot here would recreate the F224/F394 lockout, and a
+			// certbot race would then take the panel down on every restart.
+			logger.Errorf("%s HTTPS is configured (webCertFile=%q, webKeyFile=%q) but the pair did not load: %v. "+
+				"The panel is serving CLEARTEXT on %v -- session cookies are not Secure, HSTS is not sent, and node mTLS "+
+				"client-certificate verification is NOT configured. Fix the files and restart, or clear webCertFile and "+
+				"webKeyFile to make plain HTTP deliberate.",
+				service.TLSPostureLogPrefix, certFile, keyFile, err, listener.Addr())
 		}
 	} else {
 		logger.Info("Web server running HTTP on", listener.Addr())

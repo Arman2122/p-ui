@@ -10,6 +10,11 @@ import (
 // breaks a search the changelog told people to run.
 const authPostureLogPrefix = "[AUTH_POSTURE]"
 
+// TLSPostureLogPrefix is the same contract for a listener that was configured
+// for HTTPS and is serving cleartext. Exported because the panel and the
+// subscription server are different packages with the same failure.
+const TLSPostureLogPrefix = "[TLS_POSTURE]"
+
 /*
 LogAuthPosture names an authentication setting that is on but cannot work, at
 Error, on every boot.

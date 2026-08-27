@@ -352,8 +352,11 @@ func (s *Server) Start() (err error) {
 			listener = tls.NewListener(listener, c)
 			logger.Info("Sub server running HTTPS on", listener.Addr())
 		} else {
-			logger.Error("Error loading certificates:", err)
-			logger.Info("Sub server running HTTP on", listener.Addr())
+			// Same contract as the panel's listener: reported, never repaired.
+			logger.Errorf("%s HTTPS is configured (subCertFile=%q, subKeyFile=%q) but the pair did not load: %v. "+
+				"The subscription server is serving CLEARTEXT on %v, so every client fetches its credentials over "+
+				"plain HTTP. Fix the files and restart, or clear the cert settings to make plain HTTP deliberate.",
+				service.TLSPostureLogPrefix, certFile, keyFile, err, listener.Addr())
 		}
 	} else {
 		logger.Info("Sub server running HTTP on", listener.Addr())
