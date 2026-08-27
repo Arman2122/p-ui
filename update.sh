@@ -633,7 +633,7 @@ prompt_and_setup_ssl() {
             if [[ -n "$ip_confirm" && "$ip_confirm" != "y" && "$ip_confirm" != "Y" ]]; then
                 server_ip=""
                 while [[ -z "$server_ip" ]]; do
-                    read -rp "Please enter your server's public IPv4 address: " server_ip
+                    read -rp "Please enter your server's public IPv4 address: " server_ip || break
                     server_ip="${server_ip// /}"
                     if [[ ! "$server_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                         echo -e "${red}Invalid IPv4 address. Please try again.${plain}"
@@ -798,14 +798,19 @@ config_after_update() {
 
     if [[ -z "$server_ip" ]]; then
         echo -e "${yellow}Could not auto-detect server IP from any provider.${plain}"
-        while [[ -z "$server_ip" ]]; do
-            read -rp "Please enter your server's public IPv4 address: " server_ip
+        # Interactive only, for the same reason as the SSL prompt below: the
+        # panel runs this detached under systemd-run, where read cannot succeed.
+        while [[ -t 0 && -z "$server_ip" ]]; do
+            read -rp "Please enter your server's public IPv4 address: " server_ip || break
             server_ip="${server_ip// /}"
             if [[ ! "$server_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                 echo -e "${red}Invalid IPv4 address. Please try again.${plain}"
                 server_ip=""
             fi
         done
+        if [[ -z "$server_ip" ]]; then
+            echo -e "${yellow}Continuing without a server IP; any URL printed below will not name it.${plain}"
+        fi
     fi
 
     # Handle missing/short webBasePath
