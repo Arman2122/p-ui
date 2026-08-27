@@ -702,8 +702,10 @@ is only worth its risk if setup dominates.
 **Found:** while fixing F023, once the pinned-`serverName` half was closed.
 **Where:** `internal/sub/service.go` `applyShareRealityParams`,
 `internal/sub/json_service.go` `realityData`.
-**Disposition: keep open** — a posture question, not a defect, and the answer
-changes what every existing client holds.
+**Disposition: CLOSED** — deterministic per client, on the operator's decision.
+See the coda at the end of this entry: two of the three shapes below were
+argued on grounds that did not survive checking, and the operator's own reason
+for closing it was one this entry never considered.
 
 F023 bundled two claims. One was unambiguous and is fixed: a pinned
 `realitySettings.settings.serverName` was ignored by all three Go renderers
@@ -739,6 +741,55 @@ diffed, cached, or supported.
 **Cost to close:** small — `deriveSpiderX` is the template and the seam is two
 functions. What it needs first is a decision, because option two changes the
 `sni` and `sid` in every REALITY link already in circulation.
+
+---
+
+### Coda — closed 2026-08-27, and three things this entry got wrong
+
+**The operator's reason was not on the list.** This entry framed it as anti-
+blocking posture. The reason it was closed is that **the panel is consumed
+through its API**: `/panel/api/clients/subLinks/:subId`,
+`/panel/api/clients/links/:email`, `/panel/api/inbounds/:id/links`, `/sub/` and
+`/json/` all resolve to the same renderer, so a headless consumer polling any of
+them received a different string every poll with nothing having changed. That is
+a broken contract, not a posture, and it is the argument that settles it.
+
+**"Four renderers" was five, and the table's own premise was wrong.** The
+frontend builder is dead for REALITY — `InboundsPage.tsx:268` gates
+`genInboundLinks` behind `if (projected.isWireguard)` and everything else falls
+through to `fetchInboundLinks`. So the panel's Export, QR and Info modal all
+went to the Go renderer and **re-rolled every time the modal opened**. There is
+also a sixth index-0 consumer, `docs/lib/xray/reality.ts`, which has no client
+identity and is left alone: it assembles an example URL, it does not render a
+client (see [[L19]]).
+
+**The anti-blocking argument had to be taken apart twice.** First: spreading
+`sid` across clients hides nothing, because the shortId never appears on the
+wire — the client seals it inside the AEAD-encrypted TLS `session_id`, and
+`hex.Decode` into an 8-byte buffer means `""`, `"00"` and `"0000000000000000"`
+are the same entry, so an N-item list may not be N values. That looked like a
+licence for `serverNames[0]`. It was not: a censor sees the **marginal SNI
+distribution** across all flows to the IP, and `[0]` collapses it from N points
+to one. SNI blocking is measurably per-name — XTLS #3269 reports a
+Google-subdomain SNI blocked in Iran on day 2 at ~100GB while a domestic domain
+reached day 20 and 454GB. One flagged name costs ~1/N of clients under a spread
+and 100% under `[0]`. And an operator who wants one name already has
+`settings.serverName`, honoured everywhere since F023.
+
+**What was actually built:** `deriveListIndex(field, clientKey, n)` —
+`sha256(field|clientKey)`, top 8 bytes big-endian, mod n — applied in all three
+Go renderers and mirrored in `spider-x.ts`. `field` separates the two picks so
+they do not both land on the same index. The index is computed against the
+CURRENT list and never stored, so editing the list re-derives everyone onto a
+valid member on their next fetch, exactly as the random pick did. One published
+analysis claimed pinning would need re-pinning after a list edit; that is true
+of storing a value and false of deriving an index.
+
+**The corpus could not see any of this.** Every REALITY fixture declared exactly
+one `serverName` and one `shortId`, so a change of pick turned nothing red.
+`testdata/sharelink/vless-reality-multi-list.json` fixes that, and was proved
+red against BOTH prior behaviours: random (caught on `sid`) and index 0 (caught
+on `sni`).
 
 ---
 

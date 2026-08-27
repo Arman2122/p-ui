@@ -3,6 +3,7 @@ package sub
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -1572,8 +1573,8 @@ func applyShareRealityParams(stream map[string]any, params map[string]string, cl
 	realitySetting, _ := stream["realitySettings"].(map[string]any)
 	realitySettings, _ := searchKey(realitySetting, "settings")
 	if realitySetting != nil {
-		// A pinned settings.serverName wins; the random pick over serverNames stays
-		// for the unpinned case, a deliberate posture ledger L17 carries. F023.
+		// A pinned settings.serverName wins; unpinned, the list is picked from
+		// deterministically per client. F023, and ledger L17 for the pick.
 		if pinned, ok := searchKey(realitySettings, "serverName"); ok {
 			if name, _ := pinned.(string); name != "" {
 				params["sni"] = name
@@ -1582,7 +1583,7 @@ func applyShareRealityParams(stream map[string]any, params map[string]string, cl
 		if _, pinned := params["sni"]; !pinned {
 			if sniValue, ok := searchKey(realitySetting, "serverNames"); ok {
 				if sNames, _ := sniValue.([]any); len(sNames) > 0 {
-					params["sni"], _ = sNames[random.Num(len(sNames))].(string)
+					params["sni"], _ = sNames[deriveListIndex("sni", clientKey, len(sNames))].(string)
 				}
 			}
 		}
@@ -1591,7 +1592,7 @@ func applyShareRealityParams(stream map[string]any, params map[string]string, cl
 		}
 		if sidValue, ok := searchKey(realitySetting, "shortIds"); ok {
 			if shortIds, _ := sidValue.([]any); len(shortIds) > 0 {
-				params["sid"], _ = shortIds[random.Num(len(shortIds))].(string)
+				params["sid"], _ = shortIds[deriveListIndex("sid", clientKey, len(shortIds))].(string)
 			}
 		}
 		if fpValue, ok := searchKey(realitySettings, "fingerprint"); ok {
@@ -1629,6 +1630,31 @@ func deriveSpiderX(seed, clientKey string) string {
 	}
 	sum := sha256.Sum256([]byte(seed + "|" + clientKey))
 	return "/" + hex.EncodeToString(sum[:])[:15]
+}
+
+/*
+deriveListIndex picks one member of a REALITY list for a client, and picks the
+same one every time.
+
+A client link carries one sni and one sid, but the inbound declares lists. This
+used to be a fresh crypto/rand draw per render, so a client polling its
+subscription got a different link every time with nothing having changed --
+which no consumer can diff, cache or support, and which is the same reasoning
+that already moved spiderX to deriveSpiderX. Ledger L17.
+
+field separates the two picks: without it a client would land on the same index
+in both lists and the pairs would only ever be the diagonal.
+
+The index is computed against the CURRENT list, never stored, so editing the
+list re-derives everyone onto a valid member on their next fetch, exactly as the
+random pick did. frontend/src/lib/xray/spider-x.ts mirrors this byte for byte.
+*/
+func deriveListIndex(field, clientKey string, n int) int {
+	if n <= 1 {
+		return 0
+	}
+	sum := sha256.Sum256([]byte(field + "|" + clientKey))
+	return int(binary.BigEndian.Uint64(sum[:8]) % uint64(n))
 }
 
 func buildVmessLink(obj map[string]any) string {

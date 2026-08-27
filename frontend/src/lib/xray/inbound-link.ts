@@ -13,7 +13,7 @@ import type { XHttpStreamSettings } from '@/schemas/protocols/stream/xhttp';
 
 import { getHeaderValue } from './headers';
 import { canEnableTlsFlow, isSSMultiUser as canCarryClients } from './protocol-capabilities';
-import { deriveSpiderX } from './spider-x';
+import { deriveSpiderX, deriveListIndex } from './spider-x';
 import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
 import { awgInterfaceLines, awgLinesFromLinkParams, awgLinkParams, deviceMTU, needsExplicitMTU } from '@/lib/xray/awg-conf';
 import type { AwgParams } from '@/schemas/protocols/inbound/awgkernel';
@@ -444,14 +444,17 @@ export function genVlessLink(input: GenVlessLinkInput): string {
       params.set('pbk', reality.settings.publicKey);
       params.set('fp', reality.settings.fingerprint);
 
+      const names = reality.serverNames ?? [];
       const sni =
         reality.settings.serverName ||
-        reality.serverNames?.[0] ||
+        names[deriveListIndex('sni', clientKey, names.length)] ||
         reality.target?.split(':')[0];
 
       if (sni && sni.length > 0) params.set('sni', sni);
 
-      if (reality.shortIds.length > 0) params.set('sid', reality.shortIds[0]);
+      if (reality.shortIds.length > 0) {
+        params.set('sid', reality.shortIds[deriveListIndex('sid', clientKey, reality.shortIds.length)]);
+      }
       const spx = deriveSpiderX(reality.settings.spiderX, clientKey);
       if (spx.length > 0) params.set('spx', spx);
       if (reality.settings.mldsa65Verify.length > 0) params.set('pqv', reality.settings.mldsa65Verify);
@@ -541,14 +544,17 @@ function writeRealityParams(stream: NonNullable<Inbound['streamSettings']>, para
   params.set('pbk', reality.settings.publicKey);
   params.set('fp', reality.settings.fingerprint);
 
+  const names = reality.serverNames ?? [];
   const sni =
     reality.settings.serverName ||
-    reality.serverNames?.[0] ||
+    names[deriveListIndex('sni', clientKey, names.length)] ||
     reality.target?.split(':')[0];
 
   if (sni && sni.length > 0) params.set('sni', sni);
 
-  if (reality.shortIds.length > 0) params.set('sid', reality.shortIds[0]);
+  if (reality.shortIds.length > 0) {
+    params.set('sid', reality.shortIds[deriveListIndex('sid', clientKey, reality.shortIds.length)]);
+  }
   const spx = deriveSpiderX(reality.settings.spiderX, clientKey);
   if (spx.length > 0) params.set('spx', spx);
   if (reality.settings.mldsa65Verify.length > 0) params.set('pqv', reality.settings.mldsa65Verify);

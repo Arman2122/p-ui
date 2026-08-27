@@ -1,0 +1,31 @@
+{
+  "name": "vless-reality-multi-list",
+  "why": "REALITY with MORE THAN ONE serverName and shortId, and nothing pinned. Every other REALITY fixture declares exactly one of each, so the corpus could not see which member a renderer picks -- which is how the Go renderers re-rolled sni and sid on every fetch while Clash and the browser took index 0, undetected. The pick is per client and stable (ledger L17), so both values belong in expected.params with their derived values, the way spx already does. The client key here is its subId, and the two picks land on different indices on purpose: a renderer that salted both alike would pass a same-index fixture.",
+  "email": "golden",
+  "inbound": {
+    "protocol": "vless",
+    "listen": "203.0.113.12",
+    "port": 8443,
+    "remark": "golden-reality-spread",
+    "settings": "{\"clients\":[{\"id\":\"33333333-4444-5555-8666-777777777777\",\"email\":\"golden\",\"subId\":\"golden-spread\",\"flow\":\"\"}],\"decryption\":\"none\",\"encryption\":\"none\"}",
+    "streamSettings": "{\"network\":\"tcp\",\"security\":\"reality\",\"tcpSettings\":{\"header\":{\"type\":\"none\"}},\"realitySettings\":{\"serverNames\":[\"decoy-a.golden.test\",\"decoy-b.golden.test\",\"decoy-c.golden.test\"],\"shortIds\":[\"11aa\",\"22bb\",\"33cc\"],\"settings\":{\"publicKey\":\"PBKSPREAD\",\"fingerprint\":\"chrome\",\"spiderX\":\"/spread-seed\"}}}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "vless",
+    "userinfo": "33333333-4444-5555-8666-777777777777",
+    "host": "203.0.113.12",
+    "port": 8443,
+    "params": {
+      "type": "tcp",
+      "security": "reality",
+      "sni": "decoy-c.golden.test",
+      "sid": "11aa",
+      "pbk": "PBKSPREAD",
+      "fp": "chrome",
+      "spx": "/46fd0a0dbf92e86",
+      "encryption": "none"
+    }
+  },
+  "presentOnly": []
+}
