@@ -1012,7 +1012,7 @@ prompt_and_setup_ssl() {
                 if [[ -n "$ip_confirm" && "$ip_confirm" != "y" && "$ip_confirm" != "Y" ]]; then
                     server_ip=""
                     while [[ -z "$server_ip" ]]; do
-                        read -rp "Please enter your server's public IPv4 address: " server_ip
+                        read -rp "Please enter your server's public IPv4 address: " server_ip || break
                         server_ip="${server_ip// /}"
                         if [[ ! "$server_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                             echo -e "${red}Invalid IPv4 address. Please try again.${plain}"
@@ -1179,7 +1179,7 @@ config_after_install() {
         else
             echo -e "${yellow}Could not auto-detect server IP from any provider.${plain}"
             while [[ -z "$server_ip" ]]; do
-                read -rp "Please enter your server's public IPv4 address: " server_ip
+                read -rp "Please enter your server's public IPv4 address: " server_ip || break
                 server_ip="${server_ip// /}"
                 if [[ ! "$server_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                     echo -e "${red}Invalid IPv4 address. Please try again.${plain}"

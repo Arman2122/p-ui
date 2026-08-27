@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An update started from the panel no longer hangs forever when the server IP
+  cannot be detected.** The scripts asked for it at a prompt, in a loop with no
+  way out for a read that fails. The panel runs update.sh detached with no
+  terminal, so at that point the read failed instantly and the loop spun. The
+  panel itself had already restarted and kept serving, which is why this looked
+  like nothing at all: the update simply never finished, the progress indicator
+  stayed on forever, and fail2ban setup and the rest of the post-update steps
+  never ran.
+  **What you will notice:** an unattended update continues without the IP and
+  says so. An update you run yourself in a terminal is unchanged.
+
 - **Re-running the PostgreSQL setup no longer changes the database password out
   from under a working panel.** Menu option 25 -> 1 offers to "run setup anyway"
   on a machine that already has PostgreSQL, describing itself as ensuring the
