@@ -949,7 +949,9 @@ prompt_and_setup_ssl() {
     local server_ip="$3"
 
     local ssl_choice=""
-    SSL_SCHEME="https"
+    # Fail closed. Two failure branches below fall through without touching
+    # this, and announcing https on a panel with no cert sends the operator nowhere.
+    SSL_SCHEME="http"
 
     echo -e "${yellow}Choose SSL certificate setup method:${plain}"
     echo -e "${green}1.${plain} Let's Encrypt for Domain (90-day validity, auto-renews)"
@@ -983,6 +985,7 @@ prompt_and_setup_ssl() {
             # User chose Let's Encrypt domain option
             echo -e "${green}Using Let's Encrypt for domain certificate...${plain}"
             if ssl_cert_issue; then
+                SSL_SCHEME="https"
                 local cert_domain="${SSL_ISSUED_DOMAIN}"
                 if [[ -z "${cert_domain}" ]]; then
                     cert_domain=$(~/.acme.sh/acme.sh --list 2> /dev/null | tail -1 | awk '{print $1}')
@@ -1032,6 +1035,7 @@ prompt_and_setup_ssl() {
 
             setup_ip_certificate "${server_ip}" "${ipv6_addr}"
             if [ $? -eq 0 ]; then
+                SSL_SCHEME="https"
                 SSL_HOST="${server_ip}"
                 echo -e "${green}✓ Let's Encrypt IP certificate configured successfully${plain}"
             else
@@ -1094,6 +1098,7 @@ prompt_and_setup_ssl() {
                 SSL_HOST="${server_ip}"
             fi
 
+            SSL_SCHEME="https"
             echo -e "${green}✓ Custom certificate paths applied.${plain}"
             echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
 
@@ -1303,7 +1308,7 @@ config_after_install() {
             fi
 
             # Persist a machine-parseable credentials file for cloud-init / MOTD.
-            : "${SSL_SCHEME:=https}"
+            : "${SSL_SCHEME:=http}"
             : "${SSL_HOST:=${server_ip}}"
             write_install_result "${config_username}" "${config_password}" "${config_port}" \
                 "${config_webBasePath}" "${SSL_SCHEME}" "${SSL_HOST}" "${config_apiToken}"
@@ -1344,7 +1349,13 @@ config_after_install() {
             # Persist a machine-parseable credentials file for cloud-init / MOTD.
             local config_apiToken
             config_apiToken=$(${pui_folder}/p-ui setting -getApiToken true | grep -Eo 'apiToken: .+' | awk '{print $2}')
-            : "${SSL_SCHEME:=https}"
+            # prompt_and_setup_ssl does not run on this branch, so the scheme comes
+            # from the certificate the panel actually has rather than a guess.
+            if [[ -n "${existing_cert}" ]]; then
+                : "${SSL_SCHEME:=https}"
+            else
+                : "${SSL_SCHEME:=http}"
+            fi
             : "${SSL_HOST:=${server_ip}}"
             write_install_result "${config_username}" "${config_password}" "${existing_port}" \
                 "${existing_webBasePath}" "${SSL_SCHEME}" "${SSL_HOST}" "${config_apiToken}"

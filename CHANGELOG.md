@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The installer no longer reports HTTPS after a certificate failed to issue.**
+  When Let'''s Encrypt could not issue for your domain or your IP, the installer
+  printed the red failure line and then went on to print an `https://` access
+  URL, state "SSL Certificate: Enabled and configured", and write `scheme=https`
+  into `/etc/p-ui/install-result.env` for cloud-init and the login banner to
+  repeat -- while the panel was serving plain HTTP and that URL refused to
+  connect.
+  **What you will notice:** after a failed certificate the URL is `http://` and
+  the summary says the panel is HTTP-only. A certificate that issues is
+  unchanged.
+
 - **An update started from the panel no longer hangs forever when the server IP
   cannot be detected.** The scripts asked for it at a prompt, in a loop with no
   way out for a read that fails. The panel runs update.sh detached with no
