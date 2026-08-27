@@ -155,7 +155,6 @@ export interface ShadowsocksInboundSeed {
   method?: ShadowsocksInboundSettings['method'];
   password?: string;
   network?: ShadowsocksInboundSettings['network'];
-  ivCheck?: boolean;
 }
 
 export function createDefaultShadowsocksInboundSettings(
@@ -167,7 +166,6 @@ export function createDefaultShadowsocksInboundSettings(
     password: seed.password ?? RandomUtil.randomShadowsocksPassword(method),
     network: seed.network ?? 'tcp,udp',
     clients: [],
-    ivCheck: seed.ivCheck ?? false,
   };
 }
 

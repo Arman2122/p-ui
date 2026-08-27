@@ -31,6 +31,5 @@ export const ShadowsocksInboundSettingsSchema = z.object({
   password: z.string().default(''),
   network: SSNetworkSchema.default('tcp,udp'),
   clients: z.array(ShadowsocksClientSchema).default([]),
-  ivCheck: z.boolean().default(false),
 });
 export type ShadowsocksInboundSettings = z.infer<typeof ShadowsocksInboundSettingsSchema>;

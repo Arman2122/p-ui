@@ -110,7 +110,6 @@ exports[`InboundSchema (full) fixtures > parses shadowsocks-tcp-2022 byte-stably
         "totalGB": 0,
       },
     ],
-    "ivCheck": false,
     "method": "2022-blake3-aes-256-gcm",
     "network": "tcp,udp",
     "password": "ZmFrZS1zZXJ2ZXItcGFzc3dvcmQtMDAwMQ==",
