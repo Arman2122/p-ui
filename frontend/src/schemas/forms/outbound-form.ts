@@ -224,6 +224,9 @@ export type OutboundStreamFormValues = z.infer<typeof OutboundStreamFormSchema>;
 // targetStrategy '' means AsIs (omitted from wire).
 export const OutboundFormBaseSchema = z.object({
   tag: z.string().default(''),
+  // Not a field: the one standard OutboundDetourConfig key the form has no UI
+  // for, carried verbatim so editing an outbound does not delete it.
+  proxySettings: z.unknown().optional(),
   sendThrough: z.string().default(''),
   targetStrategy: z.union([OutboundDomainStrategySchema, z.literal('')]).default(''),
   streamSettings: OutboundStreamFormSchema.optional(),

@@ -384,6 +384,7 @@ export interface RawOutboundRow {
   targetStrategy?: string;
   settings?: unknown;
   streamSettings?: unknown;
+  proxySettings?: unknown;
   mux?: unknown;
 }
 
@@ -452,6 +453,7 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
     targetStrategy,
     mux,
     streamSettings,
+    proxySettings: raw.proxySettings,
   };
 }
 
@@ -715,6 +717,17 @@ export function formValuesToWirePayload(values: OutboundFormValues): WireOutboun
       const sockopt = (values.streamSettings as { sockopt?: unknown }).sockopt;
       if (sockopt) result.streamSettings = { sockopt };
     }
+  }
+
+  // proxySettings has no form control, so it is carried rather than rebuilt.
+  // Dropped when it would collide: the core refuses a config that sets both
+  // proxySettings.tag and sockopt.dialerProxy, and dialerProxy is the one the
+  // form actually manages.
+  const carried = asObject(values.proxySettings);
+  if (Object.keys(carried).length > 0) {
+    const emittedSockopt = asObject(asObject(result.streamSettings).sockopt);
+    const collides = asString(carried.tag) !== '' && asString(emittedSockopt.dialerProxy) !== '';
+    if (!collides) result.proxySettings = values.proxySettings;
   }
 
   if (values.sendThrough) result.sendThrough = values.sendThrough;
