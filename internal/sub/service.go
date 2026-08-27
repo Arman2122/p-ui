@@ -318,8 +318,13 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 			} else {
 				link = s.GetLink(inbound, client.Email)
 			}
-			result = append(result, link)
-			emails = append(emails, client.Email)
+			// A kind with no shareable link renders "" -- http/mixed/tunnel, and a
+			// WireGuard client holding no private key. seenEmails stays
+			// unconditional so the traffic header still counts them. F311.
+			if link != "" {
+				result = append(result, link)
+				emails = append(emails, client.Email)
+			}
 			seenEmails[client.Email] = struct{}{}
 		}
 	}
