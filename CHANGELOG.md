@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Opening the Xray log viewer no longer reads the whole access log into
+  memory.** Every line that survived the filters was collected first and the row
+  count you asked for was applied only at the end, so asking for the newest 20
+  lines parsed the entire file. Xray rotates that file at 64 MiB and an operator
+  with debug logging reaches it in hours; on a small VPS the panel could be
+  killed for opening a modal.
+  **What you will notice:** the viewer is unchanged in what it shows. A row
+  count outside 1-10000 is now refused, the same range the application-log
+  viewer already enforces -- previously a count of 0 or a non-number silently
+  returned nothing after reading the whole file, and a negative count crashed
+  the request.
+
 - **IPv6 WireGuard inbounds can hand out more than one working client.** Client
   addresses were always rendered with a `/32` host suffix, which is meaningful
   only for IPv4. On an inbound whose device address is IPv6, every client got a
