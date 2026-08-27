@@ -44,6 +44,32 @@ func validateClientSubID(subID string) error {
 	return nil
 }
 
+/*
+urlHostileSubIDChars break the subscription URL the id becomes a path segment
+of: '#' truncates it to a fragment, '?' starts a query, '%' opens an escape the
+router decodes before the lookup.
+
+Deliberately NOT added to hasForbiddenClientChar, which email shares -- widening
+that would silently start refusing emails. And deliberately not '&' or '+':
+both are legal literals in a path segment and round-trip today, so banning them
+would be a regression rather than hardening. F174.
+*/
+const urlHostileSubIDChars = "#?%"
+
+// validateNewClientSubID is the check for a value being SET, as opposed to one
+// being re-saved. Update and import both re-validate a stored id, so applying
+// this retroactively would make an existing client uneditable and unimportable
+// rather than merely un-fetchable.
+func validateNewClientSubID(subID string) error {
+	if err := validateClientSubID(subID); err != nil {
+		return err
+	}
+	if strings.ContainsAny(subID, urlHostileSubIDChars) {
+		return common.NewError("client subId contains a character that breaks its own subscription URL (#, ? or %):", subID)
+	}
+	return nil
+}
+
 func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreatePayload) (bool, error) {
 	if payload == nil {
 		return false, common.NewError("empty payload")
@@ -55,7 +81,7 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	if err := validateClientEmail(client.Email); err != nil {
 		return false, err
 	}
-	if err := validateClientSubID(client.SubID); err != nil {
+	if err := validateNewClientSubID(client.SubID); err != nil {
 		return false, err
 	}
 	if len(payload.InboundIds) == 0 {
@@ -320,6 +346,13 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	}
 	if err := validateClientSubID(updated.SubID); err != nil {
 		return false, err
+	}
+	// The stricter rule applies to a CHANGED value only, so a client already
+	// holding one of these characters stays editable.
+	if updated.SubID != existing.SubID {
+		if err := validateNewClientSubID(updated.SubID); err != nil {
+			return false, err
+		}
 	}
 	if updated.SubID == "" {
 		updated.SubID = existing.SubID

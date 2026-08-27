@@ -185,6 +185,20 @@ export const GroupSummarySchema = z.object({
 
 export const GroupSummaryListSchema = z.array(GroupSummarySchema).nullable().transform((v) => v ?? []);
 
+/*
+Characters that break the subscription URL a subId becomes a path segment of:
+'#' truncates it to a fragment, '?' starts a query, '%' opens an escape the
+router decodes before the lookup.
+
+Kept out of hasForbiddenClientChars, which email shares — widening that would
+silently start refusing emails. '&' and '+' are deliberately absent: both are
+legal literals in a path segment and round-trip today. Mirrors
+urlHostileSubIDChars in internal/web/service/client_crud.go. F174.
+*/
+export function hasUrlHostileSubIdChars(value: string): boolean {
+  return value.includes('#') || value.includes('?') || value.includes('%');
+}
+
 export function hasForbiddenClientChars(value: string): boolean {
   if (value.includes('/') || value.includes('\\') || value.includes(' ')) return true;
   for (let i = 0; i < value.length; i++) {
@@ -200,7 +214,9 @@ export const ClientFormSchema = z.object({
     .trim()
     .min(1, 'pages.clients.email')
     .refine((v) => !hasForbiddenClientChars(v), 'pages.clients.emailInvalidChars'),
-  subId: z.string().refine((v) => !hasForbiddenClientChars(v), 'pages.clients.subIdInvalidChars'),
+  subId: z.string()
+    .refine((v) => !hasForbiddenClientChars(v), 'pages.clients.subIdInvalidChars')
+    .refine((v) => !hasUrlHostileSubIdChars(v), 'pages.clients.subIdInvalidChars'),
   uuid: z.string(),
   password: z.string(),
   auth: z.string(),
