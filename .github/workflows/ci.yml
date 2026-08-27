@@ -107,7 +107,10 @@ jobs:
       - name: Test
         run: |
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
-          go test -shuffle=on -count=1 -skip 'Scale$' $(cat /tmp/go-packages.txt)
+          # -timeout, for the reason the race job states: Go's default is 10
+          # minutes PER PACKAGE and internal/web/service measures ~600s, so a
+          # slow run and a hang produce the same red. Ledger L16.
+          go test -shuffle=on -count=1 -timeout 30m -skip 'Scale$' $(cat /tmp/go-packages.txt)
 
   # Fails the build on SKIP, so this commit-failure coverage can never go quiet
   # the way the whole DB-backed suite above did.
