@@ -3,7 +3,9 @@ package ldaputil
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"slices"
+	"time"
 
 	"github.com/go-ldap/ldap/v3"
 )
@@ -30,6 +32,32 @@ func tlsConfig(cfg Config) *tls.Config {
 	return &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}
 }
 
+/*
+dialTimeout bounds the connection AND every request on it. DialURL alone bounds
+neither, so a directory that accepts the TCP connection and never answers hung
+the sync goroutine and its socket -- once a minute, forever, until the panel
+ran out of file descriptors.
+*/
+var dialTimeout = 15 * time.Second
+
+func dial(cfg Config) (*ldap.Conn, error) {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+
+	scheme := "ldap"
+	opts := []ldap.DialOpt{ldap.DialWithDialer(&net.Dialer{Timeout: dialTimeout})}
+	if cfg.UseTLS {
+		scheme = "ldaps"
+		opts = append(opts, ldap.DialWithTLSConfig(tlsConfig(cfg)))
+	}
+
+	conn, err := ldap.DialURL(fmt.Sprintf("%s://%s", scheme, addr), opts...)
+	if err != nil {
+		return nil, err
+	}
+	conn.SetTimeout(dialTimeout)
+	return conn, nil
+}
+
 // FetchVlessFlags returns map[email]enabled
 /*
 ldapSearchPageSize is a page, not a cap: SearchWithPaging keeps asking until the
@@ -39,21 +67,7 @@ trip. Active Directory's own MaxPageSize default is 1000.
 const ldapSearchPageSize = 500
 
 func FetchVlessFlags(cfg Config) (map[string]bool, error) {
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-
-	scheme := "ldap"
-	if cfg.UseTLS {
-		scheme = "ldaps"
-	}
-
-	ldapURL := fmt.Sprintf("%s://%s", scheme, addr)
-
-	var opts []ldap.DialOpt
-	if cfg.UseTLS {
-		opts = append(opts, ldap.DialWithTLSConfig(tlsConfig(cfg)))
-	}
-
-	conn, err := ldap.DialURL(ldapURL, opts...)
+	conn, err := dial(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -109,21 +123,7 @@ func FetchVlessFlags(cfg Config) (map[string]bool, error) {
 
 // AuthenticateUser searches user by cfg.UserAttr and attempts to bind with provided password.
 func AuthenticateUser(cfg Config, username, password string) (bool, error) {
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-
-	scheme := "ldap"
-	if cfg.UseTLS {
-		scheme = "ldaps"
-	}
-
-	ldapURL := fmt.Sprintf("%s://%s", scheme, addr)
-
-	var opts []ldap.DialOpt
-	if cfg.UseTLS {
-		opts = append(opts, ldap.DialWithTLSConfig(tlsConfig(cfg)))
-	}
-
-	conn, err := ldap.DialURL(ldapURL, opts...)
+	conn, err := dial(cfg)
 	if err != nil {
 		return false, err
 	}
