@@ -456,6 +456,15 @@ taken with that family, not with the Mediums.
 
 **Leave, with the reason on the record:**
 
+> **Superseded 2026-08-27 — this section was wrong.** The paragraph below was
+> written from the shape of the finding titles, not from re-reading the code.
+> All 231 uncited findings were then triaged one by one against the tree:
+> **178 are still live defects and 45 of those can hurt a running panel.** An
+> adversarial re-check overturned 6 of the *not a defect* verdicts. F188, named
+> below as a UI irritation that "destroys nothing", silently discards every
+> routing attribute and vlessRoute the operator typed. The measured list is
+> `TRIAGE-2026-08-27.md`; read that instead of the next paragraph.
+
 The remaining ~140 Mediums are predominantly single-protocol cosmetics
 (a missing link parameter for one transport), feature-gap-shaped items that
 belong in `feature-gaps.md` rather than a defect list, and UI-lossiness findings
