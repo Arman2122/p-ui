@@ -1270,3 +1270,36 @@ rather than the ones this entry originally set.
 **Not a security hole, and worth stating plainly:** the fallback never sends the
 panel's traffic somewhere unintended. It sends it directly, which is where it
 would go with the feature switched off.
+
+## L26 — the installer's custom-certificate path never checks whether the certificate applied
+
+Found while fixing F225, and deliberately left out of that commit.
+
+`prompt_and_setup_ssl` case 3 is the "I already have a certificate, here are the
+paths" option. It ends with
+
+```
+${pui_folder}/p-ui cert -webCert "$custom_cert" -webCertKey "$custom_key" > /dev/null 2>&1
+
+... 
+echo -e "${green}✓ Custom certificate paths applied.${plain}"
+```
+
+The exit status is discarded and both stdout and stderr go to `/dev/null`, so a
+certificate the panel rejects — wrong key for the cert, an unreadable file, a
+path that exists but holds something else — prints a green tick, raises
+`SSL_SCHEME` to https and is persisted into `install-result.env` as a configured
+certificate. Case 1 and case 2 both branch on their issuer's exit status; only
+this one does not.
+
+F225 was about the *scheme* being claimed without a certificate, and its fix
+makes cases 1 and 2 honest. Case 3 is a different mechanism — the command's
+result is thrown away rather than a variable being left stale — and fixing it
+means deciding what the installer should do when the operator's own files are
+rejected mid-install: re-prompt for paths, fall back to case 4, or abort. That
+is a behaviour choice, not a repair, so it is recorded here rather than shipped
+next to a fix that did not ask for it.
+
+Cheap when taken: branch on the exit status, keep the failure message, and leave
+`SSL_SCHEME` alone on the failing branch — the F225 guard already asserts the
+fail-closed default it would fall back to.
