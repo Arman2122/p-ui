@@ -915,3 +915,84 @@ call, in a log nobody reads until something else breaks.
 **Cost to close:** the first is small and is probably the answer; it needs the
 validator seam the settings page already has, plus one locale key in both files,
 which means the Persian rule applies before it lands.
+
+## L23 — the sidecar's secret rule is stricter than the panel's, and F172 reasoned from the wrong end
+
+**Found while:** fixing F172 (mtproto client secret not healed on the client-edit
+path).
+
+The harvest plan for F172 said, explicitly, not to add a strict FakeTLS
+validator: it "would refuse bare 32-hex secrets the repo's own parsers accept."
+That is true of the panel's parsers — `mtprotoSecretMiddle` strips an optional
+`ee`/`dd` prefix and accepts what follows, `mtprotoSecretDomain` returns "" for a
+prefix-less value rather than failing.
+
+It is not true of the thing that consumes the secret. `mtglib.Secret.Set`
+(mtg-proxy `mtglib/secret.go:63-98`) requires: hex **or** raw-URL base64, first
+byte `0xee`, at least `SecretKeyLength` (16) key bytes after it, and a non-empty
+hostname remainder. A bare 32-hex secret has no `0xee` byte. A `dd`-prefixed
+obfuscated2 secret has the wrong one. Neither is accepted.
+
+**Severity was also understated.** The finding reads as one broken client. It is
+not:
+
+- `PUT /secrets` parses every entry before applying any and returns 400 on the
+  first bad one (`mtglib/proxy_api.go:416-418`), so **no** client's edit on that
+  inbound hot-applies; and
+- at cold start `Config.Validate` walks the same set and refuses to run
+  (`internal/config/config.go:151-162`), so the whole inbound is down.
+
+**Disposition: closed** by 990805f7. `mtproto.UsableSecret` mirrors `Secret.Set`
+including **both** decode branches — a hex-only mirror would look tighter and
+would drop a base64url secret the sidecar serves today, which is a fresh outage
+inside a fix for an outage.
+
+**Tally.** This is the seventh audit *explanation* to fail against the source
+(after F234, F137, §23, §24, F103's two extra claims, and F018's refusal that
+does not exist). Locations have been right every time. The pattern is stable
+enough to state as a rule: **treat a finding's location as evidence and its
+explanation as a hypothesis.**
+
+**Follow-on, not this fix.** We own the fork now. Making `PUT /secrets`
+skip-and-report an invalid entry instead of failing the batch removes this
+failure class at the source. Queued with the transport work; the panel-side drop
+is still needed either way, for older binaries and for rows already stored.
+
+## L24 — F138's Clash half was the whole host merge, not the hop-port field
+
+**Found while:** re-reading F138 after the campaign's own audit reopened it.
+
+F138 was recorded and closed as "`mport` is missing from the Clash Hysteria
+entry". The actual defect is one line up: `buildHysteriaProxy` discarded the
+merged stream `getProxies` had just built for it and re-unmarshalled
+`inbound.StreamSettings`. So **every** host override was invisible to a Clash
+Hysteria entry — SNI, ALPN, fingerprint, the Salamander obfs password and the
+hop range — not just the hop range.
+
+Its reason for re-unmarshalling was sound: `streamData` flattens `tlsSettings`
+and drops `allowInsecure`, both of which Hysteria needs. The fix therefore
+merges the host into both stream shapes rather than deleting the raw read.
+
+**Disposition: closed** by eff66c2d. A comment in `host_sub.go` claiming clash
+ignores `finalmask` is corrected in the same commit — it does not, and believing
+it is how the obfs and hop-range halves went unnoticed.
+
+## L25 — the dead frontend host-link builder was deleted on my own judgement
+
+**Found while:** working the harvest queue (#16 / F145).
+
+The plan for F145 said to confirm with the user that host-aware panel preview is
+not queued work before deleting `frontend/src/lib/hosts/host-link.ts`. Under the
+standing autonomy grant I made that call rather than blocking on it, and this
+entry is the trail.
+
+**Why deletion:** 5df0fb20 moved host rendering to the server and
+`server-links.ts:15-19` warns against reintroducing it in the browser. The file
+had already drifted — for a host with port 0 ("inherit") it returned a hardcoded
+443, where Go inherits the inbound's port (`host_sub.go:50-52`) — and its own
+test green-certified that drift, so keeping it was holding a future bug in
+place.
+
+**Disposition: closed** by 29efca43. Reversible with one `git revert` if
+host-aware preview is in fact wanted; the reasoning above is the thing to argue
+with, not the deletion.
