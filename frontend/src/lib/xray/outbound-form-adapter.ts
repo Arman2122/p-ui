@@ -4,6 +4,7 @@ import { normalizeStreamSettingsForWire } from '@/lib/xray/stream-wire-normalize
 import { Wireguard } from '@/utils';
 import type { Sniffing, SniffingDest } from '@/schemas/primitives';
 import type { OutboundDomainStrategy } from '@/schemas/protocols/outbound';
+import { canEnableStream } from './protocol-capabilities';
 
 import type {
   DnsOutboundFormSettings,
@@ -645,8 +646,6 @@ function loopbackToWire(s: LoopbackOutboundFormSettings) {
 
 // canEnableMux mirrors the legacy Outbound.canEnableMux().
 const MUX_PROTOCOLS = new Set(['vmess', 'vless', 'trojan', 'shadowsocks', 'http', 'socks']);
-const STREAM_PROTOCOLS = new Set(['vmess', 'vless', 'trojan', 'shadowsocks', 'hysteria']);
-
 function dropEmptyStrings(obj: Raw): Raw {
   const out: Raw = {};
   for (const [k, v] of Object.entries(obj)) {
@@ -708,10 +707,10 @@ export function formValuesToWirePayload(values: OutboundFormValues): WireOutboun
   if (values.tag) result.tag = values.tag;
   if (values.targetStrategy) result.targetStrategy = values.targetStrategy;
 
-  // streamSettings emission gates on canEnableStream — non-stream protocols
-  // still emit just `sockopt` if that key is present (legacy behavior).
+  // Gates on canEnableStream itself; a private copy of the list omitted
+  // wireguard, whose UDP masks the core does apply. Others emit sockopt only.
   if (values.streamSettings) {
-    if (STREAM_PROTOCOLS.has(values.protocol)) {
+    if (canEnableStream({ protocol: values.protocol })) {
       result.streamSettings = stripUiOnlyStreamFields(values.streamSettings);
     } else {
       const sockopt = (values.streamSettings as { sockopt?: unknown }).sockopt;

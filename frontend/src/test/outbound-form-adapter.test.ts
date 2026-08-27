@@ -642,3 +642,45 @@ describe('proxySettings round trip', () => {
     expect('proxySettings' in back).toBe(false);
   });
 });
+
+/*
+A WireGuard outbound must keep the UDP masks the form let you configure.
+
+The emitter's own comment says it "gates on canEnableStream", and it did not: it
+tested a third, private copy of the protocol list that omitted wireguard and
+tunnel. A wireguard outbound therefore fell to the else branch and emitted only
+`{sockopt}`, dropping every finalmask the operator had set.
+
+The form is right and the emitter was wrong, which xray-core settles rather than
+taste: proxy/wireguard/client.go:280-281 — the OUTBOUND — wraps its packet conn
+with streamSettings.UdpmaskManager, and memory_settings.go:79 builds that
+manager straight from the finalmask config. The masks were being honoured by the
+core and thrown away by the panel. F315.
+*/
+describe('a wireguard outbound with UDP masks', () => {
+  const wire = {
+    protocol: 'wireguard',
+    tag: 'wg-out',
+    settings: {
+      secretKey: 'aGVsbG93b3JsZGhlbGxvd29ybGRoZWxsb3dvcmxkMTI=',
+      address: ['10.0.0.2/32'],
+      peers: [{ publicKey: 'cGVlcmtleXBlZXJrZXlwZWVya2V5cGVlcmtleTEyMz0=', endpoint: 'example.com:51820' }],
+    },
+    streamSettings: {
+      sockopt: { tcpFastOpen: true },
+      finalmask: { udp: [{ type: 'salamander', settings: { password: 'hunter2' } }] },
+    },
+  };
+
+  it('emits the finalmask, not just sockopt', () => {
+    const back = formValuesToWirePayload(rawOutboundToFormValues(wire));
+    const stream = back.streamSettings as Record<string, unknown>;
+
+    expect(stream, 'the outbound emitted no streamSettings at all').toBeDefined();
+    expect(
+      stream.finalmask,
+      'the UDP masks the form accepted were dropped on save; xray-core would have applied them',
+    ).toBeDefined();
+    expect(stream.sockopt).toMatchObject({ tcpFastOpen: true });
+  });
+});

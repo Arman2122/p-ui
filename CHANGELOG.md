@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A WireGuard outbound keeps the UDP masks you configure for it.** The form
+  offered a Final Mask editor for WireGuard outbounds and the save silently
+  emitted only `sockopt`, dropping every mask. Xray applies those masks on a
+  WireGuard outbound, so the panel was discarding a setting the core would have
+  honoured.
+  **What you will notice:** masks set on a WireGuard outbound now reach the
+  generated config. If you had configured them and wondered why nothing changed,
+  they will start taking effect after the next restart.
+
 - **You can reset the traffic of the clients you selected.** The panel offered
   "reset this one client" on a row and "reset all client traffic" in the menu,
   with nothing in between -- so resetting forty renewed subscriptions meant
