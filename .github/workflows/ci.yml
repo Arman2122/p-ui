@@ -20,6 +20,11 @@ on:
       # The share-link corpus is data, not code: both harnesses read it, so a
       # fixture edit must run CI or it lands unchecked in either renderer.
       - "testdata/sharelink/**"
+      # internal/arch parses these, and i18n-dead-keys reads the locale JSON.
+      # Without them a commit touching only a shell script or a translation runs
+      # no CI at all -- and the guard that would have caught it lives here.
+      - "**.sh"
+      - "internal/web/translation/**"
       - ".github/workflows/ci.yml"
   push:
     branches:
@@ -33,6 +38,11 @@ on:
       # The share-link corpus is data, not code: both harnesses read it, so a
       # fixture edit must run CI or it lands unchecked in either renderer.
       - "testdata/sharelink/**"
+      # internal/arch parses these, and i18n-dead-keys reads the locale JSON.
+      # Without them a commit touching only a shell script or a translation runs
+      # no CI at all -- and the guard that would have caught it lives here.
+      - "**.sh"
+      - "internal/web/translation/**"
       - ".github/workflows/ci.yml"
 
 permissions:

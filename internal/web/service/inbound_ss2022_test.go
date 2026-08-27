@@ -71,6 +71,12 @@ func TestAShadowsocks2022ServerKeyTooShortForItsMethodIsRefused(t *testing.T) {
 			why:      "ShadowsocksKeyBytes returns 0 and there is no size to check",
 		},
 		{
+			name:     "a present but EMPTY server key",
+			settings: `{"method":"2022-blake3-aes-256-gcm","password":"","clients":[]}`,
+			refused:  true,
+			why:      "it decodes to zero bytes, and sing answers ErrMissingPSK -- the same whole-config refusal. An audit found this accepted because the guard short-circuited on key == \"\"",
+		},
+		{
 			name:     "settings with no password at all",
 			settings: `{"method":"2022-blake3-aes-256-gcm","clients":[]}`,
 			refused:  false,

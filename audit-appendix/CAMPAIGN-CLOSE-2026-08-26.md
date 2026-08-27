@@ -426,7 +426,7 @@ taken with that family, not with the Mediums.
 > | 1 — access control (10) | **closed** |
 > | 2 — `runtime.Runtime` bypass (7) | **closed**, with §23's correction |
 > | 3 — data destruction (10) | **closed** |
-> | 4 — validation off the path | **closed** — import through the validator, AWG at the API boundary via a core capability |
+> | 4 — validation off the path | **closed 2026-08-27**, later than this row first claimed — the import half was recorded closed while `importInbound` still bare-unmarshalled; see `RUNTIME-RESULTS` §27 |
 > | 5 — lockout family | **closed** — F394, F224, plus the `p-ui setting` escapes |
 > | 6 — renderer corpus (15) | **closed** — F023, F129/F143, F138, F139, F126/F214, F081, and the corpus itself |
 >

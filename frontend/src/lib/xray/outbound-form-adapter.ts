@@ -538,11 +538,21 @@ function httpToWire(s: HttpOutboundFormSettings): Raw {
   return wire;
 }
 
+// wireguardAddresses returns undefined rather than [] for a blank field, so the
+// key is dropped from the payload entirely. See F080.
+function wireguardAddresses(value: string | undefined): string[] | undefined {
+  const parts = (value ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : undefined;
+}
+
 function wireguardToWire(s: WireguardOutboundFormSettings) {
   return {
     mtu: s.mtu || undefined,
     secretKey: s.secretKey,
-    address: s.address ? s.address.split(',').map((x) => x.trim()).filter(Boolean) : [],
+    /* Omitted, not emptied. Xray picks a bogon local address when the key is
+       ABSENT (infra/conf/wireguard.go:80); a JSON [] is non-nil, takes the else
+       branch and leaves the outbound with no endpoint at all. F080. */
+    address: wireguardAddresses(s.address),
     domainStrategy: s.domainStrategy || undefined,
     reserved: s.reserved
       ? s.reserved.split(',').map((x) => Number(x.trim())).filter((n) => Number.isFinite(n))

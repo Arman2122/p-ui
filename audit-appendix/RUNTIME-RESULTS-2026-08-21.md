@@ -1086,6 +1086,37 @@ ContentPaddingAddition claim, and this).
 
 ---
 
+## 27. F031/F312 were recorded as closed and were not
+
+`CAMPAIGN-CLOSE-2026-08-26.md` §6 item 4 marks the validation cluster closed with
+"import through the validator". An independent audit of this campaign's own
+claims checked the tree and found it disagreed.
+
+`internal/web/controller/inbound.go` `importInbound` decoded its payload with a
+bare `json.Unmarshal` of `c.PostForm("data")` and validated nothing — while
+`addInbound` and `updateInbound` both went through `BindAndValidate`. So every
+`validate:` tag on `model.Inbound`, the port range and the protocol enum
+included, was unenforced on the one endpoint whose whole job is ingesting a
+config from somewhere else. `git log -S` finds no commit that ever touched it.
+
+**Why it was missed, which matters more than the miss.** The endpoint's body is
+a JSON string inside a form field, so `c.ShouldBind` cannot reach it and
+`BindAndValidate` does not fit. The two obvious moves were to skip validation or
+to grow a second validator; the first happened, and then the close doc recorded
+the cluster as done on the strength of its other half.
+
+Closed now with `middleware.ValidateStruct`, which runs the same validator over
+an already-decoded struct and writes the same failure payload. A source guard
+pins that the call follows the decode — validating an empty struct passes and
+proves nothing.
+
+**The lesson is about the record, not the code.** Every other closure claim in
+this campaign was checked by the same audit and held. This one was closed on a
+plausible inference rather than a read, and it stayed wrong for as long as
+nobody re-read it.
+
+---
+
 ## Refuted on re-read
 
 - **F234** — see §9. Not reproducible on the pinned core, and its cited code path was replaced by f1c7071d.

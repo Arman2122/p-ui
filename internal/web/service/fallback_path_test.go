@@ -22,6 +22,35 @@ RESTART and refuses to stop the running process, so the surviving window is a
 cold start: a reboot, or a first start after the row was written. This guard
 stops the row being written at all.
 */
+/*
+And the STORED value is what the core sees.
+
+The guard validates a trimmed copy; xray-core tests `fb.Path[0]` on the raw
+string. Validating one and storing the other let " /GunService" pass the guard
+and still fail the config — which is the hole an audit of the first version of
+this fix found, because the test above only asserts on the return value and is
+green either way.
+*/
+func TestAFallbackPathIsStoredAsItWasValidated(t *testing.T) {
+	setupConflictDB(t)
+	master := seedFallbackMaster(t, "fb-store", 25137, "none")
+
+	svc := &FallbackService{}
+	if err := svc.SetByMaster(master.Id, []FallbackInput{{Dest: "8080", Path: " /GunService "}}); err != nil {
+		t.Fatalf("SetByMaster: %v", err)
+	}
+	rows, err := svc.GetByMaster(master.Id)
+	if err != nil {
+		t.Fatalf("GetByMaster: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("want one fallback row, got %d", len(rows))
+	}
+	if rows[0].Path != "/GunService" {
+		t.Fatalf("stored path is %q; the core reads the raw string and refuses the whole config when its first byte is not '/'", rows[0].Path)
+	}
+}
+
 func TestAFallbackPathMustStartWithASlash(t *testing.T) {
 	setupConflictDB(t)
 	master := seedFallbackMaster(t, "fb-path", 25131, "none")
@@ -55,6 +84,12 @@ func TestAFallbackPathMustStartWithASlash(t *testing.T) {
 			path:    "",
 			refused: false,
 			why:     "empty is explicitly allowed by the core",
+		},
+		{
+			name:    "a leading space before a good path",
+			path:    " /GunService",
+			refused: false,
+			why:     "the core tests fb.Path[0] on the RAW string, so this must be STORED trimmed rather than merely validated trimmed",
 		},
 		{
 			name:    "whitespace around a slashless path is still slashless",
