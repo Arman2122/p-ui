@@ -519,7 +519,9 @@ func assignStableTags(parsed []link.Outbound, identities []string, prev map[stri
 // for every enabled subscription. This is the set that should be merged into
 // the final Xray config. Order: subscription creation order (by id asc) so
 // that later subscriptions can shadow earlier ones if the admin uses colliding
-// prefixes (last writer wins inside xray, but we try to keep tags unique).
+// prefixes. Not "last writer wins": xray's AddHandler hard-refuses a duplicate
+// tag, and mergeSubscriptionOutbounds drops a colliding entry before it gets
+// there, so a collision costs that outbound entirely. F078.
 func (s *OutboundSubscriptionService) AllActiveOutbounds() ([]any, error) {
 	prepend, appendList, err := s.activeOutboundsSplit()
 	if err != nil {
