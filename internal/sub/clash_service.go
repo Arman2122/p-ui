@@ -147,6 +147,11 @@ func fallbackProxyName(proxy map[string]any, idx int) string {
 
 func (s *SubClashService) getProxies(subReq *SubService, inbound *model.Inbound, client model.Client, host string) []map[string]any {
 	stream := s.streamData(inbound.StreamSettings)
+	// Hysteria reads the stream unpruned (streamData flattens tlsSettings and
+	// drops allowInsecure), so the host merge has to be applied to both shapes.
+	var rawStream map[string]any
+	_ = json.Unmarshal([]byte(inbound.StreamSettings), &rawStream)
+	delete(rawStream, "externalProxy")
 	// For node-managed inbounds the Clash proxy "server" must be the
 	// node's address, not the request host. resolveInboundAddress handles
 	// the node→subscriber-host fallback chain.
@@ -182,28 +187,11 @@ func (s *SubClashService) getProxies(subReq *SubService, inbound *model.Inbound,
 			workingInbound.Port = int(port)
 		}
 		workingStream := cloneStreamForExternalProxy(stream)
+		applyEndpointToStream(extPrxy, workingStream, hasExternalProxy)
+		workingRaw := cloneStreamForExternalProxy(rawStream)
+		applyEndpointToStream(extPrxy, workingRaw, hasExternalProxy)
 
-		forceTls, _ := extPrxy["forceTls"].(string)
-		switch forceTls {
-		case "tls":
-			if workingStream["security"] != "tls" {
-				workingStream["security"] = "tls"
-				workingStream["tlsSettings"] = map[string]any{}
-			}
-		case "none":
-			if workingStream["security"] != "none" {
-				workingStream["security"] = "none"
-				delete(workingStream, "tlsSettings")
-				delete(workingStream, "realitySettings")
-			}
-		}
-		security, _ := workingStream["security"].(string)
-		if hasExternalProxy {
-			applyExternalProxyTLSToStream(extPrxy, workingStream, security)
-		}
-		applyHostStreamOverrides(extPrxy, workingStream)
-
-		proxy := s.buildProxy(subReq, &workingInbound, client, workingStream, extPrxy)
+		proxy := s.buildProxy(subReq, &workingInbound, client, workingStream, workingRaw, extPrxy)
 		if len(proxy) > 0 {
 			// Host-only mihomo knob: ip-version is a top-level proxy field, set
 			// last so it cannot be clobbered. Absent for legacy externalProxy.
@@ -216,11 +204,11 @@ func (s *SubClashService) getProxies(subReq *SubService, inbound *model.Inbound,
 	return proxies
 }
 
-func (s *SubClashService) buildProxy(subReq *SubService, inbound *model.Inbound, client model.Client, stream map[string]any, ep map[string]any) map[string]any {
+func (s *SubClashService) buildProxy(subReq *SubService, inbound *model.Inbound, client model.Client, stream, rawStream map[string]any, ep map[string]any) map[string]any {
 	// Hysteria has its own transport + TLS model, applyTransport /
 	// applySecurity don't fit.
 	if inbound.Protocol == model.Hysteria {
-		return s.buildHysteriaProxy(subReq, inbound, client, ep)
+		return s.buildHysteriaProxy(subReq, inbound, client, rawStream, ep)
 	}
 	if carriesWireguardClient(inbound.Protocol) {
 		return s.buildWireguardProxy(subReq, inbound, client, ep)
@@ -287,12 +275,11 @@ func (s *SubClashService) buildProxy(subReq *SubService, inbound *model.Inbound,
 	return proxy
 }
 
-// buildHysteriaProxy produces a mihomo-compatible Clash entry for a
-// Hysteria (v1) or Hysteria2 inbound. It reads `inbound.StreamSettings`
-// directly instead of going through streamData/tlsData, because those
-// helpers prune fields (like `allowInsecure` / the salamander obfs
-// block) that the hysteria proxy wants preserved.
-func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.Inbound, client model.Client, ep map[string]any) map[string]any {
+// buildHysteriaProxy produces a mihomo-compatible Clash entry for a Hysteria
+// (v1) or Hysteria2 inbound. It takes the UNPRUNED stream, host overrides
+// already merged in, because streamData/tlsData drop fields it needs
+// (allowInsecure, the salamander obfs block, the finalmask hop range).
+func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.Inbound, client model.Client, rawStream map[string]any, ep map[string]any) map[string]any {
 	inboundSettings := subReq.linkSettings(inbound)
 
 	proxyType := "hysteria2"
@@ -310,9 +297,6 @@ func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.
 		"udp":    true,
 		authKey:  client.Auth,
 	}
-
-	var rawStream map[string]any
-	_ = json.Unmarshal([]byte(inbound.StreamSettings), &rawStream)
 
 	// TLS details — hysteria always uses TLS.
 	if tlsSettings, ok := rawStream["tlsSettings"].(map[string]any); ok {
@@ -337,6 +321,10 @@ func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.
 			if fp, ok := inner["fingerprint"].(string); ok && fp != "" {
 				proxy["client-fingerprint"] = fp
 			}
+		}
+		// A host override writes the flat form, so it wins over the inbound's.
+		if fp, ok := tlsSettings["fingerprint"].(string); ok && fp != "" {
+			proxy["client-fingerprint"] = fp
 		}
 	}
 	if insecure, ok := ep["allowInsecure"].(bool); ok && insecure {

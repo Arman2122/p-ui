@@ -149,8 +149,8 @@ func applyHostStreamOverrides(ep map[string]any, stream map[string]any) {
 			stream["sockopt"] = sockopt
 		}
 	}
-	// Host finalmask: merge the host's masks into the stream's finalmask (the
-	// JSON renderer consumes streamSettings["finalmask"]; clash ignores it).
+	// Host finalmask: merge the host's masks into the stream's finalmask. Read
+	// by the JSON renderer, and by clash for hysteria obfs and hop ports.
 	if fm, ok := ep["finalMask"].(string); ok && fm != "" {
 		var masks map[string]any
 		if json.Unmarshal([]byte(fm), &masks) == nil && len(masks) > 0 {
@@ -427,4 +427,29 @@ func applyHostDownloadOverride(ep map[string]any, stream map[string]any) {
 	if hh, ok := ep["hostHeader"].(string); ok && hh != "" {
 		inner["host"] = hh
 	}
+}
+
+// applyEndpointToStream folds one endpoint -- a host row or a legacy
+// externalProxy entry -- into a stream: its forceTls, its TLS overrides, and
+// its transport/finalmask overrides, in that order.
+func applyEndpointToStream(ep map[string]any, stream map[string]any, hasExternalProxy bool) {
+	forceTls, _ := ep["forceTls"].(string)
+	switch forceTls {
+	case "tls":
+		if stream["security"] != "tls" {
+			stream["security"] = "tls"
+			stream["tlsSettings"] = map[string]any{}
+		}
+	case "none":
+		if stream["security"] != "none" {
+			stream["security"] = "none"
+			delete(stream, "tlsSettings")
+			delete(stream, "realitySettings")
+		}
+	}
+	security, _ := stream["security"].(string)
+	if hasExternalProxy {
+		applyExternalProxyTLSToStream(ep, stream, security)
+	}
+	applyHostStreamOverrides(ep, stream)
 }

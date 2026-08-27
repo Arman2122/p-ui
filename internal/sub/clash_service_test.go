@@ -57,7 +57,7 @@ func TestBuildProxy_VLESSRealityFieldsForClash(t *testing.T) {
 		"realitySettings": map[string]any{"serverName": "reality.example.com", "publicKey": "PBKvalue", "shortId": "ab12", "fingerprint": "chrome"},
 	}
 
-	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil)
+	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil, nil)
 	if proxy == nil {
 		t.Fatal("buildProxy returned nil for a valid reality stream")
 	}
@@ -216,7 +216,7 @@ func TestBuildProxy_VLESSPostQuantumEncryptionUsesMihomoEncryptionField(t *testi
 		},
 	}
 
-	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil)
+	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil, nil)
 
 	if proxy["encryption"] != encryption {
 		t.Fatalf("encryption = %v, want %q", proxy["encryption"], encryption)
@@ -248,7 +248,7 @@ func TestBuildProxy_VLESSFlowXhttpRealityVlessenc(t *testing.T) {
 		},
 	}
 
-	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil)
+	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil, nil)
 
 	if proxy["flow"] != "xtls-rprx-vision" {
 		t.Fatalf("xhttp+reality+vlessenc Clash proxy must carry the vision flow (#5232): %#v", proxy)
@@ -273,7 +273,7 @@ func TestBuildProxy_VLESSFlowDroppedWithoutVisionSupport(t *testing.T) {
 		},
 	}
 
-	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil)
+	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil, nil)
 
 	if _, ok := proxy["flow"]; ok {
 		t.Fatalf("tcp without tls/reality must not carry a flow: %#v", proxy)
@@ -298,7 +298,7 @@ func TestBuildProxy_VLESSNoneEncryptionOmittedForClash(t *testing.T) {
 		},
 	}
 
-	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil)
+	proxy := svc.buildProxy(svc.SubService, inbound, client, stream, nil, nil)
 
 	if _, ok := proxy["encryption"]; ok {
 		t.Fatalf("plain vless encryption should be omitted for mihomo: %#v", proxy)
@@ -807,7 +807,7 @@ func TestBuildWireguardProxyForClash(t *testing.T) {
 		AllowedIPs:   []string{"10.0.0.2/32", "fd00::2/128"},
 	}
 
-	proxy := svc.buildProxy(svc.SubService, inbound, client, nil, nil)
+	proxy := svc.buildProxy(svc.SubService, inbound, client, nil, nil, nil)
 	if proxy == nil {
 		t.Fatal("buildProxy returned nil for a valid wireguard client")
 	}
@@ -854,7 +854,7 @@ func TestBuildWireguardProxyForClashNoKey(t *testing.T) {
 	inbound := &model.Inbound{Listen: "203.0.113.9", Port: 51820, Protocol: model.WireGuard, Settings: `{}`}
 	client := model.Client{Email: "user"}
 
-	if proxy := svc.buildProxy(svc.SubService, inbound, client, nil, nil); proxy != nil {
+	if proxy := svc.buildProxy(svc.SubService, inbound, client, nil, nil, nil); proxy != nil {
 		t.Fatalf("buildProxy = %v, want nil for a keyless wireguard client", proxy)
 	}
 }
