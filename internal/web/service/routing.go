@@ -167,7 +167,15 @@ func (s *RoutingService) ensureFronts(subjects []routing.Subject, rules []*model
 		}
 		out[subject.InboundID] = row.Id
 	}
-	return out, s.reapFronts(out)
+	// Reaping is cleanup, and it must not be able to stop a start. Now that a
+	// compile error refuses the whole config (F055), a Del that fails here --
+	// ErrEgressInUse on a stale row, say -- would darken every inbound on the
+	// box to tidy up one. The orphan it leaves behind costs the one ingress
+	// whose front row survived.
+	if err := s.reapFronts(out); err != nil {
+		logger.Warning("routing: a front that no rule names could not be retired:", err)
+	}
+	return out, nil
 }
 
 /*

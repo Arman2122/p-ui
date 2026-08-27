@@ -8,6 +8,32 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A config that lost your routing rules is no longer deployed.** If the panel
+  could not compile your rules — a database error, an exit that stopped
+  resolving — it logged a warning and shipped the config anyway. That config is
+  perfectly valid to the core, so the restart *succeeded* and the panel looked
+  healthy while every rule you wrote was absent: kernel WireGuard inbounds went
+  dark, and everything else fell through to the template, leaving via this
+  server's own address rather than the uplink you routed it to.
+  **What you will notice:** if the panel cannot compile your rules it now
+  refuses to build the config at all. The running core keeps serving — nothing
+  is stopped — and it retries every 30 seconds, so a transient database problem
+  heals itself. A persistent one now means Xray does not start, which is
+  deliberate: no proxy is better than a proxy routing your clients somewhere
+  they did not choose.
+
+- **Per-client traffic is counted on every policy level, not just the stock
+  one.** The panel forced `statsUserOnline` on but never the two traffic
+  counters, and it *created* the broken case: given a policy block with no
+  level 0, it inserted an empty one and enabled only that flag. The core then
+  never registers the counters at all — so the panel reads no data rather than
+  zero.
+  **What you will notice:** nothing, on a stock config. If you have edited the
+  `policy` block in your Xray template and your clients' usage had stopped
+  moving — quotas never depleting, charts flat — this was why, and it starts
+  counting again on the next restart. **Traffic that went uncounted is gone**;
+  the panel cannot recover what the core never recorded.
+
 - **A routing rule that stopped working now says so on the Routing page.** Saving
   a rule the router cannot realise has been refused for a while, but a rule that
   was fine when you saved it can go inert later — the inbound it names gets

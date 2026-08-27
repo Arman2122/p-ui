@@ -190,8 +190,20 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 
 	// Operator intent, compiled. This replaces the egress front injection: the
 	// front an L3 ingress needs is now derived from the rules that name it.
+	// Fail closed. A config that compiles without the operator's rules is
+	// perfectly valid to xray-core, so the restart SUCCEEDS and the need-restart
+	// flag is consumed: every rule silently absent, L3 ingresses dark, and Xray
+	// clients falling through to the template -- i.e. out of this server's own
+	// address, which is the opposite of what an uplink rule was written for.
+	//
+	// Fail-closed applies to the CORE: RestartXray asks for the config before it
+	// stops anything, so the running one keeps serving and ApplyPendingRestart
+	// re-arms for the next tick. It does NOT apply to egress state -- ensureFronts
+	// writes rows before this can fire, so a refused config can leave a front the
+	// reconcile job then converges. That is the pre-existing cost of the write,
+	// not of the refusal. F055.
 	if err := applyRoutingPlan(context.Background(), xrayConfig); err != nil {
-		logger.Warning("routing plan not applied, rules stay as the template has them:", err)
+		return nil, fmt.Errorf("refusing to generate a config without the operator's routing rules: %w", err)
 	}
 
 	return xrayConfig, nil
@@ -870,14 +882,30 @@ func ensureAPIServices(api json_util.RawMessage) json_util.RawMessage {
 	return out
 }
 
-// ensureStatsPolicy guarantees every policy level in the generated config has
-// statsUserOnline enabled, so the core tracks per-email online IPs for the
-// panel's online view and access-log-free IP limiting. Generated clients carry
-// no explicit level, so level "0" is created when absent. The flag is panel
-// infrastructure and is forced on even over an explicit false in the template,
-// same as the api services above. An entirely missing or unparsable policy
-// block is left alone; the stored template itself is never modified — only the
-// generated runtime config.
+/*
+statsUserFlags are the per-level switches xray-core gates its per-user counters
+on. All three are panel infrastructure: online drives the online view and the
+access-log-free IP limiting, uplink and downlink drive every quota and chart.
+
+A flag that is off does not zero its counter -- the counter is never REGISTERED.
+app/dispatcher/default.go calls GetOrRegisterCounter only inside
+`if p.Stats.UserUplink`, so QueryStats returns no `user>>>…>>>traffic>>>…` row
+at all and the panel reads ABSENCE, not zero: quotas never deplete, expiry by
+traffic never fires, and every chart is flat, with nothing in any log.
+
+Uplink and downlink were missing, and the gap is one this function created:
+given a policy block with no level "0" it inserts an empty one and then set only
+statsUserOnline, manufacturing a level that records nothing. Nothing else
+refuses that -- CheckXrayConfig validates the outbounds array only. F112.
+*/
+var statsUserFlags = []string{"statsUserOnline", "statsUserUplink", "statsUserDownlink"}
+
+// ensureStatsPolicy forces statsUserFlags on in every policy level of the
+// GENERATED config -- over an explicit false in the template, the same way the
+// api services above are forced. Generated clients carry no explicit level, so
+// level "0" is created when absent. An entirely missing or unparsable policy
+// block is left alone, and the stored template is never modified.
+
 func ensureStatsPolicy(policy json_util.RawMessage) json_util.RawMessage {
 	if len(policy) == 0 {
 		return policy
@@ -899,9 +927,11 @@ func ensureStatsPolicy(policy json_util.RawMessage) json_util.RawMessage {
 		if !ok {
 			continue
 		}
-		if enabled, ok := level["statsUserOnline"].(bool); !ok || !enabled {
-			level["statsUserOnline"] = true
-			changed = true
+		for _, flag := range statsUserFlags {
+			if enabled, ok := level[flag].(bool); !ok || !enabled {
+				level[flag] = true
+				changed = true
+			}
 		}
 	}
 	if !changed {

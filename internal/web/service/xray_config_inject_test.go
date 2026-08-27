@@ -107,8 +107,10 @@ func TestEnsureStatsPolicy(t *testing.T) {
 	}
 
 	// already-enabled input passes through byte-identical (no marshal churn,
-	// no spurious restart)
-	full := json_util.RawMessage(`{"levels":{"0":{"statsUserOnline":true}}}`)
+	// no spurious restart). All THREE flags, since F112: a level carrying only
+	// statsUserOnline is no longer complete, because xray-core never registers
+	// the traffic counters without uplink and downlink.
+	full := json_util.RawMessage(`{"levels":{"0":{"statsUserDownlink":true,"statsUserOnline":true,"statsUserUplink":true}}}`)
 	if got := ensureStatsPolicy(full); string(got) != string(full) {
 		t.Fatalf("already-enabled policy must pass through untouched, got %s", got)
 	}
