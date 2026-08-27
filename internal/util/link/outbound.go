@@ -202,7 +202,7 @@ func parseVmess(link string) (*ParseResult, error) {
 		}
 		tls["echConfigList"] = getString(j, "ech", "")
 		tls["verifyPeerCertByName"] = getString(j, "vcn", "")
-		tls["pinnedPeerCertSha256"] = getString(j, "pcs", "")
+		tls["pinnedPeerCertSha256"] = NormalizePinList(getString(j, "pcs", ""))
 	}
 
 	port := num(j["port"])
@@ -451,7 +451,7 @@ func parseHysteria2(link string) (*ParseResult, error) {
 			"fingerprint":          params.Get("fp"),
 			"echConfigList":        params.Get("ech"),
 			"verifyPeerCertByName": params.Get("vcn"),
-			"pinnedPeerCertSha256": params.Get("pinSHA256"),
+			"pinnedPeerCertSha256": NormalizePinList(params.Get("pinSHA256")),
 		},
 	}
 	applyFinalMask(stream, params)
@@ -749,7 +749,7 @@ func applySecurity(stream map[string]any, p url.Values) {
 		// vcn is how xray-core replaced allowInsecure; without it an imported
 		// outbound cannot accept the certificate the link named. F081.
 		tls["verifyPeerCertByName"] = p.Get("vcn")
-		tls["pinnedPeerCertSha256"] = p.Get("pcs")
+		tls["pinnedPeerCertSha256"] = NormalizePinList(p.Get("pcs"))
 	case "reality":
 		re := stream["realitySettings"].(map[string]any)
 		re["serverName"] = p.Get("sni")
