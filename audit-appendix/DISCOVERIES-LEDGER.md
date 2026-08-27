@@ -1064,7 +1064,30 @@ untouched, so the core reports the operator's typo rather than the panel
 swallowing it -- which is the honest half of the refuse-on-save option, kept.
 
 `hysteriaPinHex` is gone; `link.NormalizePinHex` and `link.NormalizePinList`
-replace it, and its table test moved with it. A third copy still exists,
+replace it, and its table test moved with it.
+
+**Reopened and re-closed the same day.** The closure above covered ONE of the two
+readers. `pinnedSha256List` serves the inbound's own `tlsSettings`; a Host row's
+pin comes through `externalProxyPins`, and three of its four call sites wrote the
+stored value verbatim -- `applyExternalProxyTLSObj` (vmess),
+`applyExternalProxyTLSParams` (vless/trojan/ss) and `applyExternalProxyTLSToStream`.
+Only the Hysteria one normalised. So the exact sentence this entry claims to have
+removed stayed true for every Host-fronted inbound, one level up.
+
+It survived a closure written the same hour because a test comment described the
+divergence as intended: "which other (pcs) protocols leave untouched". Corrected.
+
+Normalised in `externalProxyPins` itself now, for the reason the entry already
+gave and then did not follow: a pin crosses into a link at four sites, and
+normalising at each of them is precisely how it ended up hex in one and base64 in
+three.
+
+**How the miss was caught, and how it nearly was not.** An independent audit
+flagged it; the first attempt to reproduce it passed with the fix reverted, which
+looked like a refutation. The revert was wrong, not the claim -- `pinnedSha256List`
+and `externalProxyPins` contain a byte-identical line, and a single-occurrence
+replace hit the wrong one. A test that passes either way is worth nothing, which
+is the rule that caught it. A third copy still exists,
 `runtime.DecodeCertPin`, which returns raw bytes and an error for a different
 purpose and is fuzz-tested; consolidating that one is a separate question.
 

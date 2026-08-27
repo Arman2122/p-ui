@@ -872,8 +872,9 @@ func TestApplyExternalProxyTLSToStream_SetsPinnedPeerCert(t *testing.T) {
 }
 
 func TestApplyExternalProxyHysteriaParams_PinIsHexNormalized(t *testing.T) {
-	// base64 SHA-256 pin must come out as bare lowercase hex for Hysteria's
-	// pinSHA256, which other (pcs) protocols leave untouched.
+	// base64 SHA-256 pin must come out as bare lowercase hex. Hysteria's
+	// pinSHA256 needs it, and since ledger L21 so does every pcs protocol --
+	// TestAHostsPinIsHexOnEveryProtocol is the one that pins the rest.
 	params := map[string]string{"security": "tls", "sni": "server.example.com"}
 	ep := map[string]any{
 		"dest":                 "edge.example.com",
