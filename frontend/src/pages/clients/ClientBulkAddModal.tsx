@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 
+import { bulkClientSubId } from '@/lib/clients/bulk-subid';
 import { RandomUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { supportsMultipleClients } from '@/lib/inbounds/multi-client';
@@ -163,7 +164,7 @@ export default function ClientBulkAddModal({
       const payloads = emails.map((email) => ({
         client: {
           email,
-          subId: current.subId || RandomUtil.randomLowerAndNum(16),
+          subId: bulkClientSubId(current.subId, emails.length),
           id: RandomUtil.randomUUID(),
           password: ss2022Method
             ? RandomUtil.randomShadowsocksPassword(ss2022Method)
