@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Dropdown, Switch, Tag } from 'antd';
+import { Button, Dropdown, Switch, Tag, Tooltip } from 'antd';
 import {
   MoreOutlined,
   EditOutlined,
@@ -10,6 +10,7 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   HolderOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -116,12 +117,32 @@ export function useRoutingColumns({
         width: 80,
         key: 'enabled',
         render: (_v, _r, index) => (
-          <Switch
-            size="small"
-            checked={_r.enabled !== false}
-            onChange={(checked) => toggleRule(index, checked)}
-            disabled={isApiRule(_r)}
-          />
+          <span className="rule-enable-cell">
+            <Switch
+              size="small"
+              checked={_r.enabled !== false}
+              onChange={(checked) => toggleRule(index, checked)}
+              disabled={isApiRule(_r)}
+            />
+            {/* A rule that was routable when it was saved and is not any more:
+                the inbound it names was disabled, its exit stopped resolving,
+                the template changed under it. Saving one is already refused, so
+                this is the only place these surface. Ledger L8. */}
+            {(_r.diags?.length ?? 0) > 0 && (
+              <Tooltip
+                title={
+                  <div>
+                    <div>{t('pages.xray.routing.inertTitle')}</div>
+                    {(_r.diags ?? []).map((diag, i) => (
+                      <div key={`${diag.subjectTag}-${i}`}>{t(diag.messageKey, diag.args)}</div>
+                    ))}
+                  </div>
+                }
+              >
+                <WarningOutlined className="rule-inert-warning" />
+              </Tooltip>
+            )}
+          </span>
         ),
       },
       {

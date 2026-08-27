@@ -391,6 +391,16 @@ export const CoreViewSchema = z.object({
 });
 export type CoreView = z.infer<typeof CoreViewSchema>;
 
+export const DiagSchema = z.object({
+  args: z.record(z.string(), z.string()).optional(),
+  messageKey: z.string().optional(),
+  pattern: z.string(),
+  ruleId: z.number().int(),
+  severity: z.string(),
+  subjectTag: z.string(),
+});
+export type Diag = z.infer<typeof DiagSchema>;
+
 export const EgressSchema = z.object({
   createdAt: z.number().int(),
   enable: z.boolean(),
@@ -800,6 +810,24 @@ export const RoutingSubjectViewSchema = z.object({
   tag: z.string(),
 });
 export type RoutingSubjectView = z.infer<typeof RoutingSubjectViewSchema>;
+
+export const RuleViewSchema = z.object({
+  createdAt: z.number().int(),
+  criteria: z.unknown(),
+  destExitId: z.number().int().nullable().optional(),
+  destKind: z.string(),
+  destTag: z.string(),
+  diags: z.array(z.lazy(() => DiagSchema)).optional(),
+  enable: z.boolean(),
+  id: z.number().int(),
+  ingressIds: z.unknown(),
+  ingressScope: z.string(),
+  inspect: z.boolean(),
+  remark: z.string(),
+  sortIndex: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type RuleView = z.infer<typeof RuleViewSchema>;
 
 export const SettingSchema = z.object({
   id: z.number().int(),

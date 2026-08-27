@@ -180,6 +180,7 @@ export default function RoutingTab({
         protocol: arrJoin(shape.protocol),
         outboundTag: shape.outboundTag,
         balancerTag: shape.balancerTag,
+        diags: record.diags,
       };
     }),
     [intentRecords, tagOfInbound, t],

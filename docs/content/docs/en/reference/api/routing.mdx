@@ -15,8 +15,16 @@ _openapi:
     - ./public/openapi.json
   toc:
     - depth: 2
-      title: List every routing rule in the operator's own first-match order.
-      url: '#list-every-routing-rule-in-the-operators-own-first-match-order'
+      title: "List every routing rule in the operator's own first-match order. Each
+        rule carries a diags array when the LAST config generation could not
+        realise it -- one entry per (rule, subject) pair, with a messageKey
+        rather than a sentence so the panel translates it. Saving an
+        unrealisable rule is already refused, so these are the rules that went
+        inert afterwards: the inbound they name was disabled, their exit stopped
+        resolving, or the Xray template changed under them. The key is omitted
+        entirely for a rule that is being applied, and on a panel that has not
+        generated a config since it started."
+      url: '#list-every-routing-rule-in-the-operators-own-first-match-order-each-rule-carries-a-diags-array-when-the-last-config-generation-could-not-realise-it----one-entry-per-rule-subject-pair-with-a-messagekey-rather-than-a-sentence-so-the-panel-translates-it-saving-an-unrealisable-rule-is-already-refused-so-these-are-the-rules-that-went-inert-afterwards-the-inbound-they-name-was-disabled-their-exit-stopped-resolving-or-the-xray-template-changed-under-them-the-key-is-omitted-entirely-for-a-rule-that-is-being-applied-and-on-a-panel-that-has-not-generated-a-config-since-it-started'
     - depth: 2
       title: Create a rule. It is appended last and converges before the response
         returns.
@@ -47,8 +55,16 @@ _openapi:
       url: '#delete-one-rule-and-converge'
   structuredData:
     headings:
-      - content: List every routing rule in the operator's own first-match order.
-        id: list-every-routing-rule-in-the-operators-own-first-match-order
+      - content: "List every routing rule in the operator's own first-match order. Each
+          rule carries a diags array when the LAST config generation could not
+          realise it -- one entry per (rule, subject) pair, with a messageKey
+          rather than a sentence so the panel translates it. Saving an
+          unrealisable rule is already refused, so these are the rules that went
+          inert afterwards: the inbound they name was disabled, their exit
+          stopped resolving, or the Xray template changed under them. The key is
+          omitted entirely for a rule that is being applied, and on a panel that
+          has not generated a config since it started."
+        id: list-every-routing-rule-in-the-operators-own-first-match-order-each-rule-carries-a-diags-array-when-the-last-config-generation-could-not-realise-it----one-entry-per-rule-subject-pair-with-a-messagekey-rather-than-a-sentence-so-the-panel-translates-it-saving-an-unrealisable-rule-is-already-refused-so-these-are-the-rules-that-went-inert-afterwards-the-inbound-they-name-was-disabled-their-exit-stopped-resolving-or-the-xray-template-changed-under-them-the-key-is-omitted-entirely-for-a-rule-that-is-being-applied-and-on-a-panel-that-has-not-generated-a-config-since-it-started
       - content: Create a rule. It is appended last and converges before the response
           returns.
         id: create-a-rule-it-is-appended-last-and-converges-before-the-response-returns

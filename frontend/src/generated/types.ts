@@ -363,6 +363,15 @@ export interface CoreView {
   unavailable: string;
 }
 
+export interface Diag {
+  args?: Record<string, string>;
+  messageKey?: string;
+  pattern: string;
+  ruleId: number;
+  severity: string;
+  subjectTag: string;
+}
+
 export interface Egress {
   createdAt: number;
   enable: boolean;
@@ -748,6 +757,23 @@ export interface RoutingSubjectView {
   routable: boolean;
   selector: string;
   tag: string;
+}
+
+export interface RuleView {
+  createdAt: number;
+  criteria: unknown;
+  destExitId?: number | null;
+  destKind: string;
+  destTag: string;
+  diags?: Diag[];
+  enable: boolean;
+  id: number;
+  ingressIds: unknown;
+  ingressScope: string;
+  inspect: boolean;
+  remark: string;
+  sortIndex: number;
+  updatedAt: number;
 }
 
 export interface Setting {

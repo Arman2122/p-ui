@@ -142,6 +142,7 @@ func Plan(in Input) Compiled {
 					out.Diags = append(out.Diags, Diag{
 						RuleID: rule.ID, SubjectTag: subject.Tag, Severity: SeverityInert,
 						Pattern: PatternInert, MessageKey: KeyNoFront,
+						Args: map[string]string{"subject": subject.Tag},
 					})
 				}
 				continue

@@ -1688,14 +1688,16 @@
           "exitMissing": "This rule points at an exit that no longer exists, or that cannot be reached from this host.",
           "noExitDriver": "Nothing on this host knows how to route through {{ .exit }}.",
           "noSnat": "{{ .exit }} has no source address to send from, so traffic would leave with this server's own address.",
-          "noDefaultOutbound": "Your Xray template has no {{ .protocol }} outbound for this rule to use."
+          "noDefaultOutbound": "Your Xray template has no {{ .protocol }} outbound for this rule to use.",
+          "noFront": "{{ .subject }} has no front device on this host, so its traffic never passes through Xray and this rule cannot match it. Nothing you can change on the rule fixes this."
         },
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
         "scopeAll": "Every routable inbound",
         "dragToReorder": "Drag to reorder",
         "unresolvedInbound": "{tags} — this rule names an inbound the panel cannot resolve right now. Saving it would widen the rule to every inbound, so nothing was saved. Reload the page, then check the rule's Inbound tags.",
         "l3Fronted": "Routing this inbound changes what it can carry",
-        "l3FrontedDetail": "A kernel WireGuard inbound forwards every IP protocol until a rule names it. Once routed, its traffic is terminated inside Xray, which carries TCP, UDP and ICMP only — ESP, GRE, SCTP and anything else is dropped. Ping is answered locally, so it succeeds even for a destination that is unreachable. Test with a real request instead."
+        "l3FrontedDetail": "A kernel WireGuard inbound forwards every IP protocol until a rule names it. Once routed, its traffic is terminated inside Xray, which carries TCP, UDP and ICMP only — ESP, GRE, SCTP and anything else is dropped. Ping is answered locally, so it succeeds even for a destination that is unreachable. Test with a real request instead.",
+        "inertTitle": "This rule is switched on but is not being applied:"
       },
       "ruleForm": {
         "sourceIps": "Source IPs",

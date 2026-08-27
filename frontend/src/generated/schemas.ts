@@ -1530,6 +1530,39 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "Diag": {
+    "description": "Diag is what the operator is told about one (rule, subject) pair.\n\nPer PAIR and never per row: one rule naming an Xray inbound and a WireGuard\ninbound is realised by two different mechanisms, and one chip cannot describe\nboth without lying about one of them.",
+    "properties": {
+      "args": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "messageKey": {
+        "type": "string"
+      },
+      "pattern": {
+        "type": "string"
+      },
+      "ruleId": {
+        "type": "integer"
+      },
+      "severity": {
+        "type": "string"
+      },
+      "subjectTag": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pattern",
+      "ruleId",
+      "severity",
+      "subjectTag"
+    ],
+    "type": "object"
+  },
   "Egress": {
     "description": "/*\nEgress is one policy-routed exit an L3 inbound's traffic can be sent out through.\n\nId is the only allocation this row stores: the routing table, the ip rule\npriority, the front device and its gateway are all pure functions of it, so a\nfreed id must never come back while any of that kernel state can still exist.\nType is the whole generalisation seam — one driver per value — and Settings is\nthe per-type column that buys the next driver zero migrations.\n*/",
     "properties": {
@@ -3351,6 +3384,94 @@ export const SCHEMAS: Record<string, unknown> = {
       "routable",
       "selector",
       "tag"
+    ],
+    "type": "object"
+  },
+  "RuleView": {
+    "description": "/*\nRuleView is a stored rule plus what the last config generation made of it.\n\nThe rule is embedded rather than nested so the list keeps the shape it has\nalways had and a client that ignores diags is unaffected.\n*/",
+    "properties": {
+      "createdAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "criteria": {
+        "example": {
+          "domain": [
+            "geosite:ads"
+          ]
+        }
+      },
+      "destExitId": {
+        "example": 4,
+        "nullable": true,
+        "type": "integer"
+      },
+      "destKind": {
+        "example": "outbound",
+        "type": "string"
+      },
+      "destTag": {
+        "example": "warp",
+        "type": "string"
+      },
+      "diags": {
+        "description": "Diags carries the refusals for this rule from the last generate, one per\n(rule, subject) pair. Empty means the rule is realised, or that no config\nhas been generated since this process started.",
+        "example": [],
+        "items": {
+          "$ref": "#/components/schemas/Diag"
+        },
+        "type": "array"
+      },
+      "enable": {
+        "example": true,
+        "type": "boolean"
+      },
+      "id": {
+        "example": 1,
+        "type": "integer"
+      },
+      "ingressIds": {
+        "example": [
+          3
+        ]
+      },
+      "ingressScope": {
+        "description": "IngressScope is \"selected\" or \"all\"; \"all\" expands at compile time to one\nrule per routable subject, in this rule's own position.",
+        "example": "selected",
+        "type": "string"
+      },
+      "inspect": {
+        "example": false,
+        "type": "boolean"
+      },
+      "remark": {
+        "example": "ads to the blackhole",
+        "type": "string"
+      },
+      "sortIndex": {
+        "example": 0,
+        "type": "integer"
+      },
+      "updatedAt": {
+        "example": 1700000000000,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "createdAt",
+      "criteria",
+      "destKind",
+      "destTag",
+      "enable",
+      "id",
+      "ingressIds",
+      "ingressScope",
+      "inspect",
+      "remark",
+      "sortIndex",
+      "updatedAt"
     ],
     "type": "object"
   },

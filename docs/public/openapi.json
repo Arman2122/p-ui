@@ -1556,6 +1556,39 @@
         ],
         "type": "object"
       },
+      "Diag": {
+        "description": "Diag is what the operator is told about one (rule, subject) pair.\n\nPer PAIR and never per row: one rule naming an Xray inbound and a WireGuard\ninbound is realised by two different mechanisms, and one chip cannot describe\nboth without lying about one of them.",
+        "properties": {
+          "args": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "messageKey": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "integer"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "subjectTag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern",
+          "ruleId",
+          "severity",
+          "subjectTag"
+        ],
+        "type": "object"
+      },
       "Egress": {
         "description": "/*\nEgress is one policy-routed exit an L3 inbound's traffic can be sent out through.\n\nId is the only allocation this row stores: the routing table, the ip rule\npriority, the front device and its gateway are all pure functions of it, so a\nfreed id must never come back while any of that kernel state can still exist.\nType is the whole generalisation seam — one driver per value — and Settings is\nthe per-type column that buys the next driver zero migrations.\n*/",
         "properties": {
@@ -3377,6 +3410,94 @@
           "routable",
           "selector",
           "tag"
+        ],
+        "type": "object"
+      },
+      "RuleView": {
+        "description": "/*\nRuleView is a stored rule plus what the last config generation made of it.\n\nThe rule is embedded rather than nested so the list keeps the shape it has\nalways had and a client that ignores diags is unaffected.\n*/",
+        "properties": {
+          "createdAt": {
+            "example": 1700000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "criteria": {
+            "example": {
+              "domain": [
+                "geosite:ads"
+              ]
+            }
+          },
+          "destExitId": {
+            "example": 4,
+            "nullable": true,
+            "type": "integer"
+          },
+          "destKind": {
+            "example": "outbound",
+            "type": "string"
+          },
+          "destTag": {
+            "example": "warp",
+            "type": "string"
+          },
+          "diags": {
+            "description": "Diags carries the refusals for this rule from the last generate, one per\n(rule, subject) pair. Empty means the rule is realised, or that no config\nhas been generated since this process started.",
+            "example": [],
+            "items": {
+              "$ref": "#/components/schemas/Diag"
+            },
+            "type": "array"
+          },
+          "enable": {
+            "example": true,
+            "type": "boolean"
+          },
+          "id": {
+            "example": 1,
+            "type": "integer"
+          },
+          "ingressIds": {
+            "example": [
+              3
+            ]
+          },
+          "ingressScope": {
+            "description": "IngressScope is \"selected\" or \"all\"; \"all\" expands at compile time to one\nrule per routable subject, in this rule's own position.",
+            "example": "selected",
+            "type": "string"
+          },
+          "inspect": {
+            "example": false,
+            "type": "boolean"
+          },
+          "remark": {
+            "example": "ads to the blackhole",
+            "type": "string"
+          },
+          "sortIndex": {
+            "example": 0,
+            "type": "integer"
+          },
+          "updatedAt": {
+            "example": 1700000000000,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdAt",
+          "criteria",
+          "destKind",
+          "destTag",
+          "enable",
+          "id",
+          "ingressIds",
+          "ingressScope",
+          "inspect",
+          "remark",
+          "sortIndex",
+          "updatedAt"
         ],
         "type": "object"
       },
@@ -9640,7 +9761,7 @@
         "tags": [
           "Routing"
         ],
-        "summary": "List every routing rule in the operator's own first-match order.",
+        "summary": "List every routing rule in the operator's own first-match order. Each rule carries a diags array when the LAST config generation could not realise it -- one entry per (rule, subject) pair, with a messageKey rather than a sentence so the panel translates it. Saving an unrealisable rule is already refused, so these are the rules that went inert afterwards: the inbound they name was disabled, their exit stopped resolving, or the Xray template changed under them. The key is omitted entirely for a rule that is being applied, and on a panel that has not generated a config since it started.",
         "operationId": "get_panel_api_routing_rules",
         "responses": {
           "200": {
@@ -9659,7 +9780,7 @@
                     "obj": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/RoutingRule"
+                        "$ref": "#/components/schemas/RuleView"
                       }
                     }
                   }
@@ -9677,6 +9798,7 @@
                       "destExitId": 4,
                       "destKind": "outbound",
                       "destTag": "warp",
+                      "diags": [],
                       "enable": true,
                       "id": 1,
                       "ingressIds": [

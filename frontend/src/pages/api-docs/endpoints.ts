@@ -1087,8 +1087,8 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/routing/rules',
-        summary: "List every routing rule in the operator's own first-match order.",
-        responseSchema: 'RoutingRule',
+        summary: "List every routing rule in the operator's own first-match order. Each rule carries a diags array when the LAST config generation could not realise it -- one entry per (rule, subject) pair, with a messageKey rather than a sentence so the panel translates it. Saving an unrealisable rule is already refused, so these are the rules that went inert afterwards: the inbound they name was disabled, their exit stopped resolving, or the Xray template changed under them. The key is omitted entirely for a rule that is being applied, and on a panel that has not generated a config since it started.",
+        responseSchema: 'RuleView',
         responseSchemaArray: true,
       },
       {

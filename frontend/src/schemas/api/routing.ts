@@ -3,6 +3,18 @@ import { z } from 'zod';
 /* Criteria and ingressIds are JSON in a column, so they cross the API as the
    values they are. The generated schema types them as unknown; these narrow
    them to what the editor actually reads and writes. */
+/* One refusal the LAST config generation produced for a (rule, subject) pair.
+   messageKey is a translation key rather than a sentence so both locales stay
+   in charge; args fills its placeholders. Ledger L8. */
+export const RoutingDiagSchema = z.object({
+  ruleId: z.number(),
+  subjectTag: z.string().optional().default(''),
+  pattern: z.string().optional().default(''),
+  severity: z.string().optional().default(''),
+  messageKey: z.string().optional().default(''),
+  args: z.record(z.string(), z.string()).optional().default({}),
+});
+
 export const RoutingRuleSchema = z.object({
   id: z.number(),
   sortIndex: z.number(),
@@ -17,6 +29,10 @@ export const RoutingRuleSchema = z.object({
   inspect: z.boolean().optional().default(false),
   createdAt: z.number().optional(),
   updatedAt: z.number().optional(),
+  /* Absent when the rule is realised, and on a panel that has not generated a
+     config since it started. The server omits the key rather than sending an
+     empty array, so optional is the whole contract. */
+  diags: z.array(RoutingDiagSchema).optional(),
 });
 
 export const RoutingRuleListSchema = z.array(RoutingRuleSchema);

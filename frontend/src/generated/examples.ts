@@ -366,6 +366,14 @@ export const EXAMPLES: Record<string, unknown> = {
     "titleKey": "cores.xray.title",
     "unavailable": "wireguard: no kernel support on this host"
   },
+  "Diag": {
+    "args": {},
+    "messageKey": "",
+    "pattern": "",
+    "ruleId": 0,
+    "severity": "",
+    "subjectTag": ""
+  },
   "Egress": {
     "createdAt": 1700000000000,
     "enable": true,
@@ -790,6 +798,28 @@ export const EXAMPLES: Record<string, unknown> = {
     "routable": true,
     "selector": "device",
     "tag": "wg-home"
+  },
+  "RuleView": {
+    "createdAt": 1700000000000,
+    "criteria": {
+      "domain": [
+        "geosite:ads"
+      ]
+    },
+    "destExitId": 4,
+    "destKind": "outbound",
+    "destTag": "warp",
+    "diags": [],
+    "enable": true,
+    "id": 1,
+    "ingressIds": [
+      3
+    ],
+    "ingressScope": "selected",
+    "inspect": false,
+    "remark": "ads to the blackhole",
+    "sortIndex": 0,
+    "updatedAt": 1700000000000
   },
   "Setting": {
     "id": 0,
