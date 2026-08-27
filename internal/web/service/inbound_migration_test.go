@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -261,5 +262,80 @@ func TestMigrationRequirements_NormalizesShareAddressFields(t *testing.T) {
 	}
 	if gotInvalidAddress.ShareAddrStrategy != "node" || gotInvalidAddress.ShareAddr != "" {
 		t.Fatalf("invalid address share fields = (%q, %q), want (node, empty)", gotInvalidAddress.ShareAddrStrategy, gotInvalidAddress.ShareAddr)
+	}
+}
+
+/*
+A junk element in settings.clients must not stop the panel from migrating.
+
+`clients[i].(map[string]any)` was a single-value assertion, so a null or scalar
+element panicked MigrationRequirements. That runs from `p-ui migrate`, which
+install.sh:364 and update.sh:772 both gate on: one such row and the operator's
+UPGRADE fails, on a panel that was serving traffic a moment earlier. The same
+call runs after a database restore, where the dump being restored is exactly
+the kind of foreign data that carries a shape this panel never wrote.
+
+Dropped rather than passed through, because the element is fatal further down:
+ParseInboundSettingsClients unmarshals into []model.Client and a scalar hard-
+errors it, so preserving it would break every client read of that inbound AND
+abort the rest of MigrationRequirements at the GetClients call in this same
+loop -- trading a panic for a silent whole-migration no-op. The drop is logged
+with the inbound id and index. F383.
+*/
+func TestMigrationRequirementsSurvivesANonObjectClientElement(t *testing.T) {
+	initTestDB(t)
+	db := database.GetDB()
+
+	const good = "survivor@example.com"
+	junk := &model.Inbound{
+		UserId: 1, Tag: "junk-clients", Enable: true, Port: 30401, Protocol: model.VLESS,
+		Settings: `{"clients":[null,"not-an-object",42,{"email":"` + good +
+			`","id":"ce8d33df-3a64-4f10-8f9b-91c3a8e0c9ff","enable":true}]}`,
+		StreamSettings: `{"network":"tcp","security":"none"}`,
+	}
+	if err := db.Create(junk).Error; err != nil {
+		t.Fatalf("create the inbound: %v", err)
+	}
+
+	// The premise: this row is unreadable until the migration repairs it.
+	if _, err := ParseInboundSettingsClients(junk.Settings); err == nil {
+		t.Fatal("the scalar element no longer breaks ParseInboundSettingsClients; this test cannot see the bug")
+	}
+
+	(&InboundService{}).MigrationRequirements()
+
+	var after model.Inbound
+	if err := db.First(&after, junk.Id).Error; err != nil {
+		t.Fatalf("re-read the inbound: %v", err)
+	}
+
+	// The repair: the inbound's clients can be read at all now.
+	parsed, err := ParseInboundSettingsClients(after.Settings)
+	if err != nil {
+		t.Fatalf("the inbound is still unreadable after the migration, so every client read of it fails: %v", err)
+	}
+	if len(parsed) != 1 || parsed[0].Email != good {
+		t.Fatalf("want the one readable client kept, got %d: %+v", len(parsed), parsed)
+	}
+
+	// And it really was migrated, not merely left alone -- proving the loop ran
+	// past the junk instead of the whole function returning early.
+	settings := map[string]any{}
+	if err := json.Unmarshal([]byte(after.Settings), &settings); err != nil {
+		t.Fatalf("the migration left unparseable settings: %v", err)
+	}
+	clients, ok := settings["clients"].([]any)
+	if !ok {
+		t.Fatalf("clients is no longer an array: %T", settings["clients"])
+	}
+	if len(clients) != 1 {
+		t.Fatalf("want the three junk elements dropped and the one client kept, got %d: %v", len(clients), clients)
+	}
+	real, ok := clients[0].(map[string]any)
+	if !ok {
+		t.Fatalf("the surviving client is not an object: %T", clients[0])
+	}
+	if _, stamped := real["updated_at"]; !stamped {
+		t.Error("the surviving client was not migrated; MigrationRequirements returned before tx.Save")
 	}
 }
