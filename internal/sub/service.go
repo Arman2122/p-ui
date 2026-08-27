@@ -1120,25 +1120,10 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 		}
 	}
 
-	// salamander obfs (Hysteria2). Emit only the standard URI fields;
-	// the non-standard fm=<json> finalmask dump breaks mihomo and other
-	// Hysteria2 clients that reject unknown query params.
-	if finalmask, ok := stream["finalmask"].(map[string]any); ok {
-		if udpMasks, ok := finalmask["udp"].([]any); ok {
-			for _, m := range udpMasks {
-				mask, _ := m.(map[string]any)
-				if mask == nil || mask["type"] != "salamander" {
-					continue
-				}
-				settings, _ := mask["settings"].(map[string]any)
-				if pw, ok := settings["password"].(string); ok && pw != "" {
-					params["obfs"] = "salamander"
-					params["obfs-password"] = pw
-					break
-				}
-			}
-		}
-	}
+	// salamander obfs (Hysteria2). Emit only the standard URI fields; the
+	// non-standard fm=<json> finalmask dump breaks mihomo and other Hysteria2
+	// clients that reject unknown query params.
+	applySalamanderParams(stream, params)
 
 	settings := s.linkSettings(inbound)
 	version, _ := settings["version"].(float64)
@@ -1169,9 +1154,12 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 			applyExternalProxyHysteriaParams(ep, epParams)
 			// Port hopping was applied only on the no-host tail, so adding a Host
 			// to a Hysteria2 inbound silently turned it off for clients. F138.
-			if hopPorts := hysteriaHopPortsForEndpoint(stream, ep); hopPorts != "" {
+			// The obfs password comes from the same merged masks. Ledger L18.
+			endpointStream := endpointFinalMaskStream(stream, ep)
+			if hopPorts := hysteriaHopPorts(endpointStream); hopPorts != "" {
 				epParams["mport"] = hopPorts
 			}
+			applySalamanderParams(endpointStream, epParams)
 
 			link := fmt.Sprintf("%s://%s@%s", protocol, auth, joinHostPort(dest, int(portF)))
 			links = append(links, buildLinkWithParams(link, epParams, s.endpointRemark(inbound, email, ep, "quic")))
@@ -1191,15 +1179,60 @@ func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) strin
 // hysteriaHopPortsForEndpoint resolves the hop range for one Host row the way
 // the JSON renderer merges finalmask, so the two formats cannot disagree. F138.
 func hysteriaHopPortsForEndpoint(stream, ep map[string]any) string {
+	return hysteriaHopPorts(endpointFinalMaskStream(stream, ep))
+}
+
+// endpointFinalMaskStream returns the stream one endpoint reads its masks from:
+// the inbound's, with that endpoint's own Final Mask merged in. The Hosts page
+// offers the field precisely so a host can carry its own.
+func endpointFinalMaskStream(stream, ep map[string]any) map[string]any {
 	fm, _ := ep["finalMask"].(string)
 	if fm == "" {
-		return hysteriaHopPorts(stream)
+		return stream
 	}
 	var masks map[string]any
 	if json.Unmarshal([]byte(fm), &masks) != nil || len(masks) == 0 {
-		return hysteriaHopPorts(stream)
+		return stream
 	}
-	return hysteriaHopPorts(map[string]any{"finalmask": mergeFinalMask(stream["finalmask"], masks)})
+	return map[string]any{"finalmask": mergeFinalMask(stream["finalmask"], masks)}
+}
+
+/*
+salamanderPassword returns the Hysteria2 obfs password a stream's masks declare.
+
+The LAST match wins, not the first. mergeFinalMask appends a host's udp masks
+after the inbound's, so a host that declares its own salamander produces a list
+with two, and stopping at the first handed back the inbound's -- leaving the
+host's field inert. Every other host override wins; this one now does too.
+Ledger L18.
+*/
+func salamanderPassword(stream map[string]any) string {
+	finalmask, _ := stream["finalmask"].(map[string]any)
+	udpMasks, _ := finalmask["udp"].([]any)
+	password := ""
+	for _, m := range udpMasks {
+		mask, _ := m.(map[string]any)
+		if mask == nil || mask["type"] != "salamander" {
+			continue
+		}
+		settings, _ := mask["settings"].(map[string]any)
+		if pw, _ := settings["password"].(string); pw != "" {
+			password = pw
+		}
+	}
+	return password
+}
+
+// applySalamanderParams writes the obfs pair, or removes it when the masks
+// carry none -- an endpoint inherits params cloned from the inbound.
+func applySalamanderParams(stream map[string]any, params map[string]string) {
+	if pw := salamanderPassword(stream); pw != "" {
+		params["obfs"] = "salamander"
+		params["obfs-password"] = pw
+		return
+	}
+	delete(params, "obfs")
+	delete(params, "obfs-password")
 }
 
 // hysteriaHopPorts returns the configured Hysteria2 UDP port-hopping range

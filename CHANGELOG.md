@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A Host's Final Mask can now set its own Hysteria2 obfuscation password.**
+  The Hosts page has always offered the field and told you it saved, but every
+  link kept the inbound's password: the raw generator never looked at a host's
+  masks, and the Clash one merged them and then stopped at the inbound's entry.
+  **What you will notice:** if you set an obfs password on a Host row and it
+  never took effect, it will now, on the next fetch. A host that sets none still
+  inherits the inbound's. Nothing changes for an inbound with no Host rows, or
+  for hosts that never set the field.
+
 - **A REALITY client's `sni` and `sid` stop changing on every subscription
   fetch.** With more than one `serverName` or `shortId` configured, the panel
   drew a fresh random member on every render, so a client polling its

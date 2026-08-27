@@ -331,23 +331,11 @@ func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.
 		proxy["skip-cert-verify"] = true
 	}
 
-	// Salamander obfs (Hysteria2). Read the same finalmask.udp[salamander]
-	// block the subscription link generator uses.
-	if finalmask, ok := rawStream["finalmask"].(map[string]any); ok {
-		if udpMasks, ok := finalmask["udp"].([]any); ok {
-			for _, m := range udpMasks {
-				mask, _ := m.(map[string]any)
-				if mask == nil || mask["type"] != "salamander" {
-					continue
-				}
-				settings, _ := mask["settings"].(map[string]any)
-				if pw, ok := settings["password"].(string); ok && pw != "" {
-					proxy["obfs"] = "salamander"
-					proxy["obfs-password"] = pw
-					break
-				}
-			}
-		}
+	// Salamander obfs (Hysteria2), through the one reader the raw generator
+	// uses -- rawStream already carries this endpoint's merged masks.
+	if pw := salamanderPassword(rawStream); pw != "" {
+		proxy["obfs"] = "salamander"
+		proxy["obfs-password"] = pw
 	}
 
 	// UDP port hopping. mihomo reads the range from a dedicated `ports`
