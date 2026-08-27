@@ -822,7 +822,7 @@
       "ungroupConfirmContent": "Clears the group label on each selected client. Clients themselves are kept (use Delete to remove them entirely).",
       "addToGroup": "Add to group",
       "attach": "Attach",
-      "adjust": "Adjust",
+      "adjust": "Add Days & Traffic",
       "subLinks": "Sub links",
       "enable": "Enable",
       "disable": "Disable",
