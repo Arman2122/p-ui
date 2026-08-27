@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **IPv6 WireGuard inbounds can hand out more than one working client.** Client
+  addresses were always rendered with a `/32` host suffix, which is meaningful
+  only for IPv4. On an inbound whose device address is IPv6, every client got a
+  96-bit-wide network instead of a host address, so the kernel refused every
+  peer after the first, installed a route for that whole network over the
+  device, and dropped the survivor from bandwidth shaping. The `.conf` handed to
+  the customer carried the wrong address too.
+  **What you will notice:** IPv6 inbounds allocate `/128` host addresses and
+  work. IPv4 is byte-for-byte unchanged. Clients already holding a wrong address
+  are NOT rewritten -- a server must not renumber an address a customer already
+  has in their config; edit those by hand.
+
 - **The client form now says when an Auto Renew period can never run.** Auto
   Renew moves a client'''s expiry date forward -- so a client given a renew
   period and no expiry date has nothing to renew. It is disabled the moment its

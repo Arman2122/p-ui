@@ -25,6 +25,9 @@ func TestAllocateWireguardAddress(t *testing.T) {
 		{name: "default base when empty", used: nil, base: "", want: "10.0.0.2/32"},
 		{name: "full ipv4 scope widens instead of failing", used: []string{"10.9.0.2/32", "10.9.0.3/32"}, base: "10.9.0.0/30", want: "10.9.0.4/32"},
 		{name: "exhausted ipv6 scope errors", used: []string{"fd00::2/128", "fd00::3/128"}, base: "fd00::/126", err: true},
+		// The table had only the ipv6 ERROR case, so nothing pinned what a v6
+		// pool RETURNS -- which is how a /32 host suffix survived on it.
+		{name: "an ipv6 pool gets a v6 host prefix", used: nil, base: "fd00::/64", want: "fd00::2/128"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -331,5 +334,46 @@ func TestAWiderPrefixIsFilledBeforeItSpills(t *testing.T) {
 	// scan is linear from .4.2 — the same shape TestAllocateWireguardAddressWidensPastFullSlash24 pins.
 	if got != "10.90.5.0/32" {
 		t.Fatalf("the 255th client got %s, want the next address in the prefix 10.90.5.0/32", got)
+	}
+}
+
+/*
+Two clients of an IPv6 WireGuard inbound must not collide in the kernel.
+
+allocateWireguardAddress walked whatever family its base prefix was but rendered
+the result with a literal "/32", so an fd00::1/64 device handed out fd00::2/32
+and fd00::3/32. Distinct strings -- which is why a string comparison would not
+have seen it -- but parseAllowedIPs masks before the kernel sees them, and both
+mask to fd00::/32. device.go then refuses every client after the first with
+"clients %q and %q share allowed-IP", installs a live fd00::/32 route over the
+device, and drops the survivor from shaping because it is not a single IP. The
+.conf handed to the customer says Address = fd00::2/32 as well.
+
+Compared masked, not as strings: the masked collision is the fact the kernel
+layer actually rejects on. F100.
+*/
+func TestDefaultWireguardClientsOnAnIPv6PoolDoNotCollideMasked(t *testing.T) {
+	clients := []model.Client{{Email: "x@wg6"}, {Email: "y@wg6"}}
+	ifaces := []any{map[string]any{"email": "x@wg6"}, map[string]any{"email": "y@wg6"}}
+	if err := defaultWireguardClients(nil, clients, ifaces, wireguardPool{base: "fd00::/64"}); err != nil {
+		t.Fatalf("defaultWireguardClients: %v", err)
+	}
+
+	first, err := netip.ParsePrefix(clients[0].AllowedIPs[0])
+	if err != nil {
+		t.Fatalf("parse %q: %v", clients[0].AllowedIPs[0], err)
+	}
+	second, err := netip.ParsePrefix(clients[1].AllowedIPs[0])
+	if err != nil {
+		t.Fatalf("parse %q: %v", clients[1].AllowedIPs[0], err)
+	}
+
+	if first.Masked() == second.Masked() {
+		t.Fatalf("both clients mask to %s (%q and %q); the kernel refuses the second peer outright and routes that whole network over the device",
+			first.Masked(), clients[0].AllowedIPs[0], clients[1].AllowedIPs[0])
+	}
+	if !first.IsSingleIP() || !second.IsSingleIP() {
+		t.Errorf("a client address is not a single host (%q, %q); shaping targets and the tunnel-local address both drop it",
+			clients[0].AllowedIPs[0], clients[1].AllowedIPs[0])
 	}
 }
