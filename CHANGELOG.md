@@ -8,6 +8,62 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A restart that would leave you with no proxy is now refused.** xray-core
+  loads its config whole: one malformed inbound, routing rule or outbound aborts
+  the load, and the panel had already stopped the core it was replacing. A
+  single bad save ended every inbound of every protocol on the box, the bad row
+  was saved anyway, and every retry — including the watchdog's — reproduced it.
+  The panel now asks the pinned binary's own `-test` loader before it stops
+  anything, keeps the running core when the answer is no, and asks in the same
+  place on the two other paths that reach the core: the hot apply, and enabling
+  a row that was saved while disabled.
+  **What you will notice:** a save or a restart can now come back with the
+  core's own refusal text instead of appearing to work. The proxy stays up while
+  you fix it. Being *unable* to ask — no binary, no permission, a timeout — is
+  never treated as a refusal, so this can not become the reason a restart cannot
+  happen. It does not run on a cold start, where there is nothing to protect.
+
+- **A host's Split download address can be saved.** The column, the form tab and
+  the subscription renderer have all existed since the feature shipped; the one
+  write path in between never learned the field, so the value was dropped on the
+  way in. Every host anyone has created has had it empty. An operator set it,
+  was told it saved, reopened the tab to find it blank, and every subscription
+  kept handing out the inbound's original download endpoint — the exact mismatch
+  the feature exists to fix.
+  **What you will notice:** the field persists. If you set one before and gave
+  up, set it again.
+
+- **A WireGuard or AmneziaWG uplink exit can be created from the Outbounds
+  page.** Every attempt failed with a database error. The form sent an ingress
+  inbound of `0` where it meant "none", and `0` is not a row any inbound can
+  ever have, so the foreign key refused it. This was the only way to author an
+  uplink exit in the panel, so the feature has been unusable from the UI since
+  the constraint landed.
+  **What you will notice:** it works. Nothing to repair — no such exit was ever
+  stored.
+
+- **A routing rule with a criterion the core cannot read is refused when you
+  save it.** A port of `abc`, a malformed CIDR, a bad domain matcher: all were
+  copied into the config verbatim, and xray-core refuses the whole routing
+  section over one of them — taking every client on the box down and re-arming
+  the pending restart to retry the same broken config every tick.
+  **What you will notice:** the rule editor rejects the value with a reason
+  instead of accepting it. Validation runs through xray-core's own rule parser,
+  not a hand-written imitation, so what the panel accepts is exactly what the
+  core accepts. **A rule already saved with a bad criterion is still stored** —
+  this stops new ones; open and re-save any rule you are unsure of.
+
+- **A VLESS client whose flow is `xtls-rprx-vision-udp443` is stored as
+  `xtls-rprx-vision`.** That value is a *client*-side flow: the client truncates
+  it to sixteen bytes before it goes on the wire, and the inbound then refuses
+  any account whose stored flow is not what arrived. The panel accepted it and
+  reported the client added; that client could never connect.
+  **What you will notice:** the flow shown for such a client changes to the
+  value that works. This is the panel rewriting something you saved, which it
+  normally will not do — the exception is made because the stored value has no
+  working meaning on an inbound and the alternative is a client that silently
+  never connects.
+
 - **A host's overrides now reach a Clash subscription for a Hysteria inbound.**
   They already reached the raw and JSON renderings. The Clash one rebuilt the
   entry from the inbound as stored and ignored the host entirely, so its SNI,
@@ -776,9 +832,10 @@ here; the git log is the full record.
   **What you will notice:** the download, checksum and extraction all happen with
   the current version still running and serving clients, and the switch is a
   single restart at the end. A failed update now leaves the panel exactly as it
-  was, with an error. If the new version cannot load your configuration, the
-  restart is refused and the running version keeps serving rather than the box
-  going dark.
+  was, with an error. And the new binary is asked whether it can load your
+  configuration *before* it is installed at all, so a version that cannot is
+  never put in place — rather than landing and then refusing every restart
+  afterwards with nothing to put the old one back.
 
 - **An inbound can no longer take the panel's own port.** The conflict check
   looked at other inbounds and at Xray's internal API port, but never at the two
