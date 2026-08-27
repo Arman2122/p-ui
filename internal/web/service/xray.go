@@ -752,6 +752,54 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound) {
 // OutboundConfigs exactly as it came from the template (we do not inject
 // subscription outbounds). This prevents us from accidentally dropping the
 // user's manually configured outbounds when the template is in a weird state.
+// outboundTagSet collects the tags a list of outbounds already holds. An entry
+// with no usable tag is ignored rather than claiming the empty string.
+func outboundTagSet(outbounds []any) map[string]struct{} {
+	held := make(map[string]struct{}, len(outbounds))
+	for _, entry := range outbounds {
+		if tag := outboundTagOf(entry); tag != "" {
+			held[tag] = struct{}{}
+		}
+	}
+	return held
+}
+
+func outboundTagOf(entry any) string {
+	object, ok := entry.(map[string]any)
+	if !ok {
+		return ""
+	}
+	tag, _ := object["tag"].(string)
+	return tag
+}
+
+/*
+keepUncontestedTags returns the entries whose tag nothing already holds, and
+claims each tag it keeps so two entries in one list cannot both survive.
+
+Dropped rather than suffixed: a suffixed tag breaks nothing visibly and routes
+nowhere, because every routing rule still names the tag the operator chose. A
+drop plus a log line is the failure an operator can act on.
+*/
+func keepUncontestedTags(outbounds []any, held map[string]struct{}, source string) []any {
+	kept := make([]any, 0, len(outbounds))
+	for _, entry := range outbounds {
+		tag := outboundTagOf(entry)
+		if tag == "" {
+			kept = append(kept, entry)
+			continue
+		}
+		if _, taken := held[tag]; taken {
+			logger.Warning("outbound tag", tag, "is already held; dropping the", source,
+				"outbound that would have shadowed it. Rename one of them or routing rules naming that tag will not do what you expect.")
+			continue
+		}
+		held[tag] = struct{}{}
+		kept = append(kept, entry)
+	}
+	return kept
+}
+
 func mergeSubscriptionOutbounds(cfg *xray.Config, prepend, appendList []any) {
 	if len(prepend) == 0 && len(appendList) == 0 {
 		return
@@ -764,10 +812,16 @@ func mergeSubscriptionOutbounds(cfg *xray.Config, prepend, appendList []any) {
 			return
 		}
 	}
+	// Deduped by OWNERSHIP, not by position. Subscriptions are prepended, so
+	// first-wins would hand an operator's tag to a third-party server and
+	// misroute everything aimed at it. The template's tags are the operator's
+	// and are kept unconditionally; a colliding subscription entry is dropped
+	// and named in the log. F078.
+	held := outboundTagSet(templateOutbounds)
 	var merged []any
-	merged = append(merged, prepend...)
+	merged = append(merged, keepUncontestedTags(prepend, held, "subscription")...)
 	merged = append(merged, templateOutbounds...)
-	merged = append(merged, appendList...)
+	merged = append(merged, keepUncontestedTags(appendList, held, "generated")...)
 	combined, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return

@@ -8,6 +8,23 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An outbound subscription can no longer take a tag you already use.** The
+  three sources of outbounds — your template, your subscriptions, and the ones
+  the panel generates — were concatenated with no check that a tag appeared once.
+  Xray refuses a duplicate tag outright, and because subscriptions are listed
+  first, the resolution that did happen handed *your* tag to a third-party
+  server: every routing rule naming it then sent traffic somewhere you never
+  chose.
+  **What you will notice:** your own outbounds keep their tags. A subscription
+  outbound that wanted one is dropped and the log says which:
+
+  ```
+  journalctl -u p-ui | grep "is already held"
+  ```
+
+  If you see that line, rename the tag prefix on the subscription — the dropped
+  outbound is unreachable until you do.
+
 - **A fallback child on a unix socket gets its master's address again.** An
   inbound listening on an `@abstract-socket` has no address a client can reach,
   so the subscription substitutes the address of the inbound that fronts it.
