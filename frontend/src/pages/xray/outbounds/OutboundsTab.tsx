@@ -52,7 +52,7 @@ import type { XraySettingsValue, SetTemplate, OutboundTestMode, OutboundTestStat
 import './OutboundsTab.css';
 
 import type { OutboundRow } from './outbounds-tab-types';
-import { exitAsOutboundRow, isUntestable, originalOutboundIndex } from './outbounds-tab-helpers';
+import { dialerProxyCycleTags, exitAsOutboundRow, isUntestable, originalOutboundIndex } from './outbounds-tab-helpers';
 import { useOutboundColumns } from './useOutboundColumns';
 import OutboundCardList from './OutboundCardList';
 import SubscriptionOutbounds from './SubscriptionOutbounds';
@@ -193,11 +193,16 @@ export default function OutboundsTab({
   );
 
   const dialerProxyTags = useMemo(() => {
+    const all = templateSettings?.outbounds || [];
+    /* Not just the row being edited: an outbound that already dials through it,
+       at any depth, closes the loop the other way round. F082. */
+    const editingTag = editingIndex == null ? '' : (all[editingIndex]?.tag ?? '');
+    const cycles = dialerProxyCycleTags(all, editingTag);
     const tags = new Set<string>();
-    (templateSettings?.outbounds || []).forEach((o, i) => {
+    all.forEach((o, i) => {
       if (i === editingIndex) return;
       if (o?.protocol === 'blackhole') return;
-      if (o?.tag) tags.add(o.tag);
+      if (o?.tag && !cycles.has(o.tag)) tags.add(o.tag);
     });
     for (const tag of subscriptionOutboundTags || []) {
       if (tag) tags.add(tag);
