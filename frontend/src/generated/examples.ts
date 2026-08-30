@@ -360,6 +360,10 @@ export const EXAMPLES: Record<string, unknown> = {
       "vless",
       "vmess"
     ],
+    "sessionKinds": [
+      "vless",
+      "wgkernel"
+    ],
     "shaping": {
       "wgkernel": "innerIP"
     },

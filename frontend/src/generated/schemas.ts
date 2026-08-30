@@ -1512,6 +1512,17 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "sessionKinds": {
+        "description": "/*\n\t\tSessionKinds are the kinds whose core can name each live connection and the\n\t\taddress it came from — the one thing an IP limit is decided from.\n\n\t\tA kind absent here cannot have a cap enforced however the form is filled\n\t\tin: EvaluateIPLimits only ever sees clients a core reported a session for,\n\t\tand mtg, for one, reports a secret in use and no address at all. The form\n\t\tsays so instead of accepting a number that does nothing. F120 / F302.\n\t*/",
+        "example": [
+          "vless",
+          "wgkernel"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "shaping": {
         "additionalProperties": {
           "type": "string"
@@ -1538,6 +1549,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "exitKinds",
       "id",
       "kinds",
+      "sessionKinds",
       "shaping",
       "titleKey",
       "unavailable"

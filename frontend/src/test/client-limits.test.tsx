@@ -23,6 +23,7 @@ const WG_CORE: CoreView = {
   exitKinds: [],
   clientCredentials: {},
   shaping: { wgkernel: 'innerIP' },
+  sessionKinds: [],
 };
 
 const XRAY_CORE: CoreView = { ...WG_CORE, id: 'xray', kinds: ['vless'], shaping: {} };

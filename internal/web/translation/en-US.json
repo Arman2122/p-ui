@@ -920,7 +920,8 @@
       },
       "tabLimits": "Limits",
       "limitIpCapped": "Limit to",
-      "amneziawgConfig": "AmneziaWG config"
+      "amneziawgConfig": "AmneziaWG config",
+      "limitIpUnsupportedKinds": "No IP limit on {kinds}: that protocol cannot report where a connection came from, so a cap on it would do nothing."
     },
     "groups": {
       "name": "Name",
