@@ -106,11 +106,14 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 		disabledClientsCount = count
 	}
 
-	needRestart2, count, disableInboundsErr := s.disableInvalidInbounds(tx)
+	needRestart2, count, xrayInbounds, disableInboundsErr := s.disableInvalidInbounds(tx)
 	if disableInboundsErr != nil {
 		logger.Warning("Error in disabling invalid inbounds:", disableInboundsErr)
 	} else if count > 0 {
 		logger.Debugf("%v inbounds disabled", count)
+		// A depleted inbound is torn down by tag; if that drop failed the
+		// listener is still up, and only a restart rebuilds the config without it.
+		disabledClientsCount += xrayInbounds
 	}
 	pending = pendingDisables
 	return needRestart0 || needRestart1 || needRestart2, disabledClientsCount > 0, renewedEmails, pending, nil

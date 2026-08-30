@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -15,7 +17,9 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, error) {
+// The third result counts the depleted inbounds XRAY serves. Only those can
+// be left listening by a failed drop, so only those may force a core restart.
+func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, int64, error) {
 	now := time.Now().Unix() * 1000
 	needRestart := false
 
@@ -37,9 +41,15 @@ func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, error
 	if err := tx.Model(model.Inbound{}).
 		Where("((total > 0 and up + down >= total) or (expiry_time > 0 and expiry_time <= ?)) and enable = ? and node_id IS NULL", now, true).
 		Find(&doomed).Error; err != nil {
-		return false, 0, err
+		return false, 0, 0, err
 	}
+	xrayServed := int64(0)
 	for _, ib := range doomed {
+		// Counted off the doomed set, BEFORE the drop and independent of it: the
+		// DB flip happens either way, and a headless box errors on every drop.
+		if cores.ServedByXray(core.Kind(ib.Protocol)) {
+			xrayServed++
+		}
 		rt, rtErr := s.runtimeFor(ib)
 		if rtErr != nil {
 			logger.Debug("Error resolving the runtime for inbound:", ib.Tag, rtErr)
@@ -59,7 +69,7 @@ func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, error
 		Update("enable", false)
 	err := result.Error
 	count := result.RowsAffected
-	return needRestart, count, err
+	return needRestart, count, xrayServed, err
 }
 
 const globalTrafficFreshWindow = 24 * time.Hour

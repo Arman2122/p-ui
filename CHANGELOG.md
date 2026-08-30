@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An inbound that runs out of quota now really stops serving.** It was flipped
+  off in the panel and dropped from the core by tag -- but when that drop failed,
+  nothing else happened. The listener stayed up with every session on it still
+  running, and the fallback reload was never scheduled, because only disabled
+  CLIENTS ever triggered it and disabled INBOUNDS did not.
+  **What you will notice:** a depleted inbound served by Xray now schedules the
+  reload that removes it. MTProto and kernel-WireGuard inbounds deliberately do
+  not -- they are not in the Xray config, so restarting Xray for them would drop
+  every live Xray session and change nothing. Unaffected if you have "Restart
+  Xray After Auto Disable" switched off.
+
 - **Disabling an inbound now takes effect even if removing it from the core
   fails.** The removal'''s failure was ignored entirely: the switch was saved,
   the panel reported success, and the listener stayed up with every current
