@@ -79,7 +79,7 @@ func (t *Tgbot) SendAnswer(chatId int64, msg string, isAdmin bool) {
 
 // SendMsgToTgbot sends a message to the Telegram bot with optional reply markup.
 func (t *Tgbot) SendMsgToTgbot(chatId int64, msg string, replyMarkup ...telego.ReplyMarkup) {
-	if !isRunning {
+	if !t.IsRunning() {
 		return
 	}
 
@@ -159,12 +159,13 @@ func (t *Tgbot) SendMsgToTgbot(chatId int64, msg string, replyMarkup ...telego.R
 
 // SendMsgToTgbotAdmins sends a message to all admin Telegram chats.
 func (t *Tgbot) SendMsgToTgbotAdmins(msg string, replyMarkup ...telego.ReplyMarkup) {
+	admins := currentAdminIds()
 	if len(replyMarkup) > 0 {
-		for _, adminId := range adminIds {
+		for _, adminId := range admins {
 			t.SendMsgToTgbot(adminId, msg, replyMarkup[0])
 		}
 	} else {
-		for _, adminId := range adminIds {
+		for _, adminId := range admins {
 			t.SendMsgToTgbot(adminId, msg)
 		}
 	}
@@ -174,7 +175,7 @@ func (t *Tgbot) SendMsgToTgbotAdmins(msg string, replyMarkup ...telego.ReplyMark
 func (t *Tgbot) sendCallbackAnswerTgBot(id string, message string) {
 	// Same guard SendMsgToTgbot carries: there is no bot to answer through
 	// before start or after shutdown, and every caller is a request handler.
-	if !isRunning {
+	if !t.IsRunning() {
 		return
 	}
 	params := telego.AnswerCallbackQueryParams{

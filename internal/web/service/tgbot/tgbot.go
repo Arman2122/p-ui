@@ -433,6 +433,15 @@ func (t *Tgbot) NewBot(token string, proxyUrl string, apiServerUrl string) (*tel
 	return telego.NewBot(token, options...)
 }
 
+// currentAdminIds reads the admin list under the lock both writers take.
+// Both of them PUBLISH a fresh slice and nothing appends to a published one,
+// so the header can be returned as-is without copying.
+func currentAdminIds() []int64 {
+	tgBotMutex.Lock()
+	defer tgBotMutex.Unlock()
+	return adminIds
+}
+
 // IsRunning checks if the Telegram bot is currently running.
 func (t *Tgbot) IsRunning() bool {
 	tgBotMutex.Lock()
