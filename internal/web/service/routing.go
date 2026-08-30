@@ -201,11 +201,37 @@ func (s *RoutingService) reapFronts(keep map[int]int) error {
 	if err != nil {
 		return err
 	}
+	/*
+		A front whose ingress is merely DISABLED is kept.
+
+		Subjects() reads enabled inbounds only, so a disabled one has no subject,
+		its front was not in `keep`, and it was retired — then re-enabling created
+		a fresh row with a fresh id. Every disable/enable cycle burned one of the
+		999 ids the whole scheme has, and renamed the device and routing table
+		derived from it.
+
+		The row costs nothing while the inbound is down: nothing renders that
+		inbound, so nothing selects its device. It is reaped the moment the
+		inbound is back and no rule names it. F070.
+	*/
+	var disabled []int
+	if err := database.GetDB().Model(&model.Inbound{}).
+		Where("node_id IS NULL AND enable = ?", false).
+		Pluck("id", &disabled).Error; err != nil {
+		return err
+	}
+	dormant := make(map[int]struct{}, len(disabled))
+	for _, id := range disabled {
+		dormant[id] = struct{}{}
+	}
 	for _, row := range rows {
 		if row.IngressInboundId == nil {
 			continue
 		}
 		if id, wanted := keep[*row.IngressInboundId]; wanted && id == row.Id {
+			continue
+		}
+		if _, asleep := dormant[*row.IngressInboundId]; asleep {
 			continue
 		}
 		if err := (&EgressService{}).Del(row.Id); err != nil {

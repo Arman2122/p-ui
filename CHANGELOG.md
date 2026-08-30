@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Disabling an inbound no longer renumbers its routing egress.** An inbound
+  with a routing rule gets a small internal egress, and everything about it --
+  its routing table, its network device name -- is derived from an id drawn from
+  a pool of 999. Disabling the inbound retired that egress and re-enabling it
+  minted a new one, so every toggle renamed the device, moved the table, and
+  spent another id from the pool. The egress now sleeps with the inbound and is
+  still cleaned up once the inbound is back and no rule needs it.
+
 - **A client cannot be attached to an inbound that serves none.** The panel's
   own pickers already leave HTTP, mixed, tunnel and TUN inbounds out, but the
   API and the Telegram bot accepted a client on one: it was stored, listed on
