@@ -308,6 +308,10 @@ export function dropLegacyOptionalEmpties(
   // Address still builds, and binds the SOCKS UDP hub to a nameless host.
   if (settings.ip === '') delete settings.ip;
 
+  // Absent, not "": xray types this as a POINTER so absent is the neutral
+  // value it re-derives from the routing table. An empty string suppresses that.
+  if (settings.autoOutboundsInterface === '') delete settings.autoOutboundsInterface;
+
   if (stream) {
     // StreamSettings emits `finalmask` only when at least one transport
     // mask exists (legacy `hasFinalMask`). Drop the whole block when all

@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Creating a tun inbound no longer binds every outbound to one network
+  interface.** The panel wrote `autoOutboundsInterface: "auto"` into every tun
+  inbound it saved, whether or not you touched the field. Xray acts on that by
+  registering a process-wide dialer controller, so one tun inbound rewrote the
+  source interface of every outbound on the server.
+  **What you will notice:** new tun inbounds leave the field unset, and Xray
+  decides for itself based on the routing table -- which is what it does when
+  the field is absent. Existing inbounds are NOT changed: a stored "auto" is
+  indistinguishable from one you typed, so it is left alone. Clear it by hand if
+  you did not mean it.
+
 - **Viewing the Xray config no longer deletes routing state the running core is
   using.** Building the config ends by retiring egress "fronts" that no routing
   rule names any more -- which deletes the database row and tears down its `ip
