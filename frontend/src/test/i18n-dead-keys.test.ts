@@ -132,7 +132,14 @@ describe('i18n keys', () => {
       for (const match of src.matchAll(/\bt\(\s*(['"`])([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\1/g)) {
         if (!asked.has(match[2])) asked.set(match[2], file);
       }
+      // Go asks in three shapes: the web handlers' I18nWeb, and the Telegram
+      // bot's I18nBot, whose miss is the quietest of the lot -- locale.I18n
+      // returns "" for an unknown key, so the bot sends a message that starts
+      // with nothing at all.
       for (const match of src.matchAll(/I18nWeb\(c,\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"/g)) {
+        if (!asked.has(match[1])) asked.set(match[1], file);
+      }
+      for (const match of src.matchAll(/I18nBot\(\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"/g)) {
         if (!asked.has(match[1])) asked.set(match[1], file);
       }
     }

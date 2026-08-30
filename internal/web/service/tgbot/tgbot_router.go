@@ -3,7 +3,6 @@ package tgbot
 import (
 	"context"
 	"fmt"
-	"html"
 	"slices"
 	"strconv"
 	"strings"
@@ -207,7 +206,7 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 		msg += t.I18nBot("tgbot.commands.help")
 		msg += t.I18nBot("tgbot.commands.pleaseChoose")
 	case "start":
-		msg += t.I18nBot("tgbot.commands.start", "Firstname=="+html.EscapeString(from.FirstName))
+		msg += t.I18nBot("tgbot.commands.start", "Firstname=="+from.FirstName)
 		if isAdmin {
 			msg += t.I18nBot("tgbot.commands.welcome", "Hostname=="+hostname)
 		}
@@ -1237,7 +1236,7 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 		tgUserID := callbackQuery.From.ID
 		traffics, err := t.inboundService.GetClientTrafficTgBot(tgUserID)
 		if err != nil {
-			t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.errorOccurred")+"\r\n"+err.Error())
+			t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.errorOperation")+"\r\n"+err.Error())
 			return
 		}
 		if len(traffics) == 0 {

@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A `<` in a client name no longer silences the Telegram bot.** Every message
+  it sends is parsed as HTML, and the values put into them -- emails, remarks,
+  comments -- were not escaped, so one angle bracket anywhere made Telegram
+  reject the whole message. The server-usage report, the inbound list and the
+  depleted-client alert simply stopped arriving for that client, with the
+  failure only in the log.
+
 - **"Send a backup to the Telegram bot" says whether it went.** The endpoint
   answered 200 with an empty body no matter what happened -- and the send is a
   silent no-op when the bot is not running, so a backup that never left the
