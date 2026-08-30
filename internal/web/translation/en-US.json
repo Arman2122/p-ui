@@ -1470,7 +1470,7 @@
         "twoFactorModalRemoveStep": "Enter the code from the application to remove two-factor authentication.",
         "twoFactorModalChangeCredentialsTitle": "Change credentials",
         "twoFactorModalChangeCredentialsStep": "Enter the code from the application to change administrator credentials.",
-        "twoFactorModalSetSuccess": "Two-factor authentication has been successfully established",
+        "twoFactorModalSetSuccess": "Code verified — press Save to enable two-factor authentication",
         "twoFactorModalDeleteSuccess": "Two-factor authentication has been successfully deleted",
         "twoFactorModalError": "Wrong code",
         "show": "Show",

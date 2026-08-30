@@ -1350,7 +1350,7 @@
         "twoFactorModalRemoveStep": "برای حذف احراز هویت دو مرحله‌ای، کد را از برنامه وارد کنید.",
         "twoFactorModalChangeCredentialsTitle": "تغییر اعتبارنامه‌ها",
         "twoFactorModalChangeCredentialsStep": "برای تغییر اعتبارنامه‌های مدیر، کد را از برنامه وارد کنید.",
-        "twoFactorModalSetSuccess": "احراز هویت دو مرحله‌ای با موفقیت برقرار شد",
+        "twoFactorModalSetSuccess": "کد تأیید شد — برای فعال‌سازی احراز هویت دو مرحله‌ای، ذخیره کنید",
         "twoFactorModalDeleteSuccess": "احراز هویت دو مرحله‌ای با موفقیت حذف شد",
         "twoFactorModalError": "کد نادرست",
         "show": "نمایش",
