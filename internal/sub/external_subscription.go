@@ -3,11 +3,14 @@ package sub
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // External subscription fetching: a "subscription" external link is a remote
@@ -21,7 +24,18 @@ const (
 	subscriptionCacheCapacity = 256
 )
 
-var subscriptionHTTPClient = &http.Client{Timeout: 6 * time.Second}
+// The URL is checked before the fetch, and a redirect is a second URL nobody
+// checked. Re-run the same policy on every hop rather than restating it.
+var subscriptionHTTPClient = &http.Client{
+	Timeout: 6 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		_, err := service.SanitizePublicHTTPURL(req.URL.String(), false)
+		return err
+	},
+}
 
 type subscriptionCacheEntry struct {
 	links     []string

@@ -1,11 +1,15 @@
 package job
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 
 	"github.com/valyala/fasthttp"
 )
@@ -38,6 +42,14 @@ func stallingListener(t *testing.T) (addr string, release func()) {
 }
 
 func TestExternalInformClient_StalledReceiverTimesOut(t *testing.T) {
+	// The dial is SSRF-guarded now, and this fixture is a loopback listener.
+	// Allow private for this test only; the refusal itself is covered below.
+	prev := informDialContext
+	informDialContext = func() context.Context {
+		return netsafe.ContextWithAllowPrivate(context.Background(), true)
+	}
+	t.Cleanup(func() { informDialContext = prev })
+
 	addr, release := stallingListener(t)
 	defer release()
 
@@ -87,5 +99,37 @@ func TestInformSkippedWhenNothingToReport(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("an empty payload must return before touching settings or the network")
+	}
+}
+
+/*
+And the same client refuses a private address at dial time.
+
+The inform URL is already checked against the public-address policy before the
+request, so a private one cannot be configured. What the dial guard adds is the
+window between that check and the connection: a hostname that answers publicly
+when the panel validates it and privately a moment later reaches the panel's own
+loopback, its metadata service, or anything else on the LAN.
+
+Loopback stands in for "private" here; netsafe applies one rule to the whole
+private range. F355.
+*/
+func TestExternalInformClient_RefusesAPrivateAddressAtDialTime(t *testing.T) {
+	addr, release := stallingListener(t)
+	defer release()
+
+	request := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(request)
+	request.Header.SetMethod("POST")
+	request.SetRequestURI("http://" + addr + "/inform")
+	response := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(response)
+
+	err := externalInformClient.DoTimeout(request, response, externalInformTimeout)
+	if err == nil {
+		t.Fatal("the inform client connected to a private address; a hostname that resolves privately after the URL check reaches the panel's own loopback")
+	}
+	if !strings.Contains(err.Error(), "blocked private") {
+		t.Errorf("the refusal did not come from the dial guard, so this proves nothing about it: %v", err)
 	}
 }

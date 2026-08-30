@@ -1,10 +1,13 @@
 package job
 
 import (
+	"context"
 	"encoding/json"
+	"net"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/outbound"
 	"github.com/Arman2122/p-ui/internal/web/websocket"
@@ -56,7 +59,18 @@ func splitMovedClientTraffics(clientTraffics []*xray.ClientTraffic) ([]*xray.Cli
 
 const externalInformTimeout = 3 * time.Second
 
+// The base context for the inform dial. Only a test that must reach a
+// loopback listener replaces it; production is always a bare background.
+var informDialContext = context.Background
+
 var externalInformClient = &fasthttp.Client{
+	// DialTimeout, not Dial: fasthttp checks this one FIRST and the Dial branch
+	// discards the per-request timeout, stretching the 3s inform budget to 10s.
+	DialTimeout: func(addr string, timeout time.Duration) (net.Conn, error) {
+		ctx, cancel := context.WithTimeout(informDialContext(), timeout)
+		defer cancel()
+		return netsafe.SSRFGuardedDialContext(ctx, "tcp", addr)
+	},
 	ReadTimeout:         externalInformTimeout,
 	WriteTimeout:        externalInformTimeout,
 	MaxIdleConnDuration: time.Minute,
