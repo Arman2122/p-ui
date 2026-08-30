@@ -18,6 +18,19 @@ export function originalRuleIndex(rows: RuleRow[], positionalIndex: number): num
   return row ? row.key : positionalIndex;
 }
 
+/**
+ * Whether two merged-table rows may swap places.
+ *
+ * A row's storeIndex is a position in ITS OWN store, and the table merges two
+ * independently-ordered lists into one evaluation order. A move across the
+ * boundary therefore names no position in either list: taking the neighbour's
+ * storeIndex and indexing the template array with it reorders an unrelated
+ * rule, and routing is first-match, so that changes which rule decides.
+ */
+export function canSwapRows(a?: RuleRow, b?: RuleRow): boolean {
+  return !!a && !!b && a.source === b.source;
+}
+
 export function csv(value?: string): string[] {
   if (!value) return [];
   return String(value).split(',').map((s) => s.trim()).filter(Boolean);

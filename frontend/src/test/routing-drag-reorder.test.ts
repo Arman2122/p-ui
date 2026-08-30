@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { originalRuleIndex } from '@/pages/xray/routing/helpers';
+import { canSwapRows, originalRuleIndex } from '@/pages/xray/routing/helpers';
 import type { RuleRow } from '@/pages/xray/routing/types';
 
 /*
@@ -21,11 +21,14 @@ const TEMPLATE: RuleRow[] = [
 ];
 const MERGED: RuleRow[] = [...INTENT, ...TEMPLATE];
 
-/* The source-aware resolution the drag handler performs. */
+/* The source-aware resolution the drag handler performs. It calls the REAL
+   predicate rather than a copy: a local re-implementation stays green while
+   the production guard is removed, which is what let the button path ship
+   without it. */
 function resolveDrag(from: number, to: number) {
   const fromRow = MERGED[from];
   const toRow = MERGED[to];
-  if (!fromRow || !toRow || fromRow.source !== toRow.source) return null;
+  if (!canSwapRows(fromRow, toRow)) return null;
   return { list: fromRow.source, from: fromRow.storeIndex, to: toRow.storeIndex };
 }
 
@@ -50,5 +53,66 @@ describe('dragging a rule moves that rule', () => {
     const correct = resolveDrag(2, 3)!.from;
     expect(correct).toBe(0);
     expect(viaTemplateRows).not.toBe(correct);
+  });
+});
+
+/*
+The Move up / Move down buttons must refuse the same crossing the drag does.
+
+A row's storeIndex is a position in ITS OWN store, and the table merges two
+independently-ordered lists into one evaluation order. moveUp took the
+neighbour's storeIndex as a bare number and indexed the TEMPLATE array with it,
+guarded only by an existence check.
+
+On the first template row the neighbour is the last operator rule, so that
+number belongs to a different list. The swap went ahead and reordered two
+template rules the operator never touched. Routing is first-match, so it changes
+which rule decides the traffic, and nothing on screen says it happened.
+
+The drag path had declared this guard since it was written. Both paths now call
+the same predicate, and the source check below is what stops one of them
+drifting away from it again. F189.
+*/
+describe('canSwapRows', () => {
+  it('refuses a swap across the operator/template boundary', () => {
+    expect(canSwapRows(INTENT[1], TEMPLATE[0])).toBe(false);
+    expect(canSwapRows(TEMPLATE[0], INTENT[1])).toBe(false);
+  });
+
+  it('allows a swap inside one store', () => {
+    expect(canSwapRows(INTENT[0], INTENT[1])).toBe(true);
+    expect(canSwapRows(TEMPLATE[0], TEMPLATE[1])).toBe(true);
+  });
+
+  it('refuses a missing row', () => {
+    expect(canSwapRows(undefined, TEMPLATE[0])).toBe(false);
+    expect(canSwapRows(TEMPLATE[0], undefined)).toBe(false);
+  });
+});
+
+/*
+And every reorder path must go through it.
+
+The predicate above is only worth anything if all three callers use it. This is
+a source check because the alternative -- rendering RoutingTab and driving its
+buttons -- tests the table library, and because the defect was precisely that
+one path re-implemented the rule and one forgot it entirely.
+*/
+describe('every reorder path uses the shared predicate', () => {
+  it('moveUp, moveDown and the drag handler all call canSwapRows', async () => {
+    const src = await import('@/pages/xray/routing/RoutingTab.tsx?raw').then((m) => m.default as string);
+
+    for (const fn of ['function moveUp(', 'function moveDown(']) {
+      const start = src.indexOf(fn);
+      expect(start, `${fn} was renamed; this guard is now vacuous`).toBeGreaterThan(-1);
+      const body = src.slice(start, src.indexOf('\n  }', start));
+      expect(
+        body.includes('canSwapRows('),
+        `${fn} reorders without the cross-store check, so moving the first template row swaps two unrelated template rules`,
+      ).toBe(true);
+    }
+
+    /* moveUp, moveDown and the drag handler; the import carries no paren. */
+    expect(src.split('canSwapRows(').length - 1).toBe(3);
   });
 });

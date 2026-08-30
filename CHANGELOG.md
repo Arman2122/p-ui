@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **"Move up" on the first template routing rule no longer reorders two other
+  rules.** The routing table shows your own rules and the template'''s as one
+  list, but they are stored separately. Moving the first template rule up used
+  the neighbouring OPERATOR rule'''s position as though it were a template
+  position, and swapped two template rules you never touched. Routing is
+  first-match, so that changes which rule decides your traffic, and nothing said
+  it had happened.
+  **What you will notice:** the move is refused at the boundary between the two
+  groups, which is what dragging already did.
+
 - **A Telegram backup that failed now says so.** The message always opened by
   stating the hostname and the backup time, and then said nothing at all if the
   database dump could not be produced or the upload failed. An admin saw a
