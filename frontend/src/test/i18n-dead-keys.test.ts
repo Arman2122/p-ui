@@ -40,15 +40,22 @@ function flattenKeys(obj: Record<string, unknown>, prefix = ''): string[] {
 }
 
 function collectSources(dir: string, exts: string[], out: string[]): void {
+  for (const [, body] of namedSourcesIn(dir, exts)) out.push(body);
+}
+
+// The same walk, keeping the path: a missing key is worth nothing to the reader
+// without the file that asks for it.
+function namedSourcesIn(dir: string, exts: string[], out: [string, string][] = []): [string, string][] {
   for (const entry of readdirSync(dir)) {
     if (['node_modules', 'dist', 'generated', '.git', '.local', 'storybook-static'].includes(entry)) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
-      collectSources(full, exts, out);
+      namedSourcesIn(full, exts, out);
     } else if (exts.some((ext) => entry.endsWith(ext)) && resolve(full) !== selfPath) {
-      out.push(readFileSync(full, 'utf8'));
+      out.push([full, readFileSync(full, 'utf8')]);
     }
   }
+  return out;
 }
 
 describe('i18n keys', () => {
@@ -63,6 +70,10 @@ describe('i18n keys', () => {
    */
   const GO_KEY_DECLARATION = /^[ \t]*(?:const |var )?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+"[ \t]*$/gm;
 
+  const namedSources = [
+    ...namedSourcesIn(join(repoRoot, 'frontend', 'src'), ['.ts', '.tsx']),
+    ...namedSourcesIn(join(repoRoot, 'internal'), ['.go']),
+  ];
   const tsSources: string[] = [];
   collectSources(join(repoRoot, 'frontend', 'src'), ['.ts', '.tsx'], tsSources);
   const goSources: string[] = [];
@@ -102,6 +113,35 @@ describe('i18n keys', () => {
       (key) => !tokens.has(key) && !prefixes.some((p) => key.startsWith(p)),
     );
     expect(dead, `dead i18n keys (delete from all locales):\n  ${dead.join('\n  ')}`).toEqual([]);
+  });
+
+  /*
+   * The direction the other two never covered: a t('a.b.c') whose key is in no
+   * locale at all shipped green, because both existing checks start FROM the
+   * key set. i18next then renders the raw dotted key, and the operator reads
+   * "pages.xray.balancer" where a word should be. Two such keys were live when
+   * this was added; one of them was hiding behind `|| 'Balancer'`, which never
+   * fires because the miss is a truthy string.
+   *
+   * A positional default (`t('a.b.c', 'Some text')`) does not excuse it: the
+   * English reads fine and every other locale still shows English. F197 / F198.
+   */
+  it('every key the sources ask for exists in en-US', () => {
+    const asked = new Map<string, string>();
+    for (const [file, src] of namedSources) {
+      for (const match of src.matchAll(/\bt\(\s*(['"`])([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\1/g)) {
+        if (!asked.has(match[2])) asked.set(match[2], file);
+      }
+      for (const match of src.matchAll(/I18nWeb\(c,\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"/g)) {
+        if (!asked.has(match[1])) asked.set(match[1], file);
+      }
+    }
+    const enSet = new Set(enKeys);
+    const absent = [...asked].filter(([key]) => !enSet.has(key));
+    expect(
+      absent.map(([key, file]) => `${key} (${file})`),
+      'i18n keys the UI asks for that no locale defines; each renders as the raw key:',
+    ).toEqual([]);
   });
 
   it('every locale carries exactly the en-US key set', () => {
