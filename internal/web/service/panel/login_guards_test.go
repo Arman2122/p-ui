@@ -55,9 +55,33 @@ func TestLoginRefusesTheComputableCodeWhenTheSecretIsEmpty(t *testing.T) {
 	// And it is the 2FA gate refusing, not the password: the same password with a
 	// real secret and its real code must get in.
 	setSettings(t, map[string]string{"twoFactorEnable": "true", "twoFactorToken": "JBSWY3DPEHPK3PXP"})
-	if _, err := svc.CheckUser("admin", "correct-horse", gotp.NewDefaultTOTP("JBSWY3DPEHPK3PXP").Now()); err != nil {
+	if err := loginWithACurrentCode(svc, "JBSWY3DPEHPK3PXP"); err != nil {
 		t.Fatalf("a correctly enrolled second factor must still work: %v", err)
 	}
+}
+
+/*
+loginWithACurrentCode logs in with a code generated for the window the login
+lands in.
+
+A TOTP code is valid only inside its own 30 seconds, and CheckUser hashes the
+password before it ever looks at the code. On a loaded runner under -race that
+hash can outlast the remainder of a window the code was generated near the end
+of, and the login is then refused for the clock rather than for the code. This
+failed on CI exactly that way.
+
+Retried from the start of a fresh window rather than slept into one, so the
+common path costs nothing: a refusal that is real fails both times.
+*/
+func loginWithACurrentCode(svc *UserService, secret string) error {
+	_, err := svc.CheckUser("admin", "correct-horse", gotp.NewDefaultTOTP(secret).Now())
+	if err == nil {
+		return nil
+	}
+	const window = 30
+	time.Sleep(time.Duration(window-time.Now().Unix()%window)*time.Second + 200*time.Millisecond)
+	_, err = svc.CheckUser("admin", "correct-horse", gotp.NewDefaultTOTP(secret).Now())
+	return err
 }
 
 // Whitespace in a submitted code is still NOT trimmed. The settings-side
