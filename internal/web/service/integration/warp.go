@@ -22,10 +22,11 @@ type WarpService struct {
 	service.SettingService
 }
 
-const (
-	warpAPIBase   = "https://api.cloudflareclient.com/v0a4005"
-	warpClientVer = "a-6.30-3596"
-)
+// A var so a test can point the client at a stand-in Cloudflare; the value is
+// production and nothing but a test ever assigns it.
+var warpAPIBase = "https://api.cloudflareclient.com/v0a4005"
+
+const warpClientVer = "a-6.30-3596"
 
 func (s *WarpService) GetWarpData() (string, error) {
 	return s.GetWarp()
@@ -196,6 +197,17 @@ func (s *WarpService) ChangeWarpIP() (string, error) {
 	}
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		return "", err
+	}
+
+	// RegWarp has just written the new device's own FREE licence over the
+	// operator's stored WARP+ key; put it back before either exit can leave.
+	if license, ok := warpDataMap["license_key"]; ok && len(license) >= 26 {
+		parsed.Data["license_key"] = license
+		if restored, mErr := json.MarshalIndent(parsed.Data, "", "  "); mErr != nil {
+			logger.Error("ChangeWarpIP: could not keep the stored WARP license: ", mErr)
+		} else if sErr := s.SetWarp(string(restored)); sErr != nil {
+			logger.Error("ChangeWarpIP: could not keep the stored WARP license: ", sErr)
+		}
 	}
 
 	xraySvc := service.XraySettingService{}

@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Changing the WARP IP no longer loses your WARP+ licence.** Rotating
+  registered a new device, which overwrote the stored WARP+ key with the new
+  device'''s free one, and only then tried to re-apply yours -- a step allowed to
+  fail with a warning. Cloudflare rate-limits registrations, so a rotation
+  retried a couple of times is exactly when that fails, and the paid key was
+  then gone from the panel with nothing left to retry from.
+  **What you will notice:** your licence stays in the panel even when the
+  re-apply fails, so you can rotate again later.
+
 - **"Move up" on the first template routing rule no longer reorders two other
   rules.** The routing table shows your own rules and the template'''s as one
   list, but they are stored separately. Moving the first template rule up used
