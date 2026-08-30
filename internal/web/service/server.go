@@ -1127,7 +1127,7 @@ func (s *ServerService) UpdateXray(version string) error {
 		if the config cannot be built the check is skipped rather than blocking an
 		upgrade.
 	*/
-	if cfg, cfgErr := s.xrayService.GetXrayConfig(); cfgErr == nil {
+	if cfg, cfgErr := s.xrayService.GetXrayConfig(false); cfgErr == nil {
 		if err := xray.TestConfigWith(stagedPath, cfg); err != nil {
 			return fmt.Errorf("xray %s cannot load this panel's config, so it was not installed: %w", version, err)
 		}
@@ -1349,7 +1349,7 @@ func logEntryContains(line string, suffixes []string) bool {
 }
 
 func (s *ServerService) GetConfigJson() (any, error) {
-	config, err := s.xrayService.GetXrayConfig()
+	config, err := s.xrayService.GetXrayConfig(false)
 	if err != nil {
 		return nil, err
 	}

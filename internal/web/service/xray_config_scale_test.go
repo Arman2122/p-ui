@@ -29,7 +29,7 @@ func TestGetXrayConfigScale(t *testing.T) {
 				const reps = 3
 				start := time.Now()
 				for range reps {
-					cfg, err := svc.GetXrayConfig()
+					cfg, err := svc.GetXrayConfig(false)
 					if err != nil {
 						t.Fatalf("GetXrayConfig: %v", err)
 					}

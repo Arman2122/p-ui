@@ -63,7 +63,7 @@ func TestTheGeneratedInboundOrderSurvivesAnUnrelatedUpdate(t *testing.T) {
 
 func renderedTags(t *testing.T) []string {
 	t.Helper()
-	cfg, err := (&XrayService{}).GetXrayConfig()
+	cfg, err := (&XrayService{}).GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig: %v", err)
 	}

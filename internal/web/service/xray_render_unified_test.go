@@ -48,7 +48,7 @@ func TestHotApplyRendersWhatARestartWouldApply(t *testing.T) {
 	seedGoldenFixture(t)
 
 	svc := &XrayService{}
-	cfg, err := svc.GetXrayConfig()
+	cfg, err := svc.GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig: %v", err)
 	}

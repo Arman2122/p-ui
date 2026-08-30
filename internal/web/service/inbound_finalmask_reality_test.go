@@ -189,7 +189,7 @@ func TestGetXrayConfig_HealsFinalMaskRealityCombo(t *testing.T) {
 		realityFinalMaskStream, `{"clients":[]}`)
 
 	svc := &XrayService{}
-	cfg, err := svc.GetXrayConfig()
+	cfg, err := svc.GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig: %v", err)
 	}

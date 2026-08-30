@@ -95,7 +95,7 @@ func criteriaMaskFor(handle core.IngressHandle) []string {
 
 // compile resolves everything the plan needs and runs it. Front ids are
 // allocated first, so the compile stays pure and repeatable.
-func (s *RoutingService) compile(ctx context.Context, cfgOutbounds []map[string]any) (routing.Compiled, error) {
+func (s *RoutingService) compile(ctx context.Context, cfgOutbounds []map[string]any, retireFronts bool) (routing.Compiled, error) {
 	rules, err := s.Rules()
 	if err != nil {
 		return routing.Compiled{}, err
@@ -104,7 +104,7 @@ func (s *RoutingService) compile(ctx context.Context, cfgOutbounds []map[string]
 	if err != nil {
 		return routing.Compiled{}, err
 	}
-	fronts, err := s.ensureFronts(subjects, rules)
+	fronts, err := s.ensureFronts(subjects, rules, retireFronts)
 	if err != nil {
 		return routing.Compiled{}, err
 	}
@@ -131,7 +131,7 @@ rule is the schema's rather than a convention. Fronts and exits come out of the
 SAME sequence, which is what guarantees a front and an exit can never derive the
 same table, priority or device.
 */
-func (s *RoutingService) ensureFronts(subjects []routing.Subject, rules []*model.RoutingRule) (map[int]int, error) {
+func (s *RoutingService) ensureFronts(subjects []routing.Subject, rules []*model.RoutingRule, retireFronts bool) (map[int]int, error) {
 	needed := map[int]bool{}
 	for _, rule := range rules {
 		if !rule.Enable {
@@ -172,8 +172,12 @@ func (s *RoutingService) ensureFronts(subjects []routing.Subject, rules []*model
 	// ErrEgressInUse on a stale row, say -- would darken every inbound on the
 	// box to tidy up one. The orphan it leaves behind costs the one ingress
 	// whose front row survived.
-	if err := s.reapFronts(out); err != nil {
-		logger.Warning("routing: a front that no rule names could not be retired:", err)
+	// And a READ must not retire a front the running core still forwards
+	// through: only the caller that is about to apply the config may reap.
+	if retireFronts {
+		if err := s.reapFronts(out); err != nil {
+			logger.Warning("routing: a front that no rule names could not be retired:", err)
+		}
 	}
 	return out, nil
 }
@@ -276,7 +280,7 @@ catch-all above it starves the gRPC stats path and every client reads offline),
 then the panel's own injections, then intent rules, then the operator's tail.
 Both are safe because every injected and intent rule is inboundTag-scoped.
 */
-func applyRoutingPlan(ctx context.Context, cfg *xray.Config) error {
+func applyRoutingPlan(ctx context.Context, cfg *xray.Config, retireFronts bool) error {
 	var outbounds []map[string]any
 	readable := true
 	if len(cfg.OutboundConfigs) > 0 {
@@ -287,7 +291,7 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config) error {
 			readable = false
 		}
 	}
-	compiled, err := (&RoutingService{}).compile(ctx, outbounds)
+	compiled, err := (&RoutingService{}).compile(ctx, outbounds, retireFronts)
 	if err != nil {
 		return err
 	}

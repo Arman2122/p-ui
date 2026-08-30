@@ -40,7 +40,7 @@ func disableClients(t *testing.T, emails ...string) {
 func emittedClients(t *testing.T, tag string) (any, bool) {
 	t.Helper()
 	svc := &XrayService{}
-	cfg, err := svc.GetXrayConfig()
+	cfg, err := svc.GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig: %v", err)
 	}

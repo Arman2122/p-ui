@@ -127,7 +127,9 @@ func (s *XrayService) GetXrayBaseConfig() (*xray.Config, error) {
 }
 
 // GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
-func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+// retireFronts must be true only for a caller that is about to APPLY the
+// config: retiring is a DB write and a kernel teardown, not part of a read.
+func (s *XrayService) GetXrayConfig(retireFronts bool) (*xray.Config, error) {
 	xrayConfig, err := s.GetXrayBaseConfig()
 	if err != nil {
 		return nil, err
@@ -208,7 +210,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	// writes rows before this can fire, so a refused config can leave a front the
 	// reconcile job then converges. That is the pre-existing cost of the write,
 	// not of the refusal. F055.
-	if err := applyRoutingPlan(context.Background(), xrayConfig); err != nil {
+	if err := applyRoutingPlan(context.Background(), xrayConfig, retireFronts); err != nil {
 		return nil, fmt.Errorf("refusing to generate a config without the operator's routing rules: %w", err)
 	}
 
@@ -1269,7 +1271,7 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 	isManuallyStopped.Store(false)
 
-	xrayConfig, err := s.GetXrayConfig()
+	xrayConfig, err := s.GetXrayConfig(true)
 	if err != nil {
 		return err
 	}

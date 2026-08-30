@@ -280,7 +280,7 @@ func TestQuotaResetRestoresAccessEndToEnd(t *testing.T) {
 	}
 
 	xraySvc := &XrayService{}
-	cfg, err := xraySvc.GetXrayConfig()
+	cfg, err := xraySvc.GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestQuotaResetRestoresAccessEndToEnd(t *testing.T) {
 		t.Fatalf("AddTraffic: %v", err)
 	}
 
-	depletedCfg, err := xraySvc.GetXrayConfig()
+	depletedCfg, err := xraySvc.GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig after depletion: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestQuotaResetRestoresAccessEndToEnd(t *testing.T) {
 		t.Fatalf("ResetAllClientTraffics: %v", err)
 	}
 
-	renewedCfg, err := xraySvc.GetXrayConfig()
+	renewedCfg, err := xraySvc.GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig after the reset: %v", err)
 	}
