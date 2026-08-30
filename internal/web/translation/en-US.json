@@ -1505,7 +1505,8 @@
         "originalUserPassIncorrect": "The current username or password is invalid",
         "userPassMustBeNotEmpty": "The new username and password are empty",
         "getOutboundTrafficError": "Error getting traffic",
-        "resetOutboundTrafficError": "Error resetting outbound traffic"
+        "resetOutboundTrafficError": "Error resetting outbound traffic",
+        "sessionsNotRevoked": "Settings saved, but existing sessions could not be signed out — they stay valid until they expire. Sign out from every device to be sure."
       },
       "smtpSettings": "SMTP Settings",
       "smtpEnable": "Enable Email Notifications",

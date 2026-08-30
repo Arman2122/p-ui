@@ -1381,7 +1381,8 @@
         "originalUserPassIncorrect": "نام‌کاربری یا رمزعبور فعلی اشتباه‌است",
         "userPassMustBeNotEmpty": "نام‌کاربری یا رمزعبور جدید خالی‌است",
         "getOutboundTrafficError": "خطا در دریافت ترافیک خروجی",
-        "resetOutboundTrafficError": "خطا در بازنشانی ترافیک خروجی"
+        "resetOutboundTrafficError": "خطا در بازنشانی ترافیک خروجی",
+        "sessionsNotRevoked": "تنظیمات ذخیره شد، اما نشست‌های موجود خارج نشدند — تا انقضا معتبر می‌مانند. برای اطمینان از همه دستگاه‌ها خارج شوید."
       },
       "smtpSettings": "تنظیمات SMTP",
       "smtpEnable": "فعال‌سازی اعلان‌های ایمیلی",
