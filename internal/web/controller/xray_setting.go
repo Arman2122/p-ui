@@ -458,6 +458,9 @@ func (a *XraySettingController) updateOutboundSub(c *gin.Context) {
 		jsonMsg(c, "Failed to update outbound subscription", err)
 		return
 	}
+	// Enabled/prepend/order all feed the merged outbounds, so xray needs a reload
+	// -- the delete path beside this one has always said so.
+	a.XrayService.SetToNeedRestart()
 	jsonObj(c, "", nil)
 }
 
