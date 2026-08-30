@@ -1116,7 +1116,11 @@
         "update": "Host updated successfully",
         "delete": "Host deleted successfully",
         "badTag": "Invalid tag",
-        "badVlessRoute": "Enter a single number between 0 and 65535"
+        "badVlessRoute": "Enter a single number between 0 and 65535",
+        "badPort": "Enter a port between 0 and 65535",
+        "serverDescriptionTooLong": "At most 64 characters",
+        "tagTooLong": "A tag can be at most 36 characters",
+        "tooManyTags": "At most 10 tags"
       }
     },
     "nodes": {

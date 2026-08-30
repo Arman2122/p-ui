@@ -527,7 +527,7 @@ export const InboundSchema = z.object({
   listen: z.string(),
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
-  port: z.number().int().min(1).max(65535),
+  port: z.number().int().min(0).max(65535),
   protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun']),
   remark: z.string(),
   settings: z.unknown(),

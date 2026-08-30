@@ -186,7 +186,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                     <FormField name="remark" label={t('pages.hosts.fields.remark')} tooltip={t('pages.hosts.hints.remark')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.remark) }}>
                       <Input maxLength={256} />
                     </FormField>
-                    <FormField name="serverDescription" label={t('pages.hosts.fields.serverDescription')} tooltip={t('pages.hosts.hints.serverDescription')}>
+                    <FormField name="serverDescription" label={t('pages.hosts.fields.serverDescription')} tooltip={t('pages.hosts.hints.serverDescription')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.serverDescription) }}>
                       <Input maxLength={64} />
                     </FormField>
                     <FormField name="inboundIds" label={t('pages.hosts.fields.inbound')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.inboundIds) }}>
@@ -205,10 +205,10 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                         placeholder="cdn.example.com, cdn2.example.com:443"
                       />
                     </FormField>
-                    <FormField name="port" label={t('pages.hosts.fields.port')} tooltip={t('pages.hosts.hints.port')}>
+                    <FormField name="port" label={t('pages.hosts.fields.port')} tooltip={t('pages.hosts.hints.port')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.port) }}>
                       <InputNumber min={0} max={65535} />
                     </FormField>
-                    <FormField name="tags" label={t('pages.hosts.fields.tags')} tooltip={t('pages.hosts.hints.tags')}>
+                    <FormField name="tags" label={t('pages.hosts.fields.tags')} tooltip={t('pages.hosts.hints.tags')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.tags) }}>
                       <Select mode="tags" allowClear tokenSeparators={[',']} />
                     </FormField>
                     <FormField name="nodeGuids" label={t('pages.hosts.fields.nodeGuids')} tooltip={t('pages.hosts.hints.nodeGuids')}>
@@ -290,7 +290,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                             <FormField name="path" label={t('pages.hosts.fields.path')}>
                               <Input />
                             </FormField>
-                            <FormField name="vlessRoute" label={t('pages.hosts.fields.vlessRoute')} tooltip={t('pages.hosts.hints.vlessRoute')}>
+                            <FormField name="vlessRoute" label={t('pages.hosts.fields.vlessRoute')} tooltip={t('pages.hosts.hints.vlessRoute')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.vlessRoute) }}>
                               <Input placeholder="443" />
                             </FormField>
                             <FormField name="excludeFromSubTypes" label={t('pages.hosts.fields.excludeFromSubTypes')}>

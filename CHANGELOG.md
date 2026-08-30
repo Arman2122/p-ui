@@ -55,14 +55,22 @@ here; the git log is the full record.
   genuinely never expires still makes the whole subscription unlimited, the same
   way one unlimited client already makes its traffic allowance unlimited.
 
-- **An inbound can no longer be saved on port 0.** The panel accepted it over
-  the API and the Telegram bot -- the form always refused it -- and the core
-  then bound whatever port the operating system handed it, changing on every
-  restart, while the inbound list, every share link and the port-conflict check
-  all said 0.
-  **What you will notice:** a validation error instead. An update that omits the
-  port is refused for the same reason, rather than silently moving the inbound
-  to a random one.
+- **An inbound can no longer be saved on a bind nothing can serve.** Port 0 was
+  accepted over the API and the Telegram bot -- the form always refused it --
+  and the core then bound whatever port the operating system handed it, changing
+  on every restart, while the inbound list, every share link and the
+  port-conflict check all said 0. The listen address had no rule at all, so a
+  typo'd one was stored too, on an inbound that could then never come up.
+  **What you will notice:** both are refused, naming the field. A listen that is
+  a unix socket path (`/run/xray/in.sock`, or `@name` for an abstract one) still
+  takes no port, exactly as that field's hint says. An update that omits the port
+  is refused rather than silently moving the inbound to a random one.
+
+- **The host form checks the fields it always meant to.** Its port, tags, server
+  description and VLESS route were declared with rules and then submitted
+  without running them, because the form had no resolver attached. A malformed
+  VLESS route in particular was stored and then ignored, leaving a link that
+  looks configured and routes nowhere.
 
 - **Changing an inbound's protocol checks the clients it already has.** The
   switch was applied to the stored row without asking the new protocol whether

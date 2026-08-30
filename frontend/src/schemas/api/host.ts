@@ -8,20 +8,25 @@ export type HostSecurity = z.infer<typeof HostSecuritySchema>;
 export const MihomoIpVersionSchema = z.enum(['dual', 'ipv4', 'ipv6', 'ipv4-prefer', 'ipv6-prefer']);
 export const SubTypeSchema = z.enum(['raw', 'json', 'clash']);
 
-const HostTagSchema = z.string().regex(/^[A-Z0-9_:]+$/, 'pages.hosts.toasts.badTag').max(36);
+const HostTagSchema = z.string().regex(/^[A-Z0-9_:]+$/, 'pages.hosts.toasts.badTag').max(36, 'pages.hosts.toasts.tagTooLong');
 
 export const HostFormSchema = z.object({
   id: z.number().optional(),
   inboundId: z.number().int().positive(),
   sortOrder: z.number().int().default(0),
   remark: z.string().trim().min(1).max(256),
-  serverDescription: z.string().max(64).default(''),
+  serverDescription: z.string().max(64, 'pages.hosts.toasts.serverDescriptionTooLong').default(''),
   isDisabled: z.boolean().default(false),
   isHidden: z.boolean().default(false),
-  tags: z.array(HostTagSchema).max(10).default([]),
+  tags: z.array(HostTagSchema).max(10, 'pages.hosts.toasts.tooManyTags').default([]),
 
   address: z.string().default(''),
-  port: z.number().int().min(0).max(65535).default(0),
+  port: z
+    .number({ error: 'pages.hosts.toasts.badPort' })
+    .int('pages.hosts.toasts.badPort')
+    .min(0, 'pages.hosts.toasts.badPort')
+    .max(65535, 'pages.hosts.toasts.badPort')
+    .default(0),
 
   security: HostSecuritySchema.default('same'),
   sni: z.string().default(''),

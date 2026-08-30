@@ -932,6 +932,12 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 
+	// A bind nothing can serve: a listen that is not an address, or the port 0
+	// that binds to whatever the OS hands out. F009 / F039.
+	if err := validateInboundBind(inbound); err != nil {
+		return inbound, false, "", err
+	}
+
 	// Credentials the core would parse and never check make this an open proxy.
 	if err := refuseUnenforcedAccounts(inbound); err != nil {
 		return inbound, false, "", err
@@ -1432,6 +1438,12 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 				return inbound, false, "", err
 			}
 		}
+	}
+
+	// A bind nothing can serve: a listen that is not an address, or the port 0
+	// that binds to whatever the OS hands out. F009 / F039.
+	if err := validateInboundBind(inbound); err != nil {
+		return inbound, false, "", err
 	}
 
 	// Credentials the core would parse and never check make this an open proxy.
