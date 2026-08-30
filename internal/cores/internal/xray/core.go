@@ -110,6 +110,9 @@ func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	}
 	cfg.InboundConfigs = append(cfg.InboundConfigs, inboundsOf(desired)...)
 
+	c.mgr.LockApply()
+	defer c.mgr.UnlockApply()
+
 	process := c.mgr.Current()
 	if process != nil && process.IsRunning() {
 		if process.GetConfig().Equals(cfg) {
@@ -147,6 +150,9 @@ func inboundsOf(desired []core.Instance) []core.InboundConfig {
 }
 
 func (c *Core) StopAll(_ context.Context) error {
+	c.mgr.LockApply()
+	defer c.mgr.UnlockApply()
+
 	process := c.mgr.Current()
 	if process == nil || !process.IsRunning() {
 		return nil
@@ -178,6 +184,9 @@ func (c *Core) PlanChange(before, after core.Instance) core.Action {
 // that inbound's connections, while a diff that only adds and removes users
 // leaves everyone else connected.
 func (c *Core) ApplyInstance(_ context.Context, inst core.Instance) error {
+	c.mgr.LockApply()
+	defer c.mgr.UnlockApply()
+
 	process := c.mgr.Current()
 	if process == nil || !process.IsRunning() {
 		return errors.New("xray: core is not running")
@@ -191,6 +200,9 @@ func (c *Core) ApplyInstance(_ context.Context, inst core.Instance) error {
 
 // DropInstance removes one inbound and leaves the rest of the config alone.
 func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {
+	c.mgr.LockApply()
+	defer c.mgr.UnlockApply()
+
 	process := c.mgr.Current()
 	if process == nil || !process.IsRunning() {
 		return errors.New("xray: core is not running")

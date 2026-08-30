@@ -24,7 +24,17 @@ type Manager struct {
 	mu      sync.RWMutex
 	process *Process
 	result  string
+	// Not mu: Replace and Snapshot are called from inside the critical
+	// section this guards, and would self-deadlock on the RWMutex.
+	applyMu sync.Mutex
 }
+
+// LockApply serializes converge-and-apply over the running process. Not
+// reentrant: hotApply must not take it, every caller of it already holds it.
+func (m *Manager) LockApply() { m.applyMu.Lock() }
+
+// UnlockApply releases the converge-and-apply lock.
+func (m *Manager) UnlockApply() { m.applyMu.Unlock() }
 
 var (
 	managerOnce sync.Once
