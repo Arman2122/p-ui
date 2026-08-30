@@ -371,14 +371,24 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 		}
 	}
 
-	for _, client := range clients {
-		if strings.TrimSpace(client.Email) == "" {
+	// Seeded from the stored clients so one pass catches new-vs-stored and
+	// new-vs-new; the email filter above means a client never meets itself.
+	addIdentityField := identityFieldFor(oldInbound.Protocol)
+	identitySeen := make([]model.Client, 0, len(existingClients)+len(clients))
+	identitySeen = append(identitySeen, existingClients...)
+	for i := range clients {
+		if strings.TrimSpace(clients[i].Email) == "" {
 			return false, common.NewError("client email is required")
 		}
-		client := client
+		client := clients[i]
 		if err := validateClientForKind(oldInbound.Protocol, oldInbound.Settings, &client); err != nil {
 			return false, err
 		}
+		if other, field := identityCollision(oldInbound.Protocol,
+			clientIdentityValue(&clients[i], addIdentityField), identitySeen, -1); other != "" {
+			return false, common.NewError(string(oldInbound.Protocol)+": "+field+" already used by client:", other)
+		}
+		identitySeen = append(identitySeen, clients[i])
 	}
 
 	var oldSettings map[string]any
@@ -545,6 +555,14 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 
 	if newClientId == "" || clientIndex == -1 {
 		return false, common.NewError("empty client ID")
+	}
+
+	// Only an edit that CHANGES the identity is checked, exactly as the
+	// WireGuard key pair below: a metadata edit must not strand a stored duplicate.
+	if newClientId != strings.TrimSpace(clientIdentityValue(&oldClients[clientIndex], identityField)) {
+		if other, field := identityCollision(oldInbound.Protocol, newClientId, oldClients, clientIndex); other != "" {
+			return false, common.NewError(string(oldInbound.Protocol)+": "+field+" already used by client:", other)
+		}
 	}
 	if strings.TrimSpace(clients[0].Email) == "" {
 		return false, common.NewError("client email is required")

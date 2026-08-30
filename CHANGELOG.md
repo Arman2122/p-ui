@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Two clients on one inbound can no longer share the credential that
+  identifies them.** The panel checked email, subscription id and WireGuard keys
+  for duplicates, and nothing else -- but Xray keys its user table on the UUID
+  for VLESS and VMess, on the password for Trojan, on the auth string for
+  Hysteria. Two clients with the same value were ONE user to the core: both
+  showed in the panel with their own quotas, all the traffic landed on
+  whichever one the core kept, and deleting the other took the survivor'''s
+  access down with it.
+  **What you will notice:** creating or editing a client into a duplicate is
+  refused, naming the client that already holds the value. Clients already in
+  that state are untouched and stay editable -- only an edit that CHANGES the
+  credential is checked.
+
 - **"Keep SNI blank" on a host now actually keeps it blank.** The switch was a
   no-op on every TLS path: the panel expressed "blank" by simply not writing an
   SNI, which every link generator read as "no override" -- and each of them had
