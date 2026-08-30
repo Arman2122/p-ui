@@ -54,10 +54,12 @@ func (t *Tgbot) SendBackupToAdmins() {
 		logger.Error("Error in getting db backup: ", err)
 	}
 	dbFilename := t.serverService.BackupFilename("")
-	for i, adminId := range adminIds {
+	// One snapshot for the whole loop: len and the range must not disagree.
+	admins := currentAdminIds()
+	for i, adminId := range admins {
 		t.sendBackupData(adminId, dbData, dbFilename)
 		// Add delay between sends to avoid Telegram rate limits
-		if i < len(adminIds)-1 {
+		if i < len(admins)-1 {
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -68,7 +70,7 @@ func (t *Tgbot) sendExhaustedToAdmins() {
 	if !t.IsRunning() {
 		return
 	}
-	for _, adminId := range adminIds {
+	for _, adminId := range currentAdminIds() {
 		t.getExhausted(adminId)
 	}
 }

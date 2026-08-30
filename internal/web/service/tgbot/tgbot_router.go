@@ -1595,7 +1595,7 @@ func (t *Tgbot) ownsEmail(tgID int64, email string) bool {
 
 // checkAdmin checks if the given Telegram ID is an admin.
 func checkAdmin(tgId int64) bool {
-	return slices.Contains(adminIds, tgId)
+	return slices.Contains(currentAdminIds(), tgId)
 }
 
 // isClientSelfCallback is the FIRST of two stages, not the authorisation itself:
