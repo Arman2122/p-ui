@@ -354,19 +354,32 @@ the device there would allocate into a range nothing on the wire is using.
 */
 func wireguardAllocationBase(used []string, fallback string) string {
 	configured, err := netip.ParsePrefix(fallback)
+	// Every client is asked before the device prefix is given up on. One
+	// rebased or hand-edited address arriving first used to end the search and
+	// send the whole pool to a /24 derived from it, whatever the rest were on.
+	if err == nil {
+		for _, u := range used {
+			if a := wireguardHostAddr(u); usableWireguardV4(a) && configured.Contains(a) {
+				return configured.Masked().String()
+			}
+		}
+	}
 	for _, u := range used {
 		a := wireguardHostAddr(u)
-		if !a.IsValid() || !a.Is4() || a.IsUnspecified() {
+		if !usableWireguardV4(a) {
 			continue
-		}
-		if err == nil && configured.Contains(a) {
-			return configured.Masked().String()
 		}
 		if p, pErr := a.Prefix(24); pErr == nil {
 			return p.String()
 		}
 	}
 	return fallback
+}
+
+// usableWireguardV4 excludes what an allowedIPs list carries besides a peer
+// address: the v6 entries, and the 0.0.0.0/0 catch-all.
+func usableWireguardV4(a netip.Addr) bool {
+	return a.IsValid() && a.Is4() && !a.IsUnspecified()
 }
 
 const wireguardPoolFloorBits = 16

@@ -120,6 +120,16 @@ func TestWireguardAllocationBase(t *testing.T) {
 		{name: "a wider device prefix keeps its whole range", used: []string{"10.90.4.2/32"}, fallback: "10.90.4.0/22", want: "10.90.4.0/22"},
 		{name: "a device prefix wider than the peers still wins", used: []string{"10.90.7.9/32"}, fallback: "10.90.4.0/22", want: "10.90.4.0/22"},
 		{name: "an unparseable device prefix falls back to the peer's /24", used: []string{"10.90.4.2/32"}, fallback: "not-a-prefix", want: "10.90.4.0/24"},
+		/*
+			One address outside the device prefix used to decide for all of them: the
+			loop returned inside its first iteration, so whichever client came first
+			settled the pool. A rebased or hand-edited peer sitting at the head of the
+			list therefore moved every future allocation into a /24 derived from it,
+			leaving the prefix the operator configured -- and every other client on it
+			-- behind, each of those then costing a per-peer route forever. F068.
+		*/
+		{name: "an outsider first does not decide for the clients the prefix covers", used: []string{"172.16.0.2/32", "10.90.4.7/32"}, fallback: "10.90.4.0/22", want: "10.90.4.0/22"},
+		{name: "every client outside it still derives a /24, from the first", used: []string{"172.16.0.2/32", "192.168.5.7/32"}, fallback: "10.90.4.0/22", want: "172.16.0.0/24"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
