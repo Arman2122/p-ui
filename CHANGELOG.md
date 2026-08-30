@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Enabling two-factor authentication no longer says it is done before it is.**
+  Entering a valid code showed "Two-factor authentication has been successfully
+  established" -- but that step only ticks a box in the unsaved form. Nothing had
+  been sent to the server, and leaving the page without pressing Save left 2FA
+  off, having been told it was on.
+  **What you will notice:** the message now says the code was verified and asks
+  you to press Save.
+
 - **The "Test SMTP" button now tests the connection the panel actually makes.**
   Sending always upgrades to STARTTLS when the server offers it, whatever
   encryption you selected -- but the test button only did so when you had picked
