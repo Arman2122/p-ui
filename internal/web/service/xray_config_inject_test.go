@@ -428,7 +428,7 @@ func mtprotoInbound(tag string, settings string) *model.Inbound {
 func TestInjectMtprotoEgress_WithOutbound(t *testing.T) {
 	cfg := egressTestConfig()
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50000,"outboundTag":"warp"}`))
+		`{"routeThroughXray":true,"routeXrayPort":50000,"outboundTag":"warp"}`), nil)
 
 	if len(cfg.InboundConfigs) != 2 {
 		t.Fatalf("expected the bridge inbound to be appended, got %d", len(cfg.InboundConfigs))
@@ -459,7 +459,7 @@ func TestInjectMtprotoEgress_NoOutboundLeavesRouting(t *testing.T) {
 	cfg := egressTestConfig()
 	before := string(cfg.RouterConfig)
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50001}`))
+		`{"routeThroughXray":true,"routeXrayPort":50001}`), nil)
 
 	if len(cfg.InboundConfigs) != 2 || cfg.InboundConfigs[1].Port != 50001 {
 		t.Fatalf("bridge must still be appended without an outbound, got %+v", cfg.InboundConfigs)
@@ -473,7 +473,7 @@ func TestInjectMtprotoEgress_BalancerTag(t *testing.T) {
 	cfg := egressTestConfig()
 	cfg.RouterConfig = json_util.RawMessage(`{"rules":[],"balancers":[{"tag":"lb","selector":["warp"]}]}`)
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50002,"outboundTag":"lb"}`))
+		`{"routeThroughXray":true,"routeXrayPort":50002,"outboundTag":"lb"}`), nil)
 
 	var routing struct {
 		Rules []struct {
@@ -498,7 +498,7 @@ func TestInjectMtprotoEgress_Disabled(t *testing.T) {
 	} {
 		cfg := egressTestConfig()
 		before := string(cfg.RouterConfig)
-		injectMtprotoEgress(cfg, mtprotoInbound("inbound-443", settings))
+		injectMtprotoEgress(cfg, mtprotoInbound("inbound-443", settings), nil)
 		if len(cfg.InboundConfigs) != 1 || string(cfg.RouterConfig) != before {
 			t.Fatalf("settings %s must be a no-op, got %d inbounds", settings, len(cfg.InboundConfigs))
 		}
@@ -511,7 +511,7 @@ func TestInjectMtprotoEgress_TagCollisionSkips(t *testing.T) {
 		xray.InboundConfig{Port: 443, Protocol: "vless", Tag: "inbound-443"})
 	before := string(cfg.RouterConfig)
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50003,"outboundTag":"warp"}`))
+		`{"routeThroughXray":true,"routeXrayPort":50003,"outboundTag":"warp"}`), nil)
 	if len(cfg.InboundConfigs) != 2 || string(cfg.RouterConfig) != before {
 		t.Fatal("a real inbound already owning the tag must make the bridge a no-op")
 	}
@@ -521,7 +521,7 @@ func TestInjectMtprotoEgress_MissingTargetSkips(t *testing.T) {
 	cfg := egressTestConfig()
 	before := string(cfg.RouterConfig)
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50004,"outboundTag":"removed-subscription-outbound"}`))
+		`{"routeThroughXray":true,"routeXrayPort":50004,"outboundTag":"removed-subscription-outbound"}`), nil)
 
 	if len(cfg.InboundConfigs) != 1 {
 		t.Fatalf("a missing target must not expose the mtproto bridge, got %+v", cfg.InboundConfigs)
@@ -536,7 +536,7 @@ func TestInjectMtprotoEgress_BadOutboundsSkips(t *testing.T) {
 	cfg.OutboundConfigs = json_util.RawMessage(`{not json`)
 	before := string(cfg.RouterConfig)
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50005,"outboundTag":"direct"}`))
+		`{"routeThroughXray":true,"routeXrayPort":50005,"outboundTag":"direct"}`), nil)
 
 	if len(cfg.InboundConfigs) != 1 {
 		t.Fatalf("unparsable outbounds must not expose the mtproto bridge, got %+v", cfg.InboundConfigs)
@@ -550,12 +550,95 @@ func TestInjectMtprotoEgress_BadRoutingSkips(t *testing.T) {
 	cfg := egressTestConfig()
 	cfg.RouterConfig = json_util.RawMessage(`{not json`)
 	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
-		`{"routeThroughXray":true,"routeXrayPort":50006,"outboundTag":"direct"}`))
+		`{"routeThroughXray":true,"routeXrayPort":50006,"outboundTag":"direct"}`), nil)
 
 	if len(cfg.InboundConfigs) != 1 {
 		t.Fatalf("unparsable routing must not expose the mtproto bridge, got %+v", cfg.InboundConfigs)
 	}
 	if string(cfg.RouterConfig) != `{not json` {
 		t.Fatalf("unparsable routing must be left untouched, got %s", cfg.RouterConfig)
+	}
+}
+
+/*
+A bridge port that something else already binds must skip the bridge, not the core.
+
+routeXrayPort is the panel's only persisted generated listener and it took part
+in none of the port-uniqueness machinery: born from FreeLocalPort with no scan,
+absent from checkPortConflict entirely, and appended here with only a tag check.
+`xray -test` binds nothing, so the pre-flight passes and the collision surfaces
+at Start -- AFTER the old process has been stopped. One EADDRINUSE on the bridge
+therefore takes down every inbound on the box, not just this one.
+
+Skipping costs this inbound's Telegram traffic and says so in the log. The
+alternative, bumping the port, cannot work: the sidecar dials this exact number.
+
+The guard uses checkPortConflict's own three conjuncts rather than bare port
+equality, because the bridge is loopback TCP and FreeLocalPort hands out
+ephemeral ports from the same range WireGuard commonly sits in -- a UDP-only
+neighbour on the same number is not a conflict and must still bridge. F035/F216.
+*/
+func TestInjectMtprotoEgress_SkipsABridgePortAlreadyBound(t *testing.T) {
+	cfg := egressTestConfig()
+	// A real TCP inbound on loopback holding the port the bridge wants.
+	cfg.InboundConfigs = append(cfg.InboundConfigs, xray.InboundConfig{
+		Port: 50007, Protocol: "http", Tag: "admin-http", Listen: json_util.RawMessage(`"127.0.0.1"`),
+	})
+	before := len(cfg.InboundConfigs)
+
+	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
+		`{"routeThroughXray":true,"routeXrayPort":50007,"outboundTag":"warp"}`), nil)
+
+	if len(cfg.InboundConfigs) != before {
+		t.Fatalf("the bridge was appended onto a port [admin-http] already binds; xray fails to start with EADDRINUSE after the old process is stopped, taking every inbound down. inbounds=%d want %d",
+			len(cfg.InboundConfigs), before)
+	}
+	// And no orphan routing rule for a bridge that does not exist.
+	var routing egressRouting
+	if err := json.Unmarshal(cfg.RouterConfig, &routing); err != nil {
+		t.Fatalf("routing: %v", err)
+	}
+	for _, r := range routing.Rules {
+		for _, tag := range r.InboundTag {
+			if tag == "inbound-443" {
+				t.Error("a routing rule was added for a bridge that was skipped")
+			}
+		}
+	}
+}
+
+func TestInjectMtprotoEgress_SkipsAPortAnotherMtprotoInboundListensOn(t *testing.T) {
+	cfg := egressTestConfig()
+	before := len(cfg.InboundConfigs)
+
+	// mtg binds this outside Xray, so no generated config can show it.
+	sibling := &model.Inbound{Tag: "mt-other", Protocol: model.MTProto, Enable: true, Port: 50009}
+
+	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
+		`{"routeThroughXray":true,"routeXrayPort":50009,"outboundTag":"warp"}`),
+		[]*model.Inbound{sibling})
+
+	if len(cfg.InboundConfigs) != before {
+		t.Fatalf("the bridge was appended onto a port the mtg sidecar already listens on for [mt-other]; got %d inbounds, want %d",
+			len(cfg.InboundConfigs), before)
+	}
+}
+
+// The other half: a UDP-only neighbour on the same number is not a conflict and
+// the bridge must still be built, or the guard breaks working panels.
+func TestInjectMtprotoEgress_UdpNeighbourStillBridges(t *testing.T) {
+	cfg := egressTestConfig()
+	cfg.InboundConfigs = append(cfg.InboundConfigs, xray.InboundConfig{
+		Port: 50008, Protocol: "wireguard", Tag: "wg-in", Listen: json_util.RawMessage(`"0.0.0.0"`),
+	})
+
+	injectMtprotoEgress(cfg, mtprotoInbound("inbound-443",
+		`{"routeThroughXray":true,"routeXrayPort":50008,"outboundTag":"warp"}`), nil)
+
+	if len(cfg.InboundConfigs) != 3 {
+		t.Fatalf("a UDP-only neighbour on the same port number blocked the bridge; got %d inbounds, want 3", len(cfg.InboundConfigs))
+	}
+	if got := cfg.InboundConfigs[2]; got.Port != 50008 || got.Tag != "inbound-443" {
+		t.Fatalf("appended entry = port %d tag %q, want 50008 / inbound-443", got.Port, got.Tag)
 	}
 }

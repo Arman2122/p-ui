@@ -170,7 +170,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		if inbound.Protocol != model.MTProto || !inbound.Enable || inbound.NodeID != nil {
 			continue
 		}
-		injectMtprotoEgress(xrayConfig, inbound)
+		injectMtprotoEgress(xrayConfig, inbound, inbounds)
 	}
 
 	// Wire the panel's own HTTP traffic through the configured outbound, after
@@ -696,7 +696,7 @@ const mtprotoEgressSocksSettings = `{"auth":"noauth","udp":false}`
 // outbound, the bridge retains default-route behavior. Generated state remains
 // hot-appliable, leaves the stored template untouched, and never forces a full
 // Xray restart. Mirrors injectPanelEgress.
-func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound) {
+func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*model.Inbound) {
 	var parsed struct {
 		RouteThroughXray bool   `json:"routeThroughXray"`
 		RouteXrayPort    int    `json:"routeXrayPort"`
@@ -710,10 +710,40 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound) {
 	}
 	tag := inbound.Tag
 	for i := range cfg.InboundConfigs {
-		if cfg.InboundConfigs[i].Tag == tag {
+		c := &cfg.InboundConfigs[i]
+		if c.Tag == tag {
 			logger.Warning("mtproto egress: inbound tag [", tag, "] already present in generated config, skipping bridge")
 			return
 		}
+		if c.Port != parsed.RouteXrayPort {
+			continue
+		}
+		// The same three conjuncts checkPortConflict uses: the bridge is
+		// loopback TCP, so a UDP-only or public-IP-pinned neighbour is no clash.
+		var listen string
+		_ = json.Unmarshal(c.Listen, &listen)
+		if !listenOverlaps(listen, "127.0.0.1") {
+			continue
+		}
+		if inboundTransports(model.Protocol(c.Protocol), string(c.StreamSettings), string(c.Settings))&transportTCP == 0 {
+			continue
+		}
+		logger.Warning("mtproto egress: bridge port", parsed.RouteXrayPort, "for inbound [", tag,
+			"] is already bound by [", c.Tag, "]; skipping the bridge, so this inbound's Telegram traffic fails until the conflict is resolved")
+		return
+	}
+	// mtproto rows never appear in the generated config -- mtg binds them
+	// outside Xray -- so the sidecar's own listeners need their own pass.
+	for _, other := range siblings {
+		if other.Protocol != model.MTProto || !other.Enable || other.NodeID != nil {
+			continue
+		}
+		if other.Port != parsed.RouteXrayPort || !listenOverlaps(other.Listen, "127.0.0.1") {
+			continue
+		}
+		logger.Warning("mtproto egress: bridge port", parsed.RouteXrayPort, "for inbound [", tag,
+			"] is the listen port of mtproto inbound [", other.Tag, "]; skipping the bridge")
+		return
 	}
 
 	if parsed.OutboundTag != "" {

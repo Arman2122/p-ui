@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An MTProto bridge-port collision no longer takes the whole Xray core down.**
+  Each routed MTProto inbound gets a loopback bridge on a port the panel picks,
+  and that port was checked against nothing. If anything else already held it,
+  Xray failed to start -- after the running process had been stopped -- so one
+  MTProto inbound with an unlucky port number took every inbound on the server
+  offline.
+  **What you will notice:** the clash is detected while the config is built. That
+  one inbound'''s Telegram traffic will not work until you change its port, and
+  the log says which inbound is holding it; everything else keeps running. A
+  UDP-only neighbour on the same port number is not a clash and still bridges.
+
 - **A `null` section in the Xray template no longer stops the panel booting.**
   Writing `"policy": null` or `"api": null` into the template -- which the editor
   accepted, and which some tools emit for an empty section -- crashed the panel
