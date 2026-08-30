@@ -480,8 +480,10 @@ func (s *SubService) AggregateTrafficByEmails(emails []string) (xray.ClientTraff
 			agg.Total += total
 		}
 		normalized := subscriptionExpiryFromClient(now, expiry)
-		if normalized != agg.ExpiryTime {
-			agg.ExpiryTime = 0
+		// Zero is "never expires" in Subscription-Userinfo, so differing expiries
+		// must fold to the nearest one, not to nothing. F131.
+		if agg.ExpiryTime != 0 && (normalized == 0 || normalized < agg.ExpiryTime) {
+			agg.ExpiryTime = normalized
 		}
 	}
 	return agg, lastOnline

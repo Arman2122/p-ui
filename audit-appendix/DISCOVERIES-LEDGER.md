@@ -1303,3 +1303,45 @@ next to a fix that did not ask for it.
 Cheap when taken: branch on the exit status, keep the failure message, and leave
 `SSL_SCHEME` alone on the failing branch — the F225 guard already asserts the
 fail-closed default it would fall back to.
+
+## L27 — clearing a WireGuard pre-shared key needs a wire-level "cleared" signal (F179)
+
+F179 is real and confirmed: a pre-shared key can be set in the client editor and
+never removed. Verified end to end rather than fixed, because the fix is a
+decision the operator has to make.
+
+The reason it is not a one-liner: **the panel has no way to say "empty on
+purpose"**. Three layers each read `""` as "the caller did not send this", and
+each is load-bearing:
+
+1. `ClientController.update` binds the body into `model.Client` with
+   `ShouldBindJSON`, so an absent key and a present empty one collapse to `""`
+   before any panel code runs.
+2. `client_crud.go` re-marshals that struct into each inbound's settings
+   payload, and `PreSharedKey` carries `json:"preSharedKey,omitempty"` — so an
+   empty key is dropped from the JSON entirely, and key-presence cannot survive
+   the hop even if the controller established it.
+3. `client_inbound_apply.go:635` then restores the stored key from an empty
+   incoming one. That is the same rule that stops a partial API update
+   (`{"totalGB": …}` alone) from silently rotating a client's uuid, password or
+   WireGuard keypair, so it cannot simply be dropped.
+
+Making `""` mean "clear" would fix the editor and break every partial API
+update: a caller adjusting only a quota would silently strip the client's
+pre-shared key, and the peer stops authenticating with no message anywhere.
+
+Two honest options, both small, neither free:
+
+- **An additive flag on the client payload** — `clearPreSharedKey bool` on
+  `model.Client`. It rides the existing settings marshal to the apply layer, so
+  the change is roughly: one field, the restore gate at :635, a
+  `delete(newMap, "preSharedKey")` at :685, the record-column merge, and the
+  editor sending it. Backwards compatible; costs a new field in the public API,
+  its OpenAPI entry and the generated types.
+- **A pointer field** — `PreSharedKey *string`, where nil is "omitted" and a
+  pointer to `""` is "cleared". No new field, correct by construction, and it
+  touches every one of the ~15 sites that read the value today.
+
+**`keepAlive` has the identical disease** — same restore at :638, same `> 0`
+gate at :688 — and whichever signal is chosen should carry it too, so a client's
+persistent-keepalive can go back to off.
