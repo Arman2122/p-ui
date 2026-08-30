@@ -140,11 +140,18 @@ func (s *InboundService) MigrationRequirements() {
 				if flow, _ := c["flow"].(string); flow == "xtls-rprx-vision" {
 					hasVisionFlow = true
 				}
-				// Backfill created_at and updated_at
+				// Backfill created_at and updated_at — BACKFILL, both of them.
+				// updated_at was assigned unconditionally, so every panel start
+				// restamped every client of every vmess/vless/trojan/shadowsocks/
+				// hysteria inbound as just-modified: the settings JSON churned on
+				// each restart, and applyClientRecordMerge decides which side wins
+				// a node sync by comparing exactly this field. F386.
 				if _, ok := c["created_at"]; !ok {
 					c["created_at"] = time.Now().Unix() * 1000
 				}
-				c["updated_at"] = time.Now().Unix() * 1000
+				if _, ok := c["updated_at"]; !ok {
+					c["updated_at"] = time.Now().Unix() * 1000
+				}
 				newClients = append(newClients, any(c))
 			}
 			settings["clients"] = newClients
@@ -157,7 +164,11 @@ func (s *InboundService) MigrationRequirements() {
 				delete(settings, "testseed")
 			}
 
-			modifiedSettings, err := json.MarshalIndent(settings, "", "  ")
+			// Assigned, not declared: the deferred commit/rollback reads the
+			// function-scoped err, so a := here returns with it still nil and
+			// COMMITS a half-migrated set of inbounds. F382.
+			var modifiedSettings []byte
+			modifiedSettings, err = json.MarshalIndent(settings, "", "  ")
 			if err != nil {
 				return
 			}
@@ -166,7 +177,8 @@ func (s *InboundService) MigrationRequirements() {
 		}
 
 		// Add client traffic row for all clients which has email
-		modelClients, err := s.GetClients(inbounds[inbound_index])
+		var modelClients []model.Client
+		modelClients, err = s.GetClients(inbounds[inbound_index])
 		if err != nil {
 			return
 		}
@@ -186,7 +198,14 @@ func (s *InboundService) MigrationRequirements() {
 			logger.Warning("MigrationRequirements sync clients failed:", syncErr)
 		}
 	}
-	tx.Save(inbounds)
+	// Checked, and only when there is something to save: GORM refuses an empty
+	// slice, and rolling the whole migration back because a panel has no inbound
+	// of these five protocols would be worse than the bug this closes. F386.
+	if len(inbounds) > 0 {
+		if err = tx.Save(inbounds).Error; err != nil {
+			return
+		}
+	}
 
 	// Remove orphaned traffics
 	tx.Where("inbound_id = 0").Delete(xray.ClientTraffic{})

@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A migration that gives up part-way rolls back instead of committing.** Two
+  of its early returns declared their own error variable, so the deferred
+  commit-or-rollback saw none and committed a half-migrated set of inbounds --
+  the next start then migrated from that half-state.
+
+- **Restarting the panel no longer marks every client as just-modified.** The
+  same migration runs on every start, and it restamped every client of every
+  VMess/VLESS/Trojan/Shadowsocks/Hysteria inbound each time. Beyond rewriting
+  the config on every boot, that timestamp is what decides which side wins when
+  a node and the panel disagree about a client -- so a restart could make the
+  panel's copy look newer than a node's real edit.
+
 - **The mail transport must be one the panel actually handles.** It was stored
   as free text, so only the dropdown constrained it -- a value set over the API,
   or left behind by an older build, is handled by neither of the two places that
