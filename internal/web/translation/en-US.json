@@ -740,6 +740,7 @@
       "delayedStart": "Start After First Use",
       "expireDays": "Duration (days)",
       "renew": "Auto Renew",
+      "bulkAddNoEmails": "No client names to create — check the numbering range.",
       "renewDesc": "Auto-renewal after expiration. (0 = disable)(unit: day)",
       "renewNeedsExpiry": "Auto Renew extends the expiry date. With no expiry set, it never runs.",
       "renewDays": "Auto Renew (days)",

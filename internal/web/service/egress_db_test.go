@@ -254,6 +254,50 @@ func TestEgressPreflightIsQuietAboutAnUplinksMissingTarget(t *testing.T) {
 	}
 }
 
+/*
+A panel-provisioned front carries no target by design, so it must not be
+reported as having lost one.
+
+ensureFronts creates the row without a Target, and the migration explicitly
+writes "" for one. The target is resolved from the RULE that names the front,
+not from the row. deadTargets filtered on enabled and front-typed only, so
+every panel front on the box was condemned as routing nothing -- and the notice
+says the traffic attached to it is contained, which is exactly the alarm an
+operator cannot ignore and cannot act on. F077.
+*/
+func TestEgressPreflightIsQuietAboutAPanelFrontsMissingTarget(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+
+	inbound := seedInbound(t, wgKernelInbound("in-panel-front", 30096))
+	front := seedEgress(t, &model.Egress{
+		Type: "xray-tun", Enable: true, Owner: model.EgressOwnerPanel,
+		Remark: "front for in-panel-front", IngressInboundId: &inbound.Id,
+	})
+
+	report := (&EgressService{}).Preflight(context.Background())
+	for _, note := range report.Notes {
+		if strings.Contains(note, "egress "+strconv.Itoa(front.Id)+" targets") {
+			t.Fatalf("a panel-provisioned front has no target by design, but preflight said: %q", note)
+		}
+	}
+
+	// An OPERATOR front with a target that stopped resolving must still be named.
+	broken := seedEgress(t, &model.Egress{
+		Type: "xray-tun", Enable: true, Owner: "operator", Target: "no-such-outbound",
+	})
+	report = (&EgressService{}).Preflight(context.Background())
+	found := false
+	for _, note := range report.Notes {
+		if strings.Contains(note, "egress "+strconv.Itoa(broken.Id)+" targets") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("an operator front whose target no longer resolves was not reported; the filter is now too wide")
+	}
+}
+
 func TestEgressSchemaConstraints(t *testing.T) {
 	initTestDB(t)
 	db := database.GetDB()

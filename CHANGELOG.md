@@ -8,6 +8,24 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The egress pre-flight stops condemning the panel'''s own routing fronts.** A
+  front the panel provisions has no target of its own -- the target comes from
+  the rule that names it -- but the check asked every enabled front to resolve
+  one, so each of yours was reported as "contained rather than routed". Fronts
+  you created yourself are still checked.
+
+- **Client names with invisible whitespace are caught in the form.** A name or
+  subscription id pasted from a document or chat app often carries a
+  non-breaking space. The server refuses those; the form did not, so the save
+  bounced back as a raw error with nothing marking the field.
+
+- **Bulk-add says why it did nothing.** Setting a last number below the first
+  produced no names, and the dialog just sat there -- no message, no field error.
+
+- **The AmneziaWG installer prints a command that exists.** On a machine without
+  kernel headers it told you to run `p-ui awg install`, which is not a command;
+  the panel'''s own installers print the right one.
+
 - **A WireGuard client is never handed the inbound'''s own device address.** The
   allocator skipped addresses other inbounds used but not the address of the
   device it was allocating for, so on a device at, say, `10.0.0.5/24` the fourth

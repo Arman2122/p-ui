@@ -204,7 +204,11 @@ export function hasUrlHostileSubIdChars(value: string): boolean {
 }
 
 export function hasForbiddenClientChars(value: string): boolean {
-  if (value.includes('/') || value.includes('\\') || value.includes(' ')) return true;
+  if (value.includes('/') || value.includes('\\')) return true;
+  /* Every space Go's unicode.IsSpace catches, which is what the backend uses.
+     \s misses U+0085 and U+00A0, so a pasted non-breaking space passed the form
+     and came back as a raw backend error rather than a message on the field. */
+  if (/[\s\u0085\u00a0]/u.test(value)) return true;
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
     if (code < 0x20 || code === 0x7f) return true;

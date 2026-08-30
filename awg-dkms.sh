@@ -56,7 +56,7 @@ ensure_build_deps() {
 
     if [[ ! -d "/lib/modules/$(uname -r)/build" ]]; then
         red "No kernel headers for $(uname -r); AmneziaWG cannot be built here."
-        red "Install the matching linux-headers package, then: p-ui awg install"
+        red "Install the matching linux-headers package, then: ${pui_folder:-/usr/local/p-ui}/awg-dkms.sh install"
         return 1
     fi
 }

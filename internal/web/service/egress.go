@@ -314,6 +314,11 @@ func deadTargets(rows []*model.Egress) []string {
 		if !egressFronts(row.Type) {
 			continue
 		}
+		// A panel-provisioned front carries no target by design -- ensureFronts
+		// creates it without one -- so asking it to resolve condemns every one.
+		if row.Owner == model.EgressOwnerPanel {
+			continue
+		}
 		if resolves, err := egressTargetResolves(row.Target); err == nil && !resolves {
 			notes = append(notes, fmt.Sprintf(
 				"egress %d targets %q, which is no longer an outbound or a balancer tag, so everything attached to it is contained rather than routed",

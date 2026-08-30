@@ -161,7 +161,12 @@ export default function ClientBulkAddModal({
       return;
     }
     const emails = buildEmails(current);
-    if (emails.length === 0) return;
+    /* A last number below the first yields nothing. The InputNumber min only
+       guards one order of typing, so this returned in silence. */
+    if (emails.length === 0) {
+      messageApi.error(t('pages.clients.bulkAddNoEmails'));
+      return;
+    }
 
     setSaving(true);
     try {
