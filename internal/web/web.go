@@ -404,11 +404,11 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	if ldapEnabled, _ := s.settingService.GetLdapEnable(); ldapEnabled {
 		runtime, err := s.settingService.GetLdapSyncCron()
 		if err != nil || runtime == "" {
-			runtime = "@every 1m"
+			runtime = defaultLdapSyncCron
 		}
 		j := job.NewLdapSyncJob()
 		// job has zero-value services with method receivers that read settings on demand
-		_, _ = s.cron.AddJob(runtime, j)
+		scheduleLdapSync(s.cron, runtime, j)
 	}
 
 	// Telegram-bot–dependent jobs: periodic stats report + callback-hash cleanup.
@@ -447,6 +447,33 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 			time.Sleep(time.Minute)
 			job.NewMemoryReleaseJob().Run()
 		}()
+	}
+}
+
+// cronSpecParser is the parser the SCHEDULER uses. It is exported to the
+// package so the cadence guard measures specs against the real thing:
+// WithSeconds makes this six-field, and ParseStandard is five.
+var cronSpecParser = cron.NewParser(
+	cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+)
+
+// defaultLdapSyncCron is the value setting.go seeds, and the fallback when the
+// operator's spec will not parse. The scheduler runs with seconds enabled, so
+// the five-field form every cron tutorial gives is rejected.
+const defaultLdapSyncCron = "@every 1m"
+
+// scheduleLdapSync falls back rather than silently leaving LDAP unscheduled:
+// off-boarding is fail-open when the job never runs, so a bad spec means every
+// disabled directory account keeps working.
+func scheduleLdapSync(c *cron.Cron, spec string, j cron.Job) {
+	_, err := c.AddJob(spec, j)
+	if err == nil {
+		return
+	}
+	logger.Errorf("LDAP is enabled but ldapSyncCron %q is not a valid cron spec (%v); falling back to %q. Fix it in Settings > LDAP.",
+		spec, err, defaultLdapSyncCron)
+	if _, err := c.AddJob(defaultLdapSyncCron, j); err != nil {
+		logger.Errorf("LDAP sync could not be scheduled at all: %v", err)
 	}
 }
 
