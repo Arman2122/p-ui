@@ -138,8 +138,12 @@ func (s *InboundService) resetAllMtprotoQuotas() {
 	if err != nil {
 		return
 	}
-	if err := mgr.Reconcile(desired); err != nil {
-		logger.Debug("mtproto: reconcile before quota reset failed:", err)
+	for _, inst := range desired {
+		// Ensure, never Reconcile: absence from the desired set can mean settings
+		// that merely will not parse, and a traffic reset must not stop a sidecar.
+		if err := mgr.Ensure(inst); err != nil {
+			logger.Warning("mtproto: converge before quota reset failed for inbound", inst.Id, ":", err)
+		}
 	}
 	for _, inst := range desired {
 		for _, sec := range inst.Secrets {
