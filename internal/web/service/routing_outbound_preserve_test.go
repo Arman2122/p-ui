@@ -52,7 +52,7 @@ func TestAnUnreadableOutboundArrayIsLeftAlone(t *testing.T) {
 		RouterConfig:    json_util.RawMessage(`{"rules":[]}`),
 		OutboundConfigs: json_util.RawMessage(unreadable),
 	}
-	if err := applyRoutingPlan(context.Background(), cfg); err != nil {
+	if err := applyRoutingPlan(context.Background(), cfg, false); err != nil {
 		t.Fatalf("applyRoutingPlan: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestAReadableOutboundArrayStillGetsTheSynthesizedBlackhole(t *testing.T) {
 		RouterConfig:    json_util.RawMessage(`{"rules":[]}`),
 		OutboundConfigs: json_util.RawMessage(`[{"protocol":"freedom","tag":"direct"}]`),
 	}
-	if err := applyRoutingPlan(context.Background(), cfg); err != nil {
+	if err := applyRoutingPlan(context.Background(), cfg, false); err != nil {
 		t.Fatalf("applyRoutingPlan: %v", err)
 	}
 

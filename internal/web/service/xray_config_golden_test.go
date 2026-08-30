@@ -171,7 +171,7 @@ func seedGoldenFixture(t *testing.T) {
 // section byte-for-byte: a reformat that parses the same still restarts Xray.
 func dumpInbounds(t *testing.T) string {
 	t.Helper()
-	cfg, err := (&XrayService{}).GetXrayConfig()
+	cfg, err := (&XrayService{}).GetXrayConfig(false)
 	if err != nil {
 		t.Fatalf("GetXrayConfig: %v", err)
 	}

@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Viewing the Xray config no longer deletes routing state the running core is
+  using.** Building the config ends by retiring egress "fronts" that no routing
+  rule names any more -- which deletes the database row and tears down its `ip
+  rule`, routing table and blackhole. Two things that only ever READ the config
+  ran that too: the "view config" button, and the pre-flight that checks a newly
+  downloaded Xray binary. So opening a settings page could tear down kernel
+  state the live core was still forwarding through.
+  **What you will notice:** nothing, unless you were hitting this -- retiring now
+  happens only on the path that actually applies the config, which is where it
+  always belonged.
+
 - **Simultaneous inbound changes no longer delete each other from the running
   core.** Applying a change read the live config, spliced one inbound into a
   copy, and pushed the whole thing back. Two of those overlapping both started
