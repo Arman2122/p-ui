@@ -950,6 +950,11 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if err := s.checkWireguardAddressConflict(inbound, 0); err != nil {
 		return inbound, false, "", err
 	}
+	// Create only. An EDIT that does not move the prefix must stay possible on an
+	// inbound that already overlaps, or the operator cannot even rename it.
+	if err := s.checkWireguardHostAddressConflict(inbound); err != nil {
+		return inbound, false, "", err
+	}
 
 	inbound.Tag, err = s.resolveInboundTag(inbound, 0)
 	if err != nil {

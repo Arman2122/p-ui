@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **WireGuard addresses no longer collide with networks the server itself is
+  on.** The panel decided which subnets were free by looking only at its own
+  inbounds -- but the thing being handed out is the server'''s single routing
+  table, and your LAN interface, docker'''s bridge or a private-network NIC are in
+  it without any inbound saying so. A tunnel subnet overlapping one of those
+  saved cleanly and then installed a route that captured that network'''s traffic.
+  **What you will notice:** creating an inbound on a subnet the server already
+  holds is refused, naming the interface that holds it. Client addresses are
+  allocated AROUND such ranges rather than refused. If the server'''s addresses
+  cannot be read -- a transient failure, or a non-Linux box -- nothing is refused
+  and behaviour is exactly as before. Existing inbounds are not re-checked, so
+  one that already overlaps stays editable.
+
 - **Routing rules now wait for Save.** Adding, editing, deleting or reordering a
   routing rule took effect the moment you clicked OK -- it was written and, since
   every one of those writes schedules a reload, it reached live traffic within
