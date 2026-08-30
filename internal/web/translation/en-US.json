@@ -1560,6 +1560,7 @@
       "smtpErrorTimeout": "Connection timeout — host unreachable",
       "smtpErrorRelay": "Server rejects sending from this address",
       "smtpErrorEof": "Connection closed by server",
+      "smtpErrorUnencrypted": "The server offered no STARTTLS, so it refused to accept the password over an unencrypted connection — use TLS, or a relay that offers STARTTLS",
       "smtpErrorUnknown": "SMTP error: {{ .Error }}",
       "eventMemoryHigh": "Memory high (%)",
       "validation": {

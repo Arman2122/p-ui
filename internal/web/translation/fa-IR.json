@@ -1440,6 +1440,7 @@
       "smtpErrorTimeout": "مهلت اتصال به پایان رسید — میزبان در دسترس نیست",
       "smtpErrorRelay": "سرور ارسال از این آدرس را رد می‌کند",
       "smtpErrorEof": "اتصال توسط سرور بسته شد",
+      "smtpErrorUnencrypted": "سرور STARTTLS ارائه نداد، بنابراین پذیرفتن رمز عبور روی اتصال رمزنگاری‌نشده را رد کرد — از TLS یا سروری که STARTTLS دارد استفاده کنید",
       "smtpErrorUnknown": "خطای SMTP: {{ .Error }}",
       "eventMemoryHigh": "مصرف حافظه بالا (%)",
       "validation": {
