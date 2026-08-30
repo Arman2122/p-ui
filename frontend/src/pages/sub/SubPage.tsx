@@ -62,6 +62,11 @@ const subClashUrl = subData.subClashUrl || '';
 const subTitle = subData.subTitle || '';
 const links: string[] = Array.isArray(subData.links) ? subData.links : [];
 const linkEmails: string[] = Array.isArray(subData.emails) ? subData.emails : [];
+/* Parallel to links: entry i belongs to a client that is switched off — out of
+   traffic, past its expiry, or disabled by hand. The link is still handed out so
+   the body keeps parsing for every app that fetches it, so this page is the only
+   place a person is told. F249. */
+const linkEnded: boolean[] = Array.isArray(subData.ended) ? subData.ended : [];
 const subEmail = [...new Set(linkEmails.filter(Boolean))].join(', ');
 const datepicker = subData.datepicker || 'gregorian';
 const announce = subData.announce || '';
@@ -462,15 +467,21 @@ export default function SubPage() {
                             return false;
                           }
                         })();
+                        const hasEnded = linkEnded[idx] === true;
                         return (
                           <Fragment key={link}>
-                          <div className="sub-link-row">
+                          <div className={hasEnded ? 'sub-link-row sub-link-row-ended' : 'sub-link-row'}>
                             {parts
                               ? <LinkTags parts={parts} />
                               : <Tag className="sub-link-tag">LINK</Tag>}
                             <span className="sub-link-title" title={rowTitle}>
                               {rowTitle}
                             </span>
+                            {hasEnded && (
+                              <Tag color="red" className="sub-link-ended-tag">
+                                {t('subscription.linkEnded')}
+                              </Tag>
+                            )}
                             <div className="sub-link-actions">
                               <Button
                                 size="small"

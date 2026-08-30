@@ -9,33 +9,26 @@ import (
 )
 
 /*
-A disabled client's link must not be handed out.
+A switched-off client keeps its link, and the page says it has ended.
 
-Disabling a client — by hand, by running out of traffic, by expiring — removes
-its account from the core, so the link cannot connect. getSubs read
-client.Enable only to set a flag on the Subscription-Userinfo header, and
-appended the link regardless; the JSON and Clash renderers did not read it at
-all. The header flag never reaches the subscriber on a body request either: that
-header carries upload, download, total and expire, and nothing else.
+This campaign first WITHHELD those links: a disabled client's account is gone
+from the core, so the link cannot connect, and the panel's file-share path had
+always skipped them. The operator's call was the other way, and the reason is
+better than the one I had: the body has to keep parsing for every app that
+fetches it, and a subscription that suddenly serves nothing reads as a broken
+URL rather than as an ended account.
 
-So a depleted user's app refreshed, took a profile full of servers that all
-looked healthy, and failed on every one with no reason given. FileShare — the
-same question, in the same package — has always skipped them.
-
-Counted in the traffic totals either way: dropping the email would under-report a
-multi-client subscription, which is how F311 was traded for a different bug.
-F249.
+So the truth goes on the PAGE — per entry, next to the link — because the page
+is the one surface a person actually looks at. The body is unchanged for every
+client whatever its state. F249.
 */
-func TestASubscriptionWithholdsADisabledClientsLink(t *testing.T) {
+func TestASubscriptionStillServesADisabledClientsLink(t *testing.T) {
 	initSubDB(t)
 
-	live := seedSubInbound(t, "mixedsub", "live", 24851, 1,
+	seedSubInbound(t, "mixedsub", "live", 24851, 1,
 		`{"network":"tcp","security":"none","tcpSettings":{"header":{"type":"none"}}}`)
 	dead := seedSubInbound(t, "mixedsub", "dead", 24852, 2,
 		`{"network":"tcp","security":"none","tcpSettings":{"header":{"type":"none"}}}`)
-	_ = live
-
-	// Disable the second client in both places the panel keeps it.
 	disableSubClient(t, dead, "dead@e")
 
 	links, emails, _, _, err := NewSubService("").GetSubs("mixedsub", "req.example.com")
@@ -43,21 +36,61 @@ func TestASubscriptionWithholdsADisabledClientsLink(t *testing.T) {
 		t.Fatalf("GetSubs: %v", err)
 	}
 
-	for i, link := range links {
-		if strings.Contains(link, "dead") {
-			t.Fatalf("entry %d is a link for a client the core has removed: %q", i, link)
+	if len(links) != 2 {
+		t.Fatalf("links = %d, want 2: a subscription that stops serving an entry reads as a broken URL, not as an ended account", len(links))
+	}
+	var sawDead bool
+	for _, email := range emails {
+		if email == "dead@e" {
+			sawDead = true
 		}
 	}
-	if len(links) != 1 {
-		t.Fatalf("links = %d, want 1 (the enabled client's)", len(links))
-	}
-	if len(emails) != 1 || emails[0] != "live@e" {
-		t.Fatalf("emails = %v, want [live@e]", emails)
+	if !sawDead {
+		t.Fatalf("emails = %v, want the disabled client among them", emails)
 	}
 }
 
-// And the disabled client still counts toward the traffic header, or a
-// multi-client subscription starts under-reporting the moment one is disabled.
+// And the page marks it, which is the whole of what changed.
+func TestTheSubscriptionPageMarksAnEndedEntry(t *testing.T) {
+	initSubDB(t)
+
+	seedSubInbound(t, "pagesub", "page-live", 24871, 1,
+		`{"network":"tcp","security":"none","tcpSettings":{"header":{"type":"none"}}}`)
+	dead := seedSubInbound(t, "pagesub", "page-dead", 24872, 2,
+		`{"network":"tcp","security":"none","tcpSettings":{"header":{"type":"none"}}}`)
+	disableSubClient(t, dead, "page-dead@e")
+
+	svc := NewSubService("req.example.com")
+	links, emails, lastOnline, traffic, err := svc.GetSubs("pagesub", "req.example.com")
+	if err != nil {
+		t.Fatalf("GetSubs: %v", err)
+	}
+	page := svc.BuildPageData("pagesub", "req.example.com", traffic, lastOnline,
+		links, emails, "", "", "", "/", "", "")
+
+	if len(page.Ended) != len(page.Result) {
+		t.Fatalf("Ended has %d entries for %d links; the page reads them by index", len(page.Ended), len(page.Result))
+	}
+	var markedDead, markedLive int
+	for i, email := range page.Emails {
+		switch {
+		case email == "page-dead@e" && page.Ended[i]:
+			markedDead++
+		case email == "page-live@e" && !page.Ended[i]:
+			markedLive++
+		}
+	}
+	if markedDead == 0 {
+		t.Fatalf("the disabled client's entry is not marked ended: emails=%v ended=%v", page.Emails, page.Ended)
+	}
+	if markedLive == 0 {
+		t.Fatalf("the working client's entry was marked ended: emails=%v ended=%v", page.Emails, page.Ended)
+	}
+}
+
+// The traffic totals count it either way — dropping the email would take the
+// client out of Subscription-Userinfo as well, which is the trade F311 warned
+// about.
 func TestADisabledClientStillCountsInTheTrafficTotals(t *testing.T) {
 	initSubDB(t)
 
@@ -83,7 +116,7 @@ func TestADisabledClientStillCountsInTheTrafficTotals(t *testing.T) {
 		t.Fatalf("GetSubs: %v", err)
 	}
 	if traffic.Up != deadUpBytes {
-		t.Fatalf("aggregate up = %d, want %d: the disabled client was dropped from the totals as well as the links", traffic.Up, deadUpBytes)
+		t.Fatalf("aggregate up = %d, want %d: the disabled client was dropped from the totals", traffic.Up, deadUpBytes)
 	}
 }
 

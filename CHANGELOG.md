@@ -194,17 +194,13 @@ here; the git log is the full record.
   so a proxy, a CDN or the app's own cache could show a user data they had
   already spent, alongside servers that were removed days ago.
 
-- **A subscription stops handing out links for clients that cannot connect.**
-  Disabling a client -- by hand, by running out of traffic, by expiring --
-  removes its account from the core, but its link stayed in the subscription and
-  looked like every other one. A depleted user's app refreshed, took a profile
-  full of healthy-looking servers, and failed on all of them with no reason
-  given. The panel's own file-share path has always skipped them.
-  **What you will notice:** those entries are gone from the raw, JSON and Clash
-  formats, and the traffic figures in the subscription header still include
-  them, so nothing starts under-reporting. A subscription whose clients are ALL
-  disabled now answers 404, the same as one with nothing else to serve — the
-  app keeps its last good profile instead of retrying dead servers.
+- **The subscription page says which of your configs have ended.** Disabling a
+  client -- by hand, by running out of traffic, by expiring -- removes its
+  account from the core, so its link cannot connect, and nothing said so.
+  **What you will notice:** on the subscription page that entry is dimmed,
+  struck through and tagged "Ended". The link itself is still served in every
+  format, so the subscription keeps parsing in whichever app you use and a
+  renewal brings it straight back.
 
 - **The routing table no longer lets you move a rule the panel will move back.**
   The stats API rule -- the one the traffic counters read -- has to lead, and
