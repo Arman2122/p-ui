@@ -65,7 +65,11 @@ func hostToExternalProxyMap(h *model.Host, defaultDest string, defaultPort int) 
 	if h.OverrideSniFromAddress {
 		sni = dest
 	}
-	if !h.KeepSniBlank && sni != "" {
+	// "Keep blank" has to be SAID: an absent key means "no override", and every
+	// applier writes the inbound's own SNI first, so skipping meant inheriting.
+	if h.KeepSniBlank {
+		ep["sniBlank"] = true
+	} else if sni != "" {
 		ep["sni"] = sni
 	}
 	if h.Fingerprint != "" {

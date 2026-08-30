@@ -1674,7 +1674,9 @@ func applyExternalProxyTLSObj(ep map[string]any, obj map[string]any, security st
 	if security != "tls" {
 		return
 	}
-	if sni, ok := externalProxySNI(ep); ok {
+	if externalProxySNIBlank(ep) {
+		delete(obj, "sni")
+	} else if sni, ok := externalProxySNI(ep); ok {
 		obj["sni"] = sni
 	}
 	if fp, ok := ep["fingerprint"].(string); ok && fp != "" {
@@ -1698,7 +1700,9 @@ func applyExternalProxyTLSParams(ep map[string]any, params map[string]string, se
 	if security != "tls" {
 		return
 	}
-	if sni, ok := externalProxySNI(ep); ok {
+	if externalProxySNIBlank(ep) {
+		delete(params, "sni")
+	} else if sni, ok := externalProxySNI(ep); ok {
 		params["sni"] = sni
 	}
 	if fp, ok := ep["fingerprint"].(string); ok && fp != "" {
@@ -1727,7 +1731,9 @@ func applyExternalProxyHysteriaParams(ep map[string]any, params map[string]strin
 	if ai, ok := ep["allowInsecure"].(bool); ok && ai {
 		params["insecure"] = "1"
 	}
-	if sni, ok := ep["sni"].(string); ok && sni != "" {
+	if externalProxySNIBlank(ep) {
+		delete(params, "sni")
+	} else if sni, ok := ep["sni"].(string); ok && sni != "" {
 		params["sni"] = sni
 	}
 	if fp, ok := ep["fingerprint"].(string); ok && fp != "" {
@@ -1799,7 +1805,11 @@ func applyExternalProxyTLSToStream(ep map[string]any, stream map[string]any, sec
 		tlsSettings = map[string]any{}
 		stream["tlsSettings"] = tlsSettings
 	}
-	if sni, ok := externalProxySNI(ep); ok {
+	if externalProxySNIBlank(ep) {
+		// Assigned, not deleted: json and clash copy this key unconditionally
+		// and a missing one renders as null rather than as absent.
+		tlsSettings["serverName"] = ""
+	} else if sni, ok := externalProxySNI(ep); ok {
 		tlsSettings["serverName"] = sni
 	}
 	if fp, ok := ep["fingerprint"].(string); ok && fp != "" {
@@ -1840,6 +1850,13 @@ func applyExternalProxyTLSToStream(ep map[string]any, stream map[string]any, sec
 		}
 		settings["allowInsecure"] = true
 	}
+}
+
+// externalProxySNIBlank is separate from externalProxySNI on purpose: the
+// hysteria applier reads ep["sni"] directly and would not be covered by it.
+func externalProxySNIBlank(ep map[string]any) bool {
+	b, _ := ep["sniBlank"].(bool)
+	return b
 }
 
 func externalProxySNI(ep map[string]any) (string, bool) {

@@ -469,3 +469,74 @@ func TestSub_EveryHostExcludedWithholdsRatherThanLeakingTheOrigin(t *testing.T) 
 		t.Errorf("the json subscription published the inbound's origin address:\n%s", cfg)
 	}
 }
+
+/*
+"Keep SNI blank" must actually blank the SNI.
+
+The endpoint map had vocabulary for "override this" but none for "clear this".
+The emitter expressed KeepSniBlank by DECLINING to write ep["sni"], so
+absent-key and "no override" became the same signal -- and every applier is
+written set-or-skip, never clear. Each generator writes the inbound's own SNI
+into the target first, so skipping meant INHERITING it.
+
+The switch was therefore a guaranteed no-op on every TLS path: the operator
+flipped it precisely to stop publishing a name, and the panel published the
+inbound's name instead. F135.
+*/
+func TestSub_KeepSniBlankActuallyBlanksTheSni(t *testing.T) {
+	seedSubDB(t)
+	const inboundSni = "base.sni"
+	ib := seedSubInbound(t, "s3", "blank-sni", 4443, 1, wsTLSStream)
+	seedHost(t, &model.Host{
+		InboundId: ib.Id, SortOrder: 1, Remark: "H",
+		Address: "cdn.example.com", Port: 8443, Security: "tls",
+		KeepSniBlank: true,
+	})
+
+	sub := NewSubService("")
+	links, _, _, _, err := sub.GetSubs("s3", "req.example.com")
+	if err != nil {
+		t.Fatalf("GetSubs: %v", err)
+	}
+	joined := strings.Join(links, "\n")
+	if strings.Contains(joined, inboundSni) {
+		t.Errorf("the raw link carries the inbound's SNI %q although the host asks to keep it blank:\n%s", inboundSni, joined)
+	}
+
+	clash := NewSubClashService(false, "", NewSubService(""))
+	yaml, _, err := clash.GetClash("s3", "req.example.com")
+	if err != nil {
+		t.Fatalf("GetClash: %v", err)
+	}
+	if strings.Contains(yaml, inboundSni) {
+		t.Errorf("the clash proxy carries the inbound's SNI %q:\n%s", inboundSni, yaml)
+	}
+
+	jsonSvc := NewSubJsonService("", "", "", NewSubService(""))
+	cfg, _, err := jsonSvc.GetJson("s3", "req.example.com", false)
+	if err != nil {
+		t.Fatalf("GetJson: %v", err)
+	}
+	if strings.Contains(cfg, inboundSni) {
+		t.Errorf("the json config carries the inbound's SNI %q:\n%s", inboundSni, cfg)
+	}
+}
+
+// The other half: a host that does NOT ask for blank must still override.
+func TestSub_AHostSniStillOverridesWhenNotBlanked(t *testing.T) {
+	seedSubDB(t)
+	ib := seedSubInbound(t, "s4", "override-sni", 4444, 1, wsTLSStream)
+	seedHost(t, &model.Host{
+		InboundId: ib.Id, SortOrder: 1, Remark: "H",
+		Address: "cdn.example.com", Port: 8443, Security: "tls",
+		Sni: "host.chosen.sni",
+	})
+
+	links, _, _, _, err := NewSubService("").GetSubs("s4", "req.example.com")
+	if err != nil {
+		t.Fatalf("GetSubs: %v", err)
+	}
+	if joined := strings.Join(links, "\n"); !strings.Contains(joined, "host.chosen.sni") {
+		t.Errorf("the host's own SNI was lost:\n%s", joined)
+	}
+}

@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **"Keep SNI blank" on a host now actually keeps it blank.** The switch was a
+  no-op on every TLS path: the panel expressed "blank" by simply not writing an
+  SNI, which every link generator read as "no override" -- and each of them had
+  already written the inbound'''s own SNI, so the value you flipped the switch to
+  hide was published anyway. Raw links, Clash and JSON were all affected, for
+  VMess, VLESS, Trojan, Shadowsocks and Hysteria.
+  **What you will notice:** subscriptions for such a host carry no SNI. Hosts
+  that set their own SNI are unchanged.
+
 - **Excluding every host from a subscription format now removes the inbound from
   it, instead of publishing your origin address.** "No host applies here" and
   "this inbound has no hosts at all" were treated as the same thing, so closing
