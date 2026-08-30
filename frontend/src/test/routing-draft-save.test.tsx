@@ -154,3 +154,38 @@ describe('routing rules are drafted, not applied on the spot', () => {
     expect(delAt).toBeLessThan(addAt);
   });
 });
+
+/*
+A rule the server refuses stays in the draft.
+
+HttpUtil resolves on a refusal rather than throwing, so an unchecked flush would
+walk straight past it, clear the draft and leave the operator with an empty form
+and a toast they may already have dismissed. The panel refuses routing rules at
+save time on purpose -- a rule the compiler would drop is rejected -- so this is
+a path operators reach, not a theoretical one.
+
+The rule stays on screen and Save stays lit, which is the whole point of having a
+draft. F191, whose original complaint (the modal closing before the server
+answered) no longer applies now that the dialog talks to nobody.
+*/
+describe('a refused write', () => {
+  it('keeps the draft so the rule is still there to correct', async () => {
+    vi.spyOn(HttpUtil, 'get').mockImplementation(async (url: string) => {
+      if (url.includes('/routing/rules')) return new Msg(true, '', [SERVER_RULE]);
+      return new Msg(true, '', []);
+    });
+    vi.spyOn(HttpUtil, 'post').mockImplementation(async () => new Msg(false, 'rule refused', null));
+
+    const { result } = renderHook(() => useRoutingDraft(), { wrapper });
+    await waitFor(() => expect(result.current.rules).toHaveLength(1));
+
+    act(() => result.current.addRule(NEW_RULE));
+    await act(async () => { await result.current.flush(); });
+
+    expect(
+      result.current.dirty,
+      'the draft was cleared after the server refused the rule, so the operator lost what they typed',
+    ).toBe(true);
+    expect(result.current.rules).toHaveLength(2);
+  });
+});
