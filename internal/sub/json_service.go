@@ -84,13 +84,19 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 			continue
 		}
 		subReq.projectThroughFallbackMaster(inbound)
-		if hostEps := subReq.hostEndpoints(inbound, "json"); len(hostEps) > 0 {
+		hostEps := subReq.hostEndpoints(inbound, "json")
+		// Every enabled host closed this format: withhold the inbound rather than
+		// fall back to the origin address the exclusion exists to hide.
+		withheld := hostEps != nil && len(hostEps) == 0
+		if len(hostEps) > 0 {
 			injectExternalProxy(inbound, hostEps)
 		}
 
 		for _, client := range clients {
 			seenEmails[client.Email] = struct{}{}
-			configArray = append(configArray, s.getConfig(subReq, inbound, client, host)...)
+			if !withheld {
+				configArray = append(configArray, s.getConfig(subReq, inbound, client, host)...)
+			}
 		}
 	}
 	for _, ext := range externalLinks {

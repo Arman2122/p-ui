@@ -412,3 +412,60 @@ func TestSub_ExcludeFromSubTypes(t *testing.T) {
 		t.Fatalf("host excluded from clash must not appear in GetClash:\n%s", yaml)
 	}
 }
+
+/*
+An inbound whose every host closes a format must be withheld, not fall back.
+
+hostEndpoints returns three outcomes in one value: nil for "no hosts at all"
+(or a DB error), and a non-nil EMPTY slice for "hosts exist, but every one of
+them excludes this format". Every caller collapsed those two with len() > 0, so
+the second landed on the legacy path -- which renders the inbound's ORIGIN
+address.
+
+That is precisely the address the operator added a CDN host to hide. Excluding
+every host from clash did not remove the inbound from the clash subscription; it
+published the origin instead, and did it silently.
+
+The email is still counted in all three renderers, so the Subscription-Userinfo
+totals of a multi-inbound subscription do not under-report a withheld one. F140.
+*/
+func TestSub_EveryHostExcludedWithholdsRatherThanLeakingTheOrigin(t *testing.T) {
+	seedSubDB(t)
+	// seedSubInbound hardcodes this listen address; it is the origin the host
+	// exists to hide, and asserting on the tag instead would pass on the remark.
+	const origin = "203.0.113.5"
+	ib := seedSubInbound(t, "s2", "hidden-inbound", 4442, 1, wsTLSStream)
+	// One host, and it closes all three formats.
+	seedHost(t, &model.Host{
+		InboundId: ib.Id, SortOrder: 1, Remark: "H", Address: "cdn.example.com",
+		Port: 8443, Security: "tls",
+		ExcludeFromSubTypes: []string{"raw", "json", "clash"},
+	})
+
+	sub := NewSubService("")
+	links, _, _, _, err := sub.GetSubs("s2", "req.example.com")
+	if err != nil {
+		t.Fatalf("GetSubs: %v", err)
+	}
+	if joined := strings.Join(links, "\n"); strings.Contains(joined, origin) {
+		t.Errorf("the raw subscription published the inbound's origin address after every host excluded raw:\n%s", joined)
+	}
+
+	clash := NewSubClashService(false, "", NewSubService(""))
+	yaml, _, err := clash.GetClash("s2", "req.example.com")
+	if err != nil {
+		t.Fatalf("GetClash: %v", err)
+	}
+	if strings.Contains(yaml, origin) {
+		t.Errorf("the clash subscription published the inbound's origin address:\n%s", yaml)
+	}
+
+	jsonSvc := NewSubJsonService("", "", "", NewSubService(""))
+	cfg, _, err := jsonSvc.GetJson("s2", "req.example.com", false)
+	if err != nil {
+		t.Fatalf("GetJson: %v", err)
+	}
+	if strings.Contains(cfg, origin) {
+		t.Errorf("the json subscription published the inbound's origin address:\n%s", cfg)
+	}
+}

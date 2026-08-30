@@ -12,10 +12,10 @@ import (
 
 // hostEndpoints loads an inbound's enabled hosts for the given subscription
 // format ("raw"|"json"|"clash") and returns them as externalProxy-shaped maps so
-// the existing per-format renderers can fan out one link/proxy per host. Returns
-// nil when the inbound has no applicable host — the caller then uses the legacy
-// inbound/externalProxy path, preserving byte-identical output for zero-host
-// inbounds.
+// the existing per-format renderers can fan out one link/proxy per host.
+// nil means no hosts at all (or a DB error): the caller takes the legacy
+// inbound/externalProxy path. A non-nil EMPTY slice means every enabled host
+// closed this format, and the caller must emit nothing rather than fall back.
 func (s *SubService) hostEndpoints(inbound *model.Inbound, format string) []map[string]any {
 	var hosts []*model.Host
 	if err := database.GetDB().

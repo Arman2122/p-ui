@@ -46,12 +46,20 @@ func (s *SubClashService) GetClash(subId string, host string) (string, string, e
 			continue
 		}
 		subReq.projectThroughFallbackMaster(inbound)
-		if hostEps := subReq.hostEndpoints(inbound, "clash"); len(hostEps) > 0 {
+		hostEps := subReq.hostEndpoints(inbound, "clash")
+		// Every enabled host closed this format: withhold the inbound rather than
+		// fall back to the origin address the exclusion exists to hide.
+		withheld := hostEps != nil && len(hostEps) == 0
+		if len(hostEps) > 0 {
 			injectExternalProxy(inbound, hostEps)
 		}
 		for _, client := range clients {
+			// Counted either way: the traffic header totals a multi-inbound
+			// subscription and must not under-report a withheld one. F311.
 			seenEmails[client.Email] = struct{}{}
-			proxies = append(proxies, s.getProxies(subReq, inbound, client, host)...)
+			if !withheld {
+				proxies = append(proxies, s.getProxies(subReq, inbound, client, host)...)
+			}
 		}
 	}
 	for _, ext := range externalLinks {

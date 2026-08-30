@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Excluding every host from a subscription format now removes the inbound from
+  it, instead of publishing your origin address.** "No host applies here" and
+  "this inbound has no hosts at all" were treated as the same thing, so closing
+  every host to, say, Clash did not take the inbound out of the Clash
+  subscription -- it fell back to the inbound'''s own address, which is exactly
+  what the host was added to hide. Raw, JSON and Clash were all affected.
+  **What you will notice:** such an inbound no longer appears in that format at
+  all. Traffic totals in the subscription header are unchanged -- the clients are
+  still counted.
+
 - **Starting Xray from cold no longer reports success for a config the core
   refuses.** The config pre-flight guarded restarts of a RUNNING core only. When
   Xray was not running -- panel boot, crash recovery, `p-ui restart`, the first
