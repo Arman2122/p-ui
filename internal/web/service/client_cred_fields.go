@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -55,6 +57,39 @@ func setClientCredential(c *model.Client, name, value string) {
 
 // clientIdentityValue reads the field a core named as this kind's config
 // identity — a vocabulary credential, or the email every client carries.
+// identityFieldFor names the field the kind's core keys its user table on.
+func identityFieldFor(p model.Protocol) string {
+	if a, ok := cores.ClientCredentialAuthority(core.Kind(p)); ok {
+		return a.ClientIdentity(core.Kind(p))
+	}
+	return core.CredUUID
+}
+
+// identityCollision names the other client already carrying this identity. The
+// core keys its user map on it, so a second claimant silently replaces the first.
+func identityCollision(p model.Protocol, value string, others []model.Client, skip int) (string, string) {
+	field := identityFieldFor(p)
+	// email is already globally unique; the kinds that answer it are out of scope.
+	if field == "email" {
+		return "", ""
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", ""
+	}
+	// Byte-exact and case-SENSITIVE on purpose: trojan keys on sha224 of the
+	// raw password, so folding case here would over-refuse.
+	for i := range others {
+		if i == skip {
+			continue
+		}
+		if strings.TrimSpace(clientIdentityValue(&others[i], field)) == value {
+			return others[i].Email, field
+		}
+	}
+	return "", ""
+}
+
 func clientIdentityValue(c *model.Client, name string) string {
 	if name == "email" {
 		return c.Email

@@ -1009,10 +1009,17 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	}
 
 	// Refused with the kind's own wording, asked of its core.
-	for _, client := range clients {
-		client := client
+	identityField := identityFieldFor(inbound.Protocol)
+	for i := range clients {
+		client := clients[i]
 		if err := validateClientForKind(inbound.Protocol, inbound.Settings, &client); err != nil {
 			return inbound, false, "", err
+		}
+		// Against the earlier members only: the core keeps one user per identity,
+		// so a duplicate inside one create is already two clients sharing an account.
+		if other, field := identityCollision(inbound.Protocol,
+			clientIdentityValue(&clients[i], identityField), clients[:i], -1); other != "" {
+			return inbound, false, "", common.NewError(string(inbound.Protocol)+": "+field+" already used by client:", other)
 		}
 	}
 
