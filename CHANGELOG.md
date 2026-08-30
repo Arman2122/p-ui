@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A client cannot be attached to an inbound that serves none.** The panel's
+  own pickers already leave HTTP, mixed, tunnel and TUN inbounds out, but the
+  API and the Telegram bot accepted a client on one: it was stored, listed on
+  the clients page, and provisioned nowhere -- a client that can never connect,
+  with nothing saying why. Refused at the save now, naming the protocol.
+
+- **The address list for a client with no IP limit stops forgetting.** For a
+  client the limit does not apply to, the panel replaced its whole address list
+  with whatever the last poll caught, while a limited client keeps the last 30
+  minutes. Two clients side by side showed lists that meant different things,
+  with nothing to say so.
+
 - **A "direct" or "block" routing rule stays one when you open it.** Reopening
   such a rule in the editor and saving it unchanged turned it into an ordinary
   outbound rule naming the literal tag. On the stock template that resolves to

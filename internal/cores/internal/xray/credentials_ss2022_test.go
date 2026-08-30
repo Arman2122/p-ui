@@ -99,3 +99,51 @@ func TestShadowsocksClientRequiresAPassword(t *testing.T) {
 		})
 	}
 }
+
+/*
+A kind that serves no clients must not be given one.
+
+ClientCredentials returns nil for http, mixed, tunnel and tun — the comment
+above it says so outright, "the kinds the panel gives no clients of their own" —
+and MintClientCredentials has no arm for them. The rendered inbound has no user
+list to put a client in.
+
+ValidateClient's default arm asked only for a non-empty uuid, so a client
+attached to one of those was accepted, stored, listed on the clients page, and
+provisioned nowhere: it can never connect, and nothing said why. The panel's own
+pickers already exclude these kinds, which is what makes the API and the
+Telegram bot the way in.
+
+vmess and vless share that same default arm and must keep working: they name a
+uuid, so they are unaffected. F313.
+*/
+func TestAKindWithNoCredentialsRefusesAClient(t *testing.T) {
+	c := &Core{}
+	have := map[string]string{core.CredUUID: "11111111-2222-3333-4444-555555555555"}
+
+	for _, kind := range []core.Kind{"http", "mixed", "tunnel", "tun"} {
+		t.Run(string(kind), func(t *testing.T) {
+			if len(c.ClientCredentials(kind)) != 0 {
+				t.Fatalf("%s now names credentials; this case is testing the wrong kind", kind)
+			}
+			err := c.ValidateClient(kind, "{}", "alice@e", have)
+			if err == nil {
+				t.Fatalf("a client was accepted on %s, which has no user list to put one in — it is stored, listed, and can never connect", kind)
+			}
+			if !strings.Contains(err.Error(), string(kind)) {
+				t.Errorf("the refusal does not name the kind, so the operator cannot tell which inbound is the problem: %v", err)
+			}
+		})
+	}
+
+	for _, kind := range []core.Kind{"vmess", "vless"} {
+		t.Run(string(kind)+"/still accepted", func(t *testing.T) {
+			if err := c.ValidateClient(kind, "{}", "alice@e", have); err != nil {
+				t.Fatalf("%s shares the same default arm and must keep working: %v", kind, err)
+			}
+			if err := c.ValidateClient(kind, "{}", "alice@e", map[string]string{}); err == nil {
+				t.Fatalf("%s accepted a client with no uuid", kind)
+			}
+		})
+	}
+}

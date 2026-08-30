@@ -79,6 +79,20 @@ func (c *Core) ValidateClient(kind core.Kind, settings, email string, have map[s
 			return errors.New("wireguard client requires a key")
 		}
 	default:
+		/*
+			A kind that names no credentials has no clients of its own.
+
+			ClientCredentials returns nil for http, mixed, tunnel and tun, and
+			MintClientCredentials has no arm for them either -- the rendered
+			inbound has no user list to put a client in. This arm only asked for a
+			non-empty uuid, so one was accepted, stored, listed and provisioned
+			nowhere: a client that can never connect, on an inbound that was never
+			going to serve it. The panel's own pickers already exclude these kinds,
+			so the path here is the API and the Telegram bot. F313.
+		*/
+		if len(c.ClientCredentials(kind)) == 0 {
+			return errors.New(string(kind) + " inbounds serve no clients of their own")
+		}
 		if have[core.CredUUID] == "" {
 			return errors.New("empty client ID")
 		}

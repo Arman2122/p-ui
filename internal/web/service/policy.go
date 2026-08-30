@@ -499,8 +499,18 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			stopped applying to a client who was still connecting.
 		*/
 		if limit <= 0 || !slices.ContainsFunc(hosted, func(inbound *model.Inbound) bool { return inbound.Enable }) {
-			// Nothing to enforce: record what was seen so the panel can show it.
-			row.Ips = encodeClientIPs(observationsToEntries(observed))
+			/*
+				Nothing to enforce: record what was seen so the panel can show it —
+				MERGED with what is already stored, not in place of it.
+
+				Replacing the blob outright meant the addresses shown for a client
+				the cap does not apply to were only the ones this poll happened to
+				catch, while every enforced client keeps its last 30 minutes. Two
+				clients side by side, one with a cap and one without, and the one
+				without looked like it had just connected from one address. F305.
+			*/
+			row.Ips = encodeClientIPs(observationsToEntries(
+				mergeRecentObservations(decodeClientIPs(row.Ips), observed, staleCutoff)))
 			if err := tx.Save(row).Error; err != nil {
 				logger.Error("policy: save observed ips:", err)
 			}
@@ -702,6 +712,32 @@ func AnyClientHasAnIPLimit() bool {
 
 // The persisted blob is unix SECONDS and is synced between panels, so its unit
 // is a compatibility contract; the rules work in milliseconds.
+/*
+mergeRecentObservations keeps the stored addresses still inside the stale window
+and lays this pass's observations over them, newest timestamp winning.
+
+The same window policy.Decide applies through Keep and Retain, so the two
+branches agree about how long an address stays on the list.
+*/
+func mergeRecentObservations(stored, observed []policy.Observation, staleCutoffMilli int64) []policy.Observation {
+	byIP := make(map[string]policy.Observation, len(stored)+len(observed))
+	for _, obs := range stored {
+		if obs.LastSeenUnixMilli >= staleCutoffMilli {
+			byIP[obs.IP] = obs
+		}
+	}
+	for _, obs := range observed {
+		if prev, ok := byIP[obs.IP]; !ok || obs.LastSeenUnixMilli > prev.LastSeenUnixMilli {
+			byIP[obs.IP] = obs
+		}
+	}
+	out := make([]policy.Observation, 0, len(byIP))
+	for _, ip := range slices.Sorted(maps.Keys(byIP)) {
+		out = append(out, byIP[ip])
+	}
+	return out
+}
+
 func observationsToEntries(observations []policy.Observation) []model.ClientIpEntry {
 	out := make([]model.ClientIpEntry, 0, len(observations))
 	for _, obs := range observations {
