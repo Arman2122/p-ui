@@ -1345,3 +1345,42 @@ Two honest options, both small, neither free:
 **`keepAlive` has the identical disease** — same restore at :638, same `> 0`
 gate at :688 — and whichever signal is chosen should carry it too, so a client's
 persistent-keepalive can go back to off.
+
+## L28 — a tun inbound holds a port it never binds, and the fix is a contract field (F319)
+
+F319 is real and reachable. `tun` is in the xray core's `kinds` list and in the
+generated protocol enum, so it is offered in the inbound form like any other;
+the port field is mandatory there (`min={isUdsListen ? 0 : 1}`). An Xray TUN
+device binds no socket at all, and `Transports()` has no `tun` arm, so it falls
+to `default: out.TCP = true` — the panel then refuses a real inbound on that
+port, naming a conflict with something that is not listening.
+
+Why it is not a one-line arm: `inboundTransports`
+(`internal/web/service/port_conflict.go`) ends with a deliberate fail-safe —
+
+```go
+if bits == 0 {
+    // A core that claims to bind nothing would disable the check for its own
+    // kind; the port is occupied either way.
+    bits = transportTCP
+}
+```
+
+— so returning an empty `core.Transports{}` for tun is turned straight back into
+TCP. That guard is right about a core that answers `{}` through negligence, and
+wrong about the one kind that genuinely binds nothing. Both cases currently
+produce the same value, which is the whole problem.
+
+The fix is to make them different, and that means a field on the contract:
+
+- **`None bool` (or `BindsNoPort`) on `core.Transports`.** xray answers
+  `{None: true}` for tun, `inboundTransports` returns zero bits only for that,
+  and the existing fail-safe keeps covering an accidental `{}`. Four small
+  sites, and `checkPortConflict` has to treat zero bits as never-overlapping.
+- **A capability rule** in `internal/core/capability.go` instead — "binds a
+  port" — which the conflict check consults. Heavier, but it puts the answer in
+  the one table that already answers "may this inbound do X", and the TypeScript
+  twin gets it for free.
+
+Either is small in lines. Neither is mine to pick: it widens the multi-core
+contract, and the standing rule is that those are presented, not chosen quietly.

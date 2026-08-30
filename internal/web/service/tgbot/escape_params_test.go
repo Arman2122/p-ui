@@ -98,3 +98,41 @@ func readBotSource(t *testing.T, name string) string {
 	}
 	return string(body)
 }
+
+/*
+The add-client draft was written in Markdown and sent as HTML.
+
+Every delivery path sets ParseMode "HTML", and this message emitted *emphasis*
+and `code spans`. In HTML mode those render literally, so the admin saw the
+asterisks and backticks. The interpolated values -- the email, the attached
+inbounds' remarks, the comment -- were unescaped besides, so a '<' in any of them
+made Telegram refuse the whole message and the draft never appeared: the admin
+pressed a button in the add-client flow and nothing came back. F298.
+*/
+func TestTheClientDraftIsHtmlAndEscapesTheOperatorsText(t *testing.T) {
+	body := readBotSource(t, "tgbot_client.go")
+
+	start := strings.Index(body, "func (t *Tgbot) BuildClientDraftMessage()")
+	if start < 0 {
+		t.Fatal("BuildClientDraftMessage was renamed; this guard is now vacuous")
+	}
+	end := strings.Index(body[start:], "\n}\n")
+	if end < 0 {
+		t.Fatal("cannot find the end of BuildClientDraftMessage; this guard is now vacuous")
+	}
+	draft := body[start : start+end]
+
+	for _, markdown := range []string{"*New client draft*", "`%s`"} {
+		if strings.Contains(draft, markdown) {
+			t.Errorf("the draft still emits Telegram Markdown (%s) while every send sets ParseMode HTML, so it renders literally", markdown)
+		}
+	}
+	if !strings.Contains(draft, "<b>New client draft</b>") || !strings.Contains(draft, "<code>%s</code>") {
+		t.Error("the draft does not use the HTML markup the ParseMode expects")
+	}
+	for _, value := range []string{"client_Email", "attached", "tgID", "comment"} {
+		if !strings.Contains(draft, "html.EscapeString("+value+")") {
+			t.Errorf("%s reaches the message unescaped; one '<' in it and Telegram refuses the whole draft", value)
+		}
+	}
+}

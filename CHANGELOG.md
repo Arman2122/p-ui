@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The add-client draft in the Telegram bot reads as text again.** It was
+  written in Markdown and sent as HTML, so its asterisks and backticks showed
+  literally -- and an email, remark or comment containing `<` made Telegram
+  refuse the whole message, so pressing a button in the add-client flow simply
+  produced nothing.
+
 - **A `<` in a client name no longer silences the Telegram bot.** Every message
   it sends is parsed as HTML, and the values put into them -- emails, remarks,
   comments -- were not escaped, so one angle bracket anywhere made Telegram
