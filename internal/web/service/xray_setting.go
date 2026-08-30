@@ -297,6 +297,9 @@ func EnsureStatsRouting(raw string) (string, error) {
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		return raw, err
 	}
+	if cfg == nil {
+		return raw, nil
+	}
 
 	var routing map[string]json.RawMessage
 	if r, ok := cfg["routing"]; ok && len(r) > 0 {
