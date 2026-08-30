@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An MTProto inbound on an IPv6 address starts.** The listen address and port
+  were joined with a bare colon, so `2001:db8::1` produced something that is not
+  an address at all; the MTProto sidecar refused the config and never came up,
+  taking every client of that inbound with it. The listen field is free text and
+  the panel documents binding to a specific address there.
+
+- **A Shadowsocks client with no password is refused at the save.** Every other
+  protocol's client is checked for its credential; this one was checked for its
+  name and its cipher and never for its key. With a legacy cipher nothing
+  upstream fills one in either, so the empty password reached the core, which
+  refuses that user -- and with it the whole configuration, taking every inbound
+  of every protocol down at the next restart.
+
 - **Six labels that were showing their own key now show words.** Four of them
   read like English by accident -- "apply", "disable", "empty", "inbounds" --
   which is exactly why nobody noticed, and none of them had a Persian

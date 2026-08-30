@@ -73,12 +73,15 @@ type Instance struct {
 	XrayRoutePort    int
 }
 
+// bindTo renders the listen address mtg parses. JoinHostPort, not a bare colon:
+// an IPv6 listen needs brackets, and without them mtg refuses the config and the
+// sidecar never comes up — every client of that inbound offline. F215.
 func (inst Instance) bindTo() string {
 	listen := inst.Listen
 	if listen == "" {
 		listen = "0.0.0.0"
 	}
-	return fmt.Sprintf("%s:%d", listen, inst.Port)
+	return net.JoinHostPort(listen, strconv.Itoa(inst.Port))
 }
 
 // StructuralFingerprint changes whenever a value outside the [secrets] section
