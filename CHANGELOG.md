@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Two saves can no longer both claim the same port.** The port check read
+  committed rows and the save committed later, with nothing holding the gap, so
+  two admins saving at once -- or one double-clicking Save -- could both be told
+  the port was free. Both rows were kept and only the tag was disambiguated, so
+  the collision hid behind a plausible name until Xray refused to start the
+  second listener and the whole core went down.
+  **What you will notice:** the second save is refused with the ordinary "port
+  already used by inbound" message instead of appearing to succeed.
+
 - **An MTProto bridge-port collision no longer takes the whole Xray core down.**
   Each routed MTProto inbound gets a loopback bridge on a port the panel picks,
   and that port was checked against nothing. If anything else already held it,
