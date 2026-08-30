@@ -169,8 +169,9 @@ func (s *EmailService) TestConnection() SMTPTestResult {
 		return SMTPTestResult{false, "auth", classifySMTPError(err)}
 	}
 
-	// STARTTLS upgrade for non-TLS connections
-	if encryptionType == "starttls" {
+	// Mirror sendPlain: every transport but implicit TLS upgrades when the
+	// server advertises it, so the test exercises the path a send takes.
+	if encryptionType != "tls" {
 		if ok, _ := client.Extension("STARTTLS"); ok {
 			if err = client.StartTLS(&tls.Config{ServerName: host}); err != nil {
 				return SMTPTestResult{false, "auth", classifySMTPError(err)}
