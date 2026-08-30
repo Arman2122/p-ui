@@ -574,8 +574,8 @@ func (s *SubJsonService) genWireguard(inbound *model.Inbound, client model.Clien
 			peer["publicKey"] = pub
 		}
 	}
-	if client.PreSharedKey != "" {
-		peer["preSharedKey"] = client.PreSharedKey
+	if psk := client.PSK(); psk != "" {
+		peer["preSharedKey"] = psk
 	}
 	if client.KeepAlive > 0 {
 		peer["keepAlive"] = client.KeepAlive

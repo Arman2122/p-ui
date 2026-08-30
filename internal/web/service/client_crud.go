@@ -418,8 +418,11 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.PublicKey == prev.PublicKey {
 		updated.PublicKey = ""
 	}
-	if updated.PreSharedKey == prev.PreSharedKey {
-		updated.PreSharedKey = ""
+	// nil, not "": absent means "carry the stored one forward", and an empty
+	// string now means "clear it". Blanking to "" here would turn every
+	// unchanged save into a deliberate clear. F179.
+	if updated.PSK() == prev.PSK() {
+		updated.PreSharedKey = nil
 	}
 	if updated.KeepAlive == prev.KeepAlive {
 		updated.KeepAlive = 0

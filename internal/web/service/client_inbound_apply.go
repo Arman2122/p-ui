@@ -632,7 +632,15 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 				clients[0].AllowedIPs = normalized
 			}
 		}
-		if clients[0].PreSharedKey == "" {
+		/*
+			Absent carries the stored key forward; EMPTY clears it.
+
+			Those were the same value while this was a plain string, so an emptied
+			field was indistinguishable from an omitted one and the stored key came
+			back every time — a pre-shared key could be set here and never removed.
+			F179.
+		*/
+		if clients[0].PreSharedKey == nil {
 			clients[0].PreSharedKey = old.PreSharedKey
 		}
 		if clients[0].KeepAlive == 0 {
@@ -682,8 +690,12 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 				newMap["privateKey"] = clients[0].PrivateKey
 				newMap["publicKey"] = clients[0].PublicKey
 				newMap["allowedIPs"] = clients[0].AllowedIPs
-				if clients[0].PreSharedKey != "" {
-					newMap["preSharedKey"] = clients[0].PreSharedKey
+				// Deleted rather than written empty, so the stored settings read
+				// like a client that never had one.
+				if psk := clients[0].PSK(); psk != "" {
+					newMap["preSharedKey"] = psk
+				} else {
+					delete(newMap, "preSharedKey")
 				}
 				if clients[0].KeepAlive > 0 {
 					newMap["keepAlive"] = clients[0].KeepAlive

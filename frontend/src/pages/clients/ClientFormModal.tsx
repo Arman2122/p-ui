@@ -549,7 +549,11 @@ export default function ClientFormModal({
       clientPayload.privateKey = values.wgPrivateKey;
       clientPayload.publicKey = values.wgPublicKey;
     }
-    if (credentials.has('preSharedKey') && values.wgPreSharedKey) {
+    /* Sent whenever the field is RENDERED, empty included: the backend reads an
+       absent key as "leave the stored one alone" and an empty one as "clear it".
+       Gating on a truthy value is what made a cleared key indistinguishable from
+       an omitted one, so it could be set here and never removed. F179. */
+    if (credentials.has('preSharedKey')) {
       clientPayload.preSharedKey = values.wgPreSharedKey;
     }
     if (credentials.has('allowedIPs')) {

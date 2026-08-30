@@ -715,8 +715,8 @@ func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) stri
 	if dns, ok := settings["dns"].(string); ok && dns != "" {
 		params["dns"] = dns
 	}
-	if client.PreSharedKey != "" {
-		params["presharedkey"] = client.PreSharedKey
+	if psk := client.PSK(); psk != "" {
+		params["presharedkey"] = psk
 	}
 	if client.KeepAlive > 0 {
 		params["keepalive"] = strconv.Itoa(client.KeepAlive)

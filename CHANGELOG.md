@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A WireGuard pre-shared key can be removed.** Clearing the field and saving
+  put the old key straight back, because the panel could not tell an emptied
+  field from one a partial update had simply left out -- so a pre-shared key
+  could be set on a client and never taken off again.
+  **What you will notice:** clearing it clears it. Leaving it alone still leaves
+  it alone, which is what stops an API call that only changes a quota from
+  wiping credentials.
+
 - **A page renders in your language, not in whoever asked last.** The web
   translator was one shared value overwritten by every request -- and the same
   code runs on the subscription server, so each subscriber poll set it to that

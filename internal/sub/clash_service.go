@@ -394,8 +394,8 @@ func (s *SubClashService) buildWireguardProxy(subReq *SubService, inbound *model
 			proxy["public-key"] = pub
 		}
 	}
-	if client.PreSharedKey != "" {
-		proxy["pre-shared-key"] = client.PreSharedKey
+	if psk := client.PSK(); psk != "" {
+		proxy["pre-shared-key"] = psk
 	}
 	if client.KeepAlive > 0 {
 		proxy["persistent-keepalive"] = client.KeepAlive

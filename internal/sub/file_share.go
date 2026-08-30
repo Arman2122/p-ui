@@ -77,8 +77,8 @@ func userForShare(client model.Client) core.User {
 	if client.PublicKey != "" {
 		credentials[core.CredPublicKey] = client.PublicKey
 	}
-	if client.PreSharedKey != "" {
-		credentials[core.CredPreSharedKey] = client.PreSharedKey
+	if psk := client.PSK(); psk != "" {
+		credentials[core.CredPreSharedKey] = psk
 	}
 	if len(client.AllowedIPs) > 0 {
 		list := make([]any, 0, len(client.AllowedIPs))

@@ -283,7 +283,7 @@ export const ClientSchema = z.object({
   keepAlive: z.number().int().optional(),
   limitIp: z.number().int(),
   password: z.string().optional(),
-  preSharedKey: z.string().optional(),
+  preSharedKey: z.string().nullable().optional(),
   privateKey: z.string().optional(),
   publicKey: z.string().optional(),
   reset: z.number().int(),

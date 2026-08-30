@@ -1304,7 +1304,7 @@ Cheap when taken: branch on the exit status, keep the failure message, and leave
 `SSL_SCHEME` alone on the failing branch — the F225 guard already asserts the
 fail-closed default it would fall back to.
 
-## L27 — clearing a WireGuard pre-shared key needs a wire-level "cleared" signal (F179)
+## L27 — ANSWERED and shipped: clearing a WireGuard pre-shared key (F179)
 
 F179 is real and confirmed: a pre-shared key can be set in the client editor and
 never removed. Verified end to end rather than fixed, because the fix is a
@@ -1345,6 +1345,19 @@ Two honest options, both small, neither free:
 **`keepAlive` has the identical disease** — same restore at :638, same `> 0`
 gate at :688 — and whichever signal is chosen should carry it too, so a client's
 persistent-keepalive can go back to off.
+
+---
+
+**Answered 2026-08-31: the pointer.** `PreSharedKey *string` — nil is omitted, a
+pointer to empty is a deliberate clear. Shipped: readers go through a `PSK()`
+helper so only the update path sees the pointer, the cleared key is DELETED from
+the stored settings rather than written empty, and the editor sends the field
+whenever it renders it. The three cases — omitted preserves, empty clears, a
+value sets — are one test.
+
+`keepAlive` still carries the same disease and can take the same treatment when
+someone wants it; it is not shipped here because nobody has asked to turn a
+persistent keepalive back off.
 
 ## L28 — a tun inbound holds a port it never binds, and the fix is a contract field (F319)
 

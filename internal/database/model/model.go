@@ -520,8 +520,8 @@ func WireguardPeerFromClient(c Client) map[string]any {
 	if len(c.AllowedIPs) > 0 {
 		peer["allowedIPs"] = c.AllowedIPs
 	}
-	if c.PreSharedKey != "" {
-		peer["preSharedKey"] = c.PreSharedKey
+	if psk := c.PSK(); psk != "" {
+		peer["preSharedKey"] = psk
 	}
 	if c.KeepAlive > 0 {
 		peer["keepAlive"] = c.KeepAlive
@@ -963,7 +963,7 @@ type Client struct {
 	PrivateKey   string         `json:"privateKey,omitempty"`
 	PublicKey    string         `json:"publicKey,omitempty"`
 	AllowedIPs   []string       `json:"allowedIPs,omitempty"`
-	PreSharedKey string         `json:"preSharedKey,omitempty"`
+	PreSharedKey *string        `json:"preSharedKey,omitempty"` // Omit to keep the stored key, send empty to clear it
 	KeepAlive    int            `json:"keepAlive,omitempty"`
 	Secret       string         `json:"secret,omitempty" example:"ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d"`
 	AdTag        string         `json:"adTag,omitempty" example:"0123456789abcdef0123456789abcdef"`
@@ -979,6 +979,42 @@ type Client struct {
 	Reset        int            `json:"reset" form:"reset"`           // Reset period in days
 	CreatedAt    int64          `json:"created_at,omitempty"`         // Creation timestamp
 	UpdatedAt    int64          `json:"updated_at,omitempty"`         // Last update timestamp
+}
+
+/*
+PSK is the pre-shared key, or "" when the caller sent none.
+
+The field is a POINTER so the panel can tell "the caller did not send this" from
+"the caller sent it empty on purpose". Every credential on this struct is
+preserved when a partial update omits it — that is what stops a caller adjusting
+a quota from silently rotating a uuid — and while this was a plain string those
+two cases were the same value. So a pre-shared key could be set in the editor
+and never removed: the field was omitted when emptied, and the update path
+restored the stored one.
+
+Readers want the value and nothing else and use this. Only the update path cares
+about the distinction, and it reads the pointer directly. F179.
+*/
+func (c Client) PSK() string {
+	if c.PreSharedKey == nil {
+		return ""
+	}
+	return *c.PreSharedKey
+}
+
+// ClearsPreSharedKey reports that the caller sent the field EMPTY, which is the
+// one thing a plain empty string could never say.
+func (c Client) ClearsPreSharedKey() bool {
+	return c.PreSharedKey != nil && *c.PreSharedKey == ""
+}
+
+// PreSharedKeyOf is the stored form: absent means no key, so an empty column
+// reads back as "not set" rather than as a deliberate clear.
+func PreSharedKeyOf(stored string) *string {
+	if stored == "" {
+		return nil
+	}
+	return &stored
 }
 
 type ClientRecord struct {
@@ -1207,7 +1243,7 @@ func (c *Client) ToRecord() *ClientRecord {
 		PrivateKey:   c.PrivateKey,
 		PublicKey:    c.PublicKey,
 		AllowedIPs:   strings.Join(c.AllowedIPs, ","),
-		PreSharedKey: c.PreSharedKey,
+		PreSharedKey: c.PSK(),
 		KeepAlive:    c.KeepAlive,
 	}
 	if c.Reverse != nil {
@@ -1258,7 +1294,7 @@ func (r *ClientRecord) ToClient() *Client {
 		PrivateKey:   r.PrivateKey,
 		PublicKey:    r.PublicKey,
 		AllowedIPs:   splitWireguardAllowedIPs(r.AllowedIPs),
-		PreSharedKey: r.PreSharedKey,
+		PreSharedKey: PreSharedKeyOf(r.PreSharedKey),
 		KeepAlive:    r.KeepAlive,
 	}
 	if r.Reverse != "" {
