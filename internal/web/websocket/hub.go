@@ -101,6 +101,24 @@ var throttledMessageTypes = map[MessageType]struct{}{
 	MessageTypeClientStats: {},
 }
 
+/*
+The throttled types whose pushes come from a mutation rather than a timer.
+
+Broadcast's doc says a dropped push is covered by "the next legitimate mutation
+will push the fresh state", and for traffic and clientStats that is true — the
+next collection tick carries the whole truth a second or two later. For these
+two it is not: nothing repeats them. Two saves inside the 250 ms window left
+every other open session showing the old list until something unrelated changed
+or the operator reloaded.
+
+They fall back to an invalidate, which is the same signal an oversized payload
+already sends and costs the client one REST refetch. F344.
+*/
+var mutationDrivenMessageTypes = map[MessageType]struct{}{
+	MessageTypeInbounds:  {},
+	MessageTypeOutbounds: {},
+}
+
 func (h *Hub) shouldThrottle(msgType MessageType) bool {
 	if _, gated := throttledMessageTypes[msgType]; !gated {
 		return false
@@ -261,14 +279,18 @@ func trySend(c *Client, msg []byte) (ok bool) {
 // Broadcast serializes payload and queues it for delivery to all clients.
 // If the serialized message exceeds maxMessageSize, an invalidate signal is
 // queued instead so the frontend re-fetches via REST. Broadcasts of throttled
-// message types (see throttledMessageTypes) within minBroadcastInterval of
-// the previous one are dropped — the next legitimate mutation will push the
-// fresh state.
+// message types (see throttledMessageTypes) within minBroadcastInterval of the
+// previous one are dropped, because the next collection tick carries their whole
+// state — except the mutation-driven ones, where nothing repeats, so those fall
+// back to an invalidate.
 func (h *Hub) Broadcast(messageType MessageType, payload any) {
 	if h == nil || payload == nil || h.GetClientCount() == 0 {
 		return
 	}
 	if h.shouldThrottle(messageType) {
+		if _, mutation := mutationDrivenMessageTypes[messageType]; mutation {
+			h.broadcastInvalidate(messageType)
+		}
 		return
 	}
 	data, err := json.Marshal(Message{

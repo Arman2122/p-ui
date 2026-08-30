@@ -8,6 +8,21 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Turning on two-factor authentication no longer reports a failed save that
+  succeeded.** Signing out your other sessions happens after the settings are
+  already stored, and a failure there was reported as the whole save failing --
+  so you saved again, the second save found 2FA already on, and the sign-out
+  never ran at all. Those sessions stayed valid with nothing saying so.
+  **What you will notice:** the save reports success with a warning telling you
+  the other sessions are still valid.
+
+- **Two saves at once no longer leave other browsers showing the old list.** The
+  live-update channel drops a second inbounds or outbounds push that lands
+  within 250ms of the first, on the assumption that something else will resend
+  it -- true for the traffic counters, which tick, and false for these, which
+  only fire on a change. Every other open session kept the stale list until a
+  reload. They now get a refresh signal instead of nothing.
+
 - **The panel update no longer says it failed while it is still running.** The
   page gave up after 95 seconds and popped "couldn't confirm the update
   finished", then reloaded -- while the panel itself treats an update as live

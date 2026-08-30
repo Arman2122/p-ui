@@ -256,3 +256,79 @@ func waitClientCount(t *testing.T, h *Hub, want int) {
 	}
 	t.Fatalf("client count never reached %d (last seen %d)", want, h.GetClientCount())
 }
+
+/*
+A throttled mutation push must leave something behind.
+
+Broadcast's throttle drops any gated type that lands within minBroadcastInterval
+of the previous one, and its doc justified that with "the next legitimate
+mutation will push the fresh state". That holds for traffic and clientStats,
+which a collection tick repeats a second or two later. It does not hold for
+inbounds and outbounds: nothing repeats them, so two saves inside the same
+250 ms window left every OTHER open session showing the old list until something
+unrelated changed or the operator reloaded the page.
+
+An invalidate is the same signal an oversized payload already sends and costs
+the client one REST refetch. F344.
+*/
+func TestHub_ThrottledMutationPushFallsBackToInvalidate(t *testing.T) {
+	h := NewHub()
+	defer h.Stop()
+	go h.Run()
+
+	c := NewClient("c1")
+	h.Register(c)
+	waitClientCount(t, h, 1)
+
+	// The first push goes out in full and arms the throttle.
+	h.Broadcast(MessageTypeInbounds, []string{"first"})
+	if m := readMessage(t, c); m.Type != MessageTypeInbounds {
+		t.Fatalf("first push Type = %q, want %q", m.Type, MessageTypeInbounds)
+	}
+
+	// The second lands inside the window and used to vanish.
+	h.Broadcast(MessageTypeInbounds, []string{"second"})
+	m := readMessage(t, c)
+	if m.Type != MessageTypeInvalidate {
+		t.Fatalf("second push Type = %q, want %q: a dropped inbounds push is never repeated, so every other session keeps the old list", m.Type, MessageTypeInvalidate)
+	}
+}
+
+// And a timer-driven type still just drops: its next tick carries the whole
+// state, so an invalidate there would be a REST refetch for nothing.
+func TestHub_ThrottledTimerPushStillDrops(t *testing.T) {
+	h := NewHub()
+	defer h.Stop()
+	go h.Run()
+
+	c := NewClient("c1")
+	h.Register(c)
+	waitClientCount(t, h, 1)
+
+	h.Broadcast(MessageTypeTraffic, map[string]int{"up": 1})
+	if m := readMessage(t, c); m.Type != MessageTypeTraffic {
+		t.Fatalf("first push Type = %q, want %q", m.Type, MessageTypeTraffic)
+	}
+
+	h.Broadcast(MessageTypeTraffic, map[string]int{"up": 2})
+	select {
+	case raw := <-c.Send:
+		t.Fatalf("a throttled traffic push produced %s; the next collection tick already carries it", raw)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func readMessage(t *testing.T, c *Client) Message {
+	t.Helper()
+	select {
+	case raw := <-c.Send:
+		var m Message
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("payload is not valid JSON: %v\n%s", err, raw)
+		}
+		return m
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for a message")
+	}
+	return Message{}
+}

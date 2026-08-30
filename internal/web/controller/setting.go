@@ -141,9 +141,23 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 		LdapPassword: form.ClearLdapPassword,
 		SmtpPassword: form.ClearSmtpPassword,
 	})
+	/*
+		A failed revocation is reported, not turned into a failed save.
+
+		UpdateAllSetting is atomic and has already committed by here, so
+		assigning bumpErr to err told the operator the whole save had failed
+		while every setting was in fact stored. They re-submitted, the second
+		submit found 2FA already on, and the bump never ran again — so the
+		sessions enabling 2FA was meant to revoke stayed valid, silently and
+		permanently. Logout's own contract, two files over, is the same one:
+		log a failed revocation loudly and do not pretend the operation failed.
+		F398.
+	*/
+	var warning string
 	if err == nil && twoFactorErr == nil && !oldTwoFactor && allSetting.TwoFactorEnable {
 		if bumpErr := a.userService.BumpLoginEpoch(); bumpErr != nil {
-			err = bumpErr
+			logger.Error("enable 2fa: could not revoke outstanding sessions, they stay valid until they expire:", bumpErr)
+			warning = I18nWeb(c, "pages.settings.toasts.sessionsNotRevoked")
 		}
 	}
 	if err == nil && form.PanelOutbound != oldPanelOutbound {
@@ -163,6 +177,10 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 		if tgChanged {
 			reloadTgbotFunc()
 		}
+	}
+	if err == nil && warning != "" {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), nil, warning)
+		return
 	}
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 }
