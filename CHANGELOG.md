@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A quiet minute no longer swallows the CPU or memory alert behind it.** The
+  watchdogs publish a reading every minute whatever it is, and the email
+  subscriber spent its one-per-minute allowance before checking the reading
+  against your threshold -- so a normal minute used up the alert, and the spike
+  that followed was dropped with nothing sent and nothing logged.
+
 - **An MTProto inbound on an IPv6 address starts.** The listen address and port
   were joined with a bare colon, so `2001:db8::1` produced something that is not
   an address at all; the MTProto sidecar refused the config and never came up,
