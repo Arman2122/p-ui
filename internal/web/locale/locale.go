@@ -17,8 +17,17 @@ import (
 )
 
 var (
-	i18nBundle   *i18n.Bundle
-	LocalizerWeb *i18n.Localizer
+	i18nBundle *i18n.Bundle
+
+	/*
+		The bot has one language for the whole panel, so one localizer is right.
+
+		The web does NOT, and used to have a package-level LocalizerWeb that
+		LocalizerMiddleware overwrote on every request — with no lock, from two
+		HTTP servers in one process. So a subscriber's Accept-Language decided the
+		language an admin's concurrent response rendered in, and the write raced
+		every read. The web localizer lives on the request now. F407.
+	*/
 	LocalizerBot *i18n.Localizer
 )
 
@@ -74,34 +83,36 @@ func createTemplateData(params []string, separator ...string) map[string]any {
 // It supports both bot and web contexts, with optional template parameters.
 // Returns the localized message or an empty string if localization fails.
 func I18n(i18nType I18nType, key string, params ...string) string {
-	var localizer *i18n.Localizer
-
 	switch i18nType {
-	case "bot":
-		localizer = LocalizerBot
-	case "web":
-		localizer = LocalizerWeb
+	case Bot:
+		return localize(LocalizerBot, key, params...)
+	case Web:
+		// A web string's language comes from the request asking for it, and there
+		// is no request here. LocalizerMiddleware puts a function bound to the
+		// right localizer into the context and I18nWeb calls that; reaching this
+		// arm means somebody asked for a web string outside a request, where the
+		// key is the honest answer.
+		return key
 	default:
 		logger.Errorf("Invalid type for I18n: %s", i18nType)
 		return ""
 	}
+}
 
-	templateData := createTemplateData(params)
-
+// localize renders one message, or the key when there is no localizer to render
+// it with — a missing localizer must never panic a page.
+func localize(localizer *i18n.Localizer, key string, params ...string) string {
 	if localizer == nil {
-		// Fallback to key if localizer not ready; prevents nil panic on pages like sub
 		return key
 	}
-
 	msg, err := localizer.Localize(&i18n.LocalizeConfig{
 		MessageID:    key,
-		TemplateData: templateData,
+		TemplateData: createTemplateData(params),
 	})
 	if err != nil {
 		logger.Errorf("Failed to localize message: %v", err)
 		return ""
 	}
-
 	return msg
 }
 
@@ -139,10 +150,16 @@ func LocalizerMiddleware() gin.HandlerFunc {
 			lang = c.GetHeader("Accept-Language")
 		}
 
-		LocalizerWeb = i18n.NewLocalizer(i18nBundle, lang)
-
-		c.Set("localizer", LocalizerWeb)
-		c.Set("I18n", I18n)
+		// This request's own localizer, and a function bound to it. Nothing
+		// shared, so nothing to race and no language to bleed. F407.
+		localizer := i18n.NewLocalizer(i18nBundle, lang)
+		c.Set("localizer", localizer)
+		c.Set("I18n", func(i18nType I18nType, key string, params ...string) string {
+			if i18nType == Web {
+				return localize(localizer, key, params...)
+			}
+			return I18n(i18nType, key, params...)
+		})
 		c.Next()
 	}
 }

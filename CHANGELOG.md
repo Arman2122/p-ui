@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A page renders in your language, not in whoever asked last.** The web
+  translator was one shared value overwritten by every request -- and the same
+  code runs on the subscription server, so each subscriber poll set it to that
+  subscriber's language. An admin page could come back in a language nobody on
+  it had chosen. It was an unguarded race besides.
+
 - **Turning on a CPU or memory alert now schedules the watchdog, and changing
   the Telegram report time now moves the report.** Both were scheduled once when
   the panel started, from the settings as they were then, and nothing touched
