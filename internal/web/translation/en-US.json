@@ -2089,6 +2089,7 @@
       "disabled": "🛑 Disabled: {{ .Disabled }}\r\n",
       "depleteSoon": "🔜 Deplete Soon: {{ .Deplete }}\r\n\r\n",
       "backupTime": "🗄 Backup Time: {{ .Time }}\r\n",
+      "backupDbFailed": "⚠️ The database backup could not be sent. Check the panel logs; pg_dump may be missing or the upload failed.\r\n",
       "refreshedOn": "\r\n📋🔄 Refreshed On: {{ .Time }}\r\n\r\n",
       "yes": "✅ Yes",
       "no": "❌ No",

@@ -419,13 +419,31 @@ func (t *Tgbot) sendBackup(chatId int64) {
 	t.sendBackupData(chatId, dbData, t.serverService.BackupFilename(""))
 }
 
+/*
+sendBackupData opens by asserting a backup happened -- the hostname and the
+backup time go out before anything is attempted -- and then had exits that
+produced no chat output at all. An admin who asked for a backup, or who receives
+the scheduled one, got a header saying a backup was taken at a given time and
+then silence, which reads as "the file is on its way".
+
+Two exits now speak, both through one key: a dump that was never built (pg_dump
+missing, a bad DSN, a non-zero exit) and an upload that failed. The second is the
+likelier one in production and the one an earlier version of this fix left out:
+ordinary messages retry three times with backoff while this document send has no
+retries at all, so a failed document on a chat that is plainly working is exactly
+the case the admin cannot otherwise detect.
+
+F273.
+*/
 func (t *Tgbot) sendBackupData(chatId int64, dbData []byte, dbFilename string) {
 	output := t.I18nBot("tgbot.messages.hostname", "Hostname=="+hostname)
 	output += t.I18nBot("tgbot.messages.backupTime", "Time=="+time.Now().Format("2006-01-02 15:04:05"))
 	t.SendMsgToTgbot(chatId, output)
 
 	// Send the database backup (a pg_dump custom-format archive)
-	if dbData != nil {
+	// len, not nil: a zero-length dump is a failure too, and uploading it would
+	// hand the admin an archive pg_restore cannot read.
+	if len(dbData) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		document := tu.Document(
 			tu.ID(chatId),
@@ -435,7 +453,10 @@ func (t *Tgbot) sendBackupData(chatId int64, dbData []byte, dbFilename string) {
 		cancel()
 		if err != nil {
 			logger.Error("Error in uploading backup: ", err)
+			t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.messages.backupDbFailed"))
 		}
+	} else {
+		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.messages.backupDbFailed"))
 	}
 
 	// Small delay between file sends

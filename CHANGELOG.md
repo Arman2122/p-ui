@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A Telegram backup that failed now says so.** The message always opened by
+  stating the hostname and the backup time, and then said nothing at all if the
+  database dump could not be produced or the upload failed. An admin saw a
+  header naming a time and assumed the file was on its way -- and found out
+  otherwise when they needed to restore.
+  **What you will notice:** a warning in the chat when the dump could not be
+  built or the upload did not go through. A successful backup is unchanged.
+
 - **LDAP no longer re-enables clients on inbounds it was not given.** The sync
   decided who to enable from a list of every client on the panel, without
   checking whether the client was on any of the inbounds you put under LDAP
