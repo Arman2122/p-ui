@@ -259,7 +259,7 @@ func TestResetInboundTrafficRestoresAnInboundItsQuotaDisabled(t *testing.T) {
 		t.Fatalf("disable by hand: %v", err)
 	}
 
-	if _, _, err := svc.disableInvalidInbounds(db); err != nil {
+	if _, _, _, err := svc.disableInvalidInbounds(db); err != nil {
 		t.Fatalf("disableInvalidInbounds: %v", err)
 	}
 	if reloadInbound(t, depleted.Id).Enable {
