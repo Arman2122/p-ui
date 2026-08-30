@@ -1410,6 +1410,30 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		return inbound, false, "", err
 	}
 
+	/*
+		A protocol change reinterprets every stored client under the new kind.
+
+		AddInbound asks the core about each client; this path never did, so a
+		switch between two kinds the same core does not serve -- wireguard to
+		mtproto, say -- rewrote the row with credentials the new kind has no
+		field for. validateInboundForXray covers the xray-served kinds only, and
+		returns nil for a disabled or node-hosted inbound besides.
+
+		Gated on the change: running it on every save would refuse a metadata
+		edit because of a client an older build let in. F030.
+	*/
+	if inbound.Protocol != oldInbound.Protocol {
+		clients, cErr := s.GetClients(inbound)
+		if cErr != nil {
+			return inbound, false, "", cErr
+		}
+		for i := range clients {
+			if err := validateClientForKind(inbound.Protocol, inbound.Settings, &clients[i]); err != nil {
+				return inbound, false, "", err
+			}
+		}
+	}
+
 	// Credentials the core would parse and never check make this an open proxy.
 	if err := refuseUnenforcedAccounts(inbound); err != nil {
 		return inbound, false, "", err

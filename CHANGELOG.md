@@ -8,7 +8,33 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
-- **The egress pre-flight stops condemning the panel'''s own routing fronts.** A
+- **A subscription whose clients expire on different days stops claiming it
+  never expires.** The header apps read for the countdown carries one number,
+  and a subscription folding two clients with different deadlines set it to
+  zero -- which on the wire means "unlimited". The client app showed no expiry
+  at all, right up until access stopped.
+  **What you will notice:** the nearest of the deadlines. A client that
+  genuinely never expires still makes the whole subscription unlimited, the same
+  way one unlimited client already makes its traffic allowance unlimited.
+
+- **An inbound can no longer be saved on port 0.** The panel accepted it over
+  the API and the Telegram bot -- the form always refused it -- and the core
+  then bound whatever port the operating system handed it, changing on every
+  restart, while the inbound list, every share link and the port-conflict check
+  all said 0.
+  **What you will notice:** a validation error instead. An update that omits the
+  port is refused for the same reason, rather than silently moving the inbound
+  to a random one.
+
+- **Changing an inbound's protocol checks the clients it already has.** The
+  switch was applied to the stored row without asking the new protocol whether
+  it could serve them, so, for instance, a VLESS inbound turned into a kernel
+  WireGuard one came up with peers the kernel has no key for -- every client of
+  it offline, and the save reported as a success.
+  **What you will notice:** the switch is refused, naming what the clients are
+  missing. Editing anything else on an inbound is unaffected.
+
+- **The egress pre-flight stops condemning the panel's own routing fronts.** A
   front the panel provisions has no target of its own -- the target comes from
   the rule that names it -- but the check asked every enabled front to resolve
   one, so each of yours was reported as "contained rather than routed". Fronts
@@ -24,13 +50,13 @@ here; the git log is the full record.
 
 - **The AmneziaWG installer prints a command that exists.** On a machine without
   kernel headers it told you to run `p-ui awg install`, which is not a command;
-  the panel'''s own installers print the right one.
+  the panel's own installers print the right one.
 
-- **A WireGuard client is never handed the inbound'''s own device address.** The
+- **A WireGuard client is never handed the inbound's own device address.** The
   allocator skipped addresses other inbounds used but not the address of the
   device it was allocating for, so on a device at, say, `10.0.0.5/24` the fourth
   client created got `10.0.0.5` -- the same address the server answers on. That
-  client'''s return traffic went to the server itself instead of into the tunnel,
+  client's return traffic went to the server itself instead of into the tunnel,
   silently.
   **What you will notice:** that address is skipped. Existing clients are not
   renumbered; if one already holds the device address, change it by hand.
@@ -50,13 +76,13 @@ here; the git log is the full record.
 
 - **WireGuard addresses no longer collide with networks the server itself is
   on.** The panel decided which subnets were free by looking only at its own
-  inbounds -- but the thing being handed out is the server'''s single routing
-  table, and your LAN interface, docker'''s bridge or a private-network NIC are in
+  inbounds -- but the thing being handed out is the server's single routing
+  table, and your LAN interface, docker's bridge or a private-network NIC are in
   it without any inbound saying so. A tunnel subnet overlapping one of those
-  saved cleanly and then installed a route that captured that network'''s traffic.
+  saved cleanly and then installed a route that captured that network's traffic.
   **What you will notice:** creating an inbound on a subnet the server already
   holds is refused, naming the interface that holds it. Client addresses are
-  allocated AROUND such ranges rather than refused. If the server'''s addresses
+  allocated AROUND such ranges rather than refused. If the server's addresses
   cannot be read -- a transient failure, or a non-Linux box -- nothing is refused
   and behaviour is exactly as before. Existing inbounds are not re-checked, so
   one that already overlaps stays editable.
@@ -98,10 +124,10 @@ here; the git log is the full record.
   active while doing nothing.
   **What you will notice:** the subject is shown as unavailable with the reason.
   No traffic changes route; this only stops the picker offering a rule that
-  cannot fire. Clear the inbound'''s own Outbound field to route it by rules.
+  cannot fire. Clear the inbound's own Outbound field to route it by rules.
 
 - **The panel stops treating its own AmneziaWG uplink devices as somebody
-  else'''s.** It recognised only one naming scheme for the devices it dials out
+  else's.** It recognised only one naming scheme for the devices it dials out
   through, and AmneziaWG uses a second. A healthy AmneziaWG uplink therefore read
   as foreign: the pre-flight refused it as a squatter on its own routing table,
   and disabling it left its route behind as though it belonged to another
@@ -109,12 +135,12 @@ here; the git log is the full record.
   **What you will notice:** AmneziaWG uplinks pass the pre-flight and are cleaned
   up properly when disabled.
 
-- **The panel'''s own outbound requests re-check the address they actually dial.**
+- **The panel's own outbound requests re-check the address they actually dial.**
   Three clients -- the traffic-report webhook, the Telegram API client and the
   subscription fetcher -- validated an administrator-supplied URL against the
   private-address policy and then dialled with an unchecked resolver, so a
   hostname that answered publicly at check time and privately at dial time
-  reached the panel'''s own loopback or LAN. The subscription fetcher also
+  reached the panel's own loopback or LAN. The subscription fetcher also
   followed redirects to addresses nobody had checked at all.
   **What you will notice:** nothing, unless you were pointing one of these at a
   private address, which was already refused. Telegram traffic through a
@@ -152,7 +178,7 @@ here; the git log is the full record.
 
 - **Changing the WARP IP no longer loses your WARP+ licence.** Rotating
   registered a new device, which overwrote the stored WARP+ key with the new
-  device'''s free one, and only then tried to re-apply yours -- a step allowed to
+  device's free one, and only then tried to re-apply yours -- a step allowed to
   fail with a warning. Cloudflare rate-limits registrations, so a rotation
   retried a couple of times is exactly when that fails, and the paid key was
   then gone from the panel with nothing left to retry from.
@@ -160,9 +186,9 @@ here; the git log is the full record.
   re-apply fails, so you can rotate again later.
 
 - **"Move up" on the first template routing rule no longer reorders two other
-  rules.** The routing table shows your own rules and the template'''s as one
+  rules.** The routing table shows your own rules and the template's as one
   list, but they are stored separately. Moving the first template rule up used
-  the neighbouring OPERATOR rule'''s position as though it were a template
+  the neighbouring OPERATOR rule's position as though it were a template
   position, and swapped two template rules you never touched. Routing is
   first-match, so that changes which rule decides your traffic, and nothing said
   it had happened.
@@ -227,7 +253,7 @@ here; the git log is the full record.
   Xray After Auto Disable" switched off.
 
 - **Disabling an inbound now takes effect even if removing it from the core
-  fails.** The removal'''s failure was ignored entirely: the switch was saved,
+  fails.** The removal's failure was ignored entirely: the switch was saved,
   the panel reported success, and the listener stayed up with every current
   client still connected to an inbound shown as off. Nothing retried, because
   the fallback that rebuilds the config from the database was never triggered.
@@ -248,7 +274,7 @@ here; the git log is the full record.
   for VLESS and VMess, on the password for Trojan, on the auth string for
   Hysteria. Two clients with the same value were ONE user to the core: both
   showed in the panel with their own quotas, all the traffic landed on
-  whichever one the core kept, and deleting the other took the survivor'''s
+  whichever one the core kept, and deleting the other took the survivor's
   access down with it.
   **What you will notice:** creating or editing a client into a duplicate is
   refused, naming the client that already holds the value. Clients already in
@@ -258,7 +284,7 @@ here; the git log is the full record.
 - **"Keep SNI blank" on a host now actually keeps it blank.** The switch was a
   no-op on every TLS path: the panel expressed "blank" by simply not writing an
   SNI, which every link generator read as "no override" -- and each of them had
-  already written the inbound'''s own SNI, so the value you flipped the switch to
+  already written the inbound's own SNI, so the value you flipped the switch to
   hide was published anyway. Raw links, Clash and JSON were all affected, for
   VMess, VLESS, Trojan, Shadowsocks and Hysteria.
   **What you will notice:** subscriptions for such a host carry no SNI. Hosts
@@ -268,7 +294,7 @@ here; the git log is the full record.
   it, instead of publishing your origin address.** "No host applies here" and
   "this inbound has no hosts at all" were treated as the same thing, so closing
   every host to, say, Clash did not take the inbound out of the Clash
-  subscription -- it fell back to the inbound'''s own address, which is exactly
+  subscription -- it fell back to the inbound's own address, which is exactly
   what the host was added to hide. Raw, JSON and Clash were all affected.
   **What you will notice:** such an inbound no longer appears in that format at
   all. Traffic totals in the subscription header are unchanged -- the clients are
@@ -280,7 +306,7 @@ here; the git log is the full record.
   start after an install -- the panel launched the core, saw the process spawn,
   and reported success. The core then read the config, refused it and exited, so
   the Restart button said it worked while the panel served nothing.
-  **What you will notice:** the failure is reported immediately, carrying Xray'''s
+  **What you will notice:** the failure is reported immediately, carrying Xray's
   own explanation of what it did not like.
 
 - **Creating a tun inbound no longer binds every outbound to one network
@@ -331,7 +357,7 @@ here; the git log is the full record.
   MTProto inbound with an unlucky port number took every inbound on the server
   offline.
   **What you will notice:** the clash is detected while the config is built. That
-  one inbound'''s Telegram traffic will not work until you change its port, and
+  one inbound's Telegram traffic will not work until you change its port, and
   the log says which inbound is holding it; everything else keeps running. A
   UDP-only neighbour on the same port number is not a clash and still bridges.
 
@@ -387,7 +413,7 @@ here; the git log is the full record.
   has in their config; edit those by hand.
 
 - **The client form now says when an Auto Renew period can never run.** Auto
-  Renew moves a client'''s expiry date forward -- so a client given a renew
+  Renew moves a client's expiry date forward -- so a client given a renew
   period and no expiry date has nothing to renew. It is disabled the moment its
   quota runs out and stays that way: nothing renews it, and the depleted-client
   cleanup skips it too because that only removes clients with no renew period.
@@ -397,7 +423,7 @@ here; the git log is the full record.
   refused, and existing clients are untouched.
 
 - **The installer no longer reports HTTPS after a certificate failed to issue.**
-  When Let'''s Encrypt could not issue for your domain or your IP, the installer
+  When Let's Encrypt could not issue for your domain or your IP, the installer
   printed the red failure line and then went on to print an `https://` access
   URL, state "SSL Certificate: Enabled and configured", and write `scheme=https`
   into `/etc/p-ui/install-result.env` for cloud-init and the login banner to

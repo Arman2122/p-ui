@@ -313,3 +313,71 @@ func TestSaveAcceptsACertificateNotIssuedYet(t *testing.T) {
 		t.Fatalf("error %q does not name the core's reason", err)
 	}
 }
+
+/*
+A protocol change is asked about every client the row already holds.
+
+AddInbound runs validateClientForKind over each client; UpdateInbound never
+did. It assigned the request's protocol straight onto the stored row, so a
+switch reinterpreted every credential under a kind that has no field for it.
+
+validateInboundForXray does not cover this: it returns nil for a kind xray does
+not serve, and for a disabled or node-hosted inbound besides. Switching a vless
+inbound to kernel WireGuard therefore saved cleanly, and the device came up with
+a peer list the kernel could not authenticate anything against -- every client
+of that inbound offline, with the save reported as a success.
+
+Gated on the protocol actually changing: an unconditional check would refuse a
+remark edit because of a client an older build let in. F030.
+*/
+func TestUpdateInboundValidatesClientsAgainstTheNewProtocol(t *testing.T) {
+	initTestDB(t)
+	svc := InboundService{}
+
+	created, _, _, err := svc.AddInbound(&model.Inbound{
+		UserId: 1, Enable: true, Port: 20131, Protocol: model.VLESS, Tag: "switcher",
+		Settings:       `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"switch@b"}],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"none"}`,
+	})
+	if err != nil {
+		t.Fatalf("AddInbound: %v", err)
+	}
+
+	switched := *created
+	switched.Protocol = model.WGKernel
+	switched.Settings = `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.91.0.1/24"],` +
+		`"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"switch@b"}]}`
+	if _, _, _, err := svc.UpdateInbound(&switched); err == nil {
+		t.Fatal("a vless client with no public key was accepted onto a kernel WireGuard inbound; the kernel authenticates by key alone, so that peer can never connect")
+	}
+
+	reloaded, err := svc.GetInbound(created.Id)
+	if err != nil {
+		t.Fatalf("GetInbound: %v", err)
+	}
+	if reloaded.Protocol != model.VLESS {
+		t.Fatalf("the refused switch was committed anyway: protocol=%v", reloaded.Protocol)
+	}
+}
+
+// And an edit that leaves the protocol alone is not newly refused, which is the
+// whole reason the check is gated rather than unconditional.
+func TestUpdateInboundStillAcceptsAMetadataEdit(t *testing.T) {
+	initTestDB(t)
+	svc := InboundService{}
+
+	created, _, _, err := svc.AddInbound(&model.Inbound{
+		UserId: 1, Enable: true, Port: 20132, Protocol: model.VLESS, Tag: "renamable",
+		Settings:       `{"clients":[{"id":"11111111-2222-3333-4444-555555555555","email":"rename@b"}],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"none"}`,
+	})
+	if err != nil {
+		t.Fatalf("AddInbound: %v", err)
+	}
+
+	renamed := *created
+	renamed.Remark = "still fine"
+	if _, _, _, err := svc.UpdateInbound(&renamed); err != nil {
+		t.Fatalf("a remark edit was refused: %v", err)
+	}
+}

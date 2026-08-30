@@ -45,6 +45,12 @@ func TestAnImportedInboundIsValidatedLikeOneThatWasAdded(t *testing.T) {
 			why:     "model.Inbound tags port lte=65535, and a port that cannot bind is a config xray refuses",
 		},
 		{
+			name:    "a port of zero",
+			inbound: model.Inbound{UserId: 1, Port: 0, Protocol: model.VLESS, Tag: "t", Listen: "0.0.0.0"},
+			refused: true,
+			why:     "xray binds port 0 to whatever the OS hands it, so the inbound serves on a port that changes every restart while the panel, the share links and the port-conflict view all say 0",
+		},
+		{
 			name:    "a protocol that is not in the enum",
 			inbound: model.Inbound{UserId: 1, Port: 443, Protocol: model.Protocol("not-a-protocol"), Tag: "t", Listen: "0.0.0.0"},
 			refused: true,
