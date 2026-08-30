@@ -2140,7 +2140,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "port": {
         "example": 443,
         "maximum": 65535,
-        "minimum": 1,
+        "minimum": 0,
         "type": "integer"
       },
       "protocol": {
