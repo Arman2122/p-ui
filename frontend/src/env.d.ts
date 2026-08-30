@@ -17,6 +17,10 @@ interface SubPageData {
   subTitle?: string;
   links?: string[];
   emails?: string[];
+  /* Parallel to links: entry i belongs to a client that is switched off. The
+     link is still served so the body keeps parsing for every app; the page is
+     where a person is told. */
+  ended?: boolean[];
   datepicker?: 'gregorian' | 'jalalian';
   announce?: string;
   downloadByte?: string | number;

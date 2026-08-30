@@ -79,6 +79,21 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+/* A link whose client is switched off. It is still copyable and still scans:
+   the operator may have renewed by the time it is used, and hiding it would
+   leave the page short of an entry with no explanation. Muted, not removed. */
+.sub-link-row-ended {
+  opacity: 0.55;
+}
+
+.sub-link-row-ended .sub-link-title {
+  text-decoration: line-through;
+}
+
+.sub-link-ended-tag {
+  margin-inline-start: auto;
+}
+
 .sub-link-tag {
   margin: 0;
   flex-shrink: 0;

@@ -98,7 +98,8 @@
     "unlimited": "Unlimited",
     "noExpiry": "No expiry",
     "copyAllConfigs": "Copy All Configs",
-    "copyAllConfigsCopied": "All configs copied"
+    "copyAllConfigsCopied": "All configs copied",
+    "linkEnded": "Ended"
   },
   "menu": {
     "theme": "Theme",

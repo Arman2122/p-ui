@@ -316,15 +316,6 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 			if client.Enable {
 				hasEnabledClient = true
 			}
-			// A disabled client's account is removed from the core, so its link
-			// cannot connect. The file-share path has always skipped it; the link,
-			// JSON and Clash paths handed one out that looked like every other.
-			// seenEmails stays unconditional below, so the traffic header still
-			// counts it. F249.
-			if !client.Enable {
-				seenEmails[client.Email] = struct{}{}
-				continue
-			}
 			var link string
 			if hostEps != nil {
 				link = s.linkFromHosts(inbound, client, hostEps)
@@ -2694,6 +2685,16 @@ type PageData struct {
 	SubSupportUrl string
 	Result        []string
 	Emails        []string
+	/*
+		Ended[i] says the client behind Result[i] is switched off — out of
+		traffic, past its expiry, or disabled by hand.
+
+		Its link is still served: the body has to keep parsing for every app that
+		fetches it, and an empty subscription reads as a broken URL rather than as
+		an ended account. So the PAGE is where the truth goes, per entry, because
+		the page is the one surface a person actually looks at. F249.
+	*/
+	Ended []bool
 }
 
 // ResolveRequest extracts scheme and host info from request/headers consistently.
@@ -2833,16 +2834,20 @@ func (s *SubService) BuildPageData(subId string, hostHeader string, traffic xray
 		datepicker = "gregorian"
 	}
 
+	ended := s.endedEmails(emails)
 	pageLinks := make([]string, 0, len(subs))
 	pageEmails := make([]string, 0, len(subs))
+	pageEnded := make([]bool, 0, len(subs))
 	for i, sub := range subs {
 		email := ""
 		if i < len(emails) {
 			email = emails[i]
 		}
+		_, off := ended[email]
 		for _, link := range splitLinkLines(sub) {
 			pageLinks = append(pageLinks, link)
 			pageEmails = append(pageEmails, email)
+			pageEnded = append(pageEnded, off)
 		}
 	}
 
@@ -2870,7 +2875,34 @@ func (s *SubService) BuildPageData(subId string, hostHeader string, traffic xray
 		SubSupportUrl: subSupportUrl,
 		Result:        pageLinks,
 		Emails:        pageEmails,
+		Ended:         pageEnded,
 	}
+}
+
+/*
+endedEmails names the clients of this subscription that are switched off.
+
+Read from the clients table rather than from the settings blob each link came
+out of: `enable` there is the flag the traffic job clears when a client runs out
+or expires, which is the state a subscriber is asking about. Page-path only, so
+the body renderers pay nothing for it.
+*/
+func (s *SubService) endedEmails(emails []string) map[string]struct{} {
+	out := map[string]struct{}{}
+	if len(emails) == 0 {
+		return out
+	}
+	var rows []model.ClientRecord
+	if err := database.GetDB().Model(&model.ClientRecord{}).
+		Where("email IN ? AND enable = ?", emails, false).
+		Find(&rows).Error; err != nil {
+		logger.Warning("SubService - endedEmails:", err)
+		return out
+	}
+	for _, row := range rows {
+		out[row.Email] = struct{}{}
+	}
+	return out
 }
 
 func subIsOnline(subEmails, onlineEmails []string) bool {

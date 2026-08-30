@@ -98,7 +98,8 @@
     "unlimited": "نامحدود",
     "noExpiry": "بدون انقضا",
     "copyAllConfigs": "کپی همه کانفیگ‌ها",
-    "copyAllConfigsCopied": "همه کانفیگ‌ها کپی شدند"
+    "copyAllConfigsCopied": "همه کانفیگ‌ها کپی شدند",
+    "linkEnded": "پایان‌یافته"
   },
   "menu": {
     "theme": "تم",

@@ -100,17 +100,22 @@ moved it. Left for the operator to undo or keep.
 
 ---
 
-## One judgement call this campaign made that is worth vetoing if you disagree
+## Answered, 2026-08-31
 
-**F249 — a subscription no longer hands out links for disabled clients.**
-Disabling a client removes its account from the core, so its link cannot
-connect; the panel's own file-share path has always skipped them, and the link,
-JSON and Clash renderers now agree with it.
+- **F249 — the operator chose: keep serving the links, and say it on the page.**
+  My first fix withheld a disabled client's link, which made an all-disabled
+  subscription answer 404. Reverted. The body is unchanged for every client
+  whatever its state, so it keeps parsing in every app; the subscription page
+  now dims that entry, strikes the name through and tags it "Ended". Better
+  reasoning than mine had: a subscription that suddenly serves nothing reads as
+  a broken URL rather than as an ended account.
+- **F179 — a pointer field.** `PreSharedKey *string`: nil is omitted, a pointer
+  to empty is cleared. No new API surface, correct by construction, ~15 sites.
+  `keepAlive` takes the same treatment.
+- **The multi-core group (F060, F089, F120, F302, F314) — extend the contract.**
+  An optional Sessions capability in `internal/core`; cores that can report
+  sessions implement it, cores that cannot declare so, and the panel stops
+  offering limitIp and online status for kinds that cannot back them.
+- **Order of work — the decisions above come before tier 3.**
 
-The consequence to be aware of: **a subscription whose clients are ALL disabled
-now answers 404**, the same as one with nothing else to serve. A depleted user's
-app therefore sees an update failure and keeps its last profile, rather than
-loading a list of servers that all refuse. That is the honest signal, but it IS
-a change in what every depleted subscriber's app does, and it was mine to pick
-rather than yours. Say the word and it goes back to serving dead links, or to
-some third behaviour.
+Still open: items 3b (F141) and 3 (F319) below, plus 4 through 8.

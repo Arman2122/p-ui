@@ -612,8 +612,12 @@ func (a *SUBController) subPageContext(page PageData) map[string]any {
 		"subSupportUrl": page.SubSupportUrl,
 		"links":         page.Result,
 		"emails":        page.Emails,
-		"datepicker":    datepicker,
-		"announce":      a.subAnnounce,
+		// Parallel to links: entry i belongs to a client that is switched off.
+		// The link is still served so every app keeps parsing the body; the page
+		// is where a person is told. F249.
+		"ended":      page.Ended,
+		"datepicker": datepicker,
+		"announce":   a.subAnnounce,
 	}
 }
 
