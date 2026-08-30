@@ -1647,8 +1647,13 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 				*/
 				postCommitApply = func() {
 					if runtimeInbound == nil {
+						// Also reached for an ENABLED inbound whose runtime config failed
+						// to build, so the log does not claim the inbound was disabled.
 						if err2 := rt.DelInbound(context.Background(), &oldSnapshot); err2 == nil {
-							logger.Debug("Disabled inbound removed on", rt.Name(), ":", tag)
+							logger.Debug("Inbound removed on", rt.Name(), ":", tag)
+						} else {
+							logger.Debug("Unable to remove inbound on", rt.Name(), ":", err2)
+							needRestart = true
 						}
 						return
 					}
