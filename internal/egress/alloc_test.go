@@ -245,3 +245,47 @@ func equalStrings(got, want []string) bool {
 	}
 	return true
 }
+
+/*
+A device this panel dials is ours in either namespace it dials in.
+
+ownedUplinkID knew one prefix, "pux". internal/awg dials through its own,
+"paux", and the manager uses this predicate to decide whether a device it finds
+belongs to the panel or to somebody else on the box.
+
+So a healthy AmneziaWG uplink read back as FOREIGN. The preflight refused it as
+a squatter on its own table, and the disable pass saw it as an outsider's route
+rather than one of ours to withdraw -- the panel treating its own kernel objects
+as an intruder's.
+
+The loop continues rather than returning on a near miss: "pux" prefixes nothing
+else today, but a name that begins with one prefix and fails its round-trip must
+not hide a hit in the other. F076.
+*/
+func TestOwnedUplinkIDKnowsBothDialledNamespaces(t *testing.T) {
+	cases := []struct {
+		name   string
+		device string
+		wantID int
+		wantOK bool
+	}{
+		{name: "the plain wireguard namespace", device: "pux7", wantID: 7, wantOK: true},
+		{name: "the amneziawg namespace", device: "paux7", wantID: 7, wantOK: true},
+		{name: "an ingress device is not a dialled one", device: "pwg7", wantOK: false},
+		{name: "a padded id does not round-trip", device: "pux007", wantOK: false},
+		{name: "a padded id in the awg namespace does not either", device: "paux007", wantOK: false},
+		{name: "somebody else's device", device: "eth0", wantOK: false},
+		{name: "the bare prefix", device: "paux", wantOK: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id, ok := ownedUplinkID(tc.device)
+			if ok != tc.wantOK {
+				t.Fatalf("ownedUplinkID(%q) ok = %v, want %v: the manager uses this to tell its own kernel objects from an outsider's", tc.device, ok, tc.wantOK)
+			}
+			if ok && id != tc.wantID {
+				t.Fatalf("ownedUplinkID(%q) id = %d, want %d", tc.device, id, tc.wantID)
+			}
+		})
+	}
+}

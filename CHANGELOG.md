@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The panel stops treating its own AmneziaWG uplink devices as somebody
+  else'''s.** It recognised only one naming scheme for the devices it dials out
+  through, and AmneziaWG uses a second. A healthy AmneziaWG uplink therefore read
+  as foreign: the pre-flight refused it as a squatter on its own routing table,
+  and disabling it left its route behind as though it belonged to another
+  program.
+  **What you will notice:** AmneziaWG uplinks pass the pre-flight and are cleaned
+  up properly when disabled.
+
 - **The panel'''s own outbound requests re-check the address they actually dial.**
   Three clients -- the traffic-report webhook, the Telegram API client and the
   subscription fetcher -- validated an administrator-supplied URL against the
