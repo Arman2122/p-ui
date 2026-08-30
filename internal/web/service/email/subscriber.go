@@ -37,11 +37,21 @@ func (s *Subscriber) HandleEvent(e eventbus.Event) {
 	if !s.isEventEnabled(e.Type) {
 		return
 	}
-	if !s.limiter.Allow(e.Type, eventbus.LimiterKey(e)) {
-		return
-	}
+	/*
+		Formatted first, rate-limited second.
+
+		formatMessage is where cpu.high and memory.high compare the reading
+		against the operator's threshold and return nothing when it is below it.
+		Spending the limiter's token before that meant a quiet minute consumed the
+		allowance, and the watchdogs publish on every run at the same one-minute
+		cadence as the cooldown — so an alert that really did cross the threshold
+		was dropped because the reading before it had not. F365.
+	*/
 	subject, body := s.formatMessage(e)
 	if subject == "" {
+		return
+	}
+	if !s.limiter.Allow(e.Type, eventbus.LimiterKey(e)) {
 		return
 	}
 	if err := s.emailService.Send(subject, body); err != nil {
