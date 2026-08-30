@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Six labels that were showing their own key now show words.** Four of them
+  read like English by accident -- "apply", "disable", "empty", "inbounds" --
+  which is exactly why nobody noticed, and none of them had a Persian
+  translation. The other two were worse: a failed copy said "copyFail", and 22
+  places that report a failed load showed nothing at all before the error, so
+  the message began with a bare bracket.
+
 - **The NordVPN server list shows the quiet servers again.** It kept only
   servers whose load was ABOVE 7 percent -- the filter upside down -- so the
   least loaded servers, the ones worth picking, were exactly the ones dropped,
