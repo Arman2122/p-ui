@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Disabling an inbound now takes effect even if removing it from the core
+  fails.** The removal'''s failure was ignored entirely: the switch was saved,
+  the panel reported success, and the listener stayed up with every current
+  client still connected to an inbound shown as off. Nothing retried, because
+  the fallback that rebuilds the config from the database was never triggered.
+  **What you will notice:** such a failure now schedules a reload, so the inbound
+  really does stop serving.
+
 - **Disabling an outbound subscription now takes effect.** Editing a
   subscription -- turning it off, changing its prepend flag, reordering it --
   saved the change and never told Xray to reload, so its outbounds stayed in the

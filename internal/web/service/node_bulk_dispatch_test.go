@@ -31,6 +31,7 @@ type fakeNodeRuntime struct {
 	// addUserTransientFailures makes the first N AddUser calls fail and the rest
 	// succeed. The zero values keep every existing test on the success path.
 	updateInboundErr         error
+	delInboundErr            error
 	addUserErr               error
 	addUserTransientFailures atomic.Int32
 }
@@ -44,7 +45,7 @@ func (f *fakeNodeRuntime) AddInbound(context.Context, *model.Inbound) error {
 
 func (f *fakeNodeRuntime) DelInbound(context.Context, *model.Inbound) error {
 	f.delInbound.Add(1)
-	return nil
+	return f.delInboundErr
 }
 
 func (f *fakeNodeRuntime) UpdateInbound(context.Context, *model.Inbound, *model.Inbound) error {

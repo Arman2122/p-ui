@@ -136,3 +136,46 @@ func TestDisablingAnXrayInboundRemovesItFromTheCore(t *testing.T) {
 		t.Fatalf("add ran %d time(s) for a disabled inbound, want 0", add)
 	}
 }
+
+/*
+And when that removal FAILS, the panel must fall back to a restart.
+
+The UpdateInbound branch three lines below this one raises needRestart when its
+push fails; the DelInbound branch logged success and did nothing at all on
+failure. So a disable whose removal was refused -- a node briefly unreachable, a
+core that lost the handler -- committed enable=false to the database, told the
+operator it worked, and left the listener up. Every current client stayed
+connected to an inbound the panel shows as off, and nothing ever retried,
+because the restart flag that would have rebuilt the config from the database
+was never raised.
+
+F235.
+*/
+func TestAFailedRemovalOfADisabledInboundAsksForARestart(t *testing.T) {
+	setupConflictDB(t)
+
+	mgr := runtime.NewManager(runtime.LocalDeps{Cores: testCores(t)})
+	fake := &fakeNodeRuntime{delInboundErr: errors.New("node unreachable")}
+	mgr.SetLocalRuntimeOverride(fake)
+	runtime.SetManager(mgr)
+	t.Cleanup(func() { runtime.SetManager(nil) })
+
+	seedInboundConflict(t, "vless-off-fail", "", 46173, model.VLESS, "",
+		`{"clients":[{"email":"offfail","id":"4b3d2f6e-6f1a-4b7c-9d2e-1f0a5c8b7d63","enable":true}],"decryption":"none"}`)
+	seeded := loadInboundByTag(t, "vless-off-fail")
+	seedClientTraffic(t, seeded.Id, "offfail", true)
+
+	update := *loadInboundByTag(t, "vless-off-fail")
+	update.Enable = false
+	_, needRestart, _, err := (&InboundService{}).UpdateInbound(&update)
+	if err != nil {
+		t.Fatalf("UpdateInbound: %v", err)
+	}
+
+	if fake.delInbound.Load() != 1 {
+		t.Fatalf("the removal was not attempted at all: del=%d", fake.delInbound.Load())
+	}
+	if !needRestart {
+		t.Fatal("the removal failed and the panel did not ask for a restart; the disabled inbound's listener stays up serving every client already on it, and nothing retries")
+	}
+}
