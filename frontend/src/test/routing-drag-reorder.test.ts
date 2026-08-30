@@ -116,3 +116,45 @@ describe('every reorder path uses the shared predicate', () => {
     expect(src.split('canSwapRows(').length - 1).toBe(3);
   });
 });
+
+/*
+And the api rule cannot be moved at all.
+
+Its drag handle was rendered like every other row's, and moveUp/moveDown were
+gated on index alone -- only the enable Switch knew about it. So a template rule
+could be dragged above it, the table redrew in the new order, and the save then
+put the api rule back at the top (EnsureStatsRouting, xray_setting.go), with no
+response field and no toast saying so. The order on screen was not the order
+stored, and routing is first-match.
+
+The stats API rule really does have to lead: it is what the traffic counters
+read. So the honest fix is to stop offering the move, not to accept it. F200.
+*/
+const API_RULE: RuleRow = {
+  key: 0, source: 'template', storeIndex: 0, inboundTag: 'api', outboundTag: 'api',
+};
+const ORDINARY: RuleRow = { key: 1, source: 'template', storeIndex: 1 };
+
+describe('the stats api rule', () => {
+  it('cannot be swapped in either direction', () => {
+    expect(
+      canSwapRows(ORDINARY, API_RULE),
+      'a rule was allowed above the api rule; the save silently puts it back and the table then lies about the order',
+    ).toBe(false);
+    expect(canSwapRows(API_RULE, ORDINARY)).toBe(false);
+  });
+
+  it('still lets two ordinary template rules swap', () => {
+    expect(canSwapRows(ORDINARY, { ...ORDINARY, key: 2, storeIndex: 2 })).toBe(true);
+  });
+
+  it('is rendered without a drag handle', async () => {
+    const src = await import('@/pages/xray/routing/useRoutingColumns.tsx?raw').then((m) => m.default as string);
+    const at = src.indexOf('<HolderOutlined');
+    expect(at, 'the drag handle was renamed; this guard is now vacuous').toBeGreaterThan(-1);
+    expect(
+      src.slice(Math.max(0, at - 200), at),
+      'the api rule is handed a drag handle for a move the panel undoes on save',
+    ).toContain('isApiRule(');
+  });
+});

@@ -27,9 +27,15 @@ export function originalRuleIndex(rows: RuleRow[], positionalIndex: number): num
  * boundary therefore names no position in either list: taking the neighbour's
  * storeIndex and indexing the template array with it reorders an unrelated
  * rule, and routing is first-match, so that changes which rule decides.
+ *
+ * The api rule cannot move at all: the panel hoists it back on every save.
  */
 export function canSwapRows(a?: RuleRow, b?: RuleRow): boolean {
-  return !!a && !!b && a.source === b.source;
+  if (!a || !b || a.source !== b.source) return false;
+  /* The api rule is put back at the top of the template on every save
+     (EnsureStatsRouting), so a move that involves it is undone with nothing
+     said -- the table showed one order and the panel stored another. */
+  return !isApiRule(a) && !isApiRule(b);
 }
 
 export function csv(value?: string): string[] {

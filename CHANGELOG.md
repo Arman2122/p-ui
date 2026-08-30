@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The routing table no longer lets you move a rule the panel will move back.**
+  The stats API rule -- the one the traffic counters read -- has to lead, and
+  every save puts it back at the top. The table offered it a drag handle
+  anyway, and let other rules be dragged above it: the rows redrew in the new
+  order, the save quietly restored the old one, and routing is first-match, so
+  the order on screen was not the order deciding traffic.
+  **What you will notice:** that one row has no drag handle, and will not swap.
+
 - **The dialer-proxy picker stops offering a choice that kills both outbounds.**
   It excluded the outbound being edited, which prevents a one-step loop and
   nothing longer: with B already dialling through A, picking B as A's dialer
