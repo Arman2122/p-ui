@@ -8,6 +8,18 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A subscription stops handing out links for clients that cannot connect.**
+  Disabling a client -- by hand, by running out of traffic, by expiring --
+  removes its account from the core, but its link stayed in the subscription and
+  looked like every other one. A depleted user's app refreshed, took a profile
+  full of healthy-looking servers, and failed on all of them with no reason
+  given. The panel's own file-share path has always skipped them.
+  **What you will notice:** those entries are gone from the raw, JSON and Clash
+  formats, and the traffic figures in the subscription header still include
+  them, so nothing starts under-reporting. A subscription whose clients are ALL
+  disabled now answers 404, the same as one with nothing else to serve — the
+  app keeps its last good profile instead of retrying dead servers.
+
 - **The routing table no longer lets you move a rule the panel will move back.**
   The stats API rule -- the one the traffic counters read -- has to lead, and
   every save puts it back at the top. The table offered it a drag handle
