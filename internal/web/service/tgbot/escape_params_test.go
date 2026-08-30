@@ -178,3 +178,49 @@ func TestResetAllTrafficSendsOneMessage(t *testing.T) {
 		t.Errorf("%d sends in the reset-all handler; one summary and one error path is the whole of it", n)
 	}
 }
+
+/*
+A client's own buttons must work when their email is long.
+
+encodeQuery replaces a callback payload over 64 characters with an MD5, which is
+how the panel fits a long email into Telegram's limit. answerCallback decoded it
+only inside the isAdmin branch; everything below matched the RAW data — the
+self-callback gate and the three client_* prefixes alike.
+
+So for a non-admin whose email pushed the payload past 64 characters, the hash
+matched no prefix, the gate returned, and nothing answered the callback: the
+button span and then stopped, with no message and nothing in the log. The
+thresholds are an email over 47 characters for client_sub_links and over 40 for
+client_individual_links — long, but ordinary for a
+firstname.lastname@company.example.com address.
+
+Decoded once for both roles now, before anything reads it. F295.
+*/
+func TestTheCallbackPayloadIsDecodedForEveryone(t *testing.T) {
+	body := readBotSource(t, "tgbot_router.go")
+
+	start := strings.Index(body, "func (t *Tgbot) answerCallback(")
+	if start < 0 {
+		t.Fatal("answerCallback was renamed; this guard is now vacuous")
+	}
+	end := strings.Index(body[start:], "\n}\n")
+	if end < 0 {
+		t.Fatal("cannot find the end of answerCallback; this guard is now vacuous")
+	}
+	handler := body[start : start+end]
+
+	decode := strings.Index(handler, "t.decodeQuery(callbackQuery.Data)")
+	adminBranch := strings.Index(handler, "\tif isAdmin {")
+	if decode < 0 || adminBranch < 0 {
+		t.Fatal("the decode or the admin branch is gone; this guard is now vacuous")
+	}
+	if decode > adminBranch {
+		t.Error("the payload is decoded inside the admin branch, so a non-admin's hashed callback is matched raw and their own buttons do nothing")
+	}
+	if strings.Count(handler, "callbackQuery.Data") != 1 {
+		t.Error("something below the decode still reads the raw payload; for a long email that value is an MD5 and matches none of the prefixes")
+	}
+	if !strings.Contains(handler, "isClientSelfCallback(decodedQuery)") {
+		t.Error("the non-admin gate still matches the raw payload")
+	}
+}
