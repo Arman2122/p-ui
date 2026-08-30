@@ -283,13 +283,20 @@ func (s *EmailService) sendPlain(addr string, auth smtp.Auth, from string, to []
 	if err = client.Hello("localhost"); err != nil {
 		return err
 	}
+	upgraded := false
 	if ok, _ := client.Extension("STARTTLS"); ok {
 		if err = client.StartTLS(&tls.Config{ServerName: host}); err != nil {
 			return err
 		}
+		upgraded = true
 	}
 	if auth != nil {
 		if err = client.Auth(auth); err != nil {
+			// net/smtp refuses PLAIN on a cleartext session with a bare
+			// "unencrypted connection", which names neither SMTP nor the cause.
+			if !upgraded {
+				return fmt.Errorf("smtp auth on a cleartext session (the server offered no STARTTLS): %w", err)
+			}
 			return err
 		}
 	}
@@ -322,28 +329,33 @@ func (s *EmailService) SendTest() error {
 	)
 }
 
-// classifySMTPError maps raw SMTP errors to human-readable messages.
+// classifySMTPError maps a raw SMTP error to an i18n key. The key is BARE: the
+// caller renders t("pages.settings." + msg), so a prefix here resolves nothing.
 func classifySMTPError(err error) string {
 	msg := err.Error()
 	msgLower := strings.ToLower(msg)
 
 	switch {
+	// First: this is net/smtp's exact refusal, and the message wrapping it names
+	// STARTTLS, which the arm below would otherwise claim.
+	case strings.Contains(msgLower, "unencrypted connection"):
+		return "smtpErrorUnencrypted"
 	case strings.Contains(msg, "535") || strings.Contains(msgLower, "authentication"):
-		return "pages.settings.smtpErrorAuth"
+		return "smtpErrorAuth"
 	case strings.Contains(msg, "534") || strings.Contains(msgLower, "starttls"):
-		return "pages.settings.smtpErrorStarttls"
+		return "smtpErrorStarttls"
 	case strings.Contains(msg, "465") || strings.Contains(msgLower, "tls"):
-		return "pages.settings.smtpErrorTls"
+		return "smtpErrorTls"
 	case strings.Contains(msgLower, "connection refused") || strings.Contains(msgLower, "dial"):
-		return "pages.settings.smtpErrorRefused"
+		return "smtpErrorRefused"
 	case strings.Contains(msgLower, "timeout"):
-		return "pages.settings.smtpErrorTimeout"
+		return "smtpErrorTimeout"
 	case strings.Contains(msg, "550") || strings.Contains(msgLower, "relay"):
-		return "pages.settings.smtpErrorRelay"
+		return "smtpErrorRelay"
 	case strings.Contains(msgLower, "eof"):
-		return "pages.settings.smtpErrorEof"
+		return "smtpErrorEof"
 	default:
-		return fmt.Sprintf("pages.settings.smtpErrorUnknown: %s", msg)
+		return fmt.Sprintf("smtpErrorUnknown: %s", msg)
 	}
 }
 

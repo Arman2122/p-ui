@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **SMTP errors are readable again.** Every failure message from the mail
+  settings was shown as a raw key like `pages.settings.pages.settings.smtpErrorAuth`
+  -- the panel added a prefix the code had already added, so nothing resolved.
+  **What you will notice:** actual sentences.
+
+- **A mail relay that refuses your password over an unencrypted connection now
+  says so.** With encryption set to "none" against a server offering no
+  STARTTLS, Go refuses to send the password and reports only "unencrypted
+  connection", which names neither SMTP nor the cause. That is what every expiry
+  notice and login alert failed with.
+  **What you will notice:** the message explains that the server offered no
+  STARTTLS and suggests using TLS or a relay that supports it.
+
 - **WireGuard addresses no longer collide with networks the server itself is
   on.** The panel decided which subnets were free by looking only at its own
   inbounds -- but the thing being handed out is the server'''s single routing
