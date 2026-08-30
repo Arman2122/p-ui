@@ -3,6 +3,7 @@ package tgbot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -40,18 +41,27 @@ func (t *Tgbot) SendReport() {
 
 	backupEnable, err := t.settingService.GetTgBotBackup()
 	if err == nil && backupEnable {
-		t.SendBackupToAdmins()
+		if bErr := t.SendBackupToAdmins(); bErr != nil {
+			logger.Warning("tgbot: scheduled backup not sent:", bErr)
+		}
 	}
 }
 
-// SendBackupToAdmins sends a PostgreSQL dump of the database to admin chats.
-func (t *Tgbot) SendBackupToAdmins() {
+/*
+SendBackupToAdmins sends a PostgreSQL dump of the database to admin chats.
+
+Reports what happened: the API endpoint that triggers it answered 200 with no
+body whatever the outcome, so a caller could not tell a delivered backup from a
+bot that is not running or a dump that failed to be taken.
+*/
+func (t *Tgbot) SendBackupToAdmins() error {
 	if !t.IsRunning() {
-		return
+		return errors.New("the Telegram bot is not running")
 	}
 	dbData, err := t.serverService.GetDb()
 	if err != nil {
 		logger.Error("Error in getting db backup: ", err)
+		return err
 	}
 	dbFilename := t.serverService.BackupFilename("")
 	// One snapshot for the whole loop: len and the range must not disagree.
@@ -63,6 +73,10 @@ func (t *Tgbot) SendBackupToAdmins() {
 			time.Sleep(1 * time.Second)
 		}
 	}
+	if len(admins) == 0 {
+		return errors.New("no Telegram admin chat is configured to receive it")
+	}
+	return nil
 }
 
 // sendExhaustedToAdmins sends notifications about exhausted clients to admins.

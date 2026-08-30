@@ -1572,7 +1572,9 @@
         "pathLeadingSlash": "Path must start with /"
       },
       "secretClear": "Clear",
-      "secretClearUndo": "Undo clear"
+      "secretClearUndo": "Undo clear",
+      "telegramBotBackupSent": "Backup sent to the Telegram admin chats",
+      "telegramBotBackupFailed": "Backup was not sent"
     },
     "xray": {
       "save": "Save",
