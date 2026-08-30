@@ -294,3 +294,66 @@ func seedTemplateWithoutClearingGate(t *testing.T, rules []any) {
 		t.Fatalf("seed template: %v", err)
 	}
 }
+
+/*
+Walking past a kept rule must stop the import, whatever kind of rule it is.
+
+The walk documents itself as MAXIMAL CONTIGUOUS PREFIX ONLY, and says why:
+intent rules compile ABOVE the template tail, so importing a rule that sat below
+one left behind silently moves it above that rule. Routing is first-match, so
+that changes which rule decides the traffic.
+
+Two of the three keep-paths did not latch. A `geoip:private` block -- the rule an
+operator adds so LAN traffic never leaves the box -- is "transparent", so the
+walk stepped over it and went on importing. Every rule below it was then hoisted
+ABOVE it on the one-time conversion, and private-range traffic started matching
+a rule meant for the internet.
+
+The api rule is the single safe exception: the head is rules[:i+1], so
+splitPinnedAPIRule pins it above intent unconditionally. F069.
+*/
+func TestMigrationStopsAtAKeptPrivateBlock(t *testing.T) {
+	initTestDB(t)
+	seedRoutedInbound(t, "vless-in", 10543, model.VLESS, nil)
+
+	seedTemplate(t, []any{
+		map[string]any{"type": "field", "inboundTag": []any{"vless-in"}, "outboundTag": "warp"},
+		/* The LAN escape hatch. Transparent to the walk, and load-bearing. */
+		map[string]any{"type": "field", "ip": []any{"geoip:private"}, "outboundTag": "direct"},
+		map[string]any{"type": "field", "inboundTag": []any{"vless-in"}, "outboundTag": "blocked"},
+	})
+
+	if err := migrateRoutingIntent(); err != nil {
+		t.Fatalf("migrateRoutingIntent: %v", err)
+	}
+
+	rules := rulesInOrder(t)
+	if len(rules) != 1 {
+		t.Fatalf("the walk imported %d rules; everything after the private block was hoisted above it, so LAN traffic now matches an internet rule", len(rules))
+	}
+	if rules[0].DestTag != "warp" {
+		t.Fatalf("imported rule = %q, want only the one above the private block", rules[0].DestTag)
+	}
+	if kept := templateRules(t); len(kept) != 2 {
+		t.Fatalf("the private block and everything below it must stay in the tail, got %d", len(kept))
+	}
+}
+
+// The api rule is the exception, and it must stay one: it is pinned above
+// intent by splitPinnedAPIRule, so walking past it moves nothing.
+func TestMigrationWalksPastTheApiRule(t *testing.T) {
+	initTestDB(t)
+	seedRoutedInbound(t, "vless-in", 10544, model.VLESS, nil)
+
+	seedTemplate(t, []any{
+		map[string]any{"type": "field", "inboundTag": []any{"api"}, "outboundTag": "api"},
+		map[string]any{"type": "field", "inboundTag": []any{"vless-in"}, "outboundTag": "warp"},
+	})
+
+	if err := migrateRoutingIntent(); err != nil {
+		t.Fatalf("migrateRoutingIntent: %v", err)
+	}
+	if rules := rulesInOrder(t); len(rules) != 1 {
+		t.Fatalf("the api rule stopped the import, but it is pinned above intent anyway: got %d rules", len(rules))
+	}
+}
