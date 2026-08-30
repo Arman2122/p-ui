@@ -282,7 +282,7 @@ func (s *XraySettingService) PropagateInboundTagRename(oldTag, newTag string) (b
 	if err != nil || !changed {
 		return false, err
 	}
-	if err := s.SaveXraySetting(updated); err != nil {
+	if err := s.storeRoutingSync(updated); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -319,8 +319,25 @@ func (s *XraySettingService) RemoveInboundTagReferences(deletedTag string) (bool
 	if err != nil || !changed {
 		return false, err
 	}
-	if err := s.SaveXraySetting(updated); err != nil {
+	if err := s.storeRoutingSync(updated); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+/*
+storeRoutingSync persists a tag substitution even when the validator refuses.
+
+SaveXraySetting re-validates the WHOLE template, so a stored template that was
+already invalid -- hand-edited, or written by an older build -- makes every
+rename fail forever. The substitution itself cannot introduce a new problem:
+it only replaces one tag string with another. Refusing it leaves routing rules
+pointing at an inbound tag that no longer exists, which is strictly worse than
+the invalidity that caused the refusal, and the callers only log a warning.
+*/
+func (s *XraySettingService) storeRoutingSync(updated string) error {
+	if err := s.SaveXraySetting(updated); err == nil {
+		return nil
+	}
+	return s.saveSetting("xrayTemplateConfig", updated)
 }

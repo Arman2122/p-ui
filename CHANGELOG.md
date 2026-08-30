@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Renaming or deleting an inbound now updates the routing template even if
+  that template was already invalid.** The update was saved through the full
+  config validator, which re-checks the WHOLE stored template -- so one
+  pre-existing problem in it, from a hand edit or an older build, made every
+  rename and every deletion silently fail to reach the routing rules. The rules
+  went on naming an inbound tag that no longer existed, and the only sign was a
+  warning in the log.
+  **What you will notice:** the tag update lands. It cannot make a template worse
+  -- it only swaps one tag for another -- and it stops routing rules pointing at
+  inbounds you renamed or removed.
+
 - **Changing the WARP IP no longer loses your WARP+ licence.** Rotating
   registered a new device, which overwrote the stored WARP+ key with the new
   device'''s free one, and only then tried to re-apply yours -- a step allowed to

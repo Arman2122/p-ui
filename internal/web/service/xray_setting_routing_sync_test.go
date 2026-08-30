@@ -356,3 +356,58 @@ func TestDelInbound_RemovesInboundOnlyRoutingRule(t *testing.T) {
 	}
 	findRuleByOutbound(t, template, "blocked")
 }
+
+/*
+A rename must land even when the stored template is already invalid.
+
+Both sync writers persist through SaveXraySetting, which re-runs the FULL
+xray-core validator on a template the panel itself has already stored. So a
+template that was invalid before the rename -- hand-edited, or written by an
+older build whose validation was looser -- makes every subsequent rename and
+every tag removal fail forever.
+
+The substitution cannot introduce a new problem: it replaces one tag string with
+another. Refusing it leaves routing rules pointing at an inbound tag that no
+longer exists, which is strictly worse than whatever invalidity caused the
+refusal -- and both callers only log a warning, so the operator is told nothing
+at all.
+
+The seed below is valid JSON with a routing section the validator rejects (an
+outbound tag nothing declares plus a malformed outbound), which is the shape an
+operator's own edit produces. F236.
+*/
+func TestATagRenameLandsOnAnAlreadyInvalidTemplate(t *testing.T) {
+	setupSettingTestDB(t)
+	const invalid = `{
+		"routing": {
+			"rules": [
+				{"type":"field","inboundTag":["in-21368-tcp"],"outboundTag":"direct"}
+			]
+		},
+		"outbounds": [{"tag":"direct","protocol":"not-a-real-protocol","settings":{}}]
+	}`
+	seedXrayTemplate(t, invalid)
+
+	svc := &XraySettingService{}
+	// The premise: this template really is refused by the validator.
+	if err := svc.CheckXrayConfig(invalid); err == nil {
+		t.Skip("the validator now accepts this template; the test cannot see the bug")
+	}
+
+	changed, err := svc.PropagateInboundTagRename("in-21368-tcp", "in-33000-tcp")
+	if err != nil {
+		t.Fatalf("a rename was refused because the STORED template was already invalid, so the rule keeps pointing at an inbound tag that no longer exists and the caller only logs a warning: %v", err)
+	}
+	if !changed {
+		t.Fatal("the rename reported no change")
+	}
+
+	got, err := svc.GetXrayConfigTemplate()
+	if err != nil {
+		t.Fatalf("GetXrayConfigTemplate: %v", err)
+	}
+	rules := routingRulesFromTemplate(t, got)
+	if tags := readInboundTags(rules[0]["inboundTag"]); len(tags) == 0 || tags[0] != "in-33000-tcp" {
+		t.Fatalf("the rename did not reach the stored template: %v", tags)
+	}
+}
