@@ -28,7 +28,10 @@ func TestClientToRecordRoundTripWireGuard(t *testing.T) {
 	}{
 		{"PrivateKey", c.PrivateKey, got.PrivateKey},
 		{"PublicKey", c.PublicKey, got.PublicKey},
-		{"PreSharedKey", c.PreSharedKey, got.PreSharedKey},
+		// Compared by VALUE: the field is a *string so the panel can tell an
+		// omitted key from a cleared one, and a round trip through the record
+		// necessarily mints a new pointer.
+		{"PreSharedKey", c.PSK(), got.PSK()},
 		{"KeepAlive", c.KeepAlive, got.KeepAlive},
 	} {
 		if f.a != f.b {
@@ -77,5 +80,50 @@ func TestMergeClientRecordWireGuardKeysPreserved(t *testing.T) {
 	MergeClientRecord(existing, incomingNewer)
 	if existing.AllowedIPs != "10.0.0.8/32" {
 		t.Fatalf("newer allowedIPs not applied: %q", existing.AllowedIPs)
+	}
+}
+
+/*
+A record with no key reads back as "not set", not as a deliberate clear.
+
+The two are different values now — nil versus a pointer to empty — and only one
+of them is a stored state. Getting this backwards would make every load of a
+client with no pre-shared key look like a request to remove one. F179.
+*/
+func TestARecordWithNoPreSharedKeyReadsBackAsUnset(t *testing.T) {
+	rec := &ClientRecord{Email: "carol@example.test"}
+	client := rec.ToClient()
+
+	if client.PreSharedKey != nil {
+		t.Fatalf("a stored empty key came back as %v; that is the shape that means 'clear it'", *client.PreSharedKey)
+	}
+	if client.ClearsPreSharedKey() {
+		t.Fatal("loading a client with no pre-shared key reads as a request to clear one")
+	}
+
+	set := &ClientRecord{Email: "dave@example.test", PreSharedKey: "a-key"}
+	if got := set.ToClient().PSK(); got != "a-key" {
+		t.Fatalf("stored key came back as %q", got)
+	}
+}
+
+// And the wire distinction the whole change exists for.
+func TestClearsPreSharedKeyOnlyForADeliberateEmpty(t *testing.T) {
+	empty := ""
+	value := "a-key"
+	for _, tc := range []struct {
+		name  string
+		field *string
+		clear bool
+	}{
+		{name: "omitted", field: nil},
+		{name: "sent empty", field: &empty, clear: true},
+		{name: "sent a value", field: &value},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (Client{PreSharedKey: tc.field}).ClearsPreSharedKey(); got != tc.clear {
+				t.Fatalf("ClearsPreSharedKey() = %v, want %v", got, tc.clear)
+			}
+		})
 	}
 }
