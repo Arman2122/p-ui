@@ -119,6 +119,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "smtpEncryptionType": {
+        "enum": [
+          "none",
+          "starttls",
+          "tls"
+        ],
+        "example": "starttls",
         "type": "string"
       },
       "smtpFrom": {
@@ -590,6 +596,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "smtpEncryptionType": {
+        "enum": [
+          "none",
+          "starttls",
+          "tls"
+        ],
+        "example": "starttls",
         "type": "string"
       },
       "smtpFrom": {

@@ -1149,16 +1149,17 @@ func (s *ServerService) UpdateXray(version string) error {
 }
 
 func (s *ServerService) GetLogs(count string, level string, syslog string) []string {
-	c, _ := strconv.Atoi(count)
+	// One check for both branches. The syslog branch validated; the panel-log
+	// branch took whatever Atoi returned, and logger.GetLogs stops at
+	// len(output) < c — so a count of "abc", "0" or "-5" yielded an empty log
+	// view with nothing anywhere saying the parameter was the reason. F343.
+	countInt, err := strconv.Atoi(count)
+	if err != nil || countInt < 1 || countInt > 10000 {
+		return []string{"Invalid count parameter - must be a number between 1 and 10000"}
+	}
 	var lines []string
 
 	if syslog == "true" {
-		// Validate and sanitize count parameter
-		countInt, err := strconv.Atoi(count)
-		if err != nil || countInt < 1 || countInt > 10000 {
-			return []string{"Invalid count parameter - must be a number between 1 and 10000"}
-		}
-
 		// Validate level parameter - only allow valid syslog levels
 		validLevels := map[string]bool{
 			"0": true, "emerg": true,
@@ -1184,7 +1185,7 @@ func (s *ServerService) GetLogs(count string, level string, syslog string) []str
 		}
 		lines = strings.Split(out.String(), "\n")
 	} else {
-		lines = logger.GetLogs(c, level)
+		lines = logger.GetLogs(countInt, level)
 	}
 
 	return lines

@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The mail transport must be one the panel actually handles.** It was stored
+  as free text, so only the dropdown constrained it -- a value set over the API,
+  or left behind by an older build, is handled by neither of the two places that
+  read it: every send fails with "unknown SMTP encryption type", while the Test
+  button falls through to a plain connection and reports success. Now refused at
+  the save, naming the field.
+
+- **The panel log view says when the row count is the problem.** Its two
+  branches disagreed: the system-log side refused a count outside 1-10000 with a
+  message, the panel-log side took whatever it was given and returned an empty
+  view for "abc", "0" or a negative number -- in the one place an operator goes
+  when something else has already gone wrong.
+
 - **The add-client draft in the Telegram bot reads as text again.** It was
   written in Markdown and sent as HTML, so its asterisks and backticks showed
   literally -- and an email, remark or comment containing `<` made Telegram
