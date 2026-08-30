@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Turning on a CPU or memory alert now schedules the watchdog, and changing
+  the Telegram report time now moves the report.** Both were scheduled once when
+  the panel started, from the settings as they were then, and nothing touched
+  them again -- so enabling an alert produced no alerts at all until a restart,
+  and a new report time was saved, confirmed, and ignored. Every settings save
+  puts those schedules where the settings say.
+
 - **An inbound tag can no longer collide with a routing front's.** Naming an
   inbound `peg1` was accepted, and the config then held two inbounds with that
   tag -- which the core refuses outright, taking every inbound of every protocol

@@ -178,6 +178,12 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 			reloadTgbotFunc()
 		}
 	}
+	// Whatever changed, the settings-driven cron entries are put where the
+	// settings now say. Cheap, idempotent, and it removes the question of which
+	// keys need it. F341 / F397.
+	if err == nil && rescheduleSettingJobsFunc != nil {
+		rescheduleSettingJobsFunc()
+	}
 	if err == nil && warning != "" {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), nil, warning)
 		return
@@ -340,6 +346,20 @@ func SetTestTgFunc(fn func() error) { testTgFunc = fn }
 var reloadTgbotFunc func()
 
 func SetReloadTgbotFunc(fn func()) { reloadTgbotFunc = fn }
+
+/*
+rescheduleSettingJobsFunc moves the cron entries a setting decides.
+
+The CPU and memory watchdogs and the Telegram stats report were scheduled once
+at process start from settings read then, and nothing touched the cron
+afterwards — so enabling an alert produced no alerts and changing the report
+time changed no report, both reported as saved. Wired from the web layer for the
+same reason the tgbot reload is: importing it here would be a cycle.
+F341 / F397.
+*/
+var rescheduleSettingJobsFunc func()
+
+func SetRescheduleSettingJobsFunc(fn func()) { rescheduleSettingJobsFunc = fn }
 
 // emailService is set from web layer.
 var emailService *email.EmailService
