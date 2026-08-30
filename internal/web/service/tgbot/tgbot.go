@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"embed"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 	"github.com/Arman2122/p-ui/internal/web/global"
 	"github.com/Arman2122/p-ui/internal/web/locale"
 	"github.com/Arman2122/p-ui/internal/web/service"
@@ -389,6 +391,14 @@ func (t *Tgbot) createRobustFastHTTPClient(proxyUrl string) *fasthttp.Client {
 			client.Dial = fasthttpproxy.FasthttpSocksDialer(proxyUrl)
 		} else {
 			client.Dial = fasthttpproxy.FasthttpHTTPDialer(proxyUrl)
+		}
+	} else {
+		// Only on the direct branch: guarding the proxy dial would route around
+		// the proxy the operator configured.
+		client.DialTimeout = func(addr string, timeout time.Duration) (net.Conn, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			return netsafe.SSRFGuardedDialContext(ctx, "tcp", addr)
 		}
 	}
 

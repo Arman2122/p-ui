@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The panel'''s own outbound requests re-check the address they actually dial.**
+  Three clients -- the traffic-report webhook, the Telegram API client and the
+  subscription fetcher -- validated an administrator-supplied URL against the
+  private-address policy and then dialled with an unchecked resolver, so a
+  hostname that answered publicly at check time and privately at dial time
+  reached the panel'''s own loopback or LAN. The subscription fetcher also
+  followed redirects to addresses nobody had checked at all.
+  **What you will notice:** nothing, unless you were pointing one of these at a
+  private address, which was already refused. Telegram traffic through a
+  configured proxy is deliberately unchanged.
+
 - **Resetting traffic no longer stops an MTProto inbound the panel cannot
   read.** Before resetting, the panel reconciled its MTProto sidecars -- and that
   reconcile stops anything absent from the desired list. An inbound whose stored
