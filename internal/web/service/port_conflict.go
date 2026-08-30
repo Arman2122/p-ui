@@ -10,6 +10,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/egress"
 	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
@@ -350,8 +351,8 @@ reservedTagOwner names what already owns a tag, or "" when it is the
 operator's to use.
 
 tagExists only counts rows in `inbounds`, and the tags that matter here belong
-to objects that have no row: the panel's own egress bridge, and the template's
-api/direct/blocked outbounds. So an inbound tagged "panel-egress" was accepted,
+to objects that have no row: the panel's own egress bridge, a routing front, and
+the template's api/direct/blocked outbounds. So an inbound tagged "panel-egress" was accepted,
 and injectPanelEgress then found the tag already present and skipped injection —
 the panel's SOCKS bridge and its routing rule silently vanished from the
 generated config behind a single Warning line.
@@ -363,6 +364,13 @@ stale name reserved and the live one free.
 func reservedTagOwner(tag string) string {
 	if tag == PanelEgressInboundTag {
 		return "the panel's own egress bridge"
+	}
+	// A routing front's Xray inbound is synthesised at compile time and tagged
+	// with its device name; it never becomes a row in `inbounds`, so tagExists
+	// cannot see it and two inbounds with one tag reached the core, which then
+	// refuses the whole config. F231.
+	if egress.NamesAFront(tag) {
+		return "a routing front"
 	}
 	for _, templateTag := range templateReservedTags() {
 		if tag == templateTag {

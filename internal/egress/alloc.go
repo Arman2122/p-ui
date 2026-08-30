@@ -96,6 +96,19 @@ an L7 core's own socket offers.
 */
 func Mark(id int) uint32 { return markBase | uint32(id) }
 
+/*
+NamesAFront reports whether a name is one this package would give a front.
+
+The front's Xray inbound is synthesised at compile time and tagged with its
+device name, and it never becomes a row in `inbounds` — so the panel's own
+duplicate-tag check cannot see it. Anything that lets an operator choose a name
+in that namespace has to ask here. F231.
+*/
+func NamesAFront(name string) bool {
+	_, ok := ownedEgressID(name)
+	return ok
+}
+
 // ownedEgressID reads the id back out of a device name. It round-trips through
 // Device, so a near miss like peg007 or peg0 is somebody else's device.
 func ownedEgressID(name string) (int, bool) {
