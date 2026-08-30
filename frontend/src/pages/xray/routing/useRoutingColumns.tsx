@@ -68,12 +68,14 @@ export function useRoutingColumns({
         key: 'index',
         render: (_v, _r, index) => (
           <div className="action-cell" style={{ justifyContent: 'center' }}>
-            <HolderOutlined
-              className="drag-handle"
-              title={t('pages.xray.routing.dragToReorder')}
-              aria-hidden="true"
-              onPointerDown={(ev: React.PointerEvent) => onHandlePointerDown(index, ev)}
-            />
+            {!isApiRule(_r) && (
+              <HolderOutlined
+                className="drag-handle"
+                title={t('pages.xray.routing.dragToReorder')}
+                aria-hidden="true"
+                onPointerDown={(ev: React.PointerEvent) => onHandlePointerDown(index, ev)}
+              />
+            )}
             <span className="row-index">{index + 1}</span>
           </div>
         ),
