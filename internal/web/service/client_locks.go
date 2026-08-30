@@ -26,6 +26,10 @@ var (
 	inboundMutationLocks   = map[int]*sync.Mutex{}
 )
 
+// One inbound create or edit at a time. checkPortConflict and its siblings
+// read committed rows, so a second mutation must not land between check and commit.
+var inboundPortClaimMu sync.Mutex
+
 func lockInbound(inboundId int) *sync.Mutex {
 	inboundMutationLocksMu.Lock()
 	m, ok := inboundMutationLocks[inboundId]

@@ -937,6 +937,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 
+	inboundPortClaimMu.Lock()
+	defer inboundPortClaimMu.Unlock()
+
 	conflict, err := s.checkPortConflict(inbound, 0)
 	if err != nil {
 		return inbound, false, "", err
@@ -1399,6 +1402,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if err := refuseUnenforcedAccounts(inbound); err != nil {
 		return inbound, false, "", err
 	}
+
+	inboundPortClaimMu.Lock()
+	defer inboundPortClaimMu.Unlock()
 
 	conflict, err := s.checkPortConflict(inbound, inbound.Id)
 	if err != nil {
