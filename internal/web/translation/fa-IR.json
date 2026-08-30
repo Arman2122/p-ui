@@ -1448,7 +1448,9 @@
         "pathLeadingSlash": "مسیر باید با / شروع شود"
       },
       "secretClear": "پاک کردن",
-      "secretClearUndo": "لغو پاک کردن"
+      "secretClearUndo": "لغو پاک کردن",
+      "telegramBotBackupSent": "پشتیبان به گفتگوهای مدیر تلگرام ارسال شد",
+      "telegramBotBackupFailed": "پشتیبان ارسال نشد"
     },
     "xray": {
       "save": "ذخیره",

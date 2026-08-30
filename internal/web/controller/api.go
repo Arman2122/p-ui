@@ -149,7 +149,13 @@ func (a *APIController) restartCore(c *gin.Context) {
 	jsonMsg(c, I18nWeb(c, "pages.xray.restartSuccess"), nil)
 }
 
-// BackuptoTgbot sends a backup of the panel data to Telegram bot admins.
+// BackuptoTgbot sends a backup of the panel data to Telegram bot admins. It
+// answered 200 with an empty body whatever happened, which the published spec
+// does not describe and no client can read as an outcome. F279.
 func (a *APIController) BackuptoTgbot(c *gin.Context) {
-	a.Tgbot.SendBackupToAdmins()
+	if err := a.Tgbot.SendBackupToAdmins(); err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.telegramBotBackupFailed"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.settings.telegramBotBackupSent"), nil)
 }

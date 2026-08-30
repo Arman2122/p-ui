@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **"Send a backup to the Telegram bot" says whether it went.** The endpoint
+  answered 200 with an empty body no matter what happened -- and the send is a
+  silent no-op when the bot is not running, so a backup that never left the
+  machine looked exactly like one delivered to every admin. The published API
+  spec documented a JSON response the endpoint never wrote, which also broke any
+  client that parsed it.
+
 - **Subscription bodies are marked uncacheable.** The subscription HTML page
   said so; the three formats a VPN client actually fetches -- raw, JSON and
   Clash -- carried no Cache-Control at all, and nothing in front of them
