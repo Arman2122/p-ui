@@ -21,7 +21,7 @@ import RuleFormModal from './RuleFormModal';
 import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
 import { useRoutingColumns } from './useRoutingColumns';
-import { arrJoin, buildInboundTagOptions, originalRuleIndex } from './helpers';
+import { arrJoin, buildInboundTagOptions, canSwapRows, originalRuleIndex } from './helpers';
 import { useRoutingMutations } from '@/api/queries/useRoutingMutations';
 import {
   useRoutingExitsQuery,
@@ -354,9 +354,11 @@ export default function RoutingTab({
   function moveUp(idx: number) {
     if (idx <= 0) return;
     const row = rowAt(idx);
-    if (row?.source === 'intent') { void moveIntent(row.storeIndex ?? 0, -1); return; }
-    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
-    const prev = rowAt(idx - 1)?.storeIndex;
+    const prevRow = rowAt(idx - 1);
+    if (!canSwapRows(row, prevRow)) return;
+    if (row.source === 'intent') { void moveIntent(row.storeIndex ?? 0, -1); return; }
+    const target = row.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+    const prev = prevRow.storeIndex;
     if (prev == null) return;
     mutate((tt) => {
       const list = tt.routing?.rules;
@@ -367,9 +369,11 @@ export default function RoutingTab({
   function moveDown(idx: number) {
     if (idx >= mergedRowsRef.current.length - 1) return;
     const row = rowAt(idx);
-    if (row?.source === 'intent') { void moveIntent(row.storeIndex ?? 0, 1); return; }
-    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
-    const next = rowAt(idx + 1)?.storeIndex;
+    const nextRow = rowAt(idx + 1);
+    if (!canSwapRows(row, nextRow)) return;
+    if (row.source === 'intent') { void moveIntent(row.storeIndex ?? 0, 1); return; }
+    const target = row.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+    const next = nextRow.storeIndex;
     if (next == null) return;
     mutate((tt) => {
       const list = tt.routing?.rules;
@@ -435,7 +439,7 @@ export default function RoutingTab({
          evaluation order, so a drag across the boundary names no position in
          either. Resolving a MERGED index against the template list is what used
          to reorder a template rule when an operator rule was dragged. */
-      if (!fromRow || !toRow || fromRow.source !== toRow.source) return;
+      if (!canSwapRows(fromRow, toRow)) return;
       if (fromRow.source === 'intent') {
         const next = [...intentRecordsRef.current];
         const [movedRecord] = next.splice(fromRow.storeIndex ?? 0, 1);
