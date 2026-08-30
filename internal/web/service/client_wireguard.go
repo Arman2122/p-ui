@@ -203,6 +203,12 @@ func (s *InboundService) wireguardPoolFor(inbound *model.Inbound) (wireguardPool
 	pool := wireguardPool{base: defaultWireguardBase}
 	if own := wireguardDeviceAddresses(inbound.Settings); len(own) > 0 {
 		pool.base = own[0].Masked().String()
+		// The DEVICE holds these, so a client handed one has its return traffic
+		// delivered locally instead of into the tunnel. Only the host address is
+		// taken; the prefix itself is the pool.
+		for _, device := range own {
+			pool.taken = append(pool.taken, device.Addr().String())
+		}
 	}
 	if !ownsHostWireguardDevice(inbound.Protocol) {
 		return pool, nil

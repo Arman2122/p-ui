@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A WireGuard client is never handed the inbound'''s own device address.** The
+  allocator skipped addresses other inbounds used but not the address of the
+  device it was allocating for, so on a device at, say, `10.0.0.5/24` the fourth
+  client created got `10.0.0.5` -- the same address the server answers on. That
+  client'''s return traffic went to the server itself instead of into the tunnel,
+  silently.
+  **What you will notice:** that address is skipped. Existing clients are not
+  renumbered; if one already holds the device address, change it by hand.
+
 - **SMTP errors are readable again.** Every failure message from the mail
   settings was shown as a raw key like `pages.settings.pages.settings.smtpErrorAuth`
   -- the panel added a prefix the code had already added, so nothing resolved.
