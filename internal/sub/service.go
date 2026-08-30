@@ -317,7 +317,7 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 				hasEnabledClient = true
 			}
 			var link string
-			if len(hostEps) > 0 {
+			if hostEps != nil {
 				link = s.linkFromHosts(inbound, client, hostEps)
 			} else {
 				link = s.GetLink(inbound, client.Email)
