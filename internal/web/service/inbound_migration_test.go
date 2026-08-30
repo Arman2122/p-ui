@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -338,4 +339,121 @@ func TestMigrationRequirementsSurvivesANonObjectClientElement(t *testing.T) {
 	if _, stamped := real["updated_at"]; !stamped {
 		t.Error("the surviving client was not migrated; MigrationRequirements returned before tx.Save")
 	}
+}
+
+/*
+A migration that gives up must not commit what it had already done.
+
+MigrationRequirements decides commit-or-rollback from one function-scoped err in
+a defer. Two of its early returns declared their own with `:=`, so the outer one
+stayed nil and the defer COMMITTED — a set of inbounds half-migrated, with the
+column drops and the share-address normalisation applied and the rest of the
+loop never run. The next start then migrated from that half-state.
+
+Driven through the share-address normalisation, which is an UPDATE the function
+performs before the loop it dies in: after a rollback the row must still hold
+what the test wrote. F382.
+*/
+func TestMigrationRequirementsRollsBackWhenItGivesUp(t *testing.T) {
+	initTestDB(t)
+	db := database.GetDB()
+
+	// A client the settings rewrite happily walks, and ParseInboundSettingsClients
+	// then refuses: limitIp is an int on model.Client.
+	unreadable := &model.Inbound{
+		UserId:         1,
+		Tag:            "rollback-me",
+		Enable:         true,
+		Port:           30301,
+		Protocol:       model.VLESS,
+		Settings:       `{"clients":[{"email":"x@rollback","limitIp":"not-a-number"}]}`,
+		StreamSettings: `{"network":"tcp","security":"none"}`,
+	}
+	if err := db.Create(unreadable).Error; err != nil {
+		t.Fatalf("create inbound: %v", err)
+	}
+	// Written straight to the column: the normalisation is what this observes, so
+	// it has to start out un-normalised.
+	if err := db.Model(&model.Inbound{}).Where("id = ?", unreadable.Id).
+		Update("share_addr_strategy", "bogus").Error; err != nil {
+		t.Fatalf("seed the un-normalised column: %v", err)
+	}
+
+	(&InboundService{}).MigrationRequirements()
+
+	var strategy string
+	if err := db.Model(&model.Inbound{}).Where("id = ?", unreadable.Id).
+		Select("share_addr_strategy").Scan(&strategy).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if strategy != "bogus" {
+		t.Fatalf("share_addr_strategy = %q: the migration gave up part-way and committed anyway, leaving the panel half-migrated", strategy)
+	}
+}
+
+/*
+Running the migration twice must not restamp every client.
+
+MigrationRequirements runs on every panel start, not only on `p-ui migrate`.
+created_at was backfilled only when absent; updated_at was assigned
+unconditionally, so every restart rewrote the settings JSON of every
+vmess/vless/trojan/shadowsocks/hysteria inbound and told the panel each of their
+clients had just been modified.
+
+That is not only churn. applyClientRecordMerge decides which side of a node sync
+wins by comparing this exact field, so a restart could make the panel's copy
+look newer than a node's real edit. F386.
+*/
+func TestMigrationRequirementsDoesNotRestampAClientItAlreadySaw(t *testing.T) {
+	initTestDB(t)
+	db := database.GetDB()
+
+	inbound := &model.Inbound{
+		UserId:         1,
+		Tag:            "stamped",
+		Enable:         true,
+		Port:           30311,
+		Protocol:       model.VLESS,
+		Settings:       `{"clients":[{"email":"stamp@e","id":"ce8d33df-3a64-4f10-8f9b-91c3a8e0c0aa","enable":true}]}`,
+		StreamSettings: `{"network":"tcp","security":"none"}`,
+	}
+	if err := db.Create(inbound).Error; err != nil {
+		t.Fatalf("create inbound: %v", err)
+	}
+
+	svc := &InboundService{}
+	svc.MigrationRequirements()
+	first := clientUpdatedAt(t, inbound.Id)
+	if first == 0 {
+		t.Fatal("the first run did not stamp updated_at at all, so this proves nothing")
+	}
+
+	// A second start, far enough apart that a re-stamp would be a different value.
+	time.Sleep(1100 * time.Millisecond)
+	svc.MigrationRequirements()
+
+	if second := clientUpdatedAt(t, inbound.Id); second != first {
+		t.Fatalf("updated_at moved from %d to %d on a restart that changed nothing; every node sync now reads the panel's copy as the newer one", first, second)
+	}
+}
+
+func clientUpdatedAt(t *testing.T, inboundId int) int64 {
+	t.Helper()
+	var settings string
+	if err := database.GetDB().Model(&model.Inbound{}).Where("id = ?", inboundId).
+		Select("settings").Scan(&settings).Error; err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	var parsed struct {
+		Clients []struct {
+			UpdatedAt int64 `json:"updated_at"`
+		} `json:"clients"`
+	}
+	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
+		t.Fatalf("parse settings: %v", err)
+	}
+	if len(parsed.Clients) != 1 {
+		t.Fatalf("want one client, got %d", len(parsed.Clients))
+	}
+	return parsed.Clients[0].UpdatedAt
 }
