@@ -250,7 +250,7 @@ export default function WarpModal({
     try {
       const msg = await HttpUtil.post('/panel/api/xray/warp/interval', { interval: methods.getValues('updateInterval') });
       if (msg?.success) {
-        messageApi.success(t('pages.setting.toasts.saveSuccess', 'Settings saved successfully'));
+        messageApi.success(t('pages.settings.toasts.modifySettings'));
       }
     } finally {
       setLoading(false);
