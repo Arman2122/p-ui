@@ -92,9 +92,19 @@ export function useRoutingDraft(): RoutingDraft {
     const server = serverRef.current;
     if (draft == null) return;
 
+    /* HttpUtil resolves on a refusal rather than throwing, so every result is
+       checked. A refused rule must stay in the draft and on screen: discarding
+       it would lose the operator's work to a message they may not have read. */
+    let failed = false;
+    const ok = (msg: { success?: boolean } | null | undefined) => {
+      if (msg?.success) return true;
+      failed = true;
+      return false;
+    };
+
     const keep = new Set(desired.map((r) => r.id));
     for (const record of server) {
-      if (!keep.has(record.id)) await mutations.remove(record.id);
+      if (!keep.has(record.id)) ok(await mutations.remove(record.id));
     }
 
     const byId = new Map(server.map((r) => [r.id, r]));
@@ -104,12 +114,12 @@ export function useRoutingDraft(): RoutingDraft {
       if (isDraftRule(rule)) {
         const created = await mutations.add(payload);
         const id = (created?.obj as { id?: number } | undefined)?.id;
-        if (typeof id === 'number') finalIds.push(id);
+        if (ok(created) && typeof id === 'number') finalIds.push(id);
         continue;
       }
       const existing = byId.get(rule.id);
       if (existing && JSON.stringify(recordToPayload(existing)) !== JSON.stringify(payload)) {
-        await mutations.update(rule.id, payload);
+        ok(await mutations.update(rule.id, payload));
       }
       finalIds.push(rule.id);
     }
@@ -119,9 +129,11 @@ export function useRoutingDraft(): RoutingDraft {
        reload the core for an order nobody touched. */
     const serverOrder = server.map((r) => r.id).join(',');
     if (finalIds.length > 0 && finalIds.join(',') !== serverOrder) {
-      await mutations.reorder(finalIds);
+      ok(await mutations.reorder(finalIds));
     }
-    setDraft(null);
+    /* Kept on any failure, so Save stays lit and the refused rule is still
+       there to correct. The server already reported why. */
+    if (!failed) setDraft(null);
   }, [draft, mutations]);
 
   return { rules, dirty, addRule, updateRule, removeRule, reorderRules, discard, flush };
