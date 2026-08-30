@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Starting Xray from cold no longer reports success for a config the core
+  refuses.** The config pre-flight guarded restarts of a RUNNING core only. When
+  Xray was not running -- panel boot, crash recovery, `p-ui restart`, the first
+  start after an install -- the panel launched the core, saw the process spawn,
+  and reported success. The core then read the config, refused it and exited, so
+  the Restart button said it worked while the panel served nothing.
+  **What you will notice:** the failure is reported immediately, carrying Xray'''s
+  own explanation of what it did not like.
+
 - **Creating a tun inbound no longer binds every outbound to one network
   interface.** The panel wrote `autoOutboundsInterface: "auto"` into every tun
   inbound it saved, whether or not you touched the field. Xray acts on that by

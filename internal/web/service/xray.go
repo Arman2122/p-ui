@@ -1296,6 +1296,10 @@ func (s *XrayService) RestartXray(isForce bool) error {
 			return nil
 		}
 		_ = process.Stop()
+	} else if err := xray.TestConfig(xrayConfig); err != nil {
+		// The running branch has had this since F004; a cold start reached
+		// Start() unchecked and reported success for a core that then died.
+		return common.NewError("refusing to start xray, the generated config is rejected by the core:", err)
 	}
 
 	process = xray.NewProcess(xrayConfig)
