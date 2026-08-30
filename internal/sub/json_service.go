@@ -94,7 +94,8 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 
 		for _, client := range clients {
 			seenEmails[client.Email] = struct{}{}
-			if !withheld {
+			// A removed account cannot connect; see F249 in getSubs.
+			if !withheld && client.Enable {
 				configArray = append(configArray, s.getConfig(subReq, inbound, client, host)...)
 			}
 		}

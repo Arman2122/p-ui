@@ -316,6 +316,15 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 			if client.Enable {
 				hasEnabledClient = true
 			}
+			// A disabled client's account is removed from the core, so its link
+			// cannot connect. The file-share path has always skipped it; the link,
+			// JSON and Clash paths handed one out that looked like every other.
+			// seenEmails stays unconditional below, so the traffic header still
+			// counts it. F249.
+			if !client.Enable {
+				seenEmails[client.Email] = struct{}{}
+				continue
+			}
 			var link string
 			if hostEps != nil {
 				link = s.linkFromHosts(inbound, client, hostEps)

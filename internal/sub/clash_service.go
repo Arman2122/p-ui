@@ -57,7 +57,8 @@ func (s *SubClashService) GetClash(subId string, host string) (string, string, e
 			// Counted either way: the traffic header totals a multi-inbound
 			// subscription and must not under-report a withheld one. F311.
 			seenEmails[client.Email] = struct{}{}
-			if !withheld {
+			// A removed account cannot connect; see F249 in getSubs.
+			if !withheld && client.Enable {
 				proxies = append(proxies, s.getProxies(subReq, inbound, client, host)...)
 			}
 		}
