@@ -309,13 +309,24 @@ func isCommandForBot(text string, username string) bool {
 func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool) {
 	chatId := callbackQuery.Message.GetChat().ID
 
+	/*
+		Decoded for BOTH roles, once.
+
+		encodeQuery replaces a payload longer than 64 characters with an MD5, and
+		everything below the admin branch matched the RAW data -- the
+		client_sub_links / _individual_links / _qr_links prefixes and the
+		self-callback gate alike. A client whose email made the payload long
+		therefore pressed their own buttons and nothing happened at all: the hash
+		matched no prefix, the gate returned, and no answer was sent, so the
+		button just span. F295.
+	*/
+	decodedQuery, err := t.decodeQuery(callbackQuery.Data)
+	if err != nil {
+		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.noQuery"))
+		return
+	}
+
 	if isAdmin {
-		// get query from hash storage
-		decodedQuery, err := t.decodeQuery(callbackQuery.Data)
-		if err != nil {
-			t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.noQuery"))
-			return
-		}
 		dataArray := strings.Split(decodedQuery, " ")
 
 		if len(dataArray) >= 2 && len(dataArray[1]) > 0 {
@@ -1121,7 +1132,7 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 			}
 			return
 		} else {
-			switch callbackQuery.Data {
+			switch decodedQuery {
 			case "get_inbounds":
 				inbounds, err := t.getInbounds()
 				if err != nil {
@@ -1156,11 +1167,11 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 		}
 	}
 
-	if !isAdmin && !isClientSelfCallback(callbackQuery.Data) {
+	if !isAdmin && !isClientSelfCallback(decodedQuery) {
 		return
 	}
 
-	switch callbackQuery.Data {
+	switch decodedQuery {
 	case "get_usage":
 		t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.buttons.serverUsage"))
 		t.getServerUsage(chatId)
@@ -1567,15 +1578,15 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 			}
 			send(chatId, email)
 		}
-		if after, ok := strings.CutPrefix(callbackQuery.Data, "client_sub_links "); ok {
+		if after, ok := strings.CutPrefix(decodedQuery, "client_sub_links "); ok {
 			serveLinks(after, t.sendClientSubLinks)
 			return
 		}
-		if after, ok := strings.CutPrefix(callbackQuery.Data, "client_individual_links "); ok {
+		if after, ok := strings.CutPrefix(decodedQuery, "client_individual_links "); ok {
 			serveLinks(after, t.sendClientIndividualLinks)
 			return
 		}
-		if after, ok := strings.CutPrefix(callbackQuery.Data, "client_qr_links "); ok {
+		if after, ok := strings.CutPrefix(decodedQuery, "client_qr_links "); ok {
 			serveLinks(after, t.sendClientQRLinks)
 			return
 		}

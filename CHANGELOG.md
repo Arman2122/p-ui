@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A client's own Telegram buttons work when their email is long.** The panel
+  hashes a callback payload that would exceed Telegram's limit, and only the
+  admin path unhashed it -- so for a client whose email made the payload long,
+  their subscription, links and QR buttons matched nothing, answered nothing and
+  simply span. Around 47 characters of email was enough.
+
 - **"Reset all traffic" in the Telegram bot answers once, not once per client.**
   It sent a separate message for every client on the box, which Telegram
   rate-limits: on any real panel the run went through but the messages stopped
