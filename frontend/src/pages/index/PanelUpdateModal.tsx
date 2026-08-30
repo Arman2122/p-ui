@@ -33,6 +33,25 @@ interface PanelUpdateModalProps {
   onBusy: (e: BusyEvent) => void;
 }
 
+/*
+The update takes as long as the backend allows it to, not 95 seconds.
+
+This waited 5 s and then polled for 90 s before calling the outcome unknown,
+popping the "couldn't confirm the update finished" warning and reloading the
+page. The backend budgets `updateStaleAfter = 20 * time.Minute` for the same run
+and holds the slot for two hours beyond that, and a real update on a small VPS
+-- fetch the release, unpack it, restart the service -- routinely outlasts 95
+seconds. So the warning fired on ordinary successful updates while the update
+was still going.
+
+Matched to the backend's own budget. The poll is silent with a 2 s timeout and
+the panel restarts under it, so the failures in between are expected and caught.
+F278.
+*/
+const UPDATE_SETTLE_MS = 5_000;
+const UPDATE_POLL_INTERVAL_MS = 2_000;
+const UPDATE_POLL_BUDGET_MS = 20 * 60 * 1_000;
+
 export default function PanelUpdateModal({
   open,
   info,
@@ -48,8 +67,8 @@ export default function PanelUpdateModal({
   const isDev = info.channel === 'dev';
 
   async function pollUpdateStatus(expectedRunId: string): Promise<UpdateOutcome> {
-    await PromiseUtil.sleep(5000);
-    const deadline = Date.now() + 90_000;
+    await PromiseUtil.sleep(UPDATE_SETTLE_MS);
+    const deadline = Date.now() + UPDATE_POLL_BUDGET_MS;
     while (Date.now() < deadline) {
       try {
         const msg = await HttpUtil.get<PanelUpdateStatus>(
@@ -65,7 +84,7 @@ export default function PanelUpdateModal({
       } catch {
         /* still restarting */
       }
-      await PromiseUtil.sleep(2000);
+      await PromiseUtil.sleep(UPDATE_POLL_INTERVAL_MS);
     }
     return 'timeout';
   }

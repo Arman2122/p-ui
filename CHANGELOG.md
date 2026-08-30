@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The panel update no longer says it failed while it is still running.** The
+  page gave up after 95 seconds and popped "couldn't confirm the update
+  finished", then reloaded -- while the panel itself treats an update as live
+  for 20 minutes, which a real one on a small VPS routinely needs. The page now
+  waits as long as the panel does.
+
+- **Two transport values that take the whole core down are caught in the form.**
+  An mKCP send window below the MTU computes to zero buffers and an httpupgrade
+  or xhttp `host` header is refused outright -- in both cases the core rejects
+  the ENTIRE configuration, so every inbound of every protocol stops answering
+  at the next restart. Both forms offered them, and the only signal was a raw
+  error bounced back from the save. Now a message on the field, in the inbound
+  and outbound editors alike.
+
 - **A client's own Telegram buttons work when their email is long.** The panel
   hashes a callback payload that would exceed Telegram's limit, and only the
   admin path unhashed it -- so for a client whose email made the payload long,

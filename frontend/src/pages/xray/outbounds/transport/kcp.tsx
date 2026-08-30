@@ -1,10 +1,13 @@
 import { useTranslation } from 'react-i18next';
+import { useWatch } from 'react-hook-form';
 import { InputNumber } from 'antd';
 
 import { FormField } from '@/components/form/rhf';
+import { kcpSendingWindowFits } from '@/lib/xray/transport-limits';
 
 export default function KcpForm() {
   const { t } = useTranslation();
+  const mtu = useWatch({ name: 'streamSettings.kcpSettings.mtu' });
   return (
     <>
       <FormField label="MTU" name={['streamSettings', 'kcpSettings', 'mtu']}>
@@ -34,6 +37,10 @@ export default function KcpForm() {
       <FormField
         label={t('pages.inbounds.form.maxSendingWindow')}
         name={['streamSettings', 'kcpSettings', 'maxSendingWindow']}
+        rules={{
+          validate: (value: unknown) =>
+            kcpSendingWindowFits(value, mtu) || 'pages.inbounds.form.maxSendingWindowBelowMtu',
+        }}
       >
         <InputNumber min={0} />
       </FormField>

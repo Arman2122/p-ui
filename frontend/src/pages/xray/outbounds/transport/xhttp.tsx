@@ -4,6 +4,7 @@ import { useFormContext, useWatch } from 'react-hook-form';
 
 import { HeaderMapEditor } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
+import { headerMapNamesHost } from '@/lib/xray/transport-limits';
 import { validateSessionIDLength, validateSessionIDTable } from '@/lib/xray/xhttp-session-id';
 import { int32RangeUpper } from '@/lib/xray/stream-wire-normalize';
 import { XHTTP_SESSION_ID_TABLES } from '@/schemas/protocols/stream/xhttp';
@@ -82,6 +83,10 @@ export default function XhttpForm({ onXmuxToggle }: XhttpFormProps) {
       <FormField
         label={t('pages.inbounds.form.headers')}
         name={['streamSettings', 'xhttpSettings', 'headers']}
+        rules={{
+          validate: (value: unknown) =>
+            !headerMapNamesHost(value) || 'pages.inbounds.form.headerHostNotAllowed',
+        }}
       >
         <HeaderMapEditor mode="v1" />
       </FormField>
