@@ -32,6 +32,10 @@ const (
 	// panel received, the other originates traffic the panel sends.
 	uplinkPrefix = "pux"
 
+	// awgUplinkPrefix is internal/awg's dialled-device namespace. Re-declared
+	// rather than imported: this package may name a device, not depend on a core.
+	awgUplinkPrefix = "paux"
+
 	// markBase is the fwmark band §5.3 reserves. MaxID is 999, so an id fits the
 	// low bits and never reaches the byte the band itself occupies.
 	markBase = 0x0e000000
@@ -64,17 +68,23 @@ func Device(id int) string { return devicePrefix + strconv.Itoa(id) }
 // it is created here rather than by a core, so its name is ours to derive.
 func Uplink(id int) string { return uplinkPrefix + strconv.Itoa(id) }
 
-// ownedUplinkID round-trips through Uplink, so pux007 and pux0 are not ours.
+// ownedUplinkID reads the id back out of a device this panel dials, in EITHER
+// namespace it dials in. It round-trips, so pux007 and pux0 are not ours.
 func ownedUplinkID(name string) (int, bool) {
-	rest, ok := strings.CutPrefix(name, uplinkPrefix)
-	if !ok {
-		return 0, false
+	for _, prefix := range []string{uplinkPrefix, awgUplinkPrefix} {
+		rest, ok := strings.CutPrefix(name, prefix)
+		if !ok {
+			continue
+		}
+		id, err := strconv.Atoi(rest)
+		// continue, never return: "pux" is a prefix of nothing else, but a near
+		// miss in one namespace must not hide a hit in the other.
+		if err != nil || !ValidID(id) || prefix+strconv.Itoa(id) != name {
+			continue
+		}
+		return id, true
 	}
-	id, err := strconv.Atoi(rest)
-	if err != nil || !ValidID(id) || Uplink(id) != name {
-		return 0, false
-	}
-	return id, true
+	return 0, false
 }
 
 /*
