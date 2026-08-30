@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **"Reset all traffic" in the Telegram bot answers once, not once per client.**
+  It sent a separate message for every client on the box, which Telegram
+  rate-limits: on any real panel the run went through but the messages stopped
+  part-way, so the admin saw the first few and then silence with no way to tell
+  a stalled reset from a finished one.
+  **What you will notice:** one message saying how many were reset out of how
+  many, with any failures listed in it.
+
 - **A quiet minute no longer swallows the CPU or memory alert behind it.** The
   watchdogs publish a reading every minute whatever it is, and the email
   subscriber spent its one-per-minute allowance before checking the reading

@@ -2117,9 +2117,7 @@
       "using_default_value": "Okay, I'll stick with the default value. 😊",
       "incorrect_input": "Your input is not valid.\nThe phrases should be continuous without spaces.\nCorrect example: aaaaaa\nIncorrect example: aaa aaa 🚫",
       "AreYouSure": "Are you sure? 🤔",
-      "SuccessResetTraffic": "📧 Email: {{ .ClientEmail }}\n🏁 Result: ✅ Success",
       "FailedResetTraffic": "📧 Email: {{ .ClientEmail }}\n🏁 Result: ❌ Failed \n\n🛠️ Error: [ {{ .ErrorMessage }} ]",
-      "FinishProcess": "🔚 Traffic reset process finished for all clients.",
       "eventOutboundDown": "Outbound {{ .Tag }} is DOWN",
       "eventOutboundUp": "Outbound {{ .Tag }} is UP",
       "eventErrorDetail": "Error: {{ .Error }}",
@@ -2130,7 +2128,8 @@
       "eventNodeUp": "Node {{ .Name }} is UP",
       "eventLoginFallback": "Login failed from {{ .Source }}",
       "memoryThreshold": "Memory Load {{ .Percent }}% exceeds the threshold of {{ .Threshold }}%",
-      "eventCoreCrash": "{{ .Core }} CRASHED"
+      "eventCoreCrash": "{{ .Core }} CRASHED",
+      "resetAllSummary": "🔚 Traffic reset finished: {{ .Count }} of {{ .Total }} clients."
     },
     "buttons": {
       "closeKeyboard": "❌ Close Keyboard",
