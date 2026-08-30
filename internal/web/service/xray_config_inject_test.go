@@ -1,9 +1,12 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/Arman2122/p-ui/internal/egress"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
 	puilogger "github.com/Arman2122/p-ui/internal/logger"
@@ -22,6 +25,9 @@ func TestMain(m *testing.M) {
 	// injectPanelEgress logs when it skips injection; the package logger must
 	// exist before any test exercises a skipped path.
 	puilogger.InitLogger(logging.ERROR)
+	// Default-neutral: wireguardPoolFor now reads the HOST, and without this
+	// every DB test in this package would depend on the machine running it.
+	wireguardHostAddrs = func(context.Context) ([]egress.AddrSpec, error) { return nil, nil }
 	os.Exit(m.Run())
 }
 

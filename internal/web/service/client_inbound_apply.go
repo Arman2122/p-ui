@@ -626,6 +626,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 				if hit := wireguardAllowedIPsCollision(normalized, peers); hit != "" {
 					return false, common.NewError("wireguard: allowedIPs entry already used by another client:", hit)
 				}
+				if hit := wireguardBlockedEntry(normalized, pool.blocked); hit != "" {
+					return false, common.NewError("wireguard: allowedIPs entry", hit, "is on a subnet this host already answers for")
+				}
 				clients[0].AllowedIPs = normalized
 			}
 		}

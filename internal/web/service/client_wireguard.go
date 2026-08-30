@@ -1,11 +1,15 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Arman2122/p-ui/internal/egress"
+	"github.com/Arman2122/p-ui/internal/logger"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
@@ -169,12 +173,30 @@ second customer's return traffic into the first customer's tunnel. The pool is
 therefore this inbound's own subnet minus everything another host device owns,
 never a package-wide default two inbounds would allocate from independently.
 */
+/*
+wireguardHostAddrs is what the HOST already answers for. The inbounds table
+cannot know: the resource being allocated is the one routing table, and eth0,
+docker0 or a private-network NIC are in it without any row saying so.
+
+A var for the reason egressManager is one: a test converges against a fake
+plane without root or a Linux kernel. It FAILS OPEN on purpose -- that is
+byte-for-byte the behaviour before this existed, whereas failing closed would
+refuse every WireGuard save on a netlink hiccup and on every non-Linux box.
+*/
+var wireguardHostAddrs = func(ctx context.Context) ([]egress.AddrSpec, error) {
+	snap, err := egress.HostPlane().Snapshot(ctx)
+	return snap.Addrs, err
+}
+
 type wireguardPool struct {
 	base string
 	// taken are the addresses other host inbounds' clients already hold.
 	taken []string
 	// blocked are the subnets other host devices already answer for.
 	blocked []netip.Prefix
+	// foreign are addresses on the host that belong to no inbound of ours, so a
+	// conflict can name the device carrying them.
+	foreign []egress.AddrSpec
 }
 
 func (s *InboundService) wireguardPoolFor(inbound *model.Inbound) (wireguardPool, error) {
@@ -202,7 +224,71 @@ func (s *InboundService) wireguardPoolFor(inbound *model.Inbound) (wireguardPool
 		}
 		pool.taken = append(pool.taken, wireguardClientAddresses(c.Settings)...)
 	}
+	// Nodes run their own host, so this only applies to the local panel.
+	if inbound.NodeID == nil {
+		pool.addHostAddrs(context.Background(), append(candidates, inbound))
+	}
 	return pool, nil
+}
+
+// addHostAddrs blocks every host address no inbound of ours carries. The
+// inbound itself is in mine, or its own device would read as a squatter.
+func (pool *wireguardPool) addHostAddrs(ctx context.Context, ours []*model.Inbound) {
+	addrs, err := wireguardHostAddrs(ctx)
+	if err != nil {
+		logger.Warning("wireguard: cannot read the host addresses, allocating from the database alone:", err)
+		return
+	}
+	mine := make(map[string]struct{}, len(ours))
+	for _, in := range ours {
+		if device, ok := egressIngressDevice(ctx, in); ok {
+			mine[device] = struct{}{}
+		}
+	}
+	for _, addr := range addrs {
+		if _, ok := mine[addr.Device]; ok || !addr.Prefix.IsValid() {
+			continue
+		}
+		pool.foreign = append(pool.foreign, addr)
+		pool.blocked = append(pool.blocked, addr.Prefix.Masked())
+	}
+}
+
+/*
+checkWireguardHostAddressConflict refuses a device address the host already
+carries. desiredRoutes installs a connected route for it, which would capture
+traffic for whatever else is on that subnet -- the LAN, docker, the panel
+itself -- and the row saves cleanly today because nothing on this path asks
+the host anything.
+*/
+func (s *InboundService) checkWireguardHostAddressConflict(inbound *model.Inbound) error {
+	if !ownsHostWireguardDevice(inbound.Protocol) || inbound.NodeID != nil {
+		return nil
+	}
+	pool, err := s.wireguardPoolFor(inbound)
+	if err != nil {
+		return err
+	}
+	for _, device := range wireguardDeviceAddresses(inbound.Settings) {
+		for _, addr := range pool.foreign {
+			if addr.Prefix.Masked().Overlaps(device.Masked()) {
+				return common.NewError("wireguard: address", device.String(), "overlaps",
+					addr.Prefix.String(), "already carried by this host's", addr.Device)
+			}
+		}
+	}
+	return nil
+}
+
+// wireguardBlockedEntry names the first hand-entered allowedIP that lands on a
+// subnet something else on this host already answers for.
+func wireguardBlockedEntry(entries []string, blocked []netip.Prefix) string {
+	for _, entry := range entries {
+		if addr := wireguardHostAddr(entry); addr.IsValid() && insideAny(addr, blocked) {
+			return entry
+		}
+	}
+	return ""
 }
 
 // inboundName is how an inbound is named back to the operator in a conflict.
@@ -420,6 +506,9 @@ func defaultWireguardClients(existing, clients []model.Client, interfaceClients 
 			}
 			if hit := wireguardAllowedIPsCollision(normalized, used); hit != "" {
 				return common.NewError("wireguard: allowedIPs entry already used by another client:", hit)
+			}
+			if hit := wireguardBlockedEntry(normalized, pool.blocked); hit != "" {
+				return common.NewError("wireguard: allowedIPs entry", hit, "is on a subnet this host already answers for")
 			}
 			c.AllowedIPs = normalized
 		}
