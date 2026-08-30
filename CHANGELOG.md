@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Simultaneous inbound changes no longer delete each other from the running
+  core.** Applying a change read the live config, spliced one inbound into a
+  copy, and pushed the whole thing back. Two of those overlapping both started
+  from the same snapshot, so the second push carried a version that had never
+  seen the first -- and the core deleted the inbound that had just been added.
+  The panel reported success for both. Driving sixteen at once, fifteen
+  disappeared from the running core while the database still listed them.
+  **What you will notice:** changes made at the same time -- by two admins, or by
+  you while the auto-disable job runs -- all take effect. Nothing else changes.
+
 - **Two saves can no longer both claim the same port.** The port check read
   committed rows and the save committed later, with nothing holding the gap, so
   two admins saving at once -- or one double-clicking Save -- could both be told
