@@ -36,6 +36,21 @@ func TestAnInboundCannotClaimAReservedTag(t *testing.T) {
 		{name: "the template's api outbound", tag: "api", refused: true, owner: "template"},
 		{name: "the template's direct outbound", tag: "direct", refused: true, owner: "template"},
 		{name: "the template's blackhole", tag: "blocked", refused: true, owner: "template"},
+		/*
+			A routing front's Xray inbound is synthesised at compile time, tagged
+			with its device name, and appended to the config — it is never a row in
+			`inbounds`, so tagExists cannot see it. An inbound tagged peg1 therefore
+			saved, and the compile then produced two inbounds with the same tag,
+			which xray-core refuses outright: every inbound of every protocol stops
+			answering. F231.
+		*/
+		{name: "a routing front's device name", tag: "peg1", refused: true, owner: "front"},
+		{name: "the highest front id", tag: "peg999", refused: true, owner: "front"},
+		// Round-tripped, exactly as the egress package reads its own devices: a
+		// near miss belongs to somebody else and stays the operator's to use.
+		{name: "a near miss with a leading zero", tag: "peg007", refused: false},
+		{name: "a front id past the band", tag: "peg1000", refused: false},
+		{name: "the bare prefix", tag: "peg", refused: false},
 		{name: "an ordinary tag", tag: "edge-tokyo-1", refused: false},
 		{name: "a tag that merely contains a reserved word", tag: "my-direct-line", refused: false},
 		{name: "empty means generate one", tag: "", refused: false},

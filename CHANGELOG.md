@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An inbound tag can no longer collide with a routing front's.** Naming an
+  inbound `peg1` was accepted, and the config then held two inbounds with that
+  tag -- which the core refuses outright, taking every inbound of every protocol
+  down at the next restart. Those names are reserved now, and the refusal says
+  so. Near misses like `peg007` stay yours.
+
 - **Disabling an inbound no longer renumbers its routing egress.** An inbound
   with a routing rule gets a small internal egress, and everything about it --
   its routing table, its network device name -- is derived from an id drawn from
