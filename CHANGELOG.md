@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The "Test SMTP" button now tests the connection the panel actually makes.**
+  Sending always upgrades to STARTTLS when the server offers it, whatever
+  encryption you selected -- but the test button only did so when you had picked
+  "STARTTLS" explicitly. Against a relay that requires the upgrade before
+  accepting a login, the test failed while sending worked; where the upgrade
+  itself was broken, the test passed while every message failed.
+  **What you will notice:** the button agrees with what sending does. Implicit
+  TLS is unchanged.
+
 - **A bad LDAP sync schedule no longer switches LDAP off in silence.** The
   scheduler expects six fields (it counts seconds), while every cron reference —
   and the settings field itself — invites the five-field form. A five-field spec
