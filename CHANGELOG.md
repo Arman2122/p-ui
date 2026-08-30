@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The one-time routing conversion no longer hoists rules above a private-IP
+  block.** Converting an existing template into the new routing rules imports a
+  leading run of rules and leaves the rest in place -- but it stepped over
+  certain rules without stopping, including a `geoip:private` block. Everything
+  below such a rule was then lifted ABOVE it, and since routing is first-match,
+  LAN traffic could start matching a rule meant for the internet.
+  **What you will notice:** on a panel that has not converted yet, the import
+  stops at the private block and everything from there down stays exactly where
+  you put it. Already-converted panels are not re-run.
+
 - **Renaming or deleting an inbound now updates the routing template even if
   that template was already invalid.** The update was saved through the full
   config validator, which re-checks the WHOLE stored template -- so one

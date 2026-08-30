@@ -185,11 +185,21 @@ func importTemplateRoutingRules(tx *gorm.DB) error {
 	stopped := false
 	for _, raw := range rawRules {
 		rule, _ := raw.(map[string]any)
-		if stopped || rule == nil {
+		if stopped {
+			kept = append(kept, raw)
+			continue
+		}
+		if rule == nil {
+			stopped = true
 			kept = append(kept, raw)
 			continue
 		}
 		if isTransparentRule(rule) {
+			// Walking past a kept rule can lift what follows above it; only the api
+			// rule is safe, since splitPinnedAPIRule pins intent strictly below it.
+			if out, _ := rule["outboundTag"].(string); out != "api" {
+				stopped = true
+			}
 			kept = append(kept, raw)
 			continue
 		}
