@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The routing page stops offering an MTProto inbound whose Outbound is already
+  forced.** When such an inbound has an Outbound set in its own form, the panel
+  applies that above every routing rule -- so a rule naming it could never win.
+  The subject picker offered it anyway, and the rule you wrote sat there looking
+  active while doing nothing.
+  **What you will notice:** the subject is shown as unavailable with the reason.
+  No traffic changes route; this only stops the picker offering a rule that
+  cannot fire. Clear the inbound'''s own Outbound field to route it by rules.
+
 - **The panel stops treating its own AmneziaWG uplink devices as somebody
   else'''s.** It recognised only one naming scheme for the devices it dials out
   through, and AmneziaWG uses a second. A healthy AmneziaWG uplink therefore read

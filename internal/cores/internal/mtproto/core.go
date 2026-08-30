@@ -285,8 +285,9 @@ blocked key is the reason the editor shows instead of offering a dead tag.
 */
 func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
 	var parsed struct {
-		RouteThroughXray bool `json:"routeThroughXray"`
-		RouteXrayPort    int  `json:"routeXrayPort"`
+		RouteThroughXray bool   `json:"routeThroughXray"`
+		RouteXrayPort    int    `json:"routeXrayPort"`
+		OutboundTag      string `json:"outboundTag"`
 	}
 	if err := json.Unmarshal([]byte(inst.Settings), &parsed); err != nil {
 		return core.IngressHandle{BlockedKey: blockedBridgeOff}, nil
@@ -294,12 +295,21 @@ func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.Ingres
 	if !parsed.RouteThroughXray || parsed.RouteXrayPort <= 0 {
 		return core.IngressHandle{BlockedKey: blockedBridgeOff}, nil
 	}
+	// The panel pins this tag to that outbound ABOVE every compiled rule, so a
+	// rule naming this subject could never win first match.
+	if parsed.OutboundTag != "" {
+		return core.IngressHandle{BlockedKey: blockedForcedOutbound}, nil
+	}
 	return core.IngressHandle{Tag: inst.Tag}, nil
 }
 
 // blockedBridgeOff is the i18n key the routing editor renders. Declared here so
 // the reason travels with the core that knows it, not with the web layer.
 const blockedBridgeOff = "pages.xray.subjects.reasonBridgeOff"
+
+// blockedForcedOutbound: the inbound's own Outbound field wins, so the
+// routing page must not offer this subject as though a rule could apply.
+const blockedForcedOutbound = "pages.xray.subjects.reasonForcedOutbound"
 
 // Transports: mtg is a TCP proxy and reads no stream settings, so its footprint
 // is the same whatever an inbound carries.

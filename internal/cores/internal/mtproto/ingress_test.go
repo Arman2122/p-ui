@@ -23,6 +23,13 @@ func TestUnbridgedMtprotoIsBlockedWithAReason(t *testing.T) {
 		{"the switch is off", `{"routeThroughXray":false}`, "", blockedBridgeOff},
 		{"bridged but no port is not a bridge", `{"routeThroughXray":true,"routeXrayPort":0}`, "", blockedBridgeOff},
 		{"unreadable settings fail closed", `{`, "", blockedBridgeOff},
+		/* The inbound's own Outbound field is applied ABOVE every compiled rule,
+		   so a rule naming this subject can never win first match. Offering it
+		   in the picker invited a rule that silently does nothing. F050. */
+		{"a forced outbound cannot be overridden by a rule",
+			`{"routeThroughXray":true,"routeXrayPort":2398,"outboundTag":"warp"}`, "", blockedForcedOutbound},
+		{"an empty outbound tag is no override",
+			`{"routeThroughXray":true,"routeXrayPort":2398,"outboundTag":""}`, "mt-1", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := (&Core{}).IngressHandle(context.Background(), core.Instance{
