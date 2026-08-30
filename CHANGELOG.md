@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The NordVPN server list shows the quiet servers again.** It kept only
+  servers whose load was ABOVE 7 percent -- the filter upside down -- so the
+  least loaded servers, the ones worth picking, were exactly the ones dropped,
+  and a country quiet enough that every server sat at or below 7 came back
+  empty. Servers with no load figure were discarded too. The full list is shown
+  now, with each server's load on its row.
+
+- **NordVPN calls go through your panel's egress proxy.** They used their own
+  direct connection while every other outbound request the panel makes -- the
+  WARP integration next to them included -- goes through the configured proxy.
+  On a panel that reaches the internet only that way, the whole NordVPN
+  integration silently failed.
+
 - **A migration that gives up part-way rolls back instead of committing.** Two
   of its early returns declared their own error variable, so the deferred
   commit-or-rollback saw none and committed a half-migrated set of inbounds --

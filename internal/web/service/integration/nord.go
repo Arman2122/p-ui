@@ -16,17 +16,29 @@ type NordService struct {
 	service.SettingService
 }
 
-var nordHTTPClient = &http.Client{Timeout: 15 * time.Second}
+/*
+nordAPIBase is the API root, and a variable so a test can point these calls at a
+stub: they are otherwise reachable only over the internet.
+
+The client is no longer a package-level one on the default transport. Every
+other outbound call the panel makes -- its sibling WARP integration in this same
+file's package included -- goes through the operator's configured egress proxy,
+and these three quietly did not. On a panel that reaches the internet only
+through that proxy, the whole NordVPN integration simply failed. F357.
+*/
+var nordAPIBase = "https://api.nordvpn.com"
+
+const nordTimeout = 15 * time.Second
 
 // maxResponseSize limits the maximum size of NordVPN API responses (10 MB).
 const maxResponseSize = 10 << 20
 
 func (s *NordService) GetCountries() (string, error) {
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.nordvpn.com/v1/countries", nil)
+	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, nordAPIBase+"/v1/countries", nil)
 	if reqErr != nil {
 		return "", reqErr
 	}
-	resp, err := nordHTTPClient.Do(req)
+	resp, err := s.NewProxiedHTTPClient(nordTimeout).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -48,12 +60,12 @@ func (s *NordService) GetServers(countryId string) (string, error) {
 			return "", common.NewError("invalid country ID")
 		}
 	}
-	url := fmt.Sprintf("https://api.nordvpn.com/v2/servers?limit=0&filters[servers_technologies][id]=35&filters[country_id]=%s", countryId)
+	url := fmt.Sprintf("%s/v2/servers?limit=0&filters[servers_technologies][id]=35&filters[country_id]=%s", nordAPIBase, countryId)
 	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if reqErr != nil {
 		return "", reqErr
 	}
-	resp, err := nordHTTPClient.Do(req)
+	resp, err := s.NewProxiedHTTPClient(nordTimeout).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -65,28 +77,20 @@ func (s *NordService) GetServers(countryId string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var data map[string]any
-	if err := json.Unmarshal(body, &data); err != nil {
-		return string(body), nil
-	}
+	/*
+		Passed through as Nord sent it.
 
-	servers, ok := data["servers"].([]any)
-	if !ok {
-		return string(body), nil
-	}
+		This used to keep a server only when its load was ABOVE 7 percent, which
+		is the filter upside down: the least loaded servers -- the ones worth
+		picking -- were the ones dropped, and a country quiet enough that every
+		server sat at or below 7 came back empty. A server whose load field was
+		missing or not a number was dropped as well.
 
-	var filtered []any
-	for _, s := range servers {
-		if server, ok := s.(map[string]any); ok {
-			if load, ok := server["load"].(float64); ok && load > 7 {
-				filtered = append(filtered, s)
-			}
-		}
-	}
-	data["servers"] = filtered
-
-	result, _ := json.Marshal(data)
-	return string(result), nil
+		Not re-inverted with a threshold of its own: which load is too high is a
+		policy nobody chose, and the operator can see the number on each row.
+		F356.
+	*/
+	return string(body), nil
 }
 
 func (s *NordService) SetKey(privateKey string) (string, error) {
@@ -106,14 +110,14 @@ func (s *NordService) SetKey(privateKey string) (string, error) {
 }
 
 func (s *NordService) GetCredentials(token string) (string, error) {
-	url := "https://api.nordvpn.com/v1/users/services/credentials"
+	url := nordAPIBase + "/v1/users/services/credentials"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
 	req.SetBasicAuth("token", token)
 
-	resp, err := nordHTTPClient.Do(req)
+	resp, err := s.NewProxiedHTTPClient(nordTimeout).Do(req)
 	if err != nil {
 		return "", err
 	}
