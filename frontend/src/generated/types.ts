@@ -264,7 +264,7 @@ export interface Client {
   keepAlive?: number;
   limitIp: number;
   password?: string;
-  preSharedKey?: string;
+  preSharedKey?: string | null;
   privateKey?: string;
   publicKey?: string;
   reset: number;

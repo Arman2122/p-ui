@@ -255,7 +255,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "keepAlive": 0,
     "limitIp": 0,
     "password": "",
-    "preSharedKey": "",
+    "preSharedKey": null,
     "privateKey": "",
     "publicKey": "",
     "reset": 0,

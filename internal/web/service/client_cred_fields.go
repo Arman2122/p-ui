@@ -28,7 +28,7 @@ func clientCredentialValues(c *model.Client) map[string]string {
 		core.CredAdTag:        c.AdTag,
 		core.CredPrivateKey:   c.PrivateKey,
 		core.CredPublicKey:    c.PublicKey,
-		core.CredPreSharedKey: c.PreSharedKey,
+		core.CredPreSharedKey: c.PSK(),
 	}
 }
 
@@ -51,7 +51,7 @@ func setClientCredential(c *model.Client, name, value string) {
 	case core.CredPublicKey:
 		c.PublicKey = value
 	case core.CredPreSharedKey:
-		c.PreSharedKey = value
+		c.PreSharedKey = &value
 	}
 }
 

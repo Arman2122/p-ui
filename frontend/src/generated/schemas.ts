@@ -1090,6 +1090,8 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "preSharedKey": {
+        "description": "Omit to keep the stored key, send empty to clear it",
+        "nullable": true,
         "type": "string"
       },
       "privateKey": {

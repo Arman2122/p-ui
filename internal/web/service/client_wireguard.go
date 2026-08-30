@@ -538,8 +538,8 @@ func defaultWireguardClients(existing, clients []model.Client, interfaceClients 
 				m["privateKey"] = c.PrivateKey
 				m["publicKey"] = c.PublicKey
 				m["allowedIPs"] = c.AllowedIPs
-				if c.PreSharedKey != "" {
-					m["preSharedKey"] = c.PreSharedKey
+				if psk := c.PSK(); psk != "" {
+					m["preSharedKey"] = psk
 				}
 				if c.KeepAlive > 0 {
 					m["keepAlive"] = c.KeepAlive
