@@ -381,3 +381,53 @@ func TestUpdateInboundStillAcceptsAMetadataEdit(t *testing.T) {
 		t.Fatalf("a remark edit was refused: %v", err)
 	}
 }
+
+/*
+A client an update INTRODUCES is asked about too, not only a protocol switch.
+
+AddInbound has always run validateClientForKind over each client; UpdateInbound
+ran it over none. Only amneziawg implements ValidateInstance, so for every other
+kind an update saved clients the core cannot serve — and validateInboundForXray
+only asks xray, only about an inbound that is enabled and local.
+
+Comparing against the stored clients is what keeps this from stranding anyone: a
+client that arrives unchanged is skipped, so an inbound whose clients an older
+build let in stays editable. F237.
+*/
+func TestUpdateInboundValidatesAClientTheEditAdds(t *testing.T) {
+	initTestDB(t)
+	svc := InboundService{}
+
+	created, _, _, err := svc.AddInbound(wgkernelInbound(20151, "10.92.0.1/24"))
+	if err != nil {
+		t.Fatalf("AddInbound: %v", err)
+	}
+
+	// A peer with no public key: the kernel authenticates by key alone, so this
+	// is a client that can never connect, on a kind xray is never asked about.
+	added := *created
+	added.Settings = `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.92.0.1/24"],` +
+		`"clients":[{"email":"keyless@wg","allowedIPs":["10.92.0.2/32"]}]}`
+	if _, _, _, err := svc.UpdateInbound(&added); err == nil {
+		t.Fatal("a keyless peer was added to a kernel WireGuard inbound; the kernel has nothing to authenticate it with")
+	}
+
+	/* And an inbound that ALREADY holds such a client stays editable. Written
+	   straight to the row, because that is the only way one gets there — every
+	   save path refuses it — and it is exactly what an older build left behind. */
+	stranded := `{"secretKey":"` + wgTestSecretKey() + `","mtu":1420,"address":["10.92.0.1/24"],` +
+		`"clients":[{"email":"legacy@wg","allowedIPs":["10.92.0.4/32"]}]}`
+	if err := database.GetDB().Model(&model.Inbound{}).
+		Where("id = ?", created.Id).Update("settings", stranded).Error; err != nil {
+		t.Fatalf("seed the stranded client: %v", err)
+	}
+	reloaded, err := svc.GetInbound(created.Id)
+	if err != nil {
+		t.Fatalf("GetInbound: %v", err)
+	}
+	renamed := *reloaded
+	renamed.Remark = "renamed"
+	if _, _, _, err := svc.UpdateInbound(&renamed); err != nil {
+		t.Fatalf("a remark edit was refused because of a client that was already stored, stranding the inbound: %v", err)
+	}
+}
