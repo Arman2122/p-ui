@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A bad LDAP sync schedule no longer switches LDAP off in silence.** The
+  scheduler expects six fields (it counts seconds), while every cron reference —
+  and the settings field itself — invites the five-field form. A five-field spec
+  was rejected and the error thrown away, so the sync was never scheduled at
+  all. Off-boarding fails open when it does not run, which means every account
+  you disabled in the directory kept working on the panel indefinitely, with
+  nothing anywhere to say so.
+  **What you will notice:** an unparseable schedule falls back to the default of
+  every minute and logs an error naming your spec and where to fix it.
+
 - **An inbound that runs out of quota now really stops serving.** It was flipped
   off in the panel and dropped from the core by tag -- but when that drop failed,
   nothing else happened. The listener stayed up with every session on it still
