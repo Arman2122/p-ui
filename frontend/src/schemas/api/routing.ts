@@ -106,6 +106,7 @@ export const CRITERIA_FIELDS = [
   'source',
   'protocol',
   'user',
+  'attrs',
 ] as const;
 
 export type CriterionField = (typeof CRITERIA_FIELDS)[number];
@@ -123,10 +124,16 @@ export function criteriaToForm(raw: RoutingRuleRecord['criteria']): Record<strin
   return out;
 }
 
-export function criteriaFromForm(form: Record<string, string | undefined>): string {
+export function criteriaFromForm(form: Record<string, unknown>): string {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(form)) {
-    const trimmed = (value ?? '').trim();
+    /* attrs is an object, not a comma list; splitting it would stringify it
+       to "[object Object]". No other caller passes a non-string. */
+    if (value !== null && typeof value === 'object') {
+      if (Object.keys(value as object).length > 0) out[key] = value;
+      continue;
+    }
+    const trimmed = (typeof value === 'string' ? value : '').trim();
     if (!trimmed) continue;
     out[key] = LIST_CRITERIA.has(key)
       ? trimmed.split(',').map((part) => part.trim()).filter(Boolean)
@@ -165,6 +172,7 @@ export interface XrayRuleShape {
   user?: string[];
   inboundTag?: string[];
   protocol?: string[];
+  attrs?: Record<string, string>;
   outboundTag?: string;
   balancerTag?: string;
   [key: string]: unknown;
@@ -179,15 +187,29 @@ export function intentToRule(
   tagOf: (inboundId: number) => string | undefined,
 ): XrayRuleShape {
   const criteria = criteriaToForm(record.criteria);
+  /* attrs is an object, so it has to come off the PARSED criteria rather than
+     the flattened string form. A malformed stored value is ignored, not
+     expanded into a row per character in the editor. */
+  const parsedCriteria = typeof record.criteria === 'string'
+    ? safeParse(record.criteria)
+    : record.criteria;
   /* The remark rides through unchanged: the form does not manage it, the modal
      carries every unmanaged key, and ruleToIntent reads it back. Omitting it
      here is what used to blank the column on every edit and every toggle. */
   const out: XrayRuleShape = { type: 'field', enabled: record.enable, remark: record.remark };
   for (const [key, value] of Object.entries(criteria)) {
     if (!value) continue;
+    /* Flattening an object criterion yields "[object Object]"; attrs is taken
+       from the parsed criteria below instead. */
+    if (key === 'attrs') continue;
     const listKey = LIST_KEYS[key];
     if (listKey) out[listKey] = value.split(',').map((s) => s.trim()).filter(Boolean);
     else out[key] = value;
+  }
+  const attrs = (parsedCriteria as Record<string, unknown> | null | undefined)?.attrs;
+  if (attrs && typeof attrs === 'object' && !Array.isArray(attrs)
+    && Object.keys(attrs).length > 0) {
+    out.attrs = attrs as Record<string, string>;
   }
   out.inboundTag = record.ingressScope === 'all'
     ? []
@@ -239,7 +261,11 @@ export function ruleToIntent(
   rule: XrayRuleShape,
   idOf: (tag: string) => number | undefined,
 ): IntentResult {
-  const criteria: Record<string, string> = {};
+  const criteria: Record<string, unknown> = {};
+  if (rule.attrs && typeof rule.attrs === 'object' && !Array.isArray(rule.attrs)
+    && Object.keys(rule.attrs).length > 0) {
+    criteria.attrs = rule.attrs;
+  }
   for (const [formKey, ruleKey] of Object.entries(LIST_KEYS)) {
     const value = rule[ruleKey];
     if (Array.isArray(value) && value.length > 0) criteria[formKey] = value.join(',');

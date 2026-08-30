@@ -214,6 +214,20 @@ func ValidateRoutingCriteria(criteria map[string]json.RawMessage) error {
 	if err != nil {
 		return err
 	}
+	// Build stores attrs as a template string and only compiles it when a
+	// packet arrives, so an unreadable pattern would otherwise reach the core.
+	if attrs, ok := criteria["attrs"]; ok {
+		var patterns map[string]string
+		if uErr := json.Unmarshal(attrs, &patterns); uErr != nil {
+			return uErr
+		}
+		for key, pattern := range patterns {
+			if _, cErr := regexp.Compile(pattern); cErr != nil {
+				return fmt.Errorf("attrs[%s]: %w", key, cErr)
+			}
+		}
+	}
+
 	_, err = (&conf.RouterConfig{RuleList: []json.RawMessage{raw}}).Build()
 	if errors.Is(err, fs.ErrNotExist) {
 		// A geoip:/geosite: token is resolved against the .dat files. Missing or

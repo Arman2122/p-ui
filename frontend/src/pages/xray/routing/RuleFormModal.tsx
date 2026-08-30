@@ -244,6 +244,7 @@ export default function RuleFormModal({
           </FormField>
 
           <FormField
+            {...gate('vlessRoute')}
             name="vlessRoute"
             label={
               <Tooltip title={t('pages.xray.rules.useComma')}>
@@ -266,11 +267,12 @@ export default function RuleFormModal({
             />
           </FormField>
 
-          <Form.Item label={t('pages.xray.ruleForm.attributes')}>
+          <Form.Item label={t('pages.xray.ruleForm.attributes')} {...gate('attrs')}>
             <Button
               size="small"
               aria-label={t('add')}
               icon={<PlusOutlined />}
+              disabled={!!gate('attrs').disabled}
               onClick={() => methods.setValue('attrs', [...attrs, ['', ''] as [string, string]])}
             />
           </Form.Item>

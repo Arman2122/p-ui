@@ -564,6 +564,8 @@ export default function RoutingTab({
           },
         ]}
       />
+      {/* subjects is intent-only, exactly like exits: a template rule is
+          written verbatim into the config, where every criterion works. */}
       <RuleFormModal
         open={ruleModalOpen}
         rule={editingRule}
@@ -571,7 +573,7 @@ export default function RoutingTab({
         outboundTags={outboundTagOptions}
         balancerTags={balancerTagOptions}
         onClose={() => setRuleModalOpen(false)}
-        subjects={subjects}
+        subjects={editingSource === 'intent' ? subjects : undefined}
         exits={editingSource === 'intent' ? exits : undefined}
         onConfirm={onRuleConfirm}
       />

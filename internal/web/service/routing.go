@@ -84,13 +84,15 @@ packet. Offering the field would produce a rule that saves and never matches,
 which is the whole class of bug this feature exists to remove.
 */
 func criteriaMaskFor(handle core.IngressHandle) []string {
-	base := []string{"ip", "port", "sourcePort", "network", "source", "attrs"}
+	base := []string{"ip", "port", "sourcePort", "network", "source"}
 	if handle.Device != "" {
 		// Fronted traffic reaches Xray without an identity, and without sniffing it
 		// carries no name either. Both are P2 work; until then, say so.
 		return base
 	}
-	return append(base, "user", "domain", "protocol")
+	// attrs joins the group that needs sniffing: the front inbound carries no
+	// sniffing block, so AttributeMatcher returns false for every packet.
+	return append(base, "user", "domain", "protocol", "attrs")
 }
 
 // compile resolves everything the plan needs and runs it. Front ids are

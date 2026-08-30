@@ -8,6 +8,25 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Routing attributes survive being edited.** `attrs` is the one rule criterion
+  stored as a set of key/value pairs rather than a list, and the editor flattened
+  it to the literal text `[object Object]` on the way in -- then split that into
+  one row per character. Saving stored the mangled text, so whatever you had
+  configured was replaced by junk the moment you opened the rule.
+  **What you will notice:** attribute rules open and save unchanged. A stored
+  value that is not a set of pairs is ignored instead of expanded.
+
+- **A routing attribute pattern that cannot compile is refused when you save
+  it.** Xray only compiles these patterns when a packet arrives, so an unclosed
+  bracket saved cleanly and then failed inside the running router, on live
+  traffic, with nothing tying the two together.
+
+- **Attribute rules are no longer offered for L3 (device) subjects.** Xray reads
+  attributes from sniffed metadata, and the inbound the panel builds for those
+  subjects does no sniffing -- so such a rule saved, displayed as active, and
+  matched nothing. It is now shown as unavailable with the reason, alongside the
+  other criteria that cannot apply there.
+
 - **The routing page stops offering an MTProto inbound whose Outbound is already
   forced.** When such an inbound has an Outbound set in its own form, the panel
   applies that above every routing rule -- so a rule naming it could never win.
