@@ -3,6 +3,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import RoutingTab from '@/pages/xray/routing/RoutingTab';
+import type { RoutingDraft } from '@/hooks/useRoutingDraft';
 import type { XraySettingsValue } from '@/hooks/useXraySetting';
 
 import { renderWithProviders } from './test-utils';
@@ -19,6 +20,20 @@ function settingsWithHiddenLoopback(): XraySettingsValue {
   } as unknown as XraySettingsValue;
 }
 
+/* This test is about template rules, which do not go through the draft. */
+function emptyRoutingDraft(): RoutingDraft {
+  return {
+    rules: [],
+    dirty: false,
+    addRule: () => {},
+    updateRule: () => {},
+    removeRule: () => {},
+    reorderRules: () => {},
+    discard: () => {},
+    flush: async () => {},
+  };
+}
+
 describe('RoutingTab hidden-loopback index mapping', () => {
   it('toggles the visible rule, not the hidden loopback rule that precedes it', () => {
     const setTemplateSettings = vi.fn();
@@ -33,6 +48,7 @@ describe('RoutingTab hidden-loopback index mapping', () => {
           inboundTags={[]}
           clientReverseTags={[]}
           isMobile={false}
+          routing={emptyRoutingDraft()}
         />
       </QueryClientProvider>,
     );

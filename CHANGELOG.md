@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Routing rules now wait for Save.** Adding, editing, deleting or reordering a
+  routing rule took effect the moment you clicked OK -- it was written and, since
+  every one of those writes schedules a reload, it reached live traffic within
+  the next reconcile. Routing is first-match, so moving a rule up the list was
+  itself a live routing change. The Save button meanwhile stayed dark, because it
+  only watched the Xray template and these rules are not in it, so there was no
+  review step and no way to ask for one.
+  **What you will notice:** rule changes are held until you press Save, exactly
+  like the rest of the Xray page, and Save lights up while you have unsaved ones.
+  Leaving the page without saving discards them.
+
 - **Routing attributes survive being edited.** `attrs` is the one rule criterion
   stored as a set of key/value pairs rather than a list, and the editor flattened
   it to the literal text `[object Object]` on the way in -- then split that into

@@ -22,10 +22,9 @@ import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
 import { useRoutingColumns } from './useRoutingColumns';
 import { arrJoin, buildInboundTagOptions, canSwapRows, originalRuleIndex } from './helpers';
-import { useRoutingMutations } from '@/api/queries/useRoutingMutations';
+import type { RoutingDraft } from '@/hooks/useRoutingDraft';
 import {
   useRoutingExitsQuery,
-  useRoutingRulesQuery,
   useRoutingSubjectsQuery,
 } from '@/api/queries/useRoutingQuery';
 import { intentToRule, recordToPayload, ruleToIntent, type XrayRuleShape } from '@/schemas/api/routing';
@@ -42,6 +41,8 @@ interface RoutingTabProps {
   clientReverseTags: string[];
   subscriptionOutboundTags?: string[];
   isMobile: boolean;
+  /* Owned by the page so its Save button can see the changes and flush them. */
+  routing: RoutingDraft;
 }
 
 export default function RoutingTab({
@@ -52,6 +53,7 @@ export default function RoutingTab({
   clientReverseTags,
   subscriptionOutboundTags,
   isMobile,
+  routing,
 }: RoutingTabProps) {
   const { t } = useTranslation();
   const [modal, modalContextHolder] = Modal.useModal();
@@ -140,10 +142,9 @@ export default function RoutingTab({
     return buildInboundTagOptions(routingSubjects, templateTags);
   }, [templateSettings, inboundTags, routingSubjects]);
 
-  const { data: intentRecords = [] } = useRoutingRulesQuery();
+  const intentRecords = routing.rules;
   const { data: subjects = [] } = useRoutingSubjectsQuery();
   const { data: exits = [] } = useRoutingExitsQuery();
-  const routingMut = useRoutingMutations();
 
   const tagOfInbound = useMemo(() => {
     const map = new Map<number, string>();
@@ -205,12 +206,12 @@ export default function RoutingTab({
 
   // Reordering an operator rule writes the whole order in one call, so a failure
   // cannot leave first-match half applied.
-  async function moveIntent(index: number, delta: number) {
+  function moveIntent(index: number, delta: number) {
     const next = [...intentRecordsRef.current];
     const target = index + delta;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    await routingMut.reorder(next.map((record) => record.id));
+    routing.reorderRules(next);
   }
 
   const outboundTagOptions = useMemo(() => {
@@ -312,7 +313,8 @@ export default function RoutingTab({
         return;
       }
       const record = editingIndex == null ? null : intentRecordsRef.current[editingIndex];
-      void (record ? routingMut.update(record.id, result.payload) : routingMut.add(result.payload));
+      if (record) routing.updateRule(record.id, result.payload);
+      else routing.addRule(result.payload);
       setRuleModalOpen(false);
       return;
     }
@@ -334,7 +336,7 @@ export default function RoutingTab({
     const remove = row?.source === 'intent'
       ? () => {
         const record = intentRecordsRef.current[row.storeIndex ?? 0];
-        if (record) void routingMut.remove(record.id);
+        if (record) routing.removeRule(record.id);
       }
       : () => {
         const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
@@ -387,7 +389,7 @@ export default function RoutingTab({
       const record = intentRecordsRef.current[row.storeIndex ?? 0];
       /* Straight from the stored row. Round-tripping through the editor's shape
          recomputed scope, criteria and destination from a toggle of one flag. */
-      if (record) void routingMut.update(record.id, { ...recordToPayload(record), enable: enabled });
+      if (record) routing.updateRule(record.id, { ...recordToPayload(record), enable: enabled });
       return;
     }
     const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
@@ -444,7 +446,7 @@ export default function RoutingTab({
         const next = [...intentRecordsRef.current];
         const [movedRecord] = next.splice(fromRow.storeIndex ?? 0, 1);
         next.splice(toRow.storeIndex ?? 0, 0, movedRecord);
-        void routingMut.reorder(next.map((record) => record.id));
+        routing.reorderRules(next);
         return;
       }
       const fromOrig = fromRow.storeIndex ?? originalRuleIndex(rowsRef.current, from);

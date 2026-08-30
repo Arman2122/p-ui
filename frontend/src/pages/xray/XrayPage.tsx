@@ -28,6 +28,7 @@ import { setMessageInstance } from '@/utils/messageBus';
 import { BasicsTab } from './basics';
 import { propagateOutboundTagRename } from './basics/helpers';
 import { RoutingTab } from './routing';
+import { useRoutingDraft } from '@/hooks/useRoutingDraft';
 import { OutboundsTab } from './outbounds';
 import { BalancersTab } from './balancers';
 import { cleanupOrphanedBalancerLoopbacks, ensureMissingBalancerLoopbacks, detectBalancerCycles } from './balancers/balancer-loopback';
@@ -50,7 +51,7 @@ export default function XrayPage() {
   const {
     fetched,
     spinning,
-    saveDisabled,
+    saveDisabled: templateSaveDisabled,
     fetchError,
     xraySetting,
     setXraySetting,
@@ -192,7 +193,7 @@ export default function XrayPage() {
     });
   }
 
-  function onSaveAll() {
+  async function onSaveAll() {
     try {
       JSON.parse(xraySetting);
     } catch (e) {
@@ -214,8 +215,16 @@ export default function XrayPage() {
       setXraySetting(serialized);
       setTemplateSettings(clone);
     }
-    saveAll();
+    /* Routing rules first: each write raises the restart flag, so flushing
+       them before the template save means one reload carries everything. */
+    await routing.flush();
+    await saveAll();
   }
+
+  /* Routing rules are drafted like the template, so Save has to see them too;
+     without this the button stays dark while unsaved rules sit on screen. */
+  const routing = useRoutingDraft();
+  const saveDisabled = templateSaveDisabled && !routing.dirty;
 
   const scrollTarget = () => document.getElementById('content-layout') || window;
 
@@ -233,6 +242,7 @@ export default function XrayPage() {
             clientReverseTags={clientReverseTags}
             subscriptionOutboundTags={subscriptionOutboundTags}
             isMobile={isMobile}
+            routing={routing}
           />
         );
       case 'outbound':
