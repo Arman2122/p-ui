@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type Key } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Card,
@@ -27,6 +28,7 @@ import {
 } from '@ant-design/icons';
 
 import { HttpUtil } from '@/utils';
+import { keys } from '@/api/queryKeys';
 import { activateOnKey } from '@/utils/a11y';
 
 import { buildRowActionsMenu } from './RowActions';
@@ -53,6 +55,7 @@ export default function InboundList({
   onBulkDelete,
 }: InboundListProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [statsRecord, setStatsRecord] = useState<DBInboundRecord | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   // Node filter (#4997): 'all' shows everything, 0 is the local-panel
@@ -87,18 +90,17 @@ export default function InboundList({
     ));
   }, [dbInbounds, nodeFilter, searchKey]);
 
+  /* The switch is fully controlled, and the row objects live in the query cache
+     -- writing enable onto one in place changes no reference, so React renders
+     nothing, and TanStack's structural sharing then finds the refetched row equal
+     to the mutated one and skips the update that would have repainted it. The row
+     follows the server's answer instead, like every other list here. F181. */
   const onSwitchEnable = useCallback(async (dbInbound: DBInboundRecord, next: boolean) => {
-    const previous = dbInbound.enable;
-    dbInbound.enable = next;
-    try {
-      const formData = new FormData();
-      formData.append('enable', String(next));
-      const msg = await HttpUtil.post(`/panel/api/inbounds/setEnable/${dbInbound.id}`, formData);
-      if (!msg?.success) dbInbound.enable = previous;
-    } catch {
-      dbInbound.enable = previous;
-    }
-  }, []);
+    const formData = new FormData();
+    formData.append('enable', String(next));
+    const msg = await HttpUtil.post(`/panel/api/inbounds/setEnable/${dbInbound.id}`, formData);
+    if (msg?.success) queryClient.invalidateQueries({ queryKey: keys.inbounds.root() });
+  }, [queryClient]);
 
   const hasAnyRemark = useMemo(
     () => dbInbounds.some((i) => typeof i.remark === 'string' && i.remark.trim() !== ''),

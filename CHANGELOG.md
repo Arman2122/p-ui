@@ -8,6 +8,20 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Exporting your routing rules exports all of them.** The file held only the
+  rules that arrived with a template; every rule created in the routing dialog
+  was left out, and the export menu greyed itself out on that same count -- so a
+  panel whose rules were all its own could not export at all. Nothing said so:
+  the file was valid, and the gap only showed on the restore.
+  **What you will notice:** the export matches the table, operator rules first,
+  in the order the router evaluates them.
+
+- **The inbound enable switch follows the panel, not a guess.** It wrote the new
+  position onto the row it was holding, which lives in the page's cache -- so
+  React repainted nothing, and the refresh that should have repainted it was
+  then skipped as a no-op. The switch could sit on the old position while the
+  inbound was already off.
+
 - **A subscription whose clients expire on different days stops claiming it
   never expires.** The header apps read for the countdown carries one number,
   and a subscription folding two clients with different deadlines set it to

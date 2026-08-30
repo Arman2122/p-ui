@@ -21,7 +21,7 @@ import RuleFormModal from './RuleFormModal';
 import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
 import { useRoutingColumns } from './useRoutingColumns';
-import { arrJoin, buildInboundTagOptions, canSwapRows, originalRuleIndex } from './helpers';
+import { arrJoin, buildInboundTagOptions, canSwapRows, exportableRuleList, originalRuleIndex } from './helpers';
 import type { RoutingDraft } from '@/hooks/useRoutingDraft';
 import {
   useRoutingExitsQuery,
@@ -240,8 +240,16 @@ export default function RoutingTab({
   const [exportOpen, setExportOpen] = useState(false);
   const [exportContent, setExportContent] = useState('');
 
+  /* Everything the table shows, in the order it shows it. Exporting `rules`
+     alone silently dropped every rule the operator created here -- the dialog
+     writes those to the panel's own store, not into the template. F192. */
+  const exportableRules = useMemo(
+    () => exportableRuleList(intentRecords, rules as XrayRuleShape[], (id) => tagOfInbound.get(id)),
+    [intentRecords, tagOfInbound, rules],
+  );
+
   function exportRules() {
-    setExportContent(JSON.stringify(rules, null, 2));
+    setExportContent(JSON.stringify(exportableRules, null, 2));
     setExportOpen(true);
   }
 
@@ -516,7 +524,7 @@ export default function RoutingTab({
                     menu={{
                       items: [
                         { key: 'import', icon: <ImportOutlined />, label: t('pages.xray.importRules'), onClick: () => setImportOpen(true) },
-                        { key: 'export', icon: <ExportOutlined />, label: t('pages.xray.exportRules'), disabled: rules.length === 0, onClick: exportRules },
+                        { key: 'export', icon: <ExportOutlined />, label: t('pages.xray.exportRules'), disabled: exportableRules.length === 0, onClick: exportRules },
                       ],
                     }}
                   >

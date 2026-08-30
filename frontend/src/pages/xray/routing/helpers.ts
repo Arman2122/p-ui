@@ -1,3 +1,4 @@
+import { intentToRule, type RoutingRuleRecord, type XrayRuleShape } from '@/schemas/api/routing';
 import type { InboundTagOption, RoutingSubject, RuleRow } from './types';
 
 export function arrJoin(v: unknown): string | undefined {
@@ -141,4 +142,23 @@ export function buildInboundTagOptions(
   for (const tag of templateTags) push(tag, false);
   for (const tag of selectedTags) push(tag, false);
   return out;
+}
+
+/**
+ * Every rule the table shows, as Xray rule objects, in evaluation order.
+ *
+ * The operator's own rules live in the panel's store and the rest in the
+ * template; the table merges them, so an export that serialises the template
+ * alone is missing every rule the operator created here -- silently, because
+ * what it does produce is a valid, plausible-looking file.
+ */
+export function exportableRuleList(
+  intentRecords: RoutingRuleRecord[],
+  templateRules: XrayRuleShape[],
+  tagOf: (inboundId: number) => string | undefined,
+): XrayRuleShape[] {
+  return [
+    ...intentRecords.map((record) => intentToRule(record, tagOf)),
+    ...templateRules,
+  ];
 }
