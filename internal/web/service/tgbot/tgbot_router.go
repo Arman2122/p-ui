@@ -1488,18 +1488,36 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 			return
 		}
 
+		/*
+			One message for the whole run, not one per client.
+
+			This sent a message per email. Telegram rate-limits a chat to a
+			handful a second, answers 429 with a flood-wait, and SendMsgToTgbot
+			only retries errors whose text mentions a connection, a timeout or a
+			closed socket -- so on any panel with real client numbers the tail of
+			the run was simply lost, while the resets themselves went through. The
+			admin saw the first few and never learned the rest had happened.
+
+			SendMsgToTgbot already splits a long body into paced chunks, so the
+			failures ride along in the same message instead of one call each. F296.
+		*/
+		var reset int
+		var failures []string
 		for _, email := range emails {
-			err := t.inboundService.ResetClientTrafficByEmail(email)
-			if err == nil {
-				msg := t.I18nBot("tgbot.messages.SuccessResetTraffic", "ClientEmail=="+email)
-				t.SendMsgToTgbot(chatId, msg, tu.ReplyKeyboardRemove())
-			} else {
-				msg := t.I18nBot("tgbot.messages.FailedResetTraffic", "ClientEmail=="+email, "ErrorMessage=="+err.Error())
-				t.SendMsgToTgbot(chatId, msg, tu.ReplyKeyboardRemove())
+			if resetErr := t.inboundService.ResetClientTrafficByEmail(email); resetErr != nil {
+				failures = append(failures, t.I18nBot("tgbot.messages.FailedResetTraffic",
+					"ClientEmail=="+email, "ErrorMessage=="+resetErr.Error()))
+				continue
 			}
+			reset++
 		}
 
-		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.messages.FinishProcess"), tu.ReplyKeyboardRemove())
+		summary := t.I18nBot("tgbot.messages.resetAllSummary",
+			"Count=="+strconv.Itoa(reset), "Total=="+strconv.Itoa(len(emails)))
+		if len(failures) > 0 {
+			summary += "\n\n" + strings.Join(failures, "\n\n")
+		}
+		t.SendMsgToTgbot(chatId, summary, tu.ReplyKeyboardRemove())
 	case "get_sorted_traffic_usage_report":
 		t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
 		emails, err := t.inboundService.GetAllEmails()

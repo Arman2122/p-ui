@@ -136,3 +136,45 @@ func TestTheClientDraftIsHtmlAndEscapesTheOperatorsText(t *testing.T) {
 		}
 	}
 }
+
+/*
+/clearall must not send one Telegram message per client.
+
+It sent a separate message for every email on the box. Telegram rate-limits a
+chat to a handful of messages a second and answers 429 with a flood-wait, whose
+text matches none of the three keywords SendMsgToTgbot retries on -- so on any
+panel with real client numbers the tail of the run was dropped, while the resets
+themselves went through. The admin saw the first few, then silence, and had no
+way to tell a stalled run from a finished one.
+
+One message now, and SendMsgToTgbot already splits a long body into paced
+chunks, so the failures ride along in it. F296.
+*/
+func TestResetAllTrafficSendsOneMessage(t *testing.T) {
+	body := readBotSource(t, "tgbot_router.go")
+
+	start := strings.Index(body, `case "reset_all_traffics_c":`)
+	if start < 0 {
+		t.Fatal("the reset-all handler was renamed; this guard is now vacuous")
+	}
+	end := strings.Index(body[start:], "\n\tcase ")
+	if end < 0 {
+		t.Fatal("cannot find the end of the reset-all handler; this guard is now vacuous")
+	}
+	handler := body[start : start+end]
+
+	loop := strings.Index(handler, "for _, email := range emails {")
+	if loop < 0 {
+		t.Fatal("the per-email loop is gone; this guard is now vacuous")
+	}
+	loopEnd := strings.Index(handler[loop:], "\n\t\t}")
+	if loopEnd < 0 {
+		t.Fatal("cannot find the end of the per-email loop")
+	}
+	if strings.Contains(handler[loop:loop+loopEnd], "SendMsgToTgbot(") {
+		t.Error("the handler still sends inside the per-email loop; Telegram drops the tail of that run and the 429 it answers with is not one of the errors SendMsgToTgbot retries")
+	}
+	if n := strings.Count(handler, "t.SendMsgToTgbot("); n > 2 {
+		t.Errorf("%d sends in the reset-all handler; one summary and one error path is the whole of it", n)
+	}
+}

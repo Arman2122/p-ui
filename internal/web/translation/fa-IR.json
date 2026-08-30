@@ -2117,9 +2117,7 @@
       "using_default_value": "باشه، از مقدار پیش‌فرض استفاده می‌کنم. 😊",
       "incorrect_input": "ورودی شما معتبر نیست.\nعبارت‌ها باید بدون فاصله باشند.\nمثال صحیح: aaaaaa\nمثال نادرست: aaa aaa 🚫",
       "AreYouSure": "مطمئنی؟ 🤔",
-      "SuccessResetTraffic": "📧 ایمیل: {{ .ClientEmail }}\n🏁 نتیجه: ✅ موفقیت‌آمیز",
       "FailedResetTraffic": "📧 ایمیل: {{ .ClientEmail }}\n🏁 نتیجه: ❌ ناموفق \n\n🛠️ خطا: [ {{ .ErrorMessage }} ]",
-      "FinishProcess": "🔚 فرآیند بازنشانی ترافیک برای همه مشتریان به پایان رسید.",
       "eventOutboundDown": "خروجی {{ .Tag }} قطع است",
       "eventOutboundUp": "خروجی {{ .Tag }} وصل است",
       "eventErrorDetail": "خطا: {{ .Error }}",
@@ -2130,7 +2128,8 @@
       "eventNodeUp": "نود {{ .Name }} وصل است",
       "eventLoginFallback": "ورود ناموفق از {{ .Source }}",
       "memoryThreshold": "مصرف حافظه {{ .Percent }}% از حد آستانه {{ .Threshold }}% فراتر رفته است",
-      "eventCoreCrash": "{{ .Core }} از کار افتاد"
+      "eventCoreCrash": "{{ .Core }} از کار افتاد",
+      "resetAllSummary": "🔚 بازنشانی ترافیک تمام شد: {{ .Count }} از {{ .Total }} مشتری."
     },
     "buttons": {
       "closeKeyboard": "❌ بستن کیبورد",
