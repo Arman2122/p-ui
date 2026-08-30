@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Disabling an outbound subscription now takes effect.** Editing a
+  subscription -- turning it off, changing its prepend flag, reordering it --
+  saved the change and never told Xray to reload, so its outbounds stayed in the
+  running core and kept serving traffic indefinitely. Deleting one always
+  signalled correctly; only editing did not.
+  **What you will notice:** the change applies at the next reload, the same as
+  deleting one already did.
+
 - **Two clients on one inbound can no longer share the credential that
   identifies them.** The panel checked email, subscription id and WireGuard keys
   for duplicates, and nothing else -- but Xray keys its user table on the UUID
