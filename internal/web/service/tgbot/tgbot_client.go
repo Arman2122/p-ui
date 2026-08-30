@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"slices"
@@ -72,15 +73,19 @@ func (t *Tgbot) BuildClientDraftMessage() string {
 		tgID = "—"
 	}
 
+	/* HTML, because that is the ParseMode every delivery path sets: the Markdown
+	   this used to emit rendered its own asterisks and backticks literally. And
+	   the operator's own text is escaped, or one '<' makes Telegram refuse the
+	   whole message, so the draft never appears at all. F298. */
 	var b strings.Builder
-	b.WriteString("📝 *New client draft*\r\n")
-	fmt.Fprintf(&b, "📧 Email: `%s`\r\n", client_Email)
-	fmt.Fprintf(&b, "🔗 Attached: %s\r\n", attached)
+	b.WriteString("📝 <b>New client draft</b>\r\n")
+	fmt.Fprintf(&b, "📧 Email: <code>%s</code>\r\n", html.EscapeString(client_Email))
+	fmt.Fprintf(&b, "🔗 Attached: %s\r\n", html.EscapeString(attached))
 	fmt.Fprintf(&b, "📊 Traffic: %s\r\n", traffic)
 	fmt.Fprintf(&b, "📅 Expire: %s\r\n", expiry)
 	fmt.Fprintf(&b, "🔢 IP limit: %s\r\n", ipLimit)
-	fmt.Fprintf(&b, "👤 TG user: %s\r\n", tgID)
-	fmt.Fprintf(&b, "💬 Comment: %s\r\n", comment)
+	fmt.Fprintf(&b, "👤 TG user: %s\r\n", html.EscapeString(tgID))
+	fmt.Fprintf(&b, "💬 Comment: %s\r\n", html.EscapeString(comment))
 	return b.String()
 }
 
