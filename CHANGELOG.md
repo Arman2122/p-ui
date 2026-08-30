@@ -8,6 +8,30 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The installer picks a panel port nothing is already using, and says when the
+  panel did not start.** The random port was drawn blind, and `systemctl start`
+  returns before a panel can die -- so an occupied port, a bad database URL or a
+  broken unit ended with "installation finished, it is running now", an access
+  URL that refuses, and the same claim persisted for the login banner to repeat.
+  **What you will notice:** a free port; a port you chose yourself is kept, but
+  you are told if something is on it; and a failed start prints the last of the
+  journal instead of a success message.
+
+- **The updater stops announcing HTTPS it did not set up.** Its access-URL block
+  guarded on a variable that every path sets -- including declining SSL and both
+  certificate failures -- so it always took the https branch, with the scheme
+  hardcoded besides. Skipping SSL was reported as "SSL Certificate: Enabled and
+  configured" with an https:// URL that could not connect. The installer was
+  repaired for this; the updater had the same bug with a guard that looked like
+  the fix.
+
+- **A WireGuard address entered by hand no longer moves every future client.**
+  New addresses are allocated from the device's own prefix whenever it covers
+  the clients on it, but the search stopped at the first client it looked at --
+  so one address outside the prefix, sitting at the head of the list, sent every
+  later allocation into a /24 derived from that one client and left the rest of
+  the configured range behind.
+
 - **Exporting your routing rules exports all of them.** The file held only the
   rules that arrived with a template; every rule created in the routing dialog
   was left out, and the export menu greyed itself out on that same count -- so a

@@ -137,6 +137,22 @@ acme_listen_flag() {
 }
 
 # Port helpers
+# A random panel port nothing is already listening on. An occupied one is stored
+# and then crash-loops the panel at every start, with nothing saying why.
+random_free_port() {
+    local port=""
+    local attempt=0
+    while ((attempt < 20)); do
+        port=$(shuf -i 1024-62000 -n 1)
+        if ! is_port_in_use "${port}"; then
+            echo "${port}"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+    done
+    echo "${port}"
+}
+
 is_port_in_use() {
     local port="$1"
     if command -v ss > /dev/null 2>&1; then
@@ -1206,7 +1222,7 @@ config_after_install() {
                     config_port="${PUI_PANEL_PORT}"
                     echo -e "${yellow}Your Panel Port is: ${config_port}${plain}"
                 else
-                    config_port=$(shuf -i 1024-62000 -n 1)
+                    config_port=$(random_free_port)
                     echo -e "${yellow}Generated random port: ${config_port}${plain}"
                 fi
             else
@@ -1215,7 +1231,7 @@ config_after_install() {
                     read -rp "Please set up the panel port: " config_port
                     echo -e "${yellow}Your Panel Port is: ${config_port}${plain}"
                 else
-                    config_port=$(shuf -i 1024-62000 -n 1)
+                    config_port=$(random_free_port)
                     echo -e "${yellow}Generated random port: ${config_port}${plain}"
                 fi
             fi
@@ -1225,8 +1241,12 @@ config_after_install() {
             # then crash-loop it at every start.
             if ! [[ "${config_port}" =~ ^[0-9]+$ ]] || ((config_port < 1 || config_port > 65535)); then
                 echo -e "${red}Invalid panel port '${config_port}'. Using a random one instead.${plain}"
-                config_port=$(shuf -i 1024-62000 -n 1)
+                config_port=$(random_free_port)
                 echo -e "${yellow}Generated random port: ${config_port}${plain}"
+            elif is_port_in_use "${config_port}"; then
+                # Kept, because it is the operator's own choice -- but said out
+                # loud, or the panel simply fails to bind at every start.
+                echo -e "${red}Something is already listening on port ${config_port}; the panel will not be able to bind it.${plain}"
             fi
 
             # Split, and each exit status checked. These used to be one call, and
@@ -1665,6 +1685,16 @@ install_p-ui() {
         systemctl daemon-reload
         systemctl enable p-ui
         systemctl start p-ui
+        # systemctl start returns as soon as the process is forked, so a panel
+        # that dies on a bad DSN or an occupied port leaves the unit inactive a
+        # moment later -- and the installer announced "it is running now" anyway.
+        sleep 2
+        if ! systemctl is-active --quiet p-ui; then
+            PANEL_START_FAILED=1
+            echo -e "${red}The panel did not stay up. Nothing printed below is reachable until it does.${plain}"
+            journalctl -u p-ui -n 20 --no-pager 2> /dev/null
+            echo -e "${yellow}Once the cause above is fixed: systemctl start p-ui${plain}"
+        fi
     else
         echo -e "${red}Failed to install p-ui.service file${plain}"
         exit 1
@@ -1674,7 +1704,11 @@ install_p-ui() {
     # works out of the box (no-op when PUI_ENABLE_FAIL2BAN=false). Never fatal.
     setup_fail2ban
 
-    echo -e "${green}Penhoon UI ${tag_version}${plain} installation finished, it is running now..."
+    if [[ "${PANEL_START_FAILED:-0}" == "1" ]]; then
+        echo -e "${yellow}Penhoon UI ${tag_version}${plain} is installed but NOT running — see the failure above."
+    else
+        echo -e "${green}Penhoon UI ${tag_version}${plain} installation finished, it is running now..."
+    fi
     echo -e ""
     echo -e "┌───────────────────────────────────────────────────────┐
 │  ${blue}p-ui control menu usages (subcommands):${plain}              │

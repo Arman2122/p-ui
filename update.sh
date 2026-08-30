@@ -584,6 +584,10 @@ prompt_and_setup_ssl() {
     local server_ip="$3"
 
     local ssl_choice=""
+    # Fail closed, as install.sh does. Both failure branches below fall through
+    # without touching this, and every branch sets SSL_HOST -- so SSL_HOST cannot
+    # be the signal for whether a certificate exists.
+    SSL_SCHEME="http"
 
     echo -e "${yellow}Choose SSL certificate setup method:${plain}"
     echo -e "${green}1.${plain} Let's Encrypt for Domain (90-day validity, auto-renews)"
@@ -605,6 +609,7 @@ prompt_and_setup_ssl() {
             # User chose Let's Encrypt domain option
             echo -e "${green}Using Let's Encrypt for domain certificate...${plain}"
             if ssl_cert_issue; then
+                SSL_SCHEME="https"
                 local cert_domain="${SSL_ISSUED_DOMAIN}"
                 if [[ -z "${cert_domain}" ]]; then
                     cert_domain=$(~/.acme.sh/acme.sh --list 2> /dev/null | tail -1 | awk '{print $1}')
@@ -652,6 +657,7 @@ prompt_and_setup_ssl() {
 
             setup_ip_certificate "${server_ip}" "${ipv6_addr}"
             if [ $? -eq 0 ]; then
+                SSL_SCHEME="https"
                 SSL_HOST="${server_ip}"
                 echo -e "${green}✓ Let's Encrypt IP certificate configured successfully${plain}"
             else
@@ -717,6 +723,7 @@ prompt_and_setup_ssl() {
                 SSL_HOST="${server_ip}"
             fi
 
+            SSL_SCHEME="https"
             echo -e "${green}✓ Custom certificate paths applied.${plain}"
             echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
 
@@ -846,13 +853,14 @@ config_after_update() {
         echo -e "${green}═══════════════════════════════════════════${plain}"
         # Only claim what happened: prompt_and_setup_ssl can decline or fail, and
         # announcing https either way sends the operator to a URL that refuses.
-        if [[ -n "${SSL_HOST}" ]]; then
-            echo -e "${green}Access URL: https://${SSL_HOST}:${existing_port}/${existing_webBasePath}${plain}"
+        if [[ "${SSL_SCHEME}" == "https" ]]; then
+            echo -e "${green}Access URL: ${SSL_SCHEME}://${SSL_HOST}:${existing_port}/${existing_webBasePath}${plain}"
             echo -e "${green}═══════════════════════════════════════════${plain}"
             echo -e "${yellow}⚠ SSL Certificate: Enabled and configured${plain}"
         else
-            echo -e "${yellow}No certificate was issued; the panel is still on http${plain}"
+            echo -e "${green}Access URL: http://${SSL_HOST}:${existing_port}/${existing_webBasePath}${plain}"
             echo -e "${green}═══════════════════════════════════════════${plain}"
+            echo -e "${yellow}No certificate was issued; the panel is still on http${plain}"
         fi
     else
         echo -e "${green}SSL certificate is already configured${plain}"
