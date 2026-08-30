@@ -65,12 +65,19 @@ afterEach(async () => {
    * React 19 defers passive-effect flushes onto a macrotask (setImmediate),
    * whose callback reads `window.event`. If one is still queued when vitest
    * tears down the jsdom environment, it fires after `window` is gone and
-   * throws "window is not defined". Drain a few macrotask ticks here so any
-   * pending callback runs while `window` still exists. Several ticks are used
-   * because a microtask resolving mid-drain (rc-trigger/AntD) can queue a new
-   * one behind the first.
+   * throws "window is not defined". Drain here so any pending callback runs
+   * while `window` still exists.
+   *
+   * BOTH queues, and both on every pass. Three setTimeout(0) ticks was the
+   * first version of this and CI caught it out: the scheduler's callback is a
+   * setImmediate (`Immediate.performWorkUntilDeadline` is in that stack), and
+   * timers and immediates are different phases of the node loop — a timer tick
+   * does not guarantee an immediate queued behind it has run. On a loaded
+   * runner one survived all three passes and fired into a torn-down
+   * environment, failing a suite in which every one of 1525 tests had passed.
    */
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 });
