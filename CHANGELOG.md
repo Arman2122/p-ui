@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Two host switches that did nothing are gone.** "Mihomo X25519" and "Shuffle
+  host" were stored and shown, and read by no part of the panel, the link
+  builders or the docs -- toggling either changed nothing about your
+  subscription. Anything you set with them is still stored and is not cleared by
+  saving a host now.
+
 - **Turning on two-factor authentication no longer reports a failed save that
   succeeded.** Signing out your other sessions happens after the settings are
   already stored, and a failure there was reported as the whole save failing --

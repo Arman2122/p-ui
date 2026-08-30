@@ -1384,3 +1384,29 @@ The fix is to make them different, and that means a field on the contract:
 
 Either is small in lines. Neither is mine to pick: it widens the multi-core
 contract, and the standing rule is that those are presented, not chosen quietly.
+
+## L29 — two host fields are stored and read by nothing: implement or drop (F141)
+
+`MihomoX25519` and `ShuffleHost` are columns on the host row, round-trip through
+the entity, appear in the OpenAPI examples, and were rendered as two switches on
+the host form's Mihomo tab. No renderer reads either one — not the panel's, not
+the frontend link builders', not the docs site's third copy. Their neighbour on
+the same tab, `MihomoIpVersion`, IS read: `host_sub.go` turns it into Clash's
+`ip-version`.
+
+The switches are gone, because a control that does nothing is worse than a
+missing one — it reads as a setting that failed. The columns, the entity fields
+and the API surface all stay, and the form still carries a stored value through
+a save, so nothing an operator set before is cleared.
+
+What is left is a product question:
+
+- **Implement them.** Neither has an obvious Clash/Mihomo counterpart, and
+  neither the field names nor any hint in either locale says what they were
+  meant to do. Someone has to decide what they mean before they can be
+  rendered, which makes this a feature rather than a repair.
+- **Drop the columns.** A migration, and the API fields go with them. Clean, and
+  irreversible for anyone whose stored `true` meant something to them.
+
+Doing nothing is also defensible: the columns cost two booleans and the panel no
+longer claims they do anything.
