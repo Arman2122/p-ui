@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A "direct" or "block" routing rule stays one when you open it.** Reopening
+  such a rule in the editor and saving it unchanged turned it into an ordinary
+  outbound rule naming the literal tag. On the stock template that resolves to
+  the same thing; on any template without outbounds by those names, the rule
+  ended up pointing at an outbound that does not exist.
+
 - **Two host switches that did nothing are gone.** "Mihomo X25519" and "Shuffle
   host" were stored and shown, and read by no part of the panel, the link
   builders or the docs -- toggling either changed nothing about your

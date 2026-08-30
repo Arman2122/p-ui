@@ -53,6 +53,18 @@ port-conflict check for its own kind.
 
 Either widens the multi-core contract, which is why it is here.
 
+## 3b. Two host fields nothing reads (F141 — ledger L29)
+
+`MihomoX25519` and `ShuffleHost` are stored, round-tripped and shown in the
+OpenAPI examples, and no renderer anywhere reads either one. The two switches
+are gone from the form — a control that does nothing reads as a setting that
+failed — and the columns, the API fields and any stored value are untouched.
+
+- **Implement them.** Neither has an obvious Clash/Mihomo counterpart and no
+  hint in either locale says what they meant, so someone has to decide first.
+- **Drop the columns.** A migration; the API fields go with them.
+- **Leave it.** Two booleans, and the panel no longer claims they do anything.
+
 ## 4. The installer's custom-certificate path (ledger L26)
 
 Case 3 of `prompt_and_setup_ssl` discards `p-ui cert`'s exit status and prints a

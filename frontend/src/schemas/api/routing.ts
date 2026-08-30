@@ -302,6 +302,13 @@ function destinationOf(rule: XrayRuleShape): Pick<RoutingRulePayload, 'destKind'
   const exitId = exitIdFromTag(rule.outboundTag);
   if (exitId != null) return { destKind: 'exit', destTag: '', destExitId: exitId };
   if (rule.balancerTag) return { destKind: 'balancer', destTag: rule.balancerTag, destExitId: null };
+  /* The inverse of destTagFor. Without these two, a stored direct/block rule
+     opened in the editor and saved unchanged came back as a plain outbound
+     pointing at the literal tag -- identical on the default template, which
+     ships outbounds named direct and blocked, and a rule referring to nothing
+     on a template that does not. F201. */
+  if (rule.outboundTag === 'direct') return { destKind: 'direct', destTag: '', destExitId: null };
+  if (rule.outboundTag === 'blocked') return { destKind: 'block', destTag: '', destExitId: null };
   return { destKind: 'outbound', destTag: rule.outboundTag || '', destExitId: null };
 }
 
