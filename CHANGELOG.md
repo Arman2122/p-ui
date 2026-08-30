@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Resetting traffic no longer stops an MTProto inbound the panel cannot
+  read.** Before resetting, the panel reconciled its MTProto sidecars -- and that
+  reconcile stops anything absent from the desired list. An inbound whose stored
+  settings will not parse is skipped when that list is built, while its sidecar
+  is running perfectly well, so a reset killed it and nothing brought it back.
+  Renewing a client goes through this path.
+  **What you will notice:** a reset converges the inbounds it can read and stops
+  nothing. An inbound with unreadable settings keeps serving.
+
 - **The one-time routing conversion no longer hoists rules above a private-IP
   block.** Converting an existing template into the new routing rules imports a
   leading run of rules and leaves the rest in place -- but it stepped over
