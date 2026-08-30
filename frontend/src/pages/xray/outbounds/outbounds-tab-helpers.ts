@@ -129,3 +129,51 @@ export function isTesting<K extends string | number>(states: Record<K, OutboundT
 export function testResult<K extends string | number>(states: Record<K, OutboundTestState>, idx: K) {
   return states?.[idx]?.result || null;
 }
+
+/**
+ * Tags that must not be offered as this outbound's dialerProxy, because
+ * choosing one closes a loop.
+ *
+ * dialerProxy makes an outbound dial THROUGH another, so a chain that comes
+ * back to the outbound being edited has no bottom: xray follows it until the
+ * dial gives up, and the outbound is simply dead with nothing said. Excluding
+ * only the row being edited catches the one-step loop and nothing longer.
+ */
+export function dialerProxyCycleTags(
+  outbounds: Array<{ tag?: string; streamSettings?: unknown } | null | undefined>,
+  editingTag: string,
+): Set<string> {
+  const unsafe = new Set<string>();
+  if (!editingTag) return unsafe;
+  unsafe.add(editingTag);
+
+  const dialsThrough = new Map<string, string>();
+  for (const outbound of outbounds) {
+    const tag = outbound?.tag;
+    const via = dialerProxyOf(outbound?.streamSettings);
+    if (tag && via) dialsThrough.set(tag, via);
+  }
+
+  for (const [tag] of dialsThrough) {
+    const walked = new Set<string>([tag]);
+    let at: string | undefined = dialsThrough.get(tag);
+    while (at) {
+      if (at === editingTag) {
+        unsafe.add(tag);
+        break;
+      }
+      if (walked.has(at)) break;
+      walked.add(at);
+      at = dialsThrough.get(at);
+    }
+  }
+  return unsafe;
+}
+
+/* streamSettings is carried as unknown through the template, and a dialerProxy
+   is only ever read for this comparison. */
+function dialerProxyOf(streamSettings: unknown): string {
+  const sockopt = (streamSettings as { sockopt?: unknown } | null | undefined)?.sockopt;
+  const via = (sockopt as { dialerProxy?: unknown } | null | undefined)?.dialerProxy;
+  return typeof via === 'string' ? via : '';
+}

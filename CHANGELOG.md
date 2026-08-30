@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The dialer-proxy picker stops offering a choice that kills both outbounds.**
+  It excluded the outbound being edited, which prevents a one-step loop and
+  nothing longer: with B already dialling through A, picking B as A's dialer
+  proxy left A→B→A. The core starts, the config is valid, and every
+  connection through either one goes nowhere.
+  **What you will notice:** any tag whose chain comes back to the outbound you
+  are editing is no longer in the list.
+
 - **The installer picks a panel port nothing is already using, and says when the
   panel did not start.** The random port was drawn blind, and `systemctl start`
   returns before a panel can die -- so an occupied port, a bad database URL or a
