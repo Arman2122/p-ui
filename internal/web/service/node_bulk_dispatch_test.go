@@ -104,6 +104,9 @@ func setupNodeRuntime(t *testing.T) (int, *fakeNodeRuntime) {
 	t.Cleanup(func() { runtime.SetManager(prev) })
 
 	node := &model.Node{Name: "n1-" + t.Name(), Address: "127.0.0.1", Port: 2096, ApiToken: "tok", Enable: true, Status: "online"}
+	// The durable tests share the real database, so a predecessor killed before
+	// its cleanup leaves this name behind and every later run fails on the index.
+	_ = database.GetDB().Where("name = ?", node.Name).Delete(&model.Node{}).Error
 	if err := database.GetDB().Create(node).Error; err != nil {
 		t.Fatalf("create node: %v", err)
 	}
