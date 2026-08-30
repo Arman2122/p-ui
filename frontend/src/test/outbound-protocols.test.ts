@@ -12,6 +12,7 @@ function core(over: Partial<CoreView>): CoreView {
     exitKinds: [],
     clientCredentials: {},
     shaping: {},
+    sessionKinds: [],
     available: true,
     unavailable: '',
     ...over,

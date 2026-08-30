@@ -920,7 +920,8 @@
       },
       "tabLimits": "محدودیت‌ها",
       "limitIpCapped": "محدود به",
-      "amneziawgConfig": "کانفیگ AmneziaWG"
+      "amneziawgConfig": "کانفیگ AmneziaWG",
+      "limitIpUnsupportedKinds": "محدودیت IP برای {kinds} اعمال نمی‌شود: این پروتکل نمی‌تواند مبدأ اتصال را گزارش کند، پس محدودیت روی آن بی‌اثر است."
     },
     "groups": {
       "name": "نام",

@@ -28,6 +28,16 @@ type CoreView struct {
 	// Shaping names the kernel key each kind's clients carry, so a form gates its
 	// speed fields on this. A kind absent here cannot be rate limited at all.
 	Shaping map[string]string `json:"shaping" example:"{\"wgkernel\":\"innerIP\"}"`
+	/*
+		SessionKinds are the kinds whose core can name each live connection and the
+		address it came from — the one thing an IP limit is decided from.
+
+		A kind absent here cannot have a cap enforced however the form is filled
+		in: EvaluateIPLimits only ever sees clients a core reported a session for,
+		and mtg, for one, reports a secret in use and no address at all. The form
+		says so instead of accepting a number that does nothing. F120 / F302.
+	*/
+	SessionKinds []string `json:"sessionKinds" example:"[\"vless\",\"wgkernel\"]"`
 	// Available is this host's Preflight answer and Unavailable is why not, so a
 	// core the host cannot run is explained rather than silently offered.
 	Available   bool   `json:"available" example:"true"`
@@ -59,8 +69,14 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		exits := make([]string, 0, len(kinds))
 		credentials := make(map[string][]string, len(kinds))
 		shaping := make(map[string]string, len(kinds))
+		// Per CORE, not per kind: Sessions answers for the whole process, so a
+		// core either can report them for everything it serves or for nothing.
+		sessions := make([]string, 0, len(kinds))
 		for _, kind := range kinds {
 			names = append(names, string(kind))
+			if bound.Sessions != nil {
+				sessions = append(sessions, string(kind))
+			}
 			if bound.Shape != nil {
 				if selector := bound.Shape.ShapingSelector(kind); selector != core.SelectorNone {
 					shaping[string(kind)] = string(selector)
@@ -82,6 +98,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		// core's own slice for kinds — and an unstable order makes gen-check flap.
 		sort.Strings(names)
 		sort.Strings(exits)
+		sort.Strings(sessions)
 		unavailable := ""
 		if err := bound.Core.Preflight(ctx); err != nil {
 			unavailable = err.Error()
@@ -94,6 +111,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			Caps:              described.Caps,
 			ClientCredentials: credentials,
 			Shaping:           shaping,
+			SessionKinds:      sessions,
 			Available:         unavailable == "",
 			Unavailable:       unavailable,
 		})

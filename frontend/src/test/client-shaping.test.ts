@@ -14,6 +14,7 @@ const CORES: CoreView[] = [
     exitKinds: [],
     clientCredentials: {},
     shaping: { wgkernel: 'innerIP' },
+    sessionKinds: [],
   },
   {
     id: 'xray',
@@ -25,6 +26,7 @@ const CORES: CoreView[] = [
     exitKinds: [],
     clientCredentials: { vless: ['uuid'] },
     shaping: {},
+    sessionKinds: [],
   },
 ];
 

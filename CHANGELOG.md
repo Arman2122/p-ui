@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The client form stops offering an IP limit that cannot be enforced.** The
+  cap is decided from live connections and the address each came from; MTProto
+  reports a secret in use and no address at all, so a cap on an MTProto client
+  was stored, displayed and applied to nobody. The form now says which of a
+  client's inbounds the cap cannot cover, and switches the control off when it
+  covers none of them.
+
 - **A WireGuard pre-shared key can be removed.** Clearing the field and saving
   put the old key straight back, because the panel could not tell an emptied
   field from one a partial update had simply left out -- so a pre-shared key

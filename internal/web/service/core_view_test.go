@@ -41,6 +41,19 @@ func (d declaringCore) ClientIdentity(core.Kind) string { return "email" }
 
 // exitingCore terminates a route on some of its kinds and not others, which is
 // the whole distinction between the outbound half of Kinds and the inbound half.
+/*
+reportingCore names each live connection and the address it came from, which is
+what an IP limit is decided from. mtg cannot: it reports a secret in use and no
+address at all, so its core implements no SessionReporter and every client of it
+is invisible to EvaluateIPLimits. The view has to carry that difference or the
+form goes on offering a cap that is enforced on nobody. F120 / F302.
+*/
+type reportingCore struct {
+	stubCore
+}
+
+func (r reportingCore) Sessions(context.Context) ([]core.Session, error) { return nil, nil }
+
 type exitingCore struct {
 	stubCore
 	exits map[core.Kind]core.ExitHandleKind
@@ -130,6 +143,13 @@ func TestCoreViews(t *testing.T) {
 		},
 	}
 
+	reporting := reportingCore{
+		stubCore: stubCore{
+			descriptor: core.Descriptor{ID: "wireguard", TitleKey: "cores.wireguard.title"},
+			kinds:      []core.Kind{"wgkernel", "wgtunnel"},
+		},
+	}
+
 	tests := []struct {
 		name string
 		reg  *core.Registry
@@ -140,38 +160,45 @@ func TestCoreViews(t *testing.T) {
 			reg:  registryOf(t, xray, mtproto),
 			want: `[{"id":"mtproto","titleKey":"cores.mtproto.title","kinds":["mtproto"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""},` +
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""},` +
 				`{"id":"xray","titleKey":"cores.xray.title","kinds":["shadowsocks","trojan","vless"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "an unanswered capability stays null, never false",
 			reg:  registryOf(t, unanswered),
 			want: `[{"id":"future","titleKey":"cores.future.title","kinds":["future"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "credentials are keyed per kind, and a kind the core skips is absent, not empty",
 			reg:  registryOf(t, declaring),
 			want: `[{"id":"multi","titleKey":"cores.multi.title","kinds":["tun","vless","vmess"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "a core this host cannot run says so, and says why, instead of being offered",
 			reg:  registryOf(t, unusable),
 			want: `[{"id":"wgkernel","titleKey":"cores.wgkernel.title","kinds":["wgkernel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
 		},
 		{
 			name: "only a kind that can terminate a route is offered as an exit",
 			reg:  registryOf(t, exiting),
 			want: `[{"id":"wireguard","titleKey":"cores.wireguard.title","kinds":["wgkernel","wgtunnel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":["wgkernel"],"clientCredentials":{},"shaping":{},"available":true,"unavailable":""}]`,
+				`"exitKinds":["wgkernel"],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
+		},
+		{
+			name: "a core that can name its live sessions says which kinds an IP limit reaches",
+			reg:  registryOf(t, reporting),
+			want: `[{"id":"wireguard","titleKey":"cores.wireguard.title","kinds":["wgkernel","wgtunnel"],` +
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["wgkernel","wgtunnel"],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",

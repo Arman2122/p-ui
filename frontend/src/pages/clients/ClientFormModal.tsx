@@ -29,6 +29,7 @@ import { FormProvider, useForm, useWatch, useFieldArray } from 'react-hook-form'
 import { HttpUtil, RandomUtil, Wireguard } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { credentialsForKinds } from '@/lib/cores/client-credentials';
+import { kindsWithoutIpLimit } from '@/lib/cores/ip-limit';
 import type { ClientCredentialName } from '@/generated/capabilities';
 import { supportsMultipleClients } from '@/lib/inbounds/multi-client';
 import { generateMtprotoSecret } from '@/lib/xray/inbound-defaults';
@@ -226,8 +227,6 @@ export default function ClientFormModal({
   /* An empty list is not a usable manifest — every build registers at least one
      core — so treat it as still missing rather than guessing every kind's fields. */
   const cores = coresQuery.data?.length ? coresQuery.data : undefined;
-  const limitIpDisabled = !fail2ban.usable;
-  const limitIpNotice = getLimitIpNotice(fail2ban, t);
 
   function addExternalLinkRow(kind: 'link' | 'subscription') {
     appendExternalLink({ kind, value: '', remark: '' });
@@ -330,6 +329,21 @@ export default function ClientFormModal({
     () => (cores ? credentialsForKinds(cores, attachedKinds) : new Set<ClientCredentialName>()),
     [cores, attachedKinds],
   );
+
+  /* Two different reasons a cap may not bite, and they are not the same thing:
+     the host has no actuator, or the client sits on an inbound whose core cannot
+     report the sessions a cap is decided from. The second is per inbound, so a
+     client with one of each keeps the control and is told which half it misses.
+     F120 / F302. */
+  const uncappableKinds = useMemo(
+    () => kindsWithoutIpLimit(cores, attachedKinds),
+    [cores, attachedKinds],
+  );
+  const allUncappable = attachedKinds.length > 0 && uncappableKinds.length === attachedKinds.length;
+  const limitIpDisabled = !fail2ban.usable || allUncappable;
+  const limitIpNotice = allUncappable || uncappableKinds.length > 0
+    ? t('pages.clients.limitIpUnsupportedKinds', { kinds: [...new Set(uncappableKinds)].join(', ') })
+    : getLimitIpNotice(fail2ban, t);
 
   const mtprotoDomain = useMemo(() => {
     for (const id of inboundIds || []) {
