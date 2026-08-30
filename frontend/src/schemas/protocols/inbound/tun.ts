@@ -7,6 +7,6 @@ export const TunInboundSettingsSchema = z.object({
   dns: z.array(z.string()).default([]),
   userLevel: z.number().int().min(0).default(0),
   autoSystemRoutingTable: z.array(z.string()).default([]),
-  autoOutboundsInterface: z.string().default('auto'),
+  autoOutboundsInterface: z.string().default(''),
 });
 export type TunInboundSettings = z.infer<typeof TunInboundSettingsSchema>;

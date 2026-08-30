@@ -483,3 +483,64 @@ describe('xhttp xmux maxConcurrency survives a load/re-save round-trip', () => {
     expect(xmux.maxConcurrency).toBe('1-2');
   });
 });
+
+/*
+Saving a tun inbound must not bind every outbound to one interface.
+
+The panel wrote `autoOutboundsInterface: "auto"` into every tun inbound it
+saved, whether or not the operator touched the field. Xray branches on that
+value being non-empty -- never on the routing table -- and then calls
+internet.RegisterDialerController, which is PROCESS-GLOBAL: creating one tun
+inbound rewrites the source interface of every outbound the core has.
+
+Upstream types the field as a pointer precisely so ABSENT is the neutral value:
+Build copies it only when non-nil, then re-derives "auto" itself when the auto
+routing table is non-empty. The panel made absent unreachable.
+
+Absent is the target, not "": an empty string is a NON-NIL pointer in Go, which
+would suppress upstream's own derivation and be strictly worse than today for a
+full-system tun. Stored rows are deliberately not rewritten -- an operator may
+have typed "auto" on purpose, and it is indistinguishable from ours. F309.
+*/
+describe('a tun save never writes an autoOutboundsInterface the operator did not type', () => {
+  function wireSettings(raw: Partial<Record<string, unknown>>) {
+    const row = {
+      protocol: 'tun',
+      port: 0,
+      listen: '',
+      settings: JSON.stringify(raw),
+      streamSettings: '{}',
+      sniffing: '{}',
+      allocate: '{}',
+    } as unknown as RawInboundRow;
+
+    const values = rawInboundToFormValues(row);
+    const parsed = InboundFormSchema.safeParse(values);
+    expect(parsed.success, `form values did not parse: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
+    const payload = formValuesToWirePayload(parsed.data as never);
+    return JSON.parse(payload.settings as string) as Record<string, unknown>;
+  }
+
+  it('omits the key entirely for a row that never had it', () => {
+    const out = wireSettings({ name: 'tun0', autoSystemRoutingTable: [] });
+    expect(
+      'autoOutboundsInterface' in out,
+      'the panel invented an interface binding; xray registers a process-global dialer controller for it',
+    ).toBe(false);
+  });
+
+  it('omits it for a row whose auto routing table is set, so xray derives it', () => {
+    const out = wireSettings({ name: 'tun0', autoSystemRoutingTable: ['main'] });
+    expect('autoOutboundsInterface' in out).toBe(false);
+  });
+
+  it('keeps a value the operator really typed', () => {
+    const out = wireSettings({ name: 'tun0', autoOutboundsInterface: 'eth0' });
+    expect(out.autoOutboundsInterface).toBe('eth0');
+  });
+
+  it('keeps a stored "auto" rather than silently rewriting it', () => {
+    const out = wireSettings({ name: 'tun0', autoOutboundsInterface: 'auto' });
+    expect(out.autoOutboundsInterface).toBe('auto');
+  });
+});

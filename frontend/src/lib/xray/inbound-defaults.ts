@@ -246,7 +246,7 @@ export function createDefaultTunInboundSettings(): TunInboundSettings {
     dns: [],
     userLevel: 0,
     autoSystemRoutingTable: [],
-    autoOutboundsInterface: 'auto',
+    autoOutboundsInterface: '',
   };
 }
 
