@@ -766,6 +766,10 @@ func (a *SUBController) ApplyCommonHeaders(
 	profileRoutingRules string,
 	profileHideSettings bool,
 ) {
+	// The one choke point every raw/JSON/Clash body passes through, and the only
+	// place their freshness can be set: a cached subscription serves yesterday's
+	// servers and yesterday's traffic figures. F251.
+	setNoCacheHeaders(c)
 	c.Writer.Header().Set("Subscription-Userinfo", header)
 	c.Writer.Header().Set("Profile-Update-Interval", updateInterval)
 

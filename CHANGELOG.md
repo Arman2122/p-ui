@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Subscription bodies are marked uncacheable.** The subscription HTML page
+  said so; the three formats a VPN client actually fetches -- raw, JSON and
+  Clash -- carried no Cache-Control at all, and nothing in front of them
+  supplied one. Those are exactly the responses that must not be cached: the
+  client reads its remaining traffic and expiry from the header beside the body,
+  so a proxy, a CDN or the app's own cache could show a user data they had
+  already spent, alongside servers that were removed days ago.
+
 - **A subscription stops handing out links for clients that cannot connect.**
   Disabling a client -- by hand, by running out of traffic, by expiring --
   removes its account from the core, but its link stayed in the subscription and

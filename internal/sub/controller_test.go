@@ -592,3 +592,40 @@ func TestLoadSubTemplate_CacheHitAndInvalidation(t *testing.T) {
 		t.Fatalf("rendered = %q, want %q after edit", buf.String(), "v2")
 	}
 }
+
+/*
+Every subscription BODY must say it is not cacheable.
+
+setNoCacheHeaders existed and was called on three paths: the ?format=info JSON,
+the custom-theme HTML and the default HTML page. The three bodies a VPN client
+actually fetches -- raw, JSON and Clash -- carried no Cache-Control at all, and
+there is no cache middleware in the sub server's router to supply one.
+
+Those bodies are exactly what must not be cached. The client reads its remaining
+traffic and expiry out of the Subscription-Userinfo header beside them, so a
+proxy, a CDN or the client's own HTTP cache serving a stale copy shows a user
+data they have already spent, and hands them servers that may have been removed.
+
+ApplyCommonHeaders is the one function all three pass through, which is where it
+belongs. F251.
+*/
+func TestEverySubscriptionBodyIsMarkedUncacheable(t *testing.T) {
+	seedSubDB(t)
+	seedSubInbound(t, "s1", "fresh", 4495, 1, `{"network":"tcp","security":"none"}`)
+	gin.SetMode(gin.TestMode)
+
+	for _, path := range []string{"/sub/s1", "/json/s1", "/clash/s1"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://sub.example.com"+path, nil)
+			resp := httptest.NewRecorder()
+			newSubscriptionTestRouter(subscriptionTestRouterConfig{}).ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", resp.Code, resp.Body.String())
+			}
+			if got := resp.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+				t.Fatalf("Cache-Control = %q, want no-store: a cached body serves spent traffic figures beside servers that may be gone", got)
+			}
+		})
+	}
+}
