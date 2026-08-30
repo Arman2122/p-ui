@@ -125,3 +125,50 @@ func TestClientAddressesAvoidASubnetTheHostHolds(t *testing.T) {
 		t.Fatalf("a client was handed %s, inside a range docker0 already answers for", got)
 	}
 }
+
+/*
+A client must never be handed the device's own address.
+
+pool.blocked carried other inbounds' device prefixes and pool.taken carried
+other inbounds' client addresses. This inbound's OWN device address was in
+neither, and the allocator's only protection was that it starts at .2.
+
+So a device on 10.0.0.5/24 hands 10.0.0.5/32 to the fourth client allocated.
+That client and the host device then answer to the same address: its return
+traffic is delivered locally instead of into the tunnel, and nothing reports it.
+
+Only the host address is taken, not the prefix -- the prefix IS the pool, and
+blocking it would leave nothing to allocate from. F101.
+*/
+func TestAClientIsNotHandedTheDevicesOwnAddress(t *testing.T) {
+	setupBulkDB(t)
+	stubHostAddrs(t, nil, nil)
+
+	inboundSvc := &InboundService{}
+	created, _, _, err := inboundSvc.AddInbound(wgkernelInbound(51991, "10.60.0.5/24"))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	pool, err := inboundSvc.wireguardPoolFor(created)
+	if err != nil {
+		t.Fatalf("wireguardPoolFor: %v", err)
+	}
+
+	// Walk the first handful; .5 is the fourth address the allocator reaches.
+	used := append([]string{}, pool.taken...)
+	for range 6 {
+		got, aErr := allocateWireguardAddress(used, pool.base, pool.blocked)
+		if aErr != nil {
+			t.Fatalf("allocate: %v", aErr)
+		}
+		if wireguardHostAddr(got) == netip.MustParseAddr("10.60.0.5") {
+			t.Fatalf("a client was handed %s, the address the device itself answers on; its return traffic is delivered locally instead of into the tunnel", got)
+		}
+		used = append(used, got)
+	}
+	// The pool itself must still be usable.
+	if len(used) != len(pool.taken)+6 {
+		t.Fatalf("allocated %d addresses, want %d", len(used), len(pool.taken)+6)
+	}
+}
