@@ -58,7 +58,7 @@ type AllSetting struct {
 	SmtpFrom           string `json:"smtpFrom" form:"smtpFrom"`
 	SmtpFromName       string `json:"smtpFromName" form:"smtpFromName"`
 	SmtpTo             string `json:"smtpTo" form:"smtpTo"`
-	SmtpEncryptionType string `json:"smtpEncryptionType" form:"smtpEncryptionType"`
+	SmtpEncryptionType string `json:"smtpEncryptionType" form:"smtpEncryptionType" validate:"oneof=none starttls tls" example:"starttls"`
 	SmtpEnabledEvents  string `json:"smtpEnabledEvents" form:"smtpEnabledEvents"`
 	SmtpCpu            int    `json:"smtpCpu" form:"smtpCpu" validate:"gte=0,lte=100"`
 	SmtpMemory         int    `json:"smtpMemory" form:"smtpMemory" validate:"gte=0,lte=100"`

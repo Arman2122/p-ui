@@ -145,6 +145,12 @@
             "type": "string"
           },
           "smtpEncryptionType": {
+            "enum": [
+              "none",
+              "starttls",
+              "tls"
+            ],
+            "example": "starttls",
             "type": "string"
           },
           "smtpFrom": {
@@ -616,6 +622,12 @@
             "type": "string"
           },
           "smtpEncryptionType": {
+            "enum": [
+              "none",
+              "starttls",
+              "tls"
+            ],
+            "example": "starttls",
             "type": "string"
           },
           "smtpFrom": {

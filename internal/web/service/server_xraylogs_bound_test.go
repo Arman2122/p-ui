@@ -92,3 +92,31 @@ func TestGetXrayLogsRefusesACountItCannotServe(t *testing.T) {
 		t.Error("count 10000 is the documented maximum and must still be served")
 	}
 }
+
+/*
+And the panel's own log view says when the count is the problem.
+
+GetLogs had two branches and validated one of them. The syslog branch refused a
+count outside 1..10000 with a message; the panel-log branch took whatever
+strconv.Atoi returned with the error discarded, and logger.GetLogs stops as soon
+as len(output) < c is false — so "abc", "0" and "-5" all produced an empty log
+view. Nothing said the count was the reason, and the log view is where an
+operator goes precisely when something else has already gone wrong. F343.
+*/
+func TestPanelLogsRefuseACountTheyCannotUse(t *testing.T) {
+	svc := &ServerService{}
+
+	for _, count := range []string{"abc", "0", "-5", "10001", ""} {
+		t.Run("count="+count, func(t *testing.T) {
+			got := svc.GetLogs(count, "info", "false")
+			if len(got) != 1 || !strings.Contains(got[0], "Invalid count parameter") {
+				t.Fatalf("GetLogs(%q) = %#v; want the same refusal the syslog branch already gives, not an empty view", count, got)
+			}
+		})
+	}
+
+	// And a usable count still reads the buffer rather than being refused.
+	if got := svc.GetLogs("20", "info", "false"); len(got) == 1 && strings.Contains(got[0], "Invalid count parameter") {
+		t.Fatalf("a valid count was refused: %#v", got)
+	}
+}
