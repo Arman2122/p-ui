@@ -854,7 +854,9 @@ func ensureAPIServices(api json_util.RawMessage) json_util.RawMessage {
 		return api
 	}
 	var parsed map[string]any
-	if err := json.Unmarshal(api, &parsed); err != nil {
+	// A literal `null` unmarshals to a NIL map with no error, so the write-back
+	// below would panic the config build on the main goroutine at boot.
+	if err := json.Unmarshal(api, &parsed); err != nil || parsed == nil {
 		return api
 	}
 	services, _ := parsed["services"].([]any)
@@ -903,7 +905,7 @@ var statsUserFlags = []string{"statsUserOnline", "statsUserUplink", "statsUserDo
 // ensureStatsPolicy forces statsUserFlags on in every policy level of the
 // GENERATED config -- over an explicit false in the template, the same way the
 // api services above are forced. Generated clients carry no explicit level, so
-// level "0" is created when absent. An entirely missing or unparsable policy
+// level "0" is created when absent. A missing, null, or unparsable policy
 // block is left alone, and the stored template is never modified.
 
 func ensureStatsPolicy(policy json_util.RawMessage) json_util.RawMessage {
@@ -911,7 +913,7 @@ func ensureStatsPolicy(policy json_util.RawMessage) json_util.RawMessage {
 		return policy
 	}
 	var parsed map[string]any
-	if err := json.Unmarshal(policy, &parsed); err != nil {
+	if err := json.Unmarshal(policy, &parsed); err != nil || parsed == nil {
 		return policy
 	}
 	levels, _ := parsed["levels"].(map[string]any)

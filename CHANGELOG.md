@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A `null` section in the Xray template no longer stops the panel booting.**
+  Writing `"policy": null` or `"api": null` into the template -- which the editor
+  accepted, and which some tools emit for an empty section -- crashed the panel
+  on startup. Because that happens before the web server is up, the panel could
+  not be reached to undo the template, and systemd restarted it into a loop.
+  **What you will notice:** such a section is now left exactly as you stored it
+  and the panel starts. Saving one no longer returns a 500 either.
+
 - **A WireGuard outbound keeps the UDP masks you configure for it.** The form
   offered a Final Mask editor for WireGuard outbounds and the save silently
   emitted only `sockopt`, dropping every mask. Xray applies those masks on a
