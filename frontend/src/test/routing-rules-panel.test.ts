@@ -164,3 +164,53 @@ describe('criteria round trip', () => {
     expect(ingressIdsToArray('{not json')).toEqual([]);
   });
 });
+
+/*
+An attrs criterion must survive the round-trip the editor puts it through.
+
+`attrs` is the one criterion whose xray shape is an OBJECT. The bridge between a
+stored intent row and the rule shape the editor edits flattened every criterion
+with String(value), so an attrs map became the literal "[object Object]" on the
+way out — and the editor then split that string into one row per character. On
+the way back, criteriaFromForm ran the same flatten and stored the mangled
+string. Whatever the operator had configured was gone, replaced by junk.
+
+Both legs are pinned here because fixing one alone leaves the value mangled in
+the other direction. F188.
+*/
+describe('an attrs criterion survives the editor round-trip', () => {
+  const attrs = { ':method': 'GET', ':path': '^/api/' };
+
+  it('reaches the rule shape as an object, not a stringified one', () => {
+    const rule = intentToRule(
+      {
+        id: 1, enable: true, remark: 'r', ingressScope: 'all', ingressIds: [],
+        destKind: 'outbound', destTag: 'direct',
+        criteria: JSON.stringify({ attrs }),
+      } as never,
+      () => 'in-1',
+    );
+    expect(rule.attrs, 'the attrs object was dropped or stringified').toEqual(attrs);
+    expect(JSON.stringify(rule)).not.toContain('[object Object]');
+  });
+
+  it('comes back from the rule shape unchanged', () => {
+    const back = ruleToIntent({ type: 'field', attrs, outboundTag: 'direct', inboundTag: [] }, () => 1);
+    expect(back.ok, 'ruleToIntent refused a rule carrying attrs').toBe(true);
+    if (!back.ok) return;
+    const stored = JSON.parse(back.payload.criteria as string) as Record<string, unknown>;
+    expect(stored.attrs, 'attrs did not survive the write leg').toEqual(attrs);
+  });
+
+  it('ignores a stored value that is not an object', () => {
+    const rule = intentToRule(
+      {
+        id: 1, enable: true, remark: 'r', ingressScope: 'all', ingressIds: [],
+        destKind: 'outbound', destTag: 'direct',
+        criteria: JSON.stringify({ attrs: 'not-an-object' }),
+      } as never,
+      () => 'in-1',
+    );
+    expect(rule.attrs, 'a malformed stored value became a rule the editor expands per character').toBeUndefined();
+  });
+});
