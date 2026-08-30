@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"embed"
+	"html"
 	"math/big"
 	"net"
 	"net/http"
@@ -183,7 +184,34 @@ func (t *Tgbot) NewTgbot() *Tgbot {
 
 // I18nBot retrieves a localized message for the bot interface.
 func (t *Tgbot) I18nBot(name string, params ...string) string {
-	return locale.I18n(locale.Bot, name, params...)
+	return locale.I18n(locale.Bot, name, escapeBotParams(params)...)
+}
+
+/*
+escapeBotParams escapes the VALUES interpolated into a bot message.
+
+Every message this package sends sets ParseMode "HTML", and Telegram rejects the
+whole message when the markup does not parse. A remark, an email or a comment
+holding a '<' therefore silenced the server-usage report, the inbound list and
+the depleted-client alert entirely — the send fails, the error is logged, and
+the admin simply never hears from the bot again about that client.
+
+Only the values: the templates' own <b> and <code> are theirs and must survive.
+*/
+func escapeBotParams(params []string) []string {
+	if len(params) == 0 {
+		return params
+	}
+	escaped := make([]string, len(params))
+	for i, param := range params {
+		name, value, found := strings.Cut(param, "==")
+		if !found {
+			escaped[i] = param
+			continue
+		}
+		escaped[i] = name + "==" + html.EscapeString(value)
+	}
+	return escaped
 }
 
 // GetHashStorage returns the hash storage instance for callback queries.
