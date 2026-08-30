@@ -308,3 +308,43 @@ func TestFingerprintSplit(t *testing.T) {
 		}
 	})
 }
+
+/*
+An IPv6 listen must be bracketed, or mtg never starts.
+
+bindTo joined host and port with a bare colon, so a listen of 2001:db8::1
+rendered `bind-to = "2001:db8::1:8443"` — which is not an address:port pair,
+which mtg refuses, so the sidecar never comes up and every client of that
+inbound is offline. The listen field is free text in the inbound form and the
+panel documents binding to a specific address there, so this is reachable
+without doing anything unusual.
+
+The unspecified IPv6 address is the same case: "::" becomes "[::]:8443". F215.
+*/
+func TestBindToBracketsAnIPv6Listen(t *testing.T) {
+	cases := []struct {
+		listen string
+		port   int
+		want   string
+	}{
+		{listen: "2001:db8::1", port: 8443, want: `bind-to = "[2001:db8::1]:8443"`},
+		{listen: "::", port: 8443, want: `bind-to = "[::]:8443"`},
+		{listen: "::1", port: 443, want: `bind-to = "[::1]:443"`},
+		// Unchanged for the addresses that always worked.
+		{listen: "0.0.0.0", port: 8443, want: `bind-to = "0.0.0.0:8443"`},
+		{listen: "10.0.0.5", port: 443, want: `bind-to = "10.0.0.5:443"`},
+		{listen: "", port: 8443, want: `bind-to = "0.0.0.0:8443"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.listen, func(t *testing.T) {
+			cfg := renderConfig(Instance{
+				Secrets: []SecretEntry{{Name: "alice", Secret: "ee00"}},
+				Listen:  tc.listen, Port: tc.port,
+			}, 5000, "")
+			if !strings.Contains(cfg, tc.want) {
+				t.Fatalf("listen %q: want %s\n%s", tc.listen, tc.want, cfg)
+			}
+		})
+	}
+}

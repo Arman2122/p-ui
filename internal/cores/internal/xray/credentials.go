@@ -61,6 +61,15 @@ func (c *Core) ValidateClient(kind core.Kind, settings, email string, have map[s
 			return errors.New("shadowsocks method " + engine.ShadowsocksMethodFromSettings(settings) +
 				" is single-user and cannot carry clients; use 2022-blake3-aes-128-gcm or 2022-blake3-aes-256-gcm")
 		}
+		// A password, like every other kind's credential. Nothing upstream mints
+		// one for a legacy cipher -- normalizeShadowsocksClientKeys returns on its
+		// second line for those -- so an empty one reached xray, which refuses the
+		// user and with it the whole config. Emptiness only: a wrong-SIZE 2022 key
+		// is repaired before this runs, and refusing it here would strand a client
+		// an older build let in. F328.
+		if have[core.CredPassword] == "" {
+			return errors.New("shadowsocks client requires a password")
+		}
 	case "hysteria":
 		if have[core.CredAuth] == "" {
 			return errors.New("empty client ID")
