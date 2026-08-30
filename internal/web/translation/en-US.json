@@ -1060,8 +1060,6 @@
         "downloadSettingsAddressHint": "Leave empty to inherit the inbound's download endpoint. Setting an address replaces it for this host alone.",
         "vlessRoute": "VLESS route",
         "mihomoIpVersion": "IP version",
-        "mihomoX25519": "Mihomo X25519",
-        "shuffleHost": "Shuffle host",
         "tags": "Tags",
         "nodeGuids": "Nodes",
         "excludeFromSubTypes": "Exclude from formats",

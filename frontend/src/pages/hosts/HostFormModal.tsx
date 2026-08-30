@@ -383,12 +383,6 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                         options={['dual', 'ipv4', 'ipv6', 'ipv4-prefer', 'ipv6-prefer'].map((v) => ({ value: v, label: v }))}
                       />
                     </FormField>
-                    <FormField name="mihomoX25519" label={t('pages.hosts.fields.mihomoX25519')} valueProp="checked">
-                      <Switch />
-                    </FormField>
-                    <FormField name="shuffleHost" label={t('pages.hosts.fields.shuffleHost')} valueProp="checked">
-                      <Switch />
-                    </FormField>
                   </>
                 ),
               },

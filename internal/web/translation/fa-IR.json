@@ -1949,8 +1949,6 @@
         "downloadSettingsAddressHint": "اگر خالی بماند، نقطهٔ دانلود ورودی به ارث می‌رسد. با وارد کردن آدرس، فقط برای همین هاست جایگزین می‌شود.",
         "vlessRoute": "مسیر VLESS",
         "mihomoIpVersion": "نسخه IP",
-        "mihomoX25519": "Mihomo X25519",
-        "shuffleHost": "درهم‌سازی میزبان",
         "tags": "برچسب‌ها",
         "nodeGuids": "نودها",
         "excludeFromSubTypes": "حذف از فرمت‌ها",
