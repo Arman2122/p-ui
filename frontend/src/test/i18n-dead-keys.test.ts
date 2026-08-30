@@ -124,22 +124,27 @@ describe('i18n keys', () => {
    * fires because the miss is a truthy string.
    *
    * A positional default (`t('a.b.c', 'Some text')`) does not excuse it: the
-   * English reads fine and every other locale still shows English. F197 / F198.
+   * English reads fine and every other locale still shows English.
+   *
+   * Top-level keys count. Requiring a dot let six through, and the ones that
+   * read like English -- apply, disable, empty, inbounds -- are precisely the
+   * ones nobody notices, because i18next renders the key and the key IS the
+   * word. F197 / F198 / F405.
    */
   it('every key the sources ask for exists in en-US', () => {
     const asked = new Map<string, string>();
     for (const [file, src] of namedSources) {
-      for (const match of src.matchAll(/\bt\(\s*(['"`])([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\1/g)) {
+      for (const match of src.matchAll(/\bt\(\s*(['"`])([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)\1/g)) {
         if (!asked.has(match[2])) asked.set(match[2], file);
       }
       // Go asks in three shapes: the web handlers' I18nWeb, and the Telegram
       // bot's I18nBot, whose miss is the quietest of the lot -- locale.I18n
       // returns "" for an unknown key, so the bot sends a message that starts
       // with nothing at all.
-      for (const match of src.matchAll(/I18nWeb\(c,\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"/g)) {
+      for (const match of src.matchAll(/I18nWeb\(c,\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)"/g)) {
         if (!asked.has(match[1])) asked.set(match[1], file);
       }
-      for (const match of src.matchAll(/I18nBot\(\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"/g)) {
+      for (const match of src.matchAll(/I18nBot\(\s*"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)"/g)) {
         if (!asked.has(match[1])) asked.set(match[1], file);
       }
     }
