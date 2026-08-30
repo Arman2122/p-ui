@@ -165,12 +165,18 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	// matchable in routing rules — that its mtg sidecar dials Telegram through.
 	// Done after the subscription merge so a selected subscription outbound (or
 	// balancer) is a valid rule target.
+	// Collected once: these rows are both what the bridge is built for and what
+	// its port guard must avoid, since mtg binds them outside Xray.
+	var localMtproto []*model.Inbound
 	for i := range inbounds {
 		inbound := inbounds[i]
 		if inbound.Protocol != model.MTProto || !inbound.Enable || inbound.NodeID != nil {
 			continue
 		}
-		injectMtprotoEgress(xrayConfig, inbound, inbounds)
+		localMtproto = append(localMtproto, inbound)
+	}
+	for _, inbound := range localMtproto {
+		injectMtprotoEgress(xrayConfig, inbound, localMtproto)
 	}
 
 	// Wire the panel's own HTTP traffic through the configured outbound, after
@@ -696,6 +702,8 @@ const mtprotoEgressSocksSettings = `{"auth":"noauth","udp":false}`
 // outbound, the bridge retains default-route behavior. Generated state remains
 // hot-appliable, leaves the stored template untouched, and never forces a full
 // Xray restart. Mirrors injectPanelEgress.
+// siblings must be the local, enabled mtproto rows -- the caller already
+// filters them, and mtg binds their ports where no generated config shows.
 func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*model.Inbound) {
 	var parsed struct {
 		RouteThroughXray bool   `json:"routeThroughXray"`
@@ -735,9 +743,6 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 	// mtproto rows never appear in the generated config -- mtg binds them
 	// outside Xray -- so the sidecar's own listeners need their own pass.
 	for _, other := range siblings {
-		if other.Protocol != model.MTProto || !other.Enable || other.NodeID != nil {
-			continue
-		}
 		if other.Port != parsed.RouteXrayPort || !listenOverlaps(other.Listen, "127.0.0.1") {
 			continue
 		}
