@@ -41,5 +41,19 @@ func (s *SettingService) LogAuthPosture() {
 				"Client sync is unaffected. This is the safe default: without a filter, every account matching ldapUserFilter could sign in here as an administrator. "+
 				`Set one from a root shell, e.g: p-ui setting -ldapAdminFilter "(memberOf=cn=panel-admins,ou=groups,dc=example,dc=com)"`, authPostureLogPrefix)
 		}
+		// The panel offers ldap:// and ldaps:// and nothing else; there is no
+		// StartTLS here, so an unencrypted transport cannot be upgraded later.
+		if useTLS, err := s.GetLdapUseTLS(); err == nil && !useTLS {
+			msg := "%s LDAP is enabled with ldapUseTLS off, so the panel talks to the directory in cleartext. " +
+				"Every account identifier the sync reads is on the wire in plain text, on every run of ldapSyncCron. " +
+				"This panel has no StartTLS, so the only encrypted option is ldaps: set ldapUseTLS true and ldapPort to 636."
+			if bindDN, err := s.GetLdapBindDN(); err == nil && strings.TrimSpace(bindDN) != "" {
+				msg += " A bind DN is configured, so its password crosses the network in plain text too."
+			}
+			if filter, err := s.GetLdapAdminFilter(); err == nil && strings.TrimSpace(filter) != "" {
+				msg += " Panel sign-in through LDAP is on, so every administrator password is sent the same way."
+			}
+			logger.Errorf(msg, authPostureLogPrefix)
+		}
 	}
 }
