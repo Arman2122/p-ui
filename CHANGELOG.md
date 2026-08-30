@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **LDAP no longer re-enables clients on inbounds it was not given.** The sync
+  decided who to enable from a list of every client on the panel, without
+  checking whether the client was on any of the inbounds you put under LDAP
+  control. So disabling such a client by hand was undone on the next tick --
+  every minute, indefinitely, with no way to stop it short of turning LDAP off.
+  **What you will notice:** a client is only re-enabled on an inbound it is
+  actually on. Disabling stays panel-wide deliberately: narrowing that would
+  leave an off-boarded account working wherever it sits outside your configured
+  inbounds. A client list that cannot be read is now logged instead of silently
+  narrowing what LDAP governs.
+
 - **Enabling two-factor authentication no longer says it is done before it is.**
   Entering a valid code showed "Two-factor authentication has been successfully
   established" -- but that step only ticks a box in the unsaved form. Nothing had

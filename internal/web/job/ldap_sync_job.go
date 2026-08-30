@@ -104,12 +104,22 @@ func (j *LdapSyncJob) Run() {
 
 	allClients := map[string]*model.Client{}  // email -> client
 	inboundMap := map[string]*model.Inbound{} // tag -> inbound
+	// Which inbound each identity is actually on. The index above is panel-wide,
+	// and enabling from it would reach clients LDAP was never given authority over.
+	membership := map[string]map[string]bool{} // tag -> email -> present
 	for _, ib := range inbounds {
 		inboundMap[ib.Tag] = ib
-		clients, _ := j.inboundService.GetClients(ib)
+		clients, err := j.inboundService.GetClients(ib)
+		if err != nil {
+			// Unreadable settings would otherwise silently narrow LDAP's authority.
+			logger.Warningf("LDAP sync: cannot read the clients of inbound %s: %v", ib.Tag, err)
+		}
+		on := make(map[string]bool, len(clients))
 		for i := range clients {
 			allClients[clients[i].Email] = &clients[i]
+			on[clients[i].Email] = true
 		}
+		membership[ib.Tag] = on
 	}
 
 	// --- Prepare batch operations ---
@@ -130,26 +140,15 @@ func (j *LdapSyncJob) Run() {
 		resolvedTags = append(resolvedTags, tag)
 	}
 
+	plan := planLdapChanges(flags, allClients, membership, resolvedTags)
 	clientsToCreate := []model.Client{}
-	clientsToEnable := map[string][]string{}  // tag -> []email
-	clientsToDisable := map[string][]string{} // tag -> []email
-
-	for email, allowed := range flags {
-		existing := allClients[email]
-		if existing == nil {
-			if allowed && autoCreate {
-				clientsToCreate = append(clientsToCreate, j.buildClient(email, defGB, defExpiryDays, defLimitIP))
-			}
-			continue
-		}
-		for _, tag := range resolvedTags {
-			if allowed && !existing.Enable {
-				clientsToEnable[tag] = append(clientsToEnable[tag], email)
-			} else if !allowed && existing.Enable {
-				clientsToDisable[tag] = append(clientsToDisable[tag], email)
-			}
+	if autoCreate {
+		for _, email := range plan.create {
+			clientsToCreate = append(clientsToCreate, j.buildClient(email, defGB, defExpiryDays, defLimitIP))
 		}
 	}
+	clientsToEnable := plan.enable
+	clientsToDisable := plan.disable
 
 	j.createClients(clientsToCreate, resolvedInboundIds, resolvedTags)
 
@@ -386,4 +385,52 @@ func (j *LdapSyncJob) deleteClientsNotInLDAP(inboundTag string, ldapEmails map[s
 		j.xrayService.SetToNeedRestart()
 		logger.Info("Xray restart scheduled after batch deletion")
 	}
+}
+
+// ldapChanges is one tick's decision, with no database or directory in it so
+// it can be driven by a test; Run cannot be, because it needs a live directory.
+type ldapChanges struct {
+	create  []string
+	enable  map[string][]string
+	disable map[string][]string
+}
+
+/*
+planLdapChanges decides who to create, enable and disable for one tick.
+
+The ENABLE direction is bounded by membership: a client is only re-enabled on
+an inbound it is actually on. Without that, an identity the directory allows
+was enabled on every configured tag no matter where it lived, so an admin
+disabling a client on an inbound LDAP does not govern had it turned back on a
+minute later, forever, with no workaround.
+
+The DISABLE direction stays panel-wide on purpose. Narrowing it fails OPEN:
+an off-boarded account would keep working wherever it sits outside the
+configured tags. That is a scope decision, not a repair.
+*/
+func planLdapChanges(
+	flags map[string]bool,
+	allClients map[string]*model.Client,
+	membership map[string]map[string]bool,
+	resolvedTags []string,
+) ldapChanges {
+	out := ldapChanges{enable: map[string][]string{}, disable: map[string][]string{}}
+	for email, allowed := range flags {
+		existing := allClients[email]
+		if existing == nil {
+			if allowed {
+				out.create = append(out.create, email)
+			}
+			continue
+		}
+		for _, tag := range resolvedTags {
+			switch {
+			case allowed && !existing.Enable && membership[tag][email]:
+				out.enable[tag] = append(out.enable[tag], email)
+			case !allowed && existing.Enable:
+				out.disable[tag] = append(out.disable[tag], email)
+			}
+		}
+	}
+	return out
 }
