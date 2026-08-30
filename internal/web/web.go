@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
@@ -127,6 +128,20 @@ type Server struct {
 
 	bus  *eventbus.Bus
 	cron *cron.Cron
+
+	/*
+		The cron entries whose existence and schedule come from a SETTING, so a
+		settings save can move them without a restart. Everything else in the
+		table is fixed at boot and needs no handle.
+
+		Guarded because a settings save runs on a request goroutine while the
+		cron runs on its own.
+	*/
+	settingJobsMu sync.Mutex
+	cpuAlarmJob   cron.EntryID
+	memAlarmJob   cron.EntryID
+	statsJob      cron.EntryID
+	checkHashJob  cron.EntryID
 
 	// cores is what supervision dispatches through, so shutdown stops a core
 	// because it is registered rather than because this file names it.
@@ -411,35 +426,7 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 		scheduleLdapSync(s.cron, runtime, j)
 	}
 
-	// Telegram-bot–dependent jobs: periodic stats report + callback-hash cleanup.
-	isTgbotenabled, err := s.settingService.GetTgbotEnabled()
-	if (err == nil) && isTgbotenabled {
-		runtime, err := s.settingService.GetTgbotRuntime()
-		if err != nil {
-			logger.Warningf("Add NewStatsNotifyJob: failed to load runtime: %v; using default @daily", err)
-			runtime = "@daily"
-		} else if strings.TrimSpace(runtime) == "" {
-			logger.Warning("Add NewStatsNotifyJob runtime is empty, using default @daily")
-			runtime = "@daily"
-		}
-		logger.Infof("Tg notify enabled,run at %s", runtime)
-		if _, err = s.cron.AddJob(runtime, job.NewStatsNotifyJob()); err != nil {
-			logger.Warningf("Add NewStatsNotifyJob: failed to schedule runtime %q: %v", runtime, err)
-		}
-
-		// check for Telegram bot callback query hash storage reset
-		_, _ = s.cron.AddJob(cadenceCheckHash, job.NewCheckHashStorageJob())
-	}
-
-	// CPU monitor publishes cpu.high events; register it whenever any notifier
-	// (Telegram or Email) wants them, independent of the Telegram bot being on.
-	if s.cpuAlarmWanted() {
-		_, _ = s.cron.AddJob(cadenceCPUAlarm, job.NewCheckCpuJob())
-	}
-	// Memory monitor publishes memory.high events; register it whenever any notifier wants them.
-	if s.memoryAlarmWanted() {
-		_, _ = s.cron.AddJob(cadenceMemoryAlarm, job.NewCheckMemJob())
-	}
+	s.rescheduleSettingJobs()
 
 	if mins := sys.MemoryReleaseIntervalMinutes(); mins > 0 {
 		_, _ = s.cron.AddJob(fmt.Sprintf("@every %dm", mins), job.NewMemoryReleaseJob())
@@ -475,6 +462,60 @@ func scheduleLdapSync(c *cron.Cron, spec string, j cron.Job) {
 	if _, err := c.AddJob(defaultLdapSyncCron, j); err != nil {
 		logger.Errorf("LDAP sync could not be scheduled at all: %v", err)
 	}
+}
+
+/*
+rescheduleSettingJobs puts the settings-driven cron entries where the settings
+say they belong, now.
+
+These four were added once, inside startTask, from settings read at process
+start — and nothing ever touched the cron again. So enabling the CPU or memory
+alert scheduled no watchdog and produced no alerts at all until a restart, and
+changing the Telegram report time reported success and hot-reloaded the bot
+while the report kept firing on the old schedule. The panel said yes and did
+nothing, which is the shape of both findings. F341 / F397.
+
+Idempotent by construction: every entry is removed before it is considered
+again, so calling this on every settings save converges rather than accumulates.
+*/
+func (s *Server) rescheduleSettingJobs() {
+	s.settingJobsMu.Lock()
+	defer s.settingJobsMu.Unlock()
+
+	for _, id := range []cron.EntryID{s.cpuAlarmJob, s.memAlarmJob, s.statsJob, s.checkHashJob} {
+		if id != 0 {
+			s.cron.Remove(id)
+		}
+	}
+	s.cpuAlarmJob, s.memAlarmJob, s.statsJob, s.checkHashJob = 0, 0, 0, 0
+
+	// CPU and memory monitors publish cpu.high / memory.high; scheduled whenever
+	// any notifier (Telegram or Email) wants them, independent of the bot.
+	if s.cpuAlarmWanted() {
+		s.cpuAlarmJob, _ = s.cron.AddJob(cadenceCPUAlarm, job.NewCheckCpuJob())
+	}
+	if s.memoryAlarmWanted() {
+		s.memAlarmJob, _ = s.cron.AddJob(cadenceMemoryAlarm, job.NewCheckMemJob())
+	}
+
+	// Telegram-bot-dependent: the periodic stats report and the callback-hash
+	// cleanup that only exists because the bot has one.
+	if enabled, err := s.settingService.GetTgbotEnabled(); err != nil || !enabled {
+		return
+	}
+	runtime, err := s.settingService.GetTgbotRuntime()
+	if err != nil {
+		logger.Warningf("stats notify: failed to load the runtime: %v; using @daily", err)
+		runtime = "@daily"
+	} else if strings.TrimSpace(runtime) == "" {
+		runtime = "@daily"
+	}
+	logger.Infof("Telegram stats notify runs at %s", runtime)
+	if s.statsJob, err = s.cron.AddJob(runtime, job.NewStatsNotifyJob()); err != nil {
+		logger.Warningf("stats notify: %q is not a valid schedule (%v); falling back to @daily", runtime, err)
+		s.statsJob, _ = s.cron.AddJob("@daily", job.NewStatsNotifyJob())
+	}
+	s.checkHashJob, _ = s.cron.AddJob(cadenceCheckHash, job.NewCheckHashStorageJob())
 }
 
 // cpuAlarmWanted reports whether any notifier is configured to receive cpu.high
@@ -767,6 +808,8 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 			s.bus.Subscribe("tg-notifier", s.tgbotService.HandleEvent)
 		}
 	})
+
+	controller.SetRescheduleSettingJobsFunc(s.rescheduleSettingJobs)
 
 	s.startTask(restartXray, loc)
 
