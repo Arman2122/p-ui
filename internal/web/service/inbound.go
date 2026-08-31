@@ -1412,7 +1412,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 
 	// Settings the core that owns this kind would refuse -- judged against what
 	// this edit replaces, so a row that already violates stays editable. Q1.
-	if err := validateInstanceOnUpdate(oldInbound, inbound); err != nil {
+	if err := refuseOnlyIfWorsened("configuration", oldInbound, inbound, validateInstanceForKind); err != nil {
 		return inbound, false, "", err
 	}
 
@@ -1441,8 +1441,29 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		return inbound, false, "", err
 	}
 
-	// Credentials the core would parse and never check make this an open proxy.
+	/*
+		Credentials the core would parse and never check make this an open proxy.
+
+		Refused outright, NOT judged against what the edit replaces: forcing the
+		fix on operator contact is this guard's whole repair path, which is why
+		nothing auto-repairs it. Deliberately outside Q1's rule, and pinned by
+		TestUpdateCannotCarryAnInboundThroughInTheBrokenState.
+	*/
 	if err := refuseUnenforcedAccounts(inbound); err != nil {
+		return inbound, false, "", err
+	}
+
+	/*
+		The host's own addresses, which create has always asked about and edit
+		never did: a device prefix moved onto the LAN, docker's bridge or the
+		panel's management network captures that traffic just as surely when it
+		arrives by an edit.
+
+		Judged against what the edit replaces, so an inbound that already overlaps
+		can still be renamed or turned off. F067 / Q1.
+	*/
+	if err := refuseOnlyIfWorsened("subnet the host already holds", oldInbound, inbound,
+		s.checkWireguardHostAddressConflict); err != nil {
 		return inbound, false, "", err
 	}
 
