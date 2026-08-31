@@ -146,26 +146,33 @@ func validateInstanceForKind(inbound *model.Inbound) error {
 }
 
 /*
-validateInstanceOnUpdate judges an edit against what it replaces.
+refuseOnlyIfWorsened judges an edit against what it replaces.
 
 A save-time refusal applied to rows that already violate it locks an operator
-out of the row they most need to reach: the panel would refuse a renamed remark
-on an inbound that has been running -- badly -- since before the rule existed,
-and the only way out would be deleting it and its clients. So a configuration
-that was already refused stays editable, and one this edit makes refusable is
-stopped. Create has no "before" and is judged on its own.
+out of the row they most need to reach. The panel would refuse a renamed remark
+on an inbound that has been running -- badly -- since before the rule existed;
+worse, it would refuse to turn OFF an inbound the rule is warning about, and the
+only way out would be deleting it and its clients.
 
-The carried-forward violation is logged rather than swallowed: it is still
-wrong, and an operator who never sees it cannot go and fix it. Q1.
+So an edit that leaves a violation where it found it is allowed, and one that
+introduces it is stopped. Create has no "before" and is judged on its own. The
+carried-forward violation is logged rather than swallowed: it is still wrong,
+and an operator who never sees it cannot go and fix it.
+
+This is the rule for every save-time refusal on the edit path, not a decision
+per refusal -- which is what makes it a rule and not a habit. Q1.
 */
-func validateInstanceOnUpdate(oldInbound, inbound *model.Inbound) error {
-	err := validateInstanceForKind(inbound)
+func refuseOnlyIfWorsened(what string, oldInbound, inbound *model.Inbound, check func(*model.Inbound) error) error {
+	err := check(inbound)
 	if err == nil {
 		return nil
 	}
-	if validateInstanceForKind(oldInbound) != nil {
-		logger.Warning("inbound", inbound.Tag,
-			"is saved still carrying a configuration its core refuses, because this edit did not introduce it:", err)
+	if oldInbound == nil {
+		return err
+	}
+	if check(oldInbound) != nil {
+		logger.Warning("inbound", inbound.Tag, "is saved still carrying a", what,
+			"its save path refuses, because this edit did not introduce it:", err)
 		return nil
 	}
 	return err

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/egress"
 )
 
 /*
@@ -102,4 +103,51 @@ func seedTunnelDirect(t *testing.T, tag string, port int, settings string) *mode
 	t.Helper()
 	seedInboundConflict(t, tag, "", port, model.Tunnel, "", settings)
 	return loadInboundByTag(t, tag)
+}
+
+/*
+The rule reaches the host-address check, which create has always run and edit
+never did.
+
+A WireGuard prefix moved onto the host's LAN, docker's bridge or the panel's own
+management network captures that traffic however it arrives -- but an inbound
+already overlapping must stay editable, or the operator cannot rename it, move
+it off the collision, or turn it off. F067 / Q1.
+*/
+func TestAnAlreadyOverlappingWireguardInboundStaysEditable(t *testing.T) {
+	setupBulkDB(t)
+	stubHostAddrs(t, nil, nil)
+
+	created, _, _, err := (&InboundService{}).AddInbound(wgkernelInbound(51995, "10.66.0.1/24"))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// The host turns out to hold that subnet after the fact -- a NIC brought up,
+	// a docker network created, a route added by something else on the box.
+	stubHostAddrs(t, []egress.AddrSpec{hostAddr(t, "10.66.0.5/24", "eth0")}, nil)
+
+	off := *created
+	off.Enable = false
+	if _, _, _, err := (&InboundService{}).UpdateInbound(&off); err != nil {
+		t.Fatalf("an inbound whose subnet the host has since claimed could not be disabled: %v", err)
+	}
+}
+
+// And an edit that MOVES an inbound onto a subnet the host holds is refused,
+// which is the half create has always covered.
+func TestAnEditOntoASubnetTheHostHoldsIsRefused(t *testing.T) {
+	setupBulkDB(t)
+	stubHostAddrs(t, []egress.AddrSpec{hostAddr(t, "10.77.0.5/24", "eth0")}, nil)
+
+	created, _, _, err := (&InboundService{}).AddInbound(wgkernelInbound(51996, "10.88.0.1/24"))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	moved := *created
+	moved.Settings = strings.ReplaceAll(moved.Settings, "10.88.0.1/24", "10.77.0.1/24")
+	if _, _, _, err := (&InboundService{}).UpdateInbound(&moved); err == nil {
+		t.Fatal("an edit moved the device onto a subnet eth0 already carries; the connected route it installs captures that network's traffic")
+	}
 }

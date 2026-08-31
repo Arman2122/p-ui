@@ -1449,3 +1449,20 @@ which calls `serverService.GetDb()`). `/getDb` calls the same `GetDb()` and
 streams the result, so it is the same operation on the same deadline — neither
 finding lists it because each was scoped to the handler it started from. Fixed
 with the other four rather than left as a known-identical fifth.
+
+## L32 — the open-proxy guard is deliberately outside Q1's rule
+
+Q1's answer — a save-time refusal fires only when the edit WORSENS the violation
+— was applied to the refusals Q1 names. It was NOT applied to
+`refuseUnenforcedAccounts`, and that is a decision rather than an omission.
+
+`TestUpdateCannotCarryAnInboundThroughInTheBrokenState` states the opposite
+policy for that one guard and gives the reason: "any save of that row — even one
+changing something else entirely — refuses until auth is set. That is the whole
+non-destructive repair path, and it is why nothing auto-repairs." An inbound
+serving every connection on its port without checking credentials is not a state
+to preserve editability for; forcing the fix on contact IS the repair.
+
+Applying Q1 there was tried and reverted. It made the guard's own test fail,
+which is the test doing its job. If the operator ever wants that guard softened
+too, it is a separate decision with a real cost: the fix stops being forced.
