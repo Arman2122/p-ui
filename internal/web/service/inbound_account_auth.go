@@ -144,3 +144,29 @@ func validateInstanceForKind(inbound *model.Inbound) error {
 	}
 	return validator.ValidateInstance(kind, inbound.Settings)
 }
+
+/*
+validateInstanceOnUpdate judges an edit against what it replaces.
+
+A save-time refusal applied to rows that already violate it locks an operator
+out of the row they most need to reach: the panel would refuse a renamed remark
+on an inbound that has been running -- badly -- since before the rule existed,
+and the only way out would be deleting it and its clients. So a configuration
+that was already refused stays editable, and one this edit makes refusable is
+stopped. Create has no "before" and is judged on its own.
+
+The carried-forward violation is logged rather than swallowed: it is still
+wrong, and an operator who never sees it cannot go and fix it. Q1.
+*/
+func validateInstanceOnUpdate(oldInbound, inbound *model.Inbound) error {
+	err := validateInstanceForKind(inbound)
+	if err == nil {
+		return nil
+	}
+	if validateInstanceForKind(oldInbound) != nil {
+		logger.Warning("inbound", inbound.Tag,
+			"is saved still carrying a configuration its core refuses, because this edit did not introduce it:", err)
+		return nil
+	}
+	return err
+}

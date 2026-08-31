@@ -448,6 +448,7 @@
         "autoOutboundsInterface": "رابط خروجی خودکار",
         "autoOutboundsInterfaceTooltip": "رابط فیزیکی برای ترافیک خروجی. از auto برای تشخیص استفاده کنید؛ زمانی که Auto system routes فعال باشد، به‌صورت خودکار فعال می‌شود.",
         "rewriteAddress": "بازنویسی آدرس",
+        "tunnelNoDestination": "این ورودی مقصدی ندارد، پس به خودش فوروارد می‌کند — هر اتصالی که می‌پذیرد یکی دیگر باز می‌کند تا فایل‌دیسکریپتورهای هسته تمام شود. یک آدرس یا پورت بازنویسی بگذارید، یک نگاشت پورت اضافه کنید، یا follow redirect را روشن کنید.",
         "rewritePort": "بازنویسی پورت",
         "allowedNetwork": "شبکه مجاز",
         "followRedirect": "دنبال‌کردن Redirect",

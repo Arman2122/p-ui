@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A tunnel inbound with no destination is refused instead of forwarding to
+  itself.** With follow-redirect off and no rewrite address, xray substitutes
+  127.0.0.1 and the connection's own port — so the inbound dials itself, and one
+  external probe opens connections until the core running every other inbound on
+  the box is out of file descriptors. The panel shipped that as the default
+  tunnel configuration. The form now warns before you save, and the save refuses
+  it.
+  **An inbound already in that state stays editable** — you can still rename or
+  disable it, and only an edit that *introduces* the loop is refused. That rule
+  is how every save-time refusal added by this campaign behaves.
+
 - **Clash subscriptions can shuffle their proxy order.** A new subscription
   setting randomises the order of the generated proxy group on every fetch, so
   clients stop all landing on whichever host sorts first — mihomo's own

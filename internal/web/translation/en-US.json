@@ -448,6 +448,7 @@
         "autoOutboundsInterface": "Auto outbounds interface",
         "autoOutboundsInterfaceTooltip": "Physical interface for outbound traffic. Use 'auto' to detect; auto-enabled when Auto system routes is set.",
         "rewriteAddress": "Rewrite address",
+        "tunnelNoDestination": "This inbound has no destination, so it would forward to itself — every connection it accepts opens another one, until the core runs out of file descriptors. Set a rewrite address or port, add a port map, or turn on follow redirect.",
         "rewritePort": "Rewrite port",
         "allowedNetwork": "Allowed network",
         "followRedirect": "Follow redirect",
