@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Two admins can add clients through the Telegram bot at the same time.**
+  The in-progress client was a set of package-level variables — one draft for
+  the whole panel — so two admins running the wizard together wrote into it in
+  turn, and whichever pressed Submit first saved a mix of both: the other's
+  email, limits and inbound set, under their own name. Each chat now has its
+  own draft. Two admins sharing one group chat still share one, because they
+  already share the state machine that drives it.
+
 - **Long admin operations are no longer cut off at 30 seconds.** Installing an
   Xray version, updating the geo files, scanning REALITY targets, downloading a
   database backup and sending one to Telegram all outrun the panel's 30-second

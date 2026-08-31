@@ -112,7 +112,7 @@ pressed a button in the add-client flow and nothing came back. F298.
 func TestTheClientDraftIsHtmlAndEscapesTheOperatorsText(t *testing.T) {
 	body := readBotSource(t, "tgbot_client.go")
 
-	start := strings.Index(body, "func (t *Tgbot) BuildClientDraftMessage()")
+	start := strings.Index(body, "func (t *Tgbot) BuildClientDraftMessage(")
 	if start < 0 {
 		t.Fatal("BuildClientDraftMessage was renamed; this guard is now vacuous")
 	}
@@ -130,7 +130,7 @@ func TestTheClientDraftIsHtmlAndEscapesTheOperatorsText(t *testing.T) {
 	if !strings.Contains(draft, "<b>New client draft</b>") || !strings.Contains(draft, "<code>%s</code>") {
 		t.Error("the draft does not use the HTML markup the ParseMode expects")
 	}
-	for _, value := range []string{"client_Email", "attached", "tgID", "comment"} {
+	for _, value := range []string{"draft.email", "attached", "tgID", "comment"} {
 		if !strings.Contains(draft, "html.EscapeString("+value+")") {
 			t.Errorf("%s reaches the message unescaped; one '<' in it and Telegram refuses the whole draft", value)
 		}

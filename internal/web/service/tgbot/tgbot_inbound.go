@@ -181,7 +181,7 @@ func (t *Tgbot) getInboundsAddClient() (*telego.InlineKeyboardMarkup, error) {
 // current selection state for the inbound; tapping fires
 // add_client_toggle_attach <id> which flips it and re-renders. A final
 // "Done" button (add_client_attach_done) returns to the field-edit screen.
-func (t *Tgbot) getInboundsAttachPicker() (*telego.InlineKeyboardMarkup, error) {
+func (t *Tgbot) getInboundsAttachPicker(draft *clientDraft) (*telego.InlineKeyboardMarkup, error) {
 	inbounds, err := t.inboundService.GetAllInbounds()
 	if err != nil {
 		logger.Warning("GetAllInbounds run failed:", err)
@@ -190,8 +190,8 @@ func (t *Tgbot) getInboundsAttachPicker() (*telego.InlineKeyboardMarkup, error) 
 	if len(inbounds) == 0 {
 		return nil, errors.New(t.I18nBot("tgbot.answers.getInboundsFailed"))
 	}
-	selected := make(map[int]bool, len(receiver_inbound_IDs))
-	for _, id := range receiver_inbound_IDs {
+	selected := make(map[int]bool, len(draft.inboundIDs))
+	for _, id := range draft.inboundIDs {
 		selected[id] = true
 	}
 	var buttons []telego.InlineKeyboardButton
