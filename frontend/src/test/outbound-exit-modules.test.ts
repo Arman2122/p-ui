@@ -24,13 +24,26 @@ describe('an exit kind resolves to its own module', () => {
        either has a form or says so. Silently reusing another kind's is the bug. */
     expect(exitModuleForKind('openvpn')).toBeUndefined();
     expect(exitModuleForKind('')).toBeUndefined();
-    expect(authorableExitKinds()).toEqual(['wgkernel']);
+    expect(authorableExitKinds()).toEqual(['wgkernel', 'awgkernel']);
   });
 
   it('finds the module for a stored row by its type, since a row carries no kind', () => {
     expect(exitModuleForType('wg-client')).toBe(exitModuleForKind('wgkernel'));
+    expect(exitModuleForType('awg-client')).toBe(exitModuleForKind('awgkernel'));
     expect(exitModuleForType('xray-tun')).toBeUndefined();
     expect(exitModuleForType('openvpn-client')).toBeUndefined();
+  });
+
+  /* The backend declares awgkernel as an exit and registers the awg-client
+     driver, so a build with no module here offered the kind and then refused it
+     in the form — the "cannot author one yet" the operator actually hit. */
+  it('can author every uplink kind the backend declares', () => {
+    const awg = exitModuleForKind('awgkernel');
+    expect(awg).toBeDefined();
+    expect(awg!.egressType).toBe('awg-client');
+    /* Never wg-client: that driver dials with no obfuscation at all while the
+       row goes on claiming it has some. */
+    expect(awg!.egressType).not.toBe(exitModuleForKind('wgkernel')!.egressType);
   });
 });
 
@@ -76,5 +89,56 @@ describe('the wgkernel module round-trips a row', () => {
     // The remark still survives: it is a column, not part of the unreadable blob.
     expect(form.remark).toBe('mullvad');
     expect(() => EgressFormFields.parse(form)).not.toThrow();
+  });
+});
+
+/*
+The obfuscation has to survive being read and written again.
+
+Zod strips what it does not name, and an exit is parsed TWICE on the way back
+out: once by fromRecord and once by ExitFormModal, which re-parses the form
+through EgressFormFields before toPayload ever sees it. With `awg` named in
+neither, opening an AmneziaWG exit and pressing Save rewrote it as a plain
+WireGuard row. Per internal/awg/params.go that is not a degraded tunnel: a peer
+whose params differ cannot recognise the other's packets at all.
+*/
+describe('the awgkernel module keeps the obfuscation it was given', () => {
+  const params = {
+    jc: 4, jmin: 40, jmax: 70, s1: 20, s2: 30,
+    i1: 'b0xdeadbeef', headerProtectionKey: 'a'.repeat(43) + '=', randomTrailers: true,
+  };
+  const row: EgressRecord = {
+    id: 7,
+    type: 'awg-client',
+    enable: true,
+    remark: 'amnezia-de',
+    target: '',
+    settings: JSON.stringify({
+      privateKey: 'priv', publicKey: 'pub', endpoint: 'de.example.com:51820',
+      address: ['10.14.0.9/32'], mtu: 1420, keepAlive: 25, awg: params,
+    }),
+    createdAt: 0,
+    updatedAt: 0,
+  } as EgressRecord;
+
+  it('reads the params back into the form', () => {
+    const form = exitModuleForKind('awgkernel')!.fromRecord(row);
+    expect(form.awg).toMatchObject(params);
+  });
+
+  it('writes them back unchanged, through the re-parse the edit form does', () => {
+    const module = exitModuleForKind('awgkernel')!;
+    /* Exactly what ExitFormModal.onOk does: safeParse, then toPayload. */
+    const reparsed = EgressFormFields.parse(module.fromRecord(row));
+    const payload = module.toPayload(reparsed, 'amnezia-de');
+    expect(payload.type).toBe('awg-client');
+    expect(JSON.parse(payload.settings).awg).toEqual(params);
+  });
+
+  it('leaves a plain WireGuard row without an obfuscation block it never had', () => {
+    const module = exitModuleForKind('wgkernel')!;
+    const plain = { ...row, type: 'wg-client', settings: JSON.stringify({ endpoint: 'x:1' }) } as EgressRecord;
+    const payload = module.toPayload(EgressFormFields.parse(module.fromRecord(plain)), 'plain');
+    expect(JSON.parse(payload.settings)).not.toHaveProperty('awg');
   });
 });

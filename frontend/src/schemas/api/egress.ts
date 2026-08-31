@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { EgressSchema } from '@/generated/zod';
 import type { Egress } from '@/generated/zod';
+import { AwgParamsSchema, type AwgParams } from '@/schemas/protocols/inbound/awgkernel';
 
 export type EgressRecord = Egress;
 
@@ -50,6 +51,9 @@ export const UplinkSettingsSchema = z.object({
   endpoint: z.string().trim().default(''),
   presharedKey: z.string().trim().default(''),
   keepAlive: z.number().int().nonnegative().default(0),
+  /* Only an awg-client carries this. Named here because zod strips what it does
+     not name, and a row parsed then saved would lose its obfuscation in silence. */
+  awg: AwgParamsSchema.optional(),
 });
 export type UplinkSettings = z.infer<typeof UplinkSettingsSchema>;
 
@@ -68,6 +72,9 @@ export const EgressFormFields = z.object({
   endpoint: z.string().trim().default(''),
   presharedKey: z.string().trim().default(''),
   keepAlive: z.number().int().nonnegative().default(0),
+  /* Carried through the form as one object, because ExitFormModal re-parses the
+     values through this schema before toPayload ever sees them. */
+  awg: AwgParamsSchema.optional(),
 });
 
 /* Which fields are required depends on the type, so it is refined rather than
@@ -122,6 +129,16 @@ export function uplinkPayload(form: EgressFormValues, remark: string, type: Egre
       endpoint: form.endpoint,
       presharedKey: form.presharedKey,
       keepAlive: form.keepAlive,
+      ...awgSettings(form.awg),
     }),
   };
+}
+
+/* Emitted only once something is set: an empty block on a wg-client row would
+   claim an obfuscation its driver never applies. Zero is unset here too, exactly
+   as it is in internal/awg's own omitempty encoding. */
+function awgSettings(awg: AwgParams | undefined): { awg?: AwgParams } {
+  if (!awg) return {};
+  const set = Object.values(awg).some((v) => v !== undefined && v !== '' && v !== false && v !== 0);
+  return set ? { awg } : {};
 }
