@@ -51,38 +51,47 @@ async function renderForm(nodeId: number | null, forwardingNotes: string[]) {
   }
 }
 
-function forwardingAlert(): HTMLElement {
+function forwardingAlert(): HTMLElement | undefined {
   const title = enUS.pages.inbounds.form.wgkernelForwardingTitle;
-  const alert = Array.from(document.querySelectorAll('.ant-alert'))
-    .find((el) => (el.textContent ?? '').includes(title));
-  if (!alert) throw new Error('the forwarding alert is not rendered');
-  return alert as HTMLElement;
+  return Array.from(document.querySelectorAll('.ant-alert'))
+    .find((el) => (el.textContent ?? '').includes(title)) as HTMLElement | undefined;
 }
 
 /*
-A fresh install has ip_forward=0 and no NAT, so the first wgkernel inbound
-anyone creates completes handshakes and routes nothing. The panel has always
-been able to read the knob — for an egress — and never said so here.
+The panel owns these knobs: EnsureHostForwarding sets both sysctls, persists a
+drop-in and writes the `inet p-ui-nat` table, at every save and every 10s.
+
+So the notice is only for a host that is REFUSING. It used to render always, and
+to print five commands to run by hand — including `nft add table ip pui_nat`,
+a second NAT table the panel neither manages nor tears down, whose plain rule
+also translates traffic leaving on a routing front and so hides the client's
+source from every `source` criterion (F066). Following the panel's own advice
+broke the panel.
 */
 describe('wgkernel forwarding notice', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('says so, in the host\'s own words, when this host forwards nothing', async () => {
+  it('says what the host reported, and never a command to run by hand', async () => {
     await renderForm(null, [OFF]);
 
     const alert = forwardingAlert();
-    expect(alert.className).toContain('ant-alert-error');
-    expect(alert.textContent).toContain(enUS.pages.inbounds.form.wgkernelForwardingOff);
+    expect(alert, 'the forwarding alert is not rendered').toBeDefined();
+    expect(alert!.className).toContain('ant-alert-error');
     // The sentence names the sysctl, so it is rendered and never translated.
-    expect(alert.textContent).toContain('net.ipv4.ip_forward is 0');
+    expect(alert!.textContent).toContain('net.ipv4.ip_forward is 0');
+    // And it says the panel is already handling it, so a note that persists
+    // means the host refused rather than that the operator has a step left.
+    expect(alert!.textContent).toContain(enUS.pages.inbounds.form.wgkernelForwardingHint);
+
+    for (const command of ['nft add table', 'sysctl --system', 'p-ui_nat', 'pui_nat', 'ip_forward=1']) {
+      expect(alert!.textContent, `still tells the operator to run ${command}`).not.toContain(command);
+    }
   });
 
-  it('stays advisory on a host that already forwards', async () => {
+  it('says nothing at all on a host that already forwards', async () => {
     await renderForm(null, []);
 
-    const alert = forwardingAlert();
-    expect(alert.className).toContain('ant-alert-warning');
-    expect(alert.textContent).not.toContain(enUS.pages.inbounds.form.wgkernelForwardingOff);
+    expect(forwardingAlert()).toBeUndefined();
   });
 
   // A node's inbound is served somewhere this panel cannot read a sysctl from,
@@ -90,7 +99,7 @@ describe('wgkernel forwarding notice', () => {
   it('never reports this host against an inbound deployed to a node', async () => {
     await renderForm(3, [OFF]);
 
-    expect(forwardingAlert().textContent).not.toContain('net.ipv4.ip_forward is 0');
+    expect(forwardingAlert()).toBeUndefined();
   });
 });
 

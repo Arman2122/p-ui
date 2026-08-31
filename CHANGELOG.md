@@ -8,6 +8,30 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An AmneziaWG exit can be created.** The outbound picker offered `awgkernel`
+  and the form then refused it — "this build has no form for that exit
+  protocol" — because the panel had a form for kernel WireGuard exits only.
+  It now has both, with the obfuscation fields the far end has to match.
+- **The kernel WireGuard inbound form no longer tells you to set up NAT by
+  hand.** The panel enables host forwarding, persists it across reboots and
+  writes the NAT rule itself, at every save and every 10 seconds — but the form
+  still printed five commands to run as root, ending in a second nftables
+  table (`ip pui_nat`). **If you ran those commands, delete that table**:
+  `nft delete table ip pui_nat`. It is not one the panel manages or removes,
+  and its rule also translates traffic leaving on a routing front, which hides
+  a client's real address from any routing rule that matches on source. The
+  notice now appears only when the host is genuinely refusing, and says what
+  the host reported.
+- **A host with no `nft` says so instead of dropping every packet.** The NAT
+  rule needs the `nft` binary; without it the panel still routed, so an L3
+  inbound handed out addresses, completed handshakes and had everything it
+  forwarded dropped upstream, with nothing on any screen. **Installing and
+  upgrading now install `nftables`**, and a host that still lacks it is named
+  in the inbound form.
+- **A kernel WireGuard or AmneziaWG inbound is ready the moment you save it.**
+  The host knobs it needs were converged on a 10-second timer, so an inbound
+  created, given a client and handed out inside that window came up and carried
+  nothing.
 - **AmneziaWG is actually installed now.** The module was never built on any
   host: its build script shipped without the executable bit, and both the
   installer and the updater skipped the build whenever that bit was missing —
