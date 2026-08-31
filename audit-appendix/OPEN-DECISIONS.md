@@ -197,9 +197,11 @@ is waiting on them any more; what is left is work.
 - **Bulk operations — add SET beside ADD, behind an explicit mode toggle.** ADD
   stays the default so existing muscle memory is unchanged; the confirmation says
   which mode is about to run and on how many clients.
-- **mtg-proxy v1.0.0 — delete the release.** It carries the remotely triggerable
-  process kill that v1.0.1 closed. Check the repo and the installer for a pinned
-  reference to that tag first.
+- **mtg-proxy v1.0.0 — DONE, the release is deleted.** It carried the remotely
+  triggerable process kill v1.0.1 closed. Nothing pinned it: `release.yml`
+  resolves `/releases/latest`, and the release had 11 assets and zero downloads
+  in the three minutes before v1.0.1 replaced it. The git tag is kept — it is the
+  history, and a tag ships no binaries.
 - **The test box's GAME inbound — leave it on 39412.**
 
 ---
