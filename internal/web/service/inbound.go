@@ -847,6 +847,61 @@ func parseRouteXrayPort(settings string) int {
 // the caller refuses the save rather than storing a routed-but-portless inbound,
 // which would otherwise route no traffic and have its mtg metrics skipped (see
 // the mtproto core's tag rollup) — silently losing its accounting.
+// The bridge is a loopback listener, so a handful of tries is generous: it only
+// re-rolls when the OS hands back a port the panel is already generating.
+const mtprotoPortAllocationAttempts = 8
+
+/*
+loopbackPortIsClaimed reports whether another inbound would bind this port on
+127.0.0.1, which is where the mtproto bridge listens.
+
+The same three conjuncts checkPortConflict uses -- listen overlap, TCP, and the
+local panel only -- because the bridge is exactly an inbound of that shape. A
+node's inbounds are excluded: they run on their own box with their own core.
+*/
+func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
+	if port <= 0 {
+		return true
+	}
+	db := database.GetDB()
+	if db == nil {
+		// No database is not a claim, and it is asked FIRST: reservedAPIPort
+		// reads a setting, so it needs one too. This normalize step also serves
+		// callers with nothing behind them, and refusing every port there would
+		// fail the allocation loop rather than protect anything.
+		return false
+	}
+	if port == reservedAPIPort() {
+		return true
+	}
+	var rows []*model.Inbound
+	q := db.Model(model.Inbound{}).Where("port = ? AND node_id IS NULL", port)
+	if ignoreID > 0 {
+		q = q.Where("id != ?", ignoreID)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		/*
+			Fails OPEN, like the WireGuard host check beside it. Answering
+			"claimed" to a question that could not be asked burns every allocation
+			attempt and turns an unreadable table into a refused save; answering
+			"free" leaves exactly the behaviour that shipped before this check,
+			and injectMtprotoEgress still catches the collision at generation time.
+		*/
+		logger.Warning("mtproto: cannot check whether the bridge port is claimed, allowing it:", err)
+		return false
+	}
+	for _, row := range rows {
+		if !listenOverlaps(row.Listen, "127.0.0.1") {
+			continue
+		}
+		if inboundTransports(row.Protocol, row.StreamSettings, row.Settings)&transportTCP == 0 {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSettings string) error {
 	if inbound.Protocol != model.MTProto {
 		return nil
@@ -872,18 +927,49 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 		return nil
 	}
 
-	// Prefer the already-stored port (carried across edits), then any value the
-	// client sent, then allocate a fresh one.
+	/*
+		Prefer the already-stored port (carried across edits), then any value the
+		client sent, then allocate a fresh one -- and check every one of them
+		against the ports this panel already claims.
+
+		None of the three was checked. FreeLocalPort binds 127.0.0.1:0 and closes
+		it, which says the OS had that port free for an instant and nothing about
+		what the panel is about to generate; an API caller could send any number
+		at all. The bridge then landed on a port a real inbound holds, and
+		injectMtprotoEgress -- which does check -- skipped the bridge, so the
+		inbound saved clean, displayed as routed, and carried no Telegram traffic
+		with only a log line to say why.
+
+		A collision is repaired rather than refused: the port is an implementation
+		detail the operator never chose, so refusing their save over it would be
+		the panel blaming them for its own allocation. F035.
+	*/
 	port := parseRouteXrayPort(oldSettings)
-	if port <= 0 {
-		port = settingsRouteXrayPort(parsed)
+	if port > 0 && s.loopbackPortIsClaimed(port, inbound.Id) {
+		logger.Warning("mtproto: the stored Xray bridge port", port, "for inbound [", inbound.Tag,
+			"] is now claimed by another inbound; allocating a new one")
+		port = 0
 	}
 	if port <= 0 {
+		if sent := settingsRouteXrayPort(parsed); sent > 0 && !s.loopbackPortIsClaimed(sent, inbound.Id) {
+			port = sent
+		}
+	}
+	for range mtprotoPortAllocationAttempts {
+		if port > 0 {
+			break
+		}
 		allocated, err := mtproto.FreeLocalPort()
 		if err != nil {
 			return common.NewError("mtproto: could not allocate an Xray egress port:", err)
 		}
-		port = allocated
+		if !s.loopbackPortIsClaimed(allocated, inbound.Id) {
+			port = allocated
+		}
+	}
+	if port <= 0 {
+		return common.NewError("mtproto: could not find a free Xray egress port after",
+			mtprotoPortAllocationAttempts, "attempts")
 	}
 	if settingsRouteXrayPort(parsed) == port {
 		return nil

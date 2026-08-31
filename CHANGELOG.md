@@ -8,6 +8,15 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An MTProto inbound routed through Xray no longer picks a bridge port
+  something else is using.** The internal loopback port was taken from whatever
+  the OS had free for an instant, or from whatever an API caller sent, and never
+  checked against the panel's own inbounds. On a collision the config generator
+  skipped the bridge — so the inbound saved cleanly, displayed as routed, and
+  carried no Telegram traffic at all, with only a log line to say why. The port
+  is now checked and reallocated, including on later saves, since the collision
+  can arrive after the inbound was created.
+
 - **A broken Xray template is refused when you save it, not at the next
   restart.** The save built every outbound and nothing else, so a routing rule,
   a dns block or a policy section the core cannot load stored as a success — and
