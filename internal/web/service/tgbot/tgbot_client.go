@@ -16,6 +16,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/presence"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -499,11 +500,11 @@ func (t *Tgbot) clientInfoMsg(
 
 	status := t.I18nBot("tgbot.offline")
 	isOnline := false
-	if process := service.XrayProcess(); process != nil && process.IsRunning() {
-		if slices.Contains(process.GetOnlineClients(), traffic.Email) {
-			status = t.I18nBot("tgbot.online")
-			isOnline = true
-		}
+	// Asked of the panel's presence view: a client on an MTProto or kernel
+	// WireGuard inbound is online whether or not this host runs Xray. F089.
+	if slices.Contains(presence.Shared().Online(), traffic.Email) {
+		status = t.I18nBot("tgbot.online")
+		isOnline = true
 	}
 
 	output := ""

@@ -15,6 +15,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/presence"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -127,10 +128,7 @@ func (t *Tgbot) prepareServerUsageInfo() string {
 		t.lastStatus = t.serverService.GetStatus(t.lastStatus)
 		t.setCachedStatus(t.lastStatus)
 	}
-	var onlines []string
-	if process := service.XrayProcess(); process != nil {
-		onlines = process.GetOnlineClients()
-	}
+	onlines := presence.Shared().Online()
 
 	info += t.I18nBot("tgbot.messages.hostname", "Hostname=="+hostname)
 	info += t.I18nBot("tgbot.messages.version", "Version=="+config.GetPanelVersion())
@@ -386,12 +384,9 @@ func (t *Tgbot) notifyExhausted() {
 
 // onlineClients retrieves and sends information about online clients.
 func (t *Tgbot) onlineClients(chatId int64, messageID ...int) {
-	process := service.XrayProcess()
-	if process == nil || !process.IsRunning() {
-		return
-	}
-
-	onlines := process.GetOnlineClients()
+	// No Xray gate: the answer covers every core, and a panel serving only
+	// MTProto used to reply to /onlines with nothing at all. F089.
+	onlines := presence.Shared().Online()
 	onlinesCount := len(onlines)
 	output := t.I18nBot("tgbot.messages.onlinesCount", "Count=="+fmt.Sprint(onlinesCount))
 	keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(

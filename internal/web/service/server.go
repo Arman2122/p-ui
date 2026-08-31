@@ -30,6 +30,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/presence"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/sys"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -725,11 +726,10 @@ func (s *ServerService) AppendStatusSample(t time.Time, status *Status) {
 	systemMetrics.append("pktDown", t, float64(status.NetIO.PktDown))
 	systemMetrics.append("tcpCount", t, float64(status.TcpCount))
 	systemMetrics.append("udpCount", t, float64(status.UdpCount))
-	online := 0
-	if process := currentXrayProcess(); process != nil && process.IsRunning() {
-		online = len(process.GetOnlineClients())
-	}
-	systemMetrics.append("online", t, float64(online))
+	// Asked of the panel's presence view, not of the Xray process: the count is
+	// every core's clients and every node's, and a panel serving only MTProto or
+	// kernel WireGuard used to graph a flat zero forever. F089.
+	systemMetrics.append("online", t, float64(len(presence.Shared().Online())))
 	if len(status.Loads) >= 3 {
 		systemMetrics.append("load1", t, status.Loads[0])
 		systemMetrics.append("load5", t, status.Loads[1])

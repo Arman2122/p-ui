@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Clients show as online on a panel that does not run Xray.** The whole
+  online view -- the client list's dot, the dashboard's online count, the
+  subscription page, the Telegram bot's /onlines -- was stored inside the Xray
+  process, so a panel serving only MTProto or kernel WireGuard reported every
+  client offline forever, and a master with no local Xray lost its nodes' online
+  lists too.
+
 - **The client form stops offering an IP limit that cannot be enforced.** The
   cap is decided from live connections and the address each came from; MTProto
   reports a secret in use and no address at all, so a cap on an MTProto client

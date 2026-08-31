@@ -12,6 +12,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/presence"
 	"github.com/Arman2122/p-ui/internal/web/runtime"
 	"github.com/Arman2122/p-ui/internal/xray"
 
@@ -1051,40 +1052,37 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 		}
 	}
 
-	if process := currentXrayProcess(); process != nil {
-		tree := snap.OnlineTree
-		switch {
-		case len(tree) == 0 && len(snap.OnlineEmails) > 0:
-			// Old-build node (no GUID tree): key its flat online list under its
-			// own effective identity so attribution still works for that branch.
-			tree = map[string][]string{selfKey: snap.OnlineEmails}
-		case guidShared && len(tree) > 0:
-			// Newer cloned node: its own clients arrive keyed under the shared
-			// panelGuid. Remap just that entry to the node-unique key so the
-			// clones don't merge; descendant subtrees keep their distinct GUIDs.
-			if _, ok := tree[nodeRow.Guid]; ok {
-				remapped := make(map[string][]string, len(tree))
-				for g, emails := range tree {
-					if g == nodeRow.Guid {
-						g = selfKey
-					}
-					remapped[g] = emails
+	// Recorded whatever this host is running: a master with no local Xray still
+	// has to report what its nodes told it. That guard was the same defect as
+	// the local set's. F089.
+	tree := snap.OnlineTree
+	switch {
+	case len(tree) == 0 && len(snap.OnlineEmails) > 0:
+		// Old-build node (no GUID tree): key its flat online list under its
+		// own effective identity so attribution still works for that branch.
+		tree = map[string][]string{selfKey: snap.OnlineEmails}
+	case guidShared && len(tree) > 0:
+		// Newer cloned node: its own clients arrive keyed under the shared
+		// panelGuid. Remap just that entry to the node-unique key so the
+		// clones don't merge; descendant subtrees keep their distinct GUIDs.
+		if _, ok := tree[nodeRow.Guid]; ok {
+			remapped := make(map[string][]string, len(tree))
+			for g, emails := range tree {
+				if g == nodeRow.Guid {
+					g = selfKey
 				}
-				tree = remapped
+				remapped[g] = emails
 			}
+			tree = remapped
 		}
-		process.SetNodeOnlineTree(nodeID, tree)
 	}
+	presence.Shared().SetNodeTree(nodeID, tree)
 
 	return structuralChange, nil
 }
 
 func (s *InboundService) GetOnlineClients() []string {
-	process := currentXrayProcess()
-	if process == nil {
-		return []string{}
-	}
-	return process.GetOnlineClients()
+	return presence.Shared().Online()
 }
 
 // GetOnlineClientsByGuid returns online emails keyed by the panelGuid of the
@@ -1093,12 +1091,8 @@ func (s *InboundService) GetOnlineClients() []string {
 // node-id keying so a client three hops down is attributed to its real node,
 // not the intermediate one it was synced through.
 func (s *InboundService) GetOnlineClientsByGuid() map[string][]string {
-	process := currentXrayProcess()
-	if process == nil {
-		return map[string][]string{}
-	}
-	out := process.GetMergedNodeTrees()
-	if local := process.GetLocalOnlineClients(); len(local) > 0 {
+	out := presence.Shared().MergedNodeTrees()
+	if local := presence.Shared().LocalOnline(); len(local) > 0 {
 		if guid := s.panelGuid(); guid != "" {
 			out[guid] = mergeEmails(out[guid], local)
 		}
@@ -1111,11 +1105,7 @@ func (s *InboundService) GetOnlineClientsByGuid() map[string][]string {
 // report per-inbound activity, so a GUID missing from the map means "don't
 // gate" for that node's inbounds.
 func (s *InboundService) GetActiveInboundsByGuid() map[string][]string {
-	process := currentXrayProcess()
-	if process == nil {
-		return map[string][]string{}
-	}
-	active := process.GetLocalActiveInbounds()
+	active := presence.Shared().LocalActiveTags()
 	if len(active) == 0 {
 		return map[string][]string{}
 	}
@@ -1127,15 +1117,11 @@ func (s *InboundService) GetActiveInboundsByGuid() map[string][]string {
 }
 
 func (s *InboundService) SetNodeOnlineTree(nodeID int, tree map[string][]string) {
-	if process := currentXrayProcess(); process != nil {
-		process.SetNodeOnlineTree(nodeID, tree)
-	}
+	presence.Shared().SetNodeTree(nodeID, tree)
 }
 
 func (s *InboundService) ClearNodeOnlineClients(nodeID int) {
-	if process := currentXrayProcess(); process != nil {
-		process.ClearNodeOnlineClients(nodeID)
-	}
+	presence.Shared().ClearNodeTree(nodeID)
 }
 
 // panelGuid returns this panel's stable self-identifier, used to key the local
@@ -1189,15 +1175,13 @@ func (s *InboundService) GetClientsLastOnline() (map[string]int64, error) {
 	return result, nil
 }
 
-// RefreshLocalOnlineClients folds the emails and inbound tags active on this
-// panel's own xray this poll into the local online/active sets, applying the
-// grace window and pruning stale entries. Pass nil to only prune. See
-// xray.Process for why the local sets are kept separate from the shared
-// last_online column.
+// RefreshLocalOnlineClients folds the emails and inbound tags this host saw
+// active this poll into the presence set, applying the grace window and pruning
+// stale entries. Pass nil to only prune. See internal/presence for why these
+// are kept separate from the shared last_online column — and for why they no
+// longer live on the Xray process. F089.
 func (s *InboundService) RefreshLocalOnlineClients(activeEmails, activeInboundTags []string) {
-	if process := currentXrayProcess(); process != nil {
-		process.RefreshLocalOnline(activeEmails, activeInboundTags, time.Now().UnixMilli(), onlineGracePeriodMs)
-	}
+	presence.Shared().RefreshLocal(activeEmails, activeInboundTags, time.Now().UnixMilli(), onlineGracePeriodMs)
 }
 
 func (s *InboundService) FilterAndSortClientEmails(emails []string) ([]string, []string, error) {
