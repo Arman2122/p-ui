@@ -161,9 +161,12 @@ load_pui_env() {
     fi
 }
 
+# nftables is listed here as well as in install.sh on purpose: a panel installed
+# before the L3 inbounds existed has no nft binary, and an upgrade is the only
+# pass that would ever give it one.
 install_base() {
     echo -e "${green}Updating and install dependency packages...${plain}"
-    apt-get update > /dev/null 2>&1 && apt-get install -y -q cron curl tar tzdata socat openssl > /dev/null 2>&1
+    apt-get update > /dev/null 2>&1 && apt-get install -y -q cron curl tar tzdata socat openssl nftables > /dev/null 2>&1
 }
 
 install_acme() {

@@ -33,3 +33,8 @@ func (unsupportedPlane) SetSysctl(context.Context, string, string) error {
 func (unsupportedPlane) PersistSysctl(context.Context, string, string) error {
 	return ErrPlatformUnsupported
 }
+
+// CanMasquerade has nothing to report off Linux: no inbound here forwards, so
+// no packet needs translating. False would tell the operator of a platform that
+// carries none of this to go and install nftables.
+func (unsupportedPlane) CanMasquerade(context.Context) bool { return true }

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -295,4 +296,12 @@ func classify(err error) error {
 		return fmt.Errorf("%w: %w", ErrFamilyUnsupported, err)
 	}
 	return err
+}
+
+// CanMasquerade reports whether nft is on this host. The rule is what gives
+// forwarded traffic the host's own source, so without it an L3 inbound hands
+// out addresses and every packet it forwards is dropped upstream.
+func (kernelPlane) CanMasquerade(context.Context) bool {
+	_, err := exec.LookPath("nft")
+	return err == nil
 }

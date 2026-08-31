@@ -38,6 +38,9 @@ type Kernel struct {
 	// Fail maps an op string, exactly as Ops records it, onto the error that op
 	// answers with — which is how a partial apply is driven mid-pass.
 	Fail map[string]error
+	// NoNft drives a host that cannot source-translate. Default false, so the
+	// ordinary fake is a host that can and no existing test gains a note.
+	NoNft bool
 }
 
 func New() *Kernel {
@@ -298,3 +301,7 @@ func (k *Kernel) ResetOps() {
 	defer k.mu.Unlock()
 	k.ops = nil
 }
+
+// CanMasquerade answers the host fact ForwardingNotes reports on, so a test
+// drives it rather than inheriting whether the box running it ships nftables.
+func (k *Kernel) CanMasquerade(context.Context) bool { return !k.NoNft }

@@ -1223,6 +1223,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if postCommitApply != nil {
 		postCommitApply()
 	}
+	ensureL3HostForwarding(inbound)
 
 	// A routed mtproto inbound is not an Xray inbound itself, so the runtime
 	// push above only (re)starts the mtg sidecar. The egress SOCKS bridge lives
@@ -1232,6 +1233,30 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	}
 
 	return inbound, needRestart, applyWarn, err
+}
+
+/*
+ensureL3HostForwarding converges the host knobs a device-backed inbound needs,
+at the save rather than on the next reconcile tick.
+
+The 10s job would get there. An operator would not wait for it: they create the
+inbound, add a client and hand out the .conf, and inside that window the tunnel
+completes its handshake and drops every packet — which reads as a broken panel,
+not as a knob that is a moment late.
+
+Warned and never fatal, exactly as routing's own converge treats it: the inbound
+is saved either way, and a host that refuses the knob still has a note saying so.
+*/
+func ensureL3HostForwarding(inbound *model.Inbound) {
+	if inbound == nil || inbound.NodeID != nil {
+		return
+	}
+	if cores.IngressSelectorFor(core.Kind(inbound.Protocol)) != core.IngressDevice {
+		return
+	}
+	if err := (&RoutingService{}).EnsureHostForwarding(context.Background()); err != nil {
+		logger.Warning("host forwarding could not be enabled for", inbound.Tag, ":", err)
+	}
 }
 
 func (s *InboundService) DelInbound(id int) (bool, error) {
@@ -1844,6 +1869,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if postCommitApply != nil {
 		postCommitApply()
 	}
+	// An edit can be what makes this host forward: a protocol changed to a
+	// device-backed kind, or an inbound enabled again after being switched off.
+	ensureL3HostForwarding(inbound)
 	// After the rename is committed, point any routing rules / loopback outbounds
 	// in xrayTemplateConfig at the new tag (oldInbound.Tag now holds the resolved
 	// new tag; tag holds the pre-edit one). Done post-commit so a sync failure
