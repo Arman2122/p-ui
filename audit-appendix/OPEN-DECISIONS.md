@@ -147,6 +147,53 @@ looks like a network fault. Keeping it leaves one renderer honouring a field
 nothing else does. Neither is reinterpreting the operator's data quietly, which
 is why this is here rather than decided.
 
+## Answered, 2026-08-31 (the full round)
+
+Every open question was put to the operator and answered. Nothing on this page
+is waiting on them any more; what is left is work.
+
+- **Q1 — a new save-time refusal fires only when the edit WORSENS the violation.**
+  A row that already violates stays editable, so an operator is never locked out
+  of a row they cannot repair; no edit may introduce or deepen one. Costs a
+  before/after comparison per rule. Unblocks F035/F216, F067, F045, F373, F007
+  and all of **F316**.
+- **Q2 — LDAP may disable, and gets a provenance column.** Off-boarding now
+  reaches the panel, and a column records which clients LDAP created so the
+  delete sweep can never take a hand-made one. Needs a migration. Unblocks
+  **F372** and F369's remaining half. Adoption of pre-existing identities was
+  NOT taken.
+- **Q10 — converge: the panel adopts the node's tag.** Refusing would clobber a
+  serving node-local inbound at the next sync. Needs runtime→service plumbing and
+  a UNIQUE(tag) guard so adoption cannot collide. This is all of **F182**.
+- **F319 — a field on `core.Transports`** (`None` / `BindsNoPort`), read by the
+  port-conflict check that already asks the question. Four small sites, and a
+  core still cannot disable the check by answering empty. The last open tier-2
+  finding.
+- **F141 — engineer it properly; "leave the columns" was refused.** The operator's
+  words: this panel is in production, so the resolution has to be a real one, not
+  the cheap one. That means establishing what `MihomoX25519` and `ShuffleHost`
+  were meant to do, then either implementing them correctly or retiring them
+  through a deprecation path an API consumer can follow — design pass first.
+- **The installer's custom-certificate path — re-prompt.** Say what was wrong and
+  ask for the paths again, with a way out to the skip-SSL branch. Matches how
+  cases 1 and 2 already branch on their issuer's status.
+- **§9 — add the declaration, and make it a real one.** The operator asked for an
+  advanced solution rather than the pinned string match. A first-class
+  "this kind serves no clients" answer in `internal/core`, honoured by
+  `runtime.Local` so AddUser/RemoveUser refuse locally instead of round-tripping,
+  and surfaced so the client form has a reason to grey those kinds out that is
+  not a protocol branch.
+- **§10 — keep the Clash arm.** Dropping it would turn certificate verification
+  back on for a legacy row and break a working self-signed deployment silently.
+  F025 is closed as it stands.
+- **Bulk operations — add SET beside ADD, behind an explicit mode toggle.** ADD
+  stays the default so existing muscle memory is unchanged; the confirmation says
+  which mode is about to run and on how many clients.
+- **mtg-proxy v1.0.0 — delete the release.** It carries the remotely triggerable
+  process kill that v1.0.1 closed. Check the repo and the installer for a pinned
+  reference to that tag first.
+- **The test box's GAME inbound — leave it on 39412.**
+
 ---
 
 ## Answered, 2026-08-31
@@ -167,4 +214,4 @@ is why this is here rather than decided.
   offering limitIp and online status for kinds that cannot back them.
 - **Order of work — the decisions above come before tier 3.**
 
-Still open: items 3b (F141) and 3 (F319) below, plus 4 through 10.
+Nothing is still open: every item below is answered in the block at the end.
