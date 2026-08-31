@@ -69,7 +69,7 @@ func (s *RoutingService) Subjects(ctx context.Context) ([]routing.Subject, error
 		}
 		out = append(out, routing.Subject{
 			InboundID: inbound.Id, Tag: inbound.Tag, Handle: handle,
-			CriteriaMask: criteriaMaskFor(handle),
+			CriteriaMask: criteriaMaskFor(core.Kind(inbound.Protocol)),
 		})
 	}
 	return out, nil
@@ -78,21 +78,21 @@ func (s *RoutingService) Subjects(ctx context.Context) ([]routing.Subject, error
 /*
 criteriaMaskFor names the criteria that can actually work on one subject.
 
-`user` is absent for a device ingress and that is not a policy choice: Xray's tun
-handler builds a MemoryUser with no Email, so UserMatcher returns false for every
-packet. Offering the field would produce a rule that saves and never matches,
-which is the whole class of bug this feature exists to remove.
+Asked of the kind's core, not inferred here. This used to branch on
+`handle.Device != ""`, which reads the SELECTOR and not the surface: xray and
+mtproto both answer IngressInternal, so an mtproto subject was granted `user`,
+`domain`, `protocol` and `attrs` — none of which can match, because its
+plaintext reaches Xray over a loopback SOCKS bridge that authenticated nobody
+and sniffs nothing. A rule written on any of them saved and never matched, which
+is the whole class of bug the routing editor exists to remove. F060.
 */
-func criteriaMaskFor(handle core.IngressHandle) []string {
-	base := []string{"ip", "port", "sourcePort", "network", "source"}
-	if handle.Device != "" {
-		// Fronted traffic reaches Xray without an identity, and without sniffing it
-		// carries no name either. Both are P2 work; until then, say so.
-		return base
+func criteriaMaskFor(kind core.Kind) []string {
+	declared := cores.IngressCriteriaFor(kind)
+	out := make([]string, 0, len(declared))
+	for _, criterion := range declared {
+		out = append(out, string(criterion))
 	}
-	// attrs joins the group that needs sniffing: the front inbound carries no
-	// sniffing block, so AttributeMatcher returns false for every packet.
-	return append(base, "user", "domain", "protocol", "attrs")
+	return out
 }
 
 // compile resolves everything the plan needs and runs it. Front ids are

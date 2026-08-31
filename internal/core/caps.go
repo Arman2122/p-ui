@@ -353,11 +353,49 @@ type IngressHandle struct {
 	BlockedKey string
 }
 
-// RoutableIngress declares that a rule may name this core's inbounds as a source.
-// Without it a core's traffic is not routable and the editor says so.
+/*
+Criterion is one thing a routing rule can match traffic on. A closed vocabulary,
+like every other in this file: a name outside it is offered by no editor.
+*/
+type Criterion string
+
+const (
+	CriterionIP         Criterion = "ip"
+	CriterionPort       Criterion = "port"
+	CriterionSourcePort Criterion = "sourcePort"
+	CriterionNetwork    Criterion = "network"
+	CriterionSource     Criterion = "source"
+	CriterionUser       Criterion = "user"
+	CriterionDomain     Criterion = "domain"
+	CriterionProtocol   Criterion = "protocol"
+	CriterionAttrs      Criterion = "attrs"
+)
+
+/*
+CriteriaByAddress is what every routable ingress can match on: the packet's own
+addresses and ports. Nothing here needs an identity or a payload, so it holds
+for a device ingress and an internal one alike.
+*/
+func CriteriaByAddress() []Criterion {
+	return []Criterion{CriterionIP, CriterionPort, CriterionSourcePort, CriterionNetwork, CriterionSource}
+}
+
+/*
+RoutableIngress declares that a rule may name this core's inbounds as a source.
+Without it a core's traffic is not routable and the editor says so.
+
+IngressCriteria is part of the declaration because the selector does not imply
+it. Xray and mtproto both answer IngressInternal, and the service layer inferred
+the vocabulary from that — so an mtproto subject was offered `user`, `domain`,
+`protocol` and `attrs`, none of which can match: its plaintext reaches Xray over
+a loopback SOCKS bridge that carries no user identity and does no sniffing. A
+rule written on any of them saved and never matched, which is the whole class of
+bug the routing editor exists to remove. F060.
+*/
 type RoutableIngress interface {
 	IngressSelector(kind Kind) IngressSelector
 	IngressHandle(ctx context.Context, inst Instance) (IngressHandle, error)
+	IngressCriteria(kind Kind) []Criterion
 }
 
 // ExitHandleKind is what an exit offers the router. Closed vocabulary as above.

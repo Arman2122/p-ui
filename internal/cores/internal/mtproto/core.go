@@ -277,6 +277,22 @@ func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
 }
 
 /*
+IngressCriteria: addresses only.
+
+The sidecar terminates MTProto and hands the PLAINTEXT to Xray over a loopback
+SOCKS bridge. Xray never authenticated that connection, so it has no user to
+match; the bridge inbound carries no sniffing block, so there is no domain, no
+protocol and no attributes either. Offering any of them produces a rule that
+saves and never matches. F060.
+*/
+func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
+	if kind != Kind {
+		return nil
+	}
+	return core.CriteriaByAddress()
+}
+
+/*
 IngressHandle answers with the bridge tag, or names why there is none.
 
 Without routeThroughXray the sidecar carries the traffic straight out and Xray's

@@ -214,6 +214,24 @@ func IngressHandleFor(ctx context.Context, inst core.Instance) (core.IngressHand
 }
 
 /*
+IngressCriteriaFor asks the kind's core what a rule naming it can match on.
+
+A kind no core claims answers the addresses and nothing else: those hold for any
+traffic that reaches a router at all, while identity and payload criteria need a
+core to say it can supply them. Fail-closed, like every other answer here. F060.
+*/
+func IngressCriteriaFor(kind core.Kind) []core.Criterion {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Ingress == nil {
+		return core.CriteriaByAddress()
+	}
+	if declared := bound.Ingress.IngressCriteria(kind); len(declared) > 0 {
+		return declared
+	}
+	return core.CriteriaByAddress()
+}
+
+/*
 ExitHandleFor resolves one uplink's handle, and what kind of handle it is.
 
 Both together because a caller needs the kind to know how to route to it and the

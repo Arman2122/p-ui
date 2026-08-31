@@ -338,6 +338,21 @@ func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
 }
 
 /*
+IngressCriteria: addresses only.
+
+Decrypted traffic appears on a kernel interface with no Xray identity attached —
+its handler builds a user with no email, so a user match returns false for every
+packet — and the front inbound the panel synthesises carries no sniffing block,
+so the name-based criteria cannot match either. F060.
+*/
+func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
+	if kind != c.kind {
+		return nil
+	}
+	return core.CriteriaByAddress()
+}
+
+/*
 IngressHandle names the interface this instance's traffic crosses.
 
 This is the resolver that used to live in the service layer as a protocol
