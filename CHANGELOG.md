@@ -24,6 +24,12 @@ here; the git log is the full record.
   no DKMS-capable kernel tree, so no amount of installing would help.
   **Note:** `install.sh` itself is still apt-only; this covers the kernel module.
 
+- **`awg-dkms.sh status` reports a loaded module as loaded.** It said `no` for a
+  module that was loaded and working: `grep -q` exits on its first match, `lsmod`
+  takes SIGPIPE, and the script's own `pipefail` then failed the check. Display
+  only — nothing decided anything on it — but it is the first thing an operator
+  runs when the panel greys the protocol out, and it was lying to them.
+
 - **A kernel upgrade will not silently take AmneziaWG away.** The install now
   checks that DKMS really registered the module against the running kernel —
   the thing that makes it rebuild itself after a kernel change — and says so if
