@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"net/netip"
+	"slices"
 )
 
 /*
@@ -363,7 +364,67 @@ const (
 	IngressNone     IngressSelector = ""
 	IngressInternal IngressSelector = "internal"
 	IngressDevice   IngressSelector = "device"
+	/*
+		IngressSubnet is a core whose sessions each get their own transient kernel
+		device -- the PPP family and OpenConnect -- so no device name is stable
+		enough to route by. The stable handle is the instance's address pool, and
+		the kernel rule that selects it is `from <prefix>` rather than `iif <dev>`.
+
+		Declared here so the contract can SAY it before the egress plane can do
+		it. Nothing mechanizes it yet, which is exactly why the criteria guard
+		below refuses a payload criterion for it: a core shipping this selector is
+		routable by address as soon as the plane grows Src, and its rules cannot
+		silently claim more in the meantime.
+	*/
+	IngressSubnet IngressSelector = "subnet"
 )
+
+/*
+InspectionMechanism is how the panel reads a domain out of one ingress shape.
+
+A criterion is only real if something can produce it. Xray matches a domain from
+the sniffer, and the sniffer runs on an Xray INBOUND -- so for every ingress
+shape the question is: which inbound would carry the sniffing block?
+
+  - IngressInternal: the inbound the core already answers to, or the loopback
+    bridge the panel builds for it.
+  - IngressDevice: the xray-tun front the panel synthesises for that device.
+  - IngressSubnet: nothing today. A per-session device has no front and no
+    bridge, so there is no inbound to attach a sniffer to.
+
+InspectableSelector answers that question once, and coretest and internal/arch
+both refuse a core declaring a payload criterion for a shape it answers false
+for. That is the whole guard: a core cannot claim `domain` for an ingress the
+panel has no way to read one from, so a rule that saves is a rule that can
+match. The inverse of that promise is the bug F060 was. Extend this the day a
+new shape gains a mechanism -- and the guard will name any core that was waiting
+on it.
+*/
+func InspectableSelector(selector IngressSelector) bool {
+	switch selector {
+	case IngressInternal, IngressDevice:
+		return true
+	default:
+		return false
+	}
+}
+
+/*
+PayloadCriteria are the criteria that can only be answered by reading the
+connection's payload, rather than from the packet's own addresses.
+
+Separated from CriteriaByAddress because they are what the mechanism question
+applies to: an address is in every packet, a name is not.
+*/
+func PayloadCriteria() []Criterion {
+	return []Criterion{CriterionDomain, CriterionProtocol, CriterionAttrs}
+}
+
+// NeedsInspection reports whether this criterion can only be answered by
+// reading the payload.
+func (c Criterion) NeedsInspection() bool {
+	return slices.Contains(PayloadCriteria(), c)
+}
 
 // IngressHandle is one instance's routable surface as it stands right now.
 type IngressHandle struct {

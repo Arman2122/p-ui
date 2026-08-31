@@ -342,18 +342,24 @@ func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
 }
 
 /*
-IngressCriteria: addresses only.
+IngressCriteria: addresses, and the domain.
 
 Decrypted traffic appears on a kernel interface with no Xray identity attached —
 its handler builds a user with no email, so a user match returns false for every
-packet — and the front inbound the panel synthesises carries no sniffing block,
-so the name-based criteria cannot match either. F060.
+packet, and `attrs` needs an L7 request this core never sees. Both stay out.
+
+The domain is in now because the panel makes the front sniff when a rule asks
+for one: the traffic crosses an xray-tun the panel synthesises, and a sniffing
+block there reads the TLS SNI, HTTP Host or QUIC name. Declared rather than
+assumed — bind.go refuses a payload criterion from any core whose ingress shape
+the panel cannot attach a sniffer to, so this line and the mechanism cannot
+drift apart. F060, and the routing vision it was blocking.
 */
 func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
 	if kind != c.kind {
 		return nil
 	}
-	return core.CriteriaByAddress()
+	return append(core.CriteriaByAddress(), core.CriterionDomain)
 }
 
 /*

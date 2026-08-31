@@ -784,6 +784,17 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 		cfg.RouterConfig = json_util.RawMessage(newRouting)
 	}
 
+	/*
+		No sniffing block here, and that is not an oversight the routing compiler
+		should fix: the sidecar hands Xray Telegram's own MTProto wire format,
+		which carries no SNI, no Host and no QUIC header. A sniffer would read
+		every connection and find nothing.
+
+		The compiler only asks for one where a rule needs it, and the mtproto core
+		declares no domain criterion, so no rule can ask. A core whose bridge DOES
+		carry TLS -- SSH, when it lands -- declares the domain and gets the block
+		through the same path, with no change here.
+	*/
 	cfg.InboundConfigs = append(cfg.InboundConfigs, xray.InboundConfig{
 		Listen:   json_util.RawMessage(`"127.0.0.1"`),
 		Port:     parsed.RouteXrayPort,

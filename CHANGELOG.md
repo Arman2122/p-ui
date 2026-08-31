@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Routing rules can match domains on kernel WireGuard and AmneziaWG.** "Send
+  google.com through this exit" now works for an L3 inbound, not only for an
+  Xray one — the panel makes the inbound read the name out of the connection
+  when, and only when, a rule asks for one.
+  **This also fixes a live gap on Xray's own inbounds:** sniffing defaults to off
+  on a new inbound, so a domain rule on a VLESS or VMess inbound used to save,
+  display as active, and never match a single connection. It matches now.
+  **What you will notice:** the name is read from the TLS SNI, the HTTP Host
+  header or QUIC, so traffic carrying no name still falls through to the IP
+  rules; the connection's destination is unchanged, so IP rules and the
+  private-address guard keep working; and your inbound's own sniffing setting is
+  never rewritten — the change is in the generated config alone.
+
 - **An MTProto inbound routed through Xray no longer picks a bridge port
   something else is using.** The internal loopback port was taken from whatever
   the OS had free for an instant, or from whatever an API caller sent, and never

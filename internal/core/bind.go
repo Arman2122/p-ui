@@ -139,11 +139,48 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	if b.Ingress != nil && routesSomeKind(b.Core, b.Ingress) && !namesSomeCriterion(b.Core, b.Ingress) {
 		problems = append(problems, "RoutableIngress: implemented, but every kind names no criterion; a subject no rule can match declares nothing")
 	}
+	problems = append(problems, unmechanizedCriteria(b)...)
 	if b.Egress != nil && len(b.Egress.ExitKinds()) == 0 {
 		problems = append(problems, "RoutableEgress: implemented, but ExitKinds is empty; a core that offers no exit declares nothing")
 	}
 	if b.CounterLoss != nil && !losesCountersOnSomeKind(b.Core, b.CounterLoss) {
 		problems = append(problems, "CounterLossDeclarer: implemented, but every kind answers false; not implementing it says the same thing")
+	}
+	return problems
+}
+
+/*
+unmechanizedCriteria names every kind declaring a criterion the panel cannot
+produce for that kind's ingress shape.
+
+The promise the criteria mask makes is that a rule the editor lets you write is
+a rule that can match. A payload criterion is only answerable where the panel
+has somewhere to attach a sniffer -- an inbound the core answers to, or one the
+panel synthesises for it -- so a core declaring `domain` for a shape with no
+such inbound is writing F060 again, in its own words.
+
+Caught here, in the conformance run the core's own author executes, rather than
+by an operator whose rule silently never fired.
+*/
+func unmechanizedCriteria(b *Bound) []string {
+	if b.Ingress == nil {
+		return nil
+	}
+	var problems []string
+	for _, kind := range b.Core.Kinds() {
+		selector := b.Ingress.IngressSelector(kind)
+		if selector == IngressNone || InspectableSelector(selector) {
+			continue
+		}
+		for _, criterion := range b.Ingress.IngressCriteria(kind) {
+			if !criterion.NeedsInspection() {
+				continue
+			}
+			problems = append(problems, "RoutableIngress: kind "+string(kind)+" declares criterion "+
+				string(criterion)+", which needs the payload read, but its ingress selector "+
+				string(selector)+" gives the panel no inbound to attach a sniffer to; "+
+				"the rule would save and never match")
+		}
 	}
 	return problems
 }
