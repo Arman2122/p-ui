@@ -1423,3 +1423,20 @@ What is left is a product question:
 
 Doing nothing is also defensible: the columns cost two booleans and the panel no
 longer claims they do anything.
+
+## L30 — the six UserManagers and the six credentialed kinds are the same six
+
+Verified against the pinned core (`xray-core@v1.260327.1-0.20260728075948`):
+exactly `hysteria`, `shadowsocks`, `shadowsocks_2022`, `trojan`, `vless`,
+`vmess` and `wireguard` implement `proxy.UserManager`. The panel's xray adapter
+names credentials for exactly those kinds and nil for `http`, `mixed`, `tunnel`
+and `tun`. The two lists were derived independently and agree, which is why
+`ClientCredentials(kind) == nil` is a sound local test for "holds no users" —
+but only inside the core that owns the kinds, since the interface documents nil
+as "declares nothing". Raised as OPEN-DECISIONS §9.
+
+Second fact from the same read: every inbound in this fork gets an
+`AlwaysOnInboundHandler`, the only type implementing `proxy.GetInbound`. So
+`getInbound`'s own refusal ("can't get inbound proxy from handler.") is
+unreachable, and `restartCannotFix` needs no arm for it. Found while fixing
+F314.

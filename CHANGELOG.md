@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A depleted client on a userless inbound no longer restarts Xray.** The
+  http, mixed, tunnel and tun kinds hold no users, so revoking a client on one
+  answers "proxy is not a UserManager" -- which the quota job read as a failure
+  a restart would repair. It restarted Xray, dropping every live connection on
+  the box, and the next poll did it again.
+
 - **A routing rule on an MTProto inbound only offers criteria that can match
   it.** The editor offered user, domain, protocol and attributes there, and none
   of them can: MTProto's traffic reaches the router over an internal bridge that

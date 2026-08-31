@@ -98,6 +98,31 @@ LAST. Listed here only so the queue is complete.
 The GAME inbound on 91.107.151.123 is on port 39412; it was 50120 before a test
 moved it. Left for the operator to undo or keep.
 
+## 9. A first-class "this kind serves no clients" declaration (F314's leftover)
+
+F314 is fixed as error classification: the panel now recognises Xray's "proxy is
+not a UserManager" as a refusal no restart repairs, so a depleted legacy client
+on an http/mixed/tunnel/tun inbound stops knocking over every live connection on
+the box.
+
+What it does NOT do is stop the panel from asking. `runtime.Local.RemoveUser`
+and `AddUser` still round-trip to Xray for a kind that can hold no user, and
+learn the answer from a string.
+
+The contract already knows: `ClientCredentials(kind)` returns nil for exactly
+those four kinds, and the six kinds it names are exactly the six proxies that
+implement `proxy.UserManager` in the pinned core. But `CredentialDeclarer`'s
+documented meaning for nil is "declares nothing, keep the form as it was" — not
+"has no users" — so the xray core may read its own nil that way (F313 does) and
+the runtime may not. Honouring it in the runtime means either changing that
+meaning or adding a declaration, which is new architecture next to a low finding.
+
+**The question:** worth a declaration, or leave it? Cheap either way. A
+declaration would let AddUser and RemoveUser refuse locally instead of asking,
+and would give the client form a reason for greying those kinds out that is not
+a protocol branch. Leaving it costs one string match that a reworded upstream
+error would break — which the test pins, so it breaks loudly.
+
 ---
 
 ## Answered, 2026-08-31
@@ -118,4 +143,4 @@ moved it. Left for the operator to undo or keep.
   offering limitIp and online status for kinds that cannot back them.
 - **Order of work — the decisions above come before tier 3.**
 
-Still open: items 3b (F141) and 3 (F319) below, plus 4 through 8.
+Still open: items 3b (F141) and 3 (F319) below, plus 4 through 9.
