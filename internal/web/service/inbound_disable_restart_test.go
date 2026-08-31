@@ -2,8 +2,10 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
@@ -42,6 +44,16 @@ func TestRestartCannotFix(t *testing.T) {
 			*/
 			name: "the kind Xray serves holds no users",
 			err:  errors.New("failed to remove user: rpc error: code = Unknown desc = app/proxyman/command: proxy is not a UserManager"),
+			want: true,
+		},
+		{
+			/*
+				The contract's own answer, decided before any call is made. The
+				string arms stay for what still arrives as text -- a remote node,
+				or a panel running an older build. F314.
+			*/
+			name: "the kind is declared to hold no users",
+			err:  fmt.Errorf("%w: %s", core.ErrKindHasNoUsers, "tun"),
 			want: true,
 		},
 		{

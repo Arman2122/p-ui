@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 // userCore provisions the named user alone, the way Xray's AlterInbound does.
 type userCore struct {
 	kind        core.Kind
+	userless    []core.Kind
 	sawUsers    []core.User
 	sawUser     core.User
 	sawEmail    string
@@ -30,6 +33,12 @@ func (c *userCore) AddUser(_ context.Context, inst core.Instance, user core.User
 	c.addCalls++
 	c.sawUsers, c.sawUser, c.sawSettings = inst.Users, user, inst.Settings
 	return nil
+}
+
+// Kinds this fake holds no users for, so the per-kind refusal can be driven
+// without standing up a real core. Empty for every existing test.
+func (c *userCore) ProvisionsUsers(kind core.Kind) bool {
+	return !slices.Contains(c.userless, kind)
 }
 
 func (c *userCore) RemoveUser(_ context.Context, inst core.Instance, email string) error {
@@ -253,5 +262,65 @@ func TestAUserOpThatCannotBeAppliedFailsLoudly(t *testing.T) {
 				t.Fatalf("error must say why; got %v, want it to mention %q", err, tc.want)
 			}
 		})
+	}
+}
+
+/*
+A kind that holds no users is refused here, not at the far end of a gRPC call.
+
+Xray serves ten kinds and six of them have a user list. For the other four —
+http, mixed, tunnel, tun — it answers "proxy is not a UserManager" to every
+AlterInbound, and the panel used to decide whether that failure was worth
+restarting the whole core for by matching that sentence in the reply. A reworded
+upstream message would have silently restored a restart that drops every live
+connection on the box.
+
+Two states that were one: the core provisions nobody (checked above, core-level)
+and this kind holds no users on a core that provisions six others. F314.
+*/
+func TestAKindWithNoUserListIsRefusedWithoutAskingTheCore(t *testing.T) {
+	ib := &model.Inbound{
+		Id: 9, Protocol: "userless", Tag: "in-9", Port: 8080, Enable: true,
+		Settings: `{"clients":[{"email":"legacy@x","enable":true}]}`,
+	}
+	c := &userCore{kind: "userless", userless: []core.Kind{"userless"}}
+	l, _ := localFor(t, c, ib)
+
+	err := l.RemoveUser(t.Context(), ib, "legacy@x")
+	if !errors.Is(err, core.ErrKindHasNoUsers) {
+		t.Fatalf("RemoveUser = %v, want ErrKindHasNoUsers; the panel is still learning this from an error string", err)
+	}
+	if err := l.AddUser(t.Context(), ib, "legacy@x"); !errors.Is(err, core.ErrKindHasNoUsers) {
+		t.Fatalf("AddUser = %v, want ErrKindHasNoUsers", err)
+	}
+	if c.addCalls != 0 || c.dropCalls != 0 {
+		t.Fatalf("the core was asked anyway: %d add(s), %d drop(s) — the round trip is the thing being removed",
+			c.addCalls, c.dropCalls)
+	}
+	// The refusal has to name the kind, or an operator reading the log cannot
+	// tell which of a client's inbounds refused them.
+	if !strings.Contains(err.Error(), "userless") {
+		t.Fatalf("the refusal does not name the kind: %v", err)
+	}
+}
+
+/*
+And a removal on such a kind is a no-op success, not a failure.
+
+There is no user to remove, so the removal is done. Reported as an error it
+would make a client on a legacy row — one attached before the panel started
+refusing them — undeletable through the panel, which is the outage this change
+exists to prevent rather than cause.
+*/
+func TestDeletingAClientOnAUserlessKindSucceeds(t *testing.T) {
+	ib := &model.Inbound{
+		Id: 10, Protocol: "userless", Tag: "in-10", Port: 8081, Enable: true,
+		Settings: `{"clients":[{"email":"legacy@x","enable":true}]}`,
+	}
+	c := &userCore{kind: "userless", userless: []core.Kind{"userless"}}
+	l, _ := localFor(t, c, ib)
+
+	if err := l.DeleteUser(t.Context(), ib, "legacy@x"); err != nil {
+		t.Fatalf("DeleteUser = %v; a client on a legacy tun row is now undeletable through the panel", err)
 	}
 }

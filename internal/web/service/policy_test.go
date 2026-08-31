@@ -76,6 +76,9 @@ func (c sessionCore) Sessions(context.Context) ([]core.Session, error) {
 // userCore adds a provisioner, which is what makes a client bounceable.
 type userCore struct{ *declaredCore }
 
+// The kind this fake serves holds users; the userless case is exercised in
+// internal/web/runtime, where the refusal it drives actually lives.
+func (c userCore) ProvisionsUsers(kind core.Kind) bool                     { return kind == c.kind }
 func (c userCore) AddUser(context.Context, core.Instance, core.User) error { return nil }
 func (c userCore) RemoveUser(context.Context, core.Instance, string) error { return nil }
 func (c userCore) Reconcile(context.Context, []core.Instance) error        { return nil }

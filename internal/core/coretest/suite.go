@@ -107,6 +107,7 @@ func Check(rig Rig) []Failure {
 	checkIdentity(r, c)
 	checkDescriptor(r, bound)
 	checkCredentials(r, bound)
+	checkUserKinds(r, bound)
 	checkTransports(r, bound)
 	checkRegistry(r, rig)
 	checkSupervisor(r, rig, bound)
@@ -211,6 +212,34 @@ listener -- so a second inbound would be accepted onto a port already in use and
 the process would fail to start. Settings are empty here on purpose: whether a
 kind binds anything at all is not a property of one inbound's configuration.
 */
+/*
+checkUserKinds pins the one contradiction between the two declarations.
+
+A kind that NAMES credential fields must provision users: the form would
+otherwise render a uuid or a public key for a client that can never be handed to
+anything. The reverse is legal and stays unchecked -- ClientCredentials
+documents nil as "declares nothing, keep the form as it was", so a kind may have
+users and decline to describe them.
+
+Both declarations are read here rather than one being derived from the other,
+which is why xray writes its six kinds out by hand. F314.
+*/
+func checkUserKinds(r *report, bound *core.Bound) {
+	if bound.Users == nil || bound.Creds == nil {
+		return
+	}
+	for _, kind := range bound.Core.Kinds() {
+		if len(bound.Creds.ClientCredentials(kind)) == 0 {
+			continue
+		}
+		if !bound.Users.ProvisionsUsers(kind) {
+			r.fail("users/credentials-agree",
+				"kind %q names credential fields but ProvisionsUsers says it holds no users; the form would render fields for a client nothing can be handed",
+				kind)
+		}
+	}
+}
+
 func checkTransports(r *report, bound *core.Bound) {
 	if bound.Transports == nil {
 		return

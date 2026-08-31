@@ -188,6 +188,19 @@ func (l *Local) userTarget(ib *model.Inbound, named string) (*core.Bound, core.I
 	if bound.Users == nil {
 		return nil, core.Instance{}, fmt.Errorf("core %q cannot provision a single user", bound.Core.Describe().ID)
 	}
+	/*
+		Two different states, and they were one. The check above is core-grained:
+		this core provisions nobody. This one is per KIND: an http, mixed, tunnel
+		or tun inbound has no user list, on a core that provisions users for six
+		other kinds.
+
+		Refused here rather than at the far end of a gRPC call whose reply the
+		panel then had to parse. F314.
+	*/
+	kind := core.Kind(ib.Protocol)
+	if !bound.Users.ProvisionsUsers(kind) {
+		return nil, core.Instance{}, fmt.Errorf("%w: %s", core.ErrKindHasNoUsers, kind)
+	}
 	if bound.UserSet == nil {
 		inst := storedInstanceOf(ib)
 		if named != "" {
@@ -245,7 +258,9 @@ func (l *Local) DeleteUser(ctx context.Context, ib *model.Inbound, email string)
 		return nil
 	}
 	if err := l.RemoveUser(ctx, ib, email); err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		// A kind with no user list has nothing to remove, so the removal is done.
+		// Reporting it would make a client on a legacy tun row undeletable.
+		if errors.Is(err, core.ErrKindHasNoUsers) || strings.Contains(err.Error(), "not found") {
 			return nil
 		}
 		return err
@@ -259,7 +274,8 @@ func (l *Local) DeleteClient(context.Context, string) error {
 
 func (l *Local) UpdateUser(ctx context.Context, ib *model.Inbound, oldEmail string, payload model.Client) error {
 	if oldEmail != "" {
-		if err := l.RemoveUser(ctx, ib, oldEmail); err != nil && !strings.Contains(err.Error(), "not found") {
+		if err := l.RemoveUser(ctx, ib, oldEmail); err != nil &&
+			!errors.Is(err, core.ErrKindHasNoUsers) && !strings.Contains(err.Error(), "not found") {
 			return err
 		}
 	}

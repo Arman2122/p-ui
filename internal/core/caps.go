@@ -46,6 +46,23 @@ type HotApplier interface {
 type UserProvisioner interface {
 	AddUser(ctx context.Context, inst Instance, user User) error
 	RemoveUser(ctx context.Context, inst Instance, email string) error
+
+	/*
+		ProvisionsUsers scopes the two above per kind, because a core is one
+		process serving many: Xray's http, mixed, tunnel and tun inbounds have no
+		user list at all, and it answers "proxy is not a UserManager" for them.
+
+		The panel used to learn that from the error string of a gRPC call it
+		should never have made. False means the kind holds no users, and every
+		user op on it is refused locally with ErrKindHasNoUsers.
+
+		Not derivable from CredentialDeclarer: nil there means "declares nothing,
+		keep the form as it was" -- an answer about the FORM, not the protocol --
+		so reading it as "has no users" would build a refusal on a documented
+		false premise. That the two agree today is a coincidence coretest pins in
+		the one direction that is genuinely a contradiction. F314.
+	*/
+	ProvisionsUsers(kind Kind) bool
 }
 
 /*

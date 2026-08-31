@@ -97,6 +97,24 @@ func (c *Core) ClientCredentials(kind core.Kind) []string {
 	}
 }
 
+/*
+ProvisionsUsers names the kinds Xray can be asked to add or remove a user on.
+
+The list is written out rather than derived from ClientCredentials, even though
+the two agree: derived, the conformance cross-check between them would be
+comparing a value with itself. These six are exactly the proxies implementing
+proxy.UserManager in the pinned core -- http, mixed, tunnel and tun are not, and
+answer "proxy is not a UserManager" to every AlterInbound. F314.
+*/
+func (c *Core) ProvisionsUsers(kind core.Kind) bool {
+	switch kind {
+	case "vmess", "vless", "trojan", "shadowsocks", "hysteria", "wireguard":
+		return true
+	default:
+		return false
+	}
+}
+
 // Reconcile converges the one Xray process on the desired inbound set. An
 // unchanged config is left alone, a change that the core API can absorb is
 // applied in place, and anything else is a restart.
