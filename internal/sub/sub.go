@@ -12,6 +12,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -29,11 +31,53 @@ type Server struct {
 	httpServer *http.Server
 	listener   net.Listener
 
+	// The engine is swapped rather than the listener. Which routes exist is
+	// decided by settings -- the paths, and the JSON/Clash toggles -- so those
+	// apply on save; the port, listen address and certificate need a rebind and
+	// still need the restart button. F253.
+	handler  atomic.Pointer[gin.Engine]
+	routerMu sync.Mutex
+
 	sub            *SUBController
 	settingService service.SettingService
 
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+// ServeHTTP is the indirection the swap needs: http.Server holds this, never an
+// engine, so a rebuilt router takes over without touching the listener.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	engine := s.handler.Load()
+	if engine == nil {
+		http.NotFound(w, r)
+		return
+	}
+	engine.ServeHTTP(w, r)
+}
+
+/*
+ReloadRoutes rebuilds the router from the settings as they stand now.
+
+A refusal keeps the router that is serving: a rebuild that cannot read its
+settings must not replace a working subscription server with a 404. In-flight
+requests finish on the engine they started on, which is free with the swap.
+
+Nothing to do before Start -- there is no listener, so there are no routes to
+be stale.
+*/
+func (s *Server) ReloadRoutes() error {
+	s.routerMu.Lock()
+	defer s.routerMu.Unlock()
+	if s.httpServer == nil {
+		return nil
+	}
+	engine, err := s.initRouter()
+	if err != nil {
+		return err
+	}
+	s.handler.Store(engine)
+	return nil
 }
 
 // NewServer creates a new subscription server instance with a cancellable context.
@@ -363,8 +407,9 @@ func (s *Server) Start() (err error) {
 	}
 	s.listener = listener
 
+	s.handler.Store(engine)
 	s.httpServer = &http.Server{
-		Handler: engine,
+		Handler: s,
 		// The subscription server is the most exposed (public) listener; without
 		// these a few slow-header connections exhaust it (Slowloris). Mirrors the
 		// panel server timeouts in internal/web/web.go.
