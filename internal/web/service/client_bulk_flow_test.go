@@ -64,7 +64,7 @@ func TestBulkAdjust_FlowSetAndClear(t *testing.T) {
 	emails := emailsOf(clients)
 
 	// Set vision flow.
-	res, restart, err := svc.BulkAdjust(inboundSvc, emails, 0, 0, "xtls-rprx-vision-udp443")
+	res, restart, err := svc.BulkAdjust(inboundSvc, emails, 0, 0, "xtls-rprx-vision-udp443", "")
 	if err != nil {
 		t.Fatalf("BulkAdjust set: %v", err)
 	}
@@ -81,14 +81,14 @@ func TestBulkAdjust_FlowSetAndClear(t *testing.T) {
 	}
 
 	// Setting the same flow again is a no-op: honored (counted) but no restart.
-	if _, restart2, err := svc.BulkAdjust(inboundSvc, emails, 0, 0, "xtls-rprx-vision-udp443"); err != nil {
+	if _, restart2, err := svc.BulkAdjust(inboundSvc, emails, 0, 0, "xtls-rprx-vision-udp443", ""); err != nil {
 		t.Fatalf("BulkAdjust idempotent: %v", err)
 	} else if restart2 {
 		t.Fatalf("re-setting identical flow should not request a restart")
 	}
 
 	// Clear flow.
-	cres, crestart, err := svc.BulkAdjust(inboundSvc, emails, 0, 0, "none")
+	cres, crestart, err := svc.BulkAdjust(inboundSvc, emails, 0, 0, "none", "")
 	if err != nil {
 		t.Fatalf("BulkAdjust clear: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestBulkAdjust_FlowIneligibleSkipped(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	res, restart, err := svc.BulkAdjust(inboundSvc, []string{"ws1@x"}, 0, 0, "xtls-rprx-vision")
+	res, restart, err := svc.BulkAdjust(inboundSvc, []string{"ws1@x"}, 0, 0, "xtls-rprx-vision", "")
 	if err != nil {
 		t.Fatalf("BulkAdjust: %v", err)
 	}
@@ -146,11 +146,11 @@ func TestBulkAdjust_NoDirectiveErrors(t *testing.T) {
 	svc := &ClientService{}
 	inboundSvc := &InboundService{}
 
-	if _, _, err := svc.BulkAdjust(inboundSvc, []string{"any@x"}, 0, 0, ""); err == nil {
+	if _, _, err := svc.BulkAdjust(inboundSvc, []string{"any@x"}, 0, 0, "", ""); err == nil {
 		t.Fatalf("expected error when no adjustment is specified")
 	}
 	// An unknown flow directive is ignored (treated as ""), so it also errors.
-	if _, _, err := svc.BulkAdjust(inboundSvc, []string{"any@x"}, 0, 0, "bogus-flow"); err == nil {
+	if _, _, err := svc.BulkAdjust(inboundSvc, []string{"any@x"}, 0, 0, "bogus-flow", ""); err == nil {
 		t.Fatalf("unknown flow should be ignored and error like an empty directive")
 	}
 }
@@ -182,7 +182,7 @@ func TestBulkAdjust_DaysApplyDespiteIneligibleFlow(t *testing.T) {
 		t.Fatalf("seed traffic: %v", err)
 	}
 
-	res, _, err := svc.BulkAdjust(inboundSvc, []string{"mix@x"}, 7, gb, "xtls-rprx-vision")
+	res, _, err := svc.BulkAdjust(inboundSvc, []string{"mix@x"}, 7, gb, "xtls-rprx-vision", "")
 	if err != nil {
 		t.Fatalf("BulkAdjust: %v", err)
 	}

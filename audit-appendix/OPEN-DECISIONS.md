@@ -235,9 +235,18 @@ is waiting on them any more; what is left is work.
 - **§10 — keep the Clash arm.** Dropping it would turn certificate verification
   back on for a legacy row and break a working self-signed deployment silently.
   F025 is closed as it stands.
-- **Bulk operations — add SET beside ADD, behind an explicit mode toggle.** ADD
-  stays the default so existing muscle memory is unchanged; the confirmation says
-  which mode is about to run and on how many clients.
+- **Bulk operations — SHIPPED. SET beside ADD, behind an explicit mode toggle.**
+  ADD is the default and the first option, the submit button names the mode and
+  the count, and an absent `mode` on the API is ADD so no existing integration
+  changes meaning.
+
+  Two sub-decisions the operator settled when they came up: **0 leaves a field
+  alone** in SET as in ADD, because the dialog's fields start at zero and reading
+  0 as "make unlimited" would strip the expiry off a whole selection on the most
+  ordinary partial fill; and a **delayed-start client is skipped with a reason**
+  rather than converted, because an absolute date and a not-yet-started countdown
+  are different products. Most of ADD's other skips do NOT apply to SET — there
+  is no underflow, and limiting an unlimited client is the request.
 - **mtg-proxy v1.0.0 — DONE, the release is deleted.** It carried the remotely
   triggerable process kill v1.0.1 closed. Nothing pinned it: `release.yml`
   resolves `/releases/latest`, and the release had 11 assets and zero downloads

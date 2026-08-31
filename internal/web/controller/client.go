@@ -291,6 +291,9 @@ type bulkAdjustRequest struct {
 	AddDays  int      `json:"addDays"`
 	AddBytes int64    `json:"addBytes"`
 	Flow     string   `json:"flow"`
+	// Mode is "add" (the default, and what every caller before this sent) or
+	// "set". Absent means add, so an existing integration keeps its semantics.
+	Mode string `json:"mode"`
 }
 
 func (a *ClientController) bulkAdjust(c *gin.Context) {
@@ -299,7 +302,7 @@ func (a *ClientController) bulkAdjust(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkAdjust(&a.inboundService, req.Emails, req.AddDays, req.AddBytes, req.Flow)
+	result, needRestart, err := a.clientService.BulkAdjust(&a.inboundService, req.Emails, req.AddDays, req.AddBytes, req.Flow, req.Mode)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

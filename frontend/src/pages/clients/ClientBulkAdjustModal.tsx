@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Form, InputNumber, Modal, Select, message } from 'antd';
-import { FormProvider, useForm } from 'react-hook-form';
+import { Alert, Form, InputNumber, Modal, Segmented, Select, message } from 'antd';
+import { FormProvider, useForm, useWatch } from 'react-hook-form';
 
 import { ClientBulkAdjustFormSchema, type ClientBulkAdjustFormValues } from '@/schemas/client';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives/flow';
@@ -11,13 +11,13 @@ const GB = 1024 * 1024 * 1024;
 
 const FLOW_CLEAR = 'none';
 
-const EMPTY: ClientBulkAdjustFormValues = { addDays: 0, addGB: 0, flow: '' };
+const EMPTY: ClientBulkAdjustFormValues = { mode: 'add', addDays: 0, addGB: 0, flow: '' };
 
 interface ClientBulkAdjustModalProps {
   open: boolean;
   count: number;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (addDays: number, addBytes: number, flow: string) => Promise<{ adjusted: number; skipped?: { email: string; reason: string }[] } | null>;
+  onSubmit: (addDays: number, addBytes: number, flow: string, mode: string) => Promise<{ adjusted: number; skipped?: { email: string; reason: string }[] } | null>;
 }
 
 export default function ClientBulkAdjustModal({ open, count, onOpenChange, onSubmit }: ClientBulkAdjustModalProps) {
@@ -25,6 +25,10 @@ export default function ClientBulkAdjustModal({ open, count, onOpenChange, onSub
   const [messageApi, messageContextHolder] = message.useMessage();
   const [submitting, setSubmitting] = useState(false);
   const methods = useForm<ClientBulkAdjustFormValues>({ defaultValues: EMPTY });
+  /* Which question is being asked changes every label below, and the operator
+     must be able to see which one before pressing Apply. */
+  const mode = useWatch({ control: methods.control, name: 'mode' }) ?? 'add';
+  const isSet = mode === 'set';
 
   useEffect(() => {
     if (open) methods.reset(EMPTY);
@@ -33,6 +37,7 @@ export default function ClientBulkAdjustModal({ open, count, onOpenChange, onSub
   async function handleOk() {
     const values = methods.getValues();
     const validated = ClientBulkAdjustFormSchema.safeParse({
+      mode: values.mode,
       addDays: Math.trunc(Number(values.addDays) || 0),
       addGB: Number(values.addGB) || 0,
       flow: values.flow,
@@ -41,11 +46,11 @@ export default function ClientBulkAdjustModal({ open, count, onOpenChange, onSub
       messageApi.warning(t(validated.error.issues[0]?.message ?? 'somethingWentWrong'));
       return;
     }
-    const { addDays: days, addGB: gb, flow: flowValue } = validated.data;
+    const { mode: chosenMode, addDays: days, addGB: gb, flow: flowValue } = validated.data;
     setSubmitting(true);
     try {
       const bytes = Math.trunc(gb * GB);
-      const result = await onSubmit(days, bytes, flowValue);
+      const result = await onSubmit(days, bytes, flowValue, chosenMode);
       if (!result) return;
       const ok = result.adjusted ?? 0;
       const skipped = result.skipped?.length ?? 0;
@@ -69,7 +74,9 @@ export default function ClientBulkAdjustModal({ open, count, onOpenChange, onSub
       <Modal
         open={open}
         title={t('pages.clients.bulkAdjustTitle', { count })}
-        okText={t('apply')}
+        okText={isSet
+          ? t('pages.clients.bulkApplySet', { count })
+          : t('pages.clients.bulkApplyAdd', { count })}
         cancelText={t('cancel')}
         confirmLoading={submitting}
         onOk={handleOk}
@@ -77,18 +84,40 @@ export default function ClientBulkAdjustModal({ open, count, onOpenChange, onSub
         destroyOnHidden
       >
         <Alert
-          type="info"
+          type={isSet ? 'warning' : 'info'}
           showIcon
           style={{ marginBottom: 16 }}
-          title={t('pages.clients.bulkAdjustHint')}
+          title={isSet
+            ? t('pages.clients.bulkAdjustHintSet', { count })
+            : t('pages.clients.bulkAdjustHint')}
         />
         <FormProvider {...methods}>
           <Form layout="vertical">
-            <FormField name="addDays" label={t('pages.clients.addDays')}>
-              <InputNumber style={{ width: '100%' }} step={1} precision={0} />
+            {/* ADD is first and default: it is what this dialog has always done,
+                and an operator reaching for it must not find SET under their
+                muscle memory. */}
+            <FormField name="mode" label={t('pages.clients.bulkMode')}>
+              <Segmented
+                block
+                options={[
+                  { value: 'add', label: t('pages.clients.bulkModeAdd') },
+                  { value: 'set', label: t('pages.clients.bulkModeSet') },
+                ]}
+              />
             </FormField>
-            <FormField name="addGB" label={t('pages.clients.addTrafficGB')}>
-              <InputNumber style={{ width: '100%' }} step={1} />
+            <FormField
+              name="addDays"
+              label={isSet ? t('pages.clients.setDays') : t('pages.clients.addDays')}
+              extra={t('pages.clients.bulkZeroLeavesAlone')}
+            >
+              <InputNumber style={{ width: '100%' }} step={1} precision={0} min={isSet ? 0 : undefined} />
+            </FormField>
+            <FormField
+              name="addGB"
+              label={isSet ? t('pages.clients.setTrafficGB') : t('pages.clients.addTrafficGB')}
+              extra={t('pages.clients.bulkZeroLeavesAlone')}
+            >
+              <InputNumber style={{ width: '100%' }} step={1} min={isSet ? 0 : undefined} />
             </FormField>
             <FormField name="flow" label={t('pages.clients.bulkFlow')}>
               <Select

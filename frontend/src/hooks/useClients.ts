@@ -434,7 +434,7 @@ export function useClients(options: UseClientsOptions = {}) {
   });
 
   const bulkAdjustMut = useMutation({
-    mutationFn: async (payload: { emails: string[]; addDays: number; addBytes: number; flow: string }): Promise<Msg<BulkAdjustResult>> => {
+    mutationFn: async (payload: { emails: string[]; addDays: number; addBytes: number; flow: string; mode: string }): Promise<Msg<BulkAdjustResult>> => {
       const raw = await HttpUtil.post('/panel/api/clients/bulkAdjust', payload, JSON_HEADERS);
       return parseMsg(raw, BulkAdjustResultSchema, 'clients/bulkAdjust');
     },
@@ -545,9 +545,11 @@ export function useClients(options: UseClientsOptions = {}) {
     if (!Array.isArray(payloads) || payloads.length === 0) return Promise.resolve(null as unknown as Msg<BulkCreateResult>);
     return bulkCreateMut.mutateAsync(payloads);
   }, [bulkCreateMut]);
-  const bulkAdjust = useCallback((emails: string[], addDays: number, addBytes: number, flow = '') => {
+  /* mode defaults to 'add', so a caller that predates the toggle keeps the
+     semantics its muscle memory expects. */
+  const bulkAdjust = useCallback((emails: string[], addDays: number, addBytes: number, flow = '', mode = 'add') => {
     if (!Array.isArray(emails) || emails.length === 0) return Promise.resolve(null);
-    return bulkAdjustMut.mutateAsync({ emails, addDays, addBytes, flow });
+    return bulkAdjustMut.mutateAsync({ emails, addDays, addBytes, flow, mode });
   }, [bulkAdjustMut]);
   const bulkEnable = useCallback((emails: string[]) => {
     if (!Array.isArray(emails) || emails.length === 0) return Promise.resolve(null as unknown as Msg<BulkSetEnableResult>);
