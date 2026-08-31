@@ -210,6 +210,14 @@ export default function ClientFormModal({
   const wgPrivateKey = useWatch({ control: methods.control, name: 'wgPrivateKey' });
   const limitIp = useWatch({ control: methods.control, name: 'limitIp' });
   const policyId = useWatch({ control: methods.control, name: 'policyId' });
+  /* The Form.Items below are hand-built rather than FormField, so they do not
+     get the error rendering FormField already does. This is that. */
+  const formErrors = methods.formState.errors;
+  function fieldError(name: keyof ClientFormValues) {
+    const raw = formErrors[name]?.message;
+    if (!raw) return {};
+    return { validateStatus: 'error' as const, help: t(raw, { defaultValue: raw }) };
+  }
   const {
     fields: externalLinkFields,
     append: appendExternalLink,
@@ -522,10 +530,27 @@ export default function ClientFormModal({
       inboundIds: values.inboundIds,
     });
     if (!validated.success) {
-      const issue = validated.error.issues[0];
-      messageApi.error(t(issue?.message ?? 'somethingWentWrong'));
+      /*
+        Every issue goes onto its own field. The first one used to go into a
+        page-level toast instead, so the operator was told a value was wrong and
+        not which of eighteen inputs held it -- across three tabs, only one of
+        which is on screen.
+      */
+      methods.clearErrors();
+      let attached = 0;
+      for (const issue of validated.error.issues) {
+        const field = issue.path[0];
+        if (typeof field !== 'string') continue;
+        methods.setError(field as keyof ClientFormValues, { type: 'validate', message: issue.message });
+        attached += 1;
+      }
+      const first = validated.error.issues[0];
+      if (attached === 0) {
+        messageApi.error(t(first?.message ?? 'somethingWentWrong', { defaultValue: first?.message ?? '' }));
+      }
       return;
     }
+    methods.clearErrors();
     const expiryTime = values.delayedStart
       ? -86400000 * (Number(values.delayedDays) || 0)
       : (values.expiryDate || 0);
@@ -690,7 +715,7 @@ export default function ClientFormModal({
                     <>
                       <Row gutter={16}>
                         <Col xs={24} md={12}>
-                          <Form.Item label={t('pages.clients.email')} required>
+                          <Form.Item label={t('pages.clients.email')} required {...fieldError('email')}>
                             <Space.Compact style={{ display: 'flex' }}>
                               <Input
                                 value={email}
@@ -806,7 +831,7 @@ export default function ClientFormModal({
                         </Row>
                       )}
 
-                      <Form.Item label={t('pages.clients.attachedInbounds')} required={!isEdit}>
+                      <Form.Item label={t('pages.clients.attachedInbounds')} required={!isEdit} {...fieldError('inboundIds')}>
                         <SelectAllClearButtons
                           options={inboundOptions}
                           value={inboundIds}
@@ -840,7 +865,7 @@ export default function ClientFormModal({
                   children: (
                     <Row gutter={16}>
                       <Col xs={24} md={12}>
-                        <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')}>
+                        <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')} {...fieldError('limitIp')}>
                           <IpLimitControl
                             value={limitIp}
                             disabled={limitIpDisabled}
@@ -902,7 +927,7 @@ export default function ClientFormModal({
                       )}
 
                       {/* subId is the subscription link's identifier, not a credential of any core, so every client has one. */}
-                      <Form.Item label={t('pages.clients.subId')}>
+                      <Form.Item label={t('pages.clients.subId')} {...fieldError('subId')}>
                         <Space.Compact style={{ display: 'flex' }}>
                           <Input value={subId} style={{ flex: 1 }} onChange={(e) => methods.setValue('subId', e.target.value)} />
                           <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('subId', RandomUtil.randomLowerAndNum(16))} />

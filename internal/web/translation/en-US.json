@@ -789,6 +789,8 @@
       "email": "Email",
       "emailInvalidChars": "Email cannot contain spaces, '/', '\\', or control characters",
       "subIdInvalidChars": "Subscription ID cannot contain spaces, '/', '\\', or control characters",
+      "errNotNegative": "Cannot be less than zero",
+      "errWholeNumber": "Must be a whole number",
       "group": "Group",
       "groupDesc": "Logical label used to bucket related clients (e.g. team, customer, region). Filterable from the toolbar.",
       "groupPlaceholder": "e.g. customer-a",
