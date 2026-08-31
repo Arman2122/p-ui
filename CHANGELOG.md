@@ -8,6 +8,19 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Bulk adjust can set an exact value, not only add to one.** "Make everyone
+  exactly 50 GB" needed you to know each client's current quota and do the
+  arithmetic per client; there is a mode toggle now.
+  **Add stays the default and the first option**, so nothing an operator already
+  does changes, and the confirm button says which mode is about to run and on
+  how many clients.
+  **Two things worth knowing about Set:** 0 leaves a field alone rather than
+  making it unlimited — so filling in only a quota does not strip everyone's
+  expiry — and a delayed-start client is skipped and reported, because writing
+  an absolute date over a countdown that has not begun changes what that client
+  was sold. Unlike Add, Set does limit a client that currently has no limit:
+  that is the request.
+
 - **A certificate the panel cannot serve is refused at install time, not
   discovered later.** `p-ui cert` stored two paths without ever opening them and
   always exited 0 — so handing the installer a key belonging to a different

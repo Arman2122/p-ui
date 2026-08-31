@@ -263,15 +263,39 @@ var bulkFlowAllowed = map[string]struct{}{
 	"xtls-rprx-vision-udp443": {},
 }
 
-// BulkAdjust shifts ExpiryTime by addDays (days) and TotalGB by addBytes
-// for every email in the list. Clients whose corresponding field is
-// unlimited (0) are skipped — bulk extend should not accidentally
-// limit an unlimited client. addDays and addBytes may be negative.
-//
-// Like BulkDelete, the work is grouped by inbound so each inbound's
-// settings JSON is parsed and written exactly once regardless of how
-// many target emails it contains.
-func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, addDays int, addBytes int64, flow string) (BulkAdjustResult, bool, error) {
+// Bulk adjustment modes. ADD is the historical behaviour and the default, so an
+// API caller that omits the field keeps the semantics its muscle memory expects.
+const (
+	BulkModeAdd = "add"
+	BulkModeSet = "set"
+)
+
+/*
+BulkAdjust changes ExpiryTime and TotalGB for every email in the list.
+
+Two modes. ADD shifts each value by the given amount and skips a client whose
+field is unlimited, because adding to unlimited means nothing; it also refuses a
+reduction that would take a value past zero, since that is underflow rather than
+intent.
+
+SET writes the value instead, and most of those skips do not apply to it:
+setting a quota ON an unlimited client is exactly what the operator asked for,
+and there is no underflow because nothing is being subtracted from. What SET
+keeps is the zero convention -- 0 means "leave this field alone", the same as in
+ADD -- because the form's fields start at zero, so an operator filling in only a
+quota sends days=0 and must not thereby strip the expiry off the whole
+selection. Making a client unlimited stays a per-client edit.
+
+A delayed-start client (expiry stored negative, a countdown that has not begun)
+is skipped by SET rather than converted: an absolute date and a not-yet-started
+window are different products, and silently turning one into the other changes
+what the operator sold.
+
+Like BulkDelete, the work is grouped by inbound so each inbound's settings JSON
+is parsed and written exactly once regardless of how many target emails it
+contains.
+*/
+func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, addDays int, addBytes int64, flow, mode string) (BulkAdjustResult, bool, error) {
 	result := BulkAdjustResult{}
 	if len(emails) == 0 {
 		return result, false, nil
@@ -284,8 +308,18 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 	if addDays == 0 && addBytes == 0 && !adjustFlow {
 		return result, false, common.NewError("no adjustment specified")
 	}
+	switch mode {
+	case "", BulkModeAdd:
+		mode = BulkModeAdd
+	case BulkModeSet:
+	default:
+		return result, false, common.NewError("unknown bulk adjustment mode:", mode)
+	}
+	setMode := mode == BulkModeSet
 
 	addExpiryMs := int64(addDays) * 24 * 60 * 60 * 1000
+	// SET days is a date, counted from now, the way the create form computes one.
+	setExpiryMs := time.Now().UnixMilli() + addExpiryMs
 
 	seen := map[string]struct{}{}
 	cleanEmails := make([]string, 0, len(emails))
@@ -329,18 +363,26 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 	plan := map[string]*bulkAdjustEntry{}
 	for email, rec := range recordsByEmail {
 		entry := &bulkAdjustEntry{record: rec}
+		skip := func(reason string) {
+			if _, exists := skippedReasons[email]; !exists {
+				skippedReasons[email] = reason
+			}
+		}
 		if addDays != 0 {
 			switch {
+			case setMode && rec.ExpiryTime < 0:
+				// A countdown that has not started is not a date. Converting it
+				// would change what this client was sold.
+				skip("delayed start")
+			case setMode:
+				entry.applyExpiry = true
+				entry.newExpiry = setExpiryMs
 			case rec.ExpiryTime == 0:
-				if _, exists := skippedReasons[email]; !exists {
-					skippedReasons[email] = "unlimited expiry"
-				}
+				skip("unlimited expiry")
 			case rec.ExpiryTime > 0:
 				next := rec.ExpiryTime + addExpiryMs
 				if next <= 0 {
-					if _, exists := skippedReasons[email]; !exists {
-						skippedReasons[email] = "reduction exceeds remaining time"
-					}
+					skip("reduction exceeds remaining time")
 				} else {
 					entry.applyExpiry = true
 					entry.newExpiry = next
@@ -348,9 +390,7 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 			default:
 				next := rec.ExpiryTime - addExpiryMs
 				if next >= 0 {
-					if _, exists := skippedReasons[email]; !exists {
-						skippedReasons[email] = "reduction exceeds delay window"
-					}
+					skip("reduction exceeds delay window")
 				} else {
 					entry.applyExpiry = true
 					entry.newExpiry = next
@@ -358,16 +398,18 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 			}
 		}
 		if addBytes != 0 {
-			if rec.TotalGB == 0 {
-				if _, exists := skippedReasons[email]; !exists {
-					skippedReasons[email] = "unlimited traffic"
-				}
-			} else {
+			switch {
+			case setMode:
+				// No unlimited skip and no underflow guard: setting a quota on an
+				// unlimited client is the request, and nothing is subtracted.
+				entry.applyTotal = true
+				entry.newTotal = addBytes
+			case rec.TotalGB == 0:
+				skip("unlimited traffic")
+			default:
 				next := rec.TotalGB + addBytes
 				if next <= 0 {
-					if _, exists := skippedReasons[email]; !exists {
-						skippedReasons[email] = "reduction exceeds remaining quota"
-					}
+					skip("reduction exceeds remaining quota")
 				} else {
 					entry.applyTotal = true
 					entry.newTotal = next

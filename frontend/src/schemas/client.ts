@@ -249,8 +249,15 @@ export const ClientCreateFormSchema = ClientFormSchema.extend({
   inboundIds: z.array(z.number()).min(1, 'pages.clients.selectInbound'),
 });
 
+/* ADD shifts each value; SET writes it. Zero means "leave this field alone" in
+   BOTH, because the fields start at zero -- so filling in only a quota must not
+   also rewrite everyone's expiry. */
+export const BulkAdjustModeSchema = z.enum(['add', 'set']);
+export type BulkAdjustMode = z.infer<typeof BulkAdjustModeSchema>;
+
 export const ClientBulkAdjustFormSchema = z
   .object({
+    mode: BulkAdjustModeSchema.default('add'),
     addDays: z.number().int(),
     addGB: z.number(),
     flow: z.string().optional().default(''),
