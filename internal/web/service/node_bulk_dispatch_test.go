@@ -30,6 +30,10 @@ type fakeNodeRuntime struct {
 	// updateInboundErr and addUserErr drive the caller's failure handling, and
 	// addUserTransientFailures makes the first N AddUser calls fail and the rest
 	// succeed. The zero values keep every existing test on the success path.
+	// onUpdateInbound runs inside the push, so a test can observe what the
+	// caller is holding while it waits on the node. nil for every other test.
+	onUpdateInbound func()
+
 	updateInboundErr         error
 	delInboundErr            error
 	addUserErr               error
@@ -50,6 +54,9 @@ func (f *fakeNodeRuntime) DelInbound(context.Context, *model.Inbound) error {
 
 func (f *fakeNodeRuntime) UpdateInbound(context.Context, *model.Inbound, *model.Inbound) error {
 	f.updateInbound.Add(1)
+	if f.onUpdateInbound != nil {
+		f.onUpdateInbound()
+	}
 	return f.updateInboundErr
 }
 
