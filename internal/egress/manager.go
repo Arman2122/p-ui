@@ -305,27 +305,30 @@ device that does not exist is refused by the kernel and the row would converge
 to its blackhole alone. A driver that does not provision -- one whose device
 belongs to a core -- is simply skipped.
 */
-func (m *Manager) provision(ctx context.Context, e Egress) error {
+// The bool reports that a device was brought up on THIS pass, which is what
+// tells converge its snapshot is already out of date.
+func (m *Manager) provision(ctx context.Context, e Egress) (bool, error) {
 	// A row that no longer exists is synthesised from what the kernel still
 	// holds, so it carries no type: nobody recorded which driver made the
 	// device. Every provisioner is asked instead, and each ignores an id it
 	// never made -- otherwise a deleted uplink keeps dialling its provider
 	// forever while its route is reaped out from under it.
 	if e.Type == "" {
-		return m.deprovisionAll(ctx, e.ID)
+		return false, m.deprovisionAll(ctx, e.ID)
 	}
 	driver, known := m.drivers.For(e.Type)
 	if !known {
-		return nil
+		return false, nil
 	}
 	provisioner, provisions := driver.(Provisioner)
 	if !provisions {
-		return nil
+		return false, nil
 	}
 	if !e.Enable {
-		return provisioner.Deprovision(ctx, e.ID)
+		return false, provisioner.Deprovision(ctx, e.ID)
 	}
-	return provisioner.Provision(ctx, e)
+	err := provisioner.Provision(ctx, e)
+	return err == nil, err
 }
 
 func (m *Manager) deprovisionAll(ctx context.Context, id int) error {
@@ -352,8 +355,21 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 	// into a device that does not exist, and the row would converge to its
 	// blackhole alone. A failure here is joined below rather than returned, so
 	// the containment still happens for a device that could not be dialled.
-	provisionErr := m.provision(ctx, e)
+	provisioned, provisionErr := m.provision(ctx, e)
 	w, planErr := m.plan(e, snap)
+	/*
+		The snapshot predates that provision, so a device just created is absent
+		from it: frontIsUp says no, the table gets its blackhole and no front, and
+		every flow the rules send there is dropped until some later pass happens
+		to re-read the host. Re-read it here instead -- once, and only when a
+		provisioner reported success while the plan still sees no front. F257.
+	*/
+	if provisioned && w.device != "" && len(w.fronts) == 0 {
+		if fresh, snapErr := m.plane.Snapshot(ctx); snapErr == nil {
+			snap = fresh
+			w, planErr = m.plan(e, snap)
+		}
+	}
 	h := ownedView(snap, e.ID, w.device)
 
 	addRules, delRules := diff(w.rules, h.rules)

@@ -40,9 +40,12 @@ func TestMarkedExitReportsNoDeviceWhileContained(t *testing.T) {
 	if err := manager.Ensure(ctx, uplinkRow(1)); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
+	// The device is gone AND the provider will not give it back, which is what
+	// keeps it gone: a reconcile that can re-dial re-routes it, by design.
 	kernel.DelLink(egress.Uplink(1))
-	if err := manager.Ensure(ctx, uplinkRow(1)); err != nil {
-		t.Fatalf("Ensure with the device gone: %v", err)
+	driver.dialFails = true
+	if err := manager.Ensure(ctx, uplinkRow(1)); err == nil {
+		t.Fatal("Ensure hid a provider that refused the handshake")
 	}
 
 	routed, err := manager.MarkedExit(ctx, 1)

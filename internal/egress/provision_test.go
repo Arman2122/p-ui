@@ -2,6 +2,7 @@ package egress_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/egress"
@@ -17,6 +18,9 @@ type fakeUplink struct {
 	kernel        *egtest.Kernel
 	provisioned   []int
 	deprovisioned []int
+	// dialFails models a provider that cannot be reached: the call is made and
+	// no device comes up, which is the only way the device stays gone.
+	dialFails bool
 }
 
 func (f *fakeUplink) Type() string { return "fake-uplink" }
@@ -27,6 +31,9 @@ func (f *fakeUplink) Fill(e egress.Egress) (egress.Fill, error) {
 
 func (f *fakeUplink) Provision(_ context.Context, e egress.Egress) error {
 	f.provisioned = append(f.provisioned, e.ID)
+	if f.dialFails {
+		return errors.New("fake-uplink: the provider refused the handshake")
+	}
 	f.kernel.AddLink(egress.Uplink(e.ID))
 	return nil
 }
@@ -122,5 +129,47 @@ func TestDisabledUplinkStopsDialling(t *testing.T) {
 
 	if len(driver.deprovisioned) == 0 {
 		t.Fatal("a disabled uplink must stop dialling")
+	}
+}
+
+/*
+A just-created uplink is routed on the pass that creates it.
+
+Ensure takes its Snapshot, converge provisions the device, and then planned
+against that snapshot -- taken before the device existed. frontIsUp looked for
+the device in stale Links, found nothing, and withheld the front route. So the
+table got its blackhole and the rules got installed, which is a working
+blackhole: every flow the operator just attached was dropped, silently, until
+some later whole-host reconcile happened to re-read the kernel.
+
+The sysctls ride on the same "present" flag, so rp_filter stayed at the host
+default too. F257.
+*/
+func TestANewUplinkIsRoutedOnTheSamePass(t *testing.T) {
+	kernel := egtest.New()
+	driver := &fakeUplink{kernel: kernel}
+	manager := newManager(t, kernel, driver)
+	ctx := context.Background()
+
+	// Through Reconcile, which is the panel's ONE convergence path: every
+	// mutation goes through it, and it plans every row off one snapshot.
+	if err := manager.Reconcile(ctx, []egress.Egress{uplinkRow(4)}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	snap, err := kernel.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	fronts := 0
+	for _, route := range snap.Routes {
+		if route.Table == egress.Table(4) && route.Type == egress.RouteUnicast &&
+			route.Device == egress.Uplink(4) {
+			fronts++
+		}
+	}
+	if fronts == 0 {
+		t.Fatalf("table %d holds no route out of %s, only its blackhole: every flow the rules send there is dropped (routes: %v)",
+			egress.Table(4), egress.Uplink(4), snap.Routes)
 	}
 }

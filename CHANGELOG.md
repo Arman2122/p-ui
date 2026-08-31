@@ -8,6 +8,14 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A new WireGuard uplink is routed by the save that creates it.** Convergence
+  read the host once, then created the device, then planned against that read —
+  so the device it had just made was still absent, and the uplink's table got
+  its blackhole and no route out. Everything attached to it was dropped until
+  the 10-second drift job re-read the host, and the uplink's own rp_filter
+  setting waited for the same pass. A probe run straight after the save read a
+  working uplink as dead.
+
 - **A depleted client on a userless inbound no longer restarts Xray.** The
   http, mixed, tunnel and tun kinds hold no users, so revoking a client on one
   answers "proxy is not a UserManager" -- which the quota job read as a failure
