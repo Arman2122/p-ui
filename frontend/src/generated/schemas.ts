@@ -176,6 +176,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "subClashRules": {
         "type": "string"
       },
+      "subClashShuffleProxies": {
+        "type": "boolean"
+      },
       "subClashURI": {
         "type": "string"
       },
@@ -400,6 +403,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "subClashEnableRouting",
       "subClashPath",
       "subClashRules",
+      "subClashShuffleProxies",
       "subClashURI",
       "subClashUserAgentRegex",
       "subDomain",
@@ -653,6 +657,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "subClashRules": {
         "type": "string"
       },
+      "subClashShuffleProxies": {
+        "type": "boolean"
+      },
       "subClashURI": {
         "type": "string"
       },
@@ -884,6 +891,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "subClashEnableRouting",
       "subClashPath",
       "subClashRules",
+      "subClashShuffleProxies",
       "subClashURI",
       "subClashUserAgentRegex",
       "subDomain",
@@ -1827,6 +1835,8 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "mihomoX25519": {
+        "deprecated": true,
+        "description": "Deprecated: read by nothing, and it never could be. The Clash renderer\nalready emits reality-opts.public-key for every REALITY proxy, so this\ncould only ever have switched correct output off. Still stored and\nreturned; scheduled for removal in the release after v1.1.0. F141.",
         "type": "boolean"
       },
       "muxParams": {},
@@ -1874,6 +1884,8 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "shuffleHost": {
+        "deprecated": true,
+        "description": "Deprecated: read by nothing. Shuffling is a property of the proxy LIST,\nnot of one member of it, so a per-host flag could not express it; the\nfeature now lives in the subscription setting subClashShuffleProxies.\nStill stored and returned; scheduled for removal in the release after\nv1.1.0. F141.",
         "type": "boolean"
       },
       "sni": {
@@ -2007,6 +2019,8 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "mihomoX25519": {
+        "deprecated": true,
+        "description": "Deprecated: read by nothing; the Clash renderer already emits\nreality-opts.public-key for every REALITY proxy. See model.Host. F141.",
         "type": "boolean"
       },
       "muxParams": {
@@ -2053,6 +2067,8 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "shuffleHost": {
+        "deprecated": true,
+        "description": "Deprecated: read by nothing; shuffling moved to the subscription setting\nsubClashShuffleProxies, because order belongs to the list. See model.Host. F141.",
         "type": "boolean"
       },
       "sni": {

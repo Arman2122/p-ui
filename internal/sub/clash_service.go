@@ -2,6 +2,7 @@ package sub
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/goccy/go-json"
@@ -13,13 +14,19 @@ import (
 )
 
 type SubClashService struct {
-	enableRouting bool
-	clashRules    string
-	SubService    *SubService
+	enableRouting  bool
+	clashRules     string
+	shuffleProxies bool
+	SubService     *SubService
 }
 
-func NewSubClashService(enableRouting bool, clashRules string, subService *SubService) *SubClashService {
-	return &SubClashService{enableRouting: enableRouting, clashRules: clashRules, SubService: subService}
+func NewSubClashService(enableRouting bool, clashRules string, shuffleProxies bool, subService *SubService) *SubClashService {
+	return &SubClashService{
+		enableRouting:  enableRouting,
+		clashRules:     clashRules,
+		shuffleProxies: shuffleProxies,
+		SubService:     subService,
+	}
 }
 
 func (s *SubClashService) GetClash(subId string, host string) (string, string, error) {
@@ -92,6 +99,20 @@ func (s *SubClashService) GetClash(subId string, host string) (string, string, e
 		if name, ok := proxy["name"].(string); ok && name != "" {
 			proxyNames = append(proxyNames, name)
 		}
+	}
+	/*
+		Shuffled before DIRECT is appended, so the escape hatch stays last where
+		an operator expects it -- and the group only, never the proxies list: a
+		client diffing its saved profile would otherwise see every entry move on
+		a fetch that changed nothing.
+
+		math/rand/v2 and not crypto/rand: this decides display and pick order,
+		not a secret, and a per-fetch reseed is exactly what is wanted. F141.
+	*/
+	if s.shuffleProxies {
+		rand.Shuffle(len(proxyNames), func(i, j int) {
+			proxyNames[i], proxyNames[j] = proxyNames[j], proxyNames[i]
+		})
 	}
 	proxyNames = append(proxyNames, "DIRECT")
 

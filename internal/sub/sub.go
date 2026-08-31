@@ -209,6 +209,11 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 		SubClashRules = ""
 	}
 
+	SubClashShuffleProxies, err := s.settingService.GetSubClashShuffleProxies()
+	if err != nil {
+		SubClashShuffleProxies = false
+	}
+
 	SubTitle, err := s.settingService.GetSubTitle()
 	if err != nil {
 		SubTitle = ""
@@ -327,6 +332,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 		WithSUBJsonFinalMask(SubJsonFinalMask),
 		WithSUBClashEnableRouting(SubClashEnableRouting),
 		WithSUBClashRules(SubClashRules),
+		WithSUBClashShuffleProxies(SubClashShuffleProxies),
 		WithSUBTitle(SubTitle),
 		WithSUBSupportURL(SubSupportUrl),
 		WithSUBProfileURL(SubProfileUrl),

@@ -1253,6 +1253,8 @@
       "subIncyRoutingRulesDesc": "لینک مسیریابی Incy که به بدنه اشتراک افزوده می‌شود، مثلاً incy://routing/onadd/<base64>. (فقط برای Incy)",
       "subClashEnableRouting": "فعال‌سازی مسیریابی",
       "subClashEnableRoutingDesc": "قوانین مسیریابی سراسری Clash/Mihomo را در اشتراک‌های YAML تولیدشده وارد کن.",
+      "subClashShuffleProxies": "بهم‌ریختن ترتیب پراکسی‌ها",
+      "subClashShuffleProxiesDesc": "ترتیب گروه پراکسی را در هر بار دریافت اشتراک تصادفی کن، تا همه‌ی کلاینت‌ها روی همان میزبانی که اول می‌آید جمع نشوند. گزینه‌ی DIRECT آخر می‌ماند.",
       "subClashRoutingRules": "قوانین مسیریابی سراسری",
       "subClashRoutingRulesDesc": "قوانین Clash/Mihomo که پیش از MATCH,PROXY به ابتدای هر اشتراک YAML افزوده می‌شوند.",
       "subListen": "آدرس آی‌پی",

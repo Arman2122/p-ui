@@ -1209,8 +1209,19 @@ type Host struct {
 	ExcludeFromSubTypes []string `json:"excludeFromSubTypes" form:"excludeFromSubTypes" gorm:"serializer:json;column:exclude_from_sub_types"`
 
 	MihomoIpVersion string `json:"mihomoIpVersion" form:"mihomoIpVersion" gorm:"column:mihomo_ip_version" validate:"omitempty,oneof=dual ipv4 ipv6 ipv4-prefer ipv6-prefer"`
-	MihomoX25519    bool   `json:"mihomoX25519" form:"mihomoX25519" gorm:"column:mihomo_x25519"`
-	ShuffleHost     bool   `json:"shuffleHost" form:"shuffleHost" gorm:"column:shuffle_host"`
+
+	// Deprecated: read by nothing, and it never could be. The Clash renderer
+	// already emits reality-opts.public-key for every REALITY proxy, so this
+	// could only ever have switched correct output off. Still stored and
+	// returned; scheduled for removal in the release after v1.1.0. F141.
+	MihomoX25519 bool `json:"mihomoX25519" form:"mihomoX25519" gorm:"column:mihomo_x25519"`
+
+	// Deprecated: read by nothing. Shuffling is a property of the proxy LIST,
+	// not of one member of it, so a per-host flag could not express it; the
+	// feature now lives in the subscription setting subClashShuffleProxies.
+	// Still stored and returned; scheduled for removal in the release after
+	// v1.1.0. F141.
+	ShuffleHost bool `json:"shuffleHost" form:"shuffleHost" gorm:"column:shuffle_host"`
 
 	NodeGuids []string `json:"nodeGuids,omitempty" form:"nodeGuids" gorm:"serializer:json;column:node_guids"`
 

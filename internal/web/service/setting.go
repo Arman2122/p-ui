@@ -112,6 +112,7 @@ var defaultValueMap = map[string]string{
 	"subClashPath":                "/clash/",
 	"subClashURI":                 "",
 	"subClashEnableRouting":       "false",
+	"subClashShuffleProxies":      "false",
 	"subClashRules":               "",
 	"subJsonMux":                  "",
 	"subJsonRules":                "",
@@ -876,6 +877,19 @@ func (s *SettingService) GetSubClashURI() (string, error) {
 
 func (s *SettingService) GetSubClashEnableRouting() (bool, error) {
 	return s.getBool("subClashEnableRouting")
+}
+
+/*
+GetSubClashShuffleProxies: whether the Clash proxy group's order is shuffled on
+every fetch.
+
+Order is what a mihomo group acts on -- a url-test or fallback group takes the
+first entry that works -- so a fixed order sends every client to whichever host
+happens to sort first. Shuffling spreads them without the operator maintaining
+anything. Mirrors mihomo's own shuffle-proxies-order. F141.
+*/
+func (s *SettingService) GetSubClashShuffleProxies() (bool, error) {
+	return s.getBool("subClashShuffleProxies")
 }
 
 func (s *SettingService) GetSubClashRules() (string, error) {

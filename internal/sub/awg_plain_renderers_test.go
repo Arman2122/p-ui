@@ -65,7 +65,7 @@ func TestPlainRenderersOmitAnObfuscatedAwgInbound(t *testing.T) {
 	plain := seedAwgSubscription(t, "plainsub", 51831, "awg-plain", false)
 
 	t.Run("clash", func(t *testing.T) {
-		clash := NewSubClashService(false, "", NewSubService(""))
+		clash := NewSubClashService(false, "", false, NewSubService(""))
 		for _, tc := range []struct {
 			name    string
 			subId   string
