@@ -322,6 +322,18 @@ func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.
 			}
 		}
 		if inner, ok := tlsSettings["settings"].(map[string]any); ok {
+			/*
+				The inbound-level allowInsecure is honoured HERE and nowhere else,
+				which is deliberate rather than an oversight. The panel's form does
+				not offer it, streamData drops it, no raw link emits it, and
+				xray-core replaced it with verifyPeerCertByName -- so nothing the
+				panel writes can set it. What can still carry it is a row from an
+				older build, and turning certificate verification back on for one
+				would break a self-signed deployment that has been working.
+
+				Setting it per host is the supported way, and that one reaches both
+				formats. Whether to drop this arm is OPEN-DECISIONS §10. F025.
+			*/
 			if insecure, ok := inner["allowInsecure"].(bool); ok && insecure {
 				proxy["skip-cert-verify"] = true
 			}

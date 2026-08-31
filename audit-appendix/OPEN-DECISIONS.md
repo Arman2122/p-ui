@@ -123,6 +123,30 @@ and would give the client form a reason for greying those kinds out that is not
 a protocol branch. Leaving it costs one string match that a reworded upstream
 error would break — which the test pins, so it breaks loudly.
 
+## 10. The legacy inbound-level allowInsecure (F025's residual)
+
+A Hysteria inbound can carry `tlsSettings.settings.allowInsecure`, and exactly
+one renderer honours it: the Clash proxy's `skip-cert-verify`. The raw link does
+not emit it, the frontend's link generator does not (its own comment says the
+field is not on the schema), `streamData` drops it before every other protocol
+sees it, and xray-core replaced it with `verifyPeerCertByName`. The panel's form
+cannot set it.
+
+So the only rows that carry it are ones an older build wrote, and for those the
+two subscription formats disagree: Clash skips certificate verification, the raw
+link does not.
+
+Setting it **per host** is the supported way and reaches both formats — that half
+of F025 is fixed and shipped.
+
+**The question:** drop the Clash arm, or keep it? Dropping makes the panel
+consistent with every decision it has already made about this key, and turns
+certificate verification back on for any legacy row that has it — which breaks a
+self-signed deployment that has been working, silently, in the direction that
+looks like a network fault. Keeping it leaves one renderer honouring a field
+nothing else does. Neither is reinterpreting the operator's data quietly, which
+is why this is here rather than decided.
+
 ---
 
 ## Answered, 2026-08-31
@@ -143,4 +167,4 @@ error would break — which the test pins, so it breaks loudly.
   offering limitIp and online status for kinds that cannot back them.
 - **Order of work — the decisions above come before tier 3.**
 
-Still open: items 3b (F141) and 3 (F319) below, plus 4 through 9.
+Still open: items 3b (F141) and 3 (F319) below, plus 4 through 10.
