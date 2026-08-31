@@ -2892,8 +2892,15 @@ func (s *SubService) endedEmails(emails []string) map[string]struct{} {
 	if len(emails) == 0 {
 		return out
 	}
+	db := database.GetDB()
+	if db == nil {
+		// The page renders without the "ended" tag rather than panicking. Only a
+		// caller with no database reaches this -- BuildPageData is otherwise
+		// reachable from a renderer test that never opened one.
+		return out
+	}
 	var rows []model.ClientRecord
-	if err := database.GetDB().Model(&model.ClientRecord{}).
+	if err := db.Model(&model.ClientRecord{}).
 		Where("email IN ? AND enable = ?", emails, false).
 		Find(&rows).Error; err != nil {
 		logger.Warning("SubService - endedEmails:", err)
