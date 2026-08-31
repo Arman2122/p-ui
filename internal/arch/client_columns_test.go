@@ -36,6 +36,9 @@ var frozenClientRecordFields = []string{
 	"Id",
 	"KeepAlive",
 	"LimitIP",
+	// A lifecycle marker, not a credential: who created this client, read only
+	// by the LDAP sweep. The freeze is here to stop per-core CREDENTIALS.
+	"Origin",
 	"Password",
 	"PreSharedKey",
 	"PrivateKey",

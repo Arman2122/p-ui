@@ -1045,9 +1045,29 @@ type ClientRecord struct {
 	// Owned solely by the node-snapshot sweep, which soft-orphans instead of
 	// deleting; orphans from any other cause stay at zero and are never reaped.
 	SyncOrphanedAt int64 `json:"-" gorm:"column:sync_orphaned_at;default:0"`
+	/*
+		Origin names what created this client, and only the LDAP sweep reads it:
+		"ldap" for a row that sync created, "" for every other row and for every
+		row that predates the column.
+
+		A lifecycle marker like SyncOrphanedAt above, NOT a credential -- which is
+		why it may join the frozen column set that exists to stop per-core
+		credentials landing here. Left out of MergeClientRecord for the same
+		reason: who created a client is the master's own fact, and a node
+		snapshot has no opinion on it.
+
+		A string rather than a bool so an origin added later ("scim", "api") is a
+		value and not a second column, and so the zero value is honestly "unknown"
+		rather than a claim. F372.
+	*/
+	Origin string `json:"-" gorm:"column:origin;default:''"`
 }
 
 func (ClientRecord) TableName() string { return "clients" }
+
+// ClientOriginLDAP is the one origin anything writes today. A constant because
+// the sweep's predicate and the stamp must never drift on the spelling.
+const ClientOriginLDAP = "ldap"
 
 type ClientGroup struct {
 	Id        int    `json:"id" gorm:"primaryKey;autoIncrement"`

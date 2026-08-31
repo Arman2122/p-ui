@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	ldaputil "github.com/Arman2122/p-ui/internal/util/ldap"
@@ -281,6 +282,7 @@ func (j *LdapSyncJob) createClients(newClients []model.Client, inboundIds []int,
 	tagList := strings.Join(tags, ",")
 	created := 0
 	restartNeeded := false
+	mine := make([]string, 0, len(newClients))
 	for _, c := range newClients {
 		nr, err := j.clientService.Create(&j.inboundService, &service.ClientCreatePayload{Client: c, InboundIds: inboundIds})
 		if err != nil {
@@ -288,6 +290,7 @@ func (j *LdapSyncJob) createClients(newClients []model.Client, inboundIds []int,
 			continue
 		}
 		created++
+		mine = append(mine, c.Email)
 		if nr {
 			restartNeeded = true
 		}
@@ -295,10 +298,60 @@ func (j *LdapSyncJob) createClients(newClients []model.Client, inboundIds []int,
 	if created == 0 {
 		return
 	}
+	markLdapOrigin(mine)
 	logger.Infof("LDAP auto-create: %d clients for %s", created, tagList)
 	if restartNeeded {
 		j.xrayService.SetToNeedRestart()
 	}
+}
+
+/*
+markLdapOrigin records that the sync created these clients, so the sweep can
+tell them from the ones an admin made by hand.
+
+Stamped HERE and not where the row is written: SyncInbound is the one path that
+creates a clients row and it serves every caller, so threading an origin through
+it would tag admin-created rows too. This is the same shape as the node-snapshot
+sweep owning sync_orphaned_at -- the job that owns the lifecycle owns the marker.
+
+`origin = ”` is the whole guard. ClientService.Create REUSES an existing
+identity when the email is already taken, so a hand-made client re-added to an
+LDAP inbound comes back through here -- and converting it to LDAP-owned would be
+adoption, which is not what was asked for. F372.
+*/
+func markLdapOrigin(emails []string) {
+	if len(emails) == 0 {
+		return
+	}
+	db := database.GetDB()
+	if db == nil {
+		return
+	}
+	for _, batch := range chunkStrings(emails, ldapSQLInChunk) {
+		if err := db.Model(&model.ClientRecord{}).
+			Where("email IN ? AND origin = ?", batch, "").
+			Update("origin", model.ClientOriginLDAP).Error; err != nil {
+			// Not fatal: an unstamped client is one the sweep will refuse to
+			// touch, which is the safe direction.
+			logger.Warning("LDAP sync: could not record which clients it created:", err)
+			return
+		}
+	}
+}
+
+// ldapSQLInChunk keeps an IN list off the driver's parameter ceiling, the same
+// bound every other batched query in the panel uses.
+const ldapSQLInChunk = 400
+
+func chunkStrings(all []string, size int) [][]string {
+	if size <= 0 || len(all) <= size {
+		return [][]string{all}
+	}
+	out := make([][]string, 0, (len(all)+size-1)/size)
+	for start := 0; start < len(all); start += size {
+		out = append(out, all[start:min(start+size, len(all))])
+	}
+	return out
 }
 
 func (j *LdapSyncJob) batchSetEnable(ib *model.Inbound, emails []string, enable bool) {
@@ -357,6 +410,22 @@ func (j *LdapSyncJob) deleteClientsNotInLDAP(inboundTag string, ldapEmails map[s
 			}
 		}
 
+		/*
+			And keep the ones LDAP did not create.
+
+			The set above is "every client on this inbound whose email the
+			directory did not return", which is every hand-made account on an
+			LDAP-managed inbound: a contractor, a founder's own client, a test
+			identity. Off-boarding was detaching all of them from every configured
+			inbound on the first sweep -- silently, since the log line reads the
+			same as an intended removal.
+
+			Only a client this job created is the sweep's to take. Everything
+			else is named in the log so an operator watching an off-boarding can
+			see why an account survived it. F372.
+		*/
+		toDelete = j.ldapCreatedOnly(ib.Tag, toDelete)
+
 		if len(toDelete) == 0 {
 			continue
 		}
@@ -387,6 +456,55 @@ func (j *LdapSyncJob) deleteClientsNotInLDAP(inboundTag string, ldapEmails map[s
 	}
 }
 
+/*
+ldapCreatedOnly narrows a candidate set to the clients this job created.
+
+Fails CLOSED, which is the opposite of most guards here and deliberate: a
+question that could not be answered must not authorise a detach. An unreadable
+table means nothing is swept this pass and the next one re-decides, where the
+other direction would detach every hand-made account on the inbound.
+*/
+func (j *LdapSyncJob) ldapCreatedOnly(tag string, candidates []model.Client) []model.Client {
+	if len(candidates) == 0 {
+		return nil
+	}
+	db := database.GetDB()
+	if db == nil {
+		return nil
+	}
+	emails := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		emails = append(emails, c.Email)
+	}
+	mine := make(map[string]struct{}, len(emails))
+	for _, batch := range chunkStrings(emails, ldapSQLInChunk) {
+		var found []string
+		if err := db.Model(&model.ClientRecord{}).
+			Where("email IN ? AND origin = ?", batch, model.ClientOriginLDAP).
+			Pluck("email", &found).Error; err != nil {
+			logger.Warningf("LDAP auto-delete skipped for %s: cannot tell which clients the sync created: %v", tag, err)
+			return nil
+		}
+		for _, email := range found {
+			mine[email] = struct{}{}
+		}
+	}
+	out := make([]model.Client, 0, len(candidates))
+	kept := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if _, ok := mine[c.Email]; ok {
+			out = append(out, c)
+			continue
+		}
+		kept = append(kept, c.Email)
+	}
+	if len(kept) > 0 {
+		logger.Infof("LDAP auto-delete kept %d client(s) on %s that the sync did not create: %s",
+			len(kept), tag, strings.Join(kept, ", "))
+	}
+	return out
+}
+
 // ldapChanges is one tick's decision, with no database or directory in it so
 // it can be driven by a test; Run cannot be, because it needs a live directory.
 type ldapChanges struct {
@@ -406,7 +524,13 @@ minute later, forever, with no workaround.
 
 The DISABLE direction stays panel-wide on purpose. Narrowing it fails OPEN:
 an off-boarded account would keep working wherever it sits outside the
-configured tags. That is a scope decision, not a repair.
+configured tags.
+
+That was a scope question rather than a repair, and it is settled: the operator
+granted LDAP authority to disable, panel-wide, when they answered Q2. Deleting
+is the direction that got a limit instead -- only clients the sync created, see
+ldapCreatedOnly -- because disabling an account an admin made by hand is
+reversible in one click and detaching it from every inbound is not. F369 / F372.
 */
 func planLdapChanges(
 	flags map[string]bool,

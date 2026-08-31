@@ -8,6 +8,21 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **LDAP auto-delete no longer detaches clients you made by hand.** Its rule was
+  "every client on this inbound the directory did not return" — which on an
+  LDAP-managed inbound is every contractor, test identity and founder's own
+  account. The first off-boarding sweep detached all of them from every
+  configured inbound, and the log line read exactly like an intended removal.
+  The panel now records which clients the sync created, and only those are
+  swept; anything kept is named in the log.
+  **What you will notice after upgrading:** every client that already exists is
+  treated as hand-made and will never be auto-deleted, including ones LDAP
+  really did create. Marking them by matching today's directory would be
+  guessing, and guessing wrong deletes an account. Clients the sync creates
+  from now on are swept normally.
+  **Unchanged:** LDAP still disables an off-boarded user panel-wide. Disabling
+  is one click to undo; detaching from every inbound is not.
+
 - **Routing rules can match domains on kernel WireGuard and AmneziaWG.** "Send
   google.com through this exit" now works for an L3 inbound, not only for an
   Xray one — the panel makes the inbound read the name out of the connection

@@ -169,11 +169,20 @@ is waiting on them any more; what is left is work.
   One deliberate exception: `refuseUnenforcedAccounts` is NOT worsens-only.
   Forcing the fix on operator contact is that guard's whole repair path, its own
   test says so, and applying Q1 there made that test fail. Ledger L32.
-- **Q2 — LDAP may disable, and gets a provenance column.** Off-boarding now
-  reaches the panel, and a column records which clients LDAP created so the
-  delete sweep can never take a hand-made one. Needs a migration. Unblocks
-  **F372** and F369's remaining half. Adoption of pre-existing identities was
-  NOT taken.
+- **Q2 — SHIPPED. LDAP may disable, and has a provenance column.** The disable
+  direction needed no code: it was already panel-wide, and the answer ratified
+  that rather than narrowing it — the comment says so now. **F369** closed.
+
+  The sweep got the limit instead. `clients.origin` records what created a row,
+  stamped by the LDAP job itself (SyncInbound serves every caller, so stamping
+  there would tag admin-made rows too) and read by the sweep, which now fails
+  CLOSED: a question it cannot answer authorises no detach. **F372** closed.
+
+  Two things worth knowing. Adoption was declined, so there is NO backfill:
+  every pre-existing row is grandfathered as hand-made forever, which the
+  changelog states plainly. And the finding says "delete" where the code says
+  DETACH — the sweep unlinks from the inbound and never removes the clients row;
+  the account survives and loses its access.
 - **Q10 — converge: the panel adopts the node's tag.** Refusing would clobber a
   serving node-local inbound at the next sync. Needs runtime→service plumbing and
   a UNIQUE(tag) guard so adoption cannot collide. This is all of **F182**.
