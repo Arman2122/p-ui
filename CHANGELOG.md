@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A broken Xray template is refused when you save it, not at the next
+  restart.** The save built every outbound and nothing else, so a routing rule,
+  a dns block or a policy section the core cannot load stored as a success — and
+  the panel then refused every reconcile from then on, over a config it had told
+  you was fine. The save now asks the core itself, the same load a start
+  performs.
+  **A template that is already rejected stays editable**, so it can be repaired
+  through the panel rather than the database. As with every save-time refusal
+  added by this campaign, only an edit that *introduces* the breakage is
+  refused.
+
 - **A tunnel inbound with no destination is refused instead of forwarding to
   itself.** With follow-redirect off and no rewrite address, xray substitutes
   127.0.0.1 and the connection's own port — so the inbound dials itself, and one
