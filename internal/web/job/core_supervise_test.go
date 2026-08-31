@@ -9,7 +9,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
-	"github.com/Arman2122/p-ui/internal/xray"
+	"github.com/Arman2122/p-ui/internal/presence"
 )
 
 /*
@@ -108,18 +108,23 @@ func TestCoreSuperviseJobKeepsIdleSidecarTagsActive(t *testing.T) {
 	Cores = registry
 	t.Cleanup(func() { Cores = nil })
 
-	process := xray.NewProcess(&xray.Config{})
-	xray.GetManager().Replace(process)
-	t.Cleanup(func() { xray.GetManager().Replace(nil) })
+	/*
+		No Xray process is started, and that is the point.
 
+		This job supervises every core, and the presence set it writes into used
+		to live on xray.Process — so on a panel serving only MTProto or kernel
+		WireGuard, RefreshLocalOnlineClients was a silent no-op and every client
+		and inbound read as offline forever. Building a process here would have
+		hidden exactly that. F089.
+	*/
 	NewCoreSuperviseJob(cores.PanelConvergedCore).Run()
 
-	active := process.GetLocalActiveInbounds()
+	active := presence.Shared().LocalActiveTags()
 	if !slices.Contains(active, "inbound-mtproto-idle") {
-		t.Fatalf("localActiveInbounds = %v, want it to contain the idle sidecar's tag", active)
+		t.Fatalf("active tags = %v, want the idle sidecar's tag, with no Xray running", active)
 	}
-	if online := process.GetLocalOnlineClients(); len(online) != 0 {
-		t.Errorf("localOnlineClients = %v, want none — this job reports tags, not emails", online)
+	if online := presence.Shared().LocalOnline(); len(online) != 0 {
+		t.Errorf("online = %v, want none — this job reports tags, not emails", online)
 	}
 }
 
