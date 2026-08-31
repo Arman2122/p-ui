@@ -1112,9 +1112,25 @@ update_p-ui() {
     echo -e "${green}Changing owner...${plain}"
     chown -R root:root ${pui_folder} > /dev/null 2>&1
 
-    # The same optional-by-design build install.sh runs. Without it an install
-    # that predates AmneziaWG never registers the module, however often it updates.
-    if [[ -x ${pui_folder}/awg-dkms.sh && -d ${pui_folder}/amneziawg/src ]]; then
+    # The new release's AmneziaWG payload replaces the installed one FIRST.
+    #
+    # This block used to build from ${pui_folder} without ever refreshing it, so
+    # a panel installed before AmneziaWG shipped could never gain it however
+    # often it updated -- there was nothing there to build -- and a panel that
+    # did have it kept compiling last release's source forever. The working
+    # directory here is the extracted archive, so the new copy is beside us.
+    if [[ -f awg-dkms.sh && -d amneziawg/src ]]; then
+        cp -f awg-dkms.sh ${pui_folder}/awg-dkms.sh > /dev/null 2>&1
+        rm -rf ${pui_folder}/amneziawg > /dev/null 2>&1
+        cp -a amneziawg ${pui_folder}/amneziawg > /dev/null 2>&1
+    fi
+
+    # The same optional-by-design build install.sh runs.
+    #
+    # -f, not -x: see install.sh. An upgrade is also the repair path for a host
+    # whose tarball delivered the script non-executable, so the chmod has to
+    # happen whatever mode it is in now.
+    if [[ -f ${pui_folder}/awg-dkms.sh && -d ${pui_folder}/amneziawg/src ]]; then
         chmod +x ${pui_folder}/awg-dkms.sh > /dev/null 2>&1
         echo -e "${yellow}Building the AmneziaWG kernel module, which takes a minute${plain}"
         if ! ${pui_folder}/awg-dkms.sh install ${pui_folder}/amneziawg; then

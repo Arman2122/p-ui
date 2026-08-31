@@ -1656,7 +1656,13 @@ install_p-ui() {
     # toolchain, and a host that cannot build it must still get a working panel
     # with every other protocol. So this reports and continues rather than
     # failing the install, and the panel's own Preflight disables that one core.
-    if [[ -x awg-dkms.sh && -d amneziawg/src ]]; then
+    #
+    # Gated on the file EXISTING, never on it being executable. The tarball is
+    # built with `cp`, which carries the checked-out mode, so a script tracked
+    # 644 arrives 644 -- and `-x` was then false on every host, forever. The
+    # chmod that would have fixed it sat inside the block that gate guarded.
+    # p-ui.sh is tracked 644 too and works, because its chmod is unconditional.
+    if [[ -f awg-dkms.sh && -d amneziawg/src ]]; then
         mkdir -p ${pui_folder}
         cp -a amneziawg ${pui_folder}/amneziawg
         cp -f awg-dkms.sh ${pui_folder}/awg-dkms.sh

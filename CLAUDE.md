@@ -24,8 +24,13 @@ file locations when it can answer in one hop.
   falls back to a process restart on older binaries. A client's panel-side
   traffic reset also calls `POST /secrets/{name}/reset-quota` so a renewed client
   is not re-blocked by the sidecar's quota counter.
-- Platform: Linux only — Ubuntu 22.04/24.04/26.04 and Debian 12+, systemd + apt
-  + iptables. No Windows, no Docker, no other distro families.
+- Platform: Linux only — systemd + iptables. Ubuntu 22.04/24.04/26.04 and
+  Debian 12+ are the VERIFIED targets: `install.sh` and `update.sh` are apt-only,
+  and that is what CI and the test VM exercise. No Windows, no Docker.
+  The one exception is `awg-dkms.sh`, which detects the host's package manager
+  (apt / dnf / yum / pacman / zypper / apk) so the AmneziaWG module can build on
+  a host the installer itself does not yet target. Alpine is refused by name —
+  musl ships no DKMS-capable kernel tree, so naming that beats a failed install.
 - Storage: PostgreSQL only. `PUI_DB_DSN` is REQUIRED; the panel fails fast at
   startup without it. No SQLite, no `PUI_DB_TYPE`. Builds are pure Go —
   `CGO_ENABLED=0`, statically linked, no C toolchain.

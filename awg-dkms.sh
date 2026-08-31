@@ -40,23 +40,76 @@ source_fingerprint() {
 
 STAMP_FILE="/var/lib/misc/amneziawg-source.sha256"
 
+# package_family names the installer this host uses. Detected from the tool that
+# is actually present rather than from /etc/os-release: a derivative reports its
+# own ID while carrying its parent's package manager, and it is the manager we
+# need to drive.
+package_family() {
+    command -v apt-get >/dev/null 2>&1 && { echo apt; return 0; }
+    command -v dnf     >/dev/null 2>&1 && { echo dnf; return 0; }
+    command -v yum     >/dev/null 2>&1 && { echo yum; return 0; }
+    command -v pacman  >/dev/null 2>&1 && { echo pacman; return 0; }
+    command -v zypper  >/dev/null 2>&1 && { echo zypper; return 0; }
+    command -v apk     >/dev/null 2>&1 && { echo apk; return 0; }
+    echo unknown
+}
+
 ensure_build_deps() {
-    local missing=()
-    command -v dkms >/dev/null 2>&1 || missing+=(dkms)
-    command -v gcc >/dev/null 2>&1 || missing+=(build-essential)
-    [[ -d "/lib/modules/$(uname -r)/build" ]] || missing+=("linux-headers-$(uname -r)")
-    [[ ${#missing[@]} -eq 0 ]] && return 0
+    [[ -d "/lib/modules/$(uname -r)/build" ]] && command -v dkms >/dev/null 2>&1         && command -v gcc >/dev/null 2>&1 && return 0
 
-    yellow "Installing build prerequisites: ${missing[*]}"
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq || true
-    # Not fatal on its own: the header check below names the real problem, and a
-    # host whose running kernel has no matching headers package is worth naming.
-    apt-get install -y -qq "${missing[@]}" || true
+    local family
+    family="$(package_family)"
+    yellow "Installing the AmneziaWG build prerequisites with ${family}"
 
+    case "$family" in
+        apt)
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq || true
+            # linux-headers-$(uname -r) on Debian/Ubuntu; the generic metapackage
+            # is deliberately not used, since it can name a kernel not running.
+            apt-get install -y -qq dkms build-essential "linux-headers-$(uname -r)" || true
+            ;;
+        dnf|yum)
+            # kernel-devel is version-matched by uname -r on the RHEL family, and
+            # elrepo/EPEL carries dkms. Both are attempted; the header check below
+            # is what decides whether it worked.
+            "$family" install -y epel-release >/dev/null 2>&1 || true
+            "$family" install -y dkms gcc make "kernel-devel-$(uname -r)" || true
+            ;;
+        pacman)
+            # Arch names the headers after the kernel package, not the release:
+            # linux-headers for the stock kernel, linux-lts-headers for the LTS one.
+            local arch_headers=linux-headers
+            [[ "$(uname -r)" == *-lts* ]] && arch_headers=linux-lts-headers
+            pacman -Sy --noconfirm --needed dkms base-devel "$arch_headers" || true
+            ;;
+        zypper)
+            zypper --non-interactive install dkms gcc make kernel-devel || true
+            ;;
+        apk)
+            # Alpine is musl and its kernel packages carry no DKMS tree at all.
+            # Naming that is more use than a failed install: the module cannot be
+            # built here, and no amount of package installation changes it.
+            red "Alpine does not ship a DKMS-capable kernel source tree; AmneziaWG cannot be built here."
+            return 1
+            ;;
+        *)
+            red "No supported package manager found (looked for apt-get, dnf, yum, pacman, zypper, apk)."
+            red "Install dkms, a C toolchain and the headers for $(uname -r) by hand, then re-run this script."
+            return 1
+            ;;
+    esac
+
+    # The header tree is the real test, whatever the package manager reported:
+    # every family names its package differently and some exit 0 having installed
+    # headers for a kernel this host is not running.
     if [[ ! -d "/lib/modules/$(uname -r)/build" ]]; then
         red "No kernel headers for $(uname -r); AmneziaWG cannot be built here."
-        red "Install the matching linux-headers package, then: ${pui_folder:-/usr/local/p-ui}/awg-dkms.sh install"
+        red "Install the header package matching the RUNNING kernel, then: ${pui_folder:-/usr/local/p-ui}/awg-dkms.sh install"
+        return 1
+    fi
+    if ! command -v dkms >/dev/null 2>&1; then
+        red "dkms is not available on this host after the install attempt; AmneziaWG cannot be registered."
         return 1
     fi
 }
@@ -119,6 +172,29 @@ install_module() {
     echo "$want_fingerprint" > "$STAMP_FILE"
 
     green "AmneziaWG installed and loaded for $(uname -r)"
+    warn_if_not_rebuilt_on_kernel_upgrade
+}
+
+# warn_if_not_rebuilt_on_kernel_upgrade checks the one property that decides
+# whether this survives.
+#
+# A DKMS module is compiled against the running kernel. On the next kernel
+# upgrade the old .ko does not load, and unless DKMS rebuilds it automatically
+# the tunnel simply stops existing after a reboot -- with nothing to say why,
+# because the panel reports the core unavailable exactly as it would on a host
+# that never had it.
+#
+# `dkms status` naming the module against the running kernel is the evidence
+# that registration took. Reported, never fatal: the module IS built and loaded
+# by the time this runs, so a host whose automation is unusual still has a
+# working tunnel today and now knows what to check after a kernel bump.
+warn_if_not_rebuilt_on_kernel_upgrade() {
+    if dkms status -m "$MODULE_NAME" -v "$MODULE_VERSION" 2>/dev/null | grep -q "$(uname -r)"; then
+        return 0
+    fi
+    yellow "AmneziaWG is not registered with DKMS for $(uname -r)."
+    yellow "It works now, but a kernel upgrade will silently remove it. After the next"
+    yellow "kernel change, re-run: ${pui_folder:-/usr/local/p-ui}/awg-dkms.sh install"
 }
 
 remove_module() {
