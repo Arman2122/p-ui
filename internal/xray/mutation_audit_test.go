@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -202,10 +201,6 @@ func TestGetResult(t *testing.T) {
 type errProcessTest string
 
 func (e errProcessTest) Error() string { return string(e) }
-
-func containsString(s []string, v string) bool {
-	return slices.Contains(s, v)
-}
 
 // ---------------------------------------------------------------------------
 // process.go mutation audits (require a real child process; re-invoke the
