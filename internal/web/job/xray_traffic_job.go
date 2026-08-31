@@ -87,11 +87,16 @@ func NewXrayTrafficJob() *XrayTrafficJob {
 // fallback, scales to 10k–20k+ clients per inbound.
 func (j *XrayTrafficJob) Run() {
 	traffics, clientTraffics := collectCoreTraffic()
-	// Xray running with nothing moving is still a poll worth finishing: the
-	// dashboard's online set ages out through the broadcast below.
-	if len(traffics) == 0 && len(clientTraffics) == 0 && !j.xrayService.IsXrayRunning() {
-		return
-	}
+	/*
+		A poll with nothing to add is still a poll. AddTraffic is where the quota
+		and expiry sweep lives, and that sweep is a database predicate: it does not
+		need a core to have reported bytes, or to be running at all.
+
+		Skipping it while Xray was down left every expired client enabled on the
+		cores Xray does not serve -- a kernel WireGuard peer stays connectable
+		because the kernel, not Xray, is serving it. The dashboard's online set
+		ages out through the broadcast below for the same reason. F260.
+	*/
 	var err error
 	needRestart0, clientsDisabled, err := j.inboundService.AddTraffic(traffics, clientTraffics)
 	if err != nil {
