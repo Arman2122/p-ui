@@ -170,7 +170,7 @@ func Plan(in Input) Compiled {
 		}
 
 		tag, pattern := subject.Handle.Tag, PatternProxy
-		if tag != "" && inspectedBy(rules) {
+		if tag != "" && inspectedBy(rules, subject) {
 			/*
 				An internal ingress is an Xray inbound already, and Xray only
 				matches a domain when that inbound sniffs. The panel's own default
@@ -203,7 +203,7 @@ func Plan(in Input) Compiled {
 			out.Kernel = append(out.Kernel, egress.Egress{
 				ID: frontID, Type: frontType, Enable: true, Ingress: []string{subject.Handle.Device},
 			})
-			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: inspectedBy(rules)})
+			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: inspectedBy(rules, subject)})
 			out.NeedsRestart = true
 			// Strictly ahead of this front's own rules: a front is otherwise the one
 			// class of forwarded traffic exempt from the template's private block.
@@ -453,13 +453,29 @@ func socksOutbound(tag string, port int) json.RawMessage {
 	})
 }
 
-// inspectedBy reports whether any enabled rule on this subject needs the front
-// to read the payload. One pass over the rules that will be compiled for it.
-func inspectedBy(rules []Rule) bool {
+/*
+inspectedBy reports whether any rule that will actually COMPILE for this subject
+needs the payload read.
+
+The forbiddenCriterion check is the load-bearing half. A rule can name a subject
+whose core cannot match its criteria -- a domain rule on an mtproto ingress, or
+on a future per-session core that routes by address alone -- and that rule is
+refused as inert further down. Asking for the payload anyway would put a sniffer
+on every connection through that inbound to answer a question no rule will ever
+read, which is a cost paid forever for nothing.
+
+The inert rule is still reported to the operator; this only decides whether the
+core is made to work for it.
+*/
+func inspectedBy(rules []Rule, subject Subject) bool {
 	for _, rule := range rules {
-		if rule.Enable && rule.NeedsInspection() {
-			return true
+		if !rule.Enable || !rule.NeedsInspection() {
+			continue
 		}
+		if _, forbidden := forbiddenCriterion(rule, subject); forbidden {
+			continue
+		}
+		return true
 	}
 	return false
 }
