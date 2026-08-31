@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The client form says which field it rejected.** A bad value raised a
+  page-level toast naming the reason and not the input — across three tabs, of
+  which one is on screen. The field is now marked and the reason sits under it.
+  The numeric limits also had no translations, so a rejected quota, renew
+  period, IP limit or Telegram id came back in Zod's own English.
+
 - **Two admins can add clients through the Telegram bot at the same time.**
   The in-progress client was a set of package-level variables — one draft for
   the whole panel — so two admins running the wizard together wrote into it in
