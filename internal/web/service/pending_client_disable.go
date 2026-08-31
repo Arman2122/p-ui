@@ -78,15 +78,30 @@ func (s *InboundService) applyOneDisable(inboundID int, emails map[string]struct
 		return
 	}
 
+	// The push is staged here and made below, once the writer has released:
+	// runSerializedTx asks for network I/O to stay out of it, and a node that
+	// has gone away would otherwise hold the one traffic writer for its whole
+	// remote timeout. F392.
+	var oldSnapshot, updated *model.Inbound
 	err := runSerializedTx(func(tx *gorm.DB) error {
-		if remote {
-			return s.disableRemoteClients(tx, inboundID, live)
+		before, after, mErr := s.markClientsDisabledInSettings(tx, inboundID, live)
+		if mErr != nil {
+			return mErr
 		}
-		_, _, mErr := s.markClientsDisabledInSettings(tx, inboundID, live)
-		return mErr
+		if remote {
+			oldSnapshot, updated = before, after
+		}
+		return nil
 	})
 	if err != nil {
 		logger.Warning("disableInvalidClients: deferred settings sync failed for inbound", inboundID, ":", err)
+		return
+	}
+	if updated == nil {
+		return
+	}
+	if pushErr := s.pushDisabledClientsToNode(oldSnapshot, updated); pushErr != nil {
+		logger.Warning("disableInvalidClients: node push failed for inbound", inboundID, ":", pushErr)
 	}
 }
 

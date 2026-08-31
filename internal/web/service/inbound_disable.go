@@ -344,24 +344,24 @@ func (s *InboundService) markClientsDisabledInSettings(tx *gorm.DB, inboundID in
 	return &snapshot, &ib, nil
 }
 
-// disableRemoteClients flips the clients off in the inbound's stored settings
-// and pushes the updated inbound to its node, which applies it to its own
-// running Xray. That push is the whole reconcile — restarting the node's Xray
-// afterwards would drop every live connection on the node for nothing (#5740).
-func (s *InboundService) disableRemoteClients(tx *gorm.DB, inboundID int, emails map[string]struct{}) error {
-	oldSnapshot, ib, err := s.markClientsDisabledInSettings(tx, inboundID, emails)
-	if err != nil {
-		return err
-	}
+/*
+pushDisabledClientsToNode sends an inbound whose clients were just flipped off
+to the node that hosts it, which applies it to its own running core. That push
+is the whole reconcile — restarting the node's Xray afterwards would drop every
+live connection on it for nothing (#5740).
 
+Separate from the settings write on purpose. Both used to happen inside one
+runSerializedTx, whose own contract asks for network I/O to stay out: a node
+that had gone away held the single traffic writer for the whole remote timeout,
+and every panel-wide traffic poll and client mutation queued behind it. The
+caller commits first and calls this after. F392.
+*/
+func (s *InboundService) pushDisabledClientsToNode(oldSnapshot, ib *model.Inbound) error {
 	rt, err := s.runtimeFor(ib)
 	if err != nil {
 		return err
 	}
-	if err := rt.UpdateInbound(context.Background(), oldSnapshot, ib); err != nil {
-		return err
-	}
-	return nil
+	return rt.UpdateInbound(context.Background(), oldSnapshot, ib)
 }
 
 /*
