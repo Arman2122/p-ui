@@ -28,6 +28,7 @@ const base: CoreView = {
   clientCredentials: {},
   shaping: {},
   sessionKinds: ['vless'],
+  portlessKinds: [],
 };
 
 const MTPROTO: CoreView = {
@@ -37,6 +38,7 @@ const MTPROTO: CoreView = {
   kinds: ['mtproto'],
   // The point of the whole thing: it serves a kind and reports no sessions.
   sessionKinds: [],
+  portlessKinds: [],
 };
 
 describe('which of a client’s inbounds an IP limit can bite on', () => {

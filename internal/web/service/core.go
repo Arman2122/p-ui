@@ -38,6 +38,16 @@ type CoreView struct {
 		says so instead of accepting a number that does nothing. F120 / F302.
 	*/
 	SessionKinds []string `json:"sessionKinds" example:"[\"vless\",\"wgkernel\"]"`
+	/*
+		PortlessKinds are the kinds that bind no port at all — an Xray TUN device
+		is a kernel interface, not a listener.
+
+		The form asks this instead of asking a protocol list, so it stops
+		demanding a port for one, and the port-conflict check stops counting the
+		stored value as occupied. Asked with no settings on purpose: whether a
+		kind binds anything is not a property of one inbound's configuration. F319.
+	*/
+	PortlessKinds []string `json:"portlessKinds" example:"[\"tun\"]"`
 	// Available is this host's Preflight answer and Unavailable is why not, so a
 	// core the host cannot run is explained rather than silently offered.
 	Available   bool   `json:"available" example:"true"`
@@ -72,10 +82,14 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		// Per CORE, not per kind: Sessions answers for the whole process, so a
 		// core either can report them for everything it serves or for nothing.
 		sessions := make([]string, 0, len(kinds))
+		portless := make([]string, 0, len(kinds))
 		for _, kind := range kinds {
 			names = append(names, string(kind))
 			if bound.Sessions != nil {
 				sessions = append(sessions, string(kind))
+			}
+			if bound.Transports != nil && bound.Transports.Transports(kind, "", "").None {
+				portless = append(portless, string(kind))
 			}
 			if bound.Shape != nil {
 				if selector := bound.Shape.ShapingSelector(kind); selector != core.SelectorNone {
@@ -99,6 +113,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		sort.Strings(names)
 		sort.Strings(exits)
 		sort.Strings(sessions)
+		sort.Strings(portless)
 		unavailable := ""
 		if err := bound.Core.Preflight(ctx); err != nil {
 			unavailable = err.Error()
@@ -112,6 +127,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			ClientCredentials: credentials,
 			Shaping:           shaping,
 			SessionKinds:      sessions,
+			PortlessKinds:     portless,
 			Available:         unavailable == "",
 			Unavailable:       unavailable,
 		})

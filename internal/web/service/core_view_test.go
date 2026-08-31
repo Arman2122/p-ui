@@ -160,45 +160,45 @@ func TestCoreViews(t *testing.T) {
 			reg:  registryOf(t, xray, mtproto),
 			want: `[{"id":"mtproto","titleKey":"cores.mtproto.title","kinds":["mtproto"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":true,"onlineUsers":true,"shareLink":false},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""},` +
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"portlessKinds":[],"available":true,"unavailable":""},` +
 				`{"id":"xray","titleKey":"cores.xray.title","kinds":["shadowsocks","trojan","vless"],` +
 				`"caps":{"userHotAdd":true,"perUserStats":true,"quotaPushdown":false,"onlineUsers":true,"shareLink":false},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "an unanswered capability stays null, never false",
 			reg:  registryOf(t, unanswered),
 			want: `[{"id":"future","titleKey":"cores.future.title","kinds":["future"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "credentials are keyed per kind, and a kind the core skips is absent, not empty",
 			reg:  registryOf(t, declaring),
 			want: `[{"id":"multi","titleKey":"cores.multi.title","kinds":["tun","vless","vmess"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{"vless":["uuid"],"vmess":["uuid","security"]},"shaping":{},"sessionKinds":[],"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "a core this host cannot run says so, and says why, instead of being offered",
 			reg:  registryOf(t, unusable),
 			want: `[{"id":"wgkernel","titleKey":"cores.wgkernel.title","kinds":["wgkernel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":[],"portlessKinds":[],"available":false,"unavailable":"wireguard: no kernel support on this host"}]`,
 		},
 		{
 			name: "only a kind that can terminate a route is offered as an exit",
 			reg:  registryOf(t, exiting),
 			want: `[{"id":"wireguard","titleKey":"cores.wireguard.title","kinds":["wgkernel","wgtunnel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":["wgkernel"],"clientCredentials":{},"shaping":{},"sessionKinds":[],"available":true,"unavailable":""}]`,
+				`"exitKinds":["wgkernel"],"clientCredentials":{},"shaping":{},"sessionKinds":[],"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "a core that can name its live sessions says which kinds an IP limit reaches",
 			reg:  registryOf(t, reporting),
 			want: `[{"id":"wireguard","titleKey":"cores.wireguard.title","kinds":["wgkernel","wgtunnel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["wgkernel","wgtunnel"],"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["wgkernel","wgtunnel"],"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",

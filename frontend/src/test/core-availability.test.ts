@@ -13,6 +13,7 @@ function core(over: Partial<CoreView>): CoreView {
     clientCredentials: {},
     shaping: {},
     sessionKinds: [],
+    portlessKinds: [],
     available: true,
     unavailable: '',
     ...over,

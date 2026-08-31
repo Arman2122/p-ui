@@ -121,13 +121,21 @@ type CredentialDeclarer interface {
 }
 
 /*
-Transports is the L4 footprint one inbound occupies on its port. Both false is
-not a valid answer — a port nothing listens on cannot conflict, and a core that
-returns it would silently disable conflict detection for its own kind.
+Transports is the L4 footprint one inbound occupies on its port.
+
+Both false is not a valid answer: a core that returned it would silently disable
+conflict detection for its own kind, so the port-conflict check reads an empty
+answer as TCP. None is how a kind says it genuinely binds nothing — an Xray TUN
+device is a kernel interface, not a listener — and it is a separate field for
+exactly that reason. Negligence and a deliberate answer must not look alike.
+
+None is exclusive: a kind that binds nothing cannot also bind TCP or UDP, and
+coretest fails a core that answers both. F319.
 */
 type Transports struct {
-	TCP bool
-	UDP bool
+	TCP  bool
+	UDP  bool
+	None bool
 }
 
 /*

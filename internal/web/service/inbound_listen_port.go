@@ -38,6 +38,12 @@ func validateInboundBind(inbound *model.Inbound) error {
 			return common.NewError("listen must be an IP address, or a socket path starting with / or @:", inbound.Listen)
 		}
 	}
+	// A kind that binds no port has none to validate. Asked of the core rather
+	// than of the protocol string, so the rule and the port-conflict check take
+	// the same answer from the same place. F319.
+	if inboundTransports(inbound.Protocol, inbound.StreamSettings, inbound.Settings) == 0 {
+		return nil
+	}
 	if inbound.Port < 1 || inbound.Port > 65535 {
 		return common.NewError("port must be between 1 and 65535, not", inbound.Port)
 	}

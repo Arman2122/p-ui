@@ -360,6 +360,9 @@ export const EXAMPLES: Record<string, unknown> = {
       "vless",
       "vmess"
     ],
+    "portlessKinds": [
+      "tun"
+    ],
     "sessionKinds": [
       "vless",
       "wgkernel"

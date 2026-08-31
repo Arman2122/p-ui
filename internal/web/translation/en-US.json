@@ -671,6 +671,7 @@
         "shareAddrHelp": "Used only when the share address strategy is Custom. Enter a host or IP without a scheme or port.",
         "subSortIndex": "Subscription sort order",
         "subSortIndexHelp": "Position of this inbound's links in subscription output (sub page and client apps). Lower values come first; equal values keep creation order. Does not affect the panel inbound list.",
+        "portNotBound": "This protocol binds no port — a TUN device is a kernel interface, not a listener. The value is stored and nothing listens on it, and no other inbound is refused this port.",
         "shareAddrStrategyOptions": {
           "node": "Node address",
           "listen": "Inbound listen",

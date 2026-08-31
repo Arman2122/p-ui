@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A TUN inbound no longer holds a port it never binds.** An Xray TUN device
+  is a kernel interface, not a listener, but the panel demanded a port for it,
+  counted that value as occupied, and refused a real inbound on it — naming a
+  conflict with something that was not listening. The port field is now optional
+  for a TUN inbound and says why, and the conflict check skips it.
+
 - **A dead node no longer stalls traffic accounting.** When a depleted client
   sat on an inbound a remote node hosts, the push telling that node about it was
   made while holding the single writer every traffic poll and every client edit
