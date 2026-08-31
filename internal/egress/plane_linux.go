@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -304,4 +305,38 @@ func classify(err error) error {
 func (kernelPlane) CanMasquerade(context.Context) bool {
 	_, err := exec.LookPath("nft")
 	return err == nil
+}
+
+/*
+RouterAdvertisedDevices names every interface carrying a route the kernel
+learned from a Router Advertisement.
+
+RTPROT_RA is the kernel's own record of where a route came from, so this asks
+the only question that matters -- is this interface configured by RA -- without
+naming a single device. A WireGuard or AmneziaWG tunnel never has such a route,
+which is what keeps accept_ra=2 away from a client-facing device.
+*/
+func (kernelPlane) RouterAdvertisedDevices(context.Context) ([]string, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, classify(err)
+	}
+	byIndex := make(map[int]string, len(links))
+	for _, l := range links {
+		byIndex[l.Attrs().Index] = l.Attrs().Name
+	}
+	routes, err := netlink.RouteListFiltered(unix.AF_INET6,
+		&netlink.Route{Table: unix.RT_TABLE_MAIN}, netlink.RT_FILTER_TABLE)
+	if err != nil {
+		return nil, classify(err)
+	}
+	var devices []string
+	for _, r := range routes {
+		name := byIndex[r.LinkIndex]
+		if r.Protocol != unix.RTPROT_RA || name == "" || slices.Contains(devices, name) {
+			continue
+		}
+		devices = append(devices, name)
+	}
+	return devices, nil
 }
