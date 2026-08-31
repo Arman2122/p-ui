@@ -90,3 +90,82 @@ func TestUpdateOnlyClaimsHttpsWhenACertificateWasInstalled(t *testing.T) {
 		t.Error("the access URL hardcodes https, so the branch that means to report http cannot")
 	}
 }
+
+/*
+And a custom certificate the panel REFUSES must not raise the scheme either.
+
+Cases 1 and 2 branch on their issuer's exit status; case 3 discarded `p-ui
+cert`'s. That binary refuses a key that does not match its certificate, an
+expired file, an unreadable PEM -- and the installer printed a green tick, set
+https and restarted, so the panel served plain HTTP on an https URL the operator
+had just been told was ready, with the reason thrown away to /dev/null.
+
+The operator's answer to the open question was re-prompt, so the failure loops
+back for new paths with an explicit way out to no-SSL. Non-interactive gives up
+instead: `read` returns EOF there, and a retry loop around one would spin.
+*/
+func TestARefusedCustomCertificateDoesNotClaimHttps(t *testing.T) {
+	body := shellFunctionBody(t, readRepoScript(t, "install.sh"), "prompt_and_setup_ssl")
+
+	custom := body[strings.Index(body, "3)"):]
+	if idx := strings.Index(custom, "\n        4)"); idx > 0 {
+		custom = custom[:idx]
+	}
+	if !strings.Contains(custom, "p-ui cert") {
+		t.Fatal("the custom-certificate case no longer calls p-ui cert; this guard is now vacuous")
+	}
+
+	// The status has to be read. Discarding it into /dev/null is the defect.
+	if strings.Contains(custom, `-webCertKey "$custom_key" > /dev/null 2>&1`) {
+		t.Error("the custom-certificate case still throws away p-ui cert's exit status and its reason, so a refused certificate is reported as success")
+	}
+	if !strings.Contains(custom, "cert_applied") {
+		t.Error("nothing in the custom-certificate case records whether the certificate was actually applied")
+	}
+
+	// https must be reachable only through that flag.
+	scheme := strings.Index(custom, `SSL_SCHEME="https"`)
+	if scheme < 0 {
+		t.Fatal("the custom-certificate case never raises the scheme, so a working certificate is under-reported")
+	}
+	guard := strings.LastIndex(custom[:scheme], `if [[ "$cert_applied" == "1" ]]; then`)
+	if guard < 0 {
+		t.Error("the custom-certificate case raises the scheme to https without first checking that the certificate applied")
+	}
+
+	// A retry loop with no reader spins forever; the non-interactive path must
+	// leave it rather than read EOF in a `while true`.
+	if !strings.Contains(custom, `if [[ "$NONINTERACTIVE" == "1" ]]; then`) {
+		t.Error("the retry loop has no non-interactive escape, so an automated install spins on a read that returns EOF")
+	}
+}
+
+/*
+update.sh carries the same case and had the same defect.
+
+The two scripts drift whenever one is repaired alone -- which is why the guard
+above has an update.sh twin, and why this does too. It gates on the tty rather
+than on NONINTERACTIVE: that variable does not exist in update.sh, and a guard
+written against it would be permanently false, leaving the retry loop to spin on
+a read that returns EOF.
+*/
+func TestUpdateAlsoRefusesToClaimHttpsForARefusedCertificate(t *testing.T) {
+	body := shellFunctionBody(t, readRepoScript(t, "update.sh"), "prompt_and_setup_ssl")
+
+	custom := body[strings.Index(body, "3)"):]
+	if idx := strings.Index(custom, "\n        4)"); idx > 0 {
+		custom = custom[:idx]
+	}
+	if !strings.Contains(custom, "p-ui cert") {
+		t.Fatal("update.sh's custom-certificate case no longer calls p-ui cert; this guard is now vacuous")
+	}
+	if strings.Contains(custom, `-webCertKey "$custom_key" > /dev/null 2>&1`) {
+		t.Error("update.sh still throws away p-ui cert's exit status, so a refused certificate is reported as success")
+	}
+	if !strings.Contains(custom, "cert_applied") {
+		t.Error("nothing in update.sh's custom-certificate case records whether the certificate applied")
+	}
+	if !strings.Contains(custom, `if [[ ! -t 0 ]]; then`) {
+		t.Error("update.sh's retry loop has no escape for a run with no tty, so it spins on a read that returns EOF")
+	}
+}

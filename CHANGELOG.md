@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A certificate the panel cannot serve is refused at install time, not
+  discovered later.** `p-ui cert` stored two paths without ever opening them and
+  always exited 0 — so handing the installer a key belonging to a different
+  certificate, an expired file, or a path with a typo printed a green tick,
+  raised the URL to https and restarted the panel. The panel then served plain
+  HTTP on an https address you had just been told was ready, with the reason
+  thrown away. The pair is now loaded and checked, the command reports failure,
+  and the installer offers you the paths again (or a way out to no-SSL). Same
+  fix in `update.sh`, which carried the identical case.
+
 - **LDAP auto-delete no longer detaches clients you made by hand.** Its rule was
   "every client on this inbound the directory did not return" — which on an
   LDAP-managed inbound is every contractor, test identity and founder's own

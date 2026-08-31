@@ -220,9 +220,12 @@ is waiting on them any more; what is left is work.
   still stored, still returned, marked `deprecated` in the published schema
   (openapigen now reads Go's own `Deprecated:` doc convention), removal named for
   the release after v1.1.0.
-- **The installer's custom-certificate path — re-prompt.** Say what was wrong and
-  ask for the paths again, with a way out to the skip-SSL branch. Matches how
-  cases 1 and 2 already branch on their issuer's status.
+- **The installer's custom-certificate path — SHIPPED, re-prompt as chosen.**
+  And the root cause was one layer down: `p-ui cert` stored two paths without
+  opening them and returned normally even on a failed write, so the status the
+  installer was told to check did not exist. It loads the pair now and exits
+  non-zero, which is what makes the re-prompt possible at all. Both `install.sh`
+  and `update.sh` carried the case; both are fixed and both are guarded.
 - **§9 — add the declaration, and make it a real one.** The operator asked for an
   advanced solution rather than the pinned string match. A first-class
   "this kind serves no clients" answer in `internal/core`, honoured by
