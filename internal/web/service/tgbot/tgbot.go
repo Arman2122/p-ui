@@ -66,24 +66,6 @@ var (
 		timestamp time.Time
 		mutex     sync.RWMutex
 	}
-
-	// clients data to adding new client. receiver_inbound_IDs is the set of
-	// inbounds the new client will be attached to; receiver_inbound_ID mirrors
-	// the primary pick for the legacy attach-picker entry point. Per-protocol
-	// secrets (UUID, password, flow, method) are filled per-inbound on submit
-	// by ClientService.fillProtocolDefaults, so the bot only tracks universal
-	// client fields here.
-	receiver_inbound_ID  int
-	receiver_inbound_IDs []int
-	client_Email         string
-	client_LimitIP       int
-	client_TotalGB       int64
-	client_ExpiryTime    int64
-	client_Enable        bool
-	client_TgID          string
-	client_SubID         string
-	client_Comment       string
-	client_Reset         int
 )
 
 // userStateStore guards the per-chat conversation states. The Telegram command
