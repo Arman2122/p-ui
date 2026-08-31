@@ -450,6 +450,19 @@ func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
 	return core.IngressInternal
 }
 
+/*
+IngressCriteria: everything, because the router is the same process that
+terminated the connection. It knows which user it authenticated, and its
+sniffing block gives it the domain, the protocol and the attributes.
+*/
+func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
+	if !slices.Contains(c.Kinds(), kind) {
+		return nil
+	}
+	return append(core.CriteriaByAddress(),
+		core.CriterionUser, core.CriterionDomain, core.CriterionProtocol, core.CriterionAttrs)
+}
+
 // IngressHandle returns the tag this instance already answers to. An internal
 // ingress needs no device: the router is the same process that terminates it.
 func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {

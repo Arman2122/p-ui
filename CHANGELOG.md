@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A routing rule on an MTProto inbound only offers criteria that can match
+  it.** The editor offered user, domain, protocol and attributes there, and none
+  of them can: MTProto's traffic reaches the router over an internal bridge that
+  authenticated nobody and inspects nothing. A rule using any of them saved,
+  displayed as active, and matched no packet.
+
 - **Clients show as online on a panel that does not run Xray.** The whole
   online view -- the client list's dot, the dashboard's online count, the
   subscription page, the Telegram bot's /onlines -- was stored inside the Xray
