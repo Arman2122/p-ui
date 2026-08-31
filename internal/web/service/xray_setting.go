@@ -32,7 +32,7 @@ func (s *XraySettingService) SaveXraySetting(newXraySettings string) error {
 	// back here. Strip it before validation/storage, otherwise we save
 	// garbage the next read can't recover from without this same call.
 	newXraySettings = UnwrapXrayTemplateConfig(newXraySettings)
-	if err := s.CheckXrayConfig(newXraySettings); err != nil {
+	if err := s.checkTemplateOnSave(newXraySettings); err != nil {
 		return err
 	}
 	if hoisted, err := EnsureStatsRouting(newXraySettings); err == nil {
@@ -57,6 +57,53 @@ func (s *XraySettingService) SaveXraySetting(newXraySettings string) error {
 		logger.Info("routing: disabled rules whose destination left the template")
 	}
 	return nil
+}
+
+/*
+checkTemplateOnSave asks the core itself, not just the outbounds array.
+
+CheckXrayConfig builds every outbound and nothing else, so a routing rule, a dns
+block or a policy section the core cannot load saved as a success -- and the
+panel then failed at the next restart, on a config the operator had been told
+was fine. The `-test` pre-flight is the same load a start performs, and it was
+only ever reached at restart time.
+
+Judged against the STORED template, per Q1: a template that already fails to
+load must stay editable, or the operator cannot repair it through the panel that
+refuses to save the repair. Only a save that newly breaks it is refused, and a
+save that leaves it broken is logged. Being unable to ask -- no binary, a
+timeout -- is not a refusal; TestConfig already answers nil for that. F007.
+*/
+func (s *XraySettingService) checkTemplateOnSave(candidate string) error {
+	if err := s.CheckXrayConfig(candidate); err != nil {
+		return err
+	}
+	err := templateLoads(candidate)
+	if err == nil {
+		return nil
+	}
+	stored, sErr := s.GetXrayConfigTemplate()
+	if sErr != nil || templateLoads(stored) != nil {
+		logger.Warning("the xray template is saved still rejected by the core, because this edit did not introduce it:", err)
+		return nil
+	}
+	return err
+}
+
+// templateLoads asks the pinned binary whether it would accept this template,
+// with the panel's own sections filled in the way the generator fills them.
+func templateLoads(template string) error {
+	if strings.TrimSpace(template) == "" {
+		return nil
+	}
+	cfg := &xray.Config{}
+	if err := json.Unmarshal([]byte(template), cfg); err != nil {
+		return common.NewError("xray template config invalid:", err)
+	}
+	// Inbounds come from the database, never from the template, and an empty
+	// list is a config the core loads happily.
+	cfg.InboundConfigs = nil
+	return xray.TestConfig(cfg)
 }
 
 func (s *XraySettingService) CheckXrayConfig(XrayTemplateConfig string) error {
