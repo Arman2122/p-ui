@@ -1527,3 +1527,28 @@ Also confirmed in the same pass: sniffing routes by name at all (SNI
 to the SAME destination IP, from the same inbound), and the exact front config
 the panel generates -- tun inbound, gateway, sniffing block -- loads in the
 pinned binary.
+
+## L35 — the v1.4.0 → HEAD upgrade is verified against a populated database
+
+Run before cutting a release, because 7 migrations and 2 new tables had landed
+since v1.4.0 and nothing had exercised them in order against real rows.
+
+Method: build v1.4.0 from its own tag, `migrate` a fresh database with it (23
+tables, no `origin` column — a true baseline), seed it the way the panel really
+stores data (clients inside the inbound's settings JSON, a `client_traffics`
+row, an enabled and a DISABLED client, a tunnel inbound), then `migrate` with
+HEAD.
+
+Result: clean. 25 tables, `routing_rules`/`policy_inbounds`/`egresses` created,
+`clients.origin` present and backfilled to `''` — every pre-existing client
+grandfathered as hand-made, which is what F372 promised. Quota, expiry, IP
+limit, subId, the disabled client's `enable=false`, per-client traffic counters
+and per-inbound counters all preserved. Migrating twice more changed nothing,
+and HEAD starts and serves on the upgraded database (the 500 is `dist-stub`'s
+placeholder frontend, not a failure).
+
+One false alarm worth recording, because it will look like a bug again next
+time: seeding a quota into `clients.total_gb` WITHOUT putting it in the
+inbound's settings JSON makes the next migrate zero it. That is the sync doing
+its job — the settings JSON is the authority and the tables are derived from it
+— not data loss. Seed both, or seed the JSON alone.

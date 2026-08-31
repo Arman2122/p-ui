@@ -219,7 +219,7 @@ is waiting on them any more; what is left is work.
   `subClashShuffleProxies` — and both columns retire through a real deprecation:
   still stored, still returned, marked `deprecated` in the published schema
   (openapigen now reads Go's own `Deprecated:` doc convention), removal named for
-  the release after v1.1.0.
+  v1.6.0.
 - **The installer's custom-certificate path — SHIPPED, re-prompt as chosen.**
   And the root cause was one layer down: `p-ui cert` stored two paths without
   opening them and returned normally even on a failed write, so the status the
