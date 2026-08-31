@@ -1070,6 +1070,8 @@
         "inheritAddress": "Inherits"
       },
       "hints": {
+        "hostHeader": "Replaces the transport's Host header on ws, httpupgrade, xhttp and tcp+http inbounds. On gRPC it sets :authority, which is the same header.",
+        "path": "Replaces the transport's path on ws, httpupgrade and xhttp inbounds, and on a tcp+http inbound that defines a request path. gRPC has no path, so it is ignored there.",
         "address": "Leave blank to inherit the inbound's own address.",
         "port": "0 inherits the inbound's port.",
         "tags": "Not visible to end users; sent with RAW subscription only. Uppercase letters, digits, _ and : only.",

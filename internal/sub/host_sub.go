@@ -138,6 +138,10 @@ func applyHostStreamOverrides(ep map[string]any, stream map[string]any) {
 				ts["host"] = hh
 			}
 		}
+		// gRPC keeps its Host header under authority; see applyEndpointHostPath.
+		if grpc, ok := stream["grpcSettings"].(map[string]any); ok && grpc != nil {
+			grpc["authority"] = hh
+		}
 	}
 	if p, ok := ep["path"].(string); ok && p != "" {
 		for _, key := range []string{"wsSettings", "httpupgradeSettings", "xhttpSettings"} {
@@ -273,17 +277,28 @@ func (s *SubService) endpointRemark(inbound *model.Inbound, email string, ep map
 	return s.genRemark(inbound, email, extra, transport)
 }
 
-// applyEndpointHostPath overrides the transport host header / path for a host
-// endpoint. It is a no-op for legacy externalProxy entries (which never carry
-// hostHeader/path) and only replaces keys the transport already emits, so it
-// cannot add spurious params to e.g. a tcp link.
+/*
+applyEndpointHostPath overrides the transport host header / path for a host
+endpoint. It is a no-op for legacy externalProxy entries (which never carry
+hostHeader/path) and only replaces keys the transport already emits, so it
+cannot add spurious params to e.g. a tcp link.
+
+authority is included because gRPC has no host param: under HTTP/2 :authority
+IS the Host header, and it is what a CDN in front of a gRPC inbound routes on.
+Without it a host row's Host header was silently dropped for every gRPC
+inbound. There is no such equivalent for path -- serviceName is a service name,
+not a path, and writing one into it would break the inbound rather than front
+it, so path stays inapplicable there and the form now says so. F147.
+*/
 func applyEndpointHostPath(e ShareEndpoint, params map[string]string) {
 	if e.ep == nil {
 		return
 	}
 	if h, ok := e.ep["hostHeader"].(string); ok && h != "" {
-		if _, exists := params["host"]; exists {
-			params["host"] = h
+		for _, key := range []string{"host", "authority"} {
+			if _, exists := params[key]; exists {
+				params[key] = h
+			}
 		}
 	}
 	if p, ok := e.ep["path"].(string); ok && p != "" {
@@ -365,14 +380,17 @@ func endpointFinalMask(e ShareEndpoint, baseFm string) (string, bool) {
 	return marshalFinalMask(mergeFinalMask(base, masks))
 }
 
-// applyEndpointHostPathObj is applyEndpointHostPath for the VMess object form.
+// applyEndpointHostPathObj is applyEndpointHostPath for the VMess object form,
+// authority included for the same reason.
 func applyEndpointHostPathObj(e ShareEndpoint, obj map[string]any) {
 	if e.ep == nil {
 		return
 	}
 	if h, ok := e.ep["hostHeader"].(string); ok && h != "" {
-		if _, exists := obj["host"]; exists {
-			obj["host"] = h
+		for _, key := range []string{"host", "authority"} {
+			if _, exists := obj[key]; exists {
+				obj[key] = h
+			}
 		}
 	}
 	if p, ok := e.ep["path"].(string); ok && p != "" {
