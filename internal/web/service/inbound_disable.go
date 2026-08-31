@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -381,6 +382,12 @@ a UserManager" however many times Xray is restarted. F313 stopped new clients
 attaching to those kinds; rows that predate it still reach here. F314.
 */
 func restartCannotFix(err error, email string) bool {
+	// The kind holds no users, decided by the contract before any call is made.
+	// The string arms below stay: they are what still arrives as text, from a
+	// remote node or an older build. F314.
+	if errors.Is(err, core.ErrKindHasNoUsers) {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, fmt.Sprintf("User %s not found.", email)) ||
 		strings.Contains(msg, "handler not found:") ||

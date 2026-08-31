@@ -165,6 +165,10 @@ func (c *Core) DropInstance(ctx context.Context, inst core.Instance) error {
 
 // AddUser upserts one client's peer, reading no other client. A kernel peer is
 // authenticated by key alone, so a client without one cannot be added.
+// ProvisionsUsers: one kind per core instance -- wgkernel here, awgkernel on the
+// AmneziaWG core that embeds this one -- and every client of it is a peer.
+func (c *Core) ProvisionsUsers(kind core.Kind) bool { return kind == c.kind }
+
 func (c *Core) AddUser(ctx context.Context, inst core.Instance, user core.User) error {
 	want, serve, err := toEngine(inst)
 	if err != nil {

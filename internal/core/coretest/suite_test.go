@@ -156,6 +156,9 @@ func (f *fakeCore) AddUser(_ context.Context, _ core.Instance, user core.User) e
 	return nil
 }
 
+// Every kind this fake serves holds users; the userless case has its own test.
+func (f *fakeCore) ProvisionsUsers(core.Kind) bool { return true }
+
 func (f *fakeCore) RemoveUser(_ context.Context, _ core.Instance, email string) error {
 	if f.d.keepsRemovedUser {
 		return nil

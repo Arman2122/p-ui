@@ -126,6 +126,11 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	if b.Shape != nil && !shapesSomeKind(b.Core, b.Shape) {
 		problems = append(problems, "ShapingHost: implemented, but every kind answers SelectorNone; a core that can shape nothing declares nothing")
 	}
+	// Same shape as the shaping and routing rules: a core that provisions users
+	// for no kind it serves is claiming a capability it never applies.
+	if b.Users != nil && !provisionsSomeKind(b.Core, b.Users) {
+		problems = append(problems, "UserProvisioner: implemented, but every kind answers ProvisionsUsers false; a core that can provision nobody declares nothing")
+	}
 	if b.Ingress != nil && !routesSomeKind(b.Core, b.Ingress) {
 		problems = append(problems, "RoutableIngress: implemented, but every kind answers IngressNone; a core that can route nothing declares nothing")
 	}
@@ -153,6 +158,17 @@ func namesSomeCriterion(c Core, ingress RoutableIngress) bool {
 			continue
 		}
 		if len(ingress.IngressCriteria(kind)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// provisionsSomeKind reports whether any kind this core serves can be handed a
+// user, which is the whole of what implementing UserProvisioner claims.
+func provisionsSomeKind(c Core, u UserProvisioner) bool {
+	for _, kind := range c.Kinds() {
+		if u.ProvisionsUsers(kind) {
 			return true
 		}
 	}

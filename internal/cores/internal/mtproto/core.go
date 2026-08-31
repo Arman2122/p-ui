@@ -159,6 +159,10 @@ func (c *Core) ProvisionsWholeUserSet() {}
 
 // AddUser is an upsert: re-adding an existing email replaces its credentials,
 // so a re-key and an add take the same path.
+// ProvisionsUsers: this core serves one kind, and every client of it is a
+// FakeTLS secret in the sidecar's [secrets] section.
+func (c *Core) ProvisionsUsers(kind core.Kind) bool { return kind == Kind }
+
 func (c *Core) AddUser(_ context.Context, inst core.Instance, user core.User) error {
 	next := withoutUser(inst, user.Email)
 	next.Users = append(next.Users, user)

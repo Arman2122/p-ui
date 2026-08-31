@@ -105,3 +105,38 @@ func TestARealRoutingDeclarationIsAccepted(t *testing.T) {
 		})
 	}
 }
+
+/*
+A core that provisions users for no kind it serves declares nothing.
+
+Same rule as the routing ones above: implementing the interface is a claim, and
+a claim that applies to none of the core's own kinds is the same silence as not
+implementing it at all. F314.
+*/
+type provisionerFake struct {
+	routingFake
+	provisions bool
+}
+
+func (f provisionerFake) ProvisionsUsers(Kind) bool { return f.provisions }
+func (provisionerFake) AddUser(context.Context, Instance, User) error {
+	return nil
+}
+func (provisionerFake) RemoveUser(context.Context, Instance, string) error { return nil }
+
+func TestAProvisionerThatServesNoUserKindIsAConformanceFailure(t *testing.T) {
+	base := routingFake{kinds: []Kind{"fk"}}
+	const want = "UserProvisioner: implemented, but every kind answers ProvisionsUsers false"
+
+	problems := Bind(provisionerFake{routingFake: base}).DeclaredMatchesImplemented()
+	if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, want) }) {
+		t.Fatalf("problems = %v, want one containing %q", problems, want)
+	}
+
+	// And a core that does provision one is not reported.
+	for _, problem := range Bind(provisionerFake{routingFake: base, provisions: true}).DeclaredMatchesImplemented() {
+		if strings.Contains(problem, "UserProvisioner") {
+			t.Fatalf("a real declaration must not be reported: %q", problem)
+		}
+	}
+}
