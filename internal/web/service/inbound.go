@@ -1410,9 +1410,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	// stays scoped to its own node (the payload's nodeId is unreliable, often absent).
 	inbound.NodeID = oldInbound.NodeID
 
-	// Settings the core that owns this kind would refuse. Asked of the core, not
-	// decided here: what makes a configuration invalid is protocol knowledge.
-	if err := validateInstanceForKind(inbound); err != nil {
+	// Settings the core that owns this kind would refuse -- judged against what
+	// this edit replaces, so a row that already violates stays editable. Q1.
+	if err := validateInstanceOnUpdate(oldInbound, inbound); err != nil {
 		return inbound, false, "", err
 	}
 
