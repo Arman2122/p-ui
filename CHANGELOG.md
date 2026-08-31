@@ -4,6 +4,32 @@ Operator-visible changes only — things that behave differently on a panel you
 upgrade in place. Bug fixes that simply make a broken thing work are not listed
 here; the git log is the full record.
 
+## Unreleased
+
+### Behaviour changes
+
+- **AmneziaWG is actually installed now.** The module was never built on any
+  host: its build script shipped without the executable bit, and both the
+  installer and the updater skipped the build whenever that bit was missing —
+  so the panel correctly greyed AmneziaWG out everywhere as a core the host
+  could not run. **Upgrading repairs it**, with no action from you.
+  **An upgrade also refreshes the module source**, which it never did: a panel
+  installed before AmneziaWG existed had nothing to build however often it
+  updated, and one that had it kept rebuilding the previous release's copy.
+
+- **AmneziaWG can build outside Debian and Ubuntu.** Its prerequisites were
+  installed with `apt` only, so the module could never be built on Fedora,
+  RHEL, Rocky, Alma, Arch or openSUSE. The build script now detects the host's
+  package manager. Alpine is refused by name rather than attempted — musl ships
+  no DKMS-capable kernel tree, so no amount of installing would help.
+  **Note:** `install.sh` itself is still apt-only; this covers the kernel module.
+
+- **A kernel upgrade will not silently take AmneziaWG away.** The install now
+  checks that DKMS really registered the module against the running kernel —
+  the thing that makes it rebuild itself after a kernel change — and says so if
+  it did not, instead of the option quietly greying out after a reboot.
+
+
 ## v1.5.0 — 2026-08-31
 
 ### Behaviour changes
