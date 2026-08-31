@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Quotas and expiry are enforced on a panel that does not run Xray.** The
+  sweep that disables an over-quota or expired client ran inside the traffic
+  poll, and that poll returned early when nothing had reported bytes and Xray
+  was down. On a panel serving only kernel WireGuard or MTProto that was every
+  poll: an expired client was never disabled, and its peer stayed connectable
+  indefinitely.
+
 - **Subscription paths and the JSON/Clash toggles apply when you save them.**
   Which routes the subscription server has was read once, at boot: enabling
   Clash subscriptions, or moving `subPath`, registered nothing until the panel
