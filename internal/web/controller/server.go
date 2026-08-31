@@ -12,6 +12,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/web/entity"
 	"github.com/Arman2122/p-ui/internal/web/global"
+	"github.com/Arman2122/p-ui/internal/web/middleware"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/panel"
 	"github.com/Arman2122/p-ui/internal/web/websocket"
@@ -53,7 +54,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getPanelUpdateInfo", a.getPanelUpdateInfo)
 	g.GET("/getUpdateStatus", a.getUpdateStatus)
 	g.GET("/getConfigJson", a.getConfigJson)
-	g.GET("/getDb", a.getDb)
+	g.GET("/getDb", middleware.LongRequest(), a.getDb)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getWebCertFiles", a.getWebCertFiles)
 	g.GET("/descendants", a.descendants)
@@ -66,11 +67,11 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 
 	g.POST("/stopXrayService", a.stopXrayService)
 	g.POST("/restartXrayService", a.restartXrayService)
-	g.POST("/installXray/:version", a.installXray)
+	g.POST("/installXray/:version", middleware.LongRequest(), a.installXray)
 	g.POST("/updatePanel", a.updatePanel)
 	g.POST("/setUpdateChannel", a.setUpdateChannel)
-	g.POST("/updateGeofile", a.updateGeofile)
-	g.POST("/updateGeofile/:fileName", a.updateGeofile)
+	g.POST("/updateGeofile", middleware.LongRequest(), a.updateGeofile)
+	g.POST("/updateGeofile/:fileName", middleware.LongRequest(), a.updateGeofile)
 	g.POST("/logs/:count", a.getLogs)
 	g.POST("/xraylogs/:count", a.getXrayLogs)
 	g.POST("/importDB", a.importDB)
@@ -78,7 +79,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.POST("/getCertHash", a.getCertHash)
 	g.POST("/getRemoteCertHash", a.getRemoteCertHash)
 	g.POST("/scanRealityTarget", a.scanRealityTarget)
-	g.POST("/scanRealityTargets", a.scanRealityTargets)
+	g.POST("/scanRealityTargets", middleware.LongRequest(), a.scanRealityTargets)
 	g.POST("/clientIps", a.setClientIps)
 }
 

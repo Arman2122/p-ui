@@ -1440,3 +1440,12 @@ Second fact from the same read: every inbound in this fork gets an
 `getInbound`'s own refusal ("can't get inbound proxy from handler.") is
 unreachable, and `restartCannotFix` needs no arm for it. Found while fixing
 F314.
+
+## L31 — /getDb is the same pg_dump F294 found behind the Telegram backup
+
+F284 names three handlers that outrun the 30s write deadline (installXray,
+updateGeofile, scanRealityTargets) and F294 names a fourth (backuptotgbot,
+which calls `serverService.GetDb()`). `/getDb` calls the same `GetDb()` and
+streams the result, so it is the same operation on the same deadline — neither
+finding lists it because each was scoped to the handler it started from. Fixed
+with the other four rather than left as a known-identical fifth.

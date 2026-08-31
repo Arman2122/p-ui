@@ -124,7 +124,7 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	a.xraySettingController = NewXraySettingController(api)
 
 	// Extra routes
-	api.POST("/backuptotgbot", a.BackuptoTgbot)
+	api.POST("/backuptotgbot", middleware.LongRequest(), a.BackuptoTgbot)
 }
 
 // getCores describes what this build can serve, so the UI can render from what
@@ -149,9 +149,15 @@ func (a *APIController) restartCore(c *gin.Context) {
 	jsonMsg(c, I18nWeb(c, "pages.xray.restartSuccess"), nil)
 }
 
-// BackuptoTgbot sends a backup of the panel data to Telegram bot admins. It
-// answered 200 with an empty body whatever happened, which the published spec
-// does not describe and no client can read as an outcome. F279.
+/*
+BackuptoTgbot sends a backup of the panel data to Telegram bot admins. It
+answered 200 with an empty body whatever happened, which the published spec does
+not describe and no client can read as an outcome. F279.
+
+Synchronous on purpose: the operator asked for a backup and the answer is
+whether it was delivered. What it needed was room to finish -- a full pg_dump
+plus one upload per admin does not fit the panel's 30s write deadline. F294.
+*/
 func (a *APIController) BackuptoTgbot(c *gin.Context) {
 	if err := a.Tgbot.SendBackupToAdmins(); err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.settings.telegramBotBackupFailed"), err)

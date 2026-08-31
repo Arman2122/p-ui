@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Long admin operations are no longer cut off at 30 seconds.** Installing an
+  Xray version, updating the geo files, scanning REALITY targets, downloading a
+  database backup and sending one to Telegram all outrun the panel's 30-second
+  write deadline. The connection died mid-response while the work ran on to
+  completion — and the obvious reaction, retrying, started a second one. Those
+  five routes now get the room their own timeouts already assume.
+
 - **Quotas and expiry are enforced on a panel that does not run Xray.** The
   sweep that disables an over-quota or expired client ran inside the traffic
   poll, and that poll returned early when nothing had reported bytes and Xray
