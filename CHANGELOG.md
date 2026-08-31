@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A dead node no longer stalls traffic accounting.** When a depleted client
+  sat on an inbound a remote node hosts, the push telling that node about it was
+  made while holding the single writer every traffic poll and every client edit
+  queues on — so a node that had gone away froze quota accounting and admin
+  saves for the whole remote timeout. The push now happens after that writer is
+  released.
+
 - **A host's Host header now reaches a gRPC inbound.** gRPC has no host
   parameter — under HTTP/2 the `:authority` header is the Host header — and the
   override only rewrote parameters the transport already emitted, so a Host

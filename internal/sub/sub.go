@@ -358,7 +358,11 @@ func (s *Server) Start() (err error) {
 		return nil
 	}
 
+	// Same lock ReloadRoutes takes: a SIGHUP restart and a settings save both
+	// reach initRouter, and both write s.sub.
+	s.routerMu.Lock()
 	engine, err := s.initRouter()
+	s.routerMu.Unlock()
 	if err != nil {
 		return err
 	}
