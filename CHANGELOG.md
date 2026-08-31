@@ -8,6 +8,13 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A host's Host header now reaches a gRPC inbound.** gRPC has no host
+  parameter — under HTTP/2 the `:authority` header is the Host header — and the
+  override only rewrote parameters the transport already emitted, so a Host
+  header set on a gRPC host row was stored, shown in the form, and dropped from
+  every link it was meant to shape. The Host header and Path fields now say
+  which transports they apply to; Path still has no gRPC equivalent.
+
 - **The client form says which field it rejected.** A bad value raised a
   page-level toast naming the reason and not the input — across three tabs, of
   which one is on screen. The field is now marked and the reason sits under it.

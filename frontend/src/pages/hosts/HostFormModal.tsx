@@ -284,10 +284,10 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                         label: catTabLabel(<SettingOutlined />, t('pages.hosts.sections.general'), isMobile),
                         children: (
                           <>
-                            <FormField name="hostHeader" label={t('pages.hosts.fields.hostHeader')}>
+                            <FormField name="hostHeader" label={t('pages.hosts.fields.hostHeader')} tooltip={t('pages.hosts.hints.hostHeader')}>
                               <Input />
                             </FormField>
-                            <FormField name="path" label={t('pages.hosts.fields.path')}>
+                            <FormField name="path" label={t('pages.hosts.fields.path')} tooltip={t('pages.hosts.hints.path')}>
                               <Input />
                             </FormField>
                             <FormField name="vlessRoute" label={t('pages.hosts.fields.vlessRoute')} tooltip={t('pages.hosts.hints.vlessRoute')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.vlessRoute) }}>
