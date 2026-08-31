@@ -27,6 +27,10 @@ type WebServer interface {
 // SubServer interface defines methods for accessing the subscription server instance.
 type SubServer interface {
 	GetCtx() context.Context // Get the server context
+	// ReloadRoutes rebuilds the subscription router from the current settings,
+	// so a changed path or a flipped JSON/Clash toggle is served without a
+	// restart while the panel is already handing out the new URL. F253.
+	ReloadRoutes() error
 }
 
 // SetWebServer sets the global web server instance.

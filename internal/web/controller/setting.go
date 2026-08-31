@@ -9,6 +9,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/crypto"
 	"github.com/Arman2122/p-ui/internal/web/entity"
+	"github.com/Arman2122/p-ui/internal/web/global"
 	"github.com/Arman2122/p-ui/internal/web/middleware"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/email"
@@ -183,6 +184,22 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 	// keys need it. F341 / F397.
 	if err == nil && rescheduleSettingJobsFunc != nil {
 		rescheduleSettingJobsFunc()
+	}
+	/*
+		And the subscription router is rebuilt, for the same reason: which routes
+		exist is decided by subPath, subJsonPath, subClashPath and the two enables,
+		and those were read once at boot. The panel started handing out the new URL
+		the moment it was saved while the server still answered only the old one.
+
+		Unconditional, like the reschedule above. A failure keeps the router that
+		is serving, so it is reported and never turned into a failed save.
+	*/
+	if err == nil {
+		if subServer := global.GetSubServer(); subServer != nil {
+			if reloadErr := subServer.ReloadRoutes(); reloadErr != nil {
+				logger.Warning("subscription routes still follow the settings this panel booted with:", reloadErr)
+			}
+		}
 	}
 	if err == nil && warning != "" {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), nil, warning)

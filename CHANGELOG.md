@@ -8,6 +8,16 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Subscription paths and the JSON/Clash toggles apply when you save them.**
+  Which routes the subscription server has was read once, at boot: enabling
+  Clash subscriptions, or moving `subPath`, registered nothing until the panel
+  was restarted — while the panel handed out the new URL the moment it was
+  saved, so every link copied in between answered 404. The router is now
+  rebuilt on save, and a rebuild that fails keeps the one that is serving.
+  **Still needs the restart button:** the subscription port, listen address,
+  certificate and the master subscription switch, which all rebind the
+  listener.
+
 - **A new WireGuard uplink is routed by the save that creates it.** Convergence
   read the host once, then created the device, then planned against that read —
   so the device it had just made was still absent, and the uplink's table got
