@@ -20,7 +20,7 @@ GORM omits a zero-valued field whose column carries a `default`, and then writes
 the default back into the struct — so a row created with its switch off is
 stored ON, and the caller's own copy is rewritten to agree. No call-level form
 overrides it: Select("*"), Select(the column) and Omit(the column) were all
-measured storing the default (audit-appendix ledger L9). Four of the five models
+measured storing the default. Four of the five models
 that carry such a tag were reachable, one of them on the client path, where it
 meant a client an operator staged as disabled could connect.
 

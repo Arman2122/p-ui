@@ -99,7 +99,7 @@ here; the git log is the full record.
   list, not to one member of it. It and "Mihomo X25519" (whose output the
   panel already emits unconditionally) are now deprecated: still stored and
   still returned by the API, marked deprecated in the OpenAPI schema, and due
-  for removal in v1.6.0.
+  for removal in a future release.
 
 - **A TUN inbound no longer holds a port it never binds.** An Xray TUN device
   is a kernel interface, not a listener, but the panel demanded a port for it,

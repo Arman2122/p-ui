@@ -15,7 +15,7 @@ A row staged as disabled must be stored disabled.
 GORM omits a zero-valued field from the INSERT when its column carries a
 default, so the database supplies the default instead. Every model here declares
 a boolean defaulting to true, so "create it switched off" wrote a row switched
-ON — measured, and reachable on four of the five (audit-appendix ledger L9).
+ON — measured, and reachable on four of the five.
 
 The consequences are not uniform, so each is driven through the path an operator
 actually uses rather than through a raw db.Create:

@@ -569,7 +569,7 @@ the retired job's protocol allowlist was the only thing that ever stopped a
 cross-core cut.
 
 What the cut actually achieves is narrower than it reads. Measured against the
-shipped core (audit-appendix/RUNTIME-RESULTS-2026-08-21.md §3), RemoveUser closes
+shipped core -- measured against it directly -- RemoveUser closes
 nothing: a session already established keeps flowing, and a warmed mux connection
 keeps carrying new requests. Only a NEW connection is refused. So this chooses
 where the refusal lands, not whose sessions end.
