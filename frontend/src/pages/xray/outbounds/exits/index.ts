@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 
 import {
+  EGRESS_TYPE_AWG_UPLINK,
   EGRESS_TYPE_UPLINK,
   EgressFormFields,
   UplinkSettingsSchema,
@@ -10,6 +11,7 @@ import {
   type EgressRecord,
 } from '@/schemas/api/egress';
 
+import AwgkernelExitFields from './awgkernel-fields';
 import WgkernelExitFields from './wgkernel-fields';
 
 /*
@@ -35,7 +37,10 @@ export interface ExitKindModule {
   fromRecord: (row: EgressRecord) => EgressFormValues;
 }
 
-function wgkernelFromRecord(row: EgressRecord): EgressFormValues {
+/* Shared by both uplink kinds: the stored settings are the same object, and an
+   awg row is one that also carries `awg`. A wg row has none, so it reads back
+   undefined and nothing changes for it. */
+function uplinkFromRecord(row: EgressRecord): EgressFormValues {
   const base = EgressFormFields.parse({ remark: row.remark ?? '', enable: row.enable ?? true });
   if (!row.settings) return base;
   try {
@@ -52,6 +57,7 @@ function wgkernelFromRecord(row: EgressRecord): EgressFormValues {
       endpoint: s.endpoint,
       presharedKey: s.presharedKey,
       keepAlive: s.keepAlive,
+      awg: s.awg,
     };
   } catch {
     return base;
@@ -63,7 +69,15 @@ const MODULES: Record<string, ExitKindModule> = {
     egressType: EGRESS_TYPE_UPLINK,
     Fields: WgkernelExitFields,
     toPayload: uplinkPayload,
-    fromRecord: wgkernelFromRecord,
+    fromRecord: uplinkFromRecord,
+  },
+  awgkernel: {
+    egressType: EGRESS_TYPE_AWG_UPLINK,
+    Fields: AwgkernelExitFields,
+    /* The type is the whole point: dialled as a wg-client this row would connect
+       with no obfuscation at all while claiming to have it. */
+    toPayload: (form, remark) => uplinkPayload(form, remark, EGRESS_TYPE_AWG_UPLINK),
+    fromRecord: uplinkFromRecord,
   },
 };
 

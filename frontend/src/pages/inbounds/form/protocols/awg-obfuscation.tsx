@@ -8,29 +8,36 @@ import { FormField } from '@/components/form/rhf';
    picking a dozen numbers by hand is how a deployment ends up with a tunnel
    that handshakes and carries nothing. */
 const PRESET: Record<string, number> = {
-  'settings.awg.jc': 4,
-  'settings.awg.jmin': 40,
-  'settings.awg.jmax': 70,
-  'settings.awg.s1': 20,
-  'settings.awg.s2': 30,
+  jc: 4,
+  jmin: 40,
+  jmax: 70,
+  s1: 20,
+  s2: 30,
 };
 
-/*
-AmneziaWG's obfuscation, a section rather than its own tab because an inbound
-with none of it set is plain WireGuard carried by the AmneziaWG module — which
-works, and is a legitimate thing to run.
+interface AwgObfuscationFieldsProps {
+  /* Where the params sit in this form. An inbound nests them under its settings;
+     an exit row carries them beside the uplink's own flat fields. */
+  prefix?: string;
+}
 
-Every field belongs to a CLIENT's configuration rather than being a server-side
-knob: the panel writes each one into the .conf it hands out, and a client whose
-values differ cannot recognise the server's packets at all.
+/*
+AmneziaWG's obfuscation, a section rather than its own tab because a device with
+none of it set is plain WireGuard carried by the AmneziaWG module — which works,
+and is a legitimate thing to run.
+
+Every field belongs to a PEER's configuration rather than being a local knob:
+both ends write the same values, and a peer whose values differ cannot recognise
+the other's packets at all.
 */
-export default function AwgObfuscationFields() {
+export default function AwgObfuscationFields({ prefix = 'settings.awg' }: AwgObfuscationFieldsProps) {
   const { t } = useTranslation();
   const { setValue } = useFormContext();
+  const at = (field: string) => `${prefix}.${field}`;
 
   const applyPreset = () => {
-    for (const path of Object.keys(PRESET)) {
-      setValue(path, PRESET[path], { shouldDirty: true });
+    for (const [field, value] of Object.entries(PRESET)) {
+      setValue(at(field), value, { shouldDirty: true });
     }
   };
 
@@ -50,30 +57,30 @@ export default function AwgObfuscationFields() {
 
             <FormField
               label={t('pages.inbounds.form.awgJc')}
-              name="settings.awg.jc"
+              name={at('jc')}
               tooltip={t('pages.inbounds.form.awgJcHint')}
             >
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgJmin')} name="settings.awg.jmin">
+            <FormField label={t('pages.inbounds.form.awgJmin')} name={at('jmin')}>
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgJmax')} name="settings.awg.jmax">
+            <FormField label={t('pages.inbounds.form.awgJmax')} name={at('jmax')}>
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
 
-            {/* Literal keys rather than built from the field name: the dead-key
-                guard scans sources statically and cannot see a computed one. */}
-            <FormField label={t('pages.inbounds.form.awgS1')} name="settings.awg.s1">
+            {/* Only the field NAME is computed. Every t() key stays a literal,
+                because the dead-key guard scans sources statically. */}
+            <FormField label={t('pages.inbounds.form.awgS1')} name={at('s1')}>
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgS2')} name="settings.awg.s2">
+            <FormField label={t('pages.inbounds.form.awgS2')} name={at('s2')}>
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgS3')} name="settings.awg.s3">
+            <FormField label={t('pages.inbounds.form.awgS3')} name={at('s3')}>
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgS4')} name="settings.awg.s4">
+            <FormField label={t('pages.inbounds.form.awgS4')} name={at('s4')}>
               <InputNumber min={0} max={65535} style={{ width: '100%' }} />
             </FormField>
 
@@ -82,28 +89,28 @@ export default function AwgObfuscationFields() {
                 needs to look different again. Ranges are written lo-hi. */}
             <Typography.Text type="secondary">{t('pages.inbounds.form.awgAdvanced')}</Typography.Text>
 
-            <FormField label={t('pages.inbounds.form.awgI1')} name="settings.awg.i1" tooltip={t('pages.inbounds.form.awgIHint')}>
+            <FormField label={t('pages.inbounds.form.awgI1')} name={at('i1')} tooltip={t('pages.inbounds.form.awgIHint')}>
               <Input placeholder="b0xdeadbeef" />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgI2')} name="settings.awg.i2">
+            <FormField label={t('pages.inbounds.form.awgI2')} name={at('i2')}>
               <Input />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgI3')} name="settings.awg.i3">
+            <FormField label={t('pages.inbounds.form.awgI3')} name={at('i3')}>
               <Input />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgI4')} name="settings.awg.i4">
+            <FormField label={t('pages.inbounds.form.awgI4')} name={at('i4')}>
               <Input />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgI5')} name="settings.awg.i5">
+            <FormField label={t('pages.inbounds.form.awgI5')} name={at('i5')}>
               <Input />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgHeaderProtectionKey')} name="settings.awg.headerProtectionKey" tooltip={t('pages.inbounds.form.awgHeaderProtectionKeyHint')}>
+            <FormField label={t('pages.inbounds.form.awgHeaderProtectionKey')} name={at('headerProtectionKey')} tooltip={t('pages.inbounds.form.awgHeaderProtectionKeyHint')}>
               <Input placeholder="base64, 32 bytes" />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgRandomTrailers')} name="settings.awg.randomTrailers" valueProp="checked">
+            <FormField label={t('pages.inbounds.form.awgRandomTrailers')} name={at('randomTrailers')} valueProp="checked">
               <Switch />
             </FormField>
-            <FormField label={t('pages.inbounds.form.awgDisableCookies')} name="settings.awg.disableCookies" valueProp="checked">
+            <FormField label={t('pages.inbounds.form.awgDisableCookies')} name={at('disableCookies')} valueProp="checked">
               <Switch />
             </FormField>
           </Space>

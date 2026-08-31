@@ -13,13 +13,16 @@ afterEach(() => {
 An exit type the editor has no fields for must refuse, not pretend.
 
 ExitFormModal resolves its field module from the row's stored type and rendered
-`{module && <module.Fields />}`. Exactly one type has a module. Opening any
-other — a panel-owned `xray-tun` front, or an `awg-client` uplink — gave a form
-with nothing in it but the remark box, and an OK that ran a save writing nothing
-and closed as though it had worked. Nothing told the operator the row was not
+`{module && <module.Fields />}`. Opening a type with no module gave a form with
+nothing in it but the remark box, and an OK that ran a save writing nothing and
+closed as though it had worked. Nothing told the operator the row was not
 editable here.
 
 OK is disabled now and the modal says why. F196.
+
+`awg-client` was one of those types and is no longer: it has a module. A
+panel-owned `xray-tun` front still has none and never will — routing provisions
+and reaps it, so an operator has nothing to edit on one.
 */
 
 function exitRow(type: string): EgressRecord {
@@ -39,7 +42,7 @@ function okButton(): HTMLButtonElement | undefined {
 }
 
 describe('editing an exit the modal has no fields for', () => {
-  for (const type of ['awg-client', 'xray-tun']) {
+  for (const type of ['xray-tun', 'openvpn-client']) {
     it(`refuses ${type} visibly instead of saving nothing`, () => {
       renderWithProviders(<ExitFormModal open exit={exitRow(type)} onClose={() => {}} />);
 
@@ -52,8 +55,10 @@ describe('editing an exit the modal has no fields for', () => {
     });
   }
 
-  it('leaves OK enabled for the kind it can edit', () => {
-    renderWithProviders(<ExitFormModal open exit={exitRow('wg-client')} onClose={() => {}} />);
-    expect(okButton()?.disabled).toBe(false);
-  });
+  for (const type of ['wg-client', 'awg-client']) {
+    it(`leaves OK enabled for ${type}, which it can edit`, () => {
+      renderWithProviders(<ExitFormModal open exit={exitRow(type)} onClose={() => {}} />);
+      expect(okButton()?.disabled).toBe(false);
+    });
+  }
 });
