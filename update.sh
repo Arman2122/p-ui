@@ -714,18 +714,55 @@ prompt_and_setup_ssl() {
             done
 
             # 3.4 Apply Settings via p-ui binary
-            ${pui_folder}/p-ui cert -webCert "$custom_cert" -webCertKey "$custom_key" > /dev/null 2>&1
+            #
+            # The status decides, exactly as in install.sh: `p-ui cert` refuses a
+            # pair the panel cannot serve, and discarding that made a refusal
+            # read as success -- an https URL for a panel on plain HTTP.
+            local cert_error=""
+            local cert_applied=0
+            while true; do
+                if cert_error=$(${pui_folder}/p-ui cert -webCert "$custom_cert" -webCertKey "$custom_key" 2>&1); then
+                    cert_applied=1
+                    break
+                fi
+                echo -e "${red}✗ The panel refused this certificate:${plain}"
+                echo -e "${red}  ${cert_error}${plain}"
 
-            # Set SSL_HOST for composing Panel URL
-            if [[ -n "$custom_domain" ]]; then
-                SSL_HOST="$custom_domain"
+                # No NONINTERACTIVE variable in this script -- it gates on the
+                # tty directly, as its own two prompts above do. Without a
+                # reader, `read` returns EOF and a retry loop would spin.
+                if [[ ! -t 0 ]]; then
+                    echo -e "${yellow}Keeping the current scheme. Fix the files and re-run, or set the certificate in Settings.${plain}"
+                    break
+                fi
+
+                local cert_retry=""
+                read -rp "Try different paths? [Default y, n = continue without SSL]: " cert_retry
+                if [[ "$cert_retry" == "n" || "$cert_retry" == "N" ]]; then
+                    echo -e "${yellow}Continuing without SSL. You can set the certificate later in Settings.${plain}"
+                    break
+                fi
+
+                read -rp "Input certificate path (keywords: .crt / fullchain): " custom_cert
+                custom_cert=$(echo "$custom_cert" | tr -d '"' | tr -d "'")
+                read -rp "Input private key path (keywords: .key / privatekey): " custom_key
+                custom_key=$(echo "$custom_key" | tr -d '"' | tr -d "'")
+            done
+
+            if [[ "$cert_applied" == "1" ]]; then
+                # Set SSL_HOST for composing Panel URL
+                if [[ -n "$custom_domain" ]]; then
+                    SSL_HOST="$custom_domain"
+                else
+                    SSL_HOST="${server_ip}"
+                fi
+
+                SSL_SCHEME="https"
+                echo -e "${green}✓ Custom certificate paths applied.${plain}"
+                echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
             else
                 SSL_HOST="${server_ip}"
             fi
-
-            SSL_SCHEME="https"
-            echo -e "${green}✓ Custom certificate paths applied.${plain}"
-            echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
 
             systemctl restart p-ui > /dev/null 2>&1
             ;;

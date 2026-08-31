@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -434,45 +436,71 @@ func updateSetting(port int, username string, password string, webBasePath strin
 }
 
 // updateCert updates the SSL certificate files for the panel.
-func updateCert(publicKey string, privateKey string) {
-	err := database.InitDB()
+/*
+loadCertificatePair reports whether these two paths are a certificate the panel
+could actually serve.
+
+Separate from updateCert so the check can be exercised without a database: the
+pair is opened before anything is stored, and standing Postgres up to assert
+that would be testing the setting layer instead.
+
+Clearing both is not a pair and loads nothing, which is the reset form.
+*/
+func loadCertificatePair(publicKey, privateKey string) (*tls.Certificate, error) {
+	if (privateKey == "") != (publicKey == "") {
+		return nil, errors.New("both public and private key should be entered")
+	}
+	if publicKey == "" {
+		return nil, nil
+	}
+	pair, err := tls.LoadX509KeyPair(publicKey, privateKey)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return nil, fmt.Errorf("the certificate and key are not a usable pair: %w", err)
+	}
+	return &pair, nil
+}
+
+/*
+updateCert stores the certificate pair, and reports whether it could.
+
+It answers an ERROR now rather than printing one. Every caller is a script: the
+installer picks the URL scheme from this, and update.sh does the same. Both used
+to read a success they were never given -- the function printed "failed:" and
+returned normally, so `p-ui cert` exited 0 on a write that did not happen and
+the installer announced https for a panel serving plain HTTP.
+
+The pair is loaded rather than trusted. A path that does not resolve to a usable
+certificate and its matching key is the whole failure this reports: an expired
+file, a key belonging to a different certificate, a PEM the operator pasted half
+of. Storing those is storing a panel that cannot start its own listener.
+*/
+func updateCert(publicKey string, privateKey string) error {
+	if err := database.InitDB(); err != nil {
+		return err
 	}
 
-	if (privateKey != "" && publicKey != "") || (privateKey == "" && publicKey == "") {
-		settingService := service.SettingService{}
-		err = settingService.SetCertFile(publicKey)
-		if err != nil {
-			fmt.Println("set certificate public key failed:", err)
-		} else {
-			fmt.Println("set certificate public key success")
-		}
-
-		err = settingService.SetKeyFile(privateKey)
-		if err != nil {
-			fmt.Println("set certificate private key failed:", err)
-		} else {
-			fmt.Println("set certificate private key success")
-		}
-
-		err = settingService.SetSubCertFile(publicKey)
-		if err != nil {
-			fmt.Println("set certificate for subscription public key failed:", err)
-		} else {
-			fmt.Println("set certificate for subscription public key success")
-		}
-
-		err = settingService.SetSubKeyFile(privateKey)
-		if err != nil {
-			fmt.Println("set certificate for subscription private key failed:", err)
-		} else {
-			fmt.Println("set certificate for subscription private key success")
-		}
-	} else {
-		fmt.Println("both public and private key should be entered.")
+	if _, err := loadCertificatePair(publicKey, privateKey); err != nil {
+		return err
 	}
+
+	settingService := service.SettingService{}
+	setters := []struct {
+		what string
+		set  func(string) error
+		file string
+	}{
+		{"certificate public key", settingService.SetCertFile, publicKey},
+		{"certificate private key", settingService.SetKeyFile, privateKey},
+		{"certificate for subscription public key", settingService.SetSubCertFile, publicKey},
+		{"certificate for subscription private key", settingService.SetSubKeyFile, privateKey},
+	}
+	for _, setter := range setters {
+		if err := setter.set(setter.file); err != nil {
+			return fmt.Errorf("set %s failed: %w", setter.what, err)
+		}
+		fmt.Println("set " + setter.what + " success")
+	}
+	return nil
 }
 
 // GetCertificate displays the current SSL certificate settings if getCert is true.
@@ -681,7 +709,13 @@ func main() {
 			}
 		}
 		if webCertFile != "" || webKeyFile != "" {
-			updateCert(webCertFile, webKeyFile)
+			// `setting -webCert` reaches the same store as `cert`, and the
+			// installer's non-SSL paths use it too, so a refusal must be as loud
+			// here as it is there.
+			if err = updateCert(webCertFile, webKeyFile); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
 		}
 		if show {
 			showSetting(show)
@@ -707,10 +741,15 @@ func main() {
 			fmt.Println(err)
 			return
 		}
+		cert, key := webCertFile, webKeyFile
 		if reset {
-			updateCert("", "")
-		} else {
-			updateCert(webCertFile, webKeyFile)
+			cert, key = "", ""
+		}
+		if err := updateCert(cert, key); err != nil {
+			// Non-zero, because the installer and update.sh choose the panel's
+			// URL scheme from this. Same shape as showFirewallPorts above.
+			fmt.Println(err)
+			os.Exit(1)
 		}
 	default:
 		fmt.Println("Invalid subcommands")
