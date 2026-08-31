@@ -26,6 +26,10 @@ func (ingressFake) IngressHandle(context.Context, Instance) (IngressHandle, erro
 	return IngressHandle{}, nil
 }
 
+// Every routable ingress says what a rule can match its traffic on, and the
+// addresses are what any of them can answer. F060.
+func (ingressFake) IngressCriteria(Kind) []Criterion { return CriteriaByAddress() }
+
 type egressFake struct {
 	routingFake
 	exits []Kind
@@ -36,6 +40,12 @@ func (egressFake) ExitHandleKind(Kind) ExitHandleKind { return ExitDevice }
 func (egressFake) ExitHandle(context.Context, Exit) (ExitHandle, error) {
 	return ExitHandle{}, nil
 }
+
+// silentIngressFake routes a kind and then names nothing a rule could match it
+// on, which is a core that cannot be routed saying it can.
+type silentIngressFake struct{ ingressFake }
+
+func (silentIngressFake) IngressCriteria(Kind) []Criterion { return nil }
 
 /*
 A nil declaration is a conformance failure, not a default: a core that implements
@@ -54,6 +64,11 @@ func TestDeclaredMatchesImplementedCatchesEmptyRoutingDeclaration(t *testing.T) 
 			"an ingress that routes no kind declares nothing",
 			ingressFake{routingFake: base, selector: IngressNone},
 			"RoutableIngress: implemented, but every kind answers IngressNone",
+		},
+		{
+			"an ingress that names no criterion declares nothing",
+			silentIngressFake{ingressFake{routingFake: base, selector: IngressInternal}},
+			"RoutableIngress: implemented, but every kind names no criterion",
 		},
 		{
 			"an egress that offers no exit kind declares nothing",
