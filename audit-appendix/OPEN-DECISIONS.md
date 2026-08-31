@@ -152,11 +152,23 @@ is why this is here rather than decided.
 Every open question was put to the operator and answered. Nothing on this page
 is waiting on them any more; what is left is work.
 
-- **Q1 — a new save-time refusal fires only when the edit WORSENS the violation.**
-  A row that already violates stays editable, so an operator is never locked out
-  of a row they cannot repair; no edit may introduce or deepen one. Costs a
-  before/after comparison per rule. Unblocks F035/F216, F067, F045, F373, F007
-  and all of **F316**.
+- **Q1 — SHIPPED. A save-time refusal fires only when the edit WORSENS the
+  violation.** Written once as `refuseOnlyIfWorsened` rather than decided per
+  refusal. Every finding it gated is now closed:
+
+  | finding | state |
+  | --- | --- |
+  | **F316** | fixed — a tunnel inbound with no destination dials itself; refused, and Q1's first user |
+  | **F067** | fixed — the host-address check now runs on edit too, worsens-only |
+  | **F007** | fixed — the template save asks the core itself, not just the outbounds array |
+  | **F035** | fixed — the mtproto bridge port is checked against the panel's own inbounds |
+  | **F216** | already fixed — injectMtprotoEgress scans for the collision and skips |
+  | **F045** | already fixed — and it had ALREADY implemented Q1's rule ("only an edit that CHANGES the identity is checked") |
+  | **F373** | already fixed — scheduleLdapSync falls back to the default spec and logs loudly |
+
+  One deliberate exception: `refuseUnenforcedAccounts` is NOT worsens-only.
+  Forcing the fix on operator contact is that guard's whole repair path, its own
+  test says so, and applying Q1 there made that test fail. Ledger L32.
 - **Q2 — LDAP may disable, and gets a provenance column.** Off-boarding now
   reaches the panel, and a column records which clients LDAP created so the
   delete sweep can never take a hand-made one. Needs a migration. Unblocks
