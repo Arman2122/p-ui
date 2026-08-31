@@ -368,15 +368,21 @@ func (s *InboundService) disableRemoteClients(tx *gorm.DB, inboundID int, emails
 restartCannotFix reports a RemoveUser failure that restarting Xray would not
 resolve, so cutting one client off never drops everyone else's connections.
 
-Two cases. The user is already gone, which is the common one. Or the tag is not
-Xray's at all: an mtproto inbound is served by an mtg sidecar, so Xray answers
-"handler not found" for every depleted MTProto client, and no restart can
-conjure a handler for another core's inbound. Such a client is cut off by its
-own core — the mtproto reconcile drops the secret once client_traffics.enable
-goes false.
+Three cases. The user is already gone, which is the common one. Or the tag is
+not Xray's at all: an mtproto inbound is served by an mtg sidecar, so Xray
+answers "handler not found" for every depleted MTProto client, and no restart
+can conjure a handler for another core's inbound. Such a client is cut off by
+its own core — the mtproto reconcile drops the secret once
+client_traffics.enable goes false.
+
+Or the tag is Xray's but the kind holds no users: http, mixed, tunnel and tun
+are not proxy.UserManagers, so removing a client from one answers "proxy is not
+a UserManager" however many times Xray is restarted. F313 stopped new clients
+attaching to those kinds; rows that predate it still reach here. F314.
 */
 func restartCannotFix(err error, email string) bool {
 	msg := err.Error()
 	return strings.Contains(msg, fmt.Sprintf("User %s not found.", email)) ||
-		strings.Contains(msg, "handler not found:")
+		strings.Contains(msg, "handler not found:") ||
+		strings.Contains(msg, "proxy is not a UserManager")
 }

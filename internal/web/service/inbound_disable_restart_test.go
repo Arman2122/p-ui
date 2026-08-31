@@ -35,6 +35,16 @@ func TestRestartCannotFix(t *testing.T) {
 			want: true,
 		},
 		{
+			/*
+				A depleted client on an http/mixed/tunnel/tun inbound. Xray serves
+				the tag, so "handler not found" never fires, but none of those four
+				proxies is a UserManager -- restarting cannot make one. F314.
+			*/
+			name: "the kind Xray serves holds no users",
+			err:  errors.New("failed to remove user: rpc error: code = Unknown desc = app/proxyman/command: proxy is not a UserManager"),
+			want: true,
+		},
+		{
 			name: "a reachable xray that genuinely failed still earns a restart",
 			err:  errors.New("failed to remove user: rpc error: code = Unavailable desc = connection refused"),
 			want: false,
