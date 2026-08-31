@@ -299,3 +299,31 @@ func TestForwardingNotesAnswersWithoutAnEgress(t *testing.T) {
 		})
 	}
 }
+
+/*
+A host that cannot source-translate says so.
+
+EnsureMasquerade answers ErrNoNft, which it has to -- the panel still routes
+without the rule -- and both call sites then swallow it. Nothing said it
+anywhere, so an L3 inbound on such a host handed out addresses, completed
+handshakes and dropped every packet it forwarded, behind a green form.
+masquerade.go's own comment already claimed "preflight says so". It did not.
+*/
+func TestForwardingNotesNameAHostThatCannotTranslate(t *testing.T) {
+	k := cleanHost(t)
+	k.SetSysctlValue(egress.IPForwardKey, "1")
+	k.SetSysctlValue(egress.IPForward6Key, "1")
+	k.NoNft = true
+
+	notes := egress.New(k, nil).ForwardingNotes(context.Background())
+	if len(notes) != 1 || !strings.Contains(notes[0], "nftables") {
+		t.Fatalf("notes = %v, want exactly one naming the nftables package", notes)
+	}
+
+	// And nothing at all once it is there, so the note means something when it
+	// does appear rather than being a line every operator learns to scroll past.
+	k.NoNft = false
+	if quiet := egress.New(k, nil).ForwardingNotes(context.Background()); len(quiet) != 0 {
+		t.Fatalf("notes = %v, want silence on a host that can translate", quiet)
+	}
+}

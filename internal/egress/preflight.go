@@ -102,6 +102,14 @@ func (m *Manager) ForwardingNotes(ctx context.Context) []string {
 				"%s is 0, so no L3 inbound on this host forwards a packet of that family at all, egress or not", key))
 		}
 	}
+	// The one half of this the panel cannot fix for itself. EnsureMasquerade
+	// tolerates ErrNoNft because the panel still routes without it -- but a
+	// forwarded packet then keeps its in-tunnel source and every upstream drops
+	// it, so the tunnel comes up and carries nothing, silently.
+	if !m.plane.CanMasquerade(ctx) {
+		notes = append(notes, "nft is not installed, so traffic forwarded out of an L3 inbound keeps"+
+			" its in-tunnel source and is dropped upstream: install the nftables package")
+	}
 	return notes
 }
 

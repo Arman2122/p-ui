@@ -166,6 +166,12 @@ type Plane interface {
 	// interface is one a fake cannot intercept, so the test that thought it was
 	// driving a fake wrote to the real /etc and failed as an unprivileged user.
 	PersistSysctl(ctx context.Context, path, body string) error
+
+	// CanMasquerade reports whether the source-NAT rule can be applied at all.
+	// On the Plane for the same reason PersistSysctl is: a bare PATH lookup is a
+	// host read a fake cannot intercept, and the note built on it would then say
+	// something different depending on the box the test ran on.
+	CanMasquerade(ctx context.Context) bool
 }
 
 // HostPlane is the real stack on Linux and a refusing stub everywhere else.

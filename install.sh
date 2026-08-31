@@ -173,8 +173,12 @@ is_port_in_use() {
 # every psql call as `sudo -u postgres`, and a Debian installed with a root
 # password does not ship sudo. Without it the now-mandatory database setup
 # would abort the whole install.
+#
+# nftables is one too. The panel writes its own `inet p-ui-nat` table so an L3
+# inbound's forwarded traffic leaves with the host's address; with no nft binary
+# that apply is skipped and every packet the tunnel forwards is dropped upstream.
 install_base() {
-    apt-get update && apt-get install -y -q cron curl tar tzdata socat ca-certificates openssl iptables sudo
+    apt-get update && apt-get install -y -q cron curl tar tzdata socat ca-certificates openssl iptables nftables sudo
 }
 
 gen_random_string() {
