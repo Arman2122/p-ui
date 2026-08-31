@@ -152,6 +152,9 @@ func initModels() error {
 	if err := migrateDepletedEmailIndex(); err != nil {
 		return err
 	}
+	if err := migrateClientOriginColumn(); err != nil {
+		return err
+	}
 	if err := migrateSyncOrphanColumns(); err != nil {
 		return err
 	}
@@ -291,6 +294,23 @@ func migratePlanTemplateInbounds() error {
 // AutoMigrate adds the column; this only backfills the NULLs the ALTER TABLE on
 // an already populated table leaves behind, so the reaper's predicate never
 // compares to NULL.
+/*
+migrateClientOriginColumn backfills the NULLs an ALTER TABLE leaves on a
+populated clients table, so the LDAP sweep's predicate never compares to NULL.
+
+Every existing row lands on "" -- unknown, which the sweep reads as "not created
+by LDAP" and therefore never detaches. Deliberate: guessing that an email
+matching the directory today was created by sync is adoption, and adoption was
+declined. An operator upgrading keeps every client they made by hand, and
+LDAP-created rows from before this column are grandfathered with them. F372.
+*/
+func migrateClientOriginColumn() error {
+	if !db.Migrator().HasColumn(&model.ClientRecord{}, "origin") {
+		return nil
+	}
+	return db.Exec("UPDATE clients SET origin = '' WHERE origin IS NULL").Error
+}
+
 func migrateSyncOrphanColumns() error {
 	if !db.Migrator().HasColumn(&model.ClientRecord{}, "sync_orphaned_at") {
 		return nil
