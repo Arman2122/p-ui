@@ -129,6 +129,11 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	if b.Ingress != nil && !routesSomeKind(b.Core, b.Ingress) {
 		problems = append(problems, "RoutableIngress: implemented, but every kind answers IngressNone; a core that can route nothing declares nothing")
 	}
+	// A routable kind that names no criterion is a subject no rule can be
+	// written against, which is the same silence as not routing it at all. F060.
+	if b.Ingress != nil && routesSomeKind(b.Core, b.Ingress) && !namesSomeCriterion(b.Core, b.Ingress) {
+		problems = append(problems, "RoutableIngress: implemented, but every kind names no criterion; a subject no rule can match declares nothing")
+	}
 	if b.Egress != nil && len(b.Egress.ExitKinds()) == 0 {
 		problems = append(problems, "RoutableEgress: implemented, but ExitKinds is empty; a core that offers no exit declares nothing")
 	}
@@ -140,6 +145,20 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 
 // routesSomeKind reports whether any kind this core serves can be named as a
 // routing source, which is the whole of what implementing RoutableIngress claims.
+// namesSomeCriterion reports whether any routable kind says what a rule can
+// match its traffic on.
+func namesSomeCriterion(c Core, ingress RoutableIngress) bool {
+	for _, kind := range c.Kinds() {
+		if ingress.IngressSelector(kind) == IngressNone {
+			continue
+		}
+		if len(ingress.IngressCriteria(kind)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func routesSomeKind(c Core, r RoutableIngress) bool {
 	for _, kind := range c.Kinds() {
 		if r.IngressSelector(kind) != IngressNone {
