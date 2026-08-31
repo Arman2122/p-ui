@@ -107,6 +107,7 @@ func Check(rig Rig) []Failure {
 	checkIdentity(r, c)
 	checkDescriptor(r, bound)
 	checkCredentials(r, bound)
+	checkTransports(r, bound)
 	checkRegistry(r, rig)
 	checkSupervisor(r, rig, bound)
 	checkHotApply(r, rig, bound)
@@ -196,6 +197,30 @@ func checkCredentials(r *report, bound *core.Bound) {
 		}
 		if len(again) != 0 {
 			r.fail("credentials/mint-idempotent", "kind %q re-minted %v over its own output; a client would get fresh credentials on every save", kind, again)
+		}
+	}
+}
+
+/*
+checkTransports holds a declaring core to the one rule Transports has: None is
+exclusive.
+
+A kind that binds no port cannot also bind TCP or UDP, and a core answering both
+would be read as portless by the conflict check while genuinely holding a
+listener -- so a second inbound would be accepted onto a port already in use and
+the process would fail to start. Settings are empty here on purpose: whether a
+kind binds anything at all is not a property of one inbound's configuration.
+*/
+func checkTransports(r *report, bound *core.Bound) {
+	if bound.Transports == nil {
+		return
+	}
+	for _, kind := range bound.Core.Kinds() {
+		answer := bound.Transports.Transports(kind, "", "")
+		if answer.None && (answer.TCP || answer.UDP) {
+			r.fail("transports/none-exclusive",
+				"kind %q answers None together with TCP=%v UDP=%v; a kind that binds nothing cannot also bind a port",
+				kind, answer.TCP, answer.UDP)
 		}
 	}
 }

@@ -44,6 +44,7 @@ import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
 import { wireguardPoolUsage, type WireguardPoolClient } from '@/lib/xray/wireguard-pool';
 import { unavailableKinds } from '@/lib/cores/core-availability';
+import { kindBindsNoPort } from '@/lib/cores/port';
 import { Protocols } from '@/schemas/primitives';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
 import { HysteriaStreamSettingsSchema } from '@/schemas/protocols/stream/hysteria';
@@ -272,6 +273,8 @@ export default function InboundFormModal({
   const wPort = useWatch({ control, name: 'port' });
   const wListen = (useWatch({ control, name: 'listen' }) ?? '') as string;
   const isUdsListen = wListen.startsWith('/') || wListen.startsWith('@');
+  /* A kind that binds no port has no port to ask for; 0 is what it stores. */
+  const bindsNoPort = kindBindsNoPort(coresQuery.data, protocol);
   const wNodeId = useWatch({ control, name: 'nodeId' }) ?? null;
   const shareAddrStrategy = useWatch({ control, name: 'shareAddrStrategy' }) ?? 'node';
   const wTag = (useWatch({ control, name: 'tag' }) ?? '') as string;
@@ -640,9 +643,18 @@ export default function InboundFormModal({
       <FormField
         name="port"
         label={t('pages.inbounds.port')}
-        rules={{ validate: rhfZodValidate(InboundFormBaseSchema.shape.port) }}
+        extra={bindsNoPort ? t('pages.inbounds.form.portNotBound') : undefined}
+        rules={{
+          /* 0 is a real answer for a bind that takes no port: a unix socket, or
+             a kind whose core declares it binds none. */
+          validate: (value: unknown) => (
+            (isUdsListen || bindsNoPort) && value === 0
+              ? true
+              : rhfZodValidate(InboundFormBaseSchema.shape.port)(value)
+          ),
+        }}
       >
-        <InputNumber min={isUdsListen ? 0 : 1} max={65535} />
+        <InputNumber min={isUdsListen || bindsNoPort ? 0 : 1} max={65535} />
       </FormField>
 
       <Form.Item

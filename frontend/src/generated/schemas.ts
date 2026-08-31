@@ -1512,6 +1512,16 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "portlessKinds": {
+        "description": "/*\n\t\tPortlessKinds are the kinds that bind no port at all — an Xray TUN device\n\t\tis a kernel interface, not a listener.\n\n\t\tThe form asks this instead of asking a protocol list, so it stops\n\t\tdemanding a port for one, and the port-conflict check stops counting the\n\t\tstored value as occupied. Asked with no settings on purpose: whether a\n\t\tkind binds anything is not a property of one inbound's configuration. F319.\n\t*/",
+        "example": [
+          "tun"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "sessionKinds": {
         "description": "/*\n\t\tSessionKinds are the kinds whose core can name each live connection and the\n\t\taddress it came from — the one thing an IP limit is decided from.\n\n\t\tA kind absent here cannot have a cap enforced however the form is filled\n\t\tin: EvaluateIPLimits only ever sees clients a core reported a session for,\n\t\tand mtg, for one, reports a secret in use and no address at all. The form\n\t\tsays so instead of accepting a number that does nothing. F120 / F302.\n\t*/",
         "example": [
@@ -1549,6 +1559,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "exitKinds",
       "id",
       "kinds",
+      "portlessKinds",
       "sessionKinds",
       "shaping",
       "titleKey",

@@ -37,6 +37,12 @@ func inboundTransports(protocol model.Protocol, streamSettings, settings string)
 		return transportTCP
 	}
 	answer := bound.Transports(kind, settings, streamSettings)
+	// The one answer that means it: a kind declaring None binds no port at all,
+	// so zero bits overlap nothing and the checks below skip it. An EMPTY answer
+	// still reads TCP -- that is negligence, not a declaration. F319.
+	if answer.None {
+		return 0
+	}
 	var bits transportBits
 	if answer.TCP {
 		bits |= transportTCP
@@ -264,6 +270,9 @@ func baseInboundTag(port int) string {
 
 func transportTagSuffix(b transportBits) string {
 	switch b {
+	// Only a kind that declared it binds nothing reaches zero bits.
+	case 0:
+		return "none"
 	case transportTCP:
 		return "tcp"
 	case transportUDP:

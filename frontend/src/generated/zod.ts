@@ -385,6 +385,7 @@ export const CoreViewSchema = z.object({
   exitKinds: z.array(z.string()),
   id: z.string(),
   kinds: z.array(z.string()),
+  portlessKinds: z.array(z.string()),
   sessionKinds: z.array(z.string()),
   shaping: z.record(z.string(), z.string()),
   titleKey: z.string(),

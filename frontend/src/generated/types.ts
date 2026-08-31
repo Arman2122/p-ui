@@ -358,6 +358,7 @@ export interface CoreView {
   exitKinds: string[];
   id: string;
   kinds: string[];
+  portlessKinds: string[];
   sessionKinds: string[];
   shaping: Record<string, string>;
   titleKey: string;

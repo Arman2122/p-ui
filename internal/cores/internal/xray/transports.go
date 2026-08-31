@@ -20,11 +20,16 @@ must still be treated as occupied, or conflict detection quietly stops
 protecting the one inbound whose settings are malformed.
 */
 func (c *Core) Transports(kind core.Kind, settings, streamSettings string) core.Transports {
+	switch kind {
 	// Two of Xray's kinds dial their own UDP and read no stream settings at all,
 	// so the transport peek below would answer TCP for them.
-	switch kind {
 	case "hysteria", "wireguard":
 		return core.Transports{UDP: true}
+	// And one binds nothing: a TUN device is a kernel interface, so its stored
+	// port is a form field and not a listener. Without this it fell to the TCP
+	// default and the panel refused a real inbound on that port. F319.
+	case "tun":
+		return core.Transports{None: true}
 	}
 
 	out := core.Transports{}
