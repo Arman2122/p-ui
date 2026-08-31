@@ -1497,3 +1497,33 @@ that is not written yet. And mtproto keeps addresses only for a real reason,
 recorded at the bridge: the sidecar hands Xray Telegram's own wire format, which
 carries no SNI and no Host, so a sniffer there would read every connection and
 find nothing.
+
+## L34 — routeOnly is proven load-bearing, on the wire
+
+The domain-routing work (L33) argued `routeOnly: true` from the pinned core's
+source: `GetTargetDomain` reads `Outbound.RouteTarget` while `GetTargetIPs`
+reads `Outbound.Target`, so the sniffed name matches without the dial target
+losing its IP. That reasoning is now demonstrated, on the VM, against the real
+binary.
+
+The probe: a dokodemo inbound forwarding to a PRIVATE address (192.168.77.5:443),
+a `geoip:private -> blocked` guard, and a `domain www.google.com -> direct` rule
+after it. One TLS handshake, SNI `www.google.com`, and the two configs differ in
+exactly one field.
+
+- `routeOnly: true`  → `accepted tcp:192.168.77.5:443 [guard-in -> blocked]`,
+  no peer certificate. The guard held.
+- `routeOnly: false` → `accepted tcp:192.168.77.5:443 [guard-in -> direct]`,
+  `subject=CN = www.google.com`. **The private-address guard was silently
+  bypassed and the connection completed.**
+
+So the field is not a preference: without it, a front's containment guard can be
+walked past by any client that sends a matching SNI, because the router sees a
+domain where the guard expects an IP. Anything that later builds a sniffing
+block for a panel-owned inbound must set it.
+
+Also confirmed in the same pass: sniffing routes by name at all (SNI
+`www.google.com` blackholed while SNI `example.org` completed a full handshake
+to the SAME destination IP, from the same inbound), and the exact front config
+the panel generates -- tun inbound, gateway, sniffing block -- loads in the
+pinned binary.
