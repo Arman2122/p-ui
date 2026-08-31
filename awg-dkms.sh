@@ -209,7 +209,10 @@ status_module() {
     echo "kernel:     $(uname -r)"
     echo "headers:    $([[ -d /lib/modules/$(uname -r)/build ]] && echo present || echo MISSING)"
     echo "dkms:       $(dkms status -m "$MODULE_NAME" 2>/dev/null | tr '\n' ' ' || true)"
-    echo "loaded:     $(lsmod | grep -q "^${MODULE_NAME}" && echo yes || echo no)"
+    # grep -c, not grep -q: -q exits on the first match, lsmod takes SIGPIPE, and
+    # `set -o pipefail` then fails the whole pipeline -- so a module that IS
+    # loaded reported "no". Counting reads every line, so nothing is signalled.
+    echo "loaded:     $([[ "$(lsmod | grep -c "^${MODULE_NAME}" || true)" != "0" ]] && echo yes || echo no)"
     secure_boot_blocks && echo "secureboot: ENABLED (unsigned modules refused)" || true
 }
 
