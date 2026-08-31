@@ -35,30 +35,25 @@ export default function WgkernelFields({
   const [clash, setClash] = useState<{ cidr: string; remark: string } | null>(null);
   return (
     <>
-      <Alert
-        style={{ marginBottom: 16 }}
-        type={forwardingNotes.length > 0 ? 'error' : 'warning'}
-        showIcon
-        title={t('pages.inbounds.form.wgkernelForwardingTitle')}
-        description={(
-          <>
-            {forwardingNotes.length > 0 && (
-              <div style={{ marginBottom: 6, fontWeight: 600 }}>
-                {t('pages.inbounds.form.wgkernelForwardingOff')}
-                {forwardingNotes.map((note) => (
-                  <div key={note} style={{ fontWeight: 400 }} dir="ltr">{note}</div>
-                ))}
-              </div>
-            )}
-            <div>{t('pages.inbounds.form.wgkernelForwardingHint')}</div>
-            <div><code>printf &apos;net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\n&apos; &gt; /etc/sysctl.d/99-wgkernel.conf</code></div>
-            <div><code>sysctl --system</code></div>
-            <div><code>nft add table ip pui_nat</code></div>
-            <div><code>nft &apos;add chain ip pui_nat postrouting {'{'} type nat hook postrouting priority srcnat; policy accept; {'}'}&apos;</code></div>
-            <div><code>nft add rule ip pui_nat postrouting iifname &quot;pwg*&quot; oifname != &quot;pwg*&quot; masquerade</code></div>
-          </>
-        )}
-      />
+      {/* Only when the host is actually refusing. The panel owns these knobs and
+          the NAT rule now, so an unconditional notice was advice to go and build
+          a second, competing nft table that nothing would ever tear down. */}
+      {forwardingNotes.length > 0 && (
+        <Alert
+          style={{ marginBottom: 16 }}
+          type="error"
+          showIcon
+          title={t('pages.inbounds.form.wgkernelForwardingTitle')}
+          description={(
+            <>
+              <div>{t('pages.inbounds.form.wgkernelForwardingHint')}</div>
+              {forwardingNotes.map((note) => (
+                <div key={note} dir="ltr">{note}</div>
+              ))}
+            </>
+          )}
+        />
+      )}
       <Form.Item label={t('pages.xray.wireguard.secretKey')}>
         <Space.Compact block>
           <FormField name={['settings', 'secretKey']} noStyle>
