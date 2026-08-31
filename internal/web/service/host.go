@@ -59,8 +59,12 @@ func newHostGroup(h *model.Host, groupId string) *entity.HostGroup {
 		ExcludeFromSubTypes:    h.ExcludeFromSubTypes,
 		NodeGuids:              h.NodeGuids,
 		MihomoIpVersion:        h.MihomoIpVersion,
-		MihomoX25519:           h.MihomoX25519,
-		ShuffleHost:            h.ShuffleHost,
+		// Deprecated and deliberately still copied: a deprecation an operator's
+		// stored value does not survive is a removal wearing a softer word.
+		//nolint:staticcheck // round-tripped until the removal release. F141.
+		MihomoX25519: h.MihomoX25519,
+		//nolint:staticcheck // round-tripped until the removal release. F141.
+		ShuffleHost: h.ShuffleHost,
 	}
 }
 
@@ -148,8 +152,10 @@ func buildHostRows(groupId string, req *entity.HostGroup) []*model.Host {
 				ExcludeFromSubTypes:    req.ExcludeFromSubTypes,
 				NodeGuids:              req.NodeGuids,
 				MihomoIpVersion:        req.MihomoIpVersion,
-				MihomoX25519:           req.MihomoX25519,
-				ShuffleHost:            req.ShuffleHost,
+				//nolint:staticcheck // round-tripped until the removal release. F141.
+				MihomoX25519: req.MihomoX25519,
+				//nolint:staticcheck // round-tripped until the removal release. F141.
+				ShuffleHost: req.ShuffleHost,
 			})
 		}
 	}

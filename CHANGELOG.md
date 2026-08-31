@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Clash subscriptions can shuffle their proxy order.** A new subscription
+  setting randomises the order of the generated proxy group on every fetch, so
+  clients stop all landing on whichever host sorts first — mihomo's own
+  `shuffle-proxies-order`, and off by default. DIRECT stays last.
+  **Replaces a host switch that never worked:** the per-host "Shuffle host"
+  toggle was read by nothing and could not have been — order belongs to the
+  list, not to one member of it. It and "Mihomo X25519" (whose output the
+  panel already emits unconditionally) are now deprecated: still stored and
+  still returned by the API, marked deprecated in the OpenAPI schema, and due
+  for removal in the release after v1.1.0.
+
 - **A TUN inbound no longer holds a port it never binds.** An Xray TUN device
   is a kernel interface, not a listener, but the panel demanded a port for it,
   counted that value as occupied, and refused a real inbound on it — naming a

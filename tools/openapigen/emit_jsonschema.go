@@ -74,6 +74,9 @@ func (g *schemaGen) fieldSchema(f Field) map[string]any {
 		if f.Doc != "" {
 			wrap["description"] = f.Doc
 		}
+		if isDeprecated(f.Doc) {
+			wrap["deprecated"] = true
+		}
 		if f.Example != "" {
 			wrap["example"] = coerceExample(f.Example, baseKind(f.Type))
 		}
@@ -83,10 +86,25 @@ func (g *schemaGen) fieldSchema(f Field) map[string]any {
 	if f.Doc != "" {
 		sch["description"] = f.Doc
 	}
+	if isDeprecated(f.Doc) {
+		sch["deprecated"] = true
+	}
 	if f.Example != "" {
 		sch["example"] = coerceExample(f.Example, baseKind(f.Type))
 	}
 	return sch
+}
+
+/*
+isDeprecated reads Go's own convention rather than inventing a struct tag: a doc
+comment whose first paragraph starts "Deprecated:" is what gopls, staticcheck
+and pkg.go.dev already act on, so one comment marks the field for the compiler's
+ecosystem and for every consumer of the published schema at once.
+
+An API consumer cannot act on a deprecation they have to read prose to find.
+*/
+func isDeprecated(doc string) bool {
+	return strings.HasPrefix(strings.TrimSpace(doc), "Deprecated:")
 }
 
 func (g *schemaGen) typeSchema(t TypeRef) map[string]any {

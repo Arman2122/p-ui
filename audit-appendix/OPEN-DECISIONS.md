@@ -169,11 +169,19 @@ is waiting on them any more; what is left is work.
   port-conflict check that already asks the question. Four small sites, and a
   core still cannot disable the check by answering empty. The last open tier-2
   finding.
-- **F141 — engineer it properly; "leave the columns" was refused.** The operator's
-  words: this panel is in production, so the resolution has to be a real one, not
-  the cheap one. That means establishing what `MihomoX25519` and `ShuffleHost`
-  were meant to do, then either implementing them correctly or retiring them
-  through a deprecation path an API consumer can follow — design pass first.
+- **F141 — SHIPPED. The research changed the question, and the operator picked
+  the answer it pointed at.** Neither field works as a per-host switch:
+  `shuffleHost`'s analogue (mihomo's `shuffle-proxies-order`) is a proxy-GROUP
+  key, and order belongs to the list rather than to one member of it; and
+  `mihomoX25519`'s documented meaning is "include the derived X25519 public key
+  in the Mihomo output", which the Clash renderer already does unconditionally,
+  so a gate for it could only ever turn correct output off.
+
+  So the capability was built where it actually lives — a subscription setting,
+  `subClashShuffleProxies` — and both columns retire through a real deprecation:
+  still stored, still returned, marked `deprecated` in the published schema
+  (openapigen now reads Go's own `Deprecated:` doc convention), removal named for
+  the release after v1.1.0.
 - **The installer's custom-certificate path — re-prompt.** Say what was wrong and
   ask for the paths again, with a way out to the skip-SSL branch. Matches how
   cases 1 and 2 already branch on their issuer's status.

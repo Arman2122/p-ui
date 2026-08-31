@@ -1377,6 +1377,8 @@
       "subIncyRoutingRulesDesc": "Incy routing deep-link added to the subscription body, e.g. incy://routing/onadd/<base64>. (Only for Incy)",
       "subClashEnableRouting": "Enable routing",
       "subClashEnableRoutingDesc": "Include global Clash/Mihomo routing rules in generated YAML subscriptions.",
+      "subClashShuffleProxies": "Shuffle proxy order",
+      "subClashShuffleProxiesDesc": "Randomise the order of the proxy group on every subscription fetch, so clients do not all land on whichever host sorts first. The DIRECT entry stays last.",
       "subClashRoutingRules": "Global routing rules",
       "subClashRoutingRulesDesc": "Default Clash/Mihomo rules prepended to every generated YAML subscription before MATCH,PROXY.",
       "subListen": "Listen IP",

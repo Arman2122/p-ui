@@ -255,7 +255,7 @@ func TestSub_HostAllowInsecure(t *testing.T) {
 		t.Fatalf("raw link should carry allowInsecure=1: %s", strings.Join(links, "\n"))
 	}
 
-	clash := NewSubClashService(false, "", NewSubService(""))
+	clash := NewSubClashService(false, "", false, NewSubService(""))
 	yaml, _, err := clash.GetClash("s1", "req.example.com")
 	if err != nil {
 		t.Fatalf("GetClash: %v", err)
@@ -276,7 +276,7 @@ func TestSub_HostHeaderReachesClashAndJson(t *testing.T) {
 		HostHeader: "cdn.example.com", Path: "/ws-path",
 	})
 
-	clash := NewSubClashService(false, "", NewSubService(""))
+	clash := NewSubClashService(false, "", false, NewSubService(""))
 	yaml, _, err := clash.GetClash("s1", "req.example.com")
 	if err != nil {
 		t.Fatalf("GetClash: %v", err)
@@ -403,7 +403,7 @@ func TestSub_ExcludeFromSubTypes(t *testing.T) {
 		t.Fatalf("host not excluded from raw should appear in GetSubs")
 	}
 
-	clash := NewSubClashService(false, "", NewSubService(""))
+	clash := NewSubClashService(false, "", false, NewSubService(""))
 	yaml, _, err := clash.GetClash("s1", "req.example.com")
 	if err != nil {
 		t.Fatalf("GetClash: %v", err)
@@ -451,7 +451,7 @@ func TestSub_EveryHostExcludedWithholdsRatherThanLeakingTheOrigin(t *testing.T) 
 		t.Errorf("the raw subscription published the inbound's origin address after every host excluded raw:\n%s", joined)
 	}
 
-	clash := NewSubClashService(false, "", NewSubService(""))
+	clash := NewSubClashService(false, "", false, NewSubService(""))
 	yaml, _, err := clash.GetClash("s2", "req.example.com")
 	if err != nil {
 		t.Fatalf("GetClash: %v", err)
@@ -503,7 +503,7 @@ func TestSub_KeepSniBlankActuallyBlanksTheSni(t *testing.T) {
 		t.Errorf("the raw link carries the inbound's SNI %q although the host asks to keep it blank:\n%s", inboundSni, joined)
 	}
 
-	clash := NewSubClashService(false, "", NewSubService(""))
+	clash := NewSubClashService(false, "", false, NewSubService(""))
 	yaml, _, err := clash.GetClash("s3", "req.example.com")
 	if err != nil {
 		t.Fatalf("GetClash: %v", err)

@@ -194,6 +194,9 @@ export default function SubscriptionGeneralTab({ allSetting, updateSetting }: Su
             <SettingListItem paddings="small" title={t('pages.settings.subClashEnableRouting')} description={t('pages.settings.subClashEnableRoutingDesc')}>
               <Switch checked={allSetting.subClashEnableRouting} onChange={(v) => updateSetting({ subClashEnableRouting: v })} />
             </SettingListItem>
+            <SettingListItem paddings="small" title={t('pages.settings.subClashShuffleProxies')} description={t('pages.settings.subClashShuffleProxiesDesc')}>
+              <Switch checked={allSetting.subClashShuffleProxies} onChange={(v) => updateSetting({ subClashShuffleProxies: v })} />
+            </SettingListItem>
             <SettingListItem paddings="small" title={t('pages.settings.subClashRoutingRules')} description={t('pages.settings.subClashRoutingRulesDesc')}>
               <Input.TextArea
                 value={allSetting.subClashRules}

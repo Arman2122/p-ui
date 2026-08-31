@@ -102,6 +102,7 @@ type AllSetting struct {
 	SubClashPath                string `json:"subClashPath" form:"subClashPath"`
 	SubClashURI                 string `json:"subClashURI" form:"subClashURI"`
 	SubClashEnableRouting       bool   `json:"subClashEnableRouting" form:"subClashEnableRouting"`
+	SubClashShuffleProxies      bool   `json:"subClashShuffleProxies" form:"subClashShuffleProxies"`
 	SubClashRules               string `json:"subClashRules" form:"subClashRules"`
 	SubJsonMux                  string `json:"subJsonMux" form:"subJsonMux"`
 	SubJsonRules                string `json:"subJsonRules" form:"subJsonRules"`
@@ -317,6 +318,10 @@ type HostGroup struct {
 	ExcludeFromSubTypes    []string `json:"excludeFromSubTypes"`
 	NodeGuids              []string `json:"nodeGuids"`
 	MihomoIpVersion        string   `json:"mihomoIpVersion" validate:"omitempty,oneof=dual ipv4 ipv6 ipv4-prefer ipv6-prefer"`
-	MihomoX25519           bool     `json:"mihomoX25519"`
-	ShuffleHost            bool     `json:"shuffleHost"`
+	// Deprecated: read by nothing; the Clash renderer already emits
+	// reality-opts.public-key for every REALITY proxy. See model.Host. F141.
+	MihomoX25519 bool `json:"mihomoX25519"`
+	// Deprecated: read by nothing; shuffling moved to the subscription setting
+	// subClashShuffleProxies, because order belongs to the list. See model.Host. F141.
+	ShuffleHost bool `json:"shuffleHost"`
 }
