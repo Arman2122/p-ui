@@ -1466,3 +1466,34 @@ to preserve editability for; forcing the fix on contact IS the repair.
 Applying Q1 there was tried and reverted. It made the guard's own test fail,
 which is the test doing its job. If the operator ever wants that guard softened
 too, it is a separate decision with a real cost: the fix stops being forced.
+
+## L33 — a criterion is only real if the panel can produce it, and that is now enforced
+
+Found while wiring domain routing for L3 ingresses: the xray core declares
+`CriterionDomain` for all ten of its kinds, but sniffing on a real Xray inbound
+defaults to `enabled: false`. So a domain rule on a VLESS/VMess/Trojan inbound
+saved, displayed as active, and never matched — F060's own bug class, still live
+on the kinds people actually use, on a path F060 never looked at.
+
+The general shape: a criterion is only real where something can produce it. Xray
+matches a domain from the sniffer, and the sniffer runs on an Xray INBOUND — so
+for every ingress shape the question is which inbound carries the block:
+
+- `IngressInternal` — the inbound the core already answers to, or the loopback
+  bridge the panel builds for a sidecar core.
+- `IngressDevice` — the xray-tun front the panel synthesises for that device.
+- `IngressSubnet` (new, for the PPP family and OpenConnect) — nothing. A
+  per-session device has no front and no bridge, so no sniffer can attach.
+
+`core.InspectableSelector` answers that question once, and `bind.go` +
+`internal/arch` both refuse a core declaring a payload criterion for a shape it
+answers false for. A future core author gets a conformance failure in their own
+run rather than an operator getting a rule that silently never fires.
+
+Two things fall out of it. `IngressSubnet` exists in the vocabulary before the
+egress plane can honour it — declared, guarded, and refused a domain until the
+mechanism lands — which is how the seam gets designed without guessing at a core
+that is not written yet. And mtproto keeps addresses only for a real reason,
+recorded at the bridge: the sidecar hands Xray Telegram's own wire format, which
+carries no SNI and no Host, so a sniffer there would read every connection and
+find nothing.

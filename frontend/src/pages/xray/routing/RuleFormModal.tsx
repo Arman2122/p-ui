@@ -152,6 +152,11 @@ export default function RuleFormModal({
     return { disabled: true, extra: t('pages.xray.routing.criterionUnavailable') };
   };
 
+  /* A domain is not in the packet: it is read out of the handshake, so it is
+     there for TLS, HTTP and QUIC and absent for everything else. Said where the
+     field is filled in, not in a doc nobody opens. */
+  const domainAsked = (useWatch({ control: methods.control, name: 'domain' }) ?? '') !== '';
+
   /* Routing an L3 inbound is not free and the cost is invisible until someone
      tries the protocol that stopped working, so it is said before the save. */
   const frontedTags = useMemo(() => {
@@ -321,6 +326,7 @@ export default function RuleFormModal({
           <FormField
             name="domain"
             {...gate('domain')}
+            extra={gate('domain').extra ?? (domainAsked ? t('pages.xray.routing.domainReadFromTraffic') : undefined)}
             label={
               <Tooltip title={t('pages.xray.rules.useComma')}>
                 {t('domainName')} <QuestionCircleOutlined aria-hidden="true" />

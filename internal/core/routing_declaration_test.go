@@ -140,3 +140,66 @@ func TestAProvisionerThatServesNoUserKindIsAConformanceFailure(t *testing.T) {
 		}
 	}
 }
+
+/*
+A core cannot declare a criterion the panel has no way to produce.
+
+This is the guard the whole multi-core routing promise rests on. The criteria
+mask says: a rule the editor lets you write is a rule that can match. A payload
+criterion -- domain, protocol, attrs -- is only answerable where the panel has
+an Xray inbound to hang a sniffer on: the one an internal ingress already
+answers to, or the front it synthesises for a device.
+
+A per-session ingress (IngressSubnet, for the PPP family and OpenConnect) has
+neither. A core shipping that selector and declaring `domain` would produce
+rules that save, display as active, and never fire -- F060 written again by the
+next core author, in a package nobody reviewing routing would look at.
+
+Caught in their own conformance run instead. The day the panel learns to sniff a
+new shape, InspectableSelector gains it and this stops firing.
+*/
+type subnetIngressFake struct {
+	routingFake
+	criteria []Criterion
+}
+
+func (subnetIngressFake) IngressSelector(Kind) IngressSelector { return IngressSubnet }
+func (subnetIngressFake) IngressHandle(context.Context, Instance) (IngressHandle, error) {
+	return IngressHandle{}, nil
+}
+func (f subnetIngressFake) IngressCriteria(Kind) []Criterion { return f.criteria }
+
+func TestACoreCannotDeclareACriterionThePanelCannotProduce(t *testing.T) {
+	base := routingFake{kinds: []Kind{"ppp"}}
+
+	withDomain := subnetIngressFake{
+		routingFake: base,
+		criteria:    append(CriteriaByAddress(), CriterionDomain),
+	}
+	problems := Bind(withDomain).DeclaredMatchesImplemented()
+	const want = "declares criterion domain"
+	if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, want) }) {
+		t.Fatalf("a per-session ingress declaring a domain criterion passed conformance: %v", problems)
+	}
+
+	// The same core routing by address alone is exactly right, and must pass.
+	byAddress := subnetIngressFake{routingFake: base, criteria: CriteriaByAddress()}
+	for _, problem := range Bind(byAddress).DeclaredMatchesImplemented() {
+		if strings.Contains(problem, "declares criterion") {
+			t.Fatalf("an address-only per-session ingress was refused: %q", problem)
+		}
+	}
+}
+
+// And an inspectable shape may declare it freely: that is the whole point.
+func TestAnInspectableShapeMayDeclareTheDomain(t *testing.T) {
+	fake := ingressFake{
+		routingFake: routingFake{kinds: []Kind{"fk"}},
+		selector:    IngressDevice,
+	}
+	for _, problem := range Bind(fake).DeclaredMatchesImplemented() {
+		if strings.Contains(problem, "declares criterion") {
+			t.Fatalf("a device ingress was refused a criterion the panel can produce: %q", problem)
+		}
+	}
+}

@@ -42,7 +42,6 @@ type Subject struct {
 	InboundID    int
 	Tag          string
 	Handle       core.IngressHandle
-	Inspect      bool
 	CriteriaMask []string
 }
 
@@ -62,6 +61,27 @@ type Rule struct {
 	IngressIDs []int
 	Dest       Dest
 	Criteria   map[string]json.RawMessage
+	// Inspect forces the front to sniff even when no criterion needs it. A
+	// domain criterion implies it; this is the manual override.
+	Inspect bool
+}
+
+/*
+NeedsInspection reports whether this rule can only match once the front reads
+the payload.
+
+A domain criterion IS the intent: an L3 ingress carries no name anywhere in the
+packet, so a rule matching one is asking for the TLS SNI, HTTP Host or QUIC
+name to be read. Deriving it rather than making the operator find a second
+switch is what stops a domain rule saving and never matching -- the whole class
+of bug F060's criteria mask exists to remove.
+*/
+func (r Rule) NeedsInspection() bool {
+	if r.Inspect {
+		return true
+	}
+	_, hasDomain := r.Criteria[string(core.CriterionDomain)]
+	return hasDomain
 }
 
 // ResolvedExit is one uplink with its core's handle already resolved.
@@ -72,7 +92,14 @@ type ResolvedExit struct {
 	Handle core.ExitHandle
 }
 
-// FrontSpec is a front the compile wants Xray to create for an L3 ingress.
+/*
+FrontSpec is a front the compile wants Xray to create for an L3 ingress.
+
+Sniff makes the front read the payload for a domain. It is asked for by the
+rules on that subject rather than configured per inbound: a front that sniffs
+when nothing needs it pays the cost of a cached reader on every connection for
+an answer no rule reads.
+*/
 type FrontSpec struct {
 	ID    int
 	Sniff bool
@@ -94,9 +121,19 @@ type Input struct {
 // Compiled is the whole answer: what Xray runs, what the kernel converges, and
 // what the operator is told about each (rule, subject) pair.
 type Compiled struct {
-	XrayRules    []json.RawMessage
-	Outbounds    []json.RawMessage
-	Fronts       []FrontSpec
+	XrayRules []json.RawMessage
+	Outbounds []json.RawMessage
+	Fronts    []FrontSpec
+	/*
+		InspectTags are the tags of INTERNAL ingresses whose rules need the
+		payload read: an Xray inbound the operator owns, or the loopback bridge
+		the panel builds for a sidecar core.
+
+		Separate from Fronts because the panel does not create these inbounds, it
+		amends them -- and it amends only the generated config, never the stored
+		row, so the operator's own sniffing setting is untouched.
+	*/
+	InspectTags  []string
 	Kernel       []egress.Egress
 	Diags        []Diag
 	NeedsRestart bool
@@ -133,6 +170,20 @@ func Plan(in Input) Compiled {
 		}
 
 		tag, pattern := subject.Handle.Tag, PatternProxy
+		if tag != "" && inspectedBy(rules) {
+			/*
+				An internal ingress is an Xray inbound already, and Xray only
+				matches a domain when that inbound sniffs. The panel's own default
+				for a new inbound is sniffing OFF, so a domain rule on a VLESS
+				inbound saved, displayed as active, and never matched -- F060 on
+				the kinds people actually use.
+
+				The rule is the intent, so the generated config carries the block.
+				The stored inbound is not touched: an operator who turned sniffing
+				off did that for their traffic, not for the router.
+			*/
+			out.InspectTags = append(out.InspectTags, tag)
+		}
 		if tag == "" {
 			// An L3 ingress is always fronted in this phase: the kernel FIB has no
 			// domain or port vocabulary, so criteria can only be matched inside Xray.
@@ -152,7 +203,7 @@ func Plan(in Input) Compiled {
 			out.Kernel = append(out.Kernel, egress.Egress{
 				ID: frontID, Type: frontType, Enable: true, Ingress: []string{subject.Handle.Device},
 			})
-			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: subject.Inspect})
+			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: inspectedBy(rules)})
 			out.NeedsRestart = true
 			// Strictly ahead of this front's own rules: a front is otherwise the one
 			// class of forwarded traffic exempt from the template's private block.
@@ -400,6 +451,17 @@ func socksOutbound(tag string, port int) json.RawMessage {
 			"servers": []any{map[string]any{"address": "127.0.0.1", "port": port}},
 		},
 	})
+}
+
+// inspectedBy reports whether any enabled rule on this subject needs the front
+// to read the payload. One pass over the rules that will be compiled for it.
+func inspectedBy(rules []Rule) bool {
+	for _, rule := range rules {
+		if rule.Enable && rule.NeedsInspection() {
+			return true
+		}
+	}
+	return false
 }
 
 func guardRule(tag, blackhole string) json.RawMessage {

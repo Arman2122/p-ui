@@ -20,6 +20,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/egress/drivers/wgclient"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/routing"
+	"github.com/Arman2122/p-ui/internal/util/json_util"
 	"github.com/Arman2122/p-ui/internal/xray"
 )
 
@@ -93,6 +94,46 @@ func criteriaMaskFor(kind core.Kind) []string {
 		out = append(out, string(criterion))
 	}
 	return out
+}
+
+/*
+frontSniffing is the sniffing block an inspected L3 front carries.
+
+routeOnly is load-bearing, not a preference. Without it the dispatcher REPLACES
+the dial target with the sniffed name, and the front's own containment guard
+matches `ip: geoip:private` -- a target rewritten to a domain has no IP for that
+guard to see, so a rule pointing at a private address would slip past the one
+protection a front is not exempt from. With it, GetTargetDomain reads
+RouteTarget while GetTargetIPs still reads Target: the name becomes matchable
+and the guard keeps holding. Verified against the pinned core
+(features/routing/session/context.go, app/dispatcher/default.go:311).
+
+quic is in the list because it is most of what the operator is trying to catch:
+a browser speaks QUIC to Google, and sniffing only http and tls would miss it.
+*/
+var frontSniffing = json_util.RawMessage(`{"enabled":true,"destOverride":["http","tls","quic"],"routeOnly":true}`)
+
+/*
+sniffingEnabled reports whether an inbound already reads the payload.
+
+Only "enabled" is read, because that is the whole question: which protocols it
+overrides, what it excludes and whether it rewrites the target are the
+operator's answers to a question they have already been asked. An unparsable
+block reads as enabled -- overwriting settings the panel could not understand is
+worse than leaving a rule inert, and the diagnostics say when a rule did not
+match.
+*/
+func sniffingEnabled(raw json_util.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var parsed struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if json.Unmarshal(raw, &parsed) != nil {
+		return true
+	}
+	return parsed.Enabled == nil || *parsed.Enabled
 }
 
 // compile resolves everything the plan needs and runs it. Front ids are
@@ -272,7 +313,8 @@ func toPlanRules(rules []*model.RoutingRule) []routing.Rule {
 		out = append(out, routing.Rule{
 			ID: rule.Id, SortIndex: rule.SortIndex, Enable: rule.Enable,
 			Scope: rule.IngressScope, IngressIDs: ids, Criteria: criteria,
-			Dest: routing.Dest{Kind: rule.DestKind, Tag: rule.DestTag, ExitID: exitID},
+			Dest:    routing.Dest{Kind: rule.DestKind, Tag: rule.DestTag, ExitID: exitID},
+			Inspect: rule.Inspect,
 		})
 	}
 	return out
@@ -337,8 +379,35 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config, retireFronts bool) 
 			diag.RuleID, diag.SubjectTag, diag.MessageKey, diag.Args)
 	}
 
-	if len(compiled.XrayRules) == 0 && len(compiled.Fronts) == 0 {
+	if len(compiled.XrayRules) == 0 && len(compiled.Fronts) == 0 && len(compiled.InspectTags) == 0 {
 		return nil
+	}
+
+	/*
+		Every inbound a domain rule names is made to sniff, in the GENERATED
+		config only.
+
+		The stored row is deliberately untouched: an operator who turned sniffing
+		off did that for their traffic, and this is the router asking a question
+		about one connection. An inbound already sniffing keeps its own block --
+		theirs may exclude domains or carry fakedns, and replacing it would answer
+		a question they had already answered.
+	*/
+	if len(compiled.InspectTags) > 0 {
+		wanted := make(map[string]struct{}, len(compiled.InspectTags))
+		for _, tag := range compiled.InspectTags {
+			wanted[tag] = struct{}{}
+		}
+		for i := range cfg.InboundConfigs {
+			inbound := &cfg.InboundConfigs[i]
+			if _, ok := wanted[inbound.Tag]; !ok {
+				continue
+			}
+			if sniffingEnabled(inbound.Sniffing) {
+				continue
+			}
+			inbound.Sniffing = frontSniffing
+		}
 	}
 
 	for _, front := range compiled.Fronts {
@@ -358,6 +427,9 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config, retireFronts bool) 
 		var inbound xray.InboundConfig
 		if json.Unmarshal(injection.Inbound, &inbound) != nil {
 			continue
+		}
+		if front.Sniff {
+			inbound.Sniffing = frontSniffing
 		}
 		cfg.InboundConfigs = append(cfg.InboundConfigs, inbound)
 	}
