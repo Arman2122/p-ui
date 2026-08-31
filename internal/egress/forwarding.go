@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 )
 
 /*
@@ -44,6 +45,12 @@ already matches is left alone, so this is free on every pass after the first.
 */
 func (m *Manager) EnsureForwarding(ctx context.Context) error {
 	var failures []error
+	// Before the knobs below, never after: accept_ra defaults to 1, which the
+	// kernel reads as "accept unless forwarding is enabled", so turning
+	// forwarding on is what costs an RA-configured host its own IPv6.
+	if err := m.keepRouterAdvertisements(ctx); err != nil {
+		failures = append(failures, err)
+	}
 	for _, key := range []string{IPForwardKey, IPForward6Key} {
 		value, err := m.plane.Sysctl(ctx, key)
 		if err != nil {
@@ -62,6 +69,59 @@ func (m *Manager) EnsureForwarding(ctx context.Context) error {
 		}
 	}
 	if err := m.plane.PersistSysctl(ctx, ForwardingDropIn, forwardingDropInBody); err != nil {
+		failures = append(failures, err)
+	}
+	return errors.Join(failures...)
+}
+
+// AcceptRADropIn keeps Router Advertisements working on a host this panel turned
+// into a router. Numbered BELOW the forwarding drop-in so sysctl applies it
+// first at boot: the knob has to read 2 before forwarding reads 1.
+const AcceptRADropIn = "/etc/sysctl.d/98-p-ui-accept-ra.conf"
+
+func acceptRAKey(device string) string { return "net.ipv6.conf." + device + ".accept_ra" }
+
+/*
+keepRouterAdvertisements preserves RA on the interfaces that actually use it.
+
+accept_ra=1 -- the default -- means "accept unless forwarding is enabled". This
+panel enables forwarding, so on a host whose IPv6 comes from a Router
+Advertisement (AWS, Vultr, Linode; not Hetzner) the panel silently costs the
+host its own default route. Value 2 is the kernel's own answer: accept anyway.
+
+Only a device the kernel is CURRENTLY configuring from an RA is touched, and
+that is the security half rather than tidiness. accept_ra=2 on a client-facing
+tunnel would let any VPN client advertise itself as this host's gateway -- so
+the test is a route the kernel attributes to an RA, which no wg device has. A
+prefix allowlist would have failed the other way, silently, the first time a new
+core named a device.
+
+Nothing is written when no device uses RA, so one momentary read of zero cannot
+delete the line that keeps the next boot working.
+*/
+func (m *Manager) keepRouterAdvertisements(ctx context.Context) error {
+	devices, err := m.plane.RouterAdvertisedDevices(ctx)
+	if err != nil || len(devices) == 0 {
+		return err
+	}
+	devices = slices.Clone(devices)
+	slices.Sort(devices)
+
+	var failures []error
+	body := "# Written by Penhoon UI. accept_ra=1 means \"accept unless forwarding is\n" +
+		"# enabled\", and this panel enables forwarding. Removed by uninstall.\n"
+	for _, device := range devices {
+		key := acceptRAKey(device)
+		body += key + "=2\n"
+		// A 0 is an operator saying no and is never overruled; a 2 is already right.
+		if value, readErr := m.plane.Sysctl(ctx, key); readErr != nil || value != "1" {
+			continue
+		}
+		if err := m.plane.SetSysctl(ctx, key, "2"); err != nil {
+			failures = append(failures, fmt.Errorf("set %s: %w", key, err))
+		}
+	}
+	if err := m.plane.PersistSysctl(ctx, AcceptRADropIn, body); err != nil {
 		failures = append(failures, err)
 	}
 	return errors.Join(failures...)

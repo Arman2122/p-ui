@@ -307,6 +307,13 @@ uninstall() {
         echo -e "${yellow}Removed /etc/sysctl.d/99-p-ui-forwarding.conf. Packet forwarding stays on until the next reboot; nothing else was changed.${plain}"
     fi
 
+    # Written only because forwarding was: accept_ra=2 exists to survive it, and
+    # with forwarding's drop-in gone the kernel's own default is right again.
+    if [[ -f /etc/sysctl.d/98-p-ui-accept-ra.conf ]]; then
+        rm -f /etc/sysctl.d/98-p-ui-accept-ra.conf
+        echo -e "${yellow}Removed /etc/sysctl.d/98-p-ui-accept-ra.conf.${plain}"
+    fi
+
     if postgresql_installed; then
         purge_postgresql
     fi

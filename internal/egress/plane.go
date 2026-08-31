@@ -167,6 +167,12 @@ type Plane interface {
 	// driving a fake wrote to the real /etc and failed as an unprivileged user.
 	PersistSysctl(ctx context.Context, path, body string) error
 
+	// RouterAdvertisedDevices names the interfaces the kernel is currently
+	// configuring from a Router Advertisement. Asked as a question about routes
+	// rather than about names: this panel's own tunnels never carry one, so the
+	// answer cannot start including them when a new core invents a prefix.
+	RouterAdvertisedDevices(ctx context.Context) ([]string, error)
+
 	// CanMasquerade reports whether the source-NAT rule can be applied at all.
 	// On the Plane for the same reason PersistSysctl is: a bare PATH lookup is a
 	// host read a fake cannot intercept, and the note built on it would then say

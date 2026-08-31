@@ -8,6 +8,17 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Turning this host into a router no longer costs it its own IPv6.** The panel
+  enables IPv6 forwarding for an L3 inbound, and the kernel's `accept_ra`
+  default means "accept Router Advertisements *unless* forwarding is enabled" —
+  so on a provider that hands out IPv6 by RA (AWS, Vultr, Linode; Hetzner and
+  other statically-configured hosts are unaffected) the host lost its own IPv6
+  default route, typically at the next reboot. The panel now raises `accept_ra`
+  to 2 first, and only on an interface the kernel is actually configuring from
+  an RA — never on a tunnel, where it would let a client advertise itself as
+  this host's gateway. **Check a host with `ip -6 route show default`:**
+  `proto ra` was affected, `proto static` was not. A host already in this state
+  needs `accept_ra` set to 2 once by hand; after that the panel keeps it.
 - **An AmneziaWG exit can be created.** The outbound picker offered `awgkernel`
   and the form then refused it — "this build has no form for that exit
   protocol" — because the panel had a form for kernel WireGuard exits only.

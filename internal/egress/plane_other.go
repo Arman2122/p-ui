@@ -38,3 +38,9 @@ func (unsupportedPlane) PersistSysctl(context.Context, string, string) error {
 // no packet needs translating. False would tell the operator of a platform that
 // carries none of this to go and install nftables.
 func (unsupportedPlane) CanMasquerade(context.Context) bool { return true }
+
+// RouterAdvertisedDevices names nothing off Linux: no interface here is being
+// configured by a Router Advertisement that this panel could disturb.
+func (unsupportedPlane) RouterAdvertisedDevices(context.Context) ([]string, error) {
+	return nil, nil
+}

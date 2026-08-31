@@ -41,6 +41,9 @@ type Kernel struct {
 	// NoNft drives a host that cannot source-translate. Default false, so the
 	// ordinary fake is a host that can and no existing test gains a note.
 	NoNft bool
+	// RADevices are the interfaces the kernel is configuring from a Router
+	// Advertisement. Empty by default: a statically addressed host.
+	RADevices []string
 }
 
 func New() *Kernel {
@@ -305,3 +308,11 @@ func (k *Kernel) ResetOps() {
 // CanMasquerade answers the host fact ForwardingNotes reports on, so a test
 // drives it rather than inheriting whether the box running it ships nftables.
 func (k *Kernel) CanMasquerade(context.Context) bool { return !k.NoNft }
+
+// RouterAdvertisedDevices answers RADevices, so a test drives which interfaces
+// the kernel is configuring from a Router Advertisement.
+func (k *Kernel) RouterAdvertisedDevices(context.Context) ([]string, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return slices.Clone(k.RADevices), nil
+}
