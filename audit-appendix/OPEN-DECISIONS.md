@@ -183,9 +183,26 @@ is waiting on them any more; what is left is work.
   changelog states plainly. And the finding says "delete" where the code says
   DETACH — the sweep unlinks from the inbound and never removes the clients row;
   the account survives and loses its access.
-- **Q10 — converge: the panel adopts the node's tag.** Refusing would clobber a
-  serving node-local inbound at the next sync. Needs runtime→service plumbing and
-  a UNIQUE(tag) guard so adoption cannot collide. This is all of **F182**.
+- **Q10 — DEFERRED to the node-mode refactor, on the operator's call
+  (2026-08-31).** The answer stands — converge, the panel adopts the node's tag —
+  but building it now would be plumbing a fix through a subsystem due to be
+  rewritten, and it would have to be redone.
+
+  The deferral is cheap, which is why it is the right call. F182 is a LOW
+  finding whose current behaviour is a documented decision with a test stating
+  its reason: a node used standalone may already own the tag the central panel
+  picked, so the regeneration lets the inbound land and the central picks the
+  resolved tag up from the AddInbound response. The finding's own mechanism is
+  wrong on one point too — there is no free-text tag field in the inbound form;
+  a tag is auto-composed, and an explicit one can only arrive through the JSON
+  editor or the REST API, both of which get the resolved tag back. The case
+  where silent replacement WOULD be wrong — a reserved tag — already returns an
+  error.
+
+  So the live harm is a stale fingerprint on a diff, not a broken inbound.
+  **Carry it into the refactor's scope** rather than closing it: tag ownership
+  between central and node is exactly the kind of thing that rewrite has to
+  settle, and settling it there is one decision instead of two.
 - **F319 — a field on `core.Transports`** (`None` / `BindsNoPort`), read by the
   port-conflict check that already asks the question. Four small sites, and a
   core still cannot disable the check by answering empty. The last open tier-2
