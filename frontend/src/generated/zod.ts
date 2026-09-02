@@ -378,6 +378,8 @@ export const CoreViewSchema = z.object({
   sessionKinds: z.array(z.string()),
   shaping: z.record(z.string(), z.string()),
   titleKey: z.string(),
+  trafficError: z.string().optional(),
+  trafficSeenAt: z.number().int().optional(),
   unavailable: z.string(),
 });
 export type CoreView = z.infer<typeof CoreViewSchema>;

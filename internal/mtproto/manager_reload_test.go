@@ -126,7 +126,7 @@ func TestCollectTrafficSurvivesAnMtgRestart(t *testing.T) {
 			mgr.procs[9].apiPort = serverPort(t, srv)
 
 			collect := func() int64 {
-				deltas, _ := mgr.CollectTraffic()
+				deltas, _, _ := mgr.CollectTraffic()
 				var sum int64
 				for _, d := range deltas {
 					sum += d.Up + d.Down

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/xray"
 )
 
@@ -42,10 +43,11 @@ func collectCoreTraffic() ([]*xray.Traffic, []*xray.ClientTraffic) {
 	var order []string
 	for _, bound := range Cores.Cores() {
 		id := bound.Core.Describe().ID
+		var collectErr error
 		if bound.Traffic != nil {
 			deltas, err := bound.Traffic.CollectTraffic(ctx)
 			if err != nil {
-				logger.Debug("core", id, "traffic collection failed:", err)
+				collectErr = err
 			}
 			for _, d := range deltas {
 				if existing, ok := byEmail[d.Email]; ok {
@@ -58,12 +60,14 @@ func collectCoreTraffic() ([]*xray.Traffic, []*xray.ClientTraffic) {
 			}
 		}
 		if bound.TagTraffic == nil {
+			service.NoteCoreTraffic(string(id), collectErr)
 			continue
 		}
 		tags, err := bound.TagTraffic.CollectTagTraffic(ctx)
-		if err != nil {
-			logger.Debug("core", id, "tag traffic collection failed:", err)
+		if err != nil && collectErr == nil {
+			collectErr = err
 		}
+		service.NoteCoreTraffic(string(id), collectErr)
 		for _, t := range tags {
 			traffics = append(traffics, &xray.Traffic{
 				Tag:        t.Tag,

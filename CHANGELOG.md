@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A core that stops reporting traffic is visible.** The MTProto sidecar's stats scrape failed silently, so a sidecar whose stats endpoint had been unreadable for a day billed nobody and told nobody. The scrape now names the sidecars it could not read, the panel logs the failure once when it starts and once when it recovers, and every core's last successful poll and last error are exposed on the cores API (`trafficSeenAt`, `trafficError`).
 - **The WireGuard `.conf` file share points at the inbound's host.** The raw, JSON and Clash renderers all fan out through the Hosts you configure; the `.conf` download did not, and handed out the inbound's own address and port. It now uses the first enabled host, like every link.
 - **A database restore keeps the database it overwrites.** Restoring the wrong file — an old backup, another panel's — was the one panel operation with no way back. The current database is now dumped to the same disk-backed spool as backups before the restore starts (only the latest such file is kept, and its path is logged), and a dump that fails stops the restore.
 - **Setting a depleted client's counters by hand brings the client back.** `POST /panel/api/clients/updateTraffic/:email` wrote the numbers and stopped, so an operator who lowered a client's usage saw a client under its quota that the core still refused. It re-enables the client the way the reset paths do, and clears the daemon counter; a client still over its quota stays off.

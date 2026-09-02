@@ -373,6 +373,8 @@ export const EXAMPLES: Record<string, unknown> = {
       "wgkernel": "innerIP"
     },
     "titleKey": "cores.xray.title",
+    "trafficError": "mtproto: stats unreadable for mtp-1",
+    "trafficSeenAt": 1725000000000,
     "unavailable": "wireguard: no kernel support on this host"
   },
   "Diag": {

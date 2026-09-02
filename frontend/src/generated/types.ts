@@ -360,6 +360,8 @@ export interface CoreView {
   sessionKinds: string[];
   shaping: Record<string, string>;
   titleKey: string;
+  trafficError?: string;
+  trafficSeenAt?: number;
   unavailable: string;
 }
 
