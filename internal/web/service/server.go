@@ -1409,11 +1409,12 @@ func (s *ServerService) keepPreRestoreDump() (string, error) {
 			_ = os.Remove(path)
 		}
 	}
-	path := filepath.Join(dir, "p-ui-pre-restore-"+time.Now().Format("20060102-150405")+".dump")
-	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	// A unique name per call: two restores in one second must not share a file.
+	out, err := os.CreateTemp(dir, "p-ui-pre-restore-"+time.Now().Format("20060102-150405")+"-*.dump")
 	if err != nil {
 		return "", err
 	}
+	path := out.Name()
 	if _, err := io.Copy(out, dump); err != nil {
 		_ = out.Close()
 		_ = os.Remove(path)
