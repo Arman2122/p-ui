@@ -365,6 +365,11 @@ func (a *ServerController) importDB(c *gin.Context) {
 		return
 	}
 	jsonObj(c, I18nWeb(c, "pages.index.importDatabaseSuccess"), nil)
+	// A browser restarts the panel itself after this answer; a token caller has
+	// no next step, so the restart happens here or the panel serves stale state.
+	if c.GetBool("api_authed") {
+		_ = a.panelService.RestartPanel(2 * time.Second)
+	}
 }
 
 // descendants publishes read-only summaries of the nodes this panel manages so
