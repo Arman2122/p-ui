@@ -1395,6 +1395,37 @@ func (s *ServerService) GetDb() (*DumpFile, error) {
 // panel's dump on a slow disk must not be cut off by a short deadline.
 const pgDumpTimeout = 30 * time.Minute
 
+// keepPreRestoreDump spools the current database beside the dump spool and
+// keeps only the latest one, so a restore of the wrong file can be undone.
+func (s *ServerService) keepPreRestoreDump() (string, error) {
+	dump, err := s.exportPostgresDB()
+	if err != nil {
+		return "", err
+	}
+	defer dump.Close()
+	dir := dumpSpoolDir()
+	if stale, _ := filepath.Glob(filepath.Join(dir, "p-ui-pre-restore-*.dump")); len(stale) > 0 {
+		for _, path := range stale {
+			_ = os.Remove(path)
+		}
+	}
+	path := filepath.Join(dir, "p-ui-pre-restore-"+time.Now().Format("20060102-150405")+".dump")
+	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(out, dump); err != nil {
+		_ = out.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
 // dumpSpoolDir is disk-backed: /tmp is tmpfs on Debian 13, where a spooled
 // dump would land straight back in RAM.
 func dumpSpoolDir() string {
@@ -1694,6 +1725,13 @@ func (s *ServerService) restorePostgresDump(file multipart.File) error {
 	if err := checkPgRestoreCanRead(bin, tempPath); err != nil {
 		return err
 	}
+	// The one backup nobody can take after the restore: the database as it is
+	// now. A failed dump stops the restore rather than making it irreversible.
+	safety, err := s.keepPreRestoreDump()
+	if err != nil {
+		return common.NewErrorf("refusing to restore without a safety dump of the current database: %v", err)
+	}
+	logger.Infof("Database restore: the previous database is kept at %s", safety)
 
 	xrayStopped := true
 	defer func() {
