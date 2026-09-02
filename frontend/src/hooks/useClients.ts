@@ -18,6 +18,8 @@ import {
   BulkResetTrafficResultSchema,
   BulkDetachResultSchema,
   BulkGroupResultSchema,
+  BulkSetResultSchema,
+  BulkMoveResultSchema,
   DelDepletedResultSchema,
   type ClientHydrate,
   type ClientRecord,
@@ -32,10 +34,13 @@ import {
   type BulkDeleteResult,
   type BulkSetEnableResult,
   type BulkResetTrafficResult,
+  type BulkSetResult,
+  type BulkMoveResult,
   type BulkDetachResult,
   type BulkGroupResult,
 } from '@/schemas/client';
 import { isEmptySelection, selectionBody, type BulkSelection } from '@/lib/clients/bulk-selection';
+import type { BulkSetPatch } from '@/lib/clients/bulk-set';
 import { DefaultsPayloadSchema } from '@/schemas/defaults';
 import { TRAFFIC_POLL_INTERVAL_S } from '@/lib/traffic/poll-interval';
 
@@ -449,6 +454,23 @@ export function useClients(options: UseClientsOptions = {}) {
     onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
   });
 
+  const bulkSetMut = useMutation({
+    mutationFn: async (payload: { selection: BulkSelection; patch: BulkSetPatch }): Promise<Msg<BulkSetResult>> => {
+      const raw = await HttpUtil.post('/panel/api/clients/bulkSet', { ...selectionBody(payload.selection), ...payload.patch }, JSON_HEADERS);
+      return parseMsg(raw, BulkSetResultSchema, 'clients/bulkSet');
+    },
+    onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
+  });
+
+  const bulkMoveMut = useMutation({
+    mutationFn: async (payload: { selection: BulkSelection; fromInboundIds: number[]; toInboundIds: number[] }): Promise<Msg<BulkMoveResult>> => {
+      const { selection, ...rest } = payload;
+      const raw = await HttpUtil.post('/panel/api/clients/bulkMove', { ...selectionBody(selection), ...rest }, JSON_HEADERS);
+      return parseMsg(raw, BulkMoveResultSchema, 'clients/bulkMove');
+    },
+    onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
+  });
+
   const bulkSetEnableMut = useMutation({
     mutationFn: async (payload: { selection: BulkSelection; enable: boolean }): Promise<Msg<BulkSetEnableResult>> => {
       const path = payload.enable ? '/panel/api/clients/bulkEnable' : '/panel/api/clients/bulkDisable';
@@ -564,6 +586,16 @@ export function useClients(options: UseClientsOptions = {}) {
     if (isEmptySelection(selection)) return Promise.resolve(null);
     return bulkAdjustMut.mutateAsync({ selection, addDays, addBytes, flow, mode });
   }, [bulkAdjustMut]);
+  const bulkSet = useCallback((input: string[] | BulkSelection, patch: BulkSetPatch) => {
+    const selection = asSelection(input);
+    if (isEmptySelection(selection)) return Promise.resolve(null);
+    return bulkSetMut.mutateAsync({ selection, patch });
+  }, [bulkSetMut]);
+  const bulkMove = useCallback((input: string[] | BulkSelection, fromInboundIds: number[], toInboundIds: number[]) => {
+    const selection = asSelection(input);
+    if (isEmptySelection(selection)) return Promise.resolve(null);
+    return bulkMoveMut.mutateAsync({ selection, fromInboundIds, toInboundIds });
+  }, [bulkMoveMut]);
   const bulkEnable = useCallback((input: string[] | BulkSelection) => {
     const selection = asSelection(input);
     if (isEmptySelection(selection)) return Promise.resolve(null as unknown as Msg<BulkSetEnableResult>);
@@ -750,6 +782,8 @@ export function useClients(options: UseClientsOptions = {}) {
     remove,
     bulkDelete,
     bulkAdjust,
+    bulkSet,
+    bulkMove,
     bulkEnable,
     bulkDisable,
     bulkResetTraffic,
