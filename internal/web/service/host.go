@@ -241,6 +241,17 @@ func (s *HostService) AddHostGroup(req *entity.HostGroup) ([]*model.Host, error)
 		if err := validateInboundsExist(tx, req.InboundIds); err != nil {
 			return err
 		}
+		// An add that names a group which exists would append rows into it,
+		// and a later edit of that group would then rewrite both. F149.
+		if req.GroupId != "" {
+			var taken int64
+			if err := tx.Model(&model.Host{}).Where("group_id = ?", groupId).Count(&taken).Error; err != nil {
+				return err
+			}
+			if taken > 0 {
+				return common.NewErrorf("host group %s already exists; update it instead", groupId)
+			}
+		}
 		if len(created) > 0 {
 			return tx.Create(&created).Error
 		}

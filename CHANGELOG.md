@@ -20,6 +20,11 @@ here; the git log is the full record.
   migration that clears a flow no transport can carry only ever looked at
   VLESS inbounds, so a VMess inbound that had one kept handing out links that
   cannot connect, across every restart.
+- **Adding a host group that names an existing group is refused.**
+  `POST /panel/api/hosts/add` with a `groupId` that already exists appended
+  the new rows into that group without a word, and the next edit of that
+  group rewrote both sets together. The panel's own form never sends one.
+  The call now answers an error naming the group — update it instead.
 
 ### Security
 
