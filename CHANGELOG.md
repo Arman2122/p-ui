@@ -16,6 +16,10 @@ here; the git log is the full record.
   by a panel that had the process in memory, so one for an inbound deleted
   while the panel was down stayed on disk. Both fixed: a final read before
   every stop, and a directory sweep on every reconcile.
+- **A VMess inbound stored with an XTLS Vision flow is repaired at boot.** The
+  migration that clears a flow no transport can carry only ever looked at
+  VLESS inbounds, so a VMess inbound that had one kept handing out links that
+  cannot connect, across every restart.
 
 ### Security
 
