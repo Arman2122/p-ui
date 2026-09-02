@@ -76,6 +76,9 @@ func TestAPIPortOf(t *testing.T) {
 		{"nil config", nil, 0},
 		{"no api inbound", &Config{InboundConfigs: []InboundConfig{{Tag: "in", Port: 443}}}, 0},
 		{"api inbound", &Config{InboundConfigs: []InboundConfig{{Tag: "in", Port: 443}, {Tag: "api", Port: 62789}}}, 62789},
+		// The tag the api section names, as hot_diff reads it: a template that
+		// renamed it used to lose every gRPC stat and quota in silence. F006.
+		{"renamed api tag", &Config{API: []byte(`{"tag":"grpc-api"}`), InboundConfigs: []InboundConfig{{Tag: "grpc-api", Port: 62789}}}, 62789},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
