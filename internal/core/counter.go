@@ -12,11 +12,12 @@ peer re-add zeroes it, an interface recreate zeroes it, and the first reading
 after the panel starts may already contain traffic that was billed by a previous
 panel process.
 
-This logic was written twice. internal/mtproto/manager.go's copy dropped every byte
-moved since an mtg restart and now calls this instead; internal/xray/api.go still
-has its own. Because client_traffics is email-keyed and shared, a delta bug in one
-core corrupts the quota of users who never touched that core, so there must be
-exactly one implementation.
+This logic was written twice before it was written here. internal/mtproto's copy
+dropped every byte moved since an mtg restart; internal/xray/api.go's fed
+GetTraffic directly. Both bill through a Counter they hold now, and neither
+keeps a copy. Because client_traffics is email-keyed and shared, a delta bug in
+one core corrupts the quota of users who never touched that core, so there must
+be exactly one implementation.
 
 Undercounting is the deliberate bias. Bytes that cannot be attributed are dropped,
 never estimated: an undercount costs bandwidth, an overcount costs trust.
