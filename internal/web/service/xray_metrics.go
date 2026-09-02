@@ -43,6 +43,12 @@ func SetEventBus(b *eventbus.Bus) { eventBus = b }
 type XrayMetricsService struct {
 	settingService SettingService
 
+	// The metrics listen address is read from the template once per TTL, not
+	// twice a second from the database for a value that changes on a restart. F347.
+	listenMu sync.Mutex
+	listen   string
+	listenAt time.Time
+
 	mu       sync.RWMutex
 	state    xrayMetricsState
 	client   *http.Client
@@ -132,6 +138,22 @@ func (s *XrayMetricsService) AggregateObservatory(tag string, bucketSeconds, max
 }
 
 func (s *XrayMetricsService) discoverListen() (string, error) {
+	s.listenMu.Lock()
+	defer s.listenMu.Unlock()
+	if !s.listenAt.IsZero() && time.Since(s.listenAt) < xrayListenCacheTTL {
+		return s.listen, nil
+	}
+	listen, err := s.readListen()
+	if err != nil {
+		return "", err
+	}
+	s.listen, s.listenAt = listen, time.Now()
+	return listen, nil
+}
+
+const xrayListenCacheTTL = 30 * time.Second
+
+func (s *XrayMetricsService) readListen() (string, error) {
 	tmpl, err := s.settingService.GetXrayConfigTemplate()
 	if err != nil {
 		return "", err
