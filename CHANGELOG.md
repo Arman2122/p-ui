@@ -8,6 +8,11 @@ here; the git log is the full record.
 
 ### Security
 
+- **A base path can no longer close the panel's inline script tag.** The
+  value is written into a JS string inside `<script>` on the panel and on the
+  subscription page, and the escaper that guarded it named `<`, `>` and `&`
+  and then left all three alone. It now uses the JSON string encoder, which
+  also covers the two Unicode line terminators the old list never knew about.
 - **A failed login costs the same whether or not the username exists.** An
   unknown username was answered in the time of one database lookup and a
   known one in the time of a full bcrypt check — a timing difference that told
