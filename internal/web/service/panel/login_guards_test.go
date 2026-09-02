@@ -84,18 +84,33 @@ func loginWithACurrentCode(svc *UserService, secret string) error {
 	return err
 }
 
-// Whitespace in a submitted code is still NOT trimmed. The settings-side
-// verifier trims; this one does not. That divergence is deliberate and is ledger
-// L14 — F208 adds the empty-secret guard and changes nothing else about how a
-// code is compared.
-func TestLoginStillComparesTheSubmittedCodeRaw(t *testing.T) {
+/*
+A two-factor code pasted with surrounding whitespace is accepted at login.
+
+The settings-side verifier trimmed the submitted code and the login path
+compared it raw, so the same pasted code passed one and was refused by the
+other. Ledger L14, decided 2026-09-02: both paths trim. Retried from the start
+of a fresh window for the same reason loginWithACurrentCode is.
+*/
+func TestLoginAcceptsAPaddedTwoFactorCode(t *testing.T) {
 	initTestDB(t)
 	seedPanelUser(t, "admin", "correct-horse")
 	setSettings(t, map[string]string{"twoFactorEnable": "true", "twoFactorToken": "JBSWY3DPEHPK3PXP"})
+	svc := &UserService{}
+	padded := func() string { return " " + gotp.NewDefaultTOTP("JBSWY3DPEHPK3PXP").Now() + "\n" }
 
-	padded := " " + gotp.NewDefaultTOTP("JBSWY3DPEHPK3PXP").Now() + " "
-	if _, err := (&UserService{}).CheckUser("admin", "correct-horse", padded); err == nil {
-		t.Fatal("the login path trimmed the submitted code: that is a behaviour change F208 does not make, and it belongs to L14")
+	_, err := svc.CheckUser("admin", "correct-horse", padded())
+	if err != nil {
+		const window = 30
+		time.Sleep(time.Duration(window-time.Now().Unix()%window)*time.Second + 200*time.Millisecond)
+		_, err = svc.CheckUser("admin", "correct-horse", padded())
+	}
+	if err != nil {
+		t.Fatalf("a current code with surrounding whitespace was refused: %v", err)
+	}
+	// Seven digits can never be a TOTP code, padded or not.
+	if _, err := svc.CheckUser("admin", "correct-horse", " 1234567 "); err == nil {
+		t.Fatal("a padded but wrong code was accepted: trimming must not weaken the compare")
 	}
 }
 
