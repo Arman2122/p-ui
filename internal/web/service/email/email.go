@@ -379,8 +379,8 @@ func parseRecipients(toStr string) []string {
 // From header is a proper name-addr ("Name" <addr>) via net/mail, and a
 // non-ASCII subject is RFC 2047 encoded.
 // headerSanitizer drops CR/LF so a crafted address or name cannot inject extra
-// header lines. Configured addresses are already validated at save time
-// (entity.AllSetting.CheckValid), this is defense in depth for buildMessage.
+// header lines. Only SmtpFrom is validated at save time (AllSetting.CheckValid);
+// the recipients, display name and username are stored verbatim. F358.
 var headerSanitizer = strings.NewReplacer("\r", "", "\n", "")
 
 func resolveFrom(from, fromName string) (string, string) {
