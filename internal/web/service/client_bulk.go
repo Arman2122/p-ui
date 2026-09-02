@@ -712,6 +712,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 	foundEmails := map[string]bool{}
 	flowChanged := false
 	credsChanged := false
+	subIDChanged := false
 	declared := declaredCredentialNames(oldInbound.Protocol)
 	nowMs := time.Now().Unix() * 1000
 	for i, client := range interfaceClients {
@@ -736,7 +737,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 		}
 		if entry.subID != "" {
 			c["subId"] = entry.subID
-			credsChanged = true
+			subIDChanged = true
 		}
 		if flow != "" {
 			if flowEligible {
@@ -797,7 +798,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 				delete(foundEmails, email)
 			}
 		} else {
-			if flowChanged || credsChanged {
+			if flowChanged || credsChanged || subIDChanged {
 				push = false
 			}
 			// Large batches collapse into one reconcile push rather than M updates.

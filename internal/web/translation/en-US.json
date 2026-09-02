@@ -927,7 +927,7 @@
       "rotate": "Rotate credentials…",
       "rotateTitle": "Rotate credentials of {count} clients",
       "rotateConfirm": "Rotate",
-      "rotateWarning": "Every share link and subscription URL of these clients stops working the moment you confirm. Hand out the new links afterwards.",
+      "rotateWarning": "Every share link and subscription URL of these clients stops working (for a local Xray inbound, once Xray restarts). Hand out the new links afterwards.",
       "rotateCredentials": "New credentials (UUID, password, key or secret, per protocol)",
       "rotateSubId": "New subscription id",
       "delDepleted": "Delete depleted",
