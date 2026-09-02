@@ -465,6 +465,7 @@ func (s *OutboundSubscriptionService) fetchAndStore(sub *model.OutboundSubscript
 	sub.LastFetchedOutbounds = string(obsJSON)
 	sub.LinkIdentities = string(identJSON)
 	sub.LastUpdated = time.Now().Unix()
+	announceSubscriptionRecovery(sub)
 	sub.LastError = ""
 	if len(droppedByCore) > 0 {
 		sub.LastError = fmt.Sprintf("dropped %d outbound(s) the xray core rejects: %s", len(droppedByCore), droppedByCore[0])
@@ -480,6 +481,7 @@ func (s *OutboundSubscriptionService) fetchAndStore(sub *model.OutboundSubscript
 func (s *OutboundSubscriptionService) recordError(sub *model.OutboundSubscription, err error) {
 	sub.LastError = err.Error()
 	_ = database.GetDB().Model(sub).Update("last_error", sub.LastError).Error
+	announceSubscriptionFailure(sub, err)
 }
 
 // assignStableTags assigns a tag to each parsed outbound, preferring stability:
