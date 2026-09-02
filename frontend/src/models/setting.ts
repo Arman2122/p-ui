@@ -20,6 +20,7 @@ export class AllSetting {
   tgBotToken = '';
   tgBotAPIServer = '';
   tgBotChatId = '';
+  tgBotProxy = '';
   tgRunTime = '@daily';
   tgBotBackup = false;
   tgCpu = 80;
