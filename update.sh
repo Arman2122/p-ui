@@ -99,7 +99,8 @@ else
     _fail "ERROR: Command 'curl' not found."
 fi
 
-# Check OS and set release variable
+# The same gate install.sh applies: an update on a host the installer would
+# refuse is an update onto a platform nothing here was tested on.
 if [[ -f /etc/os-release ]]; then
     source /etc/os-release
     release=$ID
@@ -107,9 +108,39 @@ elif [[ -f /usr/lib/os-release ]]; then
     source /usr/lib/os-release
     release=$ID
 else
-    _fail "Failed to check the system OS, please contact the author!"
+    _fail "Failed to detect the operating system: no os-release file found."
 fi
-echo "The OS release is: $release"
+unsupported_os() {
+    echo -e "${red}Unsupported operating system: ${PRETTY_NAME:-${release} ${VERSION_ID:-unknown}}${plain}" >&2
+    echo -e "${yellow}Penhoon UI supports Ubuntu 22.04 / 24.04 / 26.04, Debian 12 or newer, and Debian-family derivatives.${plain}" >&2
+    _fail "ERROR: Refusing to update on an unsupported operating system; the running panel is untouched."
+}
+id_like_has() {
+    local want="$1" word
+    for word in ${ID_LIKE:-}; do
+        [[ "${word}" == "${want}" ]] && return 0
+    done
+    return 1
+}
+case "${release}" in
+    ubuntu)
+        case "${VERSION_ID:-}" in
+            22.04 | 24.04 | 26.04) ;;
+            *) unsupported_os ;;
+        esac
+        ;;
+    debian)
+        debian_major="${VERSION_ID%%.*}"
+        if [[ -n "${VERSION_ID:-}" ]]; then
+            [[ "${debian_major}" =~ ^[0-9]+$ ]] && ((debian_major >= 12)) || unsupported_os
+        fi
+        ;;
+    *)
+        id_like_has debian || id_like_has ubuntu || unsupported_os
+        echo -e "${yellow}Note: ${PRETTY_NAME:-${release}} is a Debian-family derivative, not part of the tested set.${plain}"
+        ;;
+esac
+echo "The OS release is: ${PRETTY_NAME:-${release} ${VERSION_ID:-}}"
 
 arch() {
     case "$(uname -m)" in
@@ -214,7 +245,13 @@ verify_release_archive() {
 # pass that would ever give it one.
 install_base() {
     echo -e "${green}Updating and install dependency packages...${plain}"
-    apt-get update > /dev/null 2>&1 && apt-get install -y -q cron curl tar tzdata socat openssl nftables > /dev/null 2>&1
+    if ! (apt-get update > /dev/null 2>&1 && apt-get install -y -q cron curl tar tzdata socat openssl nftables > /dev/null 2>&1); then
+        echo -e "${yellow}apt-get could not refresh the dependency packages; continuing with what is installed${plain}"
+        local c
+        for c in curl tar; do
+            _command_exists "${c}" || _fail "ERROR: '${c}' is not installed and apt-get could not install it."
+        done
+    fi
 }
 
 install_acme() {
