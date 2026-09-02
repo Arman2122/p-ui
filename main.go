@@ -557,7 +557,7 @@ func GetApiToken(getApiToken bool) {
 
 		// Create a new fallback token so the CLI is still useful without the UI
 		fallbackName := fmt.Sprintf("cli-fallback-%d", time.Now().Unix())
-		created, err := apiTokenService.Create(fallbackName)
+		created, err := apiTokenService.Create(fallbackName, "", 0)
 		if err != nil {
 			fmt.Println("Failed to create a fallback API token:", err)
 			return
@@ -566,7 +566,7 @@ func GetApiToken(getApiToken bool) {
 		fmt.Println("apiToken:", created.Token)
 		return
 	}
-	created, err := apiTokenService.Create("install")
+	created, err := apiTokenService.Create("install", "", 0)
 	if err != nil {
 		fmt.Println("create apiToken failed, error info:", err)
 		return
