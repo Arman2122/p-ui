@@ -267,8 +267,10 @@ func TestIPLimitKeepsTheNewestAddressesAndBansTheRest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("EvaluateIPLimits: %v", err)
 		}
-		if len(verdicts) != 0 {
-			t.Fatalf("an unlimited client must never be banned, got %v", verdicts)
+		// A verdict may exist -- it is what lets the re-ban memory forget the
+		// client (F307) -- but it must ban and bounce nobody.
+		if banning := banningVerdicts(verdicts); len(banning) != 0 {
+			t.Fatalf("an unlimited client must never be banned, got %v", banning)
 		}
 		var row model.InboundClientIps
 		if err := database.GetDB().Where("client_email = ?", "sharer").First(&row).Error; err != nil {
@@ -452,8 +454,8 @@ func TestAddressesAreCollectedWithoutALimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if len(verdicts) != 0 {
-		t.Fatalf("a collection-only pass must ban nobody, got %v", verdicts)
+	if banning := banningVerdicts(verdicts); len(banning) != 0 {
+		t.Fatalf("a collection-only pass must ban nobody, got %v", banning)
 	}
 	var row model.InboundClientIps
 	if err := database.GetDB().Where("client_email = ?", "nolimit").First(&row).Error; err != nil {
@@ -998,4 +1000,17 @@ func TestAnAssignmentToAMissingPlanFailsOpen(t *testing.T) {
 	if got := shapedRates(t, wants)["orphaned"]; got != (shaping.Limits{}) {
 		t.Fatalf("an unresolvable plan must never throttle, got %+v", got)
 	}
+}
+
+// banningVerdicts keeps only the verdicts that act: a ban or a bounce. An
+// empty verdict is the record that lets the caller forget a client (F307) and
+// is not a ban.
+func banningVerdicts(verdicts []IPLimitVerdict) []IPLimitVerdict {
+	var out []IPLimitVerdict
+	for _, v := range verdicts {
+		if len(v.Ban) > 0 || v.Bounce {
+			out = append(out, v)
+		}
+	}
+	return out
 }
