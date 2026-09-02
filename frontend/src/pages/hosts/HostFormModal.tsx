@@ -95,12 +95,19 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
 
   const { nodes } = useNodesQuery();
 
+  /* A host rewrites the address a share link carries; a kernel WireGuard
+     interface hands out its own config and a host changes nothing in it. */
   const inboundSelectOptions = useMemo(
-    () => inboundOptions.map((ib) => ({
-      value: ib.id,
-      label: ib.remark || ib.tag || `#${ib.id}`,
-    })),
-    [inboundOptions],
+    () => inboundOptions.map((ib) => {
+      const kernelWg = ib.protocol === 'wgkernel' || ib.protocol === 'awgkernel';
+      const name = ib.remark || ib.tag || `#${ib.id}`;
+      return {
+        value: ib.id,
+        label: kernelWg ? `${name} (${t('pages.hosts.kernelWgNoEffect')})` : name,
+        disabled: kernelWg,
+      };
+    }),
+    [inboundOptions, t],
   );
 
   const nodeSelectOptions = useMemo(
