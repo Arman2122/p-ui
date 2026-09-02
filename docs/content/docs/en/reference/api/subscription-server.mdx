@@ -21,6 +21,14 @@ _openapi:
         path: /sub/:subid.'
       url: '#return-base64-encoded-subscription-links-for-every-client-matching-the-subscription-id-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it-when-the-request-has-an-accept-texthtml-header-or-html1-renders-a-styled-info-page-instead-with-formatinfo-returns-the-page-view-model-as-json-traffic-expiry-online-status-no-links-for-live-polling-default-path-subsubid'
     - depth: 2
+      title: 'Download the configuration file for one inbound of the subscription, as
+        an attachment — the .conf a kernel WireGuard or AmneziaWG client
+        imports. The subscription ID is the only credential. Anything that is
+        not file-shaped, or that the ID does not own, answers 404 with no body,
+        indistinguishable from a subscription that does not exist, so a guessed
+        ID confirms nothing. Default path: /sub/:subid/file/:inboundId.'
+      url: '#download-the-configuration-file-for-one-inbound-of-the-subscription-as-an-attachment--the-conf-a-kernel-wireguard-or-amneziawg-client-imports-the-subscription-id-is-the-only-credential-anything-that-is-not-file-shaped-or-that-the-id-does-not-own-answers-404-with-no-body-indistinguishable-from-a-subscription-that-does-not-exist-so-a-guessed-id-confirms-nothing-default-path-subsubidfileinboundid'
+    - depth: 2
       title: 'Return subscription as a JSON array of proxy configs, one per client on
         an enabled inbound (a disabled client is still listed, but cannot
         connect). Only when JSON subscription is enabled in settings. Default
@@ -42,6 +50,14 @@ _openapi:
           JSON (traffic, expiry, online status; no links) for live polling.
           Default path: /sub/:subid.'
         id: return-base64-encoded-subscription-links-for-every-client-matching-the-subscription-id-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it-when-the-request-has-an-accept-texthtml-header-or-html1-renders-a-styled-info-page-instead-with-formatinfo-returns-the-page-view-model-as-json-traffic-expiry-online-status-no-links-for-live-polling-default-path-subsubid
+      - content: 'Download the configuration file for one inbound of the subscription,
+          as an attachment — the .conf a kernel WireGuard or AmneziaWG client
+          imports. The subscription ID is the only credential. Anything that is
+          not file-shaped, or that the ID does not own, answers 404 with no
+          body, indistinguishable from a subscription that does not exist, so a
+          guessed ID confirms nothing. Default path:
+          /sub/:subid/file/:inboundId.'
+        id: download-the-configuration-file-for-one-inbound-of-the-subscription-as-an-attachment--the-conf-a-kernel-wireguard-or-amneziawg-client-imports-the-subscription-id-is-the-only-credential-anything-that-is-not-file-shaped-or-that-the-id-does-not-own-answers-404-with-no-body-indistinguishable-from-a-subscription-that-does-not-exist-so-a-guessed-id-confirms-nothing-default-path-subsubidfileinboundid
       - content: 'Return subscription as a JSON array of proxy configs, one per client
           on an enabled inbound (a disabled client is still listed, but cannot
           connect). Only when JSON subscription is enabled in settings. Default
@@ -63,7 +79,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/{subPath}{subid}","method":"get"},{"path":"/{jsonPath}{subid}","method":"get"},{"path":"/{clashPath}{subid}","method":"get"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/{subPath}{subid}","method":"get"},{"path":"/{subPath}{subid}/file/{inboundId}","method":"get"},{"path":"/{jsonPath}{subid}","method":"get"},{"path":"/{clashPath}{subid}","method":"get"}]} showTitle />
     </>
   );
 }

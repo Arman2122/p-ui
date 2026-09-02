@@ -13362,6 +13362,65 @@
         }
       }
     },
+    "/{subPath}{subid}/file/{inboundId}": {
+      "get": {
+        "tags": [
+          "Subscription Server"
+        ],
+        "summary": "Download the configuration file for one inbound of the subscription, as an attachment — the .conf a kernel WireGuard or AmneziaWG client imports. The subscription ID is the only credential. Anything that is not file-shaped, or that the ID does not own, answers 404 with no body, indistinguishable from a subscription that does not exist, so a guessed ID confirms nothing. Default path: /sub/:subid/file/:inboundId.",
+        "operationId": "get_subPath_subid_file_inboundId",
+        "parameters": [
+          {
+            "name": "subid",
+            "in": "path",
+            "required": true,
+            "description": "Client subscription ID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inboundId",
+            "in": "path",
+            "required": true,
+            "description": "The inbound whose client file to download; it must hand out a file-shaped config.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "subPath",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/{jsonPath}{subid}": {
       "get": {
         "tags": [
