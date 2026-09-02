@@ -166,13 +166,13 @@ var capabilityRules = map[string]Rule{
 		{All: []Clause{in("protocol", "hysteria")}},
 		{All: []Clause{
 			in("protocol", "vmess", "vless", "trojan", "shadowsocks"),
-			in("stream.network", "tcp", "ws", "http", "grpc", "httpupgrade", "xhttp"),
+			in("stream.network", "tcp", "ws", "grpc", "httpupgrade", "xhttp"),
 		}},
 	}},
 	CapReality: {Any: []Term{
 		{All: []Clause{
 			in("protocol", "vless", "trojan"),
-			in("stream.network", "tcp", "http", "grpc", "xhttp"),
+			in("stream.network", "tcp", "grpc", "xhttp"),
 		}},
 	}},
 	// XTLS Vision: classic raw TCP over TLS/REALITY, or XHTTP where VLESS-level

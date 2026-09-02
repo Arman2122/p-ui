@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **TLS and REALITY are no longer offered on the `http` (H2) transport.** The pinned Xray-core refuses that transport outright (it was folded into XHTTP), so the capability table stops advertising a combination the core cannot start. The panel's own inbound form never listed the network.
 - **An AmneziaWG device is re-configured only when its parameters or the device change.** Every 10-second reconcile issued the full obfuscation parameter set to every AWG device over netlink, changed or not.
 - **The metrics sampler reads the Xray template once per 30 seconds, not twice a second.** Every 2-second sample fetched the whole template from the database to extract the metrics listen address, whether or not anyone was on the dashboard.
 - **A traffic reset re-pushes limits to every MTProto inbound carrying the client.** Only the first inbound whose secrets named the client was re-applied, so a client sold on two MTProto inbounds kept the stale budget on the second sidecar until the next reconcile.
