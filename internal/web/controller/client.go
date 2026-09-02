@@ -67,6 +67,8 @@ func (a *ClientController) initRouter(g *gin.RouterGroup) {
 	g.POST("/resetAllTraffics", a.resetAllTraffics)
 	g.POST("/delDepleted", a.delDepleted)
 	g.POST("/bulkAdjust", a.bulkAdjust)
+	g.POST("/bulkSet", a.bulkSet)
+	g.POST("/bulkMove", a.bulkMove)
 	g.POST("/bulkEnable", a.bulkEnable)
 	g.POST("/bulkDisable", a.bulkDisable)
 	g.POST("/bulkDel", a.bulkDelete)
@@ -308,6 +310,63 @@ func (a *ClientController) bulkAdjust(c *gin.Context) {
 		return
 	}
 	result, needRestart, err := a.clientService.BulkAdjust(&a.inboundService, emails, req.AddDays, req.AddBytes, req.Flow, req.Mode)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, result, nil)
+	if needRestart {
+		a.xrayService.SetToNeedRestart()
+	}
+	notifyClientsChanged()
+}
+
+type bulkSetRequest struct {
+	Emails []string                  `json:"emails"`
+	Filter *service.ClientPageParams `json:"filter"`
+	service.BulkSetPatch
+}
+
+func (a *ClientController) bulkSet(c *gin.Context) {
+	var req bulkSetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkSet(&a.inboundService, emails, req.BulkSetPatch)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, result, nil)
+	if needRestart {
+		a.xrayService.SetToNeedRestart()
+	}
+	notifyClientsChanged()
+}
+
+type bulkMoveRequest struct {
+	Emails         []string                  `json:"emails"`
+	Filter         *service.ClientPageParams `json:"filter"`
+	FromInboundIds []int                     `json:"fromInboundIds"`
+	ToInboundIds   []int                     `json:"toInboundIds"`
+}
+
+func (a *ClientController) bulkMove(c *gin.Context) {
+	var req bulkMoveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkMove(&a.inboundService, emails, req.FromInboundIds, req.ToInboundIds)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

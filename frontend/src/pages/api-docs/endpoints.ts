@@ -721,6 +721,20 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/clients/bulkSet',
+        summary: 'Set fields to exact values on many clients in one call. Only the fields present in the body change; a present zero value clears a field (0 = unlimited totalGB or expiryTime, "" = no flow or group, policyId 0 = no speed plan). limitIp, comment, tgId, reset, flow, totalGB and expiryTime are applied with one read-modify-write per inbound; group and policyId are applied per client. Clients with a delayed-start expiry are skipped for expiryTime. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
+        body: '{\n  "emails": ["alice", "bob"],\n  "limitIp": 3,\n  "comment": "Q4 batch",\n  "expiryTime": 1767225600000,\n  "group": "resellers"\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "updated": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkMove',
+        summary: 'Move many clients between inbounds in one call: each client is attached to every target inbound first and only then detached from the source inbounds, so no client is left without an inbound mid-way. An inbound cannot be both a source and a target. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons, prefixed attach: or detach:.',
+        body: '{\n  "emails": ["alice", "bob"],\n  "fromInboundIds": [1],\n  "toInboundIds": [2]\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "moved": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/clients/bulkEnable',
         summary: 'Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
         body: '{\n  "emails": ["alice", "bob"]\n}',
