@@ -301,9 +301,8 @@ func (s *XrayService) RenderInbound(inbound *model.Inbound) (*core.InboundConfig
 			if c.ID != "" {
 				entry["id"] = c.ID
 			}
-			if c.Security != "" {
-				entry["security"] = c.Security
-			}
+			// No security: GenXrayInboundConfig strips it for VMess on the way out,
+			// so writing it here was a value that never reached the core. F331.
 		case model.Trojan:
 			// No flow: the pinned core answers one with PrintRemovedFeatureError
 			// (infra/conf/trojan.go:74) and that fails the whole config. F323.
