@@ -93,11 +93,11 @@ func (s *InboundService) resetMtprotoClientQuota(email string) {
 	if !mgr.HasRunning() {
 		return
 	}
-	id, ok := s.localMtprotoInboundIdForEmail(email)
-	if !ok {
-		return
+	// Every local inbound carrying the email gets its limits re-pushed: the
+	// sidecar of the second one kept the stale budget until a reconcile. F218.
+	for _, id := range s.localMtprotoInboundIdsForEmail(email) {
+		s.applyLocalMtproto(id)
 	}
-	s.applyLocalMtproto(id)
 	if err := mgr.ResetQuota(email); err != nil {
 		logger.Warning("mtproto: quota reset failed for", email, ":", err, "— the client may stay blocked by the sidecar until it restarts")
 	}
@@ -154,14 +154,15 @@ func (s *InboundService) resetAllMtprotoQuotas() {
 	}
 }
 
-func (s *InboundService) localMtprotoInboundIdForEmail(email string) (int, bool) {
+func (s *InboundService) localMtprotoInboundIdsForEmail(email string) []int {
 	db := database.GetDB()
 	var inbounds []*model.Inbound
 	if err := db.Model(model.Inbound{}).
 		Where("protocol = ? AND node_id IS NULL", model.MTProto).
 		Find(&inbounds).Error; err != nil {
-		return 0, false
+		return nil
 	}
+	var ids []int
 	for _, ib := range inbounds {
 		inst, ok := mtproto.InstanceFromInbound(ib)
 		if !ok {
@@ -169,9 +170,10 @@ func (s *InboundService) localMtprotoInboundIdForEmail(email string) (int, bool)
 		}
 		for _, sec := range inst.Secrets {
 			if sec.Name == email {
-				return ib.Id, true
+				ids = append(ids, ib.Id)
+				break
 			}
 		}
 	}
-	return 0, false
+	return ids
 }
