@@ -104,6 +104,37 @@ export default function AwgObfuscationFields({ prefix = 'settings.awg' }: AwgObf
             <FormField label={t('pages.inbounds.form.awgI5')} name={at('i5')}>
               <Input />
             </FormField>
+            <Typography.Text type="secondary">{t('pages.inbounds.form.awgRanges')}</Typography.Text>
+            <FormField label={t('pages.inbounds.form.awgH1')} name={at('h1')} tooltip={t('pages.inbounds.form.awgHHint')}>
+              <Input placeholder="10-19" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgH2')} name={at('h2')}>
+              <Input placeholder="20-29" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgH3')} name={at('h3')}>
+              <Input placeholder="30-39" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgH4')} name={at('h4')}>
+              <Input placeholder="40-49" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgContentPaddingAddition')} name={at('contentPaddingAddition')} tooltip={t('pages.inbounds.form.awgRangeHint')}>
+              <Input placeholder="0-64" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgRekeyAfterTime')} name={at('rekeyAfterTime')} tooltip={t('pages.inbounds.form.awgRangeHint')}>
+              <Input placeholder="120-180" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgRekeyTimeout')} name={at('rekeyTimeout')}>
+              <Input placeholder="5-10" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgRejectAfterTime')} name={at('rejectAfterTime')}>
+              <Input placeholder="180-240" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgKeepaliveTimeout')} name={at('keepaliveTimeout')}>
+              <Input placeholder="10-15" />
+            </FormField>
+            <FormField label={t('pages.inbounds.form.awgMaxHandshakeAttempts')} name={at('maxHandshakeAttempts')}>
+              <Input placeholder="10-20" />
+            </FormField>
             <FormField label={t('pages.inbounds.form.awgHeaderProtectionKey')} name={at('headerProtectionKey')} tooltip={t('pages.inbounds.form.awgHeaderProtectionKeyHint')}>
               <Input placeholder="base64, 32 bytes" />
             </FormField>

@@ -23,6 +23,7 @@ import {
   rawInboundToFormValues,
   formValuesToWirePayload,
 } from '@/lib/xray/inbound-form-adapter';
+import { awgObfuscationChanged } from '@/lib/inbounds/awg-diff';
 import { createDefaultInboundSettings } from '@/lib/xray/inbound-defaults';
 import { composeInboundTag, isAutoInboundTag, type InboundTagInput } from '@/lib/xray/inbound-tag';
 import {
@@ -539,6 +540,20 @@ export default function InboundFormModal({
         issues.map((issue) => formatInboundIssue(issue, values, t)),
       );
       return;
+    }
+    if (mode === 'edit' && dbInbound && parsed.data.protocol === 'awgkernel'
+      && awgObfuscationChanged(rawInboundToFormValues(dbInbound), parsed.data)) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: t('pages.inbounds.form.awgChangeConfirmTitle'),
+          content: t('pages.inbounds.form.awgChangeConfirmContent'),
+          okText: t('confirm'),
+          cancelText: t('cancel'),
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) return;
     }
     setSaving(true);
     try {
