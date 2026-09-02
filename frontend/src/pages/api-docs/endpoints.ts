@@ -1716,6 +1716,16 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/{subPath}:subid/file/:inboundId',
+        summary:
+          'Download the configuration file for one inbound of the subscription, as an attachment — the .conf a kernel WireGuard or AmneziaWG client imports. The subscription ID is the only credential. Anything that is not file-shaped, or that the ID does not own, answers 404 with no body, indistinguishable from a subscription that does not exist, so a guessed ID confirms nothing. Default path: /sub/:subid/file/:inboundId.',
+        params: [
+          { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
+          { name: 'inboundId', in: 'path', type: 'number', desc: 'The inbound whose client file to download; it must hand out a file-shaped config.' },
+        ],
+      },
+      {
+        method: 'GET',
         path: '/{jsonPath}:subid',
         summary: 'Return subscription as a JSON array of proxy configs, one per client on an enabled inbound (a disabled client is still listed, but cannot connect). Only when JSON subscription is enabled in settings. Default path: /json/:subid.',
         params: [
