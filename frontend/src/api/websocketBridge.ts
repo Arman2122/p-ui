@@ -1,11 +1,16 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { notification } from 'antd';
 
 import { getSharedWebSocketClient } from '@/api/websocket';
 import { keys } from '@/api/queryKeys';
 import { isRecentLocalInvalidate } from '@/api/invalidationTracker';
+import { Status } from '@/models/status';
+import { StatusSchema } from '@/schemas/status';
 
 type Handler = (payload: unknown) => void;
+
+const NOTIFICATION_LEVELS = new Set(['success', 'info', 'warning', 'error']);
 
 let invalidateTimer: number | null = null;
 
@@ -45,10 +50,41 @@ export function useWebSocketBridge() {
       queryClient.setQueryData(keys.inbounds.slim(), payload);
     };
 
+    /* The 2s telemetry push feeds the same cache the REST poll fills, so the */
+    /* dashboard follows the socket and the poll becomes a fallback. F345. */
+    const onStatus: Handler = (payload) => {
+      const parsed = StatusSchema.safeParse(payload);
+      if (!parsed.success) return;
+      queryClient.setQueryData(keys.server.status(), new Status(parsed.data));
+    };
+
+    const onNotification: Handler = (payload) => {
+      const p = payload as { title?: unknown; message?: unknown; level?: unknown } | undefined;
+      if (!p || typeof p.title !== 'string') return;
+      const level = typeof p.level === 'string' && NOTIFICATION_LEVELS.has(p.level) ? p.level : 'info';
+      notification.open({
+        type: level as 'success' | 'info' | 'warning' | 'error',
+        message: p.title,
+        description: typeof p.message === 'string' ? p.message : undefined,
+      });
+    };
+
+    const onXrayState: Handler = (payload) => {
+      const p = payload as { state?: unknown; errorMsg?: unknown } | undefined;
+      if (!p || typeof p.state !== 'string') return;
+      queryClient.invalidateQueries({ queryKey: keys.server.status() });
+      if (p.state === 'error' && typeof p.errorMsg === 'string' && p.errorMsg !== '') {
+        notification.open({ type: 'error', message: 'Xray', description: p.errorMsg });
+      }
+    };
+
     client.on('invalidate', onInvalidate);
     client.on('outbounds', onOutbounds);
     client.on('nodes', onNodes);
     client.on('inbounds', onInbounds);
+    client.on('status', onStatus);
+    client.on('notification', onNotification);
+    client.on('xray_state', onXrayState);
     client.connect();
 
     return () => {
@@ -56,6 +92,9 @@ export function useWebSocketBridge() {
       client.off('outbounds', onOutbounds);
       client.off('nodes', onNodes);
       client.off('inbounds', onInbounds);
+      client.off('status', onStatus);
+      client.off('notification', onNotification);
+      client.off('xray_state', onXrayState);
       if (invalidateTimer != null) {
         clearTimeout(invalidateTimer);
         invalidateTimer = null;

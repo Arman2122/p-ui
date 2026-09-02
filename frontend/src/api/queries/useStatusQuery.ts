@@ -6,8 +6,12 @@ import { parseMsg } from '@/utils/zodValidate';
 import { Status } from '@/models/status';
 import { StatusSchema } from '@/schemas/status';
 import { keys } from '@/api/queryKeys';
+import { getSharedWebSocketClient } from '@/api/websocket';
 
 const POLL_INTERVAL_MS = 2000;
+/* While the socket is up the bridge writes a fresh snapshot into this cache */
+/* every 2s, so the REST poll only has to cover a socket that is down. F345. */
+const SOCKET_FALLBACK_POLL_MS = 15000;
 
 async function fetchStatus(): Promise<Status> {
   const msg = await HttpUtil.get('/panel/api/server/status', undefined, { silent: true });
@@ -20,7 +24,7 @@ export function useStatusQuery() {
   const query = useQuery({
     queryKey: keys.server.status(),
     queryFn: fetchStatus,
-    refetchInterval: POLL_INTERVAL_MS,
+    refetchInterval: () => (getSharedWebSocketClient().isConnected ? SOCKET_FALLBACK_POLL_MS : POLL_INTERVAL_MS),
     refetchIntervalInBackground: false,
     staleTime: 0,
   });
