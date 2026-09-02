@@ -17,6 +17,7 @@ import {
   Result,
   Row,
   Select,
+  Space,
   Spin,
   Statistic,
   Switch,
@@ -51,6 +52,8 @@ import {
   UsergroupDeleteOutlined,
   FormOutlined,
   SwapOutlined,
+  ClearOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { activateOnKey } from '@/utils/a11y';
 
@@ -243,7 +246,7 @@ export default function ClientsPage() {
     setQuery,
     inbounds, onlines, transitioning, fetched, fetchError, subSettings,
     tgBotEnable, expireDiff, trafficDiff, pageSize, settingsReady,
-    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
+    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkClearIps, bulkExport, bulkLinks, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
     resetTraffic, resetAllTraffics, delDepleted, delOrphans, exportClients, importClients, setEnable,
     clientSpeed,
     applyTrafficEvent, applyClientStatsEvent,
@@ -800,8 +803,8 @@ export default function ClientsPage() {
     });
   }
 
-  async function runDelete(selection: BulkSelection) {
-    const msg = await bulkDelete(selection);
+  async function runDelete(selection: BulkSelection, keepTraffic = false) {
+    const msg = await bulkDelete(selection, keepTraffic);
     clearSelection();
     const ok = msg?.obj?.deleted ?? 0;
     const skipped = msg?.obj?.skipped ?? [];
@@ -814,19 +817,68 @@ export default function ClientsPage() {
         ? `${t('pages.clients.toasts.bulkDeletedMixed', { ok, failed })} — ${firstError}`
         : t('pages.clients.toasts.bulkDeletedMixed', { ok, failed }));
     }
-    reportBulk(t('delete'), msg?.obj?.outcome, (emails) => runDelete({ emails }));
+    reportBulk(t('delete'), msg?.obj?.outcome, (emails) => runDelete({ emails }, keepTraffic));
+  }
+
+  async function runClearIps(selection: BulkSelection) {
+    const msg = await bulkClearIps(selection);
+    if (!msg?.success) return;
+    clearSelection();
+    messageApi.success(t('pages.clients.toasts.bulkClearedIps', { count: msg.obj?.cleared ?? 0 }));
+    reportBulk(t('pages.clients.clearIps'), msg.obj?.outcome, (emails) => { void runClearIps({ emails }); });
+  }
+
+  function onBulkClearIps() {
+    if (selectionCount === 0) return;
+    const selection = currentSelection();
+    modal.confirm({
+      title: t('pages.clients.bulkClearIpsConfirmTitle', { count: selectionCount }),
+      content: t('pages.clients.bulkClearIpsConfirmContent'),
+      okText: t('pages.clients.clearIps'),
+      cancelText: t('cancel'),
+      onOk: () => runClearIps(selection),
+    });
+  }
+
+  async function onExportSelected() {
+    if (selectionCount === 0) return;
+    const items = await bulkExport(currentSelection());
+    if (!items) return;
+    openText({
+      title: t('pages.clients.exportSelected'),
+      content: JSON.stringify(items, null, 2),
+      fileName: 'clients-selection.json',
+    });
+  }
+
+  async function onCopyLinks() {
+    if (selectionCount === 0) return;
+    const rows = await bulkLinks(currentSelection());
+    if (!rows) return;
+    const links = rows.flatMap((row) => row.links);
+    openText({
+      title: t('pages.clients.linksForSelectionTitle', { count: rows.length, links: links.length }),
+      content: links.join('\n'),
+      fileName: 'client-links.txt',
+    });
   }
 
   function onBulkDelete() {
     if (selectionCount === 0) return;
     const selection = currentSelection();
+    let keepTraffic = false;
     modal.confirm({
       title: t('pages.clients.bulkDeleteConfirmTitle', { count: selectionCount }),
-      content: t('pages.clients.bulkDeleteConfirmContent'),
+      content: (
+        <Space direction="vertical">
+          <span>{t('pages.clients.bulkDeleteConfirmContent')}</span>
+          <Checkbox onChange={(e) => { keepTraffic = e.target.checked; }}>{t('pages.clients.bulkDeleteKeepTraffic')}</Checkbox>
+        </Space>
+      ),
       okText: t('delete'),
       okType: 'danger',
       cancelText: t('cancel'),
-      onOk: () => runDelete(selection),
+      onOk: () => runDelete(selection, keepTraffic),
     });
   }
 
@@ -1250,6 +1302,24 @@ export default function ClientsPage() {
                                     icon: <SwapOutlined />,
                                     label: t('pages.clients.move'),
                                     onClick: () => setBulkMoveOpen(true),
+                                  },
+                                  {
+                                    key: 'clearIps',
+                                    icon: <ClearOutlined />,
+                                    label: t('pages.clients.clearIps'),
+                                    onClick: onBulkClearIps,
+                                  },
+                                  {
+                                    key: 'exportSelected',
+                                    icon: <ExportOutlined />,
+                                    label: t('pages.clients.exportSelected'),
+                                    onClick: () => { void onExportSelected(); },
+                                  },
+                                  {
+                                    key: 'copyLinks',
+                                    icon: <LinkOutlined />,
+                                    label: t('pages.clients.linksForSelection'),
+                                    onClick: () => { void onCopyLinks(); },
                                   },
                                   {
                                     key: 'resetSelectedTraffics',

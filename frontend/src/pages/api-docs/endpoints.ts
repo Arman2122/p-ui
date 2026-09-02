@@ -735,6 +735,27 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/clients/bulkClearIps',
+        summary: 'Forget the recorded source IPs of many clients in one call, the same as the per-client clear: their IP-limit history restarts from zero and a client blocked by the limit is unblocked at the next check. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "cleared": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkExport',
+        summary: 'Export a selection of clients in the same portable shape GET /clients/export uses for every client, ready for /clients/import on another panel. Instead of emails, pass filter (the same query object /list/paged takes) to export every matching client, capped at 20000.',
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response: '{\n  "success": true,\n  "obj": [\n    { "client": { "email": "alice", "id": "0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c", "enable": true }, "inboundIds": [1, 2] }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkLinks',
+        summary: 'Render the share links of many clients in one call, one row per client with every link across its inbounds; a client that could not be rendered carries an error instead. Instead of emails, pass filter (the same query object /list/paged takes) to render every matching client, capped at 20000.',
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response: '{\n  "success": true,\n  "obj": [\n    { "email": "alice", "links": ["vless://0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c@example.com:443?type=tcp&security=reality#alice"] },\n    { "email": "ghost", "links": [], "error": "client not found" }\n  ]\n}',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/clients/bulkEnable',
         summary: 'Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
         body: '{\n  "emails": ["alice", "bob"]\n}',
