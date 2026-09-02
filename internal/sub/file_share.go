@@ -40,8 +40,18 @@ func (s *SubService) FileShare(subId string, inboundId int, host string) (core.S
 			if !ok {
 				continue
 			}
-			share, renders, err := cores.ClientShare(
-				instanceForShare(inbound), userForShare(client), s.resolveInboundAddress(inbound))
+			// A host is the way in the operator chose for this inbound; the file
+			// points there like every link does, not at the inbound's own address.
+			inst, address := instanceForShare(inbound), s.resolveInboundAddress(inbound)
+			if eps := s.hostEndpoints(inbound, "file"); len(eps) > 0 {
+				if dest, _ := eps[0]["dest"].(string); dest != "" {
+					address = dest
+				}
+				if port, _ := eps[0]["port"].(float64); port > 0 {
+					inst.Port = int(port)
+				}
+			}
+			share, renders, err := cores.ClientShare(inst, userForShare(client), address)
 			if err != nil {
 				return core.Share{}, err
 			}
