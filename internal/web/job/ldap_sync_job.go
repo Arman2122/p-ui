@@ -178,7 +178,7 @@ func (j *LdapSyncJob) Run() {
 			}
 			for _, tag := range inboundTags {
 				if ib := inboundMap[tag]; ib != nil {
-					j.deleteClientsNotInLDAP(ib, ldapEmailSet)
+					j.deleteClientsNotInLDAP(ib.Id, ldapEmailSet)
 				}
 			}
 		}
@@ -384,7 +384,14 @@ func (j *LdapSyncJob) batchSetEnable(ib *model.Inbound, emails []string, enable 
 }
 
 // deleteClientsNotInLDAP deletes clients not in LDAP using batches and a single restart
-func (j *LdapSyncJob) deleteClientsNotInLDAP(ib *model.Inbound, ldapEmails map[string]struct{}) {
+func (j *LdapSyncJob) deleteClientsNotInLDAP(inboundId int, ldapEmails map[string]struct{}) {
+	// Re-read the one inbound: the sync added clients to it moments ago and the
+	// row the caller loaded before the run no longer lists them. F379.
+	ib, err := j.inboundService.GetInbound(inboundId)
+	if err != nil {
+		logger.Warningf("Failed to load inbound %d for deletion: %v", inboundId, err)
+		return
+	}
 	batchSize := 50 //  clients in 1 batch
 	restartNeeded := false
 

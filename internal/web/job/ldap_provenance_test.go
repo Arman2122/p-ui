@@ -78,7 +78,7 @@ func TestTheSweepKeepsAClientTheSyncDidNotCreate(t *testing.T) {
 	}
 
 	// The directory returns nobody: everyone here is a deletion candidate.
-	j.deleteClientsNotInLDAP(ib, map[string]struct{}{})
+	j.deleteClientsNotInLDAP(ib.Id, map[string]struct{}{})
 
 	remaining := attachedEmails(t, ib.Id)
 	if _, ok := remaining[contractor]; !ok {
@@ -150,7 +150,7 @@ func TestAClientPredatingTheColumnIsNeverSwept(t *testing.T) {
 		t.Fatalf("clear origin: %v", err)
 	}
 
-	j.deleteClientsNotInLDAP(ib, map[string]struct{}{})
+	j.deleteClientsNotInLDAP(ib.Id, map[string]struct{}{})
 
 	if _, ok := attachedEmails(t, ib.Id)[email]; !ok {
 		t.Fatal("a client created before the origin column existed was swept; an upgrade would detach accounts the operator never chose to lose")
