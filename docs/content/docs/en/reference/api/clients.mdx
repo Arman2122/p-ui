@@ -95,64 +95,89 @@ _openapi:
       title: 'Shift expiry and/or traffic quota for many clients in one call.
         addDays/addBytes may be negative. Clients with unlimited expiry
         (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the
-        corresponding field — bulk extend never converts unlimited to limited. A
-        client that was auto-disabled solely because it was depleted (expired or
-        over quota) is automatically re-enabled — locally and on its node — when
-        the adjustment lifts it out of depletion; a manually-disabled or
-        still-depleted client is left disabled. The optional flow directive sets
-        the XTLS flow on every client: "none" clears it,
+        corresponding field in the default ADD mode; mode="set" makes a value
+        exactly this, and 0 still leaves a field alone. A client that was
+        auto-disabled solely because it was depleted (expired or over quota) is
+        automatically re-enabled — locally and on its node — when the adjustment
+        lifts it out of depletion; a manually-disabled or still-depleted client
+        is left disabled. The optional flow directive sets the XTLS flow on
+        every client: "none" clears it,
         "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where the inbound
         supports it (omit or "" to leave it unchanged). Returns the adjusted
-        count and per-email skip reasons.'
-      url: '#shift-expiry-andor-traffic-quota-for-many-clients-in-one-call-adddaysaddbytes-may-be-negative-clients-with-unlimited-expiry-expirytime0-or-unlimited-traffic-totalgb0-are-skipped-for-the-corresponding-field--bulk-extend-never-converts-unlimited-to-limited-a-client-that-was-auto-disabled-solely-because-it-was-depleted-expired-or-over-quota-is-automatically-re-enabled--locally-and-on-its-node--when-the-adjustment-lifts-it-out-of-depletion-a-manually-disabled-or-still-depleted-client-is-left-disabled-the-optional-flow-directive-sets-the-xtls-flow-on-every-client-none-clears-it-xtls-rprx-visionxtls-rprx-vision-udp443-set-it-where-the-inbound-supports-it-omit-or--to-leave-it-unchanged-returns-the-adjusted-count-and-per-email-skip-reasons'
+        count and per-email skip reasons. Instead of emails, pass filter (the
+        same query object /list/paged takes) to act on every matching client,
+        capped at 20000. The response also carries outcome: per-row ok, skipped
+        and failed lists with reasons.'
+      url: '#shift-expiry-andor-traffic-quota-for-many-clients-in-one-call-adddaysaddbytes-may-be-negative-clients-with-unlimited-expiry-expirytime0-or-unlimited-traffic-totalgb0-are-skipped-for-the-corresponding-field-in-the-default-add-mode-modeset-makes-a-value-exactly-this-and-0-still-leaves-a-field-alone-a-client-that-was-auto-disabled-solely-because-it-was-depleted-expired-or-over-quota-is-automatically-re-enabled--locally-and-on-its-node--when-the-adjustment-lifts-it-out-of-depletion-a-manually-disabled-or-still-depleted-client-is-left-disabled-the-optional-flow-directive-sets-the-xtls-flow-on-every-client-none-clears-it-xtls-rprx-visionxtls-rprx-vision-udp443-set-it-where-the-inbound-supports-it-omit-or--to-leave-it-unchanged-returns-the-adjusted-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Enable many clients in one call. Emails are grouped by inbound and
+      title: 'Enable many clients in one call. Emails are grouped by inbound and
         applied with a single read-modify-write per inbound; the running Xray
         (local or remote node) is updated to add each user. Note that enabling a
         client whose quota is exhausted or whose expiry has passed only flips
         the flag — the traffic loop will disable it again on the next tick.
-        Returns the changed count and per-email skip reasons.
-      url: '#enable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-add-each-user-note-that-enabling-a-client-whose-quota-is-exhausted-or-whose-expiry-has-passed-only-flips-the-flag--the-traffic-loop-will-disable-it-again-on-the-next-tick-returns-the-changed-count-and-per-email-skip-reasons'
+        Returns the changed count and per-email skip reasons. Instead of emails,
+        pass filter (the same query object /list/paged takes) to act on every
+        matching client, capped at 20000. The response also carries outcome:
+        per-row ok, skipped and failed lists with reasons.'
+      url: '#enable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-add-each-user-note-that-enabling-a-client-whose-quota-is-exhausted-or-whose-expiry-has-passed-only-flips-the-flag--the-traffic-loop-will-disable-it-again-on-the-next-tick-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Disable many clients in one call. Emails are grouped by inbound and
+      title: 'Disable many clients in one call. Emails are grouped by inbound and
         applied with a single read-modify-write per inbound; the running Xray
         (local or remote node) is updated to remove each user. Returns the
-        changed count and per-email skip reasons.
-      url: '#disable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-remove-each-user-returns-the-changed-count-and-per-email-skip-reasons'
+        changed count and per-email skip reasons. Instead of emails, pass filter
+        (the same query object /list/paged takes) to act on every matching
+        client, capped at 20000. The response also carries outcome: per-row ok,
+        skipped and failed lists with reasons.'
+      url: '#disable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-remove-each-user-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Delete many clients in one call. The server processes the list
+      title: 'Delete many clients in one call. The server processes the list
         sequentially so each delete sees the committed state of the previous one
         — avoids the race the per-email fan-out had on the panel side. Pass
         keepTraffic=true to retain the xray_client_traffic rows after deletion.
-      url: '#delete-many-clients-in-one-call-the-server-processes-the-list-sequentially-so-each-delete-sees-the-committed-state-of-the-previous-one--avoids-the-race-the-per-email-fan-out-had-on-the-panel-side-pass-keeptraffictrue-to-retain-the-xray_client_traffic-rows-after-deletion'
+        Instead of emails, pass filter (the same query object /list/paged takes)
+        to act on every matching client, capped at 20000. The response also
+        carries outcome: per-row ok, skipped and failed lists with reasons.'
+      url: '#delete-many-clients-in-one-call-the-server-processes-the-list-sequentially-so-each-delete-sees-the-committed-state-of-the-previous-one--avoids-the-race-the-per-email-fan-out-had-on-the-panel-side-pass-keeptraffictrue-to-retain-the-xray_client_traffic-rows-after-deletion-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Create many clients in one call. Body is a JSON array of {client,
+      title: 'Create many clients in one call. Body is a JSON array of {client,
         inboundIds} payloads — the same shape /add accepts. Items are processed
         sequentially; per-email skip reasons are returned for items that fail
         (e.g., duplicate email). Triggers a single Xray restart at the end if
-        any inbound was running.
-      url: '#create-many-clients-in-one-call-body-is-a-json-array-of-client-inboundids-payloads--the-same-shape-add-accepts-items-are-processed-sequentially-per-email-skip-reasons-are-returned-for-items-that-fail-eg-duplicate-email-triggers-a-single-xray-restart-at-the-end-if-any-inbound-was-running'
+        any inbound was running. Instead of emails, pass filter (the same query
+        object /list/paged takes) to act on every matching client, capped at
+        20000. The response also carries outcome: per-row ok, skipped and failed
+        lists with reasons.'
+      url: '#create-many-clients-in-one-call-body-is-a-json-array-of-client-inboundids-payloads--the-same-shape-add-accepts-items-are-processed-sequentially-per-email-skip-reasons-are-returned-for-items-that-fail-eg-duplicate-email-triggers-a-single-xray-restart-at-the-end-if-any-inbound-was-running-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Add many clients to a group in one call. Updates clients.group_name and
+      title: "Add many clients to a group in one call. Updates clients.group_name and
         patches the matching client entry inside every owning inbound's settings
         JSON in a single transaction. If the group name does not yet exist (in
         client_groups or as a derived label), it is auto-created as a persistent
-        group. To clear the group label, use /groups/bulkRemove instead.
-      url: '#add-many-clients-to-a-group-in-one-call-updates-clientsgroup_name-and-patches-the-matching-client-entry-inside-every-owning-inbounds-settings-json-in-a-single-transaction-if-the-group-name-does-not-yet-exist-in-client_groups-or-as-a-derived-label-it-is-auto-created-as-a-persistent-group-to-clear-the-group-label-use-groupsbulkremove-instead'
+        group. To clear the group label, use /groups/bulkRemove instead. Instead
+        of emails, pass filter (the same query object /list/paged takes) to act
+        on every matching client, capped at 20000. The response also carries
+        outcome: per-row ok, skipped and failed lists with reasons."
+      url: '#add-many-clients-to-a-group-in-one-call-updates-clientsgroup_name-and-patches-the-matching-client-entry-inside-every-owning-inbounds-settings-json-in-a-single-transaction-if-the-group-name-does-not-yet-exist-in-client_groups-or-as-a-derived-label-it-is-auto-created-as-a-persistent-group-to-clear-the-group-label-use-groupsbulkremove-instead-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Clear the group label on many clients in one call. Inverse of
+      title: "Clear the group label on many clients in one call. Inverse of
         /groups/bulkAdd. Clients themselves are kept — only the group label is
         cleared from clients.group_name and from each owning inbound's settings
-        JSON. Groups become empty if all their members are removed.
-      url: '#clear-the-group-label-on-many-clients-in-one-call-inverse-of-groupsbulkadd-clients-themselves-are-kept--only-the-group-label-is-cleared-from-clientsgroup_name-and-from-each-owning-inbounds-settings-json-groups-become-empty-if-all-their-members-are-removed'
+        JSON. Groups become empty if all their members are removed. Instead of
+        emails, pass filter (the same query object /list/paged takes) to act on
+        every matching client, capped at 20000. The response also carries
+        outcome: per-row ok, skipped and failed lists with reasons."
+      url: '#clear-the-group-label-on-many-clients-in-one-call-inverse-of-groupsbulkadd-clients-themselves-are-kept--only-the-group-label-is-cleared-from-clientsgroup_name-and-from-each-owning-inbounds-settings-json-groups-become-empty-if-all-their-members-are-removed-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Attach many existing clients to many inbounds in one call. Each client
+      title: 'Attach many existing clients to many inbounds in one call. Each client
         keeps its identity (email/UUID/password/subId) and a shared traffic row;
         all clients are added to a target inbound in a single AddInboundClient
         call. Clients already present on a target are reported under skipped.
         Returns per-email attached/skipped/errors lists and triggers a single
-        Xray restart if any target inbound was running.
-      url: '#attach-many-existing-clients-to-many-inbounds-in-one-call-each-client-keeps-its-identity-emailuuidpasswordsubid-and-a-shared-traffic-row-all-clients-are-added-to-a-target-inbound-in-a-single-addinboundclient-call-clients-already-present-on-a-target-are-reported-under-skipped-returns-per-email-attachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running'
+        Xray restart if any target inbound was running. Instead of emails, pass
+        filter (the same query object /list/paged takes) to act on every
+        matching client, capped at 20000. The response also carries outcome:
+        per-row ok, skipped and failed lists with reasons.'
+      url: '#attach-many-existing-clients-to-many-inbounds-in-one-call-each-client-keeps-its-identity-emailuuidpasswordsubid-and-a-shared-traffic-row-all-clients-are-added-to-a-target-inbound-in-a-single-addinboundclient-call-clients-already-present-on-a-target-are-reported-under-skipped-returns-per-email-attachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
       title: "Mirror of bulkAttach: detach many existing clients from many inbounds in
         one call. For each email, intersects the client's current inbounds with
@@ -162,14 +187,21 @@ _openapi:
         skipped. Client records are kept even if they become orphaned — use
         bulkDel for full removal. Returns per-email detached/skipped/errors
         lists and triggers a single Xray restart if any target inbound was
-        running."
-      url: '#mirror-of-bulkattach-detach-many-existing-clients-from-many-inbounds-in-one-call-for-each-email-intersects-the-clients-current-inbounds-with-the-requested-set-and-detaches-from-those-only-email-inbound-pairs-where-the-client-is-not-currently-attached-are-silently-no-ops-emails-not-attached-to-any-of-the-requested-inbounds-are-reported-under-skipped-client-records-are-kept-even-if-they-become-orphaned--use-bulkdel-for-full-removal-returns-per-email-detachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running'
+        running. Instead of emails, pass filter (the same query object
+        /list/paged takes) to act on every matching client, capped at 20000. The
+        response also carries outcome: per-row ok, skipped and failed lists with
+        reasons."
+      url: '#mirror-of-bulkattach-detach-many-existing-clients-from-many-inbounds-in-one-call-for-each-email-intersects-the-clients-current-inbounds-with-the-requested-set-and-detaches-from-those-only-email-inbound-pairs-where-the-client-is-not-currently-attached-are-silently-no-ops-emails-not-attached-to-any-of-the-requested-inbounds-are-reported-under-skipped-client-records-are-kept-even-if-they-become-orphaned--use-bulkdel-for-full-removal-returns-per-email-detachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: Zero up/down counters for many clients in one call. Loops the
-        single-reset path so each client is re-enabled across its attached
-        inbounds and pushed to Xray/remote nodes. Returns the count of
-        successfully reset clients.
-      url: '#zero-updown-counters-for-many-clients-in-one-call-loops-the-single-reset-path-so-each-client-is-re-enabled-across-its-attached-inbounds-and-pushed-to-xrayremote-nodes-returns-the-count-of-successfully-reset-clients'
+      title: 'Zero up/down counters for many clients in one call. One batched update
+        over the selection; a client the reset brings back under its quota is
+        re-enabled across its inbounds and pushed to the core, and daemon-side
+        counters (MTProto) are cleared. affected is the number of traffic rows
+        zeroed. Instead of emails, pass filter (the same query object
+        /list/paged takes) to act on every matching client, capped at 20000. The
+        response also carries outcome: per-row ok, skipped and failed lists with
+        reasons.'
+      url: '#zero-updown-counters-for-many-clients-in-one-call-one-batched-update-over-the-selection-a-client-the-reset-brings-back-under-its-quota-is-re-enabled-across-its-inbounds-and-pushed-to-the-core-and-daemon-side-counters-mtproto-are-cleared-affected-is-the-number-of-traffic-rows-zeroed-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
       title: List all client groups with their member counts. Merges persisted groups
         (rows in client_groups, including empty placeholders) with the distinct
@@ -359,60 +391,86 @@ _openapi:
       - content: 'Shift expiry and/or traffic quota for many clients in one call.
           addDays/addBytes may be negative. Clients with unlimited expiry
           (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the
-          corresponding field — bulk extend never converts unlimited to limited.
-          A client that was auto-disabled solely because it was depleted
-          (expired or over quota) is automatically re-enabled — locally and on
-          its node — when the adjustment lifts it out of depletion; a
-          manually-disabled or still-depleted client is left disabled. The
-          optional flow directive sets the XTLS flow on every client: "none"
-          clears it, "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where
-          the inbound supports it (omit or "" to leave it unchanged). Returns
-          the adjusted count and per-email skip reasons.'
-        id: shift-expiry-andor-traffic-quota-for-many-clients-in-one-call-adddaysaddbytes-may-be-negative-clients-with-unlimited-expiry-expirytime0-or-unlimited-traffic-totalgb0-are-skipped-for-the-corresponding-field--bulk-extend-never-converts-unlimited-to-limited-a-client-that-was-auto-disabled-solely-because-it-was-depleted-expired-or-over-quota-is-automatically-re-enabled--locally-and-on-its-node--when-the-adjustment-lifts-it-out-of-depletion-a-manually-disabled-or-still-depleted-client-is-left-disabled-the-optional-flow-directive-sets-the-xtls-flow-on-every-client-none-clears-it-xtls-rprx-visionxtls-rprx-vision-udp443-set-it-where-the-inbound-supports-it-omit-or--to-leave-it-unchanged-returns-the-adjusted-count-and-per-email-skip-reasons
-      - content: Enable many clients in one call. Emails are grouped by inbound and
+          corresponding field in the default ADD mode; mode="set" makes a value
+          exactly this, and 0 still leaves a field alone. A client that was
+          auto-disabled solely because it was depleted (expired or over quota)
+          is automatically re-enabled — locally and on its node — when the
+          adjustment lifts it out of depletion; a manually-disabled or
+          still-depleted client is left disabled. The optional flow directive
+          sets the XTLS flow on every client: "none" clears it,
+          "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where the inbound
+          supports it (omit or "" to leave it unchanged). Returns the adjusted
+          count and per-email skip reasons. Instead of emails, pass filter (the
+          same query object /list/paged takes) to act on every matching client,
+          capped at 20000. The response also carries outcome: per-row ok,
+          skipped and failed lists with reasons.'
+        id: shift-expiry-andor-traffic-quota-for-many-clients-in-one-call-adddaysaddbytes-may-be-negative-clients-with-unlimited-expiry-expirytime0-or-unlimited-traffic-totalgb0-are-skipped-for-the-corresponding-field-in-the-default-add-mode-modeset-makes-a-value-exactly-this-and-0-still-leaves-a-field-alone-a-client-that-was-auto-disabled-solely-because-it-was-depleted-expired-or-over-quota-is-automatically-re-enabled--locally-and-on-its-node--when-the-adjustment-lifts-it-out-of-depletion-a-manually-disabled-or-still-depleted-client-is-left-disabled-the-optional-flow-directive-sets-the-xtls-flow-on-every-client-none-clears-it-xtls-rprx-visionxtls-rprx-vision-udp443-set-it-where-the-inbound-supports-it-omit-or--to-leave-it-unchanged-returns-the-adjusted-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: 'Enable many clients in one call. Emails are grouped by inbound and
           applied with a single read-modify-write per inbound; the running Xray
           (local or remote node) is updated to add each user. Note that enabling
           a client whose quota is exhausted or whose expiry has passed only
           flips the flag — the traffic loop will disable it again on the next
-          tick. Returns the changed count and per-email skip reasons.
-        id: enable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-add-each-user-note-that-enabling-a-client-whose-quota-is-exhausted-or-whose-expiry-has-passed-only-flips-the-flag--the-traffic-loop-will-disable-it-again-on-the-next-tick-returns-the-changed-count-and-per-email-skip-reasons
-      - content: Disable many clients in one call. Emails are grouped by inbound and
+          tick. Returns the changed count and per-email skip reasons. Instead of
+          emails, pass filter (the same query object /list/paged takes) to act
+          on every matching client, capped at 20000. The response also carries
+          outcome: per-row ok, skipped and failed lists with reasons.'
+        id: enable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-add-each-user-note-that-enabling-a-client-whose-quota-is-exhausted-or-whose-expiry-has-passed-only-flips-the-flag--the-traffic-loop-will-disable-it-again-on-the-next-tick-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: 'Disable many clients in one call. Emails are grouped by inbound and
           applied with a single read-modify-write per inbound; the running Xray
           (local or remote node) is updated to remove each user. Returns the
-          changed count and per-email skip reasons.
-        id: disable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-remove-each-user-returns-the-changed-count-and-per-email-skip-reasons
-      - content: Delete many clients in one call. The server processes the list
+          changed count and per-email skip reasons. Instead of emails, pass
+          filter (the same query object /list/paged takes) to act on every
+          matching client, capped at 20000. The response also carries outcome:
+          per-row ok, skipped and failed lists with reasons.'
+        id: disable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-remove-each-user-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: 'Delete many clients in one call. The server processes the list
           sequentially so each delete sees the committed state of the previous
           one — avoids the race the per-email fan-out had on the panel side.
           Pass keepTraffic=true to retain the xray_client_traffic rows after
-          deletion.
-        id: delete-many-clients-in-one-call-the-server-processes-the-list-sequentially-so-each-delete-sees-the-committed-state-of-the-previous-one--avoids-the-race-the-per-email-fan-out-had-on-the-panel-side-pass-keeptraffictrue-to-retain-the-xray_client_traffic-rows-after-deletion
-      - content: Create many clients in one call. Body is a JSON array of {client,
+          deletion. Instead of emails, pass filter (the same query object
+          /list/paged takes) to act on every matching client, capped at 20000.
+          The response also carries outcome: per-row ok, skipped and failed
+          lists with reasons.'
+        id: delete-many-clients-in-one-call-the-server-processes-the-list-sequentially-so-each-delete-sees-the-committed-state-of-the-previous-one--avoids-the-race-the-per-email-fan-out-had-on-the-panel-side-pass-keeptraffictrue-to-retain-the-xray_client_traffic-rows-after-deletion-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: 'Create many clients in one call. Body is a JSON array of {client,
           inboundIds} payloads — the same shape /add accepts. Items are
           processed sequentially; per-email skip reasons are returned for items
           that fail (e.g., duplicate email). Triggers a single Xray restart at
-          the end if any inbound was running.
-        id: create-many-clients-in-one-call-body-is-a-json-array-of-client-inboundids-payloads--the-same-shape-add-accepts-items-are-processed-sequentially-per-email-skip-reasons-are-returned-for-items-that-fail-eg-duplicate-email-triggers-a-single-xray-restart-at-the-end-if-any-inbound-was-running
-      - content: Add many clients to a group in one call. Updates clients.group_name and
-          patches the matching client entry inside every owning inbound's
+          the end if any inbound was running. Instead of emails, pass filter
+          (the same query object /list/paged takes) to act on every matching
+          client, capped at 20000. The response also carries outcome: per-row
+          ok, skipped and failed lists with reasons.'
+        id: create-many-clients-in-one-call-body-is-a-json-array-of-client-inboundids-payloads--the-same-shape-add-accepts-items-are-processed-sequentially-per-email-skip-reasons-are-returned-for-items-that-fail-eg-duplicate-email-triggers-a-single-xray-restart-at-the-end-if-any-inbound-was-running-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: "Add many clients to a group in one call. Updates clients.group_name
+          and patches the matching client entry inside every owning inbound's
           settings JSON in a single transaction. If the group name does not yet
           exist (in client_groups or as a derived label), it is auto-created as
           a persistent group. To clear the group label, use /groups/bulkRemove
-          instead.
-        id: add-many-clients-to-a-group-in-one-call-updates-clientsgroup_name-and-patches-the-matching-client-entry-inside-every-owning-inbounds-settings-json-in-a-single-transaction-if-the-group-name-does-not-yet-exist-in-client_groups-or-as-a-derived-label-it-is-auto-created-as-a-persistent-group-to-clear-the-group-label-use-groupsbulkremove-instead
-      - content: Clear the group label on many clients in one call. Inverse of
+          instead. Instead of emails, pass filter (the same query object
+          /list/paged takes) to act on every matching client, capped at 20000.
+          The response also carries outcome: per-row ok, skipped and failed
+          lists with reasons."
+        id: add-many-clients-to-a-group-in-one-call-updates-clientsgroup_name-and-patches-the-matching-client-entry-inside-every-owning-inbounds-settings-json-in-a-single-transaction-if-the-group-name-does-not-yet-exist-in-client_groups-or-as-a-derived-label-it-is-auto-created-as-a-persistent-group-to-clear-the-group-label-use-groupsbulkremove-instead-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: "Clear the group label on many clients in one call. Inverse of
           /groups/bulkAdd. Clients themselves are kept — only the group label is
           cleared from clients.group_name and from each owning inbound's
           settings JSON. Groups become empty if all their members are removed.
-        id: clear-the-group-label-on-many-clients-in-one-call-inverse-of-groupsbulkadd-clients-themselves-are-kept--only-the-group-label-is-cleared-from-clientsgroup_name-and-from-each-owning-inbounds-settings-json-groups-become-empty-if-all-their-members-are-removed
-      - content: Attach many existing clients to many inbounds in one call. Each client
+          Instead of emails, pass filter (the same query object /list/paged
+          takes) to act on every matching client, capped at 20000. The response
+          also carries outcome: per-row ok, skipped and failed lists with
+          reasons."
+        id: clear-the-group-label-on-many-clients-in-one-call-inverse-of-groupsbulkadd-clients-themselves-are-kept--only-the-group-label-is-cleared-from-clientsgroup_name-and-from-each-owning-inbounds-settings-json-groups-become-empty-if-all-their-members-are-removed-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: 'Attach many existing clients to many inbounds in one call. Each client
           keeps its identity (email/UUID/password/subId) and a shared traffic
           row; all clients are added to a target inbound in a single
           AddInboundClient call. Clients already present on a target are
           reported under skipped. Returns per-email attached/skipped/errors
           lists and triggers a single Xray restart if any target inbound was
-          running.
-        id: attach-many-existing-clients-to-many-inbounds-in-one-call-each-client-keeps-its-identity-emailuuidpasswordsubid-and-a-shared-traffic-row-all-clients-are-added-to-a-target-inbound-in-a-single-addinboundclient-call-clients-already-present-on-a-target-are-reported-under-skipped-returns-per-email-attachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running
+          running. Instead of emails, pass filter (the same query object
+          /list/paged takes) to act on every matching client, capped at 20000.
+          The response also carries outcome: per-row ok, skipped and failed
+          lists with reasons.'
+        id: attach-many-existing-clients-to-many-inbounds-in-one-call-each-client-keeps-its-identity-emailuuidpasswordsubid-and-a-shared-traffic-row-all-clients-are-added-to-a-target-inbound-in-a-single-addinboundclient-call-clients-already-present-on-a-target-are-reported-under-skipped-returns-per-email-attachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
       - content: "Mirror of bulkAttach: detach many existing clients from many inbounds
           in one call. For each email, intersects the client's current inbounds
           with the requested set and detaches from those only; (email, inbound)
@@ -421,13 +479,20 @@ _openapi:
           under skipped. Client records are kept even if they become orphaned —
           use bulkDel for full removal. Returns per-email
           detached/skipped/errors lists and triggers a single Xray restart if
-          any target inbound was running."
-        id: mirror-of-bulkattach-detach-many-existing-clients-from-many-inbounds-in-one-call-for-each-email-intersects-the-clients-current-inbounds-with-the-requested-set-and-detaches-from-those-only-email-inbound-pairs-where-the-client-is-not-currently-attached-are-silently-no-ops-emails-not-attached-to-any-of-the-requested-inbounds-are-reported-under-skipped-client-records-are-kept-even-if-they-become-orphaned--use-bulkdel-for-full-removal-returns-per-email-detachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running
-      - content: Zero up/down counters for many clients in one call. Loops the
-          single-reset path so each client is re-enabled across its attached
-          inbounds and pushed to Xray/remote nodes. Returns the count of
-          successfully reset clients.
-        id: zero-updown-counters-for-many-clients-in-one-call-loops-the-single-reset-path-so-each-client-is-re-enabled-across-its-attached-inbounds-and-pushed-to-xrayremote-nodes-returns-the-count-of-successfully-reset-clients
+          any target inbound was running. Instead of emails, pass filter (the
+          same query object /list/paged takes) to act on every matching client,
+          capped at 20000. The response also carries outcome: per-row ok,
+          skipped and failed lists with reasons."
+        id: mirror-of-bulkattach-detach-many-existing-clients-from-many-inbounds-in-one-call-for-each-email-intersects-the-clients-current-inbounds-with-the-requested-set-and-detaches-from-those-only-email-inbound-pairs-where-the-client-is-not-currently-attached-are-silently-no-ops-emails-not-attached-to-any-of-the-requested-inbounds-are-reported-under-skipped-client-records-are-kept-even-if-they-become-orphaned--use-bulkdel-for-full-removal-returns-per-email-detachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: 'Zero up/down counters for many clients in one call. One batched update
+          over the selection; a client the reset brings back under its quota is
+          re-enabled across its inbounds and pushed to the core, and daemon-side
+          counters (MTProto) are cleared. affected is the number of traffic rows
+          zeroed. Instead of emails, pass filter (the same query object
+          /list/paged takes) to act on every matching client, capped at 20000.
+          The response also carries outcome: per-row ok, skipped and failed
+          lists with reasons.'
+        id: zero-updown-counters-for-many-clients-in-one-call-one-batched-update-over-the-selection-a-client-the-reset-brings-back-under-its-quota-is-re-enabled-across-its-inbounds-and-pushed-to-the-core-and-daemon-side-counters-mtproto-are-cleared-affected-is-the-number-of-traffic-rows-zeroed-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
       - content: List all client groups with their member counts. Merges persisted
           groups (rows in client_groups, including empty placeholders) with the
           distinct group_name values currently set on clients. Sorted

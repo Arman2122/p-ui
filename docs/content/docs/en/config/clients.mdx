@@ -62,9 +62,15 @@ To inspect exactly what a link contains, paste it into the
 
 For managing many clients at once, the panel supports bulk **create, enable,
 disable, delete, attach/detach** (to inbounds), **reset traffic**, and
-**adjust** (add days / add bytes / set flow). Maintenance actions also let you
-delete **depleted** clients (quota/expiry exhausted) and **orphaned** clients
-(not attached to any inbound).
+**adjust** (add days / add bytes in ADD mode, or make a value exactly this in
+SET mode, plus a flow change). The selection is not limited to the page on
+screen: once a whole page is selected, **Select all N matching** turns the
+selection into the filter itself and the server resolves every matching
+client. After any bulk action that skipped or failed a client, a drawer lists
+each such row with its reason and lets you copy the failed emails or retry
+exactly those. Maintenance actions also let you delete **depleted** clients
+(quota/expiry exhausted) and **orphaned** clients (not attached to any
+inbound).
 
 <Callout type="warn">
   A client's share link contains its credential. Treat links and QR codes like
