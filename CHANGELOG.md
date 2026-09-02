@@ -8,6 +8,10 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A database import accepts only a Penhoon UI backup.** Any PostgreSQL custom-format archive restored cleanly and left the panel with none of its own tables. The probe now reads the table of contents `pg_restore` already produced and refuses an archive that lists no `inbounds` table, before Xray is stopped.
+- **The updater applies the installer's operating-system gate and checks its dependencies.** `update.sh` only echoed the OS name; it now refuses an unsupported system before anything is touched, the way `install.sh` does, and when `apt-get` cannot refresh the dependency packages it continues only if `curl` and `tar` are already present.
+- **The Telegram bot can delete a client.** The client view gains a delete button behind a confirmation; a delete that changes the running core flags the restart the way the panel does.
+- **`/restart <core>` restarts one core from the bot.** `/restart` alone still restarts Xray; with a core id (`xray`, `mtproto`, `wireguard`, …) it restarts that core through the same path as the panel's core control.
 - **A disabled client's status says why.** The Clients list showed "disabled" whether the quota job switched the client off, its expiry passed, or someone turned it off by hand; the row now names the cause (quota used up, expired, switched off), and the paged API carries it as `disabledReason`.
 - **Creating an inbound for a core this host cannot run is refused on the API path too.** The form already greyed such kinds out; `POST /panel/api/inbounds/add` now asks the owning core's preflight and answers with its reason (Xray keeps its own `-test` pre-flight at restart; node-hosted inbounds are the node's business).
 - **A bad Telegram run time or LDAP sync cron is refused when saved.** Both were stored unparsed and silently replaced by the scheduler's default at the next start. Settings now run the scheduler's own parser: six fields with seconds first, or a descriptor such as `@daily`.
