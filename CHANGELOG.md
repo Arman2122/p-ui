@@ -30,12 +30,17 @@ here; the git log is the full record.
   and nothing re-read it — the same for a change to its schedule. The
   settings page said yes and scheduled nothing. It now reschedules on every
   settings save, exactly as the CPU and memory watchdogs already do.
-- **Three internal Go types are gone from the generated API surface.**
+- **`openapi.json` is valid OpenAPI 3.0.3.** The four WebSocket message
+  shapes were folded into the document as pseudo-endpoints with a `WS`
+  method and a `→ type: …` path, which no validator or client generator
+  accepts. They now live in `x-websocket-messages` at the document root, and
+  the docs site renders them onto the WebSocket page as before. A tool that
+  read them out of `paths` needs to read the extension instead.
+- **Three internal Go types are gone from the generated frontend types.**
   `SubLinkProvider`, `staticEgressResolver` and `transportBits` were emitted
-  into the frontend's generated types and the OpenAPI document by accident —
-  two of them are lowercase helpers no response can contain. Nothing in the
-  panel used them; a third-party consumer of the generated schema should not
-  have either.
+  into `frontend/src/generated` by accident — two of them are lowercase
+  helpers no response can contain. Nothing used them, and the generator now
+  refuses any unexported name outright.
 
 ### Security
 

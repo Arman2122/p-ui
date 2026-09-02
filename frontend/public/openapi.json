@@ -1,5 +1,27 @@
 {
   "openapi": "3.0.3",
+  "x-websocket-messages": [
+    {
+      "type": "status",
+      "summary": "Server health snapshot pushed every 2 seconds. Contains CPU, memory, swap, disk, network IO, load, and Xray state — same shape as <code>GET /panel/api/server/status</code>.",
+      "example": "{\n  \"type\": \"status\",\n  \"data\": { \"cpu\": 12.5, \"mem\": { \"current\": 2147483648, \"total\": 8589934592 }, \"xray\": { \"state\": \"running\" } }\n}"
+    },
+    {
+      "type": "xrayState",
+      "summary": "Xray process state change. Fired when Xray starts, stops, or encounters an error.",
+      "example": "{\n  \"type\": \"xrayState\",\n  \"data\": \"running\"\n}"
+    },
+    {
+      "type": "notification",
+      "summary": "In-panel toast notification. Fired on Xray stop/restart, DB import, panel restart, etc.",
+      "example": "{\n  \"type\": \"notification\",\n  \"title\": \"Xray service restarted\",\n  \"body\": \"Xray has been restarted successfully\",\n  \"severity\": \"success\"\n}"
+    },
+    {
+      "type": "invalidate",
+      "summary": "Instructs the UI to re-fetch a resource. Fired when another admin session modifies data (e.g. toggling inbound enable).",
+      "example": "{\n  \"type\": \"invalidate\",\n  \"resource\": \"inbounds\"\n}"
+    }
+  ],
   "info": {
     "title": "P-UI Panel API",
     "version": "1.x",
@@ -13544,153 +13566,6 @@
                     },
                     "obj": {}
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "→ type: status": {
-      "ws": {
-        "tags": [
-          "WebSocket"
-        ],
-        "summary": "Server health snapshot pushed every 2 seconds. Contains CPU, memory, swap, disk, network IO, load, and Xray state — same shape as <code>GET /panel/api/server/status</code>.",
-        "operationId": "ws_type_status",
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "obj": {}
-                  }
-                },
-                "example": {
-                  "type": "status",
-                  "data": {
-                    "cpu": 12.5,
-                    "mem": {
-                      "current": 2147483648,
-                      "total": 8589934592
-                    },
-                    "xray": {
-                      "state": "running"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "→ type: xrayState": {
-      "ws": {
-        "tags": [
-          "WebSocket"
-        ],
-        "summary": "Xray process state change. Fired when Xray starts, stops, or encounters an error.",
-        "operationId": "ws_type_xrayState",
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "obj": {}
-                  }
-                },
-                "example": {
-                  "type": "xrayState",
-                  "data": "running"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "→ type: notification": {
-      "ws": {
-        "tags": [
-          "WebSocket"
-        ],
-        "summary": "In-panel toast notification. Fired on Xray stop/restart, DB import, panel restart, etc.",
-        "operationId": "ws_type_notification",
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "obj": {}
-                  }
-                },
-                "example": {
-                  "type": "notification",
-                  "title": "Xray service restarted",
-                  "body": "Xray has been restarted successfully",
-                  "severity": "success"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "→ type: invalidate": {
-      "ws": {
-        "tags": [
-          "WebSocket"
-        ],
-        "summary": "Instructs the UI to re-fetch a resource. Fired when another admin session modifies data (e.g. toggling inbound enable).",
-        "operationId": "ws_type_invalidate",
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "obj": {}
-                  }
-                },
-                "example": {
-                  "type": "invalidate",
-                  "resource": "inbounds"
                 }
               }
             }

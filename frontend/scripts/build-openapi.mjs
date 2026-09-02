@@ -189,9 +189,19 @@ function buildOperation(ep, tag) {
 
 function buildSpec() {
   const paths = {};
+  // The WebSocket message shapes are documented as pseudo-endpoints with a
+  // `WS` method and a `→ type: …` path. Folded into the Paths Object they made
+  // the document invalid OpenAPI; they live in a vendor extension now. F408.
+  const messages = [];
   for (const section of sections) {
     const tag = section.title;
     for (const ep of section.endpoints) {
+      if (ep.method === 'WS' || !ep.path.startsWith('/')) {
+        const message = { type: ep.path.replace(/^→ type:\s*/, ''), summary: ep.summary || '' };
+        if (ep.response) message.example = ep.response;
+        messages.push(message);
+        continue;
+      }
       const openApiPath = ginPathToOpenApi(ep.path);
       if (!paths[openApiPath]) paths[openApiPath] = {};
       paths[openApiPath][ep.method.toLowerCase()] = buildOperation(ep, tag);
@@ -205,6 +215,7 @@ function buildSpec() {
 
   return {
     openapi: '3.0.3',
+    'x-websocket-messages': messages,
     info: {
       title: 'P-UI Panel API',
       version: PANEL_VERSION,
