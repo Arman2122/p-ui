@@ -464,6 +464,10 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			if err := tx.Where("client_email = ?", email).Delete(&model.InboundClientIps{}).Error; err != nil {
 				logger.Warning("policy: drop orphaned ip row:", err)
 			}
+			// An empty verdict, not none: the caller's re-ban memory forgets a
+			// client only through a verdict naming it, and a deleted client would
+			// otherwise be remembered forever. F307.
+			verdicts = append(verdicts, IPLimitVerdict{Email: email})
 			continue
 		}
 
@@ -514,6 +518,9 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			if err := tx.Save(row).Error; err != nil {
 				logger.Error("policy: save observed ips:", err)
 			}
+			// Same reason as above: a client whose cap was removed is under it now,
+			// and the pairs remembered from when it was capped must be let go.
+			verdicts = append(verdicts, IPLimitVerdict{Email: email})
 			continue
 		}
 
