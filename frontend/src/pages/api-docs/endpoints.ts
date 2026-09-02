@@ -709,13 +709,13 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/clients/export',
-        summary: 'Return every client as a {client, inboundIds} array — the same shape /bulkCreate and /import accept — so the payload round-trips straight back through /import. Clients with no inbound attachment are included with an empty inboundIds list. The UI shows this in a CodeMirror viewer (copy / download); programmatic callers get the array in obj.',
+        summary: 'Return every client as a {client, inboundIds} array — the same shape /bulkCreate and /import accept — so the payload round-trips straight back through /import. Clients with no inbound attachment are included with an empty inboundIds list. The UI shows this in a CodeMirror viewer (copy / download); programmatic callers get the array in obj. Each item also carries externalLinks (kind link or subscription, value, remark), which /clients/import writes back.',
         response: '{\n  "success": true,\n  "obj": [\n    {\n      "client": {\n        "email": "alice@example.com",\n        "id": "...",\n        "totalGB": 53687091200,\n        "expiryTime": 0,\n        "enable": true,\n        "subId": "..."\n      },\n      "inboundIds": [7, 9]\n    }\n  ]\n}',
       },
       {
         method: 'POST',
         path: '/panel/api/clients/import',
-        summary: 'Import clients from a JSON body { "data": "<json>" }, where data is a string-encoded array produced by /export ([{client, inboundIds}]). Items with inboundIds are created and attached to those inbounds; items with an empty inboundIds list are restored as unattached client records. Existing emails are never overwritten — they are returned in skipped. Triggers a single Xray restart at the end if any target inbound was running.',
+        summary: 'Import clients from a JSON body { "data": "<json>" }, where data is a string-encoded array produced by /export ([{client, inboundIds}]). Items with inboundIds are created and attached to those inbounds; items with an empty inboundIds list are restored as unattached client records. Existing emails are never overwritten — they are returned in skipped. Triggers a single Xray restart at the end if any target inbound was running. An item\'s externalLinks are validated first and restored after the client is created.',
         body: '{\n  "data": "[{\\"client\\":{\\"email\\":\\"alice@example.com\\",\\"enable\\":true},\\"inboundIds\\":[7]}]"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "created": 2,\n    "skipped": [\n      { "email": "alice@example.com", "reason": "email already in use: alice@example.com" }\n    ]\n  }\n}',
       },
@@ -752,7 +752,7 @@ export const sections: readonly Section[] = [
         path: '/panel/api/clients/bulkExport',
         summary: 'Export a selection of clients in the same portable shape GET /clients/export uses for every client, ready for /clients/import on another panel. Instead of emails, pass filter (the same query object /list/paged takes) to export every matching client, capped at 20000.',
         body: '{\n  "emails": ["alice", "bob"]\n}',
-        response: '{\n  "success": true,\n  "obj": [\n    { "client": { "email": "alice", "id": "0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c", "enable": true }, "inboundIds": [1, 2] }\n  ]\n}',
+        response: '{\n  "success": true,\n  "obj": [\n    { "client": { "email": "alice", "id": "0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c", "enable": true }, "inboundIds": [1, 2], "externalLinks": [{ "kind": "subscription", "value": "https://mirror.example.com/sub/abc", "remark": "mirror" }] }\n  ]\n}',
       },
       {
         method: 'POST',

@@ -66,8 +66,9 @@ type ClientService struct{}
 var ErrClientNotInInbound = errors.New("client not found in inbound")
 
 type ClientCreatePayload struct {
-	Client     model.Client `json:"client"`
-	InboundIds []int        `json:"inboundIds"`
+	Client        model.Client        `json:"client"`
+	InboundIds    []int               `json:"inboundIds"`
+	ExternalLinks []ExternalLinkInput `json:"externalLinks,omitempty"`
 }
 
 const sqlInChunk = 400
