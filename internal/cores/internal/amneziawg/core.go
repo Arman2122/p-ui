@@ -146,8 +146,13 @@ func (c *Core) applyParams(ctx context.Context, inst core.Instance) error {
 	// No IsZero() short-circuit: an inbound whose parameters were all cleared is
 	// exactly the case that has to reach the device, and skipping it is half of
 	// why a cleared one never did.
-	if err := awg.ConfigureParams(name, params); err != nil {
+	if err := configureParams(name, params); err != nil {
 		return fmt.Errorf("awgkernel: inbound %d obfuscation: %w", inst.ID, err)
 	}
 	return nil
 }
+
+// configureParams is the one call that reaches the module. A var so the
+// conformance suite can drive this core against the fake kernel every other
+// core is checked against; the value is never configurable. F093.
+var configureParams = awg.ConfigureParams
