@@ -30,6 +30,17 @@ here; the git log is the full record.
   and nothing re-read it — the same for a change to its schedule. The
   settings page said yes and scheduled nothing. It now reschedules on every
   settings save, exactly as the CPU and memory watchdogs already do.
+- **Renaming the Xray API inbound's tag no longer switches off accounting.**
+  The panel found its gRPC port by looking for an inbound tagged exactly
+  `api`, while the hot-reload path already read the tag from the template's
+  `api` section — so a template with a renamed tag lost every traffic stat
+  and quota check in silence. Both paths now read the same tag.
+- **A JSON subscription with several external proxies renders each on its own
+  address.** The renderer wrote each proxy's destination and port onto the
+  inbound it was handed, so a proxy without a port inherited the previous
+  one's, and the row itself was left carrying the last proxy's address until
+  the next reload. It works on a copy per proxy now, as the Clash renderer
+  already did.
 - **The client editor no longer shows a kernel-shaping status for a protocol
   that cannot be shaped.** On a VLESS client the Limits tab said speed limits
   were unavailable on the protocol and then reported "Held by the kernel: not

@@ -298,8 +298,11 @@ func apiPortOf(config *Config) int {
 	if config == nil {
 		return 0
 	}
+	// The tag the api section names, as the hot-diff path already reads it: a
+	// template that renamed it silently lost every gRPC stat and quota. F006.
+	tag := apiTagFromConfig(config.API)
 	for _, inbound := range config.InboundConfigs {
-		if inbound.Tag == "api" {
+		if inbound.Tag == tag || inbound.Tag == "api" {
 			return inbound.Port
 		}
 	}
