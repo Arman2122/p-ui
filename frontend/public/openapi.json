@@ -7797,6 +7797,73 @@
         }
       }
     },
+    "/panel/api/clients/bulkRotate": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Rotate many clients at once: credentials mints a fresh UUID, password, key or secret for every kind the client is attached to (a kind whose credential the panel cannot mint, such as a WireGuard keypair, is skipped with a reason), subId gives the client a new subscription id. Every share link and subscription URL of the selection stops working; handing out the new ones is the operator's job. Applied with one read-modify-write per inbound; a local Xray inbound is flagged for restart, a local MTProto sidecar is hot-applied, a node is reconciled. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
+        "operationId": "post_panel_api_clients_bulkRotate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "emails": [
+                  "alice",
+                  "bob"
+                ],
+                "credentials": true,
+                "subId": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "rotated": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [
+                        {
+                          "email": "wg-user",
+                          "reason": "no credential to mint for wireguard"
+                        }
+                      ],
+                      "failed": []
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/clients/bulkEnable": {
       "post": {
         "tags": [

@@ -72,6 +72,7 @@ func (a *ClientController) initRouter(g *gin.RouterGroup) {
 	g.POST("/bulkClearIps", a.bulkClearIps)
 	g.POST("/bulkExport", a.bulkExport)
 	g.POST("/bulkLinks", a.bulkLinks)
+	g.POST("/bulkRotate", a.bulkRotate)
 	g.POST("/bulkEnable", a.bulkEnable)
 	g.POST("/bulkDisable", a.bulkDisable)
 	g.POST("/bulkDel", a.bulkDelete)
@@ -438,6 +439,35 @@ func (a *ClientController) bulkLinks(c *gin.Context) {
 		return
 	}
 	jsonObj(c, rows, nil)
+}
+
+type bulkRotateRequest struct {
+	Emails      []string                  `json:"emails"`
+	Filter      *service.ClientPageParams `json:"filter"`
+	Credentials bool                      `json:"credentials"`
+	SubID       bool                      `json:"subId"`
+}
+
+func (a *ClientController) bulkRotate(c *gin.Context) {
+	var req bulkRotateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkRotate(&a.inboundService, emails, req.Credentials, req.SubID)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, result, nil)
+	if needRestart {
+		a.xrayService.SetToNeedRestart()
+	}
+	notifyClientsChanged()
 }
 
 type bulkDeleteRequest struct {

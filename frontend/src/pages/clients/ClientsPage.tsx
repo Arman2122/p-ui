@@ -54,6 +54,7 @@ import {
   SwapOutlined,
   ClearOutlined,
   ExportOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import { activateOnKey } from '@/utils/a11y';
 
@@ -86,6 +87,7 @@ const SubLinksModal = lazy(() => import('./SubLinksModal'));
 const BulkAddToGroupModal = lazy(() => import('./BulkAddToGroupModal'));
 const BulkAttachInboundsModal = lazy(() => import('./BulkAttachInboundsModal'));
 const BulkMoveInboundsModal = lazy(() => import('./BulkMoveInboundsModal'));
+const BulkRotateModal = lazy(() => import('./BulkRotateModal'));
 const BulkDetachInboundsModal = lazy(() => import('./BulkDetachInboundsModal'));
 const TextModal = lazy(() => import('@/components/feedback/TextModal'));
 const PromptModal = lazy(() => import('@/components/feedback/PromptModal'));
@@ -246,7 +248,7 @@ export default function ClientsPage() {
     setQuery,
     inbounds, onlines, transitioning, fetched, fetchError, subSettings,
     tgBotEnable, expireDiff, trafficDiff, pageSize, settingsReady,
-    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkClearIps, bulkExport, bulkLinks, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
+    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkClearIps, bulkExport, bulkLinks, bulkRotate, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
     resetTraffic, resetAllTraffics, delDepleted, delOrphans, exportClients, importClients, setEnable,
     clientSpeed,
     applyTrafficEvent, applyClientStatsEvent,
@@ -278,6 +280,7 @@ export default function ClientsPage() {
   const [bulkAdjustOpen, setBulkAdjustOpen] = useState(false);
   const [bulkSetOpen, setBulkSetOpen] = useState(false);
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkRotateOpen, setBulkRotateOpen] = useState(false);
   const { data: policies = [] } = usePoliciesQuery({ enabled: bulkSetOpen });
   const [subLinksOpen, setSubLinksOpen] = useState(false);
   const [bulkGroupOpen, setBulkGroupOpen] = useState(false);
@@ -1322,6 +1325,13 @@ export default function ClientsPage() {
                                     onClick: () => { void onCopyLinks(); },
                                   },
                                   {
+                                    key: 'rotate',
+                                    icon: <KeyOutlined />,
+                                    label: t('pages.clients.rotate'),
+                                    danger: true,
+                                    onClick: () => setBulkRotateOpen(true),
+                                  },
+                                  {
                                     key: 'resetSelectedTraffics',
                                     icon: <RetweetOutlined />,
                                     label: t('pages.clients.resetSelectedTraffics'),
@@ -1809,6 +1819,22 @@ export default function ClientsPage() {
                 clearSelection();
                 reportBulk(t('pages.clients.move'), msg.obj?.outcome, (emails) => { void bulkMove({ emails }, fromInboundIds, toInboundIds); });
                 return msg.obj ?? { moved: 0 };
+              }
+              return null;
+            }}
+          />
+        </LazyMount>
+        <LazyMount when={bulkRotateOpen}>
+          <BulkRotateModal
+            open={bulkRotateOpen}
+            count={selectionCount}
+            onOpenChange={setBulkRotateOpen}
+            onSubmit={async (credentials, subId) => {
+              const msg = await bulkRotate(currentSelection(), credentials, subId);
+              if (msg?.success) {
+                clearSelection();
+                reportBulk(t('pages.clients.rotate'), msg.obj?.outcome, (emails) => { void bulkRotate({ emails }, credentials, subId); });
+                return msg.obj ?? { rotated: 0 };
               }
               return null;
             }}
