@@ -59,6 +59,7 @@ For scripts and quick actions, `p-ui` also takes a subcommand directly:
 | `p-ui restart-xray`        | Reload only Xray-core                               |
 | `p-ui status`              | Show status                                         |
 | `p-ui settings`            | Show current settings                               |
+| `p-ui setting -<flag> …`   | Repair one setting from the shell: `-port`, `-username`, `-password`, `-webBasePath`, `-listenIP`, `-webDomain`, `-sessionMaxAge`, `-trustedProxyCIDRs`, `-subListen`, `-subPort`, `-resetTwoFactor` (pass `-` to clear a string) |
 | `p-ui enable` / `disable`  | Toggle autostart on boot                            |
 | `p-ui log`                 | Tail the debug log                                  |
 | `p-ui banlog`              | Show Fail2ban ban log                               |

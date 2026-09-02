@@ -8,6 +8,12 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The AmneziaWG form carries every 3.1 parameter, and warns before an obfuscation change.** The header ranges H1–H4, the content padding addition and the five timer ranges were in the schema, the link and the `.conf` file but had no field; the obfuscation card now offers them. Saving an existing AmneziaWG inbound with any obfuscation value changed asks first, since every client config carries those values and stops connecting until re-issued.
+- **The Telegram tab has a bot proxy field.** `tgBotProxy` was honoured by the bot but could only be set through the API; the tab now takes a socks5:// or http:// URL, empty inheriting the panel's outbound proxy.
+- **LDAP auto delete explains itself and asks before it is turned on.** The switch had no description; it now says what a sync deletes and confirms before enabling.
+- **Bulk add hides the IP limit for kinds that cannot enforce it.** The single-client form already knew which cores cannot report sessions; bulk add offered the limit to an MTProto-only batch anyway.
+- **The host form marks kernel WireGuard inbounds as unaffected.** A host changes nothing in a kernel WireGuard or AmneziaWG config; the inbound picker now shows those greyed out with the reason instead of accepting a host that does nothing.
+- **`p-ui setting` can repair the start-time settings.** New flags `-sessionMaxAge`, `-trustedProxyCIDRs`, `-subListen` and `-subPort` (pass `-` to clear the two strings), and `-show` prints them along with `webDomain`, so a panel locked out of its own browser can still be fixed from the shell.
 - **A database import accepts only a Penhoon UI backup.** Any PostgreSQL custom-format archive restored cleanly and left the panel with none of its own tables. The probe now reads the table of contents `pg_restore` already produced and refuses an archive that lists no `inbounds` table, before Xray is stopped.
 - **The updater applies the installer's operating-system gate and checks its dependencies.** `update.sh` only echoed the OS name; it now refuses an unsupported system before anything is touched, the way `install.sh` does, and when `apt-get` cannot refresh the dependency packages it continues only if `curl` and `tar` are already present.
 - **The Telegram bot can delete a client.** The client view gains a delete button behind a confirmation; a delete that changes the running core flags the restart the way the panel does.
