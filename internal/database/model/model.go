@@ -245,11 +245,19 @@ type HistoryOfSeeders struct {
 // from the seconds-based API token timestamp contract.
 const ApiTokenUnixMillisecondsThreshold int64 = 100_000_000_000
 
+const (
+	ApiTokenScopeAdmin = "admin"
+	ApiTokenScopeRead  = "read"
+)
+
 type ApiToken struct {
-	Id        int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name      string `json:"name" gorm:"uniqueIndex;not null"`
-	Token     string `json:"token" gorm:"not null"` // SHA-256 hash; the plaintext is shown only once at creation
-	Enabled   bool   `json:"enabled" gorm:"default:true"`
+	Id      int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name    string `json:"name" gorm:"uniqueIndex;not null"`
+	Token   string `json:"token" gorm:"not null"` // SHA-256 hash; the plaintext is shown only once at creation
+	Enabled bool   `json:"enabled" gorm:"default:true"`
+	// Scope is "admin" or "read"; ExpiresAt is unix seconds, 0 for never.
+	Scope     string `json:"scope" gorm:"default:admin"`
+	ExpiresAt int64  `json:"expiresAt" gorm:"default:0"`
 	CreatedAt int64  `json:"createdAt" gorm:"autoCreateTime"`
 }
 

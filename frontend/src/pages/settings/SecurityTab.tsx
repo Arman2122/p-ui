@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
+import { InputNumber, Select, Tag,
   Button,
   Empty,
   Form,
@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { ApiOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons';
 import { ClipboardManager, HttpUtil, IntlUtil, RandomUtil } from '@/utils';
+import { onNumber } from '@/utils/onNumber';
 import type { AllSetting } from '@/models/setting';
 import { SettingListItem } from '@/components/ui';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -32,6 +33,8 @@ interface ApiTokenRow {
   name: string;
   enabled: boolean;
   createdAt: number;
+  scope?: string;
+  expiresAt?: number;
 }
 
 interface SecurityTabProps {
@@ -85,6 +88,8 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting }: 
   const [apiTokensLoading, setApiTokensLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
+  const [createScope, setCreateScope] = useState<'admin' | 'read'>('admin');
+  const [createDays, setCreateDays] = useState<number>(0);
   const [creating, setCreating] = useState(false);
   const [createdToken, setCreatedToken] = useState<{ name: string; token: string } | null>(null);
 
@@ -154,6 +159,8 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting }: 
 
   function openCreateModal() {
     setCreateName('');
+    setCreateScope('admin');
+    setCreateDays(0);
     setCreateOpen(true);
   }
 
@@ -165,7 +172,7 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting }: 
     }
     setCreating(true);
     try {
-      const msg = await HttpUtil.post('/panel/api/setting/apiTokens/create', { name }) as ApiMsg<{ token?: string }>;
+      const msg = await HttpUtil.post('/panel/api/setting/apiTokens/create', { name, scope: createScope, expiresAt: createDays > 0 ? Math.floor(Date.now() / 1000) + createDays * 86400 : 0 }) as ApiMsg<{ token?: string }>;
       if (msg?.success) {
         setCreateOpen(false);
         await loadApiTokens();
@@ -317,6 +324,16 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting }: 
                       <div className="api-token-name-wrap">
                         <span className="api-token-name">{row.name}</span>
                         <span className="api-token-created">{formatTokenDate(row.createdAt)}</span>
+                        <Tag color={row.scope === 'read' ? 'blue' : 'gold'}>
+                          {t(row.scope === 'read' ? 'pages.settings.security.apiTokenScopeRead' : 'pages.settings.security.apiTokenScopeAdmin')}
+                        </Tag>
+                        {row.expiresAt ? (
+                          <Tag color={row.expiresAt * 1000 < Date.now() ? 'red' : 'default'}>
+                            {row.expiresAt * 1000 < Date.now()
+                              ? t('pages.settings.security.apiTokenExpired')
+                              : `${t('pages.settings.security.apiTokenExpires')} ${formatTokenDate(row.expiresAt)}`}
+                          </Tag>
+                        ) : null}
                       </div>
                       <div className="api-token-actions">
                         <Switch size="small" checked={row.enabled} onChange={() => toggleTokenEnabled(row)} />
@@ -351,6 +368,19 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting }: 
               onChange={(e) => setCreateName(e.target.value)}
               onPressEnter={confirmCreateToken}
             />
+          </Form.Item>
+          <Form.Item label={t('pages.settings.security.apiTokenScope')}>
+            <Select
+              value={createScope}
+              onChange={setCreateScope}
+              options={[
+                { value: 'admin', label: t('pages.settings.security.apiTokenScopeAdmin') },
+                { value: 'read', label: t('pages.settings.security.apiTokenScopeRead') },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label={t('pages.settings.security.apiTokenExpiresIn')} extra={t('pages.settings.security.apiTokenExpiresInHint')}>
+            <InputNumber min={0} max={3650} precision={0} value={createDays} onChange={onNumber(setCreateDays)} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>

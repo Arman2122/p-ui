@@ -957,10 +957,18 @@ export const SCHEMAS: Record<string, unknown> = {
       "enabled": {
         "type": "boolean"
       },
+      "expiresAt": {
+        "format": "int64",
+        "type": "integer"
+      },
       "id": {
         "type": "integer"
       },
       "name": {
+        "type": "string"
+      },
+      "scope": {
+        "description": "Scope is \"admin\" or \"read\"; ExpiresAt is unix seconds, 0 for never.",
         "type": "string"
       },
       "token": {
@@ -971,8 +979,10 @@ export const SCHEMAS: Record<string, unknown> = {
     "required": [
       "createdAt",
       "enabled",
+      "expiresAt",
       "id",
       "name",
+      "scope",
       "token"
     ],
     "type": "object"
@@ -988,12 +998,21 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": true,
         "type": "boolean"
       },
+      "expiresAt": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
       "id": {
         "example": 2,
         "type": "integer"
       },
       "name": {
         "example": "central-panel-a",
+        "type": "string"
+      },
+      "scope": {
+        "example": "admin",
         "type": "string"
       },
       "token": {
@@ -1004,8 +1023,10 @@ export const SCHEMAS: Record<string, unknown> = {
     "required": [
       "createdAt",
       "enabled",
+      "expiresAt",
       "id",
-      "name"
+      "name",
+      "scope"
     ],
     "type": "object"
   },

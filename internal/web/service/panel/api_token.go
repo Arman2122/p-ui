@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -21,6 +22,8 @@ type ApiTokenView struct {
 	Name      string `json:"name" example:"central-panel-a"`
 	Token     string `json:"token,omitempty" example:"new-token-string"`
 	Enabled   bool   `json:"enabled" example:"true"`
+	Scope     string `json:"scope" example:"admin"`
+	ExpiresAt int64  `json:"expiresAt" example:"0"`
 	CreatedAt int64  `json:"createdAt" example:"1736000000"`
 }
 
@@ -39,6 +42,8 @@ func toView(t *model.ApiToken) *ApiTokenView {
 		Id:        t.Id,
 		Name:      t.Name,
 		Enabled:   t.Enabled,
+		Scope:     scopeOrAdmin(t.Scope),
+		ExpiresAt: t.ExpiresAt,
 		CreatedAt: apiTokenCreatedAtSeconds(t.CreatedAt),
 	}
 }
@@ -56,13 +61,23 @@ func (s *ApiTokenService) List() ([]*ApiTokenView, error) {
 	return out, nil
 }
 
-func (s *ApiTokenService) Create(name string) (*ApiTokenView, error) {
+func (s *ApiTokenService) Create(name, scope string, expiresAt int64) (*ApiTokenView, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, common.NewError("token name is required")
 	}
 	if len(name) > 64 {
 		return nil, common.NewError("token name must be 64 characters or fewer")
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = model.ApiTokenScopeAdmin
+	}
+	if scope != model.ApiTokenScopeAdmin && scope != model.ApiTokenScopeRead {
+		return nil, common.NewError("token scope must be admin or read")
+	}
+	if expiresAt < 0 || (expiresAt > 0 && expiresAt <= time.Now().Unix()) {
+		return nil, common.NewError("token expiry must be a future unix time in seconds, or 0 for never")
 	}
 	db := database.GetDB()
 	var count int64
@@ -74,9 +89,11 @@ func (s *ApiTokenService) Create(name string) (*ApiTokenView, error) {
 	}
 	plaintext := random.Seq(apiTokenLength)
 	row := &model.ApiToken{
-		Name:    name,
-		Token:   crypto.HashTokenSHA256(plaintext),
-		Enabled: true,
+		Name:      name,
+		Token:     crypto.HashTokenSHA256(plaintext),
+		Enabled:   true,
+		Scope:     scope,
+		ExpiresAt: expiresAt,
 	}
 	if err := db.Create(row).Error; err != nil {
 		return nil, err
@@ -113,21 +130,34 @@ func (s *ApiTokenService) SetEnabled(id int, enabled bool) error {
 // row in api_tokens. Tokens are stored as SHA-256 hashes, so the presented
 // value is hashed before a constant-time compare per row keeps a remote
 // attacker from timing the comparison byte-by-byte.
-func (s *ApiTokenService) Match(presented string) bool {
+// Match answers with the token's scope; an expired or disabled token never
+// reaches the constant-time compare, so it cannot match by timing either.
+func (s *ApiTokenService) Match(presented string) (string, bool) {
 	if presented == "" {
-		return false
+		return "", false
 	}
 	db := database.GetDB()
 	var rows []*model.ApiToken
-	if err := db.Model(model.ApiToken{}).Where("enabled = ?", true).Find(&rows).Error; err != nil {
-		return false
+	if err := db.Model(model.ApiToken{}).
+		Where("enabled = ? AND (expires_at = 0 OR expires_at > ?)", true, time.Now().Unix()).
+		Find(&rows).Error; err != nil {
+		return "", false
 	}
 	presentedHash := []byte(crypto.HashTokenSHA256(presented))
+	scope := ""
 	matched := false
 	for _, r := range rows {
 		if subtle.ConstantTimeCompare([]byte(r.Token), presentedHash) == 1 {
 			matched = true
+			scope = scopeOrAdmin(r.Scope)
 		}
 	}
-	return matched
+	return scope, matched
+}
+
+func scopeOrAdmin(scope string) string {
+	if scope == "" {
+		return model.ApiTokenScopeAdmin
+	}
+	return scope
 }

@@ -158,6 +158,9 @@ func initModels() error {
 	if err := migrateClientOriginColumn(); err != nil {
 		return err
 	}
+	if err := migrateApiTokenScopeColumn(); err != nil {
+		return err
+	}
 	if err := migrateSyncOrphanColumns(); err != nil {
 		return err
 	}
@@ -312,6 +315,15 @@ func migrateClientOriginColumn() error {
 		return nil
 	}
 	return db.Exec("UPDATE clients SET origin = '' WHERE origin IS NULL").Error
+}
+
+// migrateApiTokenScopeColumn gives the tokens that predate scopes the full
+// access they always had; a NULL scope would read as neither admin nor read.
+func migrateApiTokenScopeColumn() error {
+	if !db.Migrator().HasColumn(&model.ApiToken{}, "scope") {
+		return nil
+	}
+	return db.Exec("UPDATE api_tokens SET scope = 'admin' WHERE scope IS NULL OR scope = ''").Error
 }
 
 func migrateSyncOrphanColumns() error {

@@ -54,6 +54,9 @@ func newAPIAuthTestEngine(t *testing.T) (*gin.Engine, *APIController) {
 	api.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"api_authed": c.GetBool("api_authed")})
 	})
+	api.POST("/write", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"api_authed": c.GetBool("api_authed")})
+	})
 	return engine, a
 }
 
