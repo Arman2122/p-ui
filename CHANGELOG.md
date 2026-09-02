@@ -19,6 +19,15 @@ here; the git log is the full record.
   metadata endpoint or anything on the LAN. It now dials through the same
   guard the REALITY probe already uses, and refuses private and internal
   addresses.
+- **The subscription server sends the same browser hardening headers as the
+  panel.** It sent none: no `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, Content Security Policy or HSTS, so a subscription page
+  could be framed and a text response could be sniffed into markup. It now
+  uses the panel's own header middleware, HSTS included when the subscription
+  server terminates TLS itself. **If you run a custom subscription theme**,
+  it gets a reduced policy — no framing, no `<base>` hijack, no plugins —
+  rather than the panel's script policy, which would have blocked the inline
+  scripts a theme is allowed to carry.
 - **Alert emails show a tag or an error as text, not as markup.** The values
   an alert reports — an outbound tag, a node name, xray's own error text, a
   login username — were written into the mail's HTML unescaped, so one

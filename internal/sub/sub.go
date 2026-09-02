@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/web/locale"
@@ -98,6 +99,20 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 
 	engine := gin.Default()
+
+	// The same browser hardening the panel sends. HSTS only when this server
+	// terminates TLS itself, exactly as the panel decides it: behind a proxy
+	// the header would describe a scheme the proxy owns. F211.
+	subCertFile, err := s.settingService.GetSubCertFile()
+	if err != nil {
+		return nil, err
+	}
+	subKeyFile, err := s.settingService.GetSubKeyFile()
+	if err != nil {
+		return nil, err
+	}
+	sendHSTS := (subCertFile != "" || subKeyFile != "") && !config.IsSkipHSTS()
+	engine.Use(middleware.SecurityHeadersMiddleware(sendHSTS))
 
 	subDomain, err := s.settingService.GetSubDomain()
 	if err != nil {
