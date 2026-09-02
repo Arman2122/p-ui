@@ -1317,8 +1317,10 @@ func (s *InboundService) delInboundRow(id int) (*model.Inbound, bool, error) {
 		} else {
 			logger.Debug("DelInbound: skipping runtime push for disabled local inbound id:", id)
 		}
+	} else if errors.Is(loadErr, gorm.ErrRecordNotFound) {
+		return nil, false, common.NewErrorf("inbound %d not found", id)
 	} else {
-		logger.Debug("DelInbound: inbound not found, id:", id)
+		return nil, false, loadErr
 	}
 
 	if err := db.Transaction(func(tx *gorm.DB) error {
@@ -1354,9 +1356,6 @@ func (s *InboundService) delInboundRow(id int) (*model.Inbound, bool, error) {
 	}
 	if postCommitApply != nil {
 		postCommitApply()
-	}
-	if loadErr != nil {
-		return nil, needRestart, nil
 	}
 	return &ib, needRestart, nil
 }

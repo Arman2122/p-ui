@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -60,5 +61,20 @@ func TestSetInboundsEnableNamesTheOnesAlreadyThere(t *testing.T) {
 	}
 	if again.Changed != 0 || len(again.Skipped) != 1 || again.Skipped[0].Reason != "already disabled" {
 		t.Fatalf("repeat = %+v, want the inbound reported as already disabled", again)
+	}
+}
+
+func TestDelInboundRefusesAMissingId(t *testing.T) {
+	initTestDB(t)
+	withFakeEgressKernel(t)
+	if _, err := (&InboundService{}).DelInbound(999999); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("deleting a missing inbound: err = %v, want not found", err)
+	}
+	res, _, err := (&InboundService{}).DelInbounds([]int{999999})
+	if err != nil {
+		t.Fatalf("DelInbounds: %v", err)
+	}
+	if res.Deleted != 0 || len(res.Skipped) != 1 || res.Skipped[0].Id != 999999 {
+		t.Fatalf("bulk delete of a missing id = %+v, want it skipped, not counted", res)
 	}
 }
