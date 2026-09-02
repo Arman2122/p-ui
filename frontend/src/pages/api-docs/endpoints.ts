@@ -1351,7 +1351,7 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/panel/api/hosts/add',
-        summary: 'Create a host group on inbounds.',
+        summary: 'Create a host group on inbounds. A security of reality in front of an inbound that serves tls or none, or tls/none in front of a REALITY inbound, is refused naming the inbound; same, and a tls or none front for a tls or plain inbound, are accepted.',
         body: '{\n  "inboundIds": [1],\n  "remark": "cdn-front",\n  "hosts": ["cdn.example.com"],\n  "port": 8443,\n  "security": "same",\n  "tags": ["CDN"]\n}',
         responseSchema: 'Host',
         responseSchemaArray: true,
@@ -1359,7 +1359,7 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/panel/api/hosts/update/:groupId',
-        summary: 'Replace a host group’s content.',
+        summary: 'Replace a host group’s content. A security of reality in front of an inbound that serves tls or none, or tls/none in front of a REALITY inbound, is refused naming the inbound; same, and a tls or none front for a tls or plain inbound, are accepted.',
         params: [
           { name: 'groupId', in: 'path', type: 'string', desc: 'Host Group ID.' },
         ],

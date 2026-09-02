@@ -11887,7 +11887,7 @@
         "tags": [
           "Hosts"
         ],
-        "summary": "Create a host group on inbounds.",
+        "summary": "Create a host group on inbounds. A security of reality in front of an inbound that serves tls or none, or tls/none in front of a REALITY inbound, is refused naming the inbound; same, and a tls or none front for a tls or plain inbound, are accepted.",
         "operationId": "post_panel_api_hosts_add",
         "requestBody": {
           "required": true,
@@ -11997,7 +11997,7 @@
         "tags": [
           "Hosts"
         ],
-        "summary": "Replace a host group’s content.",
+        "summary": "Replace a host group’s content. A security of reality in front of an inbound that serves tls or none, or tls/none in front of a REALITY inbound, is refused naming the inbound; same, and a tls or none front for a tls or plain inbound, are accepted.",
         "operationId": "post_panel_api_hosts_update_groupId",
         "parameters": [
           {

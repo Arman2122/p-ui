@@ -239,6 +239,9 @@ func (s *HostService) AddHostGroup(req *entity.HostGroup) ([]*model.Host, error)
 		if err := validateInboundsExist(tx, req.InboundIds); err != nil {
 			return err
 		}
+		if err := validateHostSecurityAgainstInbounds(tx, req.Security, req.InboundIds); err != nil {
+			return err
+		}
 		// An add that names a group which exists would append rows into it,
 		// and a later edit of that group would then rewrite both. F149.
 		if req.GroupId != "" {
@@ -273,6 +276,9 @@ func (s *HostService) UpdateHostGroup(groupId string, req *entity.HostGroup) ([]
 			return common.NewError("host not found")
 		}
 		if err := validateInboundsExist(tx, req.InboundIds); err != nil {
+			return err
+		}
+		if err := validateHostSecurityAgainstInbounds(tx, req.Security, req.InboundIds); err != nil {
 			return err
 		}
 		if err := tx.Where("group_id = ?", groupId).Delete(&model.Host{}).Error; err != nil {
