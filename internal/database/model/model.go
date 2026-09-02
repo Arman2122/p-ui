@@ -533,9 +533,9 @@ func WireguardPeerFromClient(c Client) map[string]any {
 // panel's client representation into the peers array xray-core's wireguard
 // inbound expects. The panel stores WireGuard clients under "clients" (the shape
 // every other protocol uses); xray is configured with "peers". GetXrayConfig
-// already does this conversion when it builds the full config, but the live
-// gRPC AddInbound paths (inbound create/edit and node reconcile) go through
-// GenXrayInboundConfig directly — without the conversion they re-add the
+// does this conversion when it builds the full config, and the live gRPC
+// AddInbound paths (inbound create/edit and node reconcile) reach it through
+// RenderInbound, whose last call is this — without the conversion they re-add the
 // wireguard inbound with no peers, dropping every connected client until the
 // next full restart. Clients are the source of truth and are always rebuilt
 // into peers (matching GetXrayConfig), so the panel's empty "peers" placeholder
