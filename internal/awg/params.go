@@ -204,10 +204,11 @@ configured: WireGuard's own 1, 2, 3 and 4, each as the range [n, n].
 
 They matter because the module never reports a header as "unset" -- it reports
 what the device is actually using. A reconcile that compares a desired zero
-against these sees drift on every pass and rewrites the device forever, and
-rewriting obfuscation rekeys every client on it. Measured against the module on
-2026-08-18; also exactly what makes plain WireGuard recognisable, which is why
-an obfuscated deployment sets all four.
+against these sees drift on every pass and rewrites the device forever: a
+SET_DEVICE per pass for nothing. (Not a rekey -- wg_set_device applies these as
+plain field writes and touches noise state only for a new private key. F106.)
+Measured against the module on 2026-08-18; also exactly what makes plain
+WireGuard recognisable, which is why an obfuscated deployment sets all four.
 */
 var DefaultHeaders = [4]uint64{
 	HeaderRange(1, 1), HeaderRange(2, 2), HeaderRange(3, 3), HeaderRange(4, 4),
