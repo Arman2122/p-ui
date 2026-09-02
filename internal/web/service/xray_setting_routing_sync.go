@@ -292,7 +292,18 @@ func (s *XraySettingService) PropagateInboundTagRename(oldTag, newTag string) (b
 // Rules that only matched that inbound are removed; rules with additional
 // matchers keep the rule and only lose the inboundTag entry.
 func (s *XraySettingService) RemoveInboundTagReferences(deletedTag string) (bool, error) {
-	if deletedTag == "" {
+	return s.RemoveInboundTagsReferences([]string{deletedTag})
+}
+
+// RemoveInboundTagsReferences drops every deleted tag in one template rewrite.
+func (s *XraySettingService) RemoveInboundTagsReferences(deletedTags []string) (bool, error) {
+	tags := make([]string, 0, len(deletedTags))
+	for _, tag := range deletedTags {
+		if tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	if len(tags) == 0 {
 		return false, nil
 	}
 	template, err := s.GetXrayConfigTemplate()
@@ -301,18 +312,20 @@ func (s *XraySettingService) RemoveInboundTagReferences(deletedTag string) (bool
 	}
 	updated, changed, err := mutateXrayTemplateRouting(template, func(cfg map[string]any) bool {
 		mutated := false
-		rules := routingRulesFromCfg(cfg)
-		if len(rules) > 0 {
-			nextRules, rulesChanged := removeInboundTagFromRules(rules, deletedTag)
-			if rulesChanged {
-				setRoutingRulesInCfg(cfg, nextRules)
+		for _, deletedTag := range tags {
+			rules := routingRulesFromCfg(cfg)
+			if len(rules) > 0 {
+				nextRules, rulesChanged := removeInboundTagFromRules(rules, deletedTag)
+				if rulesChanged {
+					setRoutingRulesInCfg(cfg, nextRules)
+					mutated = true
+				}
+			}
+			outbounds := outboundsFromCfg(cfg)
+			if len(outbounds) > 0 && removeInboundTagFromOutbounds(outbounds, deletedTag) {
+				cfg["outbounds"] = outbounds
 				mutated = true
 			}
-		}
-		outbounds := outboundsFromCfg(cfg)
-		if len(outbounds) > 0 && removeInboundTagFromOutbounds(outbounds, deletedTag) {
-			cfg["outbounds"] = outbounds
-			mutated = true
 		}
 		return mutated
 	})

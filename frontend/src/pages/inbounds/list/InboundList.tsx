@@ -25,6 +25,8 @@ import {
   InfoCircleOutlined,
   DeleteOutlined,
   SearchOutlined,
+  CheckCircleOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 
 import { HttpUtil } from '@/utils';
@@ -53,6 +55,7 @@ export default function InboundList({
   onGeneralAction,
   onRowAction,
   onBulkDelete,
+  onBulkSetEnable,
 }: InboundListProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -131,6 +134,10 @@ export default function InboundList({
     const ok = await onBulkDelete(selectedRowKeys);
     if (ok) setSelectedRowKeys([]);
   }, [onBulkDelete, selectedRowKeys]);
+  const handleBulkSetEnable = useCallback(async (enable: boolean) => {
+    const ok = await onBulkSetEnable(selectedRowKeys, enable);
+    if (ok) setSelectedRowKeys([]);
+  }, [onBulkSetEnable, selectedRowKeys]);
 
   const columns = useInboundColumns({
     hasAnyRemark,
@@ -206,6 +213,12 @@ export default function InboundList({
               <Tag color="blue" closable onClose={() => setSelectedRowKeys([])} style={{ marginInlineEnd: 0 }}>
                 {t('pages.inbounds.selectedCount', { count: selectedRowKeys.length })}
               </Tag>
+              <Button icon={<CheckCircleOutlined />} onClick={() => { void handleBulkSetEnable(true); }} aria-label={t('pages.inbounds.bulkEnable')}>
+                {!isMobile && t('pages.inbounds.bulkEnable')}
+              </Button>
+              <Button icon={<StopOutlined />} onClick={() => { void handleBulkSetEnable(false); }} aria-label={t('pages.inbounds.bulkDisable')}>
+                {!isMobile && t('pages.inbounds.bulkDisable')}
+              </Button>
               <Button danger icon={<DeleteOutlined />} onClick={handleBulkDelete} aria-label={t('delete')}>
                 {!isMobile && t('delete')}
               </Button>

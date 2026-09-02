@@ -1259,7 +1259,7 @@ func ensureL3HostForwarding(inbound *model.Inbound) {
 	}
 }
 
-func (s *InboundService) DelInbound(id int) (bool, error) {
+func (s *InboundService) delInboundRow(id int) (*model.Inbound, bool, error) {
 	db := database.GetDB()
 
 	needRestart := false
@@ -1335,30 +1335,58 @@ func (s *InboundService) DelInbound(id int) (bool, error) {
 		}
 		return nil
 	}); err != nil {
-		return needRestart, err
+		return nil, needRestart, err
 	}
 	if postCommitApply != nil {
 		postCommitApply()
 	}
-	if loadErr == nil && ib.Tag != "" {
-		if routingChanged, syncErr := (&XraySettingService{}).RemoveInboundTagReferences(ib.Tag); syncErr != nil {
-			logger.Warning("DelInbound: sync routing on inbound delete failed:", syncErr)
-		} else if routingChanged {
+	if loadErr != nil {
+		return nil, needRestart, nil
+	}
+	return &ib, needRestart, nil
+}
+
+// repairAfterInboundDeletes runs the routing repairs once for a whole batch:
+// one template rewrite for every deleted tag, one prune pass for every id.
+func (s *InboundService) repairAfterInboundDeletes(deleted []*model.Inbound) bool {
+	if len(deleted) == 0 {
+		return false
+	}
+	needRestart := false
+	tags := make([]string, 0, len(deleted))
+	ids := make([]int, 0, len(deleted))
+	for _, ib := range deleted {
+		if ib.Tag != "" {
+			tags = append(tags, ib.Tag)
+		}
+		ids = append(ids, ib.Id)
+		// A routed mtproto inbound leaves its egress SOCKS bridge in the
+		// config, and only a restart drops it.
+		if mtprotoRoutesThroughXray(ib) {
 			needRestart = true
 		}
 	}
-	// Synchronously, and not on a later tick: the FK cascade takes the front row,
-	// but only a converge removes its ip rule -- and Linux RE-ATTACHES a detached
-	// iif rule the moment a device of that name reappears, which id reuse allows.
-	if loadErr == nil {
-		if pruned, pruneErr := (&RoutingService{}).PruneInbound(context.Background(), ib.Id); pruneErr != nil {
-			logger.Warning("DelInbound: prune routing rules failed:", pruneErr)
-		} else if pruned {
-			needRestart = true
-		}
+	if routingChanged, syncErr := (&XraySettingService{}).RemoveInboundTagsReferences(tags); syncErr != nil {
+		logger.Warning("DelInbound: sync routing on inbound delete failed:", syncErr)
+	} else if routingChanged {
+		needRestart = true
 	}
-	// Drop the egress SOCKS bridge a routed mtproto inbound left in the config.
-	if mtprotoRoutesThroughXray(&ib) {
+	// Linux re-attaches a detached rule to the next inbound that reuses the
+	// id, so the prune (and its converge) is not optional even for one row.
+	if pruned, pruneErr := (&RoutingService{}).PruneInbounds(context.Background(), ids); pruneErr != nil {
+		logger.Warning("DelInbound: prune routing rules failed:", pruneErr)
+	} else if pruned {
+		needRestart = true
+	}
+	return needRestart
+}
+
+func (s *InboundService) DelInbound(id int) (bool, error) {
+	ib, needRestart, err := s.delInboundRow(id)
+	if err != nil {
+		return needRestart, err
+	}
+	if ib != nil && s.repairAfterInboundDeletes([]*model.Inbound{ib}) {
 		needRestart = true
 	}
 	return needRestart, nil
@@ -1381,8 +1409,9 @@ type BulkDelInboundReport struct {
 func (s *InboundService) DelInbounds(ids []int) (BulkDelInboundResult, bool, error) {
 	result := BulkDelInboundResult{}
 	needRestart := false
+	deleted := make([]*model.Inbound, 0, len(ids))
 	for _, id := range ids {
-		r, err := s.DelInbound(id)
+		ib, r, err := s.delInboundRow(id)
 		if err != nil {
 			result.Skipped = append(result.Skipped, BulkDelInboundReport{Id: id, Reason: err.Error()})
 			continue
@@ -1391,6 +1420,12 @@ func (s *InboundService) DelInbounds(ids []int) (BulkDelInboundResult, bool, err
 		if r {
 			needRestart = true
 		}
+		if ib != nil {
+			deleted = append(deleted, ib)
+		}
+	}
+	if s.repairAfterInboundDeletes(deleted) {
+		needRestart = true
 	}
 	return result, needRestart, nil
 }
@@ -1498,6 +1533,39 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 		needRestart = true
 	}
 	return needRestart, nil
+}
+
+type BulkInboundEnableResult struct {
+	Changed int                    `json:"changed"`
+	Skipped []BulkDelInboundReport `json:"skipped,omitempty"`
+}
+
+// SetInboundsEnable flips many inbounds, naming the ones already in that state.
+func (s *InboundService) SetInboundsEnable(ids []int, enable bool) (BulkInboundEnableResult, bool, error) {
+	result := BulkInboundEnableResult{}
+	needRestart := false
+	state := map[bool]string{true: "already enabled", false: "already disabled"}
+	for _, id := range ids {
+		ib, err := s.GetInbound(id)
+		if err != nil {
+			result.Skipped = append(result.Skipped, BulkDelInboundReport{Id: id, Reason: err.Error()})
+			continue
+		}
+		if ib.Enable == enable {
+			result.Skipped = append(result.Skipped, BulkDelInboundReport{Id: id, Reason: state[enable]})
+			continue
+		}
+		nr, err := s.SetInboundEnable(id, enable)
+		if err != nil {
+			result.Skipped = append(result.Skipped, BulkDelInboundReport{Id: id, Reason: err.Error()})
+			continue
+		}
+		result.Changed++
+		if nr {
+			needRestart = true
+		}
+	}
+	return result, needRestart, nil
 }
 
 func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, string, error) {
