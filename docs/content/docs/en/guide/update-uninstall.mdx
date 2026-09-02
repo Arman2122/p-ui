@@ -95,6 +95,16 @@ Releases before v1.5.2 publish no digest, so installing one of those — a pinne
 protect against a compromised release account, which can publish its own
 digests.
 
+### What an update leaves behind
+
+An update extracts the new release beside the live tree and runs its binary
+once before the panel is stopped, so a broken archive leaves the running panel
+untouched. The old binaries are set aside rather than deleted; if the new panel
+is not active within 15 seconds they are put back and started again, and the
+script points you at `journalctl -u p-ui -n 50`. This protects updates *to* a
+release that ships this behaviour, since `p-ui update` runs the updater
+published with the release being installed.
+
 ## Uninstalling
 
 Menu option **6** or `p-ui uninstall`. It stops and disables the service, removes
