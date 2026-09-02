@@ -46,6 +46,9 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 		First(user).
 		Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// The same bcrypt a real check costs, so a failed login takes as long
+		// for a username that does not exist as for one that does. F212.
+		_ = crypto.CheckPasswordHash(equalCostHash, password)
 		return nil, errors.New("invalid credentials")
 	} else if err != nil {
 		logger.Warning("check user err:", err)
@@ -209,4 +212,16 @@ func (s *UserService) UpdateFirstUser(username string, password string) error {
 	user.Password = hashedPassword
 	user.LoginEpoch++
 	return db.Save(user).Error
+}
+
+// equalCostHash is a bcrypt hash at the panel's own cost, verified against on
+// the not-found branch so an unknown username is not the fast answer. F212.
+var equalCostHash = mustEqualCostHash()
+
+func mustEqualCostHash() string {
+	hash, err := crypto.HashPasswordAsBcrypt("p-ui-equal-cost")
+	if err != nil {
+		panic("bcrypt at the default cost failed: " + err.Error())
+	}
+	return hash
 }
