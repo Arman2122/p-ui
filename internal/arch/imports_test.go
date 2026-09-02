@@ -32,6 +32,9 @@ var coreEnginePrefixes = []string{
 	"internal/xray/",
 	"internal/mtproto/",
 	"internal/wireguard/",
+	// The AmneziaWG engine that cores/internal/amneziawg is built on. It was
+	// outside every fence, so it alone could have imported the web layer. F092.
+	"internal/awg/",
 	"internal/cores/",
 }
 
