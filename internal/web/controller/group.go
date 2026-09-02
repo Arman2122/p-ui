@@ -142,12 +142,12 @@ func (a *GroupController) bulkAdd(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("group name is required"))
 		return
 	}
-	affected, err := a.clientService.AddToGroup(req.Emails, req.Group)
+	result, err := a.clientService.AddToGroupOutcome(req.Emails, req.Group)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonObj(c, gin.H{"affected": affected}, nil)
+	jsonObj(c, result, nil)
 	a.xrayService.SetToNeedRestart()
 	notifyClientsChanged()
 }
@@ -162,12 +162,12 @@ func (a *GroupController) bulkRemove(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	affected, err := a.clientService.RemoveFromGroup(req.Emails)
+	result, err := a.clientService.AddToGroupOutcome(req.Emails, "")
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonObj(c, gin.H{"affected": affected}, nil)
+	jsonObj(c, result, nil)
 	a.xrayService.SetToNeedRestart()
 	notifyClientsChanged()
 }

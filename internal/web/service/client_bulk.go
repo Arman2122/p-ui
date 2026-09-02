@@ -20,9 +20,10 @@ import (
 
 // BulkAttachResult reports the outcome of a bulk attach across target inbounds.
 type BulkAttachResult struct {
-	Attached []string `json:"attached"`
-	Skipped  []string `json:"skipped"`
-	Errors   []string `json:"errors"`
+	Attached []string    `json:"attached"`
+	Skipped  []string    `json:"skipped"`
+	Errors   []string    `json:"errors"`
+	Outcome  BulkOutcome `json:"outcome"`
 }
 
 // BulkAttach attaches the given existing clients (by email) to each target inbound,
@@ -55,9 +56,14 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		rec, err := s.GetRecordByEmail(nil, email)
 		if err != nil {
 			recordErr("%s: %v", email, err)
+			result.Outcome.fail(email, err.Error())
 			continue
 		}
 		records = append(records, rec)
+	}
+	recordEmails := make([]string, 0, len(records))
+	for _, rec := range records {
+		recordEmails = append(recordEmails, rec.Email)
 	}
 
 	emailSubIDs, sidErr := inboundSvc.getAllEmailSubIDs()
@@ -71,11 +77,13 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		inbound, err := inboundSvc.GetInbound(ibId)
 		if err != nil {
 			recordErr("inbound %d: %v", ibId, err)
+			result.Outcome.failEach(recordEmails, fmt.Sprintf("inbound %d: %v", ibId, err))
 			continue
 		}
 		existingClients, err := inboundSvc.GetClients(inbound)
 		if err != nil {
 			recordErr("inbound %d: %v", ibId, err)
+			result.Outcome.failEach(recordEmails, fmt.Sprintf("inbound %d: %v", ibId, err))
 			continue
 		}
 		have := make(map[string]struct{}, len(existingClients))
@@ -87,16 +95,19 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		for _, rec := range records {
 			if _, attached := have[strings.ToLower(rec.Email)]; attached {
 				result.Skipped = append(result.Skipped, rec.Email)
+				result.Outcome.skip(rec.Email, fmt.Sprintf("already attached to inbound %d", ibId))
 				continue
 			}
 			client := *rec.ToClient()
 			client.UpdatedAt = time.Now().UnixMilli()
 			if hErr := hydrateClientCredentials(nil, rec.Id, ibId, &client); hErr != nil {
 				recordErr("%s -> inbound %d: %v", rec.Email, ibId, hErr)
+				result.Outcome.fail(rec.Email, fmt.Sprintf("inbound %d: %v", ibId, hErr))
 				continue
 			}
 			if err := s.fillProtocolDefaults(&client, inbound); err != nil {
 				recordErr("%s -> inbound %d: %v", rec.Email, ibId, err)
+				result.Outcome.fail(rec.Email, fmt.Sprintf("inbound %d: %v", ibId, err))
 				continue
 			}
 			clientsToAdd = append(clientsToAdd, clientWithInboundFlow(client, inbound))
@@ -106,14 +117,18 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 			continue
 		}
 
+		// One failure on the inbound is one row per client destined for it: the
+		// operator retries by client, not by inbound.
 		payload, err := json.Marshal(map[string][]model.Client{"clients": clientsToAdd})
 		if err != nil {
 			recordErr("inbound %d: %v", ibId, err)
+			result.Outcome.failEach(clientEmails(clientsToAdd), fmt.Sprintf("inbound %d: %v", ibId, err))
 			continue
 		}
 		nr, err := s.addInboundClient(inboundSvc, &model.Inbound{Id: ibId, Settings: string(payload)}, emailSubIDs)
 		if err != nil {
 			recordErr("inbound %d: %v", ibId, err)
+			result.Outcome.failEach(clientEmails(clientsToAdd), fmt.Sprintf("inbound %d: %v", ibId, err))
 			continue
 		}
 		if nr {
@@ -121,17 +136,28 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		}
 		for _, c := range clientsToAdd {
 			result.Attached = append(result.Attached, c.Email)
+			result.Outcome.ok(c.Email)
 		}
 	}
 
+	result.Outcome.finalize()
 	return result, needRestart, nil
+}
+
+func clientEmails(clients []model.Client) []string {
+	out := make([]string, 0, len(clients))
+	for _, c := range clients {
+		out = append(out, c.Email)
+	}
+	return out
 }
 
 // BulkDetachResult reports the outcome of a bulk detach across target inbounds.
 type BulkDetachResult struct {
-	Detached []string `json:"detached"`
-	Skipped  []string `json:"skipped"`
-	Errors   []string `json:"errors"`
+	Detached []string    `json:"detached"`
+	Skipped  []string    `json:"skipped"`
+	Errors   []string    `json:"errors"`
+	Outcome  BulkOutcome `json:"outcome"`
 }
 
 // BulkDetach detaches the given existing clients (by email) from each target inbound.
@@ -174,11 +200,13 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 		rec, err := s.GetRecordByEmail(nil, email)
 		if err != nil {
 			recordErr("%s: %v", email, err)
+			result.Outcome.fail(email, err.Error())
 			continue
 		}
 		currentIds, err := s.GetInboundIdsForRecord(rec.Id)
 		if err != nil {
 			recordErr("%s: %v", email, err)
+			result.Outcome.fail(email, err.Error())
 			continue
 		}
 		matched := false
@@ -190,6 +218,7 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 		}
 		if !matched {
 			result.Skipped = append(result.Skipped, rec.Email)
+			result.Outcome.skip(rec.Email, "not attached to any of the requested inbounds")
 			continue
 		}
 		emailOrder = append(emailOrder, key)
@@ -208,6 +237,7 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 			recordErr("inbound %d: %v", ibId, err)
 			for _, rec := range recs {
 				emailFailed[strings.ToLower(rec.Email)] = true
+				result.Outcome.fail(rec.Email, fmt.Sprintf("inbound %d: %v", ibId, err))
 			}
 			continue
 		}
@@ -221,8 +251,10 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 			continue
 		}
 		result.Detached = append(result.Detached, emailRepr[key])
+		result.Outcome.ok(emailRepr[key])
 	}
 
+	result.Outcome.finalize()
 	return result, needRestart, nil
 }
 
@@ -232,6 +264,7 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 type BulkAdjustResult struct {
 	Adjusted int                `json:"adjusted"`
 	Skipped  []BulkAdjustReport `json:"skipped,omitempty"`
+	Outcome  BulkOutcome        `json:"outcome"`
 }
 
 type BulkAdjustReport struct {
@@ -522,9 +555,13 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 		}
 	}
 	result.Adjusted = len(adjusted)
+	for email := range adjusted {
+		result.Outcome.ok(email)
+	}
 
 	for email, reason := range skippedReasons {
 		result.Skipped = append(result.Skipped, BulkAdjustReport{Email: email, Reason: reason})
+		result.Outcome.skip(email, reason)
 	}
 	// Report a flow directive that no inbound could carry — only when it was not
 	// honored anywhere and the client has no other (expiry/total) skip reason.
@@ -537,7 +574,9 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 			continue
 		}
 		result.Skipped = append(result.Skipped, BulkAdjustReport{Email: email, Reason: "flow not supported on inbound"})
+		result.Outcome.skip(email, "flow not supported on inbound")
 	}
+	result.Outcome.finalize()
 
 	if len(wasDisabledDepleted) > 0 {
 		stillDepleted := map[string]struct{}{}
@@ -784,6 +823,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 type BulkDeleteResult struct {
 	Deleted int                `json:"deleted"`
 	Skipped []BulkDeleteReport `json:"skipped,omitempty"`
+	Outcome BulkOutcome        `json:"outcome"`
 }
 
 type BulkDeleteReport struct {
@@ -936,9 +976,14 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 	}
 
 	result.Deleted = len(successEmails)
+	for _, email := range successEmails {
+		result.Outcome.ok(email)
+	}
 	for email, reason := range skippedReasons {
 		result.Skipped = append(result.Skipped, BulkDeleteReport{Email: email, Reason: reason})
+		result.Outcome.skip(email, reason)
 	}
+	result.Outcome.finalize()
 	return result, needRestart, nil
 }
 
@@ -1183,6 +1228,7 @@ func (s *ClientService) bulkDelInboundClients(
 type BulkCreateResult struct {
 	Created int                `json:"created"`
 	Skipped []BulkCreateReport `json:"skipped,omitempty"`
+	Outcome BulkOutcome        `json:"outcome"`
 }
 
 type BulkCreateReport struct {
@@ -1201,7 +1247,9 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 			email = "(missing email)"
 		}
 		result.Skipped = append(result.Skipped, BulkCreateReport{Email: email, Reason: reason})
+		result.Outcome.skip(email, reason)
 	}
+	defer result.Outcome.finalize()
 
 	emailSubIDs, err := inboundSvc.getAllEmailSubIDs()
 	if err != nil {
@@ -1308,6 +1356,7 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 	}
 
 	inboundCache := make(map[int]*model.Inbound)
+	identityOwners := map[int]map[string]string{}
 	getIb := func(id int) (*model.Inbound, error) {
 		if ib, ok := inboundCache[id]; ok {
 			return ib, nil
@@ -1372,6 +1421,19 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 		if !ok {
 			continue
 		}
+		// One row's credential colliding with a client already on the inbound,
+		// or with an earlier row, used to fail the whole inbound's batch.
+		for _, ibId := range prep[idx].inboundIds {
+			ib, _ := getIb(ibId)
+			if owner, field := s.bulkIdentityOwner(inboundSvc, ib, identityOwners, prep[idx].client); owner != "" {
+				failed[idx] = true
+				reason[idx] = fmt.Sprintf("%s: %s already used by client %s", ib.Protocol, field, owner)
+				break
+			}
+		}
+		if failed[idx] {
+			continue
+		}
 		for _, ibId := range prep[idx].inboundIds {
 			ib, _ := getIb(ibId)
 			if _, seen := byInbound[ibId]; !seen {
@@ -1407,6 +1469,7 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 			skip(prep[idx].client.Email, reason[idx])
 		} else {
 			result.Created++
+			result.Outcome.ok(prep[idx].client.Email)
 		}
 	}
 	return result, needRestart, nil
@@ -1451,6 +1514,7 @@ func (s *ClientService) DelDepleted(inboundSvc *InboundService) (int, bool, erro
 type BulkSetEnableResult struct {
 	Changed int                   `json:"changed"`
 	Skipped []BulkSetEnableReport `json:"skipped,omitempty"`
+	Outcome BulkOutcome           `json:"outcome"`
 }
 
 type BulkSetEnableReport struct {
@@ -1566,9 +1630,14 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 	}
 
 	result.Changed = len(successEmails)
+	for _, email := range successEmails {
+		result.Outcome.ok(email)
+	}
 	for email, reason := range skippedReasons {
 		result.Skipped = append(result.Skipped, BulkSetEnableReport{Email: email, Reason: reason})
+		result.Outcome.skip(email, reason)
 	}
+	result.Outcome.finalize()
 	return result, needRestart, nil
 }
 
@@ -1733,4 +1802,34 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 	}
 
 	return res
+}
+
+// bulkIdentityOwner names the client already holding this row's credential on
+// the inbound — an existing client, or an earlier row of the same batch.
+func (s *ClientService) bulkIdentityOwner(inboundSvc *InboundService, ib *model.Inbound, owners map[int]map[string]string, client model.Client) (owner, field string) {
+	field = identityFieldFor(ib.Protocol)
+	if field == "email" {
+		return "", ""
+	}
+	value := strings.TrimSpace(clientIdentityValue(&client, field))
+	if value == "" {
+		return "", ""
+	}
+	held, seeded := owners[ib.Id]
+	if !seeded {
+		held = map[string]string{}
+		if existing, err := inboundSvc.GetClients(ib); err == nil {
+			for i := range existing {
+				if v := strings.TrimSpace(clientIdentityValue(&existing[i], field)); v != "" {
+					held[v] = existing[i].Email
+				}
+			}
+		}
+		owners[ib.Id] = held
+	}
+	if other, taken := held[value]; taken && !strings.EqualFold(other, client.Email) {
+		return other, field
+	}
+	held[value] = client.Email
+	return "", ""
 }

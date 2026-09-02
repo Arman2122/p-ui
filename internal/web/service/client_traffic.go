@@ -353,3 +353,49 @@ func (s *ClientService) ResetAllTraffics(inboundSvc *InboundService) (bool, erro
 	resetCoreQuotas(context.Background(), wasDepleted)
 	return needRestart || affected > 0, nil
 }
+
+// BulkResetTrafficResult is the per-row account of a bulk reset: the clients
+// whose usage was zeroed, and the emails that name no client.
+type BulkResetTrafficResult struct {
+	Affected int         `json:"affected" example:"2"`
+	Outcome  BulkOutcome `json:"outcome"`
+}
+
+// BulkResetTrafficOutcome resets like BulkResetTraffic and says per row what
+// happened; the count alone could not tell an unknown email from a reset one.
+func (s *ClientService) BulkResetTrafficOutcome(inboundSvc *InboundService, emails []string) (*BulkResetTrafficResult, error) {
+	result := &BulkResetTrafficResult{}
+	known := map[string]struct{}{}
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		var found []string
+		if err := database.GetDB().Model(&model.ClientRecord{}).Where("email IN ?", batch).Pluck("email", &found).Error; err != nil {
+			return nil, err
+		}
+		for _, email := range found {
+			known[email] = struct{}{}
+		}
+	}
+	affected, err := s.BulkResetTraffic(inboundSvc, emails)
+	if err != nil {
+		return nil, err
+	}
+	result.Affected = affected
+	seen := map[string]struct{}{}
+	for _, email := range emails {
+		email = strings.TrimSpace(email)
+		if email == "" {
+			continue
+		}
+		if _, dup := seen[email]; dup {
+			continue
+		}
+		seen[email] = struct{}{}
+		if _, ok := known[email]; ok {
+			result.Outcome.ok(email)
+		} else {
+			result.Outcome.skip(email, "client not found")
+		}
+	}
+	result.Outcome.finalize()
+	return result, nil
+}

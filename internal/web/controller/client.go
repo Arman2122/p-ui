@@ -653,12 +653,12 @@ func (a *ClientController) bulkResetTraffic(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	affected, err := a.clientService.BulkResetTraffic(&a.inboundService, req.Emails)
+	result, err := a.clientService.BulkResetTrafficOutcome(&a.inboundService, req.Emails)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonObj(c, gin.H{"affected": affected}, nil)
+	jsonObj(c, result, nil)
 	a.xrayService.SetToNeedRestart()
 	notifyClientsChanged()
 }
