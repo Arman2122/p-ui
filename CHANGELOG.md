@@ -19,6 +19,12 @@ here; the git log is the full record.
   metadata endpoint or anything on the LAN. It now dials through the same
   guard the REALITY probe already uses, and refuses private and internal
   addresses.
+- **Alert emails show a tag or an error as text, not as markup.** The values
+  an alert reports — an outbound tag, a node name, xray's own error text, a
+  login username — were written into the mail's HTML unescaped, so one
+  carrying `<` garbled the message and one written as a tag was delivered as
+  that tag. They are escaped now; the coloured status line the mail itself
+  writes is unchanged.
 - **A failed login costs the same whether or not the username exists.** An
   unknown username was answered in the time of one database lookup and a
   known one in the time of a full bcrypt check — a timing difference that told
