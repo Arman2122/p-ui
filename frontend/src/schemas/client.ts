@@ -31,6 +31,7 @@ export const ClientRecordSchema = z.object({
   reset: z.number().optional(),
   inboundIds: nullableNumberArray.optional(),
   traffic: ClientTrafficSchema.nullable().optional(),
+  disabledReason: z.enum(['quota', 'expiry', 'manual']).optional(),
   reverse: z.object({ tag: z.string().optional() }).loose().nullable().optional(),
   privateKey: z.string().optional(),
   publicKey: z.string().optional(),

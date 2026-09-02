@@ -930,6 +930,11 @@
       "rotateWarning": "Every share link and subscription URL of these clients stops working (for a local Xray inbound, once Xray restarts). Hand out the new links afterwards.",
       "rotateCredentials": "New credentials (UUID, password, key or secret, per protocol)",
       "rotateSubId": "New subscription id",
+      "disabledBy": {
+        "quota": "quota used up",
+        "expiry": "expired",
+        "manual": "switched off"
+      },
       "delDepleted": "Delete depleted",
       "delDepletedConfirmTitle": "Delete depleted clients?",
       "delDepletedConfirmContent": "Removes every client whose traffic quota is exhausted or whose expiry has passed. This cannot be undone.",
