@@ -20,7 +20,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, err error) {
+func (s *InboundService) AddTrafficDetailed(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, disabledEmails []string, err error) {
 	var renewed []string
 	var pending pendingClientDisable
 	err = submitTrafficWrite(func() error {
@@ -48,7 +48,14 @@ func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraff
 		// from inside the serial writer without deadlocking it.
 		s.applyPendingClientDisables(pending)
 	}
+	disabledEmails = pending.emails()
 	return
+}
+
+// AddTraffic is AddTrafficDetailed without the names of the clients it switched off.
+func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (bool, bool, error) {
+	needRestart, clientsDisabled, _, err := s.AddTrafficDetailed(inboundTraffics, clientTraffics)
+	return needRestart, clientsDisabled, err
 }
 
 /*

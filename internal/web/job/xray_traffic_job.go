@@ -92,7 +92,7 @@ func (j *XrayTrafficJob) Run() {
 		ages out through the broadcast below for the same reason. F260.
 	*/
 	var err error
-	needRestart0, clientsDisabled, err := j.inboundService.AddTraffic(traffics, clientTraffics)
+	needRestart0, clientsDisabled, disabledEmails, err := j.inboundService.AddTrafficDetailed(traffics, clientTraffics)
 	if err != nil {
 		logger.Warning("add inbound traffic failed:", err)
 	}
@@ -106,13 +106,16 @@ func (j *XrayTrafficJob) Run() {
 			logger.Warning("get RestartXrayOnClientDisable failed:", settingErr)
 		}
 		if restartOnDisable {
-			// Forced, like the node path already is. A reconcile hot-applies the
-			// removal over the core API and never replaces the process, and
-			// RemoveUser does not close a connection that is already up — so the
-			// depleted client keeps its tunnel, which is the whole point of this
-			// setting. Replacing the process is the only lever the core exposes.
-			if err := j.xrayService.RestartXray(true); err != nil {
-				logger.Warning("reconcile xray after disabling clients failed:", err)
+			if depletedStillConnected(disabledEmails, j.inboundService.GetOnlineClients()) {
+				// Forced: a hot removal never closes a tunnel that is already up, and
+				// replacing the process is the only lever the core exposes.
+				if err := j.xrayService.RestartXray(true); err != nil {
+					logger.Warning("reconcile xray after disabling clients failed:", err)
+					j.xrayService.SetToNeedRestart()
+				}
+			} else {
+				// Nobody depleted is connected, so no tunnel needs cutting now; the
+				// flag lets the restart wait for the next reason.
 				j.xrayService.SetToNeedRestart()
 			}
 		}
@@ -265,4 +268,22 @@ func (j *XrayTrafficJob) informTrafficToExternalAPI(inboundTraffics []*xray.Traf
 	if err := externalInformClient.DoTimeout(request, response, externalInformTimeout); err != nil {
 		logger.Warning("POST ExternalTrafficInformURI failed:", err)
 	}
+}
+
+// depletedStillConnected reports whether any client the pass switched off is
+// in the online set, the only case a forced restart buys anything.
+func depletedStillConnected(disabled, online []string) bool {
+	if len(disabled) == 0 || len(online) == 0 {
+		return false
+	}
+	on := make(map[string]struct{}, len(online))
+	for _, email := range online {
+		on[email] = struct{}{}
+	}
+	for _, email := range disabled {
+		if _, ok := on[email]; ok {
+			return true
+		}
+	}
+	return false
 }
