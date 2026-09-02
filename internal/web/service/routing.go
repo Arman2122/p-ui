@@ -501,6 +501,16 @@ A rule left naming nobody is disabled rather than deleted: the operator wrote it
 and silently removing their rule is the behaviour this feature exists to end.
 */
 func (s *RoutingService) PruneInbound(ctx context.Context, inboundID int) (bool, error) {
+	return s.PruneInbounds(ctx, []int{inboundID})
+}
+
+// PruneInbounds drops every deleted inbound from every rule in one pass and
+// converges once.
+func (s *RoutingService) PruneInbounds(ctx context.Context, inboundIDs []int) (bool, error) {
+	gone := make(map[int]struct{}, len(inboundIDs))
+	for _, id := range inboundIDs {
+		gone[id] = struct{}{}
+	}
 	rules, err := s.Rules()
 	if err != nil {
 		return false, err
@@ -514,7 +524,7 @@ func (s *RoutingService) PruneInbound(ctx context.Context, inboundID int) (bool,
 		}
 		kept := make([]int, 0, len(ids))
 		for _, id := range ids {
-			if id != inboundID {
+			if _, dropped := gone[id]; !dropped {
 				kept = append(kept, id)
 			}
 		}

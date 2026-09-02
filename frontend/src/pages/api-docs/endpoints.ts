@@ -180,6 +180,13 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/inbounds/bulkSetEnable',
+        summary: 'Enable or disable many inbounds in one call. Each inbound is flipped the way setEnable/:id does (hot-added or removed on a local core, pushed to its node); an inbound already in the requested state, an unknown id, or one the core refuses is reported per id and the rest still proceed. Restarts are flagged once for the batch.',
+        body: '{\n  "ids": [1, 2, 3],\n  "enable": false\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "changed": 2,\n    "skipped": [\n      { "id": 3, "reason": "already disabled" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/inbounds/update/:id',
         summary: 'Replace an inbound’s configuration. Body shape mirrors /add. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.',
         params: [

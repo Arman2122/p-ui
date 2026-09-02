@@ -72,6 +72,7 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.POST("/add", a.addInbound)
 	g.POST("/del/:id", a.delInbound)
 	g.POST("/bulkDel", a.bulkDelInbounds)
+	g.POST("/bulkSetEnable", a.bulkSetInboundsEnable)
 	g.POST("/update/:id", a.updateInbound)
 	g.POST("/setEnable/:id", a.setInboundEnable)
 	g.POST("/:id/resetTraffic", a.resetInboundTraffic)
@@ -249,6 +250,30 @@ func (a *InboundController) bulkDelInbounds(c *gin.Context) {
 	user := session.GetLoginUser(c)
 	a.broadcastInboundsUpdate(user.Id)
 	notifyClientsChanged()
+}
+
+type bulkSetInboundsEnableRequest struct {
+	Ids    []int `json:"ids"`
+	Enable bool  `json:"enable"`
+}
+
+func (a *InboundController) bulkSetInboundsEnable(c *gin.Context) {
+	var req bulkSetInboundsEnableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	result, needRestart, err := a.inboundService.SetInboundsEnable(req.Ids, req.Enable)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, result, nil)
+	if needRestart {
+		a.xrayService.SetToNeedRestart()
+	}
+	user := session.GetLoginUser(c)
+	a.broadcastInboundsUpdate(user.Id)
 }
 
 // updateInbound updates an existing inbound configuration.

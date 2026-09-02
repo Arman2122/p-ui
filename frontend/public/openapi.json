@@ -4402,6 +4402,66 @@
         }
       }
     },
+    "/panel/api/inbounds/bulkSetEnable": {
+      "post": {
+        "tags": [
+          "Inbounds"
+        ],
+        "summary": "Enable or disable many inbounds in one call. Each inbound is flipped the way setEnable/:id does (hot-added or removed on a local core, pushed to its node); an inbound already in the requested state, an unknown id, or one the core refuses is reported per id and the rest still proceed. Restarts are flagged once for the batch.",
+        "operationId": "post_panel_api_inbounds_bulkSetEnable",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "ids": [
+                  1,
+                  2,
+                  3
+                ],
+                "enable": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "changed": 2,
+                    "skipped": [
+                      {
+                        "id": 3,
+                        "reason": "already disabled"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/inbounds/update/{id}": {
       "post": {
         "tags": [

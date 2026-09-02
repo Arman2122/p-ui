@@ -413,6 +413,23 @@ export default function InboundsPage() {
     });
   }), [modal, refresh, t, messageApi]);
 
+  const bulkSetEnable = useCallback(async (ids: number[], enable: boolean) => {
+    if (ids.length === 0) return false;
+    const msg = await HttpUtil.post('/panel/api/inbounds/bulkSetEnable', { ids, enable }, { headers: { 'Content-Type': 'application/json' } });
+    const obj = (msg?.obj ?? {}) as { changed?: number; skipped?: { id: number; reason: string }[] };
+    const ok = obj.changed ?? 0;
+    const skipped = obj.skipped ?? [];
+    if (msg?.success && skipped.length === 0) {
+      messageApi.success(t(enable ? 'pages.inbounds.toasts.bulkEnabled' : 'pages.inbounds.toasts.bulkDisabled', { count: ok }));
+    } else {
+      const firstReason = skipped[0]?.reason ?? msg?.msg ?? '';
+      const base = t('pages.inbounds.toasts.bulkSetEnableMixed', { ok, failed: skipped.length });
+      messageApi.warning(firstReason ? `${base} — ${firstReason}` : base);
+    }
+    await refresh();
+    return Boolean(msg?.success);
+  }, [messageApi, refresh, t]);
+
   const confirmResetTraffic = useCallback((dbInbound: DBInbound) => {
     modal.confirm({
       title: t('pages.inbounds.resetConfirmTitle', { remark: dbInbound.remark }),
@@ -644,6 +661,7 @@ export default function InboundsPage() {
                       onGeneralAction={onGeneralAction}
                       onRowAction={({ key, dbInbound }) => onRowAction({ key, dbInbound: dbInbound as unknown as DBInbound })}
                       onBulkDelete={confirmBulkDelete}
+                      onBulkSetEnable={bulkSetEnable}
                     />
                   </Col>
                 </Row>

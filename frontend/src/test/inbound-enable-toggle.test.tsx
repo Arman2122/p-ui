@@ -67,6 +67,7 @@ function harness(rows: DBInboundRecord[]) {
     onGeneralAction: () => {},
     onRowAction: () => {},
     onBulkDelete: async () => true,
+    onBulkSetEnable: async () => true,
   };
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
