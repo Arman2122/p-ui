@@ -1,29 +1,18 @@
 package service
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/gorm"
 )
-
-type CopyClientsResult struct {
-	Added   []string `json:"added"`
-	Skipped []string `json:"skipped"`
-	Errors  []string `json:"errors"`
-}
 
 // enrichClientStats parses each inbound's clients once, fills in the
 // UUID/SubId fields on the preloaded ClientStats, and tops up rows owned by
@@ -170,193 +159,6 @@ func (s *InboundService) emailsUsedByOtherInbounds(emails []string, exceptInboun
 		}
 	}
 	return shared, nil
-}
-
-func (s *InboundService) writeBackClientSubID(sourceInboundID int, client model.Client, subID string) (bool, error) {
-	client.SubID = subID
-	client.UpdatedAt = time.Now().UnixMilli()
-	if client.Email == "" {
-		return false, common.NewError("empty client email")
-	}
-
-	settingsBytes, err := json.Marshal(map[string][]model.Client{
-		"clients": {client},
-	})
-	if err != nil {
-		return false, err
-	}
-
-	updatePayload := &model.Inbound{
-		Id:       sourceInboundID,
-		Settings: string(settingsBytes),
-	}
-	return s.clientService.UpdateInboundClient(s, updatePayload, client.Email)
-}
-
-func (s *InboundService) generateRandomCredential(targetProtocol model.Protocol) string {
-	switch targetProtocol {
-	case model.VMESS, model.VLESS:
-		return uuid.NewString()
-	default:
-		return strings.ReplaceAll(uuid.NewString(), "-", "")
-	}
-}
-
-func (s *InboundService) buildTargetClientFromSource(source model.Client, targetInbound *model.Inbound, email string, flow string) (model.Client, error) {
-	nowTs := time.Now().UnixMilli()
-	target := source
-	target.Email = email
-	target.CreatedAt = nowTs
-	target.UpdatedAt = nowTs
-
-	target.ID = ""
-	target.Password = ""
-	target.Auth = ""
-	target.Flow = ""
-	target.Secret = ""
-
-	targetProtocol := targetInbound.Protocol
-	switch targetProtocol {
-	case model.VMESS:
-		target.ID = s.generateRandomCredential(targetProtocol)
-	case model.VLESS:
-		target.ID = s.generateRandomCredential(targetProtocol)
-		if (flow == "xtls-rprx-vision" || flow == "xtls-rprx-vision-udp443") &&
-			inboundCanEnableTlsFlow(string(targetProtocol), targetInbound.StreamSettings, targetInbound.Settings) {
-			target.Flow = flow
-		}
-	case model.Trojan, model.Shadowsocks:
-		target.Password = s.generateRandomCredential(targetProtocol)
-	case model.Hysteria:
-		target.Auth = s.generateRandomCredential(targetProtocol)
-	case model.MTProto:
-		target.Secret = mtproto.MintFakeTLSSecret(targetInbound.Settings)
-	default:
-		target.ID = s.generateRandomCredential(targetProtocol)
-	}
-
-	return target, nil
-}
-
-func (s *InboundService) nextAvailableCopiedEmail(originalEmail string, targetID int, occupied map[string]struct{}) string {
-	base := fmt.Sprintf("%s_%d", originalEmail, targetID)
-	candidate := base
-	suffix := 0
-	for {
-		if _, exists := occupied[strings.ToLower(candidate)]; !exists {
-			occupied[strings.ToLower(candidate)] = struct{}{}
-			return candidate
-		}
-		suffix++
-		candidate = fmt.Sprintf("%s_%d", base, suffix)
-	}
-}
-
-func (s *InboundService) CopyInboundClients(targetInboundID int, sourceInboundID int, clientEmails []string, flow string) (*CopyClientsResult, bool, error) {
-	result := &CopyClientsResult{
-		Added:   []string{},
-		Skipped: []string{},
-		Errors:  []string{},
-	}
-	if targetInboundID == sourceInboundID {
-		return result, false, common.NewError("source and target inbounds must be different")
-	}
-
-	targetInbound, err := s.GetInbound(targetInboundID)
-	if err != nil {
-		return result, false, err
-	}
-	sourceInbound, err := s.GetInbound(sourceInboundID)
-	if err != nil {
-		return result, false, err
-	}
-
-	sourceClients, err := s.GetClients(sourceInbound)
-	if err != nil {
-		return result, false, err
-	}
-	if len(sourceClients) == 0 {
-		return result, false, nil
-	}
-
-	allowedEmails := map[string]struct{}{}
-	if len(clientEmails) > 0 {
-		for _, email := range clientEmails {
-			allowedEmails[strings.ToLower(strings.TrimSpace(email))] = struct{}{}
-		}
-	}
-
-	occupiedEmails := map[string]struct{}{}
-	allEmails, err := s.GetAllEmails()
-	if err != nil {
-		return result, false, err
-	}
-	for _, email := range allEmails {
-		clean := strings.Trim(email, "\"")
-		if clean != "" {
-			occupiedEmails[strings.ToLower(clean)] = struct{}{}
-		}
-	}
-
-	newClients := make([]model.Client, 0)
-	needRestart := false
-	for _, sourceClient := range sourceClients {
-		originalEmail := strings.TrimSpace(sourceClient.Email)
-		if originalEmail == "" {
-			continue
-		}
-		if len(allowedEmails) > 0 {
-			if _, ok := allowedEmails[strings.ToLower(originalEmail)]; !ok {
-				continue
-			}
-		}
-
-		if sourceClient.SubID == "" {
-			newSubID := uuid.NewString()
-			subNeedRestart, subErr := s.writeBackClientSubID(sourceInbound.Id, sourceClient, newSubID)
-			if subErr != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: failed to write source subId: %v", originalEmail, subErr))
-				continue
-			}
-			if subNeedRestart {
-				needRestart = true
-			}
-			sourceClient.SubID = newSubID
-		}
-
-		targetEmail := s.nextAvailableCopiedEmail(originalEmail, targetInboundID, occupiedEmails)
-		targetClient, buildErr := s.buildTargetClientFromSource(sourceClient, targetInbound, targetEmail, flow)
-		if buildErr != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", originalEmail, buildErr))
-			continue
-		}
-		newClients = append(newClients, targetClient)
-		result.Added = append(result.Added, targetEmail)
-	}
-
-	if len(newClients) == 0 {
-		return result, needRestart, nil
-	}
-
-	settingsPayload, err := json.Marshal(map[string][]model.Client{
-		"clients": newClients,
-	})
-	if err != nil {
-		return result, needRestart, err
-	}
-
-	addNeedRestart, err := s.clientService.AddInboundClient(s, &model.Inbound{
-		Id:       targetInboundID,
-		Settings: string(settingsPayload),
-	})
-	if err != nil {
-		return result, needRestart, err
-	}
-	if addNeedRestart {
-		needRestart = true
-	}
-
-	return result, needRestart, nil
 }
 
 func (s *InboundService) GetClientInboundByTrafficID(trafficId int) (traffic *xray.ClientTraffic, inbound *model.Inbound, err error) {
