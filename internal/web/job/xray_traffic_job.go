@@ -32,16 +32,10 @@ type XrayTrafficJob struct {
 // refetch for the rest.
 const clientStatsSnapshotMaxClients = 5000
 
-// splitMovedClientTraffics keeps the rows that actually moved bytes this poll,
-// alongside the active-email list and set derived from the same pass.
-//
-// Xray reports a row for every known email whether or not it transferred
-// anything, so on a large panel nearly every delta is zero. The database writes
-// and the external-API inform consume the full slice before this point; the
-// WebSocket frame only feeds the dashboard's live speed column, where an absent
-// row and a zero row render identically. Broadcasting just the movers keeps that
-// frame from growing with the client count — at 5k clients it was carrying about
-// a megabyte of zeros every five seconds.
+// splitMovedClientTraffics keeps the rows that moved bytes this poll, with the
+// active-email list and set from the same pass. core.Counter already emits only
+// positive deltas, so the guard is against a nil or negative row -- not the
+// zero rows Xray once reported for every known email. F116.
 func splitMovedClientTraffics(clientTraffics []*xray.ClientTraffic) ([]*xray.ClientTraffic, []string, map[string]bool) {
 	moved := make([]*xray.ClientTraffic, 0, len(clientTraffics))
 	emails := make([]string, 0, len(clientTraffics))
