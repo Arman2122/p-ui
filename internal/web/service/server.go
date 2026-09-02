@@ -1640,14 +1640,25 @@ var pgArchiveVersionIntroducedIn = map[string]int{
 // TOC, no database connection) so an unreadable file fails before Xray is stopped.
 func checkPgRestoreCanRead(bin, dumpPath string) error {
 	cmd := exec.CommandContext(context.Background(), bin, "--list", dumpPath)
-	cmd.Stdout = io.Discard
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if cmd.Run() == nil {
-		return nil
+	if cmd.Run() != nil {
+		return pgRestoreReadFailureError(strings.TrimSpace(stderr.String()), pgRestoreVersion(bin))
 	}
-	return pgRestoreReadFailureError(strings.TrimSpace(stderr.String()), pgRestoreVersion(bin))
+	if !pgDumpListsPanelTables(stdout.String()) {
+		return common.NewError("this backup is not a Penhoon UI database: pg_restore lists no inbounds table in it")
+	}
+	return nil
 }
+
+// pgDumpListsPanelTables reports whether a pg_restore --list TOC carries the
+// panel's own inbounds table, which any other PostgreSQL archive lacks.
+func pgDumpListsPanelTables(toc string) bool {
+	return pgPanelTablePattern.MatchString(toc)
+}
+
+var pgPanelTablePattern = regexp.MustCompile(`(?m)\bTABLE (DATA )?public inbounds\b`)
 
 func pgRestoreReadFailureError(probeOutput, localVersion string) error {
 	m := pgUnsupportedDumpVersionPattern.FindStringSubmatch(probeOutput)
