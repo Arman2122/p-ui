@@ -29,7 +29,7 @@ func TestXrayReleaseListLargerThanTheCapIsRefused(t *testing.T) {
 	t.Cleanup(huge.Close)
 	small := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `[{"tag_name":"v25.1.2"},{"tag_name":"v25.1.1"}]`)
+		_, _ = io.WriteString(w, `[{"tag_name":"v26.7.1"},{"tag_name":"v26.6.27"},{"tag_name":"v25.9.9"}]`)
 	}))
 	t.Cleanup(small.Close)
 	previous := xrayReleasesURL
@@ -46,7 +46,7 @@ func TestXrayReleaseListLargerThanTheCapIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a normal release list: %v", err)
 	}
-	if strings.Join(got, ",") != "25.1.2,25.1.1" {
-		t.Fatalf("versions = %v, want [25.1.2 25.1.1]", got)
+	if strings.Join(got, ",") != "v26.7.1,v26.6.27" {
+		t.Fatalf("versions = %v, want [v26.7.1 v26.6.27]: the filter keeps 26.6.27 and newer, tag included", got)
 	}
 }
