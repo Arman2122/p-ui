@@ -87,3 +87,20 @@ func updateFunctionBody(t *testing.T, text string) string {
 	}
 	return rest
 }
+
+// A bare `rm <folder> -f` cannot remove a directory: it fails with EISDIR, the
+// error was discarded, and the line read as "wipe the install folder" while the
+// per-file removals below it did the actual work. The folder is kept on
+// purpose -- it holds geo data and the module source -- so the line was
+// misleading twice over. F166.
+func TestTheUpdaterDoesNotPretendToWipeTheInstallFolder(t *testing.T) {
+	root := repoRoot(t)
+	body, err := os.ReadFile(filepath.Join(root, "update.sh"))
+	if err != nil {
+		t.Fatalf("read update.sh: %v", err)
+	}
+	text := updateFunctionBody(t, string(body))
+	if strings.Contains(text, "rm ${pui_folder} -f") {
+		t.Fatal("update.sh carries `rm ${pui_folder} -f`: a non-recursive rm of a directory is a silent no-op that reads as a wipe")
+	}
+}
