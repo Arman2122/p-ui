@@ -50,7 +50,7 @@ func TestAStoppedProcessIsBilledForItsLastInterval(t *testing.T) {
 		t.Fatal("Remove left the process in the map")
 	}
 
-	deltas, _ := mgr.CollectTraffic()
+	deltas, _, _ := mgr.CollectTraffic()
 	var total int64
 	for _, d := range deltas {
 		if d.Email != "alice" || d.Tag != "mtp-9" {
@@ -63,7 +63,7 @@ func TestAStoppedProcessIsBilledForItsLastInterval(t *testing.T) {
 	}
 
 	// Handed over once, never again.
-	if again, _ := mgr.CollectTraffic(); len(again) != 0 {
+	if again, _, _ := mgr.CollectTraffic(); len(again) != 0 {
 		t.Fatalf("the final interval was billed a second time: %+v", again)
 	}
 }

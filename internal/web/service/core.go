@@ -52,6 +52,10 @@ type CoreView struct {
 	// core the host cannot run is explained rather than silently offered.
 	Available   bool   `json:"available" example:"true"`
 	Unavailable string `json:"unavailable" example:"wireguard: no kernel support on this host"`
+	// TrafficSeenAt is when this core last reported traffic (Unix ms, 0 = not
+	// since start) and TrafficError why the last poll failed, if it did.
+	TrafficSeenAt int64  `json:"trafficSeenAt,omitempty" example:"1725000000000"`
+	TrafficError  string `json:"trafficError,omitempty" example:"mtproto: stats unreadable for mtp-1"`
 }
 
 // CoreViews describes the cores this build can serve. The registry is read per
@@ -118,6 +122,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		if err := bound.Core.Preflight(ctx); err != nil {
 			unavailable = err.Error()
 		}
+		seen, trafficErr := CoreTrafficHealth(string(described.ID))
 		views = append(views, CoreView{
 			ID:                string(described.ID),
 			TitleKey:          described.TitleKey,
@@ -130,6 +135,8 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			PortlessKinds:     portless,
 			Available:         unavailable == "",
 			Unavailable:       unavailable,
+			TrafficSeenAt:     seen.UnixMilli(),
+			TrafficError:      trafficErr,
 		})
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })

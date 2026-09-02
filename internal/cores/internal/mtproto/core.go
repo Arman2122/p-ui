@@ -197,7 +197,7 @@ func withoutUser(inst core.Instance, email string) core.Instance {
 }
 
 func (c *Core) CollectTraffic(_ context.Context) ([]core.TrafficDelta, error) {
-	billed, online := c.mgr.CollectTraffic()
+	billed, online, failed := c.mgr.CollectTraffic()
 	c.mu.Lock()
 	c.online = online
 	c.mu.Unlock()
@@ -207,6 +207,10 @@ func (c *Core) CollectTraffic(_ context.Context) ([]core.TrafficDelta, error) {
 		out = append(out, core.TrafficDelta{Email: t.Email, Tag: t.Tag, Up: t.Up, Down: t.Down})
 	}
 	c.stashTagTraffic(billed)
+	if len(failed) > 0 {
+		// The deltas that were read still bill; the error names who was not.
+		return out, fmt.Errorf("mtproto: stats unreadable for %s", strings.Join(failed, ", "))
+	}
 	return out, nil
 }
 

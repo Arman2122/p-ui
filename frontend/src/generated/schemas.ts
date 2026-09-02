@@ -1555,6 +1555,16 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": "cores.xray.title",
         "type": "string"
       },
+      "trafficError": {
+        "example": "mtproto: stats unreadable for mtp-1",
+        "type": "string"
+      },
+      "trafficSeenAt": {
+        "description": "TrafficSeenAt is when this core last reported traffic (Unix ms, 0 = not\nsince start) and TrafficError why the last poll failed, if it did.",
+        "example": 1725000000000,
+        "format": "int64",
+        "type": "integer"
+      },
       "unavailable": {
         "example": "wireguard: no kernel support on this host",
         "type": "string"

@@ -480,7 +480,9 @@ func (m *Manager) StopAll() {
 
 // CollectTraffic returns the per-client byte deltas since the previous scrape and
 // the emails currently connected. mtg counts cumulatively; core.Counter converts.
-func (m *Manager) CollectTraffic() ([]Traffic, []string) {
+// CollectTraffic also names the running sidecars whose /stats could not be
+// read this pass: a scrape that fails silently is a client that is not billed.
+func (m *Manager) CollectTraffic() (out []Traffic, online []string, failed []string) {
 	m.scrapeMu.Lock()
 	defer m.scrapeMu.Unlock()
 	type snap struct {
@@ -491,7 +493,7 @@ func (m *Manager) CollectTraffic() ([]Traffic, []string) {
 	}
 	m.mu.Lock()
 	// What stopped processes were billed for since the last pass goes first.
-	out := m.pending
+	out = m.pending
 	m.pending = nil
 	snaps := make([]snap, 0, len(m.procs))
 	for _, cur := range m.procs {
@@ -502,10 +504,10 @@ func (m *Manager) CollectTraffic() ([]Traffic, []string) {
 	}
 	m.mu.Unlock()
 
-	var online []string
 	for _, s := range snaps {
 		stats, ok := scrapeStats(s.apiPort, s.apiToken)
 		if !ok {
+			failed = append(failed, s.tag)
 			continue
 		}
 		for email, u := range stats.Users {
@@ -515,7 +517,7 @@ func (m *Manager) CollectTraffic() ([]Traffic, []string) {
 		}
 		out = append(out, billReadings(s.tag, s.counter, stats)...)
 	}
-	return out, online
+	return out, online, failed
 }
 
 // billReadings turns one /stats reading into per-client deltas through the
