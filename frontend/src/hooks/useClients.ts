@@ -22,6 +22,7 @@ import {
   BulkMoveResultSchema,
   BulkClearIpsResultSchema,
   ClientLinksRowsSchema,
+  BulkRotateResultSchema,
   DelDepletedResultSchema,
   type ClientHydrate,
   type ClientRecord,
@@ -40,6 +41,7 @@ import {
   type BulkMoveResult,
   type BulkClearIpsResult,
   type ClientLinksRow,
+  type BulkRotateResult,
   type BulkDetachResult,
   type BulkGroupResult,
 } from '@/schemas/client';
@@ -483,6 +485,15 @@ export function useClients(options: UseClientsOptions = {}) {
     onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
   });
 
+  const bulkRotateMut = useMutation({
+    mutationFn: async (payload: { selection: BulkSelection; credentials: boolean; subId: boolean }): Promise<Msg<BulkRotateResult>> => {
+      const { selection, ...rest } = payload;
+      const raw = await HttpUtil.post('/panel/api/clients/bulkRotate', { ...selectionBody(selection), ...rest }, JSON_HEADERS);
+      return parseMsg(raw, BulkRotateResultSchema, 'clients/bulkRotate');
+    },
+    onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
+  });
+
   const bulkSetEnableMut = useMutation({
     mutationFn: async (payload: { selection: BulkSelection; enable: boolean }): Promise<Msg<BulkSetEnableResult>> => {
       const path = payload.enable ? '/panel/api/clients/bulkEnable' : '/panel/api/clients/bulkDisable';
@@ -613,6 +624,11 @@ export function useClients(options: UseClientsOptions = {}) {
     if (isEmptySelection(selection)) return Promise.resolve(null);
     return bulkClearIpsMut.mutateAsync({ selection });
   }, [bulkClearIpsMut]);
+  const bulkRotate = useCallback((input: string[] | BulkSelection, credentials: boolean, subId: boolean) => {
+    const selection = asSelection(input);
+    if (isEmptySelection(selection)) return Promise.resolve(null);
+    return bulkRotateMut.mutateAsync({ selection, credentials, subId });
+  }, [bulkRotateMut]);
   const bulkExport = useCallback(async (input: string[] | BulkSelection): Promise<unknown[] | null> => {
     const selection = asSelection(input);
     if (isEmptySelection(selection)) return null;
@@ -819,6 +835,7 @@ export function useClients(options: UseClientsOptions = {}) {
     bulkClearIps,
     bulkExport,
     bulkLinks,
+    bulkRotate,
     bulkEnable,
     bulkDisable,
     bulkResetTraffic,

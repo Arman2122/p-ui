@@ -351,3 +351,9 @@ export const ClientLinksRowSchema = z.object({
 });
 export const ClientLinksRowsSchema = z.array(ClientLinksRowSchema);
 export type ClientLinksRow = z.infer<typeof ClientLinksRowSchema>;
+
+export const BulkRotateResultSchema = z.object({
+  rotated: z.number().optional(),
+  outcome: BulkOutcomeSchema.optional(),
+});
+export type BulkRotateResult = z.infer<typeof BulkRotateResultSchema>;

@@ -756,6 +756,13 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/clients/bulkRotate',
+        summary: 'Rotate many clients at once: credentials mints a fresh UUID, password, key or secret for every kind the client is attached to (a kind whose credential the panel cannot mint, such as a WireGuard keypair, is skipped with a reason), subId gives the client a new subscription id. Every share link and subscription URL of the selection stops working; handing out the new ones is the operator\'s job. Applied with one read-modify-write per inbound; a local Xray inbound is flagged for restart, a local MTProto sidecar is hot-applied, a node is reconciled. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
+        body: '{\n  "emails": ["alice", "bob"],\n  "credentials": true,\n  "subId": true\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "rotated": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [{ "email": "wg-user", "reason": "no credential to mint for wireguard" }], "failed": [] }\n  }\n}',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/clients/bulkEnable',
         summary: 'Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
         body: '{\n  "emails": ["alice", "bob"]\n}',

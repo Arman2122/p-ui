@@ -279,6 +279,8 @@ type bulkAdjustEntry struct {
 	applyTotal  bool
 	newTotal    int64
 	patch       *BulkSetPatch
+	creds       map[string]string
+	subID       string
 }
 
 // bulkFlowClear is the directive that strips the XTLS flow from every selected
@@ -597,7 +599,7 @@ func (s *ClientService) bulkExecutePlan(inboundSvc *InboundService, plan map[str
 		}
 		// Counted when expiry/total changed, or a flow directive was honored
 		// for this client (flow lives in the inbound JSON, not ClientTraffic).
-		if len(updates) > 0 || flowHonored[email] || entry.patch != nil {
+		if len(updates) > 0 || flowHonored[email] || entry.patch != nil || entry.creds != nil || entry.subID != "" {
 			adjusted[email] = struct{}{}
 		}
 	}
@@ -703,6 +705,8 @@ func (s *ClientService) bulkAdjustInboundClients(
 	interfaceClients, _ := settings["clients"].([]any)
 	foundEmails := map[string]bool{}
 	flowChanged := false
+	credsChanged := false
+	declared := declaredCredentialNames(oldInbound.Protocol)
 	nowMs := time.Now().Unix() * 1000
 	for i, client := range interfaceClients {
 		c, ok := client.(map[string]any)
@@ -721,6 +725,13 @@ func (s *ClientService) bulkAdjustInboundClients(
 			c["totalGB"] = entry.newTotal
 		}
 		patchClientEntry(c, entry.patch)
+		if applyClientCredentials(c, entry.creds, declared) {
+			credsChanged = true
+		}
+		if entry.subID != "" {
+			c["subId"] = entry.subID
+			credsChanged = true
+		}
 		if flow != "" {
 			if flowEligible {
 				want := ""
@@ -767,7 +778,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 	// A flow change rewrites the user's xray config, which the lightweight
 	// UpdateUser push below does not carry. Local nodes reload via restart;
 	// remote nodes get a full reconcile (MarkNodeDirty) instead of a per-user push.
-	if flowChanged && oldInbound.NodeID == nil {
+	if (flowChanged || credsChanged) && oldInbound.NodeID == nil && oldInbound.Protocol != model.MTProto {
 		res.needRestart = true
 	}
 
@@ -779,7 +790,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 				delete(foundEmails, email)
 			}
 		} else {
-			if flowChanged {
+			if flowChanged || credsChanged {
 				push = false
 			}
 			// Large batches collapse into one reconcile push rather than M updates.
@@ -838,6 +849,9 @@ func (s *ClientService) bulkAdjustInboundClients(
 				res.perEmailSkipped[email] = txErr.Error()
 			}
 		}
+	}
+	if txErr == nil && credsChanged && oldInbound.NodeID == nil && oldInbound.Protocol == model.MTProto {
+		inboundSvc.applyLocalMtproto(inboundId)
 	}
 
 	return res
