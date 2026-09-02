@@ -1384,15 +1384,6 @@ func validateSettingsURLs(allSetting *entity.AllSetting) error {
 	return nil
 }
 
-func (s *SettingService) UpdateSecret(key string, value string) error {
-	switch key {
-	case "tgBotToken", "ldapPassword", "twoFactorToken":
-		return s.saveSetting(key, strings.TrimSpace(value))
-	default:
-		return common.NewError("secret key is not replaceable:", key)
-	}
-}
-
 func (s *SettingService) GetDefaultXrayConfig() (any, error) {
 	var jsonData any
 	err := json.Unmarshal([]byte(xrayTemplateConfig), &jsonData)
