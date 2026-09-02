@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/Arman2122/p-ui/internal/awg"
 	"github.com/Arman2122/p-ui/internal/core"
@@ -34,6 +35,16 @@ type Core struct {
 	// The module cannot be asked: it answers a missing device and a refused
 	// parameter set with the same errno.
 	plane engine.Plane
+
+	// What each device last accepted, keyed by inbound: the module is asked again
+	// only when the device (its index) or the parameters differ. F270.
+	appliedMu sync.Mutex
+	applied   map[int]appliedParams
+}
+
+type appliedParams struct {
+	index  int
+	params awg.Params
 }
 
 // New returns a core over its own device manager: the AmneziaWG plane, under
@@ -143,12 +154,25 @@ func (c *Core) applyParams(ctx context.Context, inst core.Instance) error {
 	if !snap.Exists {
 		return nil
 	}
+	key := appliedParams{index: snap.Link.Index, params: params}
+	c.appliedMu.Lock()
+	same := c.applied[inst.ID] == key
+	c.appliedMu.Unlock()
+	if same {
+		return nil
+	}
 	// No IsZero() short-circuit: an inbound whose parameters were all cleared is
 	// exactly the case that has to reach the device, and skipping it is half of
 	// why a cleared one never did.
 	if err := configureParams(name, params); err != nil {
 		return fmt.Errorf("awgkernel: inbound %d obfuscation: %w", inst.ID, err)
 	}
+	c.appliedMu.Lock()
+	if c.applied == nil {
+		c.applied = map[int]appliedParams{}
+	}
+	c.applied[inst.ID] = key
+	c.appliedMu.Unlock()
 	return nil
 }
 
