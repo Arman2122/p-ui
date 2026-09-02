@@ -123,6 +123,10 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			unavailable = err.Error()
 		}
 		seen, trafficErr := CoreTrafficHealth(string(described.ID))
+		var seenAt int64
+		if !seen.IsZero() {
+			seenAt = seen.UnixMilli()
+		}
 		views = append(views, CoreView{
 			ID:                string(described.ID),
 			TitleKey:          described.TitleKey,
@@ -135,7 +139,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			PortlessKinds:     portless,
 			Available:         unavailable == "",
 			Unavailable:       unavailable,
-			TrafficSeenAt:     seen.UnixMilli(),
+			TrafficSeenAt:     seenAt,
 			TrafficError:      trafficErr,
 		})
 	}
