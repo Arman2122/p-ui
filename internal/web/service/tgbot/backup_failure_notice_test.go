@@ -31,7 +31,7 @@ func TestNoBackupFailureExitIsSilent(t *testing.T) {
 		t.Fatalf("read tgbot_report.go: %v", err)
 	}
 
-	open := "func (t *Tgbot) sendBackupData(chatId int64, dbData []byte, dbFilename string) {"
+	open := "func (t *Tgbot) sendBackupData(chatId int64, dump *service.DumpFile, dbFilename string) {"
 	start := strings.Index(string(body), open)
 	if start < 0 {
 		t.Fatal("sendBackupData was renamed or removed; this guard is now vacuous")
@@ -42,8 +42,8 @@ func TestNoBackupFailureExitIsSilent(t *testing.T) {
 	}
 
 	// The dump-never-built exit.
-	if !strings.Contains(fn, "if len(dbData) > 0 {") {
-		t.Error(`sendBackupData tests dbData for nil rather than length, so a zero-length dump is uploaded as though it were an archive; pg_restore cannot read it`)
+	if !strings.Contains(fn, "if dump != nil && dump.Size > 0 {") {
+		t.Error(`sendBackupData tests the dump for nil rather than size, so a zero-length dump is uploaded as though it were an archive; pg_restore cannot read it`)
 	}
 	if !strings.Contains(fn, "} else {") {
 		t.Error("the branch that skips the upload has no else, so a backup that was never built is reported only by the header claiming one was taken")

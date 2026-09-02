@@ -1374,9 +1374,38 @@ func (s *ServerService) GetConfigJson() (any, error) {
 	return jsonData, nil
 }
 
-// GetDb returns a pg_dump custom-format archive of the panel database.
-func (s *ServerService) GetDb() ([]byte, error) {
+// DumpFile is a pg_dump archive spooled to disk; Close removes it. F276.
+type DumpFile struct {
+	*os.File
+	Size int64
+}
+
+func (d *DumpFile) Close() error {
+	err := d.File.Close()
+	_ = os.Remove(d.Name())
+	return err
+}
+
+// GetDb returns the panel database as a pg_dump custom-format archive on disk.
+func (s *ServerService) GetDb() (*DumpFile, error) {
 	return s.exportPostgresDB()
+}
+
+// pgDumpTimeout is generous on purpose: memory is bounded now, and a large
+// panel's dump on a slow disk must not be cut off by a short deadline.
+const pgDumpTimeout = 30 * time.Minute
+
+// dumpSpoolDir is disk-backed: /tmp is tmpfs on Debian 13, where a spooled
+// dump would land straight back in RAM.
+func dumpSpoolDir() string {
+	probe, err := os.CreateTemp("/var/tmp", ".p-ui-spool-*")
+	if err != nil {
+		return os.TempDir()
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
+	return "/var/tmp"
 }
 
 // BackupFilename returns the filename for a database backup, named after the
@@ -1523,7 +1552,7 @@ func pgConnEnv(dsn string) (env []string, dbname string, err error) {
 	return env, dbname, nil
 }
 
-func (s *ServerService) exportPostgresDB() ([]byte, error) {
+func (s *ServerService) exportPostgresDB() (*DumpFile, error) {
 	bin, err := exec.LookPath("pg_dump")
 	if err != nil {
 		return nil, common.NewError("pg_dump not found on the server; install the postgresql-client package to back up a PostgreSQL database")
@@ -1532,15 +1561,37 @@ func (s *ServerService) exportPostgresDB() ([]byte, error) {
 	if err != nil {
 		return nil, common.NewErrorf("invalid PostgreSQL DSN: %v", err)
 	}
-	cmd := exec.CommandContext(context.Background(), bin, "--format=custom", "--no-owner", "--no-privileges", "--dbname", dbname)
+	spool, err := os.CreateTemp(dumpSpoolDir(), "p-ui-pg-dump-*.dump")
+	if err != nil {
+		return nil, common.NewErrorf("cannot spool the dump to disk: %v", err)
+	}
+	discard := func() {
+		_ = spool.Close()
+		_ = os.Remove(spool.Name())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pgDumpTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "--format=custom", "--no-owner", "--no-privileges", "--dbname", dbname)
 	cmd.Env = env
-	var out, stderr bytes.Buffer
-	cmd.Stdout = &out
+	var stderr bytes.Buffer
+	// The file itself, not a wrapper: os/exec hands pg_dump the descriptor and
+	// nothing is copied through the panel's heap.
+	cmd.Stdout = spool
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		discard()
 		return nil, common.NewErrorf("pg_dump failed: %v: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	return out.Bytes(), nil
+	info, err := spool.Stat()
+	if err != nil {
+		discard()
+		return nil, err
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		discard()
+		return nil, err
+	}
+	return &DumpFile{File: spool, Size: info.Size()}, nil
 }
 
 var (

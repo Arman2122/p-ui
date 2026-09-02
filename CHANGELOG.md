@@ -4,6 +4,12 @@ Operator-visible changes only — things that behave differently on a panel you
 upgrade in place. Bug fixes that simply make a broken thing work are not listed
 here; the git log is the full record.
 
+## Unreleased
+
+### Behaviour changes
+
+- **A database backup is dumped to disk and streamed, not held in memory.** The panel download and the Telegram backup both collected the whole `pg_dump` output in RAM before sending it, so a large panel could run out of memory taking its own backup, and the dump had no deadline. It is now spooled to a disk-backed temporary file (`/var/tmp`), the process exit status is checked before a byte is served, the download carries a `Content-Length`, and a dump that fails never reaches the browser as a truncated archive. `pg_dump` gets a 30-minute deadline.
+- **A two-factor code pasted with surrounding whitespace is accepted at login.** The settings page's verifier already trimmed the code; the login path compared it raw, so the same pasted code passed one and was refused by the other. Both trim now.
 ## v1.5.3 — 2026-09-02
 
 ### Behaviour changes

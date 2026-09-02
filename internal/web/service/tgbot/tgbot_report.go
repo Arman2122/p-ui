@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -59,16 +60,17 @@ func (t *Tgbot) SendBackupToAdmins() error {
 	if !t.IsRunning() {
 		return errors.New("the Telegram bot is not running")
 	}
-	dbData, err := t.serverService.GetDb()
+	dump, err := t.serverService.GetDb()
 	if err != nil {
 		logger.Error("Error in getting db backup: ", err)
 		return err
 	}
+	defer dump.Close()
 	dbFilename := t.serverService.BackupFilename("")
 	// One snapshot for the whole loop: len and the range must not disagree.
 	admins := currentAdminIds()
 	for i, adminId := range admins {
-		t.sendBackupData(adminId, dbData, dbFilename)
+		t.sendBackupData(adminId, dump, dbFilename)
 		// Add delay between sends to avoid Telegram rate limits
 		if i < len(admins)-1 {
 			time.Sleep(1 * time.Second)
@@ -421,11 +423,14 @@ func (t *Tgbot) onlineClients(chatId int64, messageID ...int) {
 
 // sendBackup sends a PostgreSQL dump of the database plus the Xray config file.
 func (t *Tgbot) sendBackup(chatId int64) {
-	dbData, err := t.serverService.GetDb()
+	dump, err := t.serverService.GetDb()
 	if err != nil {
 		logger.Error("Error in getting db backup: ", err)
 	}
-	t.sendBackupData(chatId, dbData, t.serverService.BackupFilename(""))
+	if dump != nil {
+		defer dump.Close()
+	}
+	t.sendBackupData(chatId, dump, t.serverService.BackupFilename(""))
 }
 
 /*
@@ -444,22 +449,26 @@ the case the admin cannot otherwise detect.
 
 F273.
 */
-func (t *Tgbot) sendBackupData(chatId int64, dbData []byte, dbFilename string) {
+func (t *Tgbot) sendBackupData(chatId int64, dump *service.DumpFile, dbFilename string) {
 	output := t.I18nBot("tgbot.messages.hostname", "Hostname=="+hostname)
 	output += t.I18nBot("tgbot.messages.backupTime", "Time=="+time.Now().Format("2006-01-02 15:04:05"))
 	t.SendMsgToTgbot(chatId, output)
 
 	// Send the database backup (a pg_dump custom-format archive)
-	// len, not nil: a zero-length dump is a failure too, and uploading it would
+	// Size, not nil: a zero-length dump is a failure too, and uploading it would
 	// hand the admin an archive pg_restore cannot read.
-	if len(dbData) > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		document := tu.Document(
-			tu.ID(chatId),
-			tu.FileFromBytes(dbData, dbFilename),
-		)
-		_, err := bot.SendDocument(ctx, document)
-		cancel()
+	if dump != nil && dump.Size > 0 {
+		// The same spooled file goes to every admin in turn: rewind per upload.
+		_, err := dump.Seek(0, io.SeekStart)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			document := tu.Document(
+				tu.ID(chatId),
+				tu.FileFromReader(dump, dbFilename),
+			)
+			_, err = bot.SendDocument(ctx, document)
+			cancel()
+		}
 		if err != nil {
 			logger.Error("Error in uploading backup: ", err)
 			t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.messages.backupDbFailed"))

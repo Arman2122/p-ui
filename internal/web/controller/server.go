@@ -332,21 +332,23 @@ func (a *ServerController) getConfigJson(c *gin.Context) {
 
 // getDb downloads a pg_dump archive of the panel database.
 func (a *ServerController) getDb(c *gin.Context) {
-	db, err := a.serverService.GetDb()
-	if err != nil {
-		jsonMsg(c, I18nWeb(c, "pages.index.getDatabaseError"), err)
-		return
-	}
-
 	filename := a.serverService.BackupFilename(c.Request.Host)
 	if !filenameRegex.MatchString(filename) {
 		_ = c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid filename"))
 		return
 	}
+	dump, err := a.serverService.GetDb()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.getDatabaseError"), err)
+		return
+	}
+	defer dump.Close()
 
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	_, _ = c.Writer.Write(db)
+	// Spooled to disk and served with a length: a dump that fails never reaches
+	// the browser as a 200 carrying a truncated archive. F276.
+	c.DataFromReader(http.StatusOK, dump.Size, "application/octet-stream", dump, map[string]string{
+		"Content-Disposition": "attachment; filename=" + filename,
+	})
 }
 
 // importDB restores the database from an uploaded pg_dump archive and restarts
