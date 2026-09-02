@@ -44,3 +44,52 @@ export default function Layout(props) {
     </>
   );
 }
+## پیام‌ها
+
+هر فریم یک شیء JSON است که فیلد `type` آن یکی از شکل‌های زیر را انتخاب می‌کند.
+
+### `type: status`
+
+تصویر لحظه‌ای از سلامت سرور که هر ۲ ثانیه ارسال می‌شود. شامل CPU، حافظه، swap، دیسک، ورودی/خروجی شبکه، بار سیستم و وضعیت Xray — همان شکلِ <code>GET /panel/api/server/status</code>.
+
+```json
+{
+  "type": "status",
+  "data": { "cpu": 12.5, "mem": { "current": 2147483648, "total": 8589934592 }, "xray": { "state": "running" } }
+}
+```
+
+### `type: xrayState`
+
+تغییر وضعیت فرایند Xray. هنگام شروع، توقف یا بروز خطا در Xray ارسال می‌شود.
+
+```json
+{
+  "type": "xrayState",
+  "data": "running"
+}
+```
+
+### `type: notification`
+
+اعلان (toast) داخل پنل. هنگام توقف یا راه‌اندازی مجدد Xray، وارد کردن پایگاه‌داده، راه‌اندازی مجدد پنل و مانند آن ارسال می‌شود.
+
+```json
+{
+  "type": "notification",
+  "title": "Xray service restarted",
+  "body": "Xray has been restarted successfully",
+  "severity": "success"
+}
+```
+
+### `type: invalidate`
+
+به رابط کاربری می‌گوید یک منبع را دوباره دریافت کند. وقتی نشستِ مدیر دیگری داده‌ای را تغییر می‌دهد (برای نمونه، روشن یا خاموش کردن یک ورودی) ارسال می‌شود.
+
+```json
+{
+  "type": "invalidate",
+  "resource": "inbounds"
+}
+```
