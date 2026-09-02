@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Popconfirm,
   Input,
   InputNumber,
   Select,
@@ -383,8 +384,16 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
             <SettingListItem paddings="small" title={t('pages.settings.ldap.autoCreate')}>
               <Switch checked={allSetting.ldapAutoCreate} onChange={(v) => updateSetting({ ldapAutoCreate: v })} />
             </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.autoDelete')}>
-              <Switch checked={allSetting.ldapAutoDelete} onChange={(v) => updateSetting({ ldapAutoDelete: v })} />
+            <SettingListItem paddings="small" title={t('pages.settings.ldap.autoDelete')} description={t('pages.settings.ldap.autoDeleteDesc')}>
+              <Popconfirm
+                title={t('pages.settings.ldap.autoDeleteConfirm')}
+                okText={t('confirm')}
+                cancelText={t('cancel')}
+                disabled={!!allSetting.ldapAutoDelete}
+                onConfirm={() => updateSetting({ ldapAutoDelete: true })}
+              >
+                <Switch checked={allSetting.ldapAutoDelete} onChange={(v) => { if (!v) updateSetting({ ldapAutoDelete: false }); }} />
+              </Popconfirm>
             </SettingListItem>
             <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultTotalGb')} badge={<DefaultSettingTag settingKey="ldapDefaultTotalGB" value={allSetting.ldapDefaultTotalGB} />}>
               <InputNumber value={allSetting.ldapDefaultTotalGB} min={0} style={{ width: '100%' }}
