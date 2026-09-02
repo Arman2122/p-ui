@@ -799,7 +799,6 @@ func (a *SUBController) ApplyCommonHeaders(
 	}
 }
 
-
 // jsStringEscape makes a value safe inside a JS string literal in an inline
 // <script>. encoding/json's string encoder is the right tool and not a
 // shortcut: it escapes the backslash, the quote and every control character,

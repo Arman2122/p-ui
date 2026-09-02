@@ -120,7 +120,6 @@ func serveDistPage(c *gin.Context, name string) {
 	c.Data(http.StatusOK, "text/html; charset=utf-8", out)
 }
 
-
 // jsStringEscape makes a value safe inside a JS string literal in an inline
 // <script>. encoding/json's string encoder is the right tool and not a
 // shortcut: it escapes the backslash, the quote and every control character,
