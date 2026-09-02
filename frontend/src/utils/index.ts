@@ -51,6 +51,13 @@ export class HttpUtil {
       ) {
         getMessage().warning(i18next.t('pages.inbounds.toasts.savedNodeOfflineWillSync'));
       }
+      if (
+        msg.obj &&
+        typeof msg.obj === 'object' &&
+        (msg.obj as { restartPending?: unknown }).restartPending === true
+      ) {
+        getMessage().warning(i18next.t('pages.inbounds.toasts.savedRestartPending'));
+      }
       // Longer than the default: nobody can connect until the operator acts on
       // it, so this is not a toast to blink past.
       if (msg.warning) getMessage().warning(msg.warning, 10);

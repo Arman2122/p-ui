@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **Saving an inbound or a client says when the change is only pending a restart.** The response reported success and set the restart flag silently; the Xray change was not live until the next restart and nothing said so. Inbound saves now carry that as a warning toast, and client responses carry `restartPending` beside `nodePending`, which the page turns into a toast.
 - **A core that stops reporting traffic is visible.** The MTProto sidecar's stats scrape failed silently, so a sidecar whose stats endpoint had been unreadable for a day billed nobody and told nobody. The scrape now names the sidecars it could not read, the panel logs the failure once when it starts and once when it recovers, and every core's last successful poll and last error are exposed on the cores API (`trafficSeenAt`, `trafficError`).
 - **The WireGuard `.conf` file share points at the inbound's host.** The raw, JSON and Clash renderers all fan out through the Hosts you configure; the `.conf` download did not, and handed out the inbound's own address and port. It now uses the first enabled host, like every link.
 - **A database restore keeps the database it overwrites.** Restoring the wrong file — an old backup, another panel's — was the one panel operation with no way back. The current database is now dumped to the same disk-backed spool as backups before the restore starts (only the latest such file is kept, and its path is logged), and a dump that fails stops the restore.
