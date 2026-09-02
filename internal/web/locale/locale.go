@@ -110,6 +110,11 @@ func localize(localizer *i18n.Localizer, key string, params ...string) string {
 		TemplateData: createTemplateData(params),
 	})
 	if err != nil {
+		// go-i18n hands back the default-language text WITH the error when the
+		// requested locale lacks the key; discarding it rendered "" instead. F406.
+		if msg != "" {
+			return msg
+		}
 		logger.Errorf("Failed to localize message: %v", err)
 		return ""
 	}
