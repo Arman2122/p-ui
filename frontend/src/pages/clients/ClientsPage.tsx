@@ -1,6 +1,7 @@
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -83,6 +84,9 @@ const PromptModal = lazy(() => import('@/components/feedback/PromptModal'));
 import { ClientInboundChips, ClientRowActions } from './RowCells';
 import { emptyFilters, activeFilterCount } from './filters';
 import type { ClientFilters } from './filters';
+import BulkResultDrawer from './BulkResultDrawer';
+import { filterSelection, type BulkSelection } from '@/lib/clients/bulk-selection';
+import type { BulkOutcome } from '@/schemas/client';
 import './ClientsPage.css';
 
 const FILTER_STATE_KEY = 'clientsFilterState';
@@ -269,6 +273,11 @@ export default function ClientsPage() {
   const [bulkAttachOpen, setBulkAttachOpen] = useState(false);
   const [bulkDetachOpen, setBulkDetachOpen] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  /* "Select all matching": the selection is the list filter itself, resolved
+     by the server, and it is cleared whenever the filter moves under it. */
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ title: string; outcome: BulkOutcome; retry?: (emails: string[]) => void } | null>(null);
+  const pageQueryRef = useRef<Record<string, unknown> | null>(null);
 
   const [textOpen, setTextOpen] = useState(false);
   const [textTitle, setTextTitle] = useState('');
@@ -349,7 +358,7 @@ export default function ClientsPage() {
     // guess, and issuing it costs a full server round trip that is thrown away as
     // soon as the real size arrives.
     if (resolvedPageSize === null) return;
-    setQuery({
+    const next = {
       page: currentPage,
       pageSize: tablePageSize,
       search: debouncedSearch,
@@ -366,8 +375,14 @@ export default function ClientsPage() {
       group: filters.groups.join(',') || undefined,
       sort: sortColumn || undefined,
       order: sortOrder || undefined,
-    });
+    };
+    pageQueryRef.current = next;
+    setQuery(next);
   }, [setQuery, resolvedPageSize, currentPage, tablePageSize, debouncedSearch, filters, effectiveInboundCsv, sortColumn, sortOrder]);
+
+  useEffect(() => {
+    setSelectAllMatching(false);
+  }, [debouncedSearch, filters, effectiveInboundCsv]);
 
   const activeCount = activeFilterCount(filters);
 
@@ -622,18 +637,21 @@ export default function ClientsPage() {
     }
   }, [promptHandler]);
 
+  async function runResetTraffics(selection: BulkSelection) {
+    const msg = await bulkResetTraffic(selection);
+    if (msg?.success) messageApi.success(t('pages.clients.toasts.allTrafficsReset'));
+    reportBulk(t('reset'), msg?.obj?.outcome, (emails) => runResetTraffics({ emails }));
+  }
+
   function onResetSelectedTraffics() {
-    const emails = [...selectedRowKeys];
+    const selection = currentSelection();
     modal.confirm({
-      title: t('pages.clients.resetSelectedTrafficsTitle', { count: emails.length }),
+      title: t('pages.clients.resetSelectedTrafficsTitle', { count: selectionCount }),
       content: t('pages.clients.resetSelectedTrafficsContent'),
       okText: t('reset'),
       okType: 'danger',
       cancelText: t('cancel'),
-      onOk: async () => {
-        const msg = await bulkResetTraffic(emails);
-        if (msg?.success) messageApi.success(t('pages.clients.toasts.allTrafficsReset'));
-      },
+      onOk: () => runResetTraffics(selection),
     });
   }
 
@@ -718,79 +736,89 @@ export default function ClientsPage() {
     });
   }
 
+  async function runUngroup(selection: BulkSelection, count: number) {
+    const msg = await bulkRemoveFromGroup(selection);
+    if (msg?.success) {
+      clearSelection();
+      const affected = msg.obj?.affected ?? count;
+      messageApi.success(t('pages.clients.ungroupSuccessToast', { count: affected }));
+    }
+    reportBulk(t('pages.clients.ungroup'), msg?.obj?.outcome, (emails) => runUngroup({ emails }, emails.length));
+  }
+
   function onBulkUngroup() {
-    const emails = [...selectedRowKeys];
-    if (emails.length === 0) return;
+    if (selectionCount === 0) return;
+    const selection = currentSelection();
+    const count = selectionCount;
     modal.confirm({
-      title: t('pages.clients.ungroupConfirmTitle', { count: emails.length }),
+      title: t('pages.clients.ungroupConfirmTitle', { count }),
       content: t('pages.clients.ungroupConfirmContent'),
       okText: t('confirm'),
       okType: 'danger',
       cancelText: t('cancel'),
-      onOk: async () => {
-        const msg = await bulkRemoveFromGroup(emails);
-        if (msg?.success) {
-          setSelectedRowKeys([]);
-          const affected = (msg.obj as { affected?: number } | undefined)?.affected ?? emails.length;
-          messageApi.success(t('pages.clients.ungroupSuccessToast', { count: affected }));
-        }
-      },
+      onOk: () => runUngroup(selection, count),
     });
   }
 
+  async function runSetEnable(selection: BulkSelection, enable: boolean) {
+    const msg = enable ? await bulkEnable(selection) : await bulkDisable(selection);
+    clearSelection();
+    const changed = msg?.obj?.changed ?? 0;
+    const skipped = msg?.obj?.skipped ?? [];
+    const failed = skipped.length;
+    const firstError = skipped[0]?.reason ?? msg?.msg ?? '';
+    const okKey = enable ? 'pages.clients.toasts.bulkEnabled' : 'pages.clients.toasts.bulkDisabled';
+    const mixedKey = enable ? 'pages.clients.toasts.bulkEnabledMixed' : 'pages.clients.toasts.bulkDisabledMixed';
+    if (failed === 0 && msg?.success) {
+      messageApi.success(t(okKey, { count: changed }));
+    } else {
+      messageApi.warning(firstError
+        ? `${t(mixedKey, { ok: changed, failed })} — ${firstError}`
+        : t(mixedKey, { ok: changed, failed }));
+    }
+    reportBulk(t(enable ? 'pages.clients.enable' : 'pages.clients.disable'), msg?.obj?.outcome, (emails) => runSetEnable({ emails }, enable));
+  }
+
   function onBulkSetEnable(enable: boolean) {
-    const emails = [...selectedRowKeys];
-    if (emails.length === 0) return;
+    if (selectionCount === 0) return;
+    const selection = currentSelection();
     modal.confirm({
-      title: t(enable ? 'pages.clients.bulkEnableConfirmTitle' : 'pages.clients.bulkDisableConfirmTitle', { count: emails.length }),
+      title: t(enable ? 'pages.clients.bulkEnableConfirmTitle' : 'pages.clients.bulkDisableConfirmTitle', { count: selectionCount }),
       content: t(enable ? 'pages.clients.bulkEnableConfirmContent' : 'pages.clients.bulkDisableConfirmContent'),
       okText: t('confirm'),
       okType: enable ? 'primary' : 'danger',
       cancelText: t('cancel'),
-      onOk: async () => {
-        const msg = enable ? await bulkEnable(emails) : await bulkDisable(emails);
-        setSelectedRowKeys([]);
-        const changed = msg?.obj?.changed ?? 0;
-        const skipped = msg?.obj?.skipped ?? [];
-        const failed = skipped.length;
-        const firstError = skipped[0]?.reason ?? msg?.msg ?? '';
-        const okKey = enable ? 'pages.clients.toasts.bulkEnabled' : 'pages.clients.toasts.bulkDisabled';
-        const mixedKey = enable ? 'pages.clients.toasts.bulkEnabledMixed' : 'pages.clients.toasts.bulkDisabledMixed';
-        if (failed === 0 && msg?.success) {
-          messageApi.success(t(okKey, { count: changed }));
-        } else {
-          messageApi.warning(firstError
-            ? `${t(mixedKey, { ok: changed, failed })} — ${firstError}`
-            : t(mixedKey, { ok: changed, failed }));
-        }
-      },
+      onOk: () => runSetEnable(selection, enable),
     });
   }
 
+  async function runDelete(selection: BulkSelection) {
+    const msg = await bulkDelete(selection);
+    clearSelection();
+    const ok = msg?.obj?.deleted ?? 0;
+    const skipped = msg?.obj?.skipped ?? [];
+    const failed = skipped.length;
+    const firstError = skipped[0]?.reason ?? msg?.msg ?? '';
+    if (failed === 0 && msg?.success) {
+      messageApi.success(t('pages.clients.toasts.bulkDeleted', { count: ok }));
+    } else {
+      messageApi.warning(firstError
+        ? `${t('pages.clients.toasts.bulkDeletedMixed', { ok, failed })} — ${firstError}`
+        : t('pages.clients.toasts.bulkDeletedMixed', { ok, failed }));
+    }
+    reportBulk(t('delete'), msg?.obj?.outcome, (emails) => runDelete({ emails }));
+  }
+
   function onBulkDelete() {
-    const emails = [...selectedRowKeys];
-    if (emails.length === 0) return;
+    if (selectionCount === 0) return;
+    const selection = currentSelection();
     modal.confirm({
-      title: t('pages.clients.bulkDeleteConfirmTitle', { count: emails.length }),
+      title: t('pages.clients.bulkDeleteConfirmTitle', { count: selectionCount }),
       content: t('pages.clients.bulkDeleteConfirmContent'),
       okText: t('delete'),
       okType: 'danger',
       cancelText: t('cancel'),
-      onOk: async () => {
-        const msg = await bulkDelete(emails);
-        setSelectedRowKeys([]);
-        const ok = msg?.obj?.deleted ?? 0;
-        const skipped = msg?.obj?.skipped ?? [];
-        const failed = skipped.length;
-        const firstError = skipped[0]?.reason ?? msg?.msg ?? '';
-        if (failed === 0 && msg?.success) {
-          messageApi.success(t('pages.clients.toasts.bulkDeleted', { count: ok }));
-        } else {
-          messageApi.warning(firstError
-            ? `${t('pages.clients.toasts.bulkDeletedMixed', { ok, failed })} — ${firstError}`
-            : t('pages.clients.toasts.bulkDeletedMixed', { ok, failed }));
-        }
-      },
+      onOk: () => runDelete(selection),
     });
   }
 
@@ -1015,6 +1043,7 @@ export default function ClientsPage() {
   };
 
   function toggleSelect(email: string, checked: boolean) {
+    if (!checked) setSelectAllMatching(false);
     setSelectedRowKeys((prev) => {
       const next = new Set(prev);
       if (checked) next.add(email); else next.delete(email);
@@ -1023,11 +1052,30 @@ export default function ClientsPage() {
   }
 
   function selectAll(checked: boolean) {
+    if (!checked) setSelectAllMatching(false);
     setSelectedRowKeys(checked ? filteredClients.map((c) => c.email) : []);
   }
 
   const allSelected = filteredClients.length > 0 && selectedRowKeys.length === filteredClients.length;
   const someSelected = selectedRowKeys.length > 0 && selectedRowKeys.length < filteredClients.length;
+  const selectionCount = selectAllMatching ? filtered : selectedRowKeys.length;
+
+  function currentSelection(): BulkSelection {
+    return selectAllMatching ? filterSelection(pageQueryRef.current) : { emails: [...selectedRowKeys] };
+  }
+
+  function clearSelection() {
+    setSelectAllMatching(false);
+    setSelectedRowKeys([]);
+  }
+
+  /* A run that left rows skipped or failed opens the drawer with each row's
+     reason; a clean run keeps to the toast. */
+  function reportBulk(action: string, outcome: BulkOutcome | undefined, retry?: (emails: string[]) => void) {
+    if (!outcome || (outcome.skipped.length === 0 && outcome.failed.length === 0)) return;
+    const count = outcome.ok.length + outcome.skipped.length + outcome.failed.length;
+    setBulkResult({ title: t('pages.clients.bulkResult.title', { action, count }), outcome, retry });
+  }
 
   function clearOneFilter<K extends keyof ClientFilters>(key: K) {
     if (key === 'expiryFrom' || key === 'expiryTo') {
@@ -1117,7 +1165,7 @@ export default function ClientsPage() {
                       hoverable
                       title={
                         <div className="card-toolbar">
-                          {selectedRowKeys.length === 0 ? (
+                          {selectionCount === 0 ? (
                             <Button type="primary" icon={<PlusOutlined />} onClick={onAdd} aria-label={t('pages.clients.addClients')}>
                               {!isMobile && t('pages.clients.addClients')}
                             </Button>
@@ -1125,10 +1173,10 @@ export default function ClientsPage() {
                             <Tag
                               color="blue"
                               closable
-                              onClose={() => setSelectedRowKeys([])}
+                              onClose={clearSelection}
                               style={{ marginInlineEnd: 0, padding: '4px 8px', fontSize: 13 }}
                             >
-                              {t('pages.clients.selectedCount', { count: selectedRowKeys.length })}
+                              {t('pages.clients.selectedCount', { count: selectionCount })}
                             </Tag>
                           )}
                           <Dropdown
@@ -1378,6 +1426,26 @@ export default function ClientsPage() {
                         </div>
                       )}
 
+                      {allSelected && filtered > filteredClients.length && (
+                        <Alert
+                          type="info"
+                          showIcon
+                          style={{ marginBottom: 8 }}
+                          message={selectAllMatching ? (
+                            <>
+                              {t('pages.clients.allMatchingSelected', { count: filtered })}{' '}
+                              <Button type="link" size="small" onClick={clearSelection}>{t('pages.clients.clearSelection')}</Button>
+                            </>
+                          ) : (
+                            <>
+                              {t('pages.clients.selectedCount', { count: selectedRowKeys.length })}{' '}
+                              <Button type="link" size="small" onClick={() => setSelectAllMatching(true)}>
+                                {t('pages.clients.selectAllMatching', { count: filtered })}
+                              </Button>
+                            </>
+                          )}
+                        />
+                      )}
                       {!isMobile ? (
                         <Table<ClientRecord>
                           columns={columns}
@@ -1410,8 +1478,8 @@ export default function ClientsPage() {
                                 >
                                   {t('pages.clients.selectAll')}
                                 </Checkbox>
-                                {selectedRowKeys.length > 0 && (
-                                  <span className="bulk-count">{selectedRowKeys.length}</span>
+                                {selectionCount > 0 && (
+                                  <span className="bulk-count">{selectionCount}</span>
                                 )}
                               </div>
                             )}
@@ -1582,12 +1650,13 @@ export default function ClientsPage() {
         <LazyMount when={bulkAdjustOpen}>
           <ClientBulkAdjustModal
             open={bulkAdjustOpen}
-            count={selectedRowKeys.length}
+            count={selectionCount}
             onOpenChange={setBulkAdjustOpen}
             onSubmit={async (addDays, addBytes, flow, mode) => {
-              const msg = await bulkAdjust([...selectedRowKeys], addDays, addBytes, flow, mode);
+              const msg = await bulkAdjust(currentSelection(), addDays, addBytes, flow, mode);
               if (msg?.success) {
-                setSelectedRowKeys([]);
+                clearSelection();
+                reportBulk(t('pages.clients.adjust'), msg.obj?.outcome, (emails) => { void bulkAdjust({ emails }, addDays, addBytes, flow, mode); });
                 return msg.obj ?? { adjusted: 0 };
               }
               return null;
@@ -1606,14 +1675,15 @@ export default function ClientsPage() {
         <LazyMount when={bulkGroupOpen}>
           <BulkAddToGroupModal
             open={bulkGroupOpen}
-            count={selectedRowKeys.length}
+            count={selectionCount}
             groups={allGroups}
             onOpenChange={setBulkGroupOpen}
             onSubmit={async (group) => {
-              const msg = await bulkAddToGroup([...selectedRowKeys], group);
+              const msg = await bulkAddToGroup(currentSelection(), group);
               if (msg?.success) {
-                setSelectedRowKeys([]);
-                return (msg.obj as { affected?: number } | undefined) ?? { affected: 0 };
+                clearSelection();
+                reportBulk(t('pages.clients.addToGroup'), msg.obj?.outcome, (emails) => { void bulkAddToGroup({ emails }, group); });
+                return msg.obj ?? { affected: 0 };
               }
               return null;
             }}
@@ -1622,13 +1692,14 @@ export default function ClientsPage() {
         <LazyMount when={bulkAttachOpen}>
           <BulkAttachInboundsModal
             open={bulkAttachOpen}
-            count={selectedRowKeys.length}
+            count={selectionCount}
             inbounds={inbounds}
             onOpenChange={setBulkAttachOpen}
             onSubmit={async (inboundIds) => {
-              const msg = await bulkAttach([...selectedRowKeys], inboundIds);
+              const msg = await bulkAttach(currentSelection(), inboundIds);
               if (msg?.success) {
-                setSelectedRowKeys([]);
+                clearSelection();
+                reportBulk(t('pages.clients.attach'), msg.obj?.outcome, (emails) => { void bulkAttach({ emails }, inboundIds); });
                 return msg.obj ?? { attached: [], skipped: [], errors: [] };
               }
               return null;
@@ -1638,19 +1709,27 @@ export default function ClientsPage() {
         <LazyMount when={bulkDetachOpen}>
           <BulkDetachInboundsModal
             open={bulkDetachOpen}
-            count={selectedRowKeys.length}
+            count={selectionCount}
             inbounds={inbounds}
             onOpenChange={setBulkDetachOpen}
             onSubmit={async (inboundIds) => {
-              const msg = await bulkDetach([...selectedRowKeys], inboundIds);
+              const msg = await bulkDetach(currentSelection(), inboundIds);
               if (msg?.success) {
-                setSelectedRowKeys([]);
+                clearSelection();
+                reportBulk(t('pages.clients.detach'), msg.obj?.outcome, (emails) => { void bulkDetach({ emails }, inboundIds); });
                 return msg.obj ?? { detached: [], skipped: [], errors: [] };
               }
               return null;
             }}
           />
         </LazyMount>
+        <BulkResultDrawer
+          open={bulkResult !== null}
+          title={bulkResult?.title ?? ''}
+          outcome={bulkResult?.outcome ?? null}
+          onClose={() => setBulkResult(null)}
+          onRetry={bulkResult?.retry ? (emails) => { const retry = bulkResult.retry; setBulkResult(null); retry?.(emails); } : undefined}
+        />
         <LazyMount when={filterDrawerOpen}>
           <FilterDrawer
             open={filterDrawerOpen}

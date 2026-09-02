@@ -119,8 +119,19 @@ export const ClientHydrateSchema = z.object({
   externalLinks: ExternalLinkListSchema.optional(),
 });
 
+export const BulkRowSchema = z.object({ email: z.string(), reason: z.string() });
+export type BulkRow = z.infer<typeof BulkRowSchema>;
+
+export const BulkOutcomeSchema = z.object({
+  ok: z.array(z.string()).nullable().transform((v) => v ?? []),
+  skipped: z.array(BulkRowSchema).nullable().transform((v) => v ?? []),
+  failed: z.array(BulkRowSchema).nullable().transform((v) => v ?? []),
+});
+export type BulkOutcome = z.infer<typeof BulkOutcomeSchema>;
+
 export const BulkAdjustResultSchema = z.object({
   adjusted: z.number(),
+  outcome: BulkOutcomeSchema.optional(),
   skipped: z
     .array(z.object({ email: z.string(), reason: z.string() }))
     .optional(),
@@ -128,6 +139,7 @@ export const BulkAdjustResultSchema = z.object({
 
 export const BulkDeleteResultSchema = z.object({
   deleted: z.number(),
+  outcome: BulkOutcomeSchema.optional(),
   skipped: z
     .array(z.object({ email: z.string(), reason: z.string() }))
     .optional(),
@@ -135,10 +147,12 @@ export const BulkDeleteResultSchema = z.object({
 
 export const BulkResetTrafficResultSchema = z.object({
   affected: z.number(),
+  outcome: BulkOutcomeSchema.optional(),
 });
 
 export const BulkSetEnableResultSchema = z.object({
   changed: z.number(),
+  outcome: BulkOutcomeSchema.optional(),
   skipped: z
     .array(z.object({ email: z.string(), reason: z.string() }))
     .optional(),
@@ -146,6 +160,7 @@ export const BulkSetEnableResultSchema = z.object({
 
 export const BulkCreateResultSchema = z.object({
   created: z.number(),
+  outcome: BulkOutcomeSchema.optional(),
   skipped: z
     .array(z.object({ email: z.string(), reason: z.string() }))
     .optional(),
@@ -157,12 +172,14 @@ export const DelDepletedResultSchema = z.object({
 
 export const BulkAttachResultSchema = z.object({
   attached: z.array(z.string()).nullable().transform((v) => v ?? []),
+  outcome: BulkOutcomeSchema.optional(),
   skipped: z.array(z.string()).nullable().transform((v) => v ?? []),
   errors: z.array(z.string()).nullable().transform((v) => v ?? []),
 });
 
 export const BulkDetachResultSchema = z.object({
   detached: z.array(z.string()).nullable().transform((v) => v ?? []),
+  outcome: BulkOutcomeSchema.optional(),
   skipped: z.array(z.string()).nullable().transform((v) => v ?? []),
   errors: z.array(z.string()).nullable().transform((v) => v ?? []),
 });
@@ -302,3 +319,9 @@ export type ClientBulkAddFormValues = z.infer<typeof ClientBulkAddFormSchema>;
 export type ClientBulkAdjustFormValues = z.infer<typeof ClientBulkAdjustFormSchema>;
 export type ClientFormValues = z.infer<typeof ClientFormSchema>;
 export type GroupSummary = z.infer<typeof GroupSummarySchema>;
+
+export const BulkGroupResultSchema = z.object({
+  affected: z.number().optional(),
+  outcome: BulkOutcomeSchema.optional(),
+});
+export type BulkGroupResult = z.infer<typeof BulkGroupResultSchema>;
