@@ -78,9 +78,6 @@ func TestInternalIngressEmitsNoKernelState(t *testing.T) {
 	if tags := inboundTags(t, got.XrayRules[0]); len(tags) != 1 || tags[0] != "vless-in" {
 		t.Fatalf("inboundTag = %v, want [vless-in]", tags)
 	}
-	if got.NeedsRestart {
-		t.Error("only a rules-array change: this is hot-appliable and must not arm a restart")
-	}
 }
 
 /*
@@ -124,9 +121,6 @@ func TestDeviceIngressIsFrontedAndTagRewritten(t *testing.T) {
 	}
 	if decode(t, got.XrayRules[1])["outboundTag"] != "de" {
 		t.Error("sort_index order must survive the compile")
-	}
-	if !got.NeedsRestart {
-		t.Error("a new front changes InboundConfigs, which needs a restart")
 	}
 }
 

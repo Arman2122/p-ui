@@ -133,10 +133,9 @@ type Compiled struct {
 		amends them -- and it amends only the generated config, never the stored
 		row, so the operator's own sniffing setting is untouched.
 	*/
-	InspectTags  []string
-	Kernel       []egress.Egress
-	Diags        []Diag
-	NeedsRestart bool
+	InspectTags []string
+	Kernel      []egress.Egress
+	Diags       []Diag
 }
 
 // Plan derives every artifact from intent. It never returns an error: a rule it
@@ -204,7 +203,6 @@ func Plan(in Input) Compiled {
 				ID: frontID, Type: frontType, Enable: true, Ingress: []string{subject.Handle.Device},
 			})
 			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: inspectedBy(rules, subject)})
-			out.NeedsRestart = true
 			// Strictly ahead of this front's own rules: a front is otherwise the one
 			// class of forwarded traffic exempt from the template's private block.
 			blackhole := in.Blackhole
@@ -215,7 +213,6 @@ func Plan(in Input) Compiled {
 				if !emitted[synthBlockTag] {
 					emitted[synthBlockTag] = true
 					out.Outbounds = append(out.Outbounds, blackholeOutbound(synthBlockTag))
-					out.NeedsRestart = true
 				}
 			}
 			out.XrayRules = append(out.XrayRules, guardRule(tag, blackhole))
@@ -233,7 +230,6 @@ func Plan(in Input) Compiled {
 			if outTag := synthesizedTag(outbound); !emitted[outTag] {
 				emitted[outTag] = true
 				out.Outbounds = append(out.Outbounds, outbound)
-				out.NeedsRestart = true
 			}
 		}
 	}
