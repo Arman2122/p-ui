@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **The unused `isHidden` host field is gone.** Nothing read it — not the subscription server, not the panel — so the column is dropped at first start and the API ignores the key if a client still sends it.
 - **The WebSocket reference documents the envelope the hub actually sends.** Every frame is `{ type, payload, time }`; the state message is `xray_state` with `{ state, errorMsg }`, a notification carries `{ title, message, level }`, and an invalidate names the stale message type under `payload.type`. The reference described `data`, `xrayState` and fields that never existed.
 - **TLS and REALITY are no longer offered on the `http` (H2) transport.** The pinned Xray-core refuses that transport outright (it was folded into XHTTP), so the capability table stops advertising a combination the core cannot start. The panel's own inbound form never listed the network.
 - **An AmneziaWG device is re-configured only when its parameters or the device change.** Every 10-second reconcile issued the full obfuscation parameter set to every AWG device over netlink, changed or not.
