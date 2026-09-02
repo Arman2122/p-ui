@@ -88,16 +88,7 @@ func serveDistPage(c *gin.Context, name string) {
 		body = bytes.ReplaceAll(body, []byte(`href="/assets/`), []byte(`href="`+basePath+`assets/`))
 	}
 
-	jsEscape := strings.NewReplacer(
-		`\`, `\\`,
-		`"`, `\"`,
-		"\n", `\n`,
-		"\r", `\r`,
-		"<", `<`,
-		">", `>`,
-		"&", `&`,
-	)
-	escapedBase := jsEscape.Replace(basePath)
+	escapedBase := jsStringEscape(basePath)
 	csrfToken, err := session.EnsureCSRFToken(c)
 	if err != nil {
 		logger.Warning("Unable to mint CSRF token for", name+":", err)
@@ -112,7 +103,7 @@ func serveDistPage(c *gin.Context, name string) {
 	}
 	script := `<script data-cfasync="false"` + nonceAttr + `>window.PUI_BASE_PATH="` + escapedBase + `"`
 	if name != "login.html" {
-		escapedVer := jsEscape.Replace(config.GetPanelVersion())
+		escapedVer := jsStringEscape(config.GetPanelVersion())
 		script += `;window.PUI_CUR_VER="` + escapedVer + `"`
 	}
 	script += `;</script>`
@@ -127,4 +118,18 @@ func serveDistPage(c *gin.Context, name string) {
 	c.Header("Expires", "0")
 	c.Header("Last-Modified", distPageBuildTime.UTC().Format(http.TimeFormat))
 	c.Data(http.StatusOK, "text/html; charset=utf-8", out)
+}
+
+
+// jsStringEscape makes a value safe inside a JS string literal in an inline
+// <script>. encoding/json's string encoder is the right tool and not a
+// shortcut: it escapes the backslash, the quote and every control character,
+// U+2028/U+2029, and writes `<`, `>` and `&` as JS unicode escapes -- the one
+// thing the hand-written replacer here claimed and did not do. F210.
+func jsStringEscape(s string) string {
+	quoted, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	return string(quoted[1 : len(quoted)-1])
 }

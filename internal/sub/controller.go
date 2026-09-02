@@ -566,16 +566,7 @@ func (a *SUBController) serveSubPage(c *gin.Context, basePath string, page PageD
 
 	// Defense-in-depth string-escape for the basePath embed — admin-
 	// controlled but cheap to harden.
-	jsEscape := strings.NewReplacer(
-		`\`, `\\`,
-		`"`, `\"`,
-		"\n", `\n`,
-		"\r", `\r`,
-		"<", `<`,
-		">", `>`,
-		"&", `&`,
-	)
-	escapedBase := jsEscape.Replace(basePath)
+	escapedBase := jsStringEscape(basePath)
 
 	inject := []byte(`<script>window.PUI_BASE_PATH="` + escapedBase + `";` +
 		`window.__SUB_PAGE_DATA__=` + string(subDataJSON) + `;</script></head>`)
@@ -806,4 +797,18 @@ func (a *SUBController) ApplyCommonHeaders(
 	if profileHideSettings {
 		c.Writer.Header().Set("Hide-Settings", "1")
 	}
+}
+
+
+// jsStringEscape makes a value safe inside a JS string literal in an inline
+// <script>. encoding/json's string encoder is the right tool and not a
+// shortcut: it escapes the backslash, the quote and every control character,
+// U+2028/U+2029, and writes `<`, `>` and `&` as JS unicode escapes -- the one
+// thing the hand-written replacer here claimed and did not do. F210.
+func jsStringEscape(s string) string {
+	quoted, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	return string(quoted[1 : len(quoted)-1])
 }
