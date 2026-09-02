@@ -24,7 +24,7 @@ function websocketMessages(): string {
     const example = m.example ? `\n\n\`\`\`json\n${m.example}\n\`\`\`` : '';
     return `### \`type: ${m.type}\`\n\n${m.summary}${example}`;
   });
-  return `\n\n## Messages\n\nEvery frame is a JSON object whose \`type\` field selects one of these shapes.\n\n${blocks.join('\n\n')}\n`;
+  return `\n\n## Messages\n\nEvery frame is the same JSON envelope: \`type\` selects one of these payload shapes, \`payload\` carries it, and \`time\` is the send time in Unix milliseconds.\n\n${blocks.join('\n\n')}\n`;
 }
 
 // Generate one MDX page per tag into the English reference/api folder. Only
