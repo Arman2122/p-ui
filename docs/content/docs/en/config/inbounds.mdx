@@ -47,6 +47,15 @@ exist in a shorter month, the reset runs on that month's last day.
 
 </Steps>
 
+### Bulk actions
+
+Selecting rows in the inbounds table offers **Enable**, **Disable** and
+**Delete** for the whole selection. Each inbound is switched the way its row
+switch does, and the ones already in that state are reported rather than
+touched. A bulk delete removes every deleted tag from the Xray routing
+template in one rewrite and prunes the deleted inbounds from the routing
+rules in one pass.
+
 ## Supported protocols
 
 The inbound editor accepts these protocols:

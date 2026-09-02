@@ -69,6 +69,13 @@ _openapi:
         at most once.
       url: '#delete-many-inbounds-in-one-call-processes-the-list-sequentially-failures-are-reported-per-id-and-the-rest-still-proceed-restarts-xray-at-most-once'
     - depth: 2
+      title: Enable or disable many inbounds in one call. Each inbound is flipped the
+        way setEnable/:id does (hot-added or removed on a local core, pushed to
+        its node); an inbound already in the requested state, an unknown id, or
+        one the core refuses is reported per id and the rest still proceed.
+        Restarts are flagged once for the batch.
+      url: '#enable-or-disable-many-inbounds-in-one-call-each-inbound-is-flipped-the-way-setenableid-does-hot-added-or-removed-on-a-local-core-pushed-to-its-node-an-inbound-already-in-the-requested-state-an-unknown-id-or-one-the-core-refuses-is-reported-per-id-and-the-rest-still-proceed-restarts-are-flagged-once-for-the-batch'
+    - depth: 2
       title: Replace an inbound’s configuration. Body shape mirrors /add. Heavy on
         inbounds with thousands of clients — prefer /setEnable for enable-only
         flips.
@@ -164,6 +171,12 @@ _openapi:
           failures are reported per id and the rest still proceed. Restarts xray
           at most once.
         id: delete-many-inbounds-in-one-call-processes-the-list-sequentially-failures-are-reported-per-id-and-the-rest-still-proceed-restarts-xray-at-most-once
+      - content: Enable or disable many inbounds in one call. Each inbound is flipped
+          the way setEnable/:id does (hot-added or removed on a local core,
+          pushed to its node); an inbound already in the requested state, an
+          unknown id, or one the core refuses is reported per id and the rest
+          still proceed. Restarts are flagged once for the batch.
+        id: enable-or-disable-many-inbounds-in-one-call-each-inbound-is-flipped-the-way-setenableid-does-hot-added-or-removed-on-a-local-core-pushed-to-its-node-an-inbound-already-in-the-requested-state-an-unknown-id-or-one-the-core-refuses-is-reported-per-id-and-the-rest-still-proceed-restarts-are-flagged-once-for-the-batch
       - content: Replace an inbound’s configuration. Body shape mirrors /add. Heavy on
           inbounds with thousands of clients — prefer /setEnable for enable-only
           flips.
@@ -211,7 +224,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/inbounds/list","method":"get"},{"path":"/panel/api/inbounds/list/slim","method":"get"},{"path":"/panel/api/inbounds/options","method":"get"},{"path":"/panel/api/inbounds/allLinks","method":"get"},{"path":"/panel/api/inbounds/{id}/links","method":"get"},{"path":"/panel/api/inbounds/get/{id}","method":"get"},{"path":"/panel/api/inbounds/add","method":"post"},{"path":"/panel/api/inbounds/del/{id}","method":"post"},{"path":"/panel/api/inbounds/bulkDel","method":"post"},{"path":"/panel/api/inbounds/update/{id}","method":"post"},{"path":"/panel/api/inbounds/setEnable/{id}","method":"post"},{"path":"/panel/api/inbounds/{id}/resetTraffic","method":"post"},{"path":"/panel/api/inbounds/{id}/delAllClients","method":"post"},{"path":"/panel/api/inbounds/resetAllTraffics","method":"post"},{"path":"/panel/api/inbounds/import","method":"post"},{"path":"/panel/api/inbounds/pushClientTraffics","method":"post"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"get"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/inbounds/list","method":"get"},{"path":"/panel/api/inbounds/list/slim","method":"get"},{"path":"/panel/api/inbounds/options","method":"get"},{"path":"/panel/api/inbounds/allLinks","method":"get"},{"path":"/panel/api/inbounds/{id}/links","method":"get"},{"path":"/panel/api/inbounds/get/{id}","method":"get"},{"path":"/panel/api/inbounds/add","method":"post"},{"path":"/panel/api/inbounds/del/{id}","method":"post"},{"path":"/panel/api/inbounds/bulkDel","method":"post"},{"path":"/panel/api/inbounds/bulkSetEnable","method":"post"},{"path":"/panel/api/inbounds/update/{id}","method":"post"},{"path":"/panel/api/inbounds/setEnable/{id}","method":"post"},{"path":"/panel/api/inbounds/{id}/resetTraffic","method":"post"},{"path":"/panel/api/inbounds/{id}/delAllClients","method":"post"},{"path":"/panel/api/inbounds/resetAllTraffics","method":"post"},{"path":"/panel/api/inbounds/import","method":"post"},{"path":"/panel/api/inbounds/pushClientTraffics","method":"post"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"get"},{"path":"/panel/api/inbounds/{id}/fallbacks","method":"post"}]} showTitle />
     </>
   );
 }
