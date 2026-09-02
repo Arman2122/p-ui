@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/entity"
 	"github.com/Arman2122/p-ui/internal/web/middleware"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/panel"
@@ -52,11 +54,16 @@ func (a *APIController) checkAPIAuth(c *gin.Context) {
 	auth := c.GetHeader("Authorization")
 	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
 		tok := after
-		if a.apiTokenService.Match(tok) {
+		if scope, ok := a.apiTokenService.Match(tok); ok {
+			if scope == model.ApiTokenScopeRead && !readOnlyMethod(c.Request.Method) {
+				c.AbortWithStatusJSON(http.StatusForbidden, entity.Msg{Success: false, Msg: "this API token is read-only"})
+				return
+			}
 			if u, err := a.userService.GetFirstUser(); err == nil {
 				session.SetAPIAuthUser(c, u)
 			}
 			c.Set("api_authed", true)
+			c.Set("api_scope", scope)
 			c.Next()
 			return
 		}
@@ -164,4 +171,12 @@ func (a *APIController) BackuptoTgbot(c *gin.Context) {
 		return
 	}
 	jsonMsg(c, I18nWeb(c, "pages.settings.telegramBotBackupSent"), nil)
+}
+
+func readOnlyMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	return false
 }

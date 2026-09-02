@@ -1005,10 +1005,18 @@
           "enabled": {
             "type": "boolean"
           },
+          "expiresAt": {
+            "format": "int64",
+            "type": "integer"
+          },
           "id": {
             "type": "integer"
           },
           "name": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is \"admin\" or \"read\"; ExpiresAt is unix seconds, 0 for never.",
             "type": "string"
           },
           "token": {
@@ -1019,8 +1027,10 @@
         "required": [
           "createdAt",
           "enabled",
+          "expiresAt",
           "id",
           "name",
+          "scope",
           "token"
         ],
         "type": "object"
@@ -1036,12 +1046,21 @@
             "example": true,
             "type": "boolean"
           },
+          "expiresAt": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
           "id": {
             "example": 2,
             "type": "integer"
           },
           "name": {
             "example": "central-panel-a",
+            "type": "string"
+          },
+          "scope": {
+            "example": "admin",
             "type": "string"
           },
           "token": {
@@ -1052,8 +1071,10 @@
         "required": [
           "createdAt",
           "enabled",
+          "expiresAt",
           "id",
-          "name"
+          "name",
+          "scope"
         ],
         "type": "object"
       },
@@ -12858,17 +12879,6 @@
                     },
                     "obj": {}
                   }
-                },
-                "example": {
-                  "success": true,
-                  "obj": [
-                    {
-                      "id": 1,
-                      "name": "default",
-                      "enabled": true,
-                      "createdAt": 1736000000
-                    }
-                  ]
                 }
               }
             }
@@ -12893,14 +12903,26 @@
                   "name": {
                     "type": "string",
                     "description": "Human-readable label, e.g. \"central-panel-a\"."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "\"admin\" (the default) or \"read\": a read token may call GET endpoints and nothing else."
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "description": "Unix time in seconds after which the token stops authenticating; 0 or absent = never."
                   }
                 },
                 "required": [
-                  "name"
+                  "name",
+                  "scope",
+                  "expiresAt"
                 ]
               },
               "example": {
-                "name": "central-panel-a"
+                "name": "central-panel-a",
+                "scope": "read",
+                "expiresAt": 1798761600
               }
             }
           }
@@ -12929,8 +12951,10 @@
                   "obj": {
                     "createdAt": 1736000000,
                     "enabled": true,
+                    "expiresAt": 0,
                     "id": 2,
                     "name": "central-panel-a",
+                    "scope": "admin",
                     "token": "new-token-string"
                   }
                 }

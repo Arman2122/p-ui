@@ -1508,7 +1508,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/setting/apiTokens',
         summary: 'List every API token, enabled or not. The token value is never returned — only metadata.',
-        response: '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "name": "default",\n      "enabled": true,\n      "createdAt": 1736000000\n    }\n  ]\n}',
+        response: '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "name": "default",\n      "enabled": true,\n      "createdAt": 1736000000\n      "scope": "admin",\n      "expiresAt": 0\n    }\n  ]\n}',
       },
       {
         method: 'POST',
@@ -1516,8 +1516,10 @@ export const sections: readonly Section[] = [
         summary: 'Mint a new API token. Name must be unique and 1-64 characters; the token string is server-generated and returned only in this response — it is stored hashed and cannot be retrieved later.',
         params: [
           { name: 'name', in: 'body', type: 'string', desc: 'Human-readable label, e.g. "central-panel-a".' },
+          { name: 'scope', in: 'body', type: 'string', desc: '"admin" (the default) or "read": a read token may call GET endpoints and nothing else.' },
+          { name: 'expiresAt', in: 'body', type: 'number', desc: 'Unix time in seconds after which the token stops authenticating; 0 or absent = never.' },
         ],
-        body: '{\n  "name": "central-panel-a"\n}',
+        body: '{\n  "name": "central-panel-a",\n  "scope": "read",\n  "expiresAt": 1798761600\n}',
         responseSchema: 'ApiTokenView',
         errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already exists"\n}',
       },
