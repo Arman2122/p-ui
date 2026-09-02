@@ -82,6 +82,19 @@ Run `p-ui` with an unknown subcommand to print this list from the script itself.
 Updating preserves your database and settings. Take a
 [backup](/docs/operations/backup-restore) before a major-version jump.
 
+### What an update trusts
+
+The updater script is fetched **from the release being installed**, never from
+the repository's `main` branch, and every release archive is checked against the
+`.sha256` published beside it before anything is extracted. An archive whose
+digest cannot be fetched or does not match is refused and deleted.
+
+Releases before v1.5.2 publish no digest, so installing one of those — a pinned
+`install.sh v1.5.0`, or `PUI_UPDATE_TAG` set to an old tag — is refused too.
+`PUI_SKIP_CHECKSUM=1` is the explicit escape for that case. This does not
+protect against a compromised release account, which can publish its own
+digests.
+
 ## Uninstalling
 
 Menu option **6** or `p-ui uninstall`. It stops and disables the service, removes

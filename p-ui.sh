@@ -170,11 +170,38 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/update.sh)
+    # An exported PUI_UPDATE_TAG is still honoured; empty means latest stable.
+    run_release_updater "${PUI_UPDATE_TAG}"
     if [[ $? == 0 ]]; then
         LOGI "Update is complete, Panel has automatically restarted "
         before_show_menu
     fi
+}
+
+# run_release_updater runs the update.sh that SHIPS WITH the release being
+# installed, never the tip of main: main is a branch anyone with push can move,
+# and this script runs as root on every host. An empty tag means latest stable.
+# The updater is told the same tag, so it installs the release it came from
+# rather than resolving latest a second time. F277.
+run_release_updater() {
+    local tag="$1" script
+    if [[ -z "${tag}" ]]; then
+        tag=$(curl -Ls --retry 3 --connect-timeout 15 --max-time 60 "https://api.github.com/repos/Arman2122/p-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -z "${tag}" ]]; then
+            LOGE "Failed to resolve the latest p-ui release; GitHub may be rate-limiting this host. Try again later."
+            return 1
+        fi
+    fi
+    script=$(mktemp /tmp/p-ui-update.XXXXXX) || return 1
+    if ! curl -fLs --retry 3 --connect-timeout 15 --max-time 120 -o "${script}" "https://github.com/Arman2122/p-ui/releases/download/${tag}/update.sh" || [[ ! -s "${script}" ]]; then
+        rm -f "${script}"
+        LOGE "Release ${tag} does not publish its updater (releases before v1.5.2 do not). Refusing to run one from the main branch instead."
+        return 1
+    fi
+    PUI_UPDATE_TAG="${tag}" bash "${script}"
+    local rc=$?
+    rm -f "${script}"
+    return ${rc}
 }
 
 update_dev() {
@@ -186,9 +213,7 @@ update_dev() {
         fi
         return 0
     fi
-    # PUI_UPDATE_TAG tells update.sh to install the dev-latest pre-release
-    # instead of the latest stable tag.
-    PUI_UPDATE_TAG="dev-latest" bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/update.sh)
+    run_release_updater "dev-latest"
     if [[ $? == 0 ]]; then
         LOGI "Dev update is complete, Panel has automatically restarted "
         before_show_menu

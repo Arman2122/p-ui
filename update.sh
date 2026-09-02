@@ -161,6 +161,30 @@ load_pui_env() {
     fi
 }
 
+# verify_release_archive refuses to extract an archive whose published digest it
+# cannot fetch and match. A missing digest is a refusal, not a pass: an attacker
+# who can swap the archive can drop the digest beside it. PUI_SKIP_CHECKSUM=1 is
+# the operator's explicit escape for a release that predates digests. F277.
+verify_release_archive() {
+    local archive="$1" url="$2" digest="$1.sha256" expected actual
+    if [[ "${PUI_SKIP_CHECKSUM}" == "1" ]]; then
+        echo -e "${yellow}PUI_SKIP_CHECKSUM=1: not verifying ${archive}${plain}"
+        return 0
+    fi
+    if ! ${curl_bin} -fLRo "${digest}" "${url}.sha256" 2> /dev/null || [[ ! -s "${digest}" ]]; then
+        rm -f "${archive}" "${digest}"
+        _fail "ERROR: No checksum is published for ${url}. Releases before v1.5.2 carry none; set PUI_SKIP_CHECKSUM=1 to install one anyway."
+    fi
+    expected=$(cut -d' ' -f1 "${digest}")
+    actual=$(sha256sum "${archive}" | cut -d' ' -f1)
+    rm -f "${digest}"
+    if [[ -z "${expected}" || "${expected}" != "${actual}" ]]; then
+        rm -f "${archive}"
+        _fail "ERROR: ${archive} does not match its published checksum (expected ${expected:-none}, got ${actual}). Refusing to install it."
+    fi
+    echo -e "${green}Checksum verified: ${actual}${plain}"
+}
+
 # nftables is listed here as well as in install.sh on purpose: a panel installed
 # before the L3 inbounds existed has no nft binary, and an upgrade is the only
 # pass that would ever give it one.
@@ -1015,6 +1039,7 @@ update_p-ui() {
         rm ${pui_folder}-linux-$(arch).tar.gz -f > /dev/null 2>&1
         _fail "ERROR: Downloaded p-ui release archive is empty, please be sure that your server can access GitHub"
     fi
+    verify_release_archive "${pui_folder}-linux-$(arch).tar.gz" "https://github.com/Arman2122/p-ui/releases/download/${tag_version}/p-ui-linux-$(arch).tar.gz"
 
     # Staged BEFORE the teardown, and from the archive we already downloaded.
     # This used to be a GitHub fetch AFTER the unit was stopped, disabled and

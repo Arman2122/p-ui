@@ -4,6 +4,26 @@ Operator-visible changes only — things that behave differently on a panel you
 upgrade in place. Bug fixes that simply make a broken thing work are not listed
 here; the git log is the full record.
 
+## Unreleased
+
+### Security
+
+- **Updates are pinned to the release and verified.** The panel's Update
+  button, `p-ui update` and node remote-update all ran whatever `update.sh`
+  the tip of the `main` branch carried, as root, on every host — and that
+  script then downloaded the release archive with no checksum. From this
+  release the updater ships as an asset **of the release it installs**, every
+  archive has a `.sha256` beside it, and both `install.sh` and `update.sh`
+  refuse to extract an archive whose digest they cannot fetch and match.
+  **Two things to know:** installing a release older than this one (a pinned
+  `install.sh v1.5.0`, or `PUI_UPDATE_TAG` to an old tag) is refused because
+  those releases publish no digest — `PUI_SKIP_CHECKSUM=1` is the explicit
+  escape. And the `p-ui.sh` already on your host is the old one, so the
+  upgrade *to* this release is the last one that fetches the updater from
+  `main`; every upgrade after it is pinned. This does not defend against a
+  compromised release account, which can publish its own digests; signing is a
+  separate step.
+
 ## v1.5.1 — 2026-09-01
 
 ### Behaviour changes

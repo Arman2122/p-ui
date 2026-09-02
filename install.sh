@@ -169,6 +169,32 @@ is_port_in_use() {
     return 1
 }
 
+# verify_release_archive refuses to extract an archive whose published digest it
+# cannot fetch and match. A missing digest is a refusal, not a pass: an attacker
+# who can swap the archive can drop the digest beside it. PUI_SKIP_CHECKSUM=1 is
+# the operator's explicit escape for a release that predates digests. F277.
+verify_release_archive() {
+    local archive="$1" url="$2" digest="$1.sha256" expected actual
+    if [[ "${PUI_SKIP_CHECKSUM}" == "1" ]]; then
+        echo -e "${yellow}PUI_SKIP_CHECKSUM=1: not verifying ${archive}${plain}"
+        return 0
+    fi
+    if ! curl -fLR --retry 5 --retry-delay 3 --connect-timeout 15 --max-time 60 -o "${digest}" "${url}.sha256" 2> /dev/null || [[ ! -s "${digest}" ]]; then
+        rm -f "${archive}" "${digest}"
+        echo -e "${red}No checksum is published for ${url}. Releases before v1.5.2 carry none; set PUI_SKIP_CHECKSUM=1 to install one anyway.${plain}"
+        exit 1
+    fi
+    expected=$(cut -d' ' -f1 "${digest}")
+    actual=$(sha256sum "${archive}" | cut -d' ' -f1)
+    rm -f "${digest}"
+    if [[ -z "${expected}" || "${expected}" != "${actual}" ]]; then
+        rm -f "${archive}"
+        echo -e "${red}${archive} does not match its published checksum (expected ${expected:-none}, got ${actual}). Refusing to install it.${plain}"
+        exit 1
+    fi
+    echo -e "${green}Checksum verified: ${actual}${plain}"
+}
+
 # sudo is a hard dependency, not a convenience: provisioning PostgreSQL runs
 # every psql call as `sudo -u postgres`, and a Debian installed with a root
 # password does not ship sudo. Without it the now-mandatory database setup
@@ -1542,6 +1568,7 @@ install_p-ui() {
             echo -e "${red}Downloaded p-ui release archive is empty${plain}"
             exit 1
         fi
+        verify_release_archive "${pui_folder}-linux-$(arch).tar.gz" "https://github.com/Arman2122/p-ui/releases/download/${tag_version}/p-ui-linux-$(arch).tar.gz"
     else
         tag_version=$1
         # The rolling dev channel ships under a fixed, non-semver tag that is
@@ -1576,6 +1603,7 @@ install_p-ui() {
             echo -e "${red}Downloaded p-ui release archive is empty${plain}"
             exit 1
         fi
+        verify_release_archive "${pui_folder}-linux-$(arch).tar.gz" "${url}"
     fi
     # The management script installed at /usr/bin/p-ui has to match the release
     # being installed -- it drives the panel binary and shares its assumptions.
