@@ -30,6 +30,12 @@ here; the git log is the full record.
   and nothing re-read it — the same for a change to its schedule. The
   settings page said yes and scheduled nothing. It now reschedules on every
   settings save, exactly as the CPU and memory watchdogs already do.
+- **Three internal Go types are gone from the generated API surface.**
+  `SubLinkProvider`, `staticEgressResolver` and `transportBits` were emitted
+  into the frontend's generated types and the OpenAPI document by accident —
+  two of them are lowercase helpers no response can contain. Nothing in the
+  panel used them; a third-party consumer of the generated schema should not
+  have either.
 
 ### Security
 
