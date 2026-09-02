@@ -182,11 +182,16 @@ func (s *SubJsonService) getConfig(subReq *SubService, inbound *model.Inbound, c
 	delete(stream, "externalProxy")
 	network, _ := stream["network"].(string)
 
+	// A fresh copy per external proxy, the way the Clash renderer works: the
+	// dest and port used to land on the caller's row and outlive the loop. F024.
+	original := inbound
 	for _, ep := range externalProxies {
 		extPrxy, ok := ep.(map[string]any)
 		if !ok {
 			continue
 		}
+		working := *original
+		inbound := &working
 		// Expand the host's {{VAR}} remark template for this client (no-op for
 		// the synthetic/legacy entry) before it's used as the config remark.
 		subReq.renderHostRemark(inbound, client, extPrxy, network)
