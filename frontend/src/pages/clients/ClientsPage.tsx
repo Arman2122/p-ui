@@ -49,6 +49,8 @@ import {
   UploadOutlined,
   UsergroupAddOutlined,
   UsergroupDeleteOutlined,
+  FormOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { activateOnKey } from '@/utils/a11y';
 
@@ -59,6 +61,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { useClients } from '@/hooks/useClients';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
 import { usePolicyMutations } from '@/api/queries/usePolicyMutations';
+import { usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
@@ -74,10 +77,12 @@ const ClientInfoModal = lazy(() => import('./ClientInfoModal'));
 const ClientQrModal = lazy(() => import('./ClientQrModal'));
 const ClientBulkAddModal = lazy(() => import('./ClientBulkAddModal'));
 const ClientBulkAdjustModal = lazy(() => import('./ClientBulkAdjustModal'));
+const ClientBulkSetModal = lazy(() => import('./ClientBulkSetModal'));
 const FilterDrawer = lazy(() => import('./FilterDrawer'));
 const SubLinksModal = lazy(() => import('./SubLinksModal'));
 const BulkAddToGroupModal = lazy(() => import('./BulkAddToGroupModal'));
 const BulkAttachInboundsModal = lazy(() => import('./BulkAttachInboundsModal'));
+const BulkMoveInboundsModal = lazy(() => import('./BulkMoveInboundsModal'));
 const BulkDetachInboundsModal = lazy(() => import('./BulkDetachInboundsModal'));
 const TextModal = lazy(() => import('@/components/feedback/TextModal'));
 const PromptModal = lazy(() => import('@/components/feedback/PromptModal'));
@@ -238,7 +243,7 @@ export default function ClientsPage() {
     setQuery,
     inbounds, onlines, transitioning, fetched, fetchError, subSettings,
     tgBotEnable, expireDiff, trafficDiff, pageSize, settingsReady,
-    create, update, remove, bulkDelete, bulkAdjust, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
+    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
     resetTraffic, resetAllTraffics, delDepleted, delOrphans, exportClients, importClients, setEnable,
     clientSpeed,
     applyTrafficEvent, applyClientStatsEvent,
@@ -268,6 +273,9 @@ export default function ClientsPage() {
   const [qrClient, setQrClient] = useState<ClientRecord | null>(null);
   const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [bulkAdjustOpen, setBulkAdjustOpen] = useState(false);
+  const [bulkSetOpen, setBulkSetOpen] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const { data: policies = [] } = usePoliciesQuery({ enabled: bulkSetOpen });
   const [subLinksOpen, setSubLinksOpen] = useState(false);
   const [bulkGroupOpen, setBulkGroupOpen] = useState(false);
   const [bulkAttachOpen, setBulkAttachOpen] = useState(false);
@@ -1232,6 +1240,18 @@ export default function ClientsPage() {
                                     onClick: () => setBulkAdjustOpen(true),
                                   },
                                   {
+                                    key: 'set',
+                                    icon: <FormOutlined />,
+                                    label: t('pages.clients.set'),
+                                    onClick: () => setBulkSetOpen(true),
+                                  },
+                                  {
+                                    key: 'move',
+                                    icon: <SwapOutlined />,
+                                    label: t('pages.clients.move'),
+                                    onClick: () => setBulkMoveOpen(true),
+                                  },
+                                  {
                                     key: 'resetSelectedTraffics',
                                     icon: <RetweetOutlined />,
                                     label: t('pages.clients.resetSelectedTraffics'),
@@ -1684,6 +1704,41 @@ export default function ClientsPage() {
                 clearSelection();
                 reportBulk(t('pages.clients.addToGroup'), msg.obj?.outcome, (emails) => { void bulkAddToGroup({ emails }, group); });
                 return msg.obj ?? { affected: 0 };
+              }
+              return null;
+            }}
+          />
+        </LazyMount>
+        <LazyMount when={bulkSetOpen}>
+          <ClientBulkSetModal
+            open={bulkSetOpen}
+            count={selectionCount}
+            groups={allGroups}
+            policies={policies}
+            onOpenChange={setBulkSetOpen}
+            onSubmit={async (patch) => {
+              const msg = await bulkSet(currentSelection(), patch);
+              if (msg?.success) {
+                clearSelection();
+                reportBulk(t('pages.clients.set'), msg.obj?.outcome, (emails) => { void bulkSet({ emails }, patch); });
+                return msg.obj ?? { updated: 0 };
+              }
+              return null;
+            }}
+          />
+        </LazyMount>
+        <LazyMount when={bulkMoveOpen}>
+          <BulkMoveInboundsModal
+            open={bulkMoveOpen}
+            count={selectionCount}
+            inbounds={inbounds}
+            onOpenChange={setBulkMoveOpen}
+            onSubmit={async (fromInboundIds, toInboundIds) => {
+              const msg = await bulkMove(currentSelection(), fromInboundIds, toInboundIds);
+              if (msg?.success) {
+                clearSelection();
+                reportBulk(t('pages.clients.move'), msg.obj?.outcome, (emails) => { void bulkMove({ emails }, fromInboundIds, toInboundIds); });
+                return msg.obj ?? { moved: 0 };
               }
               return null;
             }}

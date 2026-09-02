@@ -325,3 +325,15 @@ export const BulkGroupResultSchema = z.object({
   outcome: BulkOutcomeSchema.optional(),
 });
 export type BulkGroupResult = z.infer<typeof BulkGroupResultSchema>;
+
+export const BulkSetResultSchema = z.object({
+  updated: z.number().optional(),
+  outcome: BulkOutcomeSchema.optional(),
+});
+export type BulkSetResult = z.infer<typeof BulkSetResultSchema>;
+
+export const BulkMoveResultSchema = z.object({
+  moved: z.number().optional(),
+  outcome: BulkOutcomeSchema.optional(),
+});
+export type BulkMoveResult = z.infer<typeof BulkMoveResultSchema>;
