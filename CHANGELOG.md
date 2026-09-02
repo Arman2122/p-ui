@@ -25,6 +25,11 @@ here; the git log is the full record.
   the new rows into that group without a word, and the next edit of that
   group rewrote both sets together. The panel's own form never sends one.
   The call now answers an error naming the group — update it instead.
+- **Enabling LDAP takes effect on save, not at the next restart.** The sync
+  job was scheduled once at startup from the setting's value at that moment,
+  and nothing re-read it — the same for a change to its schedule. The
+  settings page said yes and scheduled nothing. It now reschedules on every
+  settings save, exactly as the CPU and memory watchdogs already do.
 
 ### Security
 
