@@ -73,3 +73,30 @@ func TestParsePgToolVersion(t *testing.T) {
 		})
 	}
 }
+
+/*
+Import accepted any PostgreSQL custom-format archive: a dump of some other
+database restored cleanly and left the panel with no tables of its own. The
+probe now reads the TOC pg_restore already produced and requires the
+panel's inbounds table in it. Feature gap O11.
+*/
+func TestPgDumpListsPanelTables(t *testing.T) {
+	cases := []struct {
+		name string
+		toc  string
+		want bool
+	}{
+		{name: "panel dump", toc: ";\n; Selected TOC Entries:\n;\n214; 1259 16400 TABLE public inbounds pui\n3521; 0 16400 TABLE DATA public inbounds pui\n", want: true},
+		{name: "empty inbounds table still lists the schema entry", toc: "214; 1259 16400 TABLE public inbounds pui\n", want: true},
+		{name: "another application's dump", toc: "214; 1259 16400 TABLE public orders shop\n3521; 0 16400 TABLE DATA public orders shop\n", want: false},
+		{name: "a similarly named table", toc: "214; 1259 16400 TABLE public inbounds_archive shop\n", want: false},
+		{name: "nothing", toc: "", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pgDumpListsPanelTables(tc.toc); got != tc.want {
+				t.Fatalf("pgDumpListsPanelTables = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
