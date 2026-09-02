@@ -271,10 +271,11 @@ func (s *InboundService) MigrateDB() {
 // inbound became eligible, clears it where it never was. Idempotent either way.
 func (s *InboundService) MigrationRegateVisionFlow() {
 	db := database.GetDB()
+	// Every protocol, not only VLESS: the restore half answers no for the
+	// others itself, and the strip half is the one that has to see a VMess
+	// inbound still carrying a flow no transport of its can use. F387.
 	var inbounds []*model.Inbound
-	if err := db.Model(&model.Inbound{}).
-		Where("protocol = ?", model.VLESS).
-		Find(&inbounds).Error; err != nil {
+	if err := db.Model(&model.Inbound{}).Find(&inbounds).Error; err != nil {
 		logger.Warning("MigrationRegateVisionFlow: load inbounds failed:", err)
 		return
 	}
