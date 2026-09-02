@@ -30,6 +30,12 @@ here; the git log is the full record.
   and nothing re-read it — the same for a change to its schedule. The
   settings page said yes and scheduled nothing. It now reschedules on every
   settings save, exactly as the CPU and memory watchdogs already do.
+- **The client editor no longer shows a kernel-shaping status for a protocol
+  that cannot be shaped.** On a VLESS client the Limits tab said speed limits
+  were unavailable on the protocol and then reported "Held by the kernel: not
+  enforced — the inbound's device is down", a sentence about a device a VLESS
+  inbound does not have. The tier and kernel rows now appear only when one of
+  the client's protocols can be shaped; usage is shown either way.
 - **`openapi.json` is valid OpenAPI 3.0.3.** The four WebSocket message
   shapes were folded into the document as pseudo-endpoints with a `WS`
   method and a `→ type: …` path, which no validator or client generator

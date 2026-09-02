@@ -117,26 +117,30 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
             label: t('pages.policies.used'),
             children: <span dir="ltr">{SizeFormatter.sizeFormat(enforced.usedBytes)}</span>,
           },
-          {
-            key: 'want',
-            label: t('pages.policies.inEffect'),
-            children: (
-              <span dir="ltr">
-                ↓ {formatRate(enforced.wantDownBps, t)} / ↑ {formatRate(enforced.wantUpBps, t)}
-              </span>
-            ),
-          },
-          {
-            key: 'enforced',
-            label: t('pages.policies.enforced'),
-            children: enforced.shapeable ? (
-              <span dir="ltr">
-                ↓ {formatRate(enforced.enforcedDownBps, t)} / ↑ {formatRate(enforced.enforcedUpBps, t)}
-              </span>
-            ) : (
-              <Typography.Text type="secondary">{t('pages.policies.notEnforcedYet')}</Typography.Text>
-            ),
-          },
+          /* Both rows describe shaping; on a client no core can shape, "the
+             device is down" reads as a fault on a VLESS client that has none. */
+          ...(verdict.shapeable.length > 0 ? [
+            {
+              key: 'want',
+              label: t('pages.policies.inEffect'),
+              children: (
+                <span dir="ltr">
+                  ↓ {formatRate(enforced.wantDownBps, t)} / ↑ {formatRate(enforced.wantUpBps, t)}
+                </span>
+              ),
+            },
+            {
+              key: 'enforced',
+              label: t('pages.policies.enforced'),
+              children: enforced.shapeable ? (
+                <span dir="ltr">
+                  ↓ {formatRate(enforced.enforcedDownBps, t)} / ↑ {formatRate(enforced.enforcedUpBps, t)}
+                </span>
+              ) : (
+                <Typography.Text type="secondary">{t('pages.policies.notEnforcedYet')}</Typography.Text>
+              ),
+            },
+          ] : []),
         ]} />
       )}
     </Space>
