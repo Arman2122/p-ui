@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A traffic reset re-pushes limits to every MTProto inbound carrying the client.** Only the first inbound whose secrets named the client was re-applied, so a client sold on two MTProto inbounds kept the stale budget on the second sidecar until the next reconcile.
 - **The Xray version list is read under a 4 MiB cap.** The archive, binary and digest fetches from GitHub all had a ceiling; the release-list fetch buffered whatever came back. A list over the cap is refused with an error naming it.
 - **The legacy `0.0.0.0:<port>-…` inbound-tag cleanup now runs on every upgraded panel.** It sat behind a return taken whenever no inbound carried an `externalProxy` entry — most panels — so tags minted by old versions survived every upgrade. Anything keyed on such a tag sees the cleaned name after the first start.
 - **`POST /panel/api/setting/updateUser` on a panel with no user row answers a refusal, not a 500.** A bearer-token caller is admitted before a user is attached; with the users table empty the handler dereferenced a nil user and gin turned the panic into a 500 with a stack trace.
