@@ -422,7 +422,6 @@ export interface Host {
   id: number;
   inboundId: number;
   isDisabled: boolean;
-  isHidden: boolean;
   keepSniBlank: boolean;
   mihomoIpVersion: string;
   mihomoX25519: boolean;
@@ -458,7 +457,6 @@ export interface HostGroup {
   hosts: string[];
   inboundIds: number[];
   isDisabled: boolean;
-  isHidden: boolean;
   keepSniBlank: boolean;
   mihomoIpVersion: string;
   mihomoX25519: boolean;

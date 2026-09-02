@@ -1184,7 +1184,6 @@ type Host struct {
 	Remark            string   `json:"remark" form:"remark" validate:"required,max=256" example:"cdn-front"`
 	ServerDescription string   `json:"serverDescription" form:"serverDescription" gorm:"column:server_description" validate:"omitempty,max=64"`
 	IsDisabled        bool     `json:"isDisabled" form:"isDisabled" gorm:"default:false;column:is_disabled"`
-	IsHidden          bool     `json:"isHidden" form:"isHidden" gorm:"default:false;column:is_hidden"`
 	Tags              []string `json:"tags" form:"tags" gorm:"serializer:json"`
 
 	Address string `json:"address" form:"address" example:"cdn.example.com"`

@@ -295,7 +295,6 @@ type HostGroup struct {
 	Remark                 string   `json:"remark" validate:"required,max=256"`
 	ServerDescription      string   `json:"serverDescription" validate:"omitempty,max=64"`
 	IsDisabled             bool     `json:"isDisabled"`
-	IsHidden               bool     `json:"isHidden"`
 	Tags                   []string `json:"tags"`
 	Port                   int      `json:"port" validate:"gte=0,lte=65535"`
 	Security               string   `json:"security" validate:"omitempty,oneof=same tls none reality"`

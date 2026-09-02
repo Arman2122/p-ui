@@ -433,7 +433,6 @@ export const EXAMPLES: Record<string, unknown> = {
     "id": 1,
     "inboundId": 1,
     "isDisabled": false,
-    "isHidden": false,
     "keepSniBlank": false,
     "mihomoIpVersion": "dual",
     "mihomoX25519": false,
@@ -482,7 +481,6 @@ export const EXAMPLES: Record<string, unknown> = {
       0
     ],
     "isDisabled": false,
-    "isHidden": false,
     "keepSniBlank": false,
     "mihomoIpVersion": "dual",
     "mihomoX25519": false,

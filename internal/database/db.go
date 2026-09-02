@@ -104,6 +104,9 @@ func initModels() error {
 	if err := migrateHostVerifyPeerCertByNameColumn(); err != nil {
 		return err
 	}
+	if err := migrateDropHostIsHidden(); err != nil {
+		return err
+	}
 	if err := migratePolicyAssignmentForeignKey(); err != nil {
 		return err
 	}
@@ -2317,4 +2320,12 @@ func PruneOrphansForTest() error {
 		return err
 	}
 	return pruneOrphanedInboundFallbacks()
+}
+
+// migrateDropHostIsHidden removes a column the form wrote and nothing read. F146.
+func migrateDropHostIsHidden() error {
+	if !db.Migrator().HasColumn(&model.Host{}, "is_hidden") {
+		return nil
+	}
+	return db.Migrator().DropColumn(&model.Host{}, "is_hidden")
 }

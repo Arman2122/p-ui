@@ -17,7 +17,6 @@ export const HostFormSchema = z.object({
   remark: z.string().trim().min(1).max(256),
   serverDescription: z.string().max(64, 'pages.hosts.toasts.serverDescriptionTooLong').default(''),
   isDisabled: z.boolean().default(false),
-  isHidden: z.boolean().default(false),
   tags: z.array(HostTagSchema).max(10, 'pages.hosts.toasts.tooManyTags').default([]),
 
   address: z.string().default(''),
@@ -80,7 +79,6 @@ export const HostRecordSchema = z.object({
   remark: z.string().optional(),
   serverDescription: z.string().optional(),
   isDisabled: z.boolean().optional(),
-  isHidden: z.boolean().optional(),
   tags: z.array(z.string()).nullish(),
   port: z.number().optional(),
   security: z.string().optional(),
