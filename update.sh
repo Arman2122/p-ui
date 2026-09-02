@@ -32,6 +32,30 @@ _fail() {
     exit 2
 }
 
+# _restore_previous_release puts the files an update set aside back in place
+# and starts the panel on them. Called only when the new release did not come up.
+_restore_previous_release() {
+    local previous="$1"
+    [[ -d "${previous}" ]] || return 1
+    echo -e "${yellow}Putting the previous p-ui version back...${plain}"
+    systemctl stop p-ui > /dev/null 2>&1
+    local f
+    for f in p-ui.service p-ui.service.debian p-ui p-ui.sh; do
+        [[ -e "${previous}/${f}" ]] && mv -f "${previous}/${f}" "${pui_folder}/${f}"
+    done
+    for f in "${previous}"/bin/*; do
+        [[ -e "${f}" ]] && mv -f "${f}" "${pui_folder}/bin/$(basename "${f}")"
+    done
+    if [[ -f "${previous}/p-ui.service.unit" ]]; then
+        cp -f "${previous}/p-ui.service.unit" "${pui_service}/p-ui.service" > /dev/null 2>&1
+        chmod 644 "${pui_service}/p-ui.service" > /dev/null 2>&1
+    fi
+    rm -rf "${previous}"
+    systemctl daemon-reload > /dev/null 2>&1
+    systemctl enable p-ui > /dev/null 2>&1
+    systemctl start p-ui > /dev/null 2>&1
+}
+
 # Records this run's outcome for the panel's web updater to poll, since it
 # launches this script detached and has no other way to learn whether it
 # finished. Written to a fixed path outside PUI_MAIN_FOLDER so it survives
@@ -1054,12 +1078,32 @@ update_p-ui() {
         ${curl_bin} -fLRo "${pui_script_temp}" https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.sh > /dev/null 2>&1 || true
     fi
 
+    # Staged beside the live tree and proved to run BEFORE anything of the
+    # running panel is stopped or removed: a bad archive leaves it untouched.
+    local stage="${pui_folder}.new.$$"
+    rm -rf "${stage}"
+    mkdir -p "${stage}"
+    if ! tar --no-same-owner -zxf p-ui-linux-$(arch).tar.gz -C "${stage}" > /dev/null 2>&1 || [[ ! -s "${stage}/p-ui/p-ui" ]]; then
+        rm -rf "${stage}"
+        rm -f "${pui_script_temp}" p-ui-linux-$(arch).tar.gz
+        _fail "ERROR: The release archive did not extract cleanly; the running panel is untouched."
+    fi
+    chmod +x "${stage}/p-ui/p-ui" > /dev/null 2>&1
+    if ! "${stage}/p-ui/p-ui" -v > /dev/null 2>&1; then
+        rm -rf "${stage}"
+        rm -f "${pui_script_temp}" p-ui-linux-$(arch).tar.gz
+        _fail "ERROR: The new p-ui binary does not run on this host; the running panel is untouched."
+    fi
+    local previous="${pui_folder}/.previous"
+    rm -rf "${previous}"
     if [[ -e ${pui_folder}/ ]]; then
         echo -e "${green}Stopping p-ui...${plain}"
         if [ -f "${pui_service}/p-ui.service" ]; then
             systemctl stop p-ui > /dev/null 2>&1
             systemctl disable p-ui > /dev/null 2>&1
             echo -e "${green}Removing old systemd unit version...${plain}"
+            mkdir -p "${previous}" > /dev/null 2>&1
+            cp -f "${pui_service}/p-ui.service" "${previous}/p-ui.service.unit" > /dev/null 2>&1
             rm ${pui_service}/p-ui.service -f > /dev/null 2>&1
             systemctl daemon-reload > /dev/null 2>&1
         else
@@ -1071,20 +1115,17 @@ update_p-ui() {
         # an inbound port with an outdated secret, silently breaking new clients.
         # The new panel respawns a clean mtg per inbound on next start.
         pkill -f 'mtg-linux-[^ ]* run ' > /dev/null 2>&1 || true
-        echo -e "${green}Removing old p-ui version...${plain}"
+        echo -e "${green}Setting the old p-ui version aside...${plain}"
         # File by file, on purpose: the folder also holds geo data the operator
         # may have updated and the module source an upgrade refreshes itself.
-        rm ${pui_folder}/p-ui.service -f > /dev/null 2>&1
-        rm ${pui_folder}/p-ui.service.debian -f > /dev/null 2>&1
-        rm ${pui_folder}/p-ui -f > /dev/null 2>&1
-        rm ${pui_folder}/p-ui.sh -f > /dev/null 2>&1
-        echo -e "${green}Removing old mtg version...${plain}"
-        rm ${pui_folder}/bin/mtg-linux-$(arch) -f > /dev/null 2>&1
-        echo -e "${green}Removing old xray version...${plain}"
-        rm ${pui_folder}/bin/xray-linux-$(arch) -f > /dev/null 2>&1
-        echo -e "${green}Removing old README and LICENSE file...${plain}"
-        rm ${pui_folder}/bin/README.md -f > /dev/null 2>&1
-        rm ${pui_folder}/bin/LICENSE -f > /dev/null 2>&1
+        mkdir -p "${previous}/bin" > /dev/null 2>&1
+        local f
+        for f in p-ui.service p-ui.service.debian p-ui p-ui.sh; do
+            [[ -e "${pui_folder}/${f}" ]] && mv -f "${pui_folder}/${f}" "${previous}/${f}" > /dev/null 2>&1
+        done
+        for f in mtg-linux-$(arch) mtg-linux-arm xray-linux-$(arch) xray-linux-arm32 README.md LICENSE; do
+            [[ -e "${pui_folder}/bin/${f}" ]] && mv -f "${pui_folder}/bin/${f}" "${previous}/bin/${f}" > /dev/null 2>&1
+        done
     else
         rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
         _fail "ERROR: p-ui not installed."
@@ -1093,11 +1134,14 @@ update_p-ui() {
     echo -e "${green}Installing new p-ui version...${plain}"
     # --no-same-owner: the chown further down repairs the tree, but only after
     # every file has spent the length of an update owned by the archive's uid.
-    tar --no-same-owner -zxvf p-ui-linux-$(arch).tar.gz > /dev/null 2>&1
+    cp -a "${stage}/p-ui/." "${pui_folder}/" > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
+        rm -rf "${stage}"
         rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
-        _fail "ERROR: Failed to extract the p-ui release archive -- the previous installation has already been removed, so the panel will not start until this is fixed; try running the update again"
+        _restore_previous_release "${previous}"
+        _fail "ERROR: Failed to copy the new release into place; the previous version was put back and started."
     fi
+    rm -rf "${stage}"
     rm p-ui-linux-$(arch).tar.gz -f > /dev/null 2>&1
     cd p-ui > /dev/null 2>&1
     if [[ $? -ne 0 || ! -s p-ui ]]; then
@@ -1198,7 +1242,16 @@ update_p-ui() {
     systemctl daemon-reload > /dev/null 2>&1
     systemctl enable p-ui > /dev/null 2>&1
     systemctl start p-ui > /dev/null 2>&1
-
+    local waited=0
+    until systemctl is-active --quiet p-ui || [[ ${waited} -ge 15 ]]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if ! systemctl is-active --quiet p-ui; then
+        _restore_previous_release "${previous}"
+        _fail "ERROR: The new p-ui did not start within 15s; the previous version was put back and started. See: journalctl -u p-ui -n 50"
+    fi
+    rm -rf "${previous}"
     config_after_update
 
     # IP Limit relies on fail2ban; install + configure it now so the feature
