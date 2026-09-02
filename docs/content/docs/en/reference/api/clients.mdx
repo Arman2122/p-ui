@@ -131,6 +131,27 @@ _openapi:
         skipped and failed lists with reasons, prefixed attach: or detach:.'
       url: '#move-many-clients-between-inbounds-in-one-call-each-client-is-attached-to-every-target-inbound-first-and-only-then-detached-from-the-source-inbounds-so-no-client-is-left-without-an-inbound-mid-way-an-inbound-cannot-be-both-a-source-and-a-target-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons-prefixed-attach-or-detach'
     - depth: 2
+      title: 'Forget the recorded source IPs of many clients in one call, the same as
+        the per-client clear: their IP-limit history restarts from zero and a
+        client blocked by the limit is unblocked at the next check. Instead of
+        emails, pass filter (the same query object /list/paged takes) to act on
+        every matching client, capped at 20000. The response also carries
+        outcome: per-row ok, skipped and failed lists with reasons.'
+      url: '#forget-the-recorded-source-ips-of-many-clients-in-one-call-the-same-as-the-per-client-clear-their-ip-limit-history-restarts-from-zero-and-a-client-blocked-by-the-limit-is-unblocked-at-the-next-check-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
+    - depth: 2
+      title: Export a selection of clients in the same portable shape GET
+        /clients/export uses for every client, ready for /clients/import on
+        another panel. Instead of emails, pass filter (the same query object
+        /list/paged takes) to export every matching client, capped at 20000.
+      url: '#export-a-selection-of-clients-in-the-same-portable-shape-get-clientsexport-uses-for-every-client-ready-for-clientsimport-on-another-panel-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-export-every-matching-client-capped-at-20000'
+    - depth: 2
+      title: Render the share links of many clients in one call, one row per client
+        with every link across its inbounds; a client that could not be rendered
+        carries an error instead. Instead of emails, pass filter (the same query
+        object /list/paged takes) to render every matching client, capped at
+        20000.
+      url: '#render-the-share-links-of-many-clients-in-one-call-one-row-per-client-with-every-link-across-its-inbounds-a-client-that-could-not-be-rendered-carries-an-error-instead-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-render-every-matching-client-capped-at-20000'
+    - depth: 2
       title: 'Enable many clients in one call. Emails are grouped by inbound and
         applied with a single read-modify-write per inbound; the running Xray
         (local or remote node) is updated to add each user. Note that enabling a
@@ -446,6 +467,24 @@ _openapi:
           per-row ok, skipped and failed lists with reasons, prefixed attach: or
           detach:.'
         id: move-many-clients-between-inbounds-in-one-call-each-client-is-attached-to-every-target-inbound-first-and-only-then-detached-from-the-source-inbounds-so-no-client-is-left-without-an-inbound-mid-way-an-inbound-cannot-be-both-a-source-and-a-target-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons-prefixed-attach-or-detach
+      - content: 'Forget the recorded source IPs of many clients in one call, the same
+          as the per-client clear: their IP-limit history restarts from zero and
+          a client blocked by the limit is unblocked at the next check. Instead
+          of emails, pass filter (the same query object /list/paged takes) to
+          act on every matching client, capped at 20000. The response also
+          carries outcome: per-row ok, skipped and failed lists with reasons.'
+        id: forget-the-recorded-source-ips-of-many-clients-in-one-call-the-same-as-the-per-client-clear-their-ip-limit-history-restarts-from-zero-and-a-client-blocked-by-the-limit-is-unblocked-at-the-next-check-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: Export a selection of clients in the same portable shape GET
+          /clients/export uses for every client, ready for /clients/import on
+          another panel. Instead of emails, pass filter (the same query object
+          /list/paged takes) to export every matching client, capped at 20000.
+        id: export-a-selection-of-clients-in-the-same-portable-shape-get-clientsexport-uses-for-every-client-ready-for-clientsimport-on-another-panel-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-export-every-matching-client-capped-at-20000
+      - content: Render the share links of many clients in one call, one row per client
+          with every link across its inbounds; a client that could not be
+          rendered carries an error instead. Instead of emails, pass filter (the
+          same query object /list/paged takes) to render every matching client,
+          capped at 20000.
+        id: render-the-share-links-of-many-clients-in-one-call-one-row-per-client-with-every-link-across-its-inbounds-a-client-that-could-not-be-rendered-carries-an-error-instead-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-render-every-matching-client-capped-at-20000
       - content: 'Enable many clients in one call. Emails are grouped by inbound and
           applied with a single read-modify-write per inbound; the running Xray
           (local or remote node) is updated to add each user. Note that enabling
@@ -642,7 +681,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/clients/list","method":"get"},{"path":"/panel/api/clients/list/paged","method":"get"},{"path":"/panel/api/clients/get/{email}","method":"get"},{"path":"/panel/api/clients/get/tgId/{tgId}","method":"get"},{"path":"/panel/api/clients/add","method":"post"},{"path":"/panel/api/clients/update/{email}","method":"post"},{"path":"/panel/api/clients/del/{email}","method":"post"},{"path":"/panel/api/clients/{email}/attach","method":"post"},{"path":"/panel/api/clients/{email}/detach","method":"post"},{"path":"/panel/api/clients/{email}/externalLinks","method":"post"},{"path":"/panel/api/clients/resetAllTraffics","method":"post"},{"path":"/panel/api/clients/delDepleted","method":"post"},{"path":"/panel/api/clients/delOrphans","method":"post"},{"path":"/panel/api/clients/export","method":"get"},{"path":"/panel/api/clients/import","method":"post"},{"path":"/panel/api/clients/bulkAdjust","method":"post"},{"path":"/panel/api/clients/bulkSet","method":"post"},{"path":"/panel/api/clients/bulkMove","method":"post"},{"path":"/panel/api/clients/bulkEnable","method":"post"},{"path":"/panel/api/clients/bulkDisable","method":"post"},{"path":"/panel/api/clients/bulkDel","method":"post"},{"path":"/panel/api/clients/bulkCreate","method":"post"},{"path":"/panel/api/clients/groups/bulkAdd","method":"post"},{"path":"/panel/api/clients/groups/bulkRemove","method":"post"},{"path":"/panel/api/clients/bulkAttach","method":"post"},{"path":"/panel/api/clients/bulkDetach","method":"post"},{"path":"/panel/api/clients/bulkResetTraffic","method":"post"},{"path":"/panel/api/clients/groups","method":"get"},{"path":"/panel/api/clients/groups/{name}/emails","method":"get"},{"path":"/panel/api/clients/groups/create","method":"post"},{"path":"/panel/api/clients/groups/rename","method":"post"},{"path":"/panel/api/clients/groups/delete","method":"post"},{"path":"/panel/api/clients/groups/resetTraffic","method":"post"},{"path":"/panel/api/clients/resetTraffic/{email}","method":"post"},{"path":"/panel/api/clients/updateTraffic/{email}","method":"post"},{"path":"/panel/api/clients/ips/{email}","method":"post"},{"path":"/panel/api/clients/localAddresses/{email}","method":"get"},{"path":"/panel/api/clients/clearIps/{email}","method":"post"},{"path":"/panel/api/clients/onlines","method":"post"},{"path":"/panel/api/clients/onlinesByGuid","method":"post"},{"path":"/panel/api/clients/clientIpsByGuid","method":"post"},{"path":"/panel/api/clients/activeInbounds","method":"post"},{"path":"/panel/api/clients/lastOnline","method":"post"},{"path":"/panel/api/clients/traffic/{email}","method":"get"},{"path":"/panel/api/clients/subLinks/{subId}","method":"get"},{"path":"/panel/api/clients/configFile/{subId}/{inboundId}","method":"get"},{"path":"/panel/api/clients/links/{email}","method":"get"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/clients/list","method":"get"},{"path":"/panel/api/clients/list/paged","method":"get"},{"path":"/panel/api/clients/get/{email}","method":"get"},{"path":"/panel/api/clients/get/tgId/{tgId}","method":"get"},{"path":"/panel/api/clients/add","method":"post"},{"path":"/panel/api/clients/update/{email}","method":"post"},{"path":"/panel/api/clients/del/{email}","method":"post"},{"path":"/panel/api/clients/{email}/attach","method":"post"},{"path":"/panel/api/clients/{email}/detach","method":"post"},{"path":"/panel/api/clients/{email}/externalLinks","method":"post"},{"path":"/panel/api/clients/resetAllTraffics","method":"post"},{"path":"/panel/api/clients/delDepleted","method":"post"},{"path":"/panel/api/clients/delOrphans","method":"post"},{"path":"/panel/api/clients/export","method":"get"},{"path":"/panel/api/clients/import","method":"post"},{"path":"/panel/api/clients/bulkAdjust","method":"post"},{"path":"/panel/api/clients/bulkSet","method":"post"},{"path":"/panel/api/clients/bulkMove","method":"post"},{"path":"/panel/api/clients/bulkClearIps","method":"post"},{"path":"/panel/api/clients/bulkExport","method":"post"},{"path":"/panel/api/clients/bulkLinks","method":"post"},{"path":"/panel/api/clients/bulkEnable","method":"post"},{"path":"/panel/api/clients/bulkDisable","method":"post"},{"path":"/panel/api/clients/bulkDel","method":"post"},{"path":"/panel/api/clients/bulkCreate","method":"post"},{"path":"/panel/api/clients/groups/bulkAdd","method":"post"},{"path":"/panel/api/clients/groups/bulkRemove","method":"post"},{"path":"/panel/api/clients/bulkAttach","method":"post"},{"path":"/panel/api/clients/bulkDetach","method":"post"},{"path":"/panel/api/clients/bulkResetTraffic","method":"post"},{"path":"/panel/api/clients/groups","method":"get"},{"path":"/panel/api/clients/groups/{name}/emails","method":"get"},{"path":"/panel/api/clients/groups/create","method":"post"},{"path":"/panel/api/clients/groups/rename","method":"post"},{"path":"/panel/api/clients/groups/delete","method":"post"},{"path":"/panel/api/clients/groups/resetTraffic","method":"post"},{"path":"/panel/api/clients/resetTraffic/{email}","method":"post"},{"path":"/panel/api/clients/updateTraffic/{email}","method":"post"},{"path":"/panel/api/clients/ips/{email}","method":"post"},{"path":"/panel/api/clients/localAddresses/{email}","method":"get"},{"path":"/panel/api/clients/clearIps/{email}","method":"post"},{"path":"/panel/api/clients/onlines","method":"post"},{"path":"/panel/api/clients/onlinesByGuid","method":"post"},{"path":"/panel/api/clients/clientIpsByGuid","method":"post"},{"path":"/panel/api/clients/activeInbounds","method":"post"},{"path":"/panel/api/clients/lastOnline","method":"post"},{"path":"/panel/api/clients/traffic/{email}","method":"get"},{"path":"/panel/api/clients/subLinks/{subId}","method":"get"},{"path":"/panel/api/clients/configFile/{subId}/{inboundId}","method":"get"},{"path":"/panel/api/clients/links/{email}","method":"get"}]} showTitle />
     </>
   );
 }
