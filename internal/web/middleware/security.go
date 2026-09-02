@@ -11,7 +11,7 @@ import (
 )
 
 // SecurityHeadersMiddleware adds browser hardening headers to panel responses.
-func SecurityHeadersMiddleware(directHTTPS bool) gin.HandlerFunc {
+func SecurityHeadersMiddleware(directHTTPS, skipHSTS bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		nonce := newCSPNonce()
 		c.Set("csp_nonce", nonce)
@@ -19,7 +19,7 @@ func SecurityHeadersMiddleware(directHTTPS bool) gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "no-referrer")
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
-		if directHTTPS {
+		if !skipHSTS && (directHTTPS || c.GetBool(session.RequestHTTPSKey)) {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
 		c.Next()

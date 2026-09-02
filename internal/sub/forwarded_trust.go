@@ -1,14 +1,13 @@
 package sub
 
 import (
-	"net"
-	"net/netip"
 	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/proxytrust"
 )
 
 var warnSuppressedForwardedOnce sync.Once
@@ -83,29 +82,5 @@ func warnSuppressedForwardedHeaders(c *gin.Context) {
 }
 
 func remoteAddrInCIDRs(remoteAddr, cidrs string) bool {
-	host := remoteAddr
-	if h, _, err := net.SplitHostPort(remoteAddr); err == nil {
-		host = h
-	}
-	addr, err := netip.ParseAddr(strings.TrimSpace(host))
-	if err != nil {
-		return false
-	}
-	addr = addr.Unmap()
-	for value := range strings.SplitSeq(cidrs, ",") {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if prefix, err := netip.ParsePrefix(value); err == nil {
-			if prefix.Contains(addr) {
-				return true
-			}
-			continue
-		}
-		if proxyIP, err := netip.ParseAddr(value); err == nil && proxyIP.Unmap() == addr.Unmap() {
-			return true
-		}
-	}
-	return false
+	return proxytrust.RemoteAddrInCIDRs(remoteAddr, cidrs)
 }

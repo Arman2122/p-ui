@@ -8,6 +8,7 @@ export const RESTART_FIELD_LABELS: Readonly<Partial<Record<keyof AllSetting, str
   webBasePath: 'pages.settings.panelUrlPath',
   webCertFile: 'pages.settings.publicKeyPath',
   webKeyFile: 'pages.settings.privateKeyPath',
+  trustedProxyCIDRs: 'pages.settings.trustedProxyCidrs',
   sessionMaxAge: 'pages.settings.sessionMaxAge',
   subEnable: 'pages.settings.subEnable',
   subListen: 'pages.settings.subListen',

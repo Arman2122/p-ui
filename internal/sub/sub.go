@@ -112,7 +112,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 		return nil, err
 	}
 	sendHSTS := (subCertFile != "" || subKeyFile != "") && !config.IsSkipHSTS()
-	engine.Use(middleware.SecurityHeadersMiddleware(sendHSTS))
+	engine.Use(middleware.SecurityHeadersMiddleware(sendHSTS, false))
 
 	subDomain, err := s.settingService.GetSubDomain()
 	if err != nil {

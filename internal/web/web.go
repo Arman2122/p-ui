@@ -184,8 +184,13 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 
 	engine := gin.Default()
 	directHTTPS := s.isDirectHTTPSConfigured()
-	sendHSTS := directHTTPS && !config.IsSkipHSTS()
-	engine.Use(middleware.SecurityHeadersMiddleware(sendHSTS))
+	trustedProxies, err := s.settingService.GetTrustedProxyCIDRs()
+	if err != nil {
+		logger.Warning("cannot read trustedProxyCIDRs, forwarded headers are ignored:", err)
+		trustedProxies = ""
+	}
+	engine.Use(middleware.ForwardedHTTPS(trustedProxies))
+	engine.Use(middleware.SecurityHeadersMiddleware(directHTTPS, config.IsSkipHSTS()))
 
 	// Cap request bodies on state-changing requests so a stolen session/API
 	// token or a buggy client can't force large allocations or long DB
@@ -230,6 +235,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	}
 	configureSessionStore(store, sessionOptions)
 	engine.Use(sessions.Sessions("p-ui", store))
+	engine.Use(middleware.SecureCookiesBehindProxy(sessionOptions))
 	engine.Use(func(c *gin.Context) {
 		c.Set("base_path", basePath)
 	})
@@ -716,7 +722,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 			// Refusing to boot here would recreate the F224/F394 lockout, and a
 			// certbot race would then take the panel down on every restart.
 			logger.Errorf("%s HTTPS is configured (webCertFile=%q, webKeyFile=%q) but the pair did not load: %v. "+
-				"The panel is serving CLEARTEXT on %v -- session cookies are not Secure, HSTS is not sent, and node mTLS "+
+				"The panel is serving CLEARTEXT on %v -- session cookies are not Secure and HSTS is not sent (unless a proxy in trustedProxyCIDRs terminates TLS and says so), and node mTLS "+
 				"client-certificate verification is NOT configured. Fix the files and restart, or clear webCertFile and "+
 				"webKeyFile to make plain HTTP deliberate.",
 				service.TLSPostureLogPrefix, certFile, keyFile, err, listener.Addr())

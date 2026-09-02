@@ -20,6 +20,10 @@ const (
 	sessionCookieName = "p-ui"
 )
 
+// RequestHTTPSKey is set by middleware.ForwardedHTTPS: the browser reached the
+// panel over TLS, directly or through a trusted proxy that says so.
+const RequestHTTPSKey = "request_https"
+
 func init() {
 	gob.Register(model.User{})
 }
@@ -182,7 +186,7 @@ func ClearSession(c *gin.Context) error {
 	if cookiePath == "" {
 		cookiePath = "/"
 	}
-	secure := c.Request.TLS != nil
+	secure := c.Request.TLS != nil || c.GetBool(RequestHTTPSKey)
 	s.Options(sessions.Options{
 		Path:     cookiePath,
 		MaxAge:   -1,
