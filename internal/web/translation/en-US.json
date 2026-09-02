@@ -1614,6 +1614,7 @@
       "smtpSettings": "SMTP Settings",
       "smtpEnable": "Enable Email Notifications",
       "smtpEnableDesc": "Enable email notifications via SMTP",
+      "smtpLastError": "Last email delivery failed",
       "smtpHost": "SMTP Host",
       "smtpHostDesc": "SMTP server hostname (e.g. smtp.gmail.com)",
       "smtpPort": "SMTP Port",

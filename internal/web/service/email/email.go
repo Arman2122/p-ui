@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"github.com/Arman2122/p-ui/internal/logger"
 	"mime"
 	"net"
 	"net/mail"
@@ -43,7 +44,17 @@ const smtpConnectTimeout = 10 * time.Second
 var smtpDeadline = 30 * time.Second
 
 // Send sends an HTML email to all configured recipients.
+// Send delivers and records the outcome, so the Email tab shows the last
+// failure instead of a log line nobody reads.
 func (s *EmailService) Send(subject, body string) error {
+	err := s.send(subject, body)
+	if recErr := s.settingService.RecordSmtpDelivery(err); recErr != nil {
+		logger.Warning("email: recording the delivery outcome failed:", recErr)
+	}
+	return err
+}
+
+func (s *EmailService) send(subject, body string) error {
 	host, err := s.settingService.GetSmtpHost()
 	if err != nil || host == "" {
 		return fmt.Errorf("smtp host not configured")

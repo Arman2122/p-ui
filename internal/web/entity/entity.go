@@ -65,6 +65,9 @@ type AllSetting struct {
 	SmtpEnabledEvents  string `json:"smtpEnabledEvents" form:"smtpEnabledEvents"`
 	SmtpCpu            int    `json:"smtpCpu" form:"smtpCpu" validate:"gte=0,lte=100"`
 	SmtpMemory         int    `json:"smtpMemory" form:"smtpMemory" validate:"gte=0,lte=100"`
+	// SmtpLastError and SmtpLastErrorAt are written by the mailer and shown read-only.
+	SmtpLastError   string `json:"smtpLastError" form:"smtpLastError"`
+	SmtpLastErrorAt int64  `json:"smtpLastErrorAt" form:"smtpLastErrorAt"`
 
 	OutboundDownThreshold int `json:"outboundDownThreshold" form:"outboundDownThreshold" validate:"gte=1,lte=100"`
 

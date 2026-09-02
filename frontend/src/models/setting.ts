@@ -107,6 +107,8 @@ export class AllSetting {
   smtpEnabledEvents = 'login.attempt,cpu.high';
   smtpCpu = 80;
   smtpMemory = 80;
+  smtpLastError = '';
+  smtpLastErrorAt = 0;
   outboundDownThreshold = 3;
   hasTgBotToken = false;
   hasTwoFactorToken = false;
