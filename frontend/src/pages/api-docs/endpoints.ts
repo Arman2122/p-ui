@@ -1747,7 +1747,7 @@ export const sections: readonly Section[] = [
     id: 'websocket',
     title: 'WebSocket',
     description:
-      'Real-time status updates via WebSocket. Connect once at <code>ws://<panel>/ws</code> to receive a stream of JSON messages without polling. Requires an authenticated session cookie (Bearer token auth is not supported). Each message has a <code>type</code> field that identifies the payload shape.',
+      'Real-time status updates via WebSocket. Connect once at <code>ws://<panel>/ws</code> to receive a stream of JSON messages without polling. Requires an authenticated session cookie (Bearer token auth is not supported). Every message is the same envelope: <code>type</code> identifies the payload shape, <code>payload</code> carries it, and <code>time</code> is the send time in Unix milliseconds.',
     endpoints: [
       {
         method: 'GET',
@@ -1757,26 +1757,26 @@ export const sections: readonly Section[] = [
       {
         method: 'WS',
         path: '→ type: status',
-        summary: 'Server health snapshot pushed every 2 seconds. Contains CPU, memory, swap, disk, network IO, load, and Xray state — same shape as <code>GET /panel/api/server/status</code>.',
-        response: '{\n  "type": "status",\n  "data": { "cpu": 12.5, "mem": { "current": 2147483648, "total": 8589934592 }, "xray": { "state": "running" } }\n}',
+        summary: 'Server health snapshot pushed every 2 seconds. The payload contains CPU, memory, swap, disk, network IO, load, and Xray state — same shape as <code>GET /panel/api/server/status</code>.',
+        response: '{\n  "type": "status",\n  "payload": { "cpu": 12.5, "mem": { "current": 2147483648, "total": 8589934592 }, "xray": { "state": "running" } },\n  "time": 1725000000000\n}',
       },
       {
         method: 'WS',
-        path: '→ type: xrayState',
-        summary: 'Xray process state change. Fired when Xray starts, stops, or encounters an error.',
-        response: '{\n  "type": "xrayState",\n  "data": "running"\n}',
+        path: '→ type: xray_state',
+        summary: 'Xray process state change. Fired when Xray starts, stops, or encounters an error; <code>state</code> is <code>running</code>, <code>stop</code> or <code>error</code>, and <code>errorMsg</code> carries the reason when it is <code>error</code>.',
+        response: '{\n  "type": "xray_state",\n  "payload": { "state": "running", "errorMsg": "" },\n  "time": 1725000000000\n}',
       },
       {
         method: 'WS',
         path: '→ type: notification',
-        summary: 'In-panel toast notification. Fired on Xray stop/restart, DB import, panel restart, etc.',
-        response: '{\n  "type": "notification",\n  "title": "Xray service restarted",\n  "body": "Xray has been restarted successfully",\n  "severity": "success"\n}',
+        summary: 'In-panel toast notification. Fired on Xray stop/restart, DB import, panel restart, etc. <code>level</code> is <code>success</code>, <code>info</code>, <code>warning</code> or <code>error</code>.',
+        response: '{\n  "type": "notification",\n  "payload": { "title": "Xray service restarted", "message": "Xray service has been restarted successfully", "level": "success" },\n  "time": 1725000000000\n}',
       },
       {
         method: 'WS',
         path: '→ type: invalidate',
-        summary: 'Instructs the UI to re-fetch a resource. Fired when another admin session modifies data (e.g. toggling inbound enable).',
-        response: '{\n  "type": "invalidate",\n  "resource": "inbounds"\n}',
+        summary: 'Instructs the UI to re-fetch a resource. Fired when another admin session modifies data (e.g. toggling inbound enable). The payload names the message type whose cached data is stale: <code>inbounds</code>, <code>outbounds</code>, <code>nodes</code> or <code>clients</code>.',
+        response: '{\n  "type": "invalidate",\n  "payload": { "type": "inbounds" },\n  "time": 1725000000000\n}',
       },
     ],
   },

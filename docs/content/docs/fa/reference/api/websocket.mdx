@@ -46,50 +46,52 @@ export default function Layout(props) {
 }
 ## پیام‌ها
 
-هر فریم یک شیء JSON است که فیلد `type` آن یکی از شکل‌های زیر را انتخاب می‌کند.
+هر فریم یک پاکت JSON یکسان است: فیلد `type` شکل محموله را مشخص می‌کند، `payload` خودِ محموله را حمل می‌کند و `time` زمان ارسال بر حسب میلی‌ثانیهٔ یونیکس است.
 
 ### `type: status`
 
-تصویر لحظه‌ای از سلامت سرور که هر ۲ ثانیه ارسال می‌شود. شامل CPU، حافظه، swap، دیسک، ورودی/خروجی شبکه، بار سیستم و وضعیت Xray — همان شکلِ <code>GET /panel/api/server/status</code>.
+تصویر لحظه‌ای از سلامت سرور که هر ۲ ثانیه ارسال می‌شود. محموله شامل CPU، حافظه، swap، دیسک، ورودی/خروجی شبکه، بار سیستم و وضعیت Xray است — همان شکلِ <code>GET /panel/api/server/status</code>.
 
 ```json
 {
   "type": "status",
-  "data": { "cpu": 12.5, "mem": { "current": 2147483648, "total": 8589934592 }, "xray": { "state": "running" } }
+  "payload": { "cpu": 12.5, "mem": { "current": 2147483648, "total": 8589934592 }, "xray": { "state": "running" } },
+  "time": 1725000000000
 }
 ```
 
-### `type: xrayState`
+### `type: xray_state`
 
-تغییر وضعیت فرایند Xray. هنگام شروع، توقف یا بروز خطا در Xray ارسال می‌شود.
+تغییر وضعیت فرایند Xray. هنگام شروع، توقف یا بروز خطا در Xray ارسال می‌شود؛ <code>state</code> یکی از <code>running</code>، <code>stop</code> یا <code>error</code> است و وقتی <code>error</code> باشد، <code>errorMsg</code> علت را حمل می‌کند.
 
 ```json
 {
-  "type": "xrayState",
-  "data": "running"
+  "type": "xray_state",
+  "payload": { "state": "running", "errorMsg": "" },
+  "time": 1725000000000
 }
 ```
 
 ### `type: notification`
 
-اعلان (toast) داخل پنل. هنگام توقف یا راه‌اندازی مجدد Xray، وارد کردن پایگاه‌داده، راه‌اندازی مجدد پنل و مانند آن ارسال می‌شود.
+اعلان (toast) داخل پنل. هنگام توقف یا راه‌اندازی مجدد Xray، وارد کردن پایگاه‌داده، راه‌اندازی مجدد پنل و مانند آن ارسال می‌شود. <code>level</code> یکی از <code>success</code>، <code>info</code>، <code>warning</code> یا <code>error</code> است.
 
 ```json
 {
   "type": "notification",
-  "title": "Xray service restarted",
-  "body": "Xray has been restarted successfully",
-  "severity": "success"
+  "payload": { "title": "Xray service restarted", "message": "Xray service has been restarted successfully", "level": "success" },
+  "time": 1725000000000
 }
 ```
 
 ### `type: invalidate`
 
-به رابط کاربری می‌گوید یک منبع را دوباره دریافت کند. وقتی نشستِ مدیر دیگری داده‌ای را تغییر می‌دهد (برای نمونه، روشن یا خاموش کردن یک ورودی) ارسال می‌شود.
+به رابط کاربری می‌گوید یک منبع را دوباره دریافت کند. وقتی نشستِ مدیر دیگری داده‌ای را تغییر می‌دهد (برای نمونه، روشن یا خاموش کردن یک ورودی) ارسال می‌شود. محموله نام نوع پیامی را می‌آورد که دادهٔ کش‌شدهٔ آن کهنه شده است: <code>inbounds</code>، <code>outbounds</code>، <code>nodes</code> یا <code>clients</code>.
 
 ```json
 {
   "type": "invalidate",
-  "resource": "inbounds"
+  "payload": { "type": "inbounds" },
+  "time": 1725000000000
 }
 ```

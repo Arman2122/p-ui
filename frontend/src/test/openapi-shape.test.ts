@@ -33,6 +33,6 @@ describe('openapi.json', () => {
 
   it('keeps the WebSocket message shapes in the vendor extension', () => {
     const types = (spec['x-websocket-messages'] ?? []).map((m) => m.type).sort();
-    expect(types).toEqual(['invalidate', 'notification', 'status', 'xrayState']);
+    expect(types).toEqual(['invalidate', 'notification', 'status', 'xray_state']);
   });
 });
