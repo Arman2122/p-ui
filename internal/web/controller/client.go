@@ -287,10 +287,11 @@ func (a *ClientController) resetAllTraffics(c *gin.Context) {
 }
 
 type bulkAdjustRequest struct {
-	Emails   []string `json:"emails"`
-	AddDays  int      `json:"addDays"`
-	AddBytes int64    `json:"addBytes"`
-	Flow     string   `json:"flow"`
+	Emails   []string                  `json:"emails"`
+	Filter   *service.ClientPageParams `json:"filter"`
+	AddDays  int                       `json:"addDays"`
+	AddBytes int64                     `json:"addBytes"`
+	Flow     string                    `json:"flow"`
 	// Mode is "add" (the default, and what every caller before this sent) or
 	// "set". Absent means add, so an existing integration keeps its semantics.
 	Mode string `json:"mode"`
@@ -302,7 +303,11 @@ func (a *ClientController) bulkAdjust(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkAdjust(&a.inboundService, req.Emails, req.AddDays, req.AddBytes, req.Flow, req.Mode)
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkAdjust(&a.inboundService, emails, req.AddDays, req.AddBytes, req.Flow, req.Mode)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -315,13 +320,15 @@ func (a *ClientController) bulkAdjust(c *gin.Context) {
 }
 
 type bulkDeleteRequest struct {
-	Emails      []string `json:"emails"`
-	KeepTraffic bool     `json:"keepTraffic"`
+	Emails      []string                  `json:"emails"`
+	Filter      *service.ClientPageParams `json:"filter"`
+	KeepTraffic bool                      `json:"keepTraffic"`
 }
 
 type bulkAttachRequest struct {
-	Emails     []string `json:"emails"`
-	InboundIds []int    `json:"inboundIds"`
+	Emails     []string                  `json:"emails"`
+	Filter     *service.ClientPageParams `json:"filter"`
+	InboundIds []int                     `json:"inboundIds"`
 }
 
 func (a *ClientController) bulkAttach(c *gin.Context) {
@@ -330,7 +337,11 @@ func (a *ClientController) bulkAttach(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkAttach(&a.inboundService, req.Emails, req.InboundIds)
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkAttach(&a.inboundService, emails, req.InboundIds)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -343,8 +354,9 @@ func (a *ClientController) bulkAttach(c *gin.Context) {
 }
 
 type bulkDetachRequest struct {
-	Emails     []string `json:"emails"`
-	InboundIds []int    `json:"inboundIds"`
+	Emails     []string                  `json:"emails"`
+	Filter     *service.ClientPageParams `json:"filter"`
+	InboundIds []int                     `json:"inboundIds"`
 }
 
 func (a *ClientController) bulkDetach(c *gin.Context) {
@@ -353,7 +365,11 @@ func (a *ClientController) bulkDetach(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkDetach(&a.inboundService, req.Emails, req.InboundIds)
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkDetach(&a.inboundService, emails, req.InboundIds)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -371,7 +387,11 @@ func (a *ClientController) bulkDelete(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkDelete(&a.inboundService, req.Emails, req.KeepTraffic)
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkDelete(&a.inboundService, emails, req.KeepTraffic)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -384,7 +404,8 @@ func (a *ClientController) bulkDelete(c *gin.Context) {
 }
 
 type bulkEnableRequest struct {
-	Emails []string `json:"emails"`
+	Emails []string                  `json:"emails"`
+	Filter *service.ClientPageParams `json:"filter"`
 }
 
 func (a *ClientController) bulkEnable(c *gin.Context) {
@@ -401,7 +422,11 @@ func (a *ClientController) bulkSetEnable(c *gin.Context, enable bool) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkSetEnable(&a.inboundService, req.Emails, enable)
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, needRestart, err := a.clientService.BulkSetEnable(&a.inboundService, emails, enable)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -644,7 +669,8 @@ func (a *ClientController) detach(c *gin.Context) {
 }
 
 type bulkResetRequest struct {
-	Emails []string `json:"emails"`
+	Emails []string                  `json:"emails"`
+	Filter *service.ClientPageParams `json:"filter"`
 }
 
 func (a *ClientController) bulkResetTraffic(c *gin.Context) {
@@ -653,7 +679,11 @@ func (a *ClientController) bulkResetTraffic(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, err := a.clientService.BulkResetTrafficOutcome(&a.inboundService, req.Emails)
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, err := a.clientService.BulkResetTrafficOutcome(&a.inboundService, emails)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

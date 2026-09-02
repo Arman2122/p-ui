@@ -8,6 +8,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/xray"
 
 	"gorm.io/gorm"
@@ -41,23 +42,23 @@ type ClientSlim struct {
 // fields treat 0 as "unset" on the lower bound and 0 (or negative) as
 // "unbounded" on the upper bound.
 type ClientPageParams struct {
-	Page     int    `form:"page"`
-	PageSize int    `form:"pageSize"`
-	Search   string `form:"search"`
-	Filter   string `form:"filter"`
-	Protocol string `form:"protocol"`
-	Inbound  string `form:"inbound"`
-	Sort     string `form:"sort"`
-	Order    string `form:"order"`
+	Page     int    `form:"page" json:"page"`
+	PageSize int    `form:"pageSize" json:"pageSize"`
+	Search   string `form:"search" json:"search"`
+	Filter   string `form:"filter" json:"filter"`
+	Protocol string `form:"protocol" json:"protocol"`
+	Inbound  string `form:"inbound" json:"inbound"`
+	Sort     string `form:"sort" json:"sort"`
+	Order    string `form:"order" json:"order"`
 
-	ExpiryFrom int64  `form:"expiryFrom"`
-	ExpiryTo   int64  `form:"expiryTo"`
-	UsageFrom  int64  `form:"usageFrom"`
-	UsageTo    int64  `form:"usageTo"`
-	AutoRenew  string `form:"autoRenew"`
-	HasTgID    string `form:"hasTgId"`
-	HasComment string `form:"hasComment"`
-	Group      string `form:"group"`
+	ExpiryFrom int64  `form:"expiryFrom" json:"expiryFrom"`
+	ExpiryTo   int64  `form:"expiryTo" json:"expiryTo"`
+	UsageFrom  int64  `form:"usageFrom" json:"usageFrom"`
+	UsageTo    int64  `form:"usageTo" json:"usageTo"`
+	AutoRenew  string `form:"autoRenew" json:"autoRenew"`
+	HasTgID    string `form:"hasTgId" json:"hasTgId"`
+	HasComment string `form:"hasComment" json:"hasComment"`
+	Group      string `form:"group" json:"group"`
 }
 
 // ClientPageResponse is the shape returned by ListPaged. `Total` is the
@@ -664,4 +665,34 @@ func parseCSVInts(raw string) []int {
 		return nil
 	}
 	return out
+}
+
+// bulkSelectionCap bounds a filter-resolved selection: past it the operator
+// is asked to narrow the filter rather than handed a silent partial run.
+var bulkSelectionCap = 20000
+
+// ResolveEmails turns the list page's filter into the emails it matches, so a
+// bulk operation can act on "everything matching" rather than the page shown.
+func (s *ClientService) ResolveEmails(inboundSvc *InboundService, settingSvc *SettingService, params ClientPageParams) ([]string, error) {
+	db := database.GetDB()
+	var expireDiffMs, trafficDiffBytes int64
+	if settingSvc != nil {
+		if v, err := settingSvc.GetExpireDiff(); err == nil {
+			expireDiffMs = int64(v) * 86400000
+		}
+		if v, err := settingSvc.GetTrafficDiff(); err == nil {
+			trafficDiffBytes = int64(v) * 1073741824
+		}
+	}
+	onlines := inboundSvc.GetOnlineClients()
+	q := newClientQuery(db, time.Now().UnixMilli(), expireDiffMs, trafficDiffBytes)
+	scoped, _ := q.applyParams(q.from(), params, onlines)
+	var emails []string
+	if err := scoped.Limit(bulkSelectionCap + 1).Pluck("c.email", &emails).Error; err != nil {
+		return nil, err
+	}
+	if len(emails) > bulkSelectionCap {
+		return nil, common.NewErrorf("the selection matches more than %d clients; narrow the filter", bulkSelectionCap)
+	}
+	return emails, nil
 }

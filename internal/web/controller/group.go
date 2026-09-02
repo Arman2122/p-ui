@@ -10,8 +10,10 @@ import (
 )
 
 type GroupController struct {
-	clientService service.ClientService
-	xrayService   service.XrayService
+	clientService  service.ClientService
+	inboundService service.InboundService
+	settingService service.SettingService
+	xrayService    service.XrayService
 }
 
 func NewGroupController(g *gin.RouterGroup) *GroupController {
@@ -128,8 +130,9 @@ func (a *GroupController) resetTraffic(c *gin.Context) {
 }
 
 type bulkAddToGroupRequest struct {
-	Emails []string `json:"emails"`
-	Group  string   `json:"group"`
+	Emails []string                  `json:"emails"`
+	Filter *service.ClientPageParams `json:"filter"`
+	Group  string                    `json:"group"`
 }
 
 func (a *GroupController) bulkAdd(c *gin.Context) {
@@ -138,11 +141,15 @@ func (a *GroupController) bulkAdd(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
 	if strings.TrimSpace(req.Group) == "" {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("group name is required"))
 		return
 	}
-	result, err := a.clientService.AddToGroupOutcome(req.Emails, req.Group)
+	result, err := a.clientService.AddToGroupOutcome(emails, req.Group)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -153,7 +160,8 @@ func (a *GroupController) bulkAdd(c *gin.Context) {
 }
 
 type bulkRemoveFromGroupRequest struct {
-	Emails []string `json:"emails"`
+	Emails []string                  `json:"emails"`
+	Filter *service.ClientPageParams `json:"filter"`
 }
 
 func (a *GroupController) bulkRemove(c *gin.Context) {
@@ -162,7 +170,11 @@ func (a *GroupController) bulkRemove(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, err := a.clientService.AddToGroupOutcome(req.Emails, "")
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, err := a.clientService.AddToGroupOutcome(emails, "")
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
