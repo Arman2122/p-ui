@@ -68,8 +68,10 @@ expiry, auto-renew, flow, group, speed plan, Telegram id and comment, each row
 kept, set or cleared), **move** between inbounds (every client is attached
 to the targets before it is detached from the sources), **clear IPs**,
 **export selected** and **copy links** (every share link of the selection, one
-per line). The delete confirmation can keep the traffic history, so a client
-re-created with the same email continues its counters. The selection is not limited to the page on
+per line) and **rotate credentials** (a fresh UUID, password, key or secret per
+protocol, optionally a new subscription id: every link the selection was handed
+stops working at once). The delete confirmation can keep the traffic history,
+so a client re-created with the same email continues its counters. The selection is not limited to the page on
 screen: once a whole page is selected, **Select all N matching** turns the
 selection into the filter itself and the server resolves every matching
 client. After any bulk action that skipped or failed a client, a drawer lists
