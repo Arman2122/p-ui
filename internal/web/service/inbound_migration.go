@@ -222,7 +222,7 @@ func (s *InboundService) MigrationRequirements() {
 	  AND NULLIF(stream_settings, '')::jsonb #>> '{security}' = 'tls'
 	  AND NULLIF(stream_settings, '')::jsonb #> '{tlsSettings,settings,domains}' IS NOT NULL`
 	err = tx.Raw(externalProxyQuery).Scan(&externalProxy).Error
-	if err != nil || len(externalProxy) == 0 {
+	if err != nil {
 		return
 	}
 
