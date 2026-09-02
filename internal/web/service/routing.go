@@ -345,10 +345,11 @@ func outboundsByProtocol(outbounds []map[string]any) (blackhole, direct string) 
 /*
 applyRoutingPlan puts the compile's answer into the generated config.
 
-The derived array is deliberately ordered: the api rule stays pinned first (a
-catch-all above it starves the gRPC stats path and every client reads offline),
-then the panel's own injections, then intent rules, then the operator's tail.
-Both are safe because every injected and intent rule is inboundTag-scoped.
+The derived array is deliberately ordered: the panel's own injections come
+first (each PREPENDS before this runs), then the api rule, then intent rules,
+then the operator's tail. A catch-all above the api rule would starve the gRPC
+stats path and every client would read offline; the injections cannot, because
+every injected and intent rule is inboundTag-scoped. F058.
 */
 func applyRoutingPlan(ctx context.Context, cfg *xray.Config, retireFronts bool) error {
 	var outbounds []map[string]any
