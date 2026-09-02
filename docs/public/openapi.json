@@ -1866,9 +1866,6 @@
           "isDisabled": {
             "type": "boolean"
           },
-          "isHidden": {
-            "type": "boolean"
-          },
           "keepSniBlank": {
             "type": "boolean"
           },
@@ -1977,7 +1974,6 @@
           "id",
           "inboundId",
           "isDisabled",
-          "isHidden",
           "keepSniBlank",
           "mihomoIpVersion",
           "mihomoX25519",
@@ -2048,9 +2044,6 @@
             "type": "array"
           },
           "isDisabled": {
-            "type": "boolean"
-          },
-          "isHidden": {
             "type": "boolean"
           },
           "keepSniBlank": {
@@ -2154,7 +2147,6 @@
           "hosts",
           "inboundIds",
           "isDisabled",
-          "isHidden",
           "keepSniBlank",
           "mihomoIpVersion",
           "mihomoX25519",
@@ -11066,7 +11058,6 @@
                         0
                       ],
                       "isDisabled": false,
-                      "isHidden": false,
                       "keepSniBlank": false,
                       "mihomoIpVersion": "dual",
                       "mihomoX25519": false,
@@ -11161,7 +11152,6 @@
                       0
                     ],
                     "isDisabled": false,
-                    "isHidden": false,
                     "keepSniBlank": false,
                     "mihomoIpVersion": "dual",
                     "mihomoX25519": false,
@@ -11259,7 +11249,6 @@
                         0
                       ],
                       "isDisabled": false,
-                      "isHidden": false,
                       "keepSniBlank": false,
                       "mihomoIpVersion": "dual",
                       "mihomoX25519": false,
@@ -11407,7 +11396,6 @@
                       "id": 1,
                       "inboundId": 1,
                       "isDisabled": false,
-                      "isHidden": false,
                       "keepSniBlank": false,
                       "mihomoIpVersion": "dual",
                       "mihomoX25519": false,
@@ -11529,7 +11517,6 @@
                       "id": 1,
                       "inboundId": 1,
                       "isDisabled": false,
-                      "isHidden": false,
                       "keepSniBlank": false,
                       "mihomoIpVersion": "dual",
                       "mihomoX25519": false,
@@ -11781,7 +11768,6 @@
                       "id": 1,
                       "inboundId": 1,
                       "isDisabled": false,
-                      "isHidden": false,
                       "keepSniBlank": false,
                       "mihomoIpVersion": "dual",
                       "mihomoX25519": false,

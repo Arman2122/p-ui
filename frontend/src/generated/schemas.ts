@@ -1818,9 +1818,6 @@ export const SCHEMAS: Record<string, unknown> = {
       "isDisabled": {
         "type": "boolean"
       },
-      "isHidden": {
-        "type": "boolean"
-      },
       "keepSniBlank": {
         "type": "boolean"
       },
@@ -1929,7 +1926,6 @@ export const SCHEMAS: Record<string, unknown> = {
       "id",
       "inboundId",
       "isDisabled",
-      "isHidden",
       "keepSniBlank",
       "mihomoIpVersion",
       "mihomoX25519",
@@ -2000,9 +1996,6 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "array"
       },
       "isDisabled": {
-        "type": "boolean"
-      },
-      "isHidden": {
         "type": "boolean"
       },
       "keepSniBlank": {
@@ -2106,7 +2099,6 @@ export const SCHEMAS: Record<string, unknown> = {
       "hosts",
       "inboundIds",
       "isDisabled",
-      "isHidden",
       "keepSniBlank",
       "mihomoIpVersion",
       "mihomoX25519",

@@ -48,7 +48,6 @@ function defaultsFor(host: HostRecord | null): FormShape {
     remark: host?.remark ?? '',
     serverDescription: host?.serverDescription ?? '',
     enable: host ? !host.isDisabled : true,
-    isHidden: host?.isHidden ?? false,
     tags: host?.tags ?? [],
     port: host?.port ?? 0,
     security: (host?.security as BulkAddHostValues['security']) ?? 'same',
