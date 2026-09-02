@@ -69,6 +69,9 @@ func (a *ClientController) initRouter(g *gin.RouterGroup) {
 	g.POST("/bulkAdjust", a.bulkAdjust)
 	g.POST("/bulkSet", a.bulkSet)
 	g.POST("/bulkMove", a.bulkMove)
+	g.POST("/bulkClearIps", a.bulkClearIps)
+	g.POST("/bulkExport", a.bulkExport)
+	g.POST("/bulkLinks", a.bulkLinks)
 	g.POST("/bulkEnable", a.bulkEnable)
 	g.POST("/bulkDisable", a.bulkDisable)
 	g.POST("/bulkDel", a.bulkDelete)
@@ -376,6 +379,65 @@ func (a *ClientController) bulkMove(c *gin.Context) {
 		a.xrayService.SetToNeedRestart()
 	}
 	notifyClientsChanged()
+}
+
+type bulkSelectionRequest struct {
+	Emails []string                  `json:"emails"`
+	Filter *service.ClientPageParams `json:"filter"`
+}
+
+func (a *ClientController) bulkClearIps(c *gin.Context) {
+	var req bulkSelectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	result, err := a.clientService.BulkClearIps(emails)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, result, nil)
+}
+
+func (a *ClientController) bulkExport(c *gin.Context) {
+	var req bulkSelectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	items, err := a.clientService.ExportEmails(emails)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, items, nil)
+}
+
+func (a *ClientController) bulkLinks(c *gin.Context) {
+	var req bulkSelectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	emails, ok := resolveBulkEmails(c, &a.clientService, &a.inboundService, &a.settingService, req.Emails, req.Filter)
+	if !ok {
+		return
+	}
+	rows, err := a.inboundService.GetClientLinksMany(resolveHost(c), emails)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
+		return
+	}
+	jsonObj(c, rows, nil)
 }
 
 type bulkDeleteRequest struct {

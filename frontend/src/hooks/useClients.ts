@@ -20,6 +20,8 @@ import {
   BulkGroupResultSchema,
   BulkSetResultSchema,
   BulkMoveResultSchema,
+  BulkClearIpsResultSchema,
+  ClientLinksRowsSchema,
   DelDepletedResultSchema,
   type ClientHydrate,
   type ClientRecord,
@@ -36,6 +38,8 @@ import {
   type BulkResetTrafficResult,
   type BulkSetResult,
   type BulkMoveResult,
+  type BulkClearIpsResult,
+  type ClientLinksRow,
   type BulkDetachResult,
   type BulkGroupResult,
 } from '@/schemas/client';
@@ -471,6 +475,14 @@ export function useClients(options: UseClientsOptions = {}) {
     onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
   });
 
+  const bulkClearIpsMut = useMutation({
+    mutationFn: async (payload: { selection: BulkSelection }): Promise<Msg<BulkClearIpsResult>> => {
+      const raw = await HttpUtil.post('/panel/api/clients/bulkClearIps', selectionBody(payload.selection), JSON_HEADERS);
+      return parseMsg(raw, BulkClearIpsResultSchema, 'clients/bulkClearIps');
+    },
+    onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
+  });
+
   const bulkSetEnableMut = useMutation({
     mutationFn: async (payload: { selection: BulkSelection; enable: boolean }): Promise<Msg<BulkSetEnableResult>> => {
       const path = payload.enable ? '/panel/api/clients/bulkEnable' : '/panel/api/clients/bulkDisable';
@@ -596,6 +608,26 @@ export function useClients(options: UseClientsOptions = {}) {
     if (isEmptySelection(selection)) return Promise.resolve(null);
     return bulkMoveMut.mutateAsync({ selection, fromInboundIds, toInboundIds });
   }, [bulkMoveMut]);
+  const bulkClearIps = useCallback((input: string[] | BulkSelection) => {
+    const selection = asSelection(input);
+    if (isEmptySelection(selection)) return Promise.resolve(null);
+    return bulkClearIpsMut.mutateAsync({ selection });
+  }, [bulkClearIpsMut]);
+  const bulkExport = useCallback(async (input: string[] | BulkSelection): Promise<unknown[] | null> => {
+    const selection = asSelection(input);
+    if (isEmptySelection(selection)) return null;
+    const msg = await HttpUtil.post('/panel/api/clients/bulkExport', selectionBody(selection), JSON_HEADERS);
+    if (!msg?.success) return null;
+    return Array.isArray(msg.obj) ? msg.obj : [];
+  }, []);
+  const bulkLinks = useCallback(async (input: string[] | BulkSelection): Promise<ClientLinksRow[] | null> => {
+    const selection = asSelection(input);
+    if (isEmptySelection(selection)) return null;
+    const raw = await HttpUtil.post('/panel/api/clients/bulkLinks', selectionBody(selection), JSON_HEADERS);
+    const msg = parseMsg(raw, ClientLinksRowsSchema, 'clients/bulkLinks');
+    if (!msg?.success) return null;
+    return msg.obj ?? [];
+  }, []);
   const bulkEnable = useCallback((input: string[] | BulkSelection) => {
     const selection = asSelection(input);
     if (isEmptySelection(selection)) return Promise.resolve(null as unknown as Msg<BulkSetEnableResult>);
@@ -784,6 +816,9 @@ export function useClients(options: UseClientsOptions = {}) {
     bulkAdjust,
     bulkSet,
     bulkMove,
+    bulkClearIps,
+    bulkExport,
+    bulkLinks,
     bulkEnable,
     bulkDisable,
     bulkResetTraffic,

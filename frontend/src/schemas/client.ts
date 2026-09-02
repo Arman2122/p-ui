@@ -337,3 +337,17 @@ export const BulkMoveResultSchema = z.object({
   outcome: BulkOutcomeSchema.optional(),
 });
 export type BulkMoveResult = z.infer<typeof BulkMoveResultSchema>;
+
+export const BulkClearIpsResultSchema = z.object({
+  cleared: z.number().optional(),
+  outcome: BulkOutcomeSchema.optional(),
+});
+export type BulkClearIpsResult = z.infer<typeof BulkClearIpsResultSchema>;
+
+export const ClientLinksRowSchema = z.object({
+  email: z.string(),
+  links: z.array(z.string()),
+  error: z.string().optional(),
+});
+export const ClientLinksRowsSchema = z.array(ClientLinksRowSchema);
+export type ClientLinksRow = z.infer<typeof ClientLinksRowSchema>;

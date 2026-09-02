@@ -23,6 +23,10 @@ func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
 	if err := db.Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	return s.exportRecords(db, rows)
+}
+
+func (s *ClientService) exportRecords(db *gorm.DB, rows []model.ClientRecord) ([]ClientCreatePayload, error) {
 	out := make([]ClientCreatePayload, 0, len(rows))
 	if len(rows) == 0 {
 		return out, nil

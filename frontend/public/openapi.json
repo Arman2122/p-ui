@@ -7613,6 +7613,190 @@
         }
       }
     },
+    "/panel/api/clients/bulkClearIps": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Forget the recorded source IPs of many clients in one call, the same as the per-client clear: their IP-limit history restarts from zero and a client blocked by the limit is unblocked at the next check. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
+        "operationId": "post_panel_api_clients_bulkClearIps",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "emails": [
+                  "alice",
+                  "bob"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "cleared": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/clients/bulkExport": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Export a selection of clients in the same portable shape GET /clients/export uses for every client, ready for /clients/import on another panel. Instead of emails, pass filter (the same query object /list/paged takes) to export every matching client, capped at 20000.",
+        "operationId": "post_panel_api_clients_bulkExport",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "emails": [
+                  "alice",
+                  "bob"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "client": {
+                        "email": "alice",
+                        "id": "0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c",
+                        "enable": true
+                      },
+                      "inboundIds": [
+                        1,
+                        2
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/clients/bulkLinks": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Render the share links of many clients in one call, one row per client with every link across its inbounds; a client that could not be rendered carries an error instead. Instead of emails, pass filter (the same query object /list/paged takes) to render every matching client, capped at 20000.",
+        "operationId": "post_panel_api_clients_bulkLinks",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "emails": [
+                  "alice",
+                  "bob"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "email": "alice",
+                      "links": [
+                        "vless://0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c@example.com:443?type=tcp&security=reality#alice"
+                      ]
+                    },
+                    {
+                      "email": "ghost",
+                      "links": [],
+                      "error": "client not found"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/clients/bulkEnable": {
       "post": {
         "tags": [
