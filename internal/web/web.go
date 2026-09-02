@@ -142,6 +142,7 @@ type Server struct {
 	memAlarmJob   cron.EntryID
 	statsJob      cron.EntryID
 	checkHashJob  cron.EntryID
+	ldapSyncJob   cron.EntryID
 
 	// cores is what supervision dispatches through, so shutdown stops a core
 	// because it is registered rather than because this file names it.
@@ -415,17 +416,8 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	// Check monthly reset days at midnight
 	_, _ = s.cron.AddJob("@daily", job.NewPeriodicTrafficResetJob("monthly", loc))
 
-	// LDAP sync scheduling
-	if ldapEnabled, _ := s.settingService.GetLdapEnable(); ldapEnabled {
-		runtime, err := s.settingService.GetLdapSyncCron()
-		if err != nil || runtime == "" {
-			runtime = defaultLdapSyncCron
-		}
-		j := job.NewLdapSyncJob()
-		// job has zero-value services with method receivers that read settings on demand
-		scheduleLdapSync(s.cron, runtime, j)
-	}
-
+	// LDAP sync is one of the settings-driven entries below, so enabling it
+	// later takes effect on the save and not at the next restart. F374.
 	s.rescheduleSettingJobs()
 
 	if mins := sys.MemoryReleaseIntervalMinutes(); mins > 0 {
@@ -452,16 +444,18 @@ const defaultLdapSyncCron = "@every 1m"
 // scheduleLdapSync falls back rather than silently leaving LDAP unscheduled:
 // off-boarding is fail-open when the job never runs, so a bad spec means every
 // disabled directory account keeps working.
-func scheduleLdapSync(c *cron.Cron, spec string, j cron.Job) {
-	_, err := c.AddJob(spec, j)
+func scheduleLdapSync(c *cron.Cron, spec string, j cron.Job) cron.EntryID {
+	id, err := c.AddJob(spec, j)
 	if err == nil {
-		return
+		return id
 	}
 	logger.Errorf("LDAP is enabled but ldapSyncCron %q is not a valid cron spec (%v); falling back to %q. Fix it in Settings > LDAP.",
 		spec, err, defaultLdapSyncCron)
-	if _, err := c.AddJob(defaultLdapSyncCron, j); err != nil {
+	id, err = c.AddJob(defaultLdapSyncCron, j)
+	if err != nil {
 		logger.Errorf("LDAP sync could not be scheduled at all: %v", err)
 	}
+	return id
 }
 
 /*
@@ -482,12 +476,22 @@ func (s *Server) rescheduleSettingJobs() {
 	s.settingJobsMu.Lock()
 	defer s.settingJobsMu.Unlock()
 
-	for _, id := range []cron.EntryID{s.cpuAlarmJob, s.memAlarmJob, s.statsJob, s.checkHashJob} {
+	for _, id := range []cron.EntryID{s.cpuAlarmJob, s.memAlarmJob, s.statsJob, s.checkHashJob, s.ldapSyncJob} {
 		if id != 0 {
 			s.cron.Remove(id)
 		}
 	}
-	s.cpuAlarmJob, s.memAlarmJob, s.statsJob, s.checkHashJob = 0, 0, 0, 0
+	s.cpuAlarmJob, s.memAlarmJob, s.statsJob, s.checkHashJob, s.ldapSyncJob = 0, 0, 0, 0, 0
+
+	// LDAP sync, on the same terms as the rest: turning it on, or changing its
+	// schedule, used to do nothing until the panel was restarted. F374.
+	if enabled, _ := s.settingService.GetLdapEnable(); enabled {
+		spec, err := s.settingService.GetLdapSyncCron()
+		if err != nil || spec == "" {
+			spec = defaultLdapSyncCron
+		}
+		s.ldapSyncJob = scheduleLdapSync(s.cron, spec, job.NewLdapSyncJob())
+	}
 
 	// CPU and memory monitors publish cpu.high / memory.high; scheduled whenever
 	// any notifier (Telegram or Email) wants them, independent of the bot.
