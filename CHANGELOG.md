@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A migration pass leaves the panel's own `pui-dns-allow` routing rules alone.** They are keyed by `ruleTag` and carry no `inboundTag`; the guard that spares the panel's own rules only looked at `inboundTag`, so a pass could rewrite the anchor those rules depend on.
 - **A string missing from the Persian locale renders in English instead of as nothing.** go-i18n hands the default-language text back together with its "not found" error; the panel discarded the text with the error, so every key added to `en-US` first rendered as an empty string for a Persian session until it was translated.
 - **An MTProto sidecar is billed for its last interval, and configs for
   deleted inbounds are cleaned up.** Stopping, restarting or removing an mtg
