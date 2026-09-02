@@ -251,6 +251,12 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 				} else {
 					msg += t.I18nBot("tgbot.commands.xrayNotRunning")
 				}
+			} else if len(commandArgs) == 1 {
+				if err := t.serverService.RestartCore(context.Background(), commandArgs[0]); err != nil {
+					msg += t.I18nBot("tgbot.commands.restartCoreFailed", "Core=="+commandArgs[0], "Error=="+err.Error())
+				} else {
+					msg += t.I18nBot("tgbot.commands.restartCoreSuccess", "Core=="+commandArgs[0])
+				}
 			} else {
 				handleUnknownCommand()
 				msg += t.I18nBot("tgbot.commands.restartUsage")
@@ -425,6 +431,27 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 					),
 				)
 				t.editMessageCallbackTgBot(chatId, callbackQuery.Message.GetMessageID(), inlineKeyboard)
+			case "client_delete":
+				inlineKeyboard := tu.InlineKeyboard(
+					tu.InlineKeyboardRow(
+						tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.cancelReset")).WithCallbackData(t.encodeQuery("client_cancel "+email)),
+					),
+					tu.InlineKeyboardRow(
+						tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.confirmDeleteClient")).WithCallbackData(t.encodeQuery("client_delete_c "+email)),
+					),
+				)
+				t.editMessageCallbackTgBot(chatId, callbackQuery.Message.GetMessageID(), inlineKeyboard)
+			case "client_delete_c":
+				needRestart, err := t.clientService.DeleteByEmail(&t.inboundService, email, false)
+				if needRestart {
+					t.xrayService.SetToNeedRestart()
+				}
+				if err == nil {
+					t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.answers.deleteClientSuccess", "Email=="+email))
+					t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
+				} else {
+					t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.answers.errorOperation"))
+				}
 			case "reset_traffic_c":
 				err := t.inboundService.ResetClientTrafficByEmail(email)
 				if err == nil {
