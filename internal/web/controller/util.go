@@ -251,3 +251,17 @@ func pureJsonMsg(c *gin.Context, statusCode int, success bool, msg string) {
 func isAjax(c *gin.Context) bool {
 	return c.GetHeader("X-Requested-With") == "XMLHttpRequest"
 }
+
+// resolveBulkEmails turns a bulk request's selection into emails: the list it
+// carries, or every client matching the list page's filter it names instead.
+func resolveBulkEmails(c *gin.Context, clients *service.ClientService, inbounds *service.InboundService, settings *service.SettingService, emails []string, filter *service.ClientPageParams) ([]string, bool) {
+	if len(emails) > 0 || filter == nil {
+		return emails, true
+	}
+	resolved, err := clients.ResolveEmails(inbounds, settings, *filter)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return nil, false
+	}
+	return resolved, true
+}
