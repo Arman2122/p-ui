@@ -157,7 +157,7 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/panel/api/inbounds/add',
-        summary: 'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy).',
+        summary: 'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). An inbound for a core this host cannot run (its preflight fails, e.g. a kernel module is missing) is refused with the core\'s reason; Xray inbounds keep their own -test pre-flight at restart.',
         body:
           '{\n  "enable": true,\n  "remark": "VLESS-443",\n  "listen": "",\n  "port": 443,\n  "protocol": "vless",\n  "expiryTime": 0,\n  "total": 0,\n  "settings": {\n    "clients": [{ "id": "...", "email": "user1" }],\n    "decryption": "none",\n    "fallbacks": []\n  },\n  "streamSettings": {\n    "network": "tcp",\n    "security": "reality",\n    "realitySettings": { "show": false, "dest": "..." }\n  },\n  "sniffing": {\n    "enabled": true,\n    "destOverride": ["http", "tls"]\n  }\n}',
         errorResponse:
@@ -166,7 +166,7 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/panel/api/inbounds/del/:id',
-        summary: 'Delete an inbound by ID. Also removes its associated client stats rows.',
+        summary: 'Delete an inbound by ID. Also removes its associated client stats rows. An id that does not exist answers not-found instead of success.',
         params: [
           { name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' },
         ],

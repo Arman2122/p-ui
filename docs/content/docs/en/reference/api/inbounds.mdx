@@ -58,11 +58,15 @@ _openapi:
       title: Create a new inbound. Send the full inbound payload (protocol, port,
         settings, streamSettings, sniffing, remark, expiryTime, total, enable).
         settings, streamSettings, and sniffing may be sent as nested JSON
-        objects (preferred) or as JSON-encoded strings (legacy).
-      url: '#create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy'
+        objects (preferred) or as JSON-encoded strings (legacy). An inbound for
+        a core this host cannot run (its preflight fails, e.g. a kernel module
+        is missing) is refused with the core's reason; Xray inbounds keep their
+        own -test pre-flight at restart.
+      url: '#create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-an-inbound-for-a-core-this-host-cannot-run-its-preflight-fails-eg-a-kernel-module-is-missing-is-refused-with-the-cores-reason-xray-inbounds-keep-their-own--test-pre-flight-at-restart'
     - depth: 2
       title: Delete an inbound by ID. Also removes its associated client stats rows.
-      url: '#delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows'
+        An id that does not exist answers not-found instead of success.
+      url: '#delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows-an-id-that-does-not-exist-answers-not-found-instead-of-success'
     - depth: 2
       title: Delete many inbounds in one call. Processes the list sequentially;
         failures are reported per id and the rest still proceed. Restarts xray
@@ -163,10 +167,14 @@ _openapi:
       - content: Create a new inbound. Send the full inbound payload (protocol, port,
           settings, streamSettings, sniffing, remark, expiryTime, total,
           enable). settings, streamSettings, and sniffing may be sent as nested
-          JSON objects (preferred) or as JSON-encoded strings (legacy).
-        id: create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy
+          JSON objects (preferred) or as JSON-encoded strings (legacy). An
+          inbound for a core this host cannot run (its preflight fails, e.g. a
+          kernel module is missing) is refused with the core's reason; Xray
+          inbounds keep their own -test pre-flight at restart.
+        id: create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-an-inbound-for-a-core-this-host-cannot-run-its-preflight-fails-eg-a-kernel-module-is-missing-is-refused-with-the-cores-reason-xray-inbounds-keep-their-own--test-pre-flight-at-restart
       - content: Delete an inbound by ID. Also removes its associated client stats rows.
-        id: delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows
+          An id that does not exist answers not-found instead of success.
+        id: delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows-an-id-that-does-not-exist-answers-not-found-instead-of-success
       - content: Delete many inbounds in one call. Processes the list sequentially;
           failures are reported per id and the rest still proceed. Restarts xray
           at most once.
