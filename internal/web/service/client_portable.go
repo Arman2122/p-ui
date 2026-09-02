@@ -53,6 +53,10 @@ func (s *ClientService) exportRecords(db *gorm.DB, rows []model.ClientRecord) ([
 		return nil, err
 	}
 	credsByClient := credentialsByClient(creds)
+	linksByClient, err := exportableExternalLinks(db, ids)
+	if err != nil {
+		return nil, err
+	}
 
 	for i := range rows {
 		client := rows[i].ToClient()
@@ -63,8 +67,9 @@ func (s *ClientService) exportRecords(db *gorm.DB, rows []model.ClientRecord) ([
 			client.Flow = flow
 		}
 		out = append(out, ClientCreatePayload{
-			Client:     *client,
-			InboundIds: attachments[rows[i].Id],
+			Client:        *client,
+			InboundIds:    attachments[rows[i].Id],
+			ExternalLinks: linksByClient[rows[i].Id],
 		})
 	}
 	return out, nil
@@ -75,20 +80,26 @@ func (s *ClientService) exportRecords(db *gorm.DB, rows []model.ClientRecord) ([
 // pushed to xray); items with no inboundIds are restored as bare records so an
 // orphan-inclusive export round-trips. Existing emails are never overwritten —
 // they are reported in Skipped. The boolean reports whether xray needs a restart.
+// exportableExternalLinks reads every client's external links in id batches,
+// in the order the subscription renders them.
+func exportableExternalLinks(db *gorm.DB, ids []int) (map[int][]ExternalLinkInput, error) {
+	links := map[int][]ExternalLinkInput{}
+	for _, batch := range chunkInts(ids, sqlInChunk) {
+		var rows []model.ClientExternalLink
+		if err := db.Where("client_id IN ?", batch).Order("client_id ASC, sort_index ASC, id ASC").Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			links[r.ClientId] = append(links[r.ClientId], ExternalLinkInput{Kind: r.Kind, Value: r.Value, Remark: r.Remark})
+		}
+	}
+	return links, nil
+}
+
 func (s *ClientService) ImportClients(inboundSvc *InboundService, items []ClientCreatePayload) (BulkCreateResult, bool, error) {
 	result := BulkCreateResult{}
 	if len(items) == 0 {
 		return result, false, nil
-	}
-
-	attached := make([]ClientCreatePayload, 0, len(items))
-	orphans := make([]ClientCreatePayload, 0)
-	for i := range items {
-		if len(items[i].InboundIds) > 0 {
-			attached = append(attached, items[i])
-		} else {
-			orphans = append(orphans, items[i])
-		}
 	}
 
 	skip := func(email, reason string) {
@@ -96,6 +107,36 @@ func (s *ClientService) ImportClients(inboundSvc *InboundService, items []Client
 			email = "(missing email)"
 		}
 		result.Skipped = append(result.Skipped, BulkCreateReport{Email: email, Reason: reason})
+	}
+
+	// Links are checked before anything is created, so a bad link skips the
+	// row instead of leaving a client without the links it was exported with.
+	attached := make([]ClientCreatePayload, 0, len(items))
+	orphans := make([]ClientCreatePayload, 0)
+	linksByEmail := map[string][]ExternalLinkInput{}
+	for i := range items {
+		email := strings.TrimSpace(items[i].Client.Email)
+		if len(items[i].ExternalLinks) > 0 {
+			if _, err := normalizeExternalLinks(items[i].ExternalLinks); err != nil {
+				skip(email, "external links: "+err.Error())
+				continue
+			}
+			linksByEmail[email] = items[i].ExternalLinks
+		}
+		if len(items[i].InboundIds) > 0 {
+			attached = append(attached, items[i])
+		} else {
+			orphans = append(orphans, items[i])
+		}
+	}
+	restoreLinks := func(email string) {
+		links, ok := linksByEmail[email]
+		if !ok {
+			return
+		}
+		if err := s.SetExternalLinksByEmail(email, links); err != nil {
+			skip(email, "created without its external links: "+err.Error())
+		}
 	}
 
 	needRestart := false
@@ -107,6 +148,9 @@ func (s *ClientService) ImportClients(inboundSvc *InboundService, items []Client
 		needRestart = needRestart || nr
 		result.Created += sub.Created
 		result.Skipped = append(result.Skipped, sub.Skipped...)
+		for _, email := range sub.Outcome.OK {
+			restoreLinks(email)
+		}
 	}
 
 	db := database.GetDB()
@@ -167,6 +211,7 @@ func (s *ClientService) ImportClients(inboundSvc *InboundService, items []Client
 			continue
 		}
 		result.Created++
+		restoreLinks(email)
 	}
 
 	return result, needRestart, nil
