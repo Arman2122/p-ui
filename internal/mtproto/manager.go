@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -156,10 +157,14 @@ type managed struct {
 // Manager owns the set of running mtg processes keyed by inbound id.
 type Manager struct {
 	mu sync.Mutex
-	// scrapeMu serialises CollectTraffic. Counter.Observe assumes readings arrive
-	// in order; two overlapping scrapes can invert them and re-bill a counter.
+	// scrapeMu serialises every scrape, the periodic one and the final one a
+	// stop takes. Counter.Observe assumes readings arrive in order; two
+	// overlapping scrapes can invert them and re-bill a counter.
 	scrapeMu sync.Mutex
 	procs    map[int]*managed
+	// pending is what a stopped process was billed for in its last interval,
+	// handed to the next CollectTraffic. Without it those bytes were lost. F090.
+	pending []Traffic
 	// swept records that the one-time startup cleanup of orphaned mtg
 	// processes (survivors of a previous p-ui run) has already run.
 	swept bool
@@ -301,6 +306,8 @@ func UsableSecret(secret string) string {
 // Ensure starts the mtg process for an instance, or restarts it when its
 // configuration changed. A no-op when the desired process is already running.
 func (m *Manager) Ensure(inst Instance) error {
+	m.scrapeMu.Lock()
+	defer m.scrapeMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepOrphansLocked()
@@ -370,6 +377,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 			fallthrough
 		case ensureRestart:
 			counter = cur.counter
+			m.billFinalLocked(cur)
 			_ = cur.proc.Stop()
 			delete(m.procs, inst.Id)
 		}
@@ -406,9 +414,12 @@ func (m *Manager) ensureLocked(inst Instance) error {
 
 // Remove stops and forgets the mtg process for an inbound id.
 func (m *Manager) Remove(id int) {
+	m.scrapeMu.Lock()
+	defer m.scrapeMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if cur, ok := m.procs[id]; ok {
+		m.billFinalLocked(cur)
 		_ = cur.proc.Stop()
 		delete(m.procs, id)
 		_ = os.Remove(configPathForID(id))
@@ -422,6 +433,8 @@ func (m *Manager) Remove(id int) {
 // must be left running even though they are not in desired — a caller that could
 // not read one must not have that read count as "stop it".
 func (m *Manager) Reconcile(desired []Instance, keep ...int) error {
+	m.scrapeMu.Lock()
+	defer m.scrapeMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepOrphansLocked()
@@ -434,11 +447,13 @@ func (m *Manager) Reconcile(desired []Instance, keep ...int) error {
 	}
 	for id, cur := range m.procs {
 		if _, ok := want[id]; !ok {
+			m.billFinalLocked(cur)
 			_ = cur.proc.Stop()
 			delete(m.procs, id)
 			_ = os.Remove(configPathForID(id))
 		}
 	}
+	m.removeStaleConfigsLocked(want)
 	var failures []error
 	for _, inst := range desired {
 		if err := m.ensureLocked(inst); err != nil {
@@ -451,9 +466,12 @@ func (m *Manager) Reconcile(desired []Instance, keep ...int) error {
 
 // StopAll stops every managed mtg process. Called on panel shutdown.
 func (m *Manager) StopAll() {
+	m.scrapeMu.Lock()
+	defer m.scrapeMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for id, cur := range m.procs {
+		m.billFinalLocked(cur)
 		_ = cur.proc.Stop()
 		_ = os.Remove(configPathForID(id))
 		delete(m.procs, id)
@@ -472,6 +490,9 @@ func (m *Manager) CollectTraffic() ([]Traffic, []string) {
 		counter  *core.Counter
 	}
 	m.mu.Lock()
+	// What stopped processes were billed for since the last pass goes first.
+	out := m.pending
+	m.pending = nil
 	snaps := make([]snap, 0, len(m.procs))
 	for _, cur := range m.procs {
 		if cur.proc == nil || !cur.proc.IsRunning() {
@@ -481,40 +502,65 @@ func (m *Manager) CollectTraffic() ([]Traffic, []string) {
 	}
 	m.mu.Unlock()
 
-	var out []Traffic
 	var online []string
 	for _, s := range snaps {
 		stats, ok := scrapeStats(s.apiPort, s.apiToken)
 		if !ok {
 			continue
 		}
-		readings := make(map[string]int64, 2*len(stats.Users))
 		for email, u := range stats.Users {
-			readings[email+upKey] = u.BytesIn
-			readings[email+downKey] = u.BytesOut
 			if u.Connections > 0 {
 				online = append(online, email)
 			}
 		}
-		billed := make(map[string]*Traffic)
-		for key, delta := range s.counter.Observe(stats.StartedAt, readings) {
-			email, direction, _ := strings.Cut(key, keySep)
-			t, seen := billed[email]
-			if !seen {
-				t = &Traffic{Tag: s.tag, Email: email}
-				billed[email] = t
-			}
-			if direction == "up" {
-				t.Up += delta
-			} else {
-				t.Down += delta
-			}
-		}
-		for _, t := range billed {
-			out = append(out, *t)
-		}
+		out = append(out, billReadings(s.tag, s.counter, stats)...)
 	}
 	return out, online
+}
+
+// billReadings turns one /stats reading into per-client deltas through the
+// counter that owns that process's baseline.
+func billReadings(tag string, counter *core.Counter, stats mtgStats) []Traffic {
+	readings := make(map[string]int64, 2*len(stats.Users))
+	for email, u := range stats.Users {
+		readings[email+upKey] = u.BytesIn
+		readings[email+downKey] = u.BytesOut
+	}
+	billed := make(map[string]*Traffic)
+	for key, delta := range counter.Observe(stats.StartedAt, readings) {
+		email, direction, _ := strings.Cut(key, keySep)
+		t, seen := billed[email]
+		if !seen {
+			t = &Traffic{Tag: tag, Email: email}
+			billed[email] = t
+		}
+		if direction == "up" {
+			t.Up += delta
+		} else {
+			t.Down += delta
+		}
+	}
+	out := make([]Traffic, 0, len(billed))
+	for _, t := range billed {
+		out = append(out, *t)
+	}
+	return out
+}
+
+// billFinalLocked scrapes a process one last time before it is stopped and
+// keeps the result for the next CollectTraffic. mtg holds its counters in
+// memory only, so every byte since the previous scrape died with it. Called
+// with scrapeMu and mu held, so it cannot interleave with a periodic scrape
+// on the same counter. F090.
+func (m *Manager) billFinalLocked(cur *managed) {
+	if cur == nil || cur.counter == nil {
+		return
+	}
+	stats, ok := scrapeStats(cur.apiPort, cur.apiToken)
+	if !ok {
+		return
+	}
+	m.pending = append(m.pending, billReadings(cur.tag, cur.counter, stats)...)
 }
 
 func (m *Manager) HasRunning() bool {
@@ -840,3 +886,30 @@ const (
 	mtgFakeTLSFirstByte = 0xee
 	mtgSecretKeyLength  = 16
 )
+
+// removeStaleConfigsLocked deletes every generated config whose inbound is not
+// wanted. Keyed on the directory and not on m.procs: the map is empty at boot,
+// so a toml for an inbound deleted while the panel was down -- every one of its
+// client secrets, on disk -- survived until someone noticed. F221.
+func (m *Manager) removeStaleConfigsLocked(want map[int]struct{}) {
+	paths, err := filepath.Glob(filepath.Join(configDir(), "mtg-*.toml"))
+	if err != nil {
+		return
+	}
+	removed := 0
+	for _, path := range paths {
+		var id int
+		if _, err := fmt.Sscanf(filepath.Base(path), "mtg-%d.toml", &id); err != nil {
+			continue
+		}
+		if _, ok := want[id]; ok {
+			continue
+		}
+		if os.Remove(path) == nil {
+			removed++
+		}
+	}
+	if removed > 0 {
+		logger.Infof("mtproto: removed %d config(s) for inbound(s) that no longer exist", removed)
+	}
+}
