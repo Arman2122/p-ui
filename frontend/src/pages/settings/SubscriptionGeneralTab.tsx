@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import type { AllSetting } from '@/models/setting';
 import { onNumber } from '@/utils/onNumber';
-import { DefaultSettingTag, SettingListItem } from '@/components/ui';
+import { DefaultSettingTag, RestartTag, SettingListItem } from '@/components/ui';
 import { RemarkTemplateField } from '@/components/form';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { catTabLabel } from './catTabLabel';
@@ -27,7 +27,7 @@ export default function SubscriptionGeneralTab({ allSetting, updateSetting }: Su
         label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
         children: (
           <>
-            <SettingListItem paddings="small" title={t('pages.settings.subEnable')} description={t('pages.settings.subEnableDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.subEnable')} badge={<RestartTag />} description={t('pages.settings.subEnableDesc')}>
               <Switch checked={allSetting.subEnable} onChange={(v) => updateSetting({ subEnable: v })} />
             </SettingListItem>
             <SettingListItem paddings="small" title={t('pages.settings.subJsonEnableTitle')} description={t('pages.settings.subJsonEnable')}>
@@ -50,13 +50,13 @@ export default function SubscriptionGeneralTab({ allSetting, updateSetting }: Su
                 )}
               />
             )}
-            <SettingListItem paddings="small" title={t('pages.settings.subListen')} description={t('pages.settings.subListenDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.subListen')} badge={<RestartTag />} description={t('pages.settings.subListenDesc')}>
               <Input value={allSetting.subListen} onChange={(e) => updateSetting({ subListen: e.target.value })} />
             </SettingListItem>
             <SettingListItem paddings="small" title={t('pages.settings.subDomain')} description={t('pages.settings.subDomainDesc')}>
               <Input value={allSetting.subDomain} onChange={(e) => updateSetting({ subDomain: e.target.value })} />
             </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.subPort')} badge={<DefaultSettingTag settingKey="subPort" value={allSetting.subPort} />} description={t('pages.settings.subPortDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.subPort')} badge={<><DefaultSettingTag settingKey="subPort" value={allSetting.subPort} /><RestartTag /></>} description={t('pages.settings.subPortDesc')}>
               <InputNumber value={allSetting.subPort} min={1} max={65535} style={{ width: '100%' }}
                 onChange={onNumber((v) => updateSetting({ subPort: v }))} />
             </SettingListItem>
@@ -159,10 +159,10 @@ export default function SubscriptionGeneralTab({ allSetting, updateSetting }: Su
         label: catTabLabel(<SafetyCertificateOutlined />, t('pages.settings.certs'), isMobile),
         children: (
           <>
-            <SettingListItem paddings="small" title={t('pages.settings.subCertPath')} description={t('pages.settings.subCertPathDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.subCertPath')} badge={<RestartTag />} description={t('pages.settings.subCertPathDesc')}>
               <Input value={allSetting.subCertFile} onChange={(e) => updateSetting({ subCertFile: e.target.value })} />
             </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.subKeyPath')} description={t('pages.settings.subKeyPathDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.subKeyPath')} badge={<RestartTag />} description={t('pages.settings.subKeyPathDesc')}>
               <Input value={allSetting.subKeyFile} onChange={(e) => updateSetting({ subKeyFile: e.target.value })} />
             </SettingListItem>
           </>

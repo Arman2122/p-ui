@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { HttpUtil, Msg } from '@/utils';
@@ -7,6 +7,7 @@ import { AllSetting } from '@/models/setting';
 import { AllSettingSchema, type AllSettingInput } from '@/schemas/setting';
 import { keys } from '@/api/queryKeys';
 import { useServerDraft } from '@/hooks/useServerDraft';
+import { restartPendingKeys } from '@/lib/settings/restartKeys';
 
 type SettingSavePayload = Partial<AllSetting> & Record<string, unknown>;
 type SettingSaveResult = {
@@ -32,6 +33,10 @@ export function useAllSettings() {
   });
 
   const server = useMemo(() => new AllSetting(query.data), [query.data]);
+  /* What the running process loaded, as far as this page can know: the first
+     fetch. A later save that differs on a restart-only key is pending. F402. */
+  const loadedRef = useRef<AllSetting | undefined>(undefined);
+  if (loadedRef.current === undefined && query.data !== undefined) loadedRef.current = server;
   const { draft, setDraft, isDirty, markSaved } = useServerDraft(
     query.data === undefined ? undefined : server,
     (setting) => new AllSetting(setting),
@@ -87,5 +92,6 @@ export function useAllSettings() {
     saveDisabled,
     saveAll,
     savePayload,
+    restartPendingKeys: restartPendingKeys(loadedRef.current, query.data === undefined ? undefined : server),
   };
 }

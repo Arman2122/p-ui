@@ -18,7 +18,7 @@ import {
 import type { AllSetting } from '@/models/setting';
 import { HttpUtil, LanguageManager } from '@/utils';
 import { onNumber } from '@/utils/onNumber';
-import { DefaultSettingTag, SettingListItem } from '@/components/ui';
+import { DefaultSettingTag, RestartTag, SettingListItem } from '@/components/ui';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { catTabLabel } from './catTabLabel';
 import { sanitizePath } from './uriPath';
@@ -161,7 +161,7 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
         label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
         children: (
           <>
-            <SettingListItem paddings="small" title={t('pages.settings.panelListeningIP')} description={t('pages.settings.panelListeningIPDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.panelListeningIP')} badge={<RestartTag />} description={t('pages.settings.panelListeningIPDesc')}>
               <Input value={allSetting.webListen} onChange={(e) => updateSetting({ webListen: e.target.value })} />
             </SettingListItem>
 
@@ -169,16 +169,16 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
               <Input value={allSetting.webDomain} onChange={(e) => updateSetting({ webDomain: e.target.value })} />
             </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.panelPort')} badge={<DefaultSettingTag settingKey="webPort" value={allSetting.webPort} />} description={t('pages.settings.panelPortDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.panelPort')} badge={<><DefaultSettingTag settingKey="webPort" value={allSetting.webPort} /><RestartTag /></>} description={t('pages.settings.panelPortDesc')}>
               <InputNumber value={allSetting.webPort} min={1} max={65535} style={{ width: '100%' }}
                 onChange={onNumber((v) => updateSetting({ webPort: v }))} />
             </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.panelUrlPath')} description={t('pages.settings.panelUrlPathDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.panelUrlPath')} badge={<RestartTag />} description={t('pages.settings.panelUrlPathDesc')}>
               <Input value={allSetting.webBasePath} onChange={(e) => updateSetting({ webBasePath: sanitizePath(e.target.value) })} />
             </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.sessionMaxAge')} badge={<DefaultSettingTag settingKey="sessionMaxAge" value={allSetting.sessionMaxAge} />} description={t('pages.settings.sessionMaxAgeDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.sessionMaxAge')} badge={<><DefaultSettingTag settingKey="sessionMaxAge" value={allSetting.sessionMaxAge} /><RestartTag /></>} description={t('pages.settings.sessionMaxAgeDesc')}>
               <InputNumber value={allSetting.sessionMaxAge} min={60} max={525600} style={{ width: '100%' }}
                 onChange={onNumber((v) => updateSetting({ sessionMaxAge: v }))} />
             </SettingListItem>
@@ -249,10 +249,10 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
         label: catTabLabel(<SafetyCertificateOutlined />, t('pages.settings.certs'), isMobile),
         children: (
           <>
-            <SettingListItem paddings="small" title={t('pages.settings.publicKeyPath')} description={t('pages.settings.publicKeyPathDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.publicKeyPath')} badge={<RestartTag />} description={t('pages.settings.publicKeyPathDesc')}>
               <Input value={allSetting.webCertFile} onChange={(e) => updateSetting({ webCertFile: e.target.value })} />
             </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.privateKeyPath')} description={t('pages.settings.privateKeyPathDesc')}>
+            <SettingListItem paddings="small" title={t('pages.settings.privateKeyPath')} badge={<RestartTag />} description={t('pages.settings.privateKeyPathDesc')}>
               <Input value={allSetting.webKeyFile} onChange={(e) => updateSetting({ webKeyFile: e.target.value })} />
             </SettingListItem>
           </>

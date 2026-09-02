@@ -21,6 +21,7 @@ import { setMessageInstance } from '@/utils/messageBus';
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useAllSettings } from '@/api/queries/useAllSettings';
+import { RESTART_FIELD_LABELS } from '@/lib/settings/restartKeys';
 import { AllSettingSchema } from '@/schemas/setting';
 import AppSidebar from '@/layouts/AppSidebar';
 import GeneralTab from './GeneralTab';
@@ -77,6 +78,7 @@ export default function SettingsPage() {
     saveDisabled,
     saveAll,
     savePayload,
+    restartPendingKeys,
   } = useAllSettings();
 
   const [entryHost, setEntryHost] = useState('');
@@ -254,7 +256,15 @@ export default function SettingsPage() {
                           </Col>
                           <Col xs={24} sm={14} className="header-info">
                             <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
-                            <Alert type="warning" showIcon title={t('pages.settings.infoDesc')} />
+                            {restartPendingKeys.length > 0 && (
+                              <Alert
+                                type="warning"
+                                showIcon
+                                title={t('pages.settings.restartPendingFor', {
+                                  fields: restartPendingKeys.map((key) => t(RESTART_FIELD_LABELS[key] ?? key)).join(', '),
+                                })}
+                              />
+                            )}
                           </Col>
                         </Row>
                       </Card>
