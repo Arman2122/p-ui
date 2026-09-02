@@ -34,6 +34,24 @@ func (p pendingClientDisable) isEmpty() bool {
 	return len(p.local) == 0 && len(p.remote) == 0
 }
 
+// emails lists every client the pass switched off, on any inbound.
+func (p pendingClientDisable) emails() []string {
+	seen := map[string]struct{}{}
+	out := []string{}
+	for _, byInbound := range []map[int]map[string]struct{}{p.local, p.remote} {
+		for _, byEmail := range byInbound {
+			for email := range byEmail {
+				if _, dup := seen[email]; dup {
+					continue
+				}
+				seen[email] = struct{}{}
+				out = append(out, email)
+			}
+		}
+	}
+	return out
+}
+
 /*
 applyPendingClientDisables performs the deferred writes after the traffic
 transaction has committed.
