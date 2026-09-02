@@ -95,7 +95,6 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
             "op": "in",
             "values": [
               "tcp",
-              "http",
               "grpc",
               "xhttp"
             ]
@@ -231,7 +230,6 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
             "values": [
               "tcp",
               "ws",
-              "http",
               "grpc",
               "httpupgrade",
               "xhttp"

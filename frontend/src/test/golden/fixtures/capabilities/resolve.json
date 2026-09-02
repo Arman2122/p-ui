@@ -69,7 +69,6 @@
               "op": "in",
               "values": [
                 "tcp",
-                "http",
                 "grpc",
                 "xhttp"
               ]
@@ -205,7 +204,6 @@
               "values": [
                 "tcp",
                 "ws",
-                "http",
                 "grpc",
                 "httpupgrade",
                 "xhttp"
