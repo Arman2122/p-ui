@@ -163,6 +163,11 @@ func (r *rig) asRig() coretest.Rig {
 // TestAmneziaWGConformsToTheContract is the acceptance test for this core. A
 // failure here means the contract is wrong, not that AmneziaWG is special.
 func TestAmneziaWGConformsToTheContract(t *testing.T) {
+	// Stubbed for this test only and restored after it: left in place, the
+	// Linux sibling test saw a healthy inbound come up with no obfuscation.
+	previous := configureParams
+	configureParams = func(string, awg.Params) error { return nil }
+	t.Cleanup(func() { configureParams = previous })
 	coretest.RunAdapterSuite(t, newRig().asRig())
 }
 
@@ -176,6 +181,5 @@ device prefix, with the module call routed to a recorder: the fake carries no
 AmneziaWG module, and the suite checks the contract, not the kernel.
 */
 func newTestCore(kernel *wgtest.Kernel, mgr *engine.Manager) *Core {
-	configureParams = func(string, awg.Params) error { return nil }
 	return &Core{Core: wgcore.NewFor(Kind, mgr, mgr), mgr: mgr, plane: kernel}
 }
