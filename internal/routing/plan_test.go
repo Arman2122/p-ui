@@ -69,8 +69,8 @@ func TestInternalIngressEmitsNoKernelState(t *testing.T) {
 		nil,
 	))
 
-	if len(got.Kernel) != 0 || len(got.Fronts) != 0 {
-		t.Fatalf("an internal ingress needs no kernel state, got %d kernel and %d fronts", len(got.Kernel), len(got.Fronts))
+	if len(got.Fronts) != 0 {
+		t.Fatalf("an internal ingress needs no front, got %d", len(got.Fronts))
 	}
 	if len(got.XrayRules) != 1 {
 		t.Fatalf("want exactly one rule, got %d", len(got.XrayRules))
@@ -101,12 +101,8 @@ func TestDeviceIngressIsFrontedAndTagRewritten(t *testing.T) {
 		map[int]int{7: 1},
 	))
 
-	if len(got.Kernel) != 1 {
-		t.Fatalf("want one kernel row, got %d", len(got.Kernel))
-	}
-	if got.Kernel[0].ID != 1 || got.Kernel[0].Type != "xray-tun" ||
-		len(got.Kernel[0].Ingress) != 1 || got.Kernel[0].Ingress[0] != "pwg7" {
-		t.Fatalf("kernel row = %+v, want id 1 xray-tun selecting pwg7", got.Kernel[0])
+	if len(got.Fronts) != 1 || got.Fronts[0].ID != 1 {
+		t.Fatalf("fronts = %+v, want exactly one, with id 1", got.Fronts)
 	}
 	if len(got.XrayRules) != 3 {
 		t.Fatalf("want the guard plus two rules, got %d", len(got.XrayRules))
@@ -384,9 +380,9 @@ func TestDisabledRuleEmitsNothing(t *testing.T) {
 		map[int]int{7: 1},
 	))
 
-	if len(got.XrayRules) != 0 || len(got.Kernel) != 0 || len(got.Fronts) != 0 {
-		t.Fatalf("a disabled rule must not front its ingress: %d rules, %d kernel, %d fronts",
-			len(got.XrayRules), len(got.Kernel), len(got.Fronts))
+	if len(got.XrayRules) != 0 || len(got.Fronts) != 0 {
+		t.Fatalf("a disabled rule must not front its ingress: %d rules, %d fronts",
+			len(got.XrayRules), len(got.Fronts))
 	}
 }
 
@@ -402,7 +398,7 @@ func TestBlockedIngressIsReportedNotFronted(t *testing.T) {
 		map[int]int{3: 1},
 	))
 
-	if len(got.Kernel) != 0 || len(got.XrayRules) != 0 {
+	if len(got.Fronts) != 0 || len(got.XrayRules) != 0 {
 		t.Fatal("a blocked ingress must not be fronted or emitted")
 	}
 	refusals := got.Refusals()
