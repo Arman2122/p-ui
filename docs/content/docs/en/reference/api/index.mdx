@@ -16,8 +16,9 @@ Requests authenticate with either a **session cookie** (from `POST /login`) or a
 Authorization: Bearer <token>
 ```
 
-Create API tokens in the panel; they are full-admin credentials, so store them
-securely. See [API Tokens](/docs/reference/api/api-tokens).
+Create API tokens in the panel. Each carries a scope, `admin` or `read` (GET
+endpoints only), and an optional expiry; a full-access token is an admin
+credential, so store it securely. See [API Tokens](/docs/reference/api/api-tokens).
 
 Build an authenticated request for any endpoint below:
 
