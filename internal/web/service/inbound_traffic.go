@@ -159,11 +159,14 @@ func (s *InboundService) addClientTraffic(tx *gorm.DB, traffics []*xray.ClientTr
 	// shared row then carried the node inbound's id (AddClientStat used to use
 	// OnConflict DoNothing and never refreshed it; it now refreshes inbound_id on
 	// conflict, but this filter was removed rather than relying on that ordering).
-	err = tx.Model(xray.ClientTraffic{}).
-		Where("email IN (?)", emails).
-		Find(&dbClientTraffics).Error
-	if err != nil {
-		return err
+	// Chunked like every other IN list in this file: one bind parameter per
+	// client that moved bytes, and a large panel exceeds the driver's cap. F114.
+	for _, batch := range chunkStrings(emails, maxBindVars) {
+		var page []*xray.ClientTraffic
+		if err = tx.Model(xray.ClientTraffic{}).Where("email IN (?)", batch).Find(&page).Error; err != nil {
+			return err
+		}
+		dbClientTraffics = append(dbClientTraffics, page...)
 	}
 
 	// Avoid empty slice error
