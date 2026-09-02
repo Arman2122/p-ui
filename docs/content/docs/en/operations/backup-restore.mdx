@@ -18,7 +18,8 @@ PostgreSQL database. Back it up regularly so you can recover or migrate.
 
 The overview page's **Back Up** button streams a `pg_dump` custom-format archive
 (`.dump`), named after the server and the current date. **Import** takes that
-file back: the panel checks that the local `pg_restore` can read it, stops Xray,
+file back: the panel checks that the local `pg_restore` can read it and that it
+is a Penhoon UI dump (the archive must list the `inbounds` table), stops Xray,
 restores into the database and restarts. The restore is destructive — it replaces
 the current contents of the database.
 

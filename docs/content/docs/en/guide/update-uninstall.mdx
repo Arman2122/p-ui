@@ -87,7 +87,9 @@ Updating preserves your database and settings. Take a
 The updater script is fetched **from the release being installed**, never from
 the repository's `main` branch, and every release archive is checked against the
 `.sha256` published beside it before anything is extracted. An archive whose
-digest cannot be fetched or does not match is refused and deleted.
+digest cannot be fetched or does not match is refused and deleted. The updater
+also applies the installer's operating-system gate, refusing an unsupported
+system before anything is touched.
 
 Releases before v1.5.2 publish no digest, so installing one of those — a pinned
 `install.sh v1.5.0`, or `PUI_UPDATE_TAG` set to an old tag — is refused too.
