@@ -218,9 +218,8 @@ of its clients'. A tag that egresses through Xray is skipped: the bridge already
 counted those bytes, and billing them here too would double them.
 */
 func (c *Core) stashTagTraffic(billed []engine.Traffic) {
-	// Asked of the engine every scrape, not remembered here: nothing calls this
-	// core's Reconcile, so a map filled on apply would still be empty after a
-	// panel restart — and an empty one bills every routed inbound twice.
+	// Asked every scrape rather than cached on apply, so a routing edit or a
+	// restart cannot leave a stale map — an empty one bills every routed inbound twice.
 	var routed map[string]bool
 	if c.routedTags != nil {
 		routed = c.routedTags()
