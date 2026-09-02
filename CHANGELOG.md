@@ -4,7 +4,7 @@ Operator-visible changes only — things that behave differently on a panel you
 upgrade in place. Bug fixes that simply make a broken thing work are not listed
 here; the git log is the full record.
 
-## Unreleased
+## v1.5.3 — 2026-09-02
 
 ### Behaviour changes
 
