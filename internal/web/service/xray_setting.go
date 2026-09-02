@@ -51,7 +51,7 @@ func (s *XraySettingService) SaveXraySetting(newXraySettings string) error {
 		worth finding even if this pass cannot.
 	*/
 	if changed, pErr := (&RoutingService{}).PruneOutbound(context.Background(),
-		TemplateDestinations(newXraySettings)); pErr != nil {
+		presentDestinations(newXraySettings)); pErr != nil {
 		logger.Warning("routing: could not repair rules after the template changed:", pErr)
 	} else if changed {
 		logger.Info("routing: disabled rules whose destination left the template")

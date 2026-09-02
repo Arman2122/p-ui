@@ -1138,3 +1138,33 @@ func TemplateDestinations(template string) map[string]bool {
 	}
 	return out
 }
+
+// presentDestinations is every tag a rule may still name: the template's
+// outbounds and balancers plus the subscription outbounds merged at generate.
+func presentDestinations(template string) map[string]bool {
+	present := TemplateDestinations(template)
+	tags, err := (&OutboundSubscriptionService{}).AllActiveOutboundTags()
+	if err != nil {
+		logger.Warning("routing: subscription outbounds unreadable; pruning against the template alone:", err)
+		return present
+	}
+	for _, tag := range tags {
+		present[tag] = true
+	}
+	return present
+}
+
+// PruneOutboundForCurrentTemplate repairs rules after a subscription changed
+// what it carries; the template itself did not move. Non-fatal like the save path.
+func (s *RoutingService) PruneOutboundForCurrentTemplate(ctx context.Context) {
+	template, err := (&SettingService{}).GetXrayConfigTemplate()
+	if err != nil {
+		logger.Warning("routing: could not read the template to repair rules:", err)
+		return
+	}
+	if changed, err := s.PruneOutbound(ctx, presentDestinations(template)); err != nil {
+		logger.Warning("routing: could not repair rules after a subscription changed:", err)
+	} else if changed {
+		logger.Info("routing: disabled rules whose subscription outbound went away")
+	}
+}
