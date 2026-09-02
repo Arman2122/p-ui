@@ -223,14 +223,20 @@ func jsonMsgObj(c *gin.Context, msg string, obj any, err error) {
 	c.JSON(http.StatusOK, m)
 }
 
-// pendingNodeObj returns a response object flagging that the save committed
-// locally but a backing node was offline/disabled, so the change will be
-// mirrored to the node once it reconnects. Returns nil when nothing is pending.
-func pendingNodeObj(pending bool) any {
-	if pending {
-		return gin.H{"nodePending": true}
+// pendingObj flags what the save still owes: a backing node that was offline
+// (mirrored when it reconnects) or a core restart. nil when nothing is pending.
+func pendingObj(nodePending, restartPending bool) any {
+	if !nodePending && !restartPending {
+		return nil
 	}
-	return nil
+	out := gin.H{}
+	if nodePending {
+		out["nodePending"] = true
+	}
+	if restartPending {
+		out["restartPending"] = true
+	}
+	return out
 }
 
 // pureJsonMsg sends a pure JSON message response with custom status code.

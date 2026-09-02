@@ -192,6 +192,8 @@ func (a *InboundController) addInbound(c *gin.Context) {
 	if applyWarn != "" {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound,
 			I18nWeb(c, "pages.inbounds.toasts.inboundSavedButNotApplied")+" "+applyWarn)
+	} else if needRestart {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, I18nWeb(c, "pages.inbounds.toasts.savedRestartPending"))
 	} else {
 		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
 	}
@@ -277,6 +279,8 @@ func (a *InboundController) updateInbound(c *gin.Context) {
 	if applyWarn != "" {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound,
 			I18nWeb(c, "pages.inbounds.toasts.inboundSavedButNotApplied")+" "+applyWarn)
+	} else if needRestart {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, I18nWeb(c, "pages.inbounds.toasts.savedRestartPending"))
 	} else {
 		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, nil)
 	}
@@ -447,6 +451,8 @@ func (a *InboundController) importInbound(c *gin.Context) {
 	if applyWarn != "" {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound,
 			I18nWeb(c, "pages.inbounds.toasts.inboundSavedButNotApplied")+" "+applyWarn)
+	} else if needRestart {
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, I18nWeb(c, "pages.inbounds.toasts.savedRestartPending"))
 	} else {
 		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
 	}
