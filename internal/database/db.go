@@ -131,6 +131,9 @@ func initModels() error {
 	if err := pruneOrphanedInboundFallbacks(); err != nil {
 		return err
 	}
+	if err := pruneOrphanedRoutingIngress(); err != nil {
+		return err
+	}
 	if err := normalizeInboundSubSortIndex(); err != nil {
 		return err
 	}
@@ -2324,6 +2327,67 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
+// pruneOrphanedRoutingIngress drops deleted inbounds from routing_rules.ingress_ids,
+// which a recycled id would otherwise inherit along with a rule it never asked for.
+func pruneOrphanedRoutingIngress() error {
+	var rules []model.RoutingRule
+	if err := db.Where("ingress_scope = ?", model.RoutingScopeSelected).Find(&rules).Error; err != nil {
+		return err
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	var liveIds []int
+	if err := db.Model(&model.Inbound{}).Pluck("id", &liveIds).Error; err != nil {
+		return err
+	}
+	alive := make(map[int]struct{}, len(liveIds))
+	for _, id := range liveIds {
+		alive[id] = struct{}{}
+	}
+	pruned := 0
+	for _, rule := range rules {
+		var ids []int
+		if json.Unmarshal([]byte(rule.IngressIds), &ids) != nil {
+			continue
+		}
+		kept := make([]int, 0, len(ids))
+		for _, id := range ids {
+			if _, ok := alive[id]; ok {
+				kept = append(kept, id)
+			}
+		}
+		if len(kept) == len(ids) {
+			continue
+		}
+		body, err := json.Marshal(kept)
+		if err != nil {
+			return err
+		}
+		updates := map[string]any{"ingress_ids": string(body)}
+		if len(kept) == 0 {
+			updates["enable"] = false
+			updates["remark"] = orphanedRuleRemark(rule.Remark)
+		}
+		if err := db.Model(&model.RoutingRule{}).Where("id = ?", rule.Id).Updates(updates).Error; err != nil {
+			return err
+		}
+		pruned++
+	}
+	if pruned > 0 {
+		log.Printf("Pruned %d routing rule(s) naming deleted inbounds", pruned)
+	}
+	return nil
+}
+
+func orphanedRuleRemark(existing string) string {
+	const note = "disabled: its last inbound was deleted"
+	if existing == "" {
+		return note
+	}
+	return existing + " (" + note + ")"
+}
+
 // PruneOrphansForTest runs the per-inbound orphan pruners on demand. Exported
 // for tests: the pruners run inside initModels, which a test cannot re-enter
 // without rebuilding the whole schema.
@@ -2331,7 +2395,10 @@ func PruneOrphansForTest() error {
 	if err := pruneOrphanedClientCredentials(); err != nil {
 		return err
 	}
-	return pruneOrphanedInboundFallbacks()
+	if err := pruneOrphanedInboundFallbacks(); err != nil {
+		return err
+	}
+	return pruneOrphanedRoutingIngress()
 }
 
 // migrateDropHostIsHidden removes a column the form wrote and nothing read. F146.
