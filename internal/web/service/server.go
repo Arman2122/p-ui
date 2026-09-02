@@ -829,15 +829,14 @@ const (
 	// maxXrayDigestBytes caps the .dgst checksum sidecar read; it is a few
 	// hundred bytes in practice.
 	maxXrayDigestBytes = 64 << 10
+	// maxXrayReleasesBytes caps the GitHub release-list read; a page is ~100 KiB. F285.
+	maxXrayReleasesBytes = 4 << 20
 )
 
 func (s *ServerService) GetXrayVersions() ([]string, error) {
-	const (
-		XrayURL    = "https://api.github.com/repos/XTLS/Xray-core/releases"
-		bufferSize = 8192
-	)
+	const bufferSize = 8192
 
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, XrayURL, nil)
+	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, xrayReleasesURL, nil)
 	if reqErr != nil {
 		return nil, reqErr
 	}
@@ -849,7 +848,7 @@ func (s *ServerService) GetXrayVersions() ([]string, error) {
 
 	// Check HTTP status code - GitHub API returns object instead of array on error
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxXrayDigestBytes))
 		var errorResponse struct {
 			Message string `json:"message"`
 		}
@@ -861,8 +860,12 @@ func (s *ServerService) GetXrayVersions() ([]string, error) {
 
 	buffer := bytes.NewBuffer(make([]byte, bufferSize))
 	buffer.Reset()
-	if _, err := buffer.ReadFrom(resp.Body); err != nil {
+	n, err := buffer.ReadFrom(io.LimitReader(resp.Body, maxXrayReleasesBytes+1))
+	if err != nil {
 		return nil, err
+	}
+	if n > maxXrayReleasesBytes {
+		return nil, fmt.Errorf("xray release list exceeds %d bytes", maxXrayReleasesBytes)
 	}
 
 	var releases []Release
@@ -913,6 +916,8 @@ func (s *ServerService) RestartXrayService() error {
 // xrayReleaseBaseURL is a var so a test can point the download at an httptest
 // server, the same seam fetchXrayDigestSHA256 already takes its URL through.
 var xrayReleaseBaseURL = "https://github.com/XTLS/Xray-core/releases/download"
+
+var xrayReleasesURL = "https://api.github.com/repos/XTLS/Xray-core/releases"
 
 func (s *ServerService) downloadXRay(version string) (string, error) {
 	fileName := fmt.Sprintf("Xray-linux-%s.zip", xray.ReleaseAssetArch())
