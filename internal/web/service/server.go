@@ -32,6 +32,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/presence"
 	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/netsafe"
 	"github.com/Arman2122/p-ui/internal/util/sys"
 	"github.com/Arman2122/p-ui/internal/xray"
 
@@ -2095,8 +2096,11 @@ func (s *ServerService) GetRemoteCertHash(server string) ([]string, error) {
 		host, port = h, p
 	}
 
-	dialer := stdnet.Dialer{Timeout: 10 * time.Second}
-	tcpConn, err := dialer.Dial("tcp", stdnet.JoinHostPort(host, port))
+	// Through the SSRF guard, as the REALITY probe beside it already is: this
+	// takes an operator-supplied host and dialled anything the panel could. F283.
+	dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tcpConn, err := netsafe.SSRFGuardedDialContext(dialCtx, "tcp", stdnet.JoinHostPort(host, port))
 	if err != nil {
 		return nil, common.NewErrorf("failed to dial %s: %s", stdnet.JoinHostPort(host, port), err)
 	}
