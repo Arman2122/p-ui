@@ -134,7 +134,6 @@ type Compiled struct {
 		row, so the operator's own sniffing setting is untouched.
 	*/
 	InspectTags []string
-	Kernel      []egress.Egress
 	Diags       []Diag
 }
 
@@ -199,9 +198,6 @@ func Plan(in Input) Compiled {
 			}
 			tag = egress.Device(frontID)
 			pattern = PatternInspected
-			out.Kernel = append(out.Kernel, egress.Egress{
-				ID: frontID, Type: frontType, Enable: true, Ingress: []string{subject.Handle.Device},
-			})
 			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: inspectedBy(rules, subject)})
 			// Strictly ahead of this front's own rules: a front is otherwise the one
 			// class of forwarded traffic exempt from the template's private block.
@@ -235,10 +231,6 @@ func Plan(in Input) Compiled {
 	}
 	return out
 }
-
-// frontType is the driver that terminates an L3 ingress inside Xray. Named here
-// rather than imported so this package keeps no dependency on a driver.
-const frontType = "xray-tun"
 
 // groupRules expands scope and indexes by subject, preserving operator order.
 // An "all" rule is expanded to every routable subject at its own position, which

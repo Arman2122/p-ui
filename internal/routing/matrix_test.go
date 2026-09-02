@@ -76,9 +76,9 @@ func TestEveryIngressCanReachEveryExit(t *testing.T) {
 					}
 				}
 				// An L3 ingress is only routable because the compile makes its front;
-				// without that kernel row the rewritten tag names a device nothing owns.
-				if ingress.fronted && len(got.Kernel) == 0 {
-					t.Fatal("a fronted ingress emitted no kernel state to be fronted by")
+				// without it the rewritten tag names a device nothing owns.
+				if ingress.fronted && len(got.Fronts) == 0 {
+					t.Fatal("a fronted ingress emitted no front to be fronted by")
 				}
 			})
 		}
