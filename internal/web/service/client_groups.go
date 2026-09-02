@@ -434,3 +434,47 @@ func (s *ClientService) replaceGroupValue(oldName, newName string) (int, error) 
 	}
 	return len(records), nil
 }
+
+// BulkGroupResult is the per-row account of a bulk group change.
+type BulkGroupResult struct {
+	Affected int         `json:"affected" example:"2"`
+	Outcome  BulkOutcome `json:"outcome"`
+}
+
+// AddToGroupOutcome groups like AddToGroup and names the emails it could not
+// find, which the count alone folded into "fewer than asked".
+func (s *ClientService) AddToGroupOutcome(emails []string, group string) (*BulkGroupResult, error) {
+	result := &BulkGroupResult{}
+	known := map[string]struct{}{}
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		var found []string
+		if err := database.GetDB().Model(&model.ClientRecord{}).Where("email IN ?", batch).Pluck("email", &found).Error; err != nil {
+			return nil, err
+		}
+		for _, email := range found {
+			known[email] = struct{}{}
+		}
+	}
+	affected, err := s.AddToGroup(emails, group)
+	if err != nil {
+		return nil, err
+	}
+	result.Affected = affected
+	seen := map[string]struct{}{}
+	for _, email := range emails {
+		if email == "" {
+			continue
+		}
+		if _, dup := seen[email]; dup {
+			continue
+		}
+		seen[email] = struct{}{}
+		if _, ok := known[email]; ok {
+			result.Outcome.ok(email)
+		} else {
+			result.Outcome.skip(email, "client not found")
+		}
+	}
+	result.Outcome.finalize()
+	return result, nil
+}
