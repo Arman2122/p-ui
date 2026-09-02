@@ -111,3 +111,30 @@ func TestSubFileRefusesWhatItCannotServe(t *testing.T) {
 		}
 	}
 }
+
+/*
+The file share points at the host the operator configured, like every link.
+
+FileShare rendered the .conf against the inbound's own address and port and
+never consulted the Host rows, while the raw, JSON and Clash renderers all fan
+out through hostEndpoints -- so the one delivery a kernel WireGuard client
+depends on was the one that ignored the CDN or relay the operator set up.
+Feature gap B4.
+*/
+func TestSubFileHonoursTheInboundsHost(t *testing.T) {
+	initSubDB(t)
+	in := seedFileShareInbound(t, "subfilehost")
+	host := &model.Host{InboundId: in.Id, Remark: "relay", Address: "relay.example.com", Port: 5555, Security: "same"}
+	if err := database.GetDB().Create(host).Error; err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	fileShareRouter().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sub/subfilehost/file/"+strconv.Itoa(in.Id), nil))
+	if w.Code != 200 {
+		t.Fatalf("GET file = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "Endpoint = relay.example.com:5555") {
+		t.Fatalf("the served .conf does not point at the host:\n%s", body)
+	}
+}
