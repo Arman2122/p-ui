@@ -13,6 +13,12 @@ here; the git log is the full record.
   subscription page, and the escaper that guarded it named `<`, `>` and `&`
   and then left all three alone. It now uses the JSON string encoder, which
   also covers the two Unicode line terminators the old list never knew about.
+- **The certificate-hash probe cannot be pointed at the panel's own network.**
+  "Get remote certificate hash" took an operator-supplied host and dialled it
+  with a plain dialer, so it could reach loopback, the database, a cloud
+  metadata endpoint or anything on the LAN. It now dials through the same
+  guard the REALITY probe already uses, and refuses private and internal
+  addresses.
 - **A failed login costs the same whether or not the username exists.** An
   unknown username was answered in the time of one database lookup and a
   known one in the time of a full bcrypt check — a timing difference that told
