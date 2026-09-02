@@ -20,10 +20,16 @@ import (
 // test converges a real egress without writing an ip rule on the machine.
 func withFakeEgressKernel(t *testing.T) *egtest.Kernel {
 	t.Helper()
+	// An earlier test's restart kick may still be reading the manager this swaps:
+	// quiesce it first, and again before the swap back. CI run 33641933638.
+	egressKicks.Wait()
 	kernel := egtest.New()
 	previous := egressManager
 	egressManager = egress.New(kernel, egressDriverRegistry)
-	t.Cleanup(func() { egressManager = previous })
+	t.Cleanup(func() {
+		egressKicks.Wait()
+		egressManager = previous
+	})
 	return kernel
 }
 

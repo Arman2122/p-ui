@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -263,7 +264,9 @@ blackhole, so every attached inbound is contained — not leaking, but dark — 
 something reconciles. Waiting for the 10s tick is up to ten seconds of that.
 */
 func kickEgressAfterCoreRestart() {
+	egressKicks.Add(1)
 	go func() {
+		defer egressKicks.Done()
 		service := &EgressService{}
 		for _, delay := range egressRestartKickDelays {
 			time.Sleep(delay)
@@ -491,3 +494,7 @@ func egressTargetResolves(tag string) (bool, error) {
 	}
 	return routingTargetExists(routing, cfg.OutboundConfigs, tag), nil
 }
+
+// egressKicks counts restart kicks in flight: a kick outlives its caller by the
+// whole ladder and reads a manager the test harness swaps. CI run 33641933638.
+var egressKicks sync.WaitGroup
