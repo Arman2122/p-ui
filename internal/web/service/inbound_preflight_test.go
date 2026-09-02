@@ -13,11 +13,12 @@ import (
 /*
 The inbound form refuses a kind whose core reports itself unusable on this
 host, but the API path took it: an inbound for a kernel WireGuard core with
-no module could be created and then never start. AddInbound now asks the
-owning core's Preflight and refuses with its reason. Feature gap O4.
+no module could be created and then never start. The add handler now asks
+the owning core's Preflight through RefuseUnrunnableCore, which this drives
+with a registry holding a core that says no; the service itself stays free
+of host checks so its own tests run on a bare runner. Feature gap O4.
 */
-func TestAddInboundRefusesACoreThisHostCannotRun(t *testing.T) {
-	initTestDB(t)
+func TestRefuseUnrunnableCoreNamesTheCoresReason(t *testing.T) {
 	reg, err := cores.Default(cores.Deps{})
 	if err != nil {
 		t.Fatalf("default registry: %v", err)
@@ -32,9 +33,15 @@ func TestAddInboundRefusesACoreThisHostCannotRun(t *testing.T) {
 	}
 	cores.Use(reg)
 
-	inbound := &model.Inbound{Protocol: model.Protocol("stubkind"), Tag: "stub-1", Remark: "stub", Port: 46012, Settings: "{}", StreamSettings: "{}"}
-	_, _, _, err = (&InboundService{}).AddInbound(inbound)
-	if err == nil || !strings.Contains(err.Error(), "kernel module missing") {
-		t.Fatalf("AddInbound for an unusable core: err = %v, want the core's own reason", err)
+	err = RefuseUnrunnableCore(&model.Inbound{Protocol: model.Protocol("stubkind"), Tag: "stub-1"})
+	if err == nil || !strings.Contains(err.Error(), "kernel module missing") || !strings.Contains(err.Error(), "stubkind") {
+		t.Fatalf("unusable core: err = %v, want the kind and the core's own reason", err)
+	}
+	node := 7
+	if err := RefuseUnrunnableCore(&model.Inbound{Protocol: model.Protocol("stubkind"), NodeID: &node}); err != nil {
+		t.Fatalf("a node-hosted inbound is the node's business, got %v", err)
+	}
+	if err := RefuseUnrunnableCore(&model.Inbound{Protocol: model.VLESS}); err != nil {
+		t.Fatalf("an Xray kind keeps its own -test pre-flight, got %v", err)
 	}
 }
