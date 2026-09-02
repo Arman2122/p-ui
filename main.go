@@ -250,6 +250,21 @@ func showSetting(show bool) {
 		fmt.Println("hasDefaultCredential:", hasDefaultCredential)
 		fmt.Println("port:", port)
 		fmt.Println("webBasePath:", webBasePath)
+		if webDomain, err := settingService.GetWebDomain(); err == nil {
+			fmt.Println("webDomain:", webDomain)
+		}
+		if sessionMaxAge, err := settingService.GetSessionMaxAge(); err == nil {
+			fmt.Println("sessionMaxAge:", sessionMaxAge)
+		}
+		if trusted, err := settingService.GetTrustedProxyCIDRs(); err == nil {
+			fmt.Println("trustedProxyCIDRs:", trusted)
+		}
+		if subListen, err := settingService.GetSubListen(); err == nil {
+			fmt.Println("subListen:", subListen)
+		}
+		if subPort, err := settingService.GetSubPort(); err == nil {
+			fmt.Println("subPort:", subPort)
+		}
 	}
 }
 
@@ -336,7 +351,57 @@ func showFirewallPorts() error {
 	return nil
 }
 
-func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool, ldapAdminFilter string, webDomain string) error {
+// cliSettingExtras are the start-time settings the panel reads once, which
+// used to be repairable only from a browser that could still reach it.
+type cliSettingExtras struct {
+	sessionMaxAge     int
+	trustedProxyCIDRs string
+	subListen         string
+	subPort           int
+}
+
+func applyCliSettingExtras(settingService *service.SettingService, extra cliSettingExtras) {
+	if extra.sessionMaxAge > 0 {
+		if err := settingService.SetSessionMaxAge(extra.sessionMaxAge); err != nil {
+			fmt.Println("Failed to set the session max age:", err)
+		} else {
+			fmt.Printf("sessionMaxAge set to %d minutes\n", extra.sessionMaxAge)
+		}
+	}
+	if extra.trustedProxyCIDRs != "" {
+		value := extra.trustedProxyCIDRs
+		if value == "-" {
+			value = ""
+		}
+		if err := settingService.SetTrustedProxyCIDRs(value); err != nil {
+			fmt.Println("Failed to set trustedProxyCIDRs:", err)
+		} else if value == "" {
+			fmt.Println("trustedProxyCIDRs cleared; no peer may set forwarded headers")
+		} else {
+			fmt.Println("trustedProxyCIDRs set to", value)
+		}
+	}
+	if extra.subListen != "" {
+		value := extra.subListen
+		if value == "-" {
+			value = ""
+		}
+		if err := settingService.SetSubListen(value); err != nil {
+			fmt.Println("Failed to set the subscription listen IP:", err)
+		} else {
+			fmt.Printf("subListen set to %q\n", value)
+		}
+	}
+	if extra.subPort > 0 {
+		if err := settingService.SetSubPort(extra.subPort); err != nil {
+			fmt.Println("Failed to set the subscription port:", err)
+		} else {
+			fmt.Printf("subPort set to %d\n", extra.subPort)
+		}
+	}
+}
+
+func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool, ldapAdminFilter string, webDomain string, extra cliSettingExtras) error {
 	err := database.InitDB()
 	if err != nil {
 		fmt.Println("Database initialization failed:", err)
@@ -431,6 +496,7 @@ func updateSetting(port int, username string, password string, webBasePath strin
 			fmt.Printf("listen %v set successfully\n", listenIP)
 		}
 	}
+	applyCliSettingExtras(&settingService, extra)
 
 	return nil
 }
@@ -637,6 +703,10 @@ func main() {
 	var resetTwoFactor bool
 	var ldapAdminFilter string
 	var webDomain string
+	var sessionMaxAge int
+	var trustedProxyCIDRs string
+	var subListen string
+	var subPort int
 	var listPorts bool
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
@@ -647,6 +717,10 @@ func main() {
 	settingCmd.StringVar(&listenIP, "listenIP", "", "set panel listenIP IP")
 	settingCmd.BoolVar(&resetTwoFactor, "resetTwoFactor", false, "Reset two-factor authentication settings")
 	settingCmd.StringVar(&webDomain, "webDomain", "", "Set the panel Listen Domain (pass \"-\" to clear it and answer on any host)")
+	settingCmd.IntVar(&sessionMaxAge, "sessionMaxAge", 0, "Set the panel session length in minutes")
+	settingCmd.StringVar(&trustedProxyCIDRs, "trustedProxyCIDRs", "", "Set the proxies allowed to send forwarded headers, comma-separated (pass \"-\" to clear)")
+	settingCmd.StringVar(&subListen, "subListen", "", "Set the subscription server listen IP (pass \"-\" to clear)")
+	settingCmd.IntVar(&subPort, "subPort", 0, "Set the subscription server port")
 	settingCmd.StringVar(&ldapAdminFilter, "ldapAdminFilter", "", "LDAP filter an account must also match to sign in to the PANEL (empty = off; pass \"-\" to clear)")
 	settingCmd.BoolVar(&getListen, "getListen", false, "Display current panel listenIP IP")
 	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
@@ -704,7 +778,7 @@ func main() {
 				return
 			}
 		} else {
-			if err = updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor, ldapAdminFilter, webDomain); err != nil {
+			if err = updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor, ldapAdminFilter, webDomain, cliSettingExtras{sessionMaxAge: sessionMaxAge, trustedProxyCIDRs: trustedProxyCIDRs, subListen: subListen, subPort: subPort}); err != nil {
 				return
 			}
 		}

@@ -663,6 +663,22 @@ func (s *SettingService) GetTrustedProxyCIDRs() (string, error) {
 	return s.getString("trustedProxyCIDRs")
 }
 
+func (s *SettingService) SetSessionMaxAge(minutes int) error {
+	return s.setInt("sessionMaxAge", minutes)
+}
+
+func (s *SettingService) SetTrustedProxyCIDRs(value string) error {
+	return s.setString("trustedProxyCIDRs", value)
+}
+
+func (s *SettingService) SetSubListen(value string) error {
+	return s.setString("subListen", value)
+}
+
+func (s *SettingService) SetSubPort(port int) error {
+	return s.setInt("subPort", port)
+}
+
 func (s *SettingService) GetRemarkTemplate() (string, error) {
 	return s.getString("remarkTemplate")
 }
