@@ -177,7 +177,9 @@ func (j *LdapSyncJob) Run() {
 				ldapEmailSet[e] = struct{}{}
 			}
 			for _, tag := range inboundTags {
-				j.deleteClientsNotInLDAP(tag, ldapEmailSet)
+				if ib := inboundMap[tag]; ib != nil {
+					j.deleteClientsNotInLDAP(ib, ldapEmailSet)
+				}
 			}
 		}
 	}
@@ -363,7 +365,7 @@ func (j *LdapSyncJob) batchSetEnable(ib *model.Inbound, emails []string, enable 
 	for _, email := range emails {
 		ok, needRestart, err := j.clientService.SetClientEnableByEmail(&j.inboundService, email, enable)
 		if err != nil {
-			logger.Warningf("Batch set enable failed for %s in inbound %s: %v", email, ib.Tag, err)
+			logger.Warningf("Batch set enable failed for %s (batched from inbound %s; the change spans every inbound carrying the email): %v", email, ib.Tag, err)
 			continue
 		}
 		if ok {
@@ -374,7 +376,7 @@ func (j *LdapSyncJob) batchSetEnable(ib *model.Inbound, emails []string, enable 
 		}
 	}
 	if changed > 0 {
-		logger.Infof("Batch set enable=%v for %d clients in inbound %s", enable, changed, ib.Tag)
+		logger.Infof("Batch set enable=%v for %d clients batched from inbound %s (each change spans every inbound carrying the email)", enable, changed, ib.Tag)
 	}
 	if restartNeeded {
 		j.xrayService.SetToNeedRestart()
@@ -382,24 +384,15 @@ func (j *LdapSyncJob) batchSetEnable(ib *model.Inbound, emails []string, enable 
 }
 
 // deleteClientsNotInLDAP deletes clients not in LDAP using batches and a single restart
-func (j *LdapSyncJob) deleteClientsNotInLDAP(inboundTag string, ldapEmails map[string]struct{}) {
-	inbounds, err := j.inboundService.GetAllInbounds()
-	if err != nil {
-		logger.Warning("Failed to get inbounds for deletion:", err)
-		return
-	}
-
+func (j *LdapSyncJob) deleteClientsNotInLDAP(ib *model.Inbound, ldapEmails map[string]struct{}) {
 	batchSize := 50 //  clients in 1 batch
 	restartNeeded := false
 
-	for _, ib := range inbounds {
-		if ib.Tag != inboundTag {
-			continue
-		}
+	{
 		clients, err := j.inboundService.GetClients(ib)
 		if err != nil {
 			logger.Warningf("Failed to get clients for inbound %s: %v", ib.Tag, err)
-			continue
+			return
 		}
 
 		// Collect clients for deletion
@@ -427,7 +420,7 @@ func (j *LdapSyncJob) deleteClientsNotInLDAP(inboundTag string, ldapEmails map[s
 		toDelete = j.ldapCreatedOnly(ib.Tag, toDelete)
 
 		if len(toDelete) == 0 {
-			continue
+			return
 		}
 
 		for i := 0; i < len(toDelete); i += batchSize {
