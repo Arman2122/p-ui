@@ -100,8 +100,10 @@ file locations when it can answer in one hop.
   in `frontend/src/pages/api-docs/endpoints.ts`, then `make gen` (or
   `cd frontend && npm run gen`). Hand-maintained but pinned both ways by
   `TestRouteRegistryContract` (`internal/web/routes_contract_test.go`): a missing
-  OR stale entry fails `make test-go`. Scope: `/panel/api/*` + a few session
-  routes; sub-server routes are exempt.
+  OR stale entry fails CI's live-Postgres job, and `make test-go` only when
+  `PUI_DB_DSN` names a database — the contract builds the real router, so
+  without one it SKIPS and a green local run proves nothing here. Scope:
+  `/panel/api/*` + a few session routes; sub-server routes are exempt.
 - Response examples come from Go struct `example:` tags via `tools/openapigen` —
   never hand-write them. A new struct must be added to openapigen's `StructAllow`
   allowlist (`tools/openapigen/main.go`) or it is silently omitted from
