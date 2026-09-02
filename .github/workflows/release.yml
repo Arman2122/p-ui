@@ -187,11 +187,20 @@ jobs:
       - name: Package
         run: tar -zcvf p-ui-linux-${{ matrix.platform }}.tar.gz p-ui
 
+      # One digest beside each archive. install.sh and update.sh refuse to
+      # extract an archive whose digest they cannot fetch and match, so a
+      # truncated download or a tampered CDN object stops here instead of
+      # becoming a root-owned binary. F277.
+      - name: Checksum
+        run: sha256sum p-ui-linux-${{ matrix.platform }}.tar.gz > p-ui-linux-${{ matrix.platform }}.tar.gz.sha256
+
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v7
         with:
           name: p-ui-linux-${{ matrix.platform }}
-          path: ./p-ui-linux-${{ matrix.platform }}.tar.gz
+          path: |
+            ./p-ui-linux-${{ matrix.platform }}.tar.gz
+            ./p-ui-linux-${{ matrix.platform }}.tar.gz.sha256
 
       # `prerelease: true` is a CREATE-time staging state, not the final one: the
       # release does not exist when the tag is pushed, so whichever matrix leg
@@ -210,6 +219,32 @@ jobs:
           tag: ${{ github.ref_name }}
           file: p-ui-linux-${{ matrix.platform }}.tar.gz
           asset_name: p-ui-linux-${{ matrix.platform }}.tar.gz
+          overwrite: true
+          prerelease: true
+
+      - name: Upload checksum to GH release
+        uses: svenstaro/upload-release-action@v2
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          file: p-ui-linux-${{ matrix.platform }}.tar.gz.sha256
+          asset_name: p-ui-linux-${{ matrix.platform }}.tar.gz.sha256
+          overwrite: true
+          prerelease: true
+
+      # The updater ships WITH the release it installs. The panel and p-ui.sh
+      # used to run whatever update.sh the tip of main carried, as root, on
+      # every host -- so a commit on main was code execution everywhere.
+      # Published from one leg: the script is not per-platform. F277.
+      - name: Upload update.sh to GH release
+        uses: svenstaro/upload-release-action@v2
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && matrix.platform == 'amd64'
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          file: update.sh
+          asset_name: update.sh
           overwrite: true
           prerelease: true
 
@@ -317,4 +352,6 @@ jobs:
               --target "${COMMIT}" --title "Dev build ${short}" --notes "${notes}"
           fi
 
-          retry gh release upload dev-latest dev-artifacts/*.tar.gz --clobber
+          # Digests and the updater ride along, so the dev channel is verified
+          # and tag-pinned exactly as a stable release is.
+          retry gh release upload dev-latest dev-artifacts/*.tar.gz dev-artifacts/*.sha256 update.sh --clobber

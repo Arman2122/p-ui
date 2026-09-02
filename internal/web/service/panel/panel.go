@@ -38,8 +38,16 @@ type PanelUpdateInfo struct {
 	UpdateAvailable bool   `json:"updateAvailable"`
 }
 
+// panelReleaseBaseURL is where a release's assets live. A var so a test can point
+// the updater download at an httptest server; the value is never configurable.
+var panelReleaseBaseURL = "https://github.com/Arman2122/p-ui/releases/download/"
+
+// panelUpdaterURL names the update.sh that SHIPS WITH the release being
+// installed. It used to be the tip of main, run as root on every host -- so a
+// commit on main was code execution everywhere. F277.
+func panelUpdaterURL(tag string) string { return panelReleaseBaseURL + tag + "/update.sh" }
+
 const (
-	panelUpdaterURL      = "https://raw.githubusercontent.com/Arman2122/p-ui/main/update.sh"
 	maxPanelUpdaterBytes = 2 << 20
 	// devReleaseTag is the fixed-tag rolling pre-release the CI force-moves to the
 	// newest main commit; the dev update channel installs from it.
@@ -224,7 +232,16 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 		return 0, fmt.Errorf("bash is required to run the panel updater: %w", err)
 	}
 
-	scriptPath, err := downloadPanelUpdater()
+	// The tag is resolved BEFORE the script is fetched, and the script is then
+	// told the same tag: it installs the release it came from, rather than
+	// resolving latest a second time and possibly landing on a different one.
+	updateTag := devReleaseTag
+	if !useDev {
+		if updateTag, err = fetchLatestPanelVersion(); err != nil {
+			return 0, fmt.Errorf("resolve latest panel release: %w", err)
+		}
+	}
+	scriptPath, err := downloadPanelUpdater(updateTag)
 	if err != nil {
 		return 0, err
 	}
@@ -232,10 +249,6 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 	statusFile := config.GetUpdateStatusFilePath()
 
 	mainFolder, serviceFolder := resolveUpdateFolders()
-	updateTag := ""
-	if useDev {
-		updateTag = devReleaseTag
-	}
 	updateScript := fmt.Sprintf("set -e; trap 'rm -f %s' EXIT; %s %s", shellQuote(scriptPath), shellQuote(bash), shellQuote(scriptPath))
 	runIDEnv := "PUI_UPDATE_RUN_ID=" + strconv.FormatInt(runID, 10)
 	statusFileEnv := "PUI_UPDATE_STATUS_FILE=" + statusFile
@@ -345,9 +358,9 @@ func releaseUpdateSlot() {
 	updateMu.Unlock()
 }
 
-func downloadPanelUpdater() (string, error) {
+func downloadPanelUpdater(tag string) (string, error) {
 	client := (&service.SettingService{}).NewProxiedHTTPClient(15 * time.Second)
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, panelUpdaterURL, nil)
+	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, panelUpdaterURL(tag), nil)
 	if reqErr != nil {
 		return "", fmt.Errorf("download panel updater: %w", reqErr)
 	}
