@@ -97,6 +97,8 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
 
   /* A host rewrites the address a share link carries; a kernel WireGuard
      interface hands out its own config and a host changes nothing in it. */
+  const watchedInboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
+  const selectedInboundIds = useMemo(() => (watchedInboundIds ?? []) as number[], [watchedInboundIds]);
   const inboundSelectOptions = useMemo(
     () => inboundOptions.map((ib) => {
       const kernelWg = ib.protocol === 'wgkernel' || ib.protocol === 'awgkernel';
@@ -104,10 +106,10 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
       return {
         value: ib.id,
         label: kernelWg ? `${name} (${t('pages.hosts.kernelWgNoEffect')})` : name,
-        disabled: kernelWg,
+        disabled: kernelWg && !selectedInboundIds.includes(ib.id),
       };
     }),
-    [inboundOptions, t],
+    [inboundOptions, selectedInboundIds, t],
   );
 
   const nodeSelectOptions = useMemo(
