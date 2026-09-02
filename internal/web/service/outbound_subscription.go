@@ -223,6 +223,7 @@ func (s *OutboundSubscriptionService) Update(id int, remark, rawURL, tagPrefix s
 	if prefix == "" {
 		prefix = s.nextDefaultSubPrefix(sub.Id)
 	}
+	wasEnabled := sub.Enabled
 	sub.Remark = strings.TrimSpace(remark)
 	sub.Url = cleanURL
 	sub.Enabled = enabled
@@ -231,12 +232,24 @@ func (s *OutboundSubscriptionService) Update(id int, remark, rawURL, tagPrefix s
 	sub.Prepend = prepend
 	sub.TagPrefix = prefix
 	sub.UpdateInterval = updateInterval
-	return database.GetDB().Save(sub).Error
+	if err := database.GetDB().Save(sub).Error; err != nil {
+		return err
+	}
+	if wasEnabled && !enabled {
+		(&RoutingService{}).PruneOutboundForCurrentTemplate(context.Background())
+	}
+	return nil
 }
 
 // Delete removes a subscription.
 func (s *OutboundSubscriptionService) Delete(id int) error {
-	return database.GetDB().Delete(&model.OutboundSubscription{}, id).Error
+	if err := database.GetDB().Delete(&model.OutboundSubscription{}, id).Error; err != nil {
+		return err
+	}
+	// Its tags are gone from the merged config; a rule still naming one drops
+	// everything it matches until it is repaired.
+	(&RoutingService{}).PruneOutboundForCurrentTemplate(context.Background())
+	return nil
 }
 
 // GetLastOutbounds returns the last successfully fetched outbounds for a subscription
@@ -264,6 +277,9 @@ func (s *OutboundSubscriptionService) Refresh(id int) ([]any, error) {
 		return nil, err
 	}
 	outbounds, err := s.fetchAndStore(sub)
+	if err == nil {
+		(&RoutingService{}).PruneOutboundForCurrentTemplate(context.Background())
+	}
 	return outbounds, err
 }
 
@@ -288,6 +304,9 @@ func (s *OutboundSubscriptionService) RefreshAllEnabled() (int, error) {
 				refreshed++
 			}
 		}
+	}
+	if refreshed > 0 {
+		(&RoutingService{}).PruneOutboundForCurrentTemplate(context.Background())
 	}
 	return refreshed, nil
 }
