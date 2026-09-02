@@ -16,6 +16,8 @@ import { FormField } from '@/components/form/rhf';
 import { IpLimitControl } from '@/components/clients/IpLimitControl';
 import { useClients, type InboundOption } from '@/hooks/useClients';
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
+import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { kindsWithoutIpLimit } from '@/lib/cores/ip-limit';
 import { ClientBulkAddFormSchema, type ClientBulkAddFormValues } from '@/schemas/client';
 
 const FLOW_OPTIONS = Object.values(TLS_FLOW_CONTROL);
@@ -68,8 +70,24 @@ export default function ClientBulkAddModal({
   const [delayedStart, setDelayedStart] = useState(false);
   const [saving, setSaving] = useState(false);
   const fail2ban = useFail2banStatusQuery();
-  const limitIpDisabled = !fail2ban.usable;
-  const limitIpNotice = getLimitIpNotice(fail2ban, t);
+  const coresQuery = useCoresQuery();
+  const cores = coresQuery.data?.length ? coresQuery.data : undefined;
+  /* The same two reasons the single-client form knows: no actuator on the
+     host, or an inbound whose core cannot report the sessions a cap needs. */
+  const attachedKinds = useMemo(() => {
+    const kinds: string[] = [];
+    for (const id of inboundIds || []) {
+      const ib = (inbounds || []).find((row) => row.id === id);
+      if (ib?.protocol) kinds.push(ib.protocol);
+    }
+    return kinds;
+  }, [inboundIds, inbounds]);
+  const uncappableKinds = useMemo(() => kindsWithoutIpLimit(cores, attachedKinds), [cores, attachedKinds]);
+  const allUncappable = attachedKinds.length > 0 && uncappableKinds.length === attachedKinds.length;
+  const limitIpDisabled = !fail2ban.usable || allUncappable;
+  const limitIpNotice = allUncappable || uncappableKinds.length > 0
+    ? t('pages.clients.limitIpUnsupportedKinds', { kinds: [...new Set(uncappableKinds)].join(', ') })
+    : getLimitIpNotice(fail2ban, t);
 
   useEffect(() => {
     if (!open) return;
