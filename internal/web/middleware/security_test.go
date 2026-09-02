@@ -80,7 +80,7 @@ func TestCSRFMiddlewareRejectsMissingTokenAndAcceptsValidToken(t *testing.T) {
 func TestSecurityHeadersMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeadersMiddleware(true))
+	router.Use(SecurityHeadersMiddleware(true, false))
 	var capturedNonce string
 	router.GET("/", func(c *gin.Context) {
 		capturedNonce = c.GetString("csp_nonce")
@@ -136,7 +136,7 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 func TestSecurityHeadersMiddlewareSkipsHSTSWithoutDirectHTTPS(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeadersMiddleware(false))
+	router.Use(SecurityHeadersMiddleware(false, false))
 	router.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "ok")
 	})
