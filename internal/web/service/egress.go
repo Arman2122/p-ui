@@ -30,11 +30,7 @@ var (
 	ErrEgressUnknownType      = errors.New("egress: no driver serves this type")
 	ErrEgressTargetUnresolved = errors.New("egress: the target names no outbound or balancer")
 	ErrEgressUnrealisable     = errors.New("egress: its own driver cannot derive what the kernel needs")
-	ErrEgressNoIngressDevice  = errors.New("egress: this protocol has no ingress device to select on")
-	ErrEgressMasterLocal      = errors.New("egress: egress is master-local while the id is a global key")
 	ErrEgressInUse            = errors.New("egress: the egress still serves inbounds")
-	ErrEgressDisabled         = errors.New("egress: a disabled egress installs no containment")
-	ErrEgressNotRouted        = errors.New("egress: the attachment did not reach the host")
 )
 
 // egressDriverRegistry is the driver set this build serves, one Register line
