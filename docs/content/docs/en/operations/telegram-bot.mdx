@@ -81,7 +81,7 @@ confirmation) on a client's card. Regular users get buttons for their own usage,
   | `cpu.high`      | CPU exceeds `tgCpu` percent (default 80)                |
   | `memory.high`   | Memory exceeds `tgMemory` percent (default 80)          |
   | `xray.crash`    | Xray-core crashes                                       |
-  | `outbound.down` / `outbound.up` | An outbound goes down / recovers        |
+  | `outbound.down` / `outbound.up` | An outbound goes down / recovers, or an outbound subscription stops fetching / fetches again        |
   | `node.down` / `node.up`         | A node goes offline / comes back        |
 
 The warning lead times come from `expireDiff` (days before expiry) and
