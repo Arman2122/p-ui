@@ -241,6 +241,11 @@ func isTransparentRule(rule map[string]any) bool {
 	if tag, _ := rule["balancerTag"].(string); strings.HasPrefix(tag, "_bl_") {
 		return true
 	}
+	// The real pui-dns-allow rules carry ruleTag and no inboundTag at all, so
+	// the inboundTag check below never saw one. F162.
+	if tag, _ := rule["ruleTag"].(string); strings.HasSuffix(tag, "-dns-allow") {
+		return true
+	}
 	for _, tag := range ruleStrings(rule["inboundTag"]) {
 		if strings.HasSuffix(tag, "-dns-allow") || strings.HasPrefix(tag, "_bl_") {
 			return true
