@@ -19,19 +19,21 @@ import (
 // so the list payload stays compact even when the panel manages thousands
 // of clients. Modals that need the full record still call /get/:email.
 type ClientSlim struct {
-	Email      string              `json:"email"`
-	SubID      string              `json:"subId"`
-	Enable     bool                `json:"enable"`
-	TotalGB    int64               `json:"totalGB"`
-	ExpiryTime int64               `json:"expiryTime"`
-	LimitIP    int                 `json:"limitIp"`
-	Reset      int                 `json:"reset"`
-	Group      string              `json:"group,omitempty"`
-	Comment    string              `json:"comment,omitempty"`
-	InboundIds []int               `json:"inboundIds"`
-	Traffic    *xray.ClientTraffic `json:"traffic,omitempty"`
-	CreatedAt  int64               `json:"createdAt"`
-	UpdatedAt  int64               `json:"updatedAt"`
+	Email  string `json:"email"`
+	SubID  string `json:"subId"`
+	Enable bool   `json:"enable"`
+	// DisabledReason is "quota", "expiry" or "manual" while Enable is false.
+	DisabledReason string              `json:"disabledReason,omitempty"`
+	TotalGB        int64               `json:"totalGB"`
+	ExpiryTime     int64               `json:"expiryTime"`
+	LimitIP        int                 `json:"limitIp"`
+	Reset          int                 `json:"reset"`
+	Group          string              `json:"group,omitempty"`
+	Comment        string              `json:"comment,omitempty"`
+	InboundIds     []int               `json:"inboundIds"`
+	Traffic        *xray.ClientTraffic `json:"traffic,omitempty"`
+	CreatedAt      int64               `json:"createdAt"`
+	UpdatedAt      int64               `json:"updatedAt"`
 }
 
 // ClientPageParams are the query params accepted by /panel/api/clients/list/paged.
@@ -402,6 +404,23 @@ func (s *ClientService) ListPaged(inboundSvc *InboundService, settingSvc *Settin
 // attachments and traffic for those ids only. A page never exceeds
 // clientPageMaxSize rows, which stays under sqlInChunk, so the follow-up IN
 // lists need no chunking.
+// disabledReason names what keeps a client off: the quota it used up, the
+// expiry it passed, or nothing but the switch.
+func disabledReason(rec *model.ClientRecord, t *xray.ClientTraffic, nowMs int64) string {
+	if rec.Enable {
+		return ""
+	}
+	if t != nil {
+		if t.Total > 0 && t.Up+t.Down >= t.Total {
+			return "quota"
+		}
+		if t.ExpiryTime > 0 && t.ExpiryTime <= nowMs {
+			return "expiry"
+		}
+	}
+	return "manual"
+}
+
 func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset, limit int) ([]ClientSlim, error) {
 	tx, _ := q.applyParams(q.from(), params, onlines)
 	var ids []int
@@ -448,6 +467,7 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 		}
 	}
 
+	nowMs := time.Now().UnixMilli()
 	items := make([]ClientSlim, 0, len(ids))
 	for _, id := range ids {
 		rec := byId[id]
@@ -455,19 +475,20 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 			continue
 		}
 		items = append(items, ClientSlim{
-			Email:      rec.Email,
-			SubID:      rec.SubID,
-			Enable:     rec.Enable,
-			TotalGB:    rec.TotalGB,
-			ExpiryTime: rec.ExpiryTime,
-			LimitIP:    rec.LimitIP,
-			Reset:      rec.Reset,
-			Group:      rec.Group,
-			Comment:    rec.Comment,
-			InboundIds: attachments[rec.Id],
-			Traffic:    trafficByEmail[rec.Email],
-			CreatedAt:  rec.CreatedAt,
-			UpdatedAt:  rec.UpdatedAt,
+			Email:          rec.Email,
+			SubID:          rec.SubID,
+			Enable:         rec.Enable,
+			DisabledReason: disabledReason(rec, trafficByEmail[rec.Email], nowMs),
+			TotalGB:        rec.TotalGB,
+			ExpiryTime:     rec.ExpiryTime,
+			LimitIP:        rec.LimitIP,
+			Reset:          rec.Reset,
+			Group:          rec.Group,
+			Comment:        rec.Comment,
+			InboundIds:     attachments[rec.Id],
+			Traffic:        trafficByEmail[rec.Email],
+			CreatedAt:      rec.CreatedAt,
+			UpdatedAt:      rec.UpdatedAt,
 		})
 	}
 	return items, nil

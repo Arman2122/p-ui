@@ -984,7 +984,16 @@ export default function ClientsPage() {
         if (record.enable && isOnline(record.email)) return (
           <Tag color="green" className="dot-tag"><span className="online-dot" />{t('pages.clients.online')}</Tag>
         );
-        if (!record.enable) return <Tag>{t('disabled')}</Tag>;
+        if (!record.enable) {
+          const why = record.disabledReason === 'quota'
+            ? t('pages.clients.disabledBy.quota')
+            : record.disabledReason === 'expiry'
+              ? t('pages.clients.disabledBy.expiry')
+              : record.disabledReason === 'manual'
+                ? t('pages.clients.disabledBy.manual')
+                : '';
+          return <Tag>{why ? `${t('disabled')} · ${why}` : t('disabled')}</Tag>;
+        }
         if (bucket === 'expiring') return <Tag color="orange">{t('depletingSoon')}</Tag>;
         return (
           <Tooltip title={lastOnlineTitle}>
