@@ -278,6 +278,7 @@ type bulkAdjustEntry struct {
 	newExpiry   int64
 	applyTotal  bool
 	newTotal    int64
+	patch       *BulkSetPatch
 }
 
 // bulkFlowClear is the directive that strips the XTLS flow from every selected
@@ -461,6 +462,52 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 		return result, false, nil
 	}
 
+	exec, err := s.bulkExecutePlan(inboundSvc, plan, flow, skippedReasons)
+	if err != nil {
+		return result, exec.needRestart, err
+	}
+	adjusted, needRestart := exec.adjusted, exec.needRestart
+	flowHonored, flowIneligible := exec.flowHonored, exec.flowIneligible
+	result.Adjusted = len(adjusted)
+	for email := range adjusted {
+		result.Outcome.ok(email)
+	}
+
+	for email, reason := range skippedReasons {
+		result.Skipped = append(result.Skipped, BulkAdjustReport{Email: email, Reason: reason})
+		result.Outcome.skip(email, reason)
+	}
+	// Report a flow directive that no inbound could carry — only when it was not
+	// honored anywhere and the client has no other (expiry/total) skip reason.
+	// The expiry/total part, if any, has already been applied and counted above.
+	for email := range flowIneligible {
+		if flowHonored[email] {
+			continue
+		}
+		if _, already := skippedReasons[email]; already {
+			continue
+		}
+		result.Skipped = append(result.Skipped, BulkAdjustReport{Email: email, Reason: "flow not supported on inbound"})
+		result.Outcome.skip(email, "flow not supported on inbound")
+	}
+	result.Outcome.finalize()
+
+	return result, needRestart, nil
+}
+
+// bulkPlanExec is what running a plan leaves behind: which clients changed,
+// per-client reasons (added to the caller's map) and whether Xray must restart.
+type bulkPlanExec struct {
+	adjusted       map[string]struct{}
+	flowHonored    map[string]bool
+	flowIneligible map[string]bool
+	needRestart    bool
+}
+
+// bulkExecutePlan applies a plan inbound by inbound, then to client_traffics,
+// and re-enables clients the change lifted out of the depleted state.
+func (s *ClientService) bulkExecutePlan(inboundSvc *InboundService, plan map[string]*bulkAdjustEntry, flow string, skippedReasons map[string]string) (bulkPlanExec, error) {
+	db := database.GetDB()
 	plannedIds := make([]int, 0, len(plan))
 	recordIdToEmail := make(map[int]string, len(plan))
 	for email, entry := range plan {
@@ -472,7 +519,7 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 	for _, batch := range chunkInts(plannedIds, sqlInChunk) {
 		var rows []model.ClientInbound
 		if err := db.Where("client_id IN ?", batch).Find(&rows).Error; err != nil {
-			return result, false, err
+			return bulkPlanExec{}, err
 		}
 		mappings = append(mappings, rows...)
 	}
@@ -521,7 +568,7 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 		if err := db.Model(xray.ClientTraffic{}).
 			Where(cond+" AND enable = ? AND email IN ?", append(append([]any{}, condArgs...), false, batch)...).
 			Pluck("email", &rows).Error; err != nil {
-			return result, needRestart, err
+			return bulkPlanExec{needRestart: needRestart}, err
 		}
 		for _, e := range rows {
 			wasDisabledDepleted[e] = struct{}{}
@@ -550,33 +597,10 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 		}
 		// Counted when expiry/total changed, or a flow directive was honored
 		// for this client (flow lives in the inbound JSON, not ClientTraffic).
-		if len(updates) > 0 || flowHonored[email] {
+		if len(updates) > 0 || flowHonored[email] || entry.patch != nil {
 			adjusted[email] = struct{}{}
 		}
 	}
-	result.Adjusted = len(adjusted)
-	for email := range adjusted {
-		result.Outcome.ok(email)
-	}
-
-	for email, reason := range skippedReasons {
-		result.Skipped = append(result.Skipped, BulkAdjustReport{Email: email, Reason: reason})
-		result.Outcome.skip(email, reason)
-	}
-	// Report a flow directive that no inbound could carry — only when it was not
-	// honored anywhere and the client has no other (expiry/total) skip reason.
-	// The expiry/total part, if any, has already been applied and counted above.
-	for email := range flowIneligible {
-		if flowHonored[email] {
-			continue
-		}
-		if _, already := skippedReasons[email]; already {
-			continue
-		}
-		result.Skipped = append(result.Skipped, BulkAdjustReport{Email: email, Reason: "flow not supported on inbound"})
-		result.Outcome.skip(email, "flow not supported on inbound")
-	}
-	result.Outcome.finalize()
 
 	if len(wasDisabledDepleted) > 0 {
 		stillDepleted := map[string]struct{}{}
@@ -589,7 +613,7 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 			if err := db.Model(xray.ClientTraffic{}).
 				Where(cond+" AND email IN ?", append(append([]any{}, condArgs...), batch)...).
 				Pluck("email", &rows).Error; err != nil {
-				return result, needRestart, err
+				return bulkPlanExec{needRestart: needRestart}, err
 			}
 			for _, e := range rows {
 				stillDepleted[e] = struct{}{}
@@ -604,15 +628,14 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 		if len(reEnable) > 0 {
 			_, nr, err := s.BulkSetEnable(inboundSvc, reEnable, true)
 			if err != nil {
-				return result, needRestart, err
+				return bulkPlanExec{needRestart: needRestart}, err
 			}
 			if nr {
 				needRestart = true
 			}
 		}
 	}
-
-	return result, needRestart, nil
+	return bulkPlanExec{adjusted: adjusted, flowHonored: flowHonored, flowIneligible: flowIneligible, needRestart: needRestart}, nil
 }
 
 type bulkInboundAdjustResult struct {
@@ -697,6 +720,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 		if entry.applyTotal {
 			c["totalGB"] = entry.newTotal
 		}
+		patchClientEntry(c, entry.patch)
 		if flow != "" {
 			if flowEligible {
 				want := ""
@@ -776,6 +800,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 					if entry.applyTotal {
 						updated.TotalGB = entry.newTotal
 					}
+					applyBulkSetPatch(&updated, entry.patch)
 					updated.UpdatedAt = nowMs
 					if err1 := rt.UpdateUser(context.Background(), oldInbound, email, updated); err1 != nil {
 						logger.Warning("Error in updating client on", rt.Name(), ":", err1)
