@@ -1072,7 +1072,8 @@ update_p-ui() {
         # The new panel respawns a clean mtg per inbound on next start.
         pkill -f 'mtg-linux-[^ ]* run ' > /dev/null 2>&1 || true
         echo -e "${green}Removing old p-ui version...${plain}"
-        rm ${pui_folder} -f > /dev/null 2>&1
+        # File by file, on purpose: the folder also holds geo data the operator
+        # may have updated and the module source an upgrade refreshes itself.
         rm ${pui_folder}/p-ui.service -f > /dev/null 2>&1
         rm ${pui_folder}/p-ui.service.debian -f > /dev/null 2>&1
         rm ${pui_folder}/p-ui -f > /dev/null 2>&1
