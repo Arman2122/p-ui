@@ -2,11 +2,14 @@ package entity
 
 import (
 	"crypto/tls"
+	"fmt"
 	"math"
 	"net"
 	"net/mail"
 	"strings"
 	"time"
+
+	"github.com/robfig/cron/v3"
 
 	"github.com/Arman2122/p-ui/internal/util/common"
 )
@@ -156,7 +159,29 @@ func pathHasForbiddenChar(s string) bool {
 	return false
 }
 
+// CronSpecParser is the parser the SCHEDULER uses: six fields with seconds,
+// plus descriptors, so a spec the settings accept is one the scheduler runs.
+var CronSpecParser = cron.NewParser(
+	cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+)
+
+func checkCronSpec(name, spec string) error {
+	if spec == "" {
+		return nil
+	}
+	if _, err := CronSpecParser.Parse(spec); err != nil {
+		return fmt.Errorf("%s: %w (the scheduler takes six fields, seconds first, or a descriptor such as @daily)", name, err)
+	}
+	return nil
+}
+
 func (s *AllSetting) CheckValid() error {
+	if err := checkCronSpec("tgRunTime", s.TgRunTime); err != nil {
+		return err
+	}
+	if err := checkCronSpec("ldapSyncCron", s.LdapSyncCron); err != nil {
+		return err
+	}
 	if s.WebListen != "" {
 		ip := net.ParseIP(s.WebListen)
 		if ip == nil {

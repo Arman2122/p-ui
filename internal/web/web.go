@@ -26,6 +26,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/sys"
 	"github.com/Arman2122/p-ui/internal/web/controller"
+	"github.com/Arman2122/p-ui/internal/web/entity"
 	"github.com/Arman2122/p-ui/internal/web/job"
 	"github.com/Arman2122/p-ui/internal/web/locale"
 	"github.com/Arman2122/p-ui/internal/web/middleware"
@@ -438,9 +439,7 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 // cronSpecParser is the parser the SCHEDULER uses. It is exported to the
 // package so the cadence guard measures specs against the real thing:
 // WithSeconds makes this six-field, and ParseStandard is five.
-var cronSpecParser = cron.NewParser(
-	cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
-)
+var cronSpecParser = entity.CronSpecParser
 
 // defaultLdapSyncCron is the value setting.go seeds, and the fallback when the
 // operator's spec will not parse. The scheduler runs with seconds enabled, so
