@@ -17,6 +17,12 @@ type BulkRotateResult struct {
 	Outcome BulkOutcome `json:"outcome"`
 }
 
+// inboundServedByXray is the registry's answer, so the bulk writer never
+// switches on the protocol itself (the dispatch ratchet forbids it here).
+func inboundServedByXray(ib *model.Inbound) bool {
+	return cores.ServedByXray(core.Kind(ib.Protocol))
+}
+
 func declaredCredentialNames(protocol model.Protocol) map[string]bool {
 	kind := core.Kind(protocol)
 	declared := map[string]bool{}

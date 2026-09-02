@@ -778,7 +778,8 @@ func (s *ClientService) bulkAdjustInboundClients(
 	// A flow change rewrites the user's xray config, which the lightweight
 	// UpdateUser push below does not carry. Local nodes reload via restart;
 	// remote nodes get a full reconcile (MarkNodeDirty) instead of a per-user push.
-	if (flowChanged || credsChanged) && oldInbound.NodeID == nil && oldInbound.Protocol != model.MTProto {
+	xrayServes := inboundServedByXray(oldInbound)
+	if (flowChanged || credsChanged) && oldInbound.NodeID == nil && xrayServes {
 		res.needRestart = true
 	}
 
@@ -850,7 +851,7 @@ func (s *ClientService) bulkAdjustInboundClients(
 			}
 		}
 	}
-	if txErr == nil && credsChanged && oldInbound.NodeID == nil && oldInbound.Protocol == model.MTProto {
+	if txErr == nil && credsChanged && oldInbound.NodeID == nil && !xrayServes {
 		inboundSvc.applyLocalMtproto(inboundId)
 	}
 
