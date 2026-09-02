@@ -191,12 +191,12 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 
 	RemarkTemplate, err := s.settingService.GetRemarkTemplate()
 	if err != nil {
-		RemarkTemplate = ""
+		RemarkTemplate = service.DefaultRemarkTemplate
 	}
 
 	SubUpdates, err := s.settingService.GetSubUpdates()
 	if err != nil {
-		SubUpdates = "10"
+		SubUpdates = "12"
 	}
 
 	SubJsonMux, err := s.settingService.GetSubJsonMux()
