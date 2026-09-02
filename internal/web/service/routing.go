@@ -795,46 +795,6 @@ func normalizeRule(rule *model.RoutingRule) error {
 	return nil
 }
 
-// ReplaceInboundRule expresses "send this whole inbound there" as one rule,
-// replacing whatever single-subject rules that inbound already had.
-func (s *RoutingService) ReplaceInboundRule(ctx context.Context, inboundID int, destTag string) error {
-	if err := s.ClearInbound(ctx, inboundID); err != nil {
-		return err
-	}
-	ids, err := json.Marshal([]int{inboundID})
-	if err != nil {
-		return err
-	}
-	_, err = s.Add(ctx, &model.RoutingRule{
-		Enable: true, IngressScope: model.RoutingScopeSelected, IngressIds: string(ids),
-		DestKind: model.RoutingDestOutbound, DestTag: destTag, Criteria: "{}",
-	})
-	return err
-}
-
-// ClearInbound drops the rules that name ONLY this inbound, which is what
-// detaching used to mean. A rule naming others keeps them.
-func (s *RoutingService) ClearInbound(ctx context.Context, inboundID int) error {
-	rules, err := s.Rules()
-	if err != nil {
-		return err
-	}
-	db := database.GetDB()
-	for _, rule := range rules {
-		var ids []int
-		if json.Unmarshal([]byte(rule.IngressIds), &ids) != nil {
-			continue
-		}
-		if len(ids) != 1 || ids[0] != inboundID {
-			continue
-		}
-		if err := db.Delete(&model.RoutingRule{}, rule.Id).Error; err != nil {
-			return err
-		}
-	}
-	return s.converge(ctx)
-}
-
 /*
 EnsureHostForwarding turns on packet forwarding when this host has an inbound
 that needs it, and leaves the knob alone when it does not.
