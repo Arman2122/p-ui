@@ -63,7 +63,10 @@ To inspect exactly what a link contains, paste it into the
 For managing many clients at once, the panel supports bulk **create, enable,
 disable, delete, attach/detach** (to inbounds), **reset traffic**, and
 **adjust** (add days / add bytes in ADD mode, or make a value exactly this in
-SET mode, plus a flow change). The selection is not limited to the page on
+SET mode, plus a flow change), **set** (exact values for the IP limit, quota,
+expiry, auto-renew, flow, group, speed plan, Telegram id and comment, each row
+kept, set or cleared) and **move** between inbounds (every client is attached
+to the targets before it is detached from the sources). The selection is not limited to the page on
 screen: once a whole page is selected, **Select all N matching** turns the
 selection into the filter itself and the server resolves every matching
 client. After any bulk action that skipped or failed a client, a drawer lists
