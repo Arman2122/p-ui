@@ -296,3 +296,32 @@ describe('ClientFormModal — the plan rides its own endpoint', () => {
     expect(save.mock.calls[0][0]).not.toHaveProperty('policyId');
   });
 });
+
+/* The tier and kernel rows describe shaping. On a VLESS client the panel said
+   "not available on this protocol" and then printed "Held by the kernel: not
+   enforced -- the device is down or on another node", a sentence about a
+   device a VLESS inbound does not have, reading as a fault on a healthy client. */
+describe('ClientPlanPanel shaping rows', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('omits the tier and kernel rows on a client no core can shape', async () => {
+    mockHost({ ...ENFORCED, shapeable: false, policyId: 0 });
+    await renderPanel(['vless'], [XRAY_CORE]);
+
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(enUS.pages.policies.used);
+    expect(text).not.toContain(enUS.pages.policies.enforced);
+    expect(text).not.toContain(enUS.pages.policies.notEnforcedYet);
+    expect(text).not.toContain(enUS.pages.policies.inEffect);
+  });
+
+  it('keeps them on a client whose protocol can be shaped, device down or not', async () => {
+    mockHost({ ...ENFORCED, shapeable: false });
+    await renderPanel(['wgkernel'], [WG_CORE]);
+
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(enUS.pages.policies.inEffect);
+    expect(text).toContain(enUS.pages.policies.enforced);
+    expect(text).toContain(enUS.pages.policies.notEnforcedYet);
+  });
+});
