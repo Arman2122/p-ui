@@ -988,6 +988,18 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 // then saves the inbound to the database and optionally adds it to the running Xray instance.
 // Returns the created inbound, whether Xray needs restart, a post-commit apply
 // warning for a core the panel converges directly, and any error.
+// refuseUnrunnableCore holds the API path to the form's gate: an inbound for a
+// core this host cannot run is refused with the core's own reason.
+func refuseUnrunnableCore(inbound *model.Inbound) error {
+	if inbound.NodeID != nil {
+		return nil
+	}
+	if err := cores.PreflightFor(context.Background(), core.Kind(inbound.Protocol)); err != nil {
+		return common.NewErrorf("this host cannot run a %s inbound: %v", inbound.Protocol, err)
+	}
+	return nil
+}
+
 func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, string, error) {
 	inbound.Id = 0
 	var applyWarn string
@@ -997,6 +1009,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	inbound.TrafficResetDay = normalizeTrafficResetDay(inbound.TrafficResetDay)
 	// Normalize streamSettings based on protocol
 	s.normalizeStreamSettings(inbound)
+	if err := refuseUnrunnableCore(inbound); err != nil {
+		return inbound, false, "", err
+	}
 	if err := validateFinalMaskRealityCombo(inbound.StreamSettings); err != nil {
 		return inbound, false, "", err
 	}

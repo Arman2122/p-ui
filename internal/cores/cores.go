@@ -115,6 +115,16 @@ func ClientCredentialAuthority(kind core.Kind) (core.CredentialDeclarer, bool) {
 	return bound.Creds, true
 }
 
+// PreflightFor asks the core that owns kind whether this host can run it. A
+// kind no core owns, and Xray (proved by its own -test at restart), pass.
+func PreflightFor(ctx context.Context, kind core.Kind) error {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Core.Describe().ID == xray.ID {
+		return nil
+	}
+	return bound.Core.Preflight(ctx)
+}
+
 /*
 kindOwners is the registry every facade helper answers from.
 
