@@ -3,22 +3,9 @@ import { z } from 'zod';
 export const OnlineAPISupportSchema = z.number().int();
 export type OnlineAPISupport = z.infer<typeof OnlineAPISupportSchema>;
 
-export const PROCESSSTATE_VALUES = ['running', 'stop', 'error'] as const;
-export const ProcessStateSchema = z.enum(PROCESSSTATE_VALUES);
-export type ProcessState = z.infer<typeof ProcessStateSchema>;
-
 export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun'] as const;
 export const ProtocolSchema = z.enum(PROTOCOL_VALUES);
 export type Protocol = z.infer<typeof ProtocolSchema>;
-
-export const SubLinkProviderSchema = z.unknown();
-export type SubLinkProvider = z.infer<typeof SubLinkProviderSchema>;
-
-export const staticEgressResolverSchema = z.string();
-export type staticEgressResolver = z.infer<typeof staticEgressResolverSchema>;
-
-export const transportBitsSchema = z.number().int();
-export type transportBits = z.infer<typeof transportBitsSchema>;
 
 export const AllSettingSchema = z.object({
   datepicker: z.string(),

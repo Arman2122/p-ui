@@ -48,6 +48,11 @@ func walkPackages(requests []packageRequest) ([]Schema, []Alias, error) {
 						if !ok {
 							continue
 						}
+						// An unexported type is not API surface, whatever an allowlist
+						// says: three of them reached the frontend this way. F409.
+						if !ast.IsExported(ts.Name.Name) {
+							continue
+						}
 						if strct, ok := ts.Type.(*ast.StructType); ok {
 							if req.StructAllow != nil && !req.StructAllow[ts.Name.Name] {
 								continue

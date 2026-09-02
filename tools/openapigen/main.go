@@ -114,6 +114,9 @@ func run(root, outDir string) error {
 				"RoutingSubjectView",
 				"RuleView",
 			),
+			// Named, and empty: a nil AliasAllow means every alias, and this
+			// package's aliases are internals, not API surface. F409.
+			AliasAllow: setOf(),
 		},
 		{
 			Path:        resolveRel(root, "internal/routing"),
