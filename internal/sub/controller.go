@@ -553,6 +553,10 @@ func (a *SUBController) serveSubPage(c *gin.Context, basePath string, page PageD
 				logger.Error("sub: custom template execution failed, using default page:", execErr)
 			} else {
 				setNoCacheHeaders(c)
+				// The operator wrote this HTML, inline scripts and all, and cannot
+				// give them the nonce the panel's policy demands. Keep what does
+				// not depend on the markup: no framing, no base hijack, no plugins.
+				c.Header("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'self'; object-src 'none'")
 				c.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 				return
 			}
@@ -568,7 +572,12 @@ func (a *SUBController) serveSubPage(c *gin.Context, basePath string, page PageD
 	// controlled but cheap to harden.
 	escapedBase := jsStringEscape(basePath)
 
-	inject := []byte(`<script>window.PUI_BASE_PATH="` + escapedBase + `";` +
+	// The nonce the CSP header names, or the browser refuses this very script.
+	nonceAttr := ""
+	if nonce := c.GetString("csp_nonce"); nonce != "" {
+		nonceAttr = ` nonce="` + template.HTMLEscapeString(nonce) + `"`
+	}
+	inject := []byte(`<script` + nonceAttr + `>window.PUI_BASE_PATH="` + escapedBase + `";` +
 		`window.__SUB_PAGE_DATA__=` + string(subDataJSON) + `;</script></head>`)
 	out := bytes.Replace(body, []byte("</head>"), inject, 1)
 
