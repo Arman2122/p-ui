@@ -688,7 +688,7 @@ func (s *ClientService) ResolveEmails(inboundSvc *InboundService, settingSvc *Se
 	q := newClientQuery(db, time.Now().UnixMilli(), expireDiffMs, trafficDiffBytes)
 	scoped, _ := q.applyParams(q.from(), params, onlines)
 	var emails []string
-	if err := scoped.Limit(bulkSelectionCap + 1).Pluck("c.email", &emails).Error; err != nil {
+	if err := scoped.Limit(bulkSelectionCap+1).Pluck("c.email", &emails).Error; err != nil {
 		return nil, err
 	}
 	if len(emails) > bulkSelectionCap {
