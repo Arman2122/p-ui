@@ -96,7 +96,7 @@ The warning lead times come from `expireDiff` (days before expiry) and
 | `tgBotChatId`  | _(none)_                   | Comma-separated **admin** Telegram IDs.        |
 | `tgBotProxy`   | _(none)_                   | `socks5://`, `http://`, or `https://` proxy.   |
 | `tgBotAPIServer` | _(default)_              | Custom Telegram Bot API server.                |
-| `tgRunTime`    | `@daily`                   | Report schedule (cron / `@daily` / `@every …`).|
+| `tgRunTime`    | `@daily`                   | Report schedule: six cron fields with seconds first, `@daily`, or `@every …`; a spec the scheduler cannot parse is refused when saved.|
 | `tgBotBackup`  | `false`                    | Attach a DB backup to the periodic report.     |
 | `tgCpu` / `tgMemory` | `80` / `80`          | CPU / memory alert thresholds (percent).       |
 | `tgLang`       | `en-US`                    | Bot language.                                  |

@@ -4232,7 +4232,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy).",
+        "summary": "Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). An inbound for a core this host cannot run (its preflight fails, e.g. a kernel module is missing) is refused with the core's reason; Xray inbounds keep their own -test pre-flight at restart.",
         "operationId": "post_panel_api_inbounds_add",
         "requestBody": {
           "required": true,
@@ -4328,7 +4328,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Delete an inbound by ID. Also removes its associated client stats rows.",
+        "summary": "Delete an inbound by ID. Also removes its associated client stats rows. An id that does not exist answers not-found instead of success.",
         "operationId": "post_panel_api_inbounds_del_id",
         "parameters": [
           {
