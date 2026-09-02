@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **An AmneziaWG device is re-configured only when its parameters or the device change.** Every 10-second reconcile issued the full obfuscation parameter set to every AWG device over netlink, changed or not.
 - **The metrics sampler reads the Xray template once per 30 seconds, not twice a second.** Every 2-second sample fetched the whole template from the database to extract the metrics listen address, whether or not anyone was on the dashboard.
 - **A traffic reset re-pushes limits to every MTProto inbound carrying the client.** Only the first inbound whose secrets named the client was re-applied, so a client sold on two MTProto inbounds kept the stale budget on the second sidecar until the next reconcile.
 - **The Xray version list is read under a 4 MiB cap.** The archive, binary and digest fetches from GitHub all had a ceiling; the release-list fetch buffered whatever came back. A list over the cap is refused with an error naming it.
