@@ -8,6 +8,7 @@ here; the git log is the full record.
 
 ### Behaviour changes
 
+- **A string missing from the Persian locale renders in English instead of as nothing.** go-i18n hands the default-language text back together with its "not found" error; the panel discarded the text with the error, so every key added to `en-US` first rendered as an empty string for a Persian session until it was translated.
 - **An MTProto sidecar is billed for its last interval, and configs for
   deleted inbounds are cleaned up.** Stopping, restarting or removing an mtg
   sidecar dropped every byte moved since the previous traffic scrape — up to
