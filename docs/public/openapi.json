@@ -7483,6 +7483,136 @@
         }
       }
     },
+    "/panel/api/clients/bulkSet": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Set fields to exact values on many clients in one call. Only the fields present in the body change; a present zero value clears a field (0 = unlimited totalGB or expiryTime, \"\" = no flow or group, policyId 0 = no speed plan). limitIp, comment, tgId, reset, flow, totalGB and expiryTime are applied with one read-modify-write per inbound; group and policyId are applied per client. Clients with a delayed-start expiry are skipped for expiryTime. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
+        "operationId": "post_panel_api_clients_bulkSet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "emails": [
+                  "alice",
+                  "bob"
+                ],
+                "limitIp": 3,
+                "comment": "Q4 batch",
+                "expiryTime": 1767225600000,
+                "group": "resellers"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "updated": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/clients/bulkMove": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Move many clients between inbounds in one call: each client is attached to every target inbound first and only then detached from the source inbounds, so no client is left without an inbound mid-way. An inbound cannot be both a source and a target. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons, prefixed attach: or detach:.",
+        "operationId": "post_panel_api_clients_bulkMove",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "emails": [
+                  "alice",
+                  "bob"
+                ],
+                "fromInboundIds": [
+                  1
+                ],
+                "toInboundIds": [
+                  2
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "moved": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/clients/bulkEnable": {
       "post": {
         "tags": [
