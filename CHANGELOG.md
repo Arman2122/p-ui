@@ -6,6 +6,17 @@ here; the git log is the full record.
 
 ## Unreleased
 
+### Behaviour changes
+
+- **An MTProto sidecar is billed for its last interval, and configs for
+  deleted inbounds are cleaned up.** Stopping, restarting or removing an mtg
+  sidecar dropped every byte moved since the previous traffic scrape — up to
+  a whole polling interval, for every client on that inbound. And the
+  generated config, which holds every client's secret, was only ever removed
+  by a panel that had the process in memory, so one for an inbound deleted
+  while the panel was down stayed on disk. Both fixed: a final read before
+  every stop, and a directory sweep on every reconcile.
+
 ### Security
 
 - **A base path can no longer close the panel's inline script tag.** The
