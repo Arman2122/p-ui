@@ -83,7 +83,7 @@ on how fail2ban owns `f2b-table`. So a native nft applier is not a new dependenc
 
 Sourced from upstream repos and release notes.
 
-| Axis | p-ui | 3x-ui | alireza0/x-ui | Marzban/Marzneshin | Hiddify |
+| Axis | p-ui | 3x-ui | x-ui (nftables fork) | Marzban/Marzneshin | Hiddify |
 |---|---|---|---|---|---|
 | **Observe** | gRPC online-stats API, **plus kernel-WG** | gRPC since v3.3.1 (2026-06-12) | gRPC, Xray-only | no first-party feature | nothing shipped |
 | **Decide** | extracted pure function + frozen-`lastSeen` suppression | inline, flat 120s window | inline | — | — |
@@ -93,10 +93,10 @@ Sourced from upstream repos and release notes.
   2026. Your `SessionReporter` spans kernel-WireGuard where the peers are Xray-only.
 - **Decide: ahead of everyone.** Nobody else has an extracted pure decision function.
 - **Actuate: the ensemble is typical; the firewall prong is the crudest still shipping in this
-  lineage.** All TCP+UDP ports minus a frozen exemption list, 30 minutes, versus alireza0's
+  lineage.** All TCP+UDP ports minus a frozen exemption list, 30 minutes, versus the nftables fork's
   single destination port for 60 seconds.
 
-**The decisive competitor datapoint:** alireza0/x-ui *already did the swap you are asking
+**The decisive competitor datapoint:** the nftables x-ui fork *already did the swap you are asking
 about* — deleted fail2ban, shipped an in-process `github.com/google/nftables` applier (table
 `xui`, sets with `HasTimeout: true`, `BlockDuration = 60 * time.Second`, rule
 `saddr . dport @set drop`). And their issue **#1632** (Jul 2026, closed *not planned*) reports
@@ -219,7 +219,7 @@ The architecture is right and the pattern is already in production. But:
 2. It gives up fail2ban's sqlite persistence, nine free `fail2ban-client` operator commands
    (`p-ui.sh:1911-2005`), and `pui-ipl-banned.log` whose sole writer is the action file
    (`p-ui.sh:2217`).
-3. **alireza0 #1632 proves it does not solve CGNAT anyway.**
+3. **That fork's own tracker (issue #1632) proves it does not solve CGNAT anyway.**
 
 Against the hard rule that fix size must match bug size, that is not a fix — it is a project.
 Revisit only if **per-inbound port scoping becomes a binding requirement**; then make that
@@ -311,7 +311,7 @@ string.
 ### On CGNAT — the real product question
 
 Under carrier-grade NAT one IPv4 can represent thousands of subscribers, so banning an address
-punishes strangers. **No actuator fixes this** (alireza0 #1632). The levers are duration and
+punishes strangers. **No actuator fixes this** (the nftables fork's issue #1632). The levers are duration and
 scope, and both are available today:
 
 - **Shorten the default bantime** (`p-ui.sh:2160`, `:2178`) and persist the operator's choice
