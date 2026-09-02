@@ -8,7 +8,7 @@ import (
 
 func hostColumns() []string {
 	return []string{
-		"id", "group_id", "inbound_id", "sort_order", "remark", "server_description", "is_disabled", "is_hidden", "tags",
+		"id", "group_id", "inbound_id", "sort_order", "remark", "server_description", "is_disabled", "tags",
 		"address", "port",
 		"security", "sni", "host_header", "path", "alpn", "fingerprint",
 		"override_sni_from_address", "keep_sni_blank", "pinned_peer_cert_sha256",
