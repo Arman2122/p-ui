@@ -721,49 +721,6 @@ func TestFamilyDisabledOnTheFrontIsNotAFailure(t *testing.T) {
 	assertList(t, "rules", k.Rules(), steadyRules)
 }
 
-// Selects is what tells "my attachment landed" from "some other row on this host
-// is unhappy" — the two a whole-host Reconcile joins into one error.
-func TestSelectsAnswersPerIngressDevice(t *testing.T) {
-	k := upHost(t)
-	m := newManager(t, k)
-	mustEnsure(t, m, row())
-
-	cases := []struct {
-		name string
-		iif  string
-		id   int
-		want bool
-	}{
-		{name: "the egress it was attached to", iif: "pwg3", id: 1, want: true},
-		{name: "an egress it was never attached to", iif: "pwg3", id: 2},
-		{name: "detached, while a rule still selects it", iif: "pwg3", id: 0},
-		{name: "detached, with nothing selecting it", iif: "pwg9", id: 0, want: true},
-		{name: "a device no rule mentions", iif: "pwg9", id: 1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := m.Selects(context.Background(), tc.iif, tc.id)
-			if err != nil {
-				t.Fatalf("Selects: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("Selects(%q, %d) = %v, want %v", tc.iif, tc.id, got, tc.want)
-			}
-		})
-	}
-
-	// One family routed and the other not is not an attachment: the unrouted half
-	// leaves through main with the server's own address.
-	drop(t, k, egress.RuleSpec{Family: egress.FamilyV6, Priority: 31001, Iif: "pwg3", Table: 30001})
-	got, err := m.Selects(context.Background(), "pwg3", 1)
-	if err != nil {
-		t.Fatalf("Selects: %v", err)
-	}
-	if got {
-		t.Fatal("Selects accepted a v4-only attachment, so every v6 flow from that inbound leaves via main")
-	}
-}
-
 // TestRegistryRefusesADuplicateType keeps two drivers from claiming one type,
 // where the winner would depend on registration order.
 func TestRegistryRefusesADuplicateType(t *testing.T) {

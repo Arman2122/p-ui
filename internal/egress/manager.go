@@ -39,45 +39,6 @@ func (m *Manager) Ensure(ctx context.Context, e Egress) error {
 	return m.converge(ctx, snap, e)
 }
 
-/*
-Selects reports whether the band routes iif into egress id in every family, and
-an id of 0 asks the opposite: that nothing in the band selects iif at all.
-
-It reads the host rather than the last apply's error, so a caller can tell "my
-attachment landed" from "some other row on this host is unhappy" — the two a
-whole-host Reconcile joins into one error.
-*/
-func (m *Manager) Selects(ctx context.Context, iif string, id int) (bool, error) {
-	if iif == "" {
-		return false, fmt.Errorf("egress: asking which egress serves no device at all")
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	snap, err := m.plane.Snapshot(ctx)
-	if err != nil {
-		return false, err
-	}
-	found := map[Family]int{}
-	for _, rule := range snap.Rules {
-		if rule.Iif != iif {
-			continue
-		}
-		if id == 0 || rule.Priority != Prio(id) || rule.Table != Table(id) {
-			return false, nil
-		}
-		found[rule.Family]++
-	}
-	if id == 0 {
-		return true, nil
-	}
-	for _, family := range Families {
-		if found[family] == 0 {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
 // Remove deletes every object this id owns, using the device Device(id) derives —
 // a driver naming its own device must go through Ensure with Enable false.
 func (m *Manager) Remove(ctx context.Context, id int) error {
