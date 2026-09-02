@@ -4,6 +4,16 @@ Operator-visible changes only — things that behave differently on a panel you
 upgrade in place. Bug fixes that simply make a broken thing work are not listed
 here; the git log is the full record.
 
+## Unreleased
+
+### Security
+
+- **A failed login costs the same whether or not the username exists.** An
+  unknown username was answered in the time of one database lookup and a
+  known one in the time of a full bcrypt check — a timing difference that told
+  a caller which usernames are real. The not-found branch now performs the same
+  bcrypt work.
+
 ## v1.5.2 — 2026-09-01
 
 ### Security
