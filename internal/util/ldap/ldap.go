@@ -140,7 +140,7 @@ func AuthenticateUser(cfg Config, username, password string) (bool, error) {
 		cfg.UserFilter = "(objectClass=person)"
 	}
 	if cfg.UserAttr == "" {
-		cfg.UserAttr = "uid"
+		cfg.UserAttr = "mail"
 	}
 
 	// The admin filter is ANDed in, never substituted: an account must satisfy
