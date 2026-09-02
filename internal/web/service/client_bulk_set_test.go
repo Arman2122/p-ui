@@ -106,3 +106,24 @@ func TestBulkMoveAttachesToTheTargetBeforeLeavingTheSource(t *testing.T) {
 		t.Fatalf("client_inbounds = %+v, want exactly the target inbound %d", links, target.Id)
 	}
 }
+
+func TestBulkSetDoesNotReportAnUnattachedClientAsDone(t *testing.T) {
+	setupBulkDB(t)
+	seedBulkClients(t, 23922, "att@x")
+	db := database.GetDB()
+	if err := db.Create(&model.ClientRecord{Email: "orphan@x", SubID: "sub-orphan", Enable: true}).Error; err != nil {
+		t.Fatalf("seed orphan: %v", err)
+	}
+
+	limit := 4
+	res, _, err := (&ClientService{}).BulkSet(&InboundService{}, []string{"att@x", "orphan@x"}, BulkSetPatch{LimitIP: &limit})
+	if err != nil {
+		t.Fatalf("BulkSet: %v", err)
+	}
+	if !contains(res.Outcome.OK, "att@x") || contains(res.Outcome.OK, "orphan@x") {
+		t.Fatalf("ok = %v, want the attached client only", res.Outcome.OK)
+	}
+	if !hasRow(res.Outcome.Skipped, "orphan@x", "not attached to any inbound") {
+		t.Fatalf("skipped = %+v, want the orphan named with its reason", res.Outcome.Skipped)
+	}
+}

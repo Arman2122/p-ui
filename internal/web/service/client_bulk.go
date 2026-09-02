@@ -533,6 +533,12 @@ func (s *ClientService) bulkExecutePlan(inboundSvc *InboundService, plan map[str
 		}
 		emailsByInbound[m.InboundId] = append(emailsByInbound[m.InboundId], email)
 	}
+	attached := map[string]bool{}
+	for _, list := range emailsByInbound {
+		for _, email := range list {
+			attached[email] = true
+		}
+	}
 
 	needRestart := false
 	flowHonored := map[string]bool{}
@@ -599,7 +605,7 @@ func (s *ClientService) bulkExecutePlan(inboundSvc *InboundService, plan map[str
 		}
 		// Counted when expiry/total changed, or a flow directive was honored
 		// for this client (flow lives in the inbound JSON, not ClientTraffic).
-		if len(updates) > 0 || flowHonored[email] || entry.patch != nil || entry.creds != nil || entry.subID != "" {
+		if len(updates) > 0 || flowHonored[email] || (attached[email] && (entry.patch != nil || entry.creds != nil || entry.subID != "")) {
 			adjusted[email] = struct{}{}
 		}
 	}
