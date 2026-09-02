@@ -119,7 +119,7 @@ _openapi:
         Shift expiry and/or traffic quota for many clients in one call.
         addDays/addBytes may be negative. Clients with unlimited expiry
         (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the
-        corresponding field — bulk extend never converts unlimited to limited.
+        corresponding field in the default ADD mode; mode="set" makes a value exactly this, and 0 still leaves a field alone.
         The optional flow directive sets the XTLS flow on every client: "none"
         clears it, "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where the
         inbound supports it (omit or "" to leave it unchanged). Returns the
@@ -425,7 +425,7 @@ _openapi:
           Shift expiry and/or traffic quota for many clients in one call.
           addDays/addBytes may be negative. Clients with unlimited expiry
           (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the
-          corresponding field — bulk extend never converts unlimited to limited.
+          corresponding field in the default ADD mode; mode="set" makes a value exactly this, and 0 still leaves a field alone.
           The optional flow directive sets the XTLS flow on every client: "none"
           clears it, "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where
           the inbound supports it (omit or "" to leave it unchanged). Returns

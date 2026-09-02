@@ -7419,7 +7419,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Shift expiry and/or traffic quota for many clients in one call. addDays/addBytes may be negative. Clients with unlimited expiry (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the corresponding field — bulk extend never converts unlimited to limited. A client that was auto-disabled solely because it was depleted (expired or over quota) is automatically re-enabled — locally and on its node — when the adjustment lifts it out of depletion; a manually-disabled or still-depleted client is left disabled. The optional flow directive sets the XTLS flow on every client: \"none\" clears it, \"xtls-rprx-vision\"/\"xtls-rprx-vision-udp443\" set it where the inbound supports it (omit or \"\" to leave it unchanged). Returns the adjusted count and per-email skip reasons.",
+        "summary": "Shift expiry and/or traffic quota for many clients in one call. addDays/addBytes may be negative. Clients with unlimited expiry (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the corresponding field in the default ADD mode; mode=\"set\" makes a value exactly this, and 0 still leaves a field alone. A client that was auto-disabled solely because it was depleted (expired or over quota) is automatically re-enabled — locally and on its node — when the adjustment lifts it out of depletion; a manually-disabled or still-depleted client is left disabled. The optional flow directive sets the XTLS flow on every client: \"none\" clears it, \"xtls-rprx-vision\"/\"xtls-rprx-vision-udp443\" set it where the inbound supports it (omit or \"\" to leave it unchanged). Returns the adjusted count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkAdjust",
         "requestBody": {
           "required": true,
@@ -7466,7 +7466,15 @@
                         "email": "carol",
                         "reason": "unlimited expiry"
                       }
-                    ]
+                    ],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7480,7 +7488,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons.",
+        "summary": "Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkEnable",
         "requestBody": {
           "required": true,
@@ -7524,7 +7532,15 @@
                         "email": "carol",
                         "reason": "client not found"
                       }
-                    ]
+                    ],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7538,7 +7554,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Disable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to remove each user. Returns the changed count and per-email skip reasons.",
+        "summary": "Disable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to remove each user. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkDisable",
         "requestBody": {
           "required": true,
@@ -7582,7 +7598,15 @@
                         "email": "carol",
                         "reason": "client not found"
                       }
-                    ]
+                    ],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7596,7 +7620,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Delete many clients in one call. The server processes the list sequentially so each delete sees the committed state of the previous one — avoids the race the per-email fan-out had on the panel side. Pass keepTraffic=true to retain the xray_client_traffic rows after deletion.",
+        "summary": "Delete many clients in one call. The server processes the list sequentially so each delete sees the committed state of the previous one — avoids the race the per-email fan-out had on the panel side. Pass keepTraffic=true to retain the xray_client_traffic rows after deletion. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkDel",
         "requestBody": {
           "required": true,
@@ -7641,7 +7665,15 @@
                         "email": "carol",
                         "reason": "client not found"
                       }
-                    ]
+                    ],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7655,7 +7687,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Create many clients in one call. Body is a JSON array of {client, inboundIds} payloads — the same shape /add accepts. Items are processed sequentially; per-email skip reasons are returned for items that fail (e.g., duplicate email). Triggers a single Xray restart at the end if any inbound was running.",
+        "summary": "Create many clients in one call. Body is a JSON array of {client, inboundIds} payloads — the same shape /add accepts. Items are processed sequentially; per-email skip reasons are returned for items that fail (e.g., duplicate email). Triggers a single Xray restart at the end if any inbound was running. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkCreate",
         "requestBody": {
           "required": true,
@@ -7718,7 +7750,15 @@
                         "email": "alice@example.com",
                         "reason": "email already in use"
                       }
-                    ]
+                    ],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7732,7 +7772,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Add many clients to a group in one call. Updates clients.group_name and patches the matching client entry inside every owning inbound's settings JSON in a single transaction. If the group name does not yet exist (in client_groups or as a derived label), it is auto-created as a persistent group. To clear the group label, use /groups/bulkRemove instead.",
+        "summary": "Add many clients to a group in one call. Updates clients.group_name and patches the matching client entry inside every owning inbound's settings JSON in a single transaction. If the group name does not yet exist (in client_groups or as a derived label), it is auto-created as a persistent group. To clear the group label, use /groups/bulkRemove instead. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_groups_bulkAdd",
         "requestBody": {
           "required": true,
@@ -7771,7 +7811,15 @@
                 "example": {
                   "success": true,
                   "obj": {
-                    "affected": 2
+                    "affected": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7785,7 +7833,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Clear the group label on many clients in one call. Inverse of /groups/bulkAdd. Clients themselves are kept — only the group label is cleared from clients.group_name and from each owning inbound's settings JSON. Groups become empty if all their members are removed.",
+        "summary": "Clear the group label on many clients in one call. Inverse of /groups/bulkAdd. Clients themselves are kept — only the group label is cleared from clients.group_name and from each owning inbound's settings JSON. Groups become empty if all their members are removed. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_groups_bulkRemove",
         "requestBody": {
           "required": true,
@@ -7823,7 +7871,15 @@
                 "example": {
                   "success": true,
                   "obj": {
-                    "affected": 2
+                    "affected": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7837,7 +7893,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Attach many existing clients to many inbounds in one call. Each client keeps its identity (email/UUID/password/subId) and a shared traffic row; all clients are added to a target inbound in a single AddInboundClient call. Clients already present on a target are reported under skipped. Returns per-email attached/skipped/errors lists and triggers a single Xray restart if any target inbound was running.",
+        "summary": "Attach many existing clients to many inbounds in one call. Each client keeps its identity (email/UUID/password/subId) and a shared traffic row; all clients are added to a target inbound in a single AddInboundClient call. Clients already present on a target are reported under skipped. Returns per-email attached/skipped/errors lists and triggers a single Xray restart if any target inbound was running. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkAttach",
         "requestBody": {
           "required": true,
@@ -7886,7 +7942,15 @@
                     "skipped": [
                       "bob"
                     ],
-                    "errors": []
+                    "errors": [],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7900,7 +7964,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Mirror of bulkAttach: detach many existing clients from many inbounds in one call. For each email, intersects the client's current inbounds with the requested set and detaches from those only; (email, inbound) pairs where the client is not currently attached are silently no-ops. Emails not attached to any of the requested inbounds are reported under skipped. Client records are kept even if they become orphaned — use bulkDel for full removal. Returns per-email detached/skipped/errors lists and triggers a single Xray restart if any target inbound was running.",
+        "summary": "Mirror of bulkAttach: detach many existing clients from many inbounds in one call. For each email, intersects the client's current inbounds with the requested set and detaches from those only; (email, inbound) pairs where the client is not currently attached are silently no-ops. Emails not attached to any of the requested inbounds are reported under skipped. Client records are kept even if they become orphaned — use bulkDel for full removal. Returns per-email detached/skipped/errors lists and triggers a single Xray restart if any target inbound was running. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkDetach",
         "requestBody": {
           "required": true,
@@ -7947,7 +8011,15 @@
                       "bob"
                     ],
                     "skipped": [],
-                    "errors": []
+                    "errors": [],
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
@@ -7961,7 +8033,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Zero up/down counters for many clients in one call. Loops the single-reset path so each client is re-enabled across its attached inbounds and pushed to Xray/remote nodes. Returns the count of successfully reset clients.",
+        "summary": "Zero up/down counters for many clients in one call. One batched update over the selection; a client the reset brings back under its quota is re-enabled across its inbounds and pushed to the core, and daemon-side counters (MTProto) are cleared. affected is the number of traffic rows zeroed. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
         "operationId": "post_panel_api_clients_bulkResetTraffic",
         "requestBody": {
           "required": true,
@@ -7999,7 +8071,15 @@
                 "example": {
                   "success": true,
                   "obj": {
-                    "affected": 2
+                    "affected": 2,
+                    "outcome": {
+                      "ok": [
+                        "alice",
+                        "bob"
+                      ],
+                      "skipped": [],
+                      "failed": []
+                    }
                   }
                 }
               }
