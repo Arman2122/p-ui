@@ -632,8 +632,13 @@ func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
 		return err
 	}
 	s.resetMtprotoClientQuota(clientEmail)
-	_, err = s.clientService.reEnableRecovered(s, wasDepleted)
-	return err
+	if _, err = s.clientService.reEnableRecovered(s, wasDepleted); err != nil {
+		return err
+	}
+	// The daemon's counter for a client that was cut off is cleared only once
+	// the client is back on it; the reset above found nobody to reset.
+	resetCoreQuotas(context.Background(), wasDepleted)
+	return nil
 }
 
 func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (needRestart bool, err error) {
@@ -1020,8 +1025,13 @@ func (s *InboundService) GetClientTrafficByEmail(email string) (traffic *xray.Cl
 }
 
 func (s *InboundService) UpdateClientTrafficByEmail(email string, upload int64, download int64) error {
-	return submitTrafficWrite(func() error {
+	var wasDepleted []string
+	err := submitTrafficWrite(func() error {
 		db := database.GetDB()
+		var snapErr error
+		if wasDepleted, snapErr = depletedAndDisabled(db, []string{email}); snapErr != nil {
+			return snapErr
+		}
 		err := db.Model(xray.ClientTraffic{}).
 			Where("email = ?", email).
 			Updates(map[string]any{
@@ -1033,6 +1043,16 @@ func (s *InboundService) UpdateClientTrafficByEmail(email string, upload int64, 
 		}
 		return err
 	})
+	if err != nil || len(wasDepleted) == 0 {
+		return err
+	}
+	// A hand-set counter can bring a depleted client back under its quota; the
+	// reset paths re-enable on that, and this one left the client cut off.
+	if _, err := s.clientService.reEnableRecovered(s, wasDepleted); err != nil {
+		return err
+	}
+	resetCoreQuotas(context.Background(), wasDepleted)
+	return nil
 }
 
 func (s *InboundService) SearchClientTraffic(query string) (traffic *xray.ClientTraffic, err error) {
