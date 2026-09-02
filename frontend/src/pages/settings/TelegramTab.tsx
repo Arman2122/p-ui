@@ -211,6 +211,9 @@ export default function TelegramTab({ allSetting, updateSetting }: TelegramTabPr
             <SettingListItem paddings="small" title={t('pages.settings.telegramChatId')} description={t('pages.settings.telegramChatIdDesc')}>
               <Input value={allSetting.tgBotChatId} onChange={(e) => updateSetting({ tgBotChatId: e.target.value })} />
             </SettingListItem>
+            <SettingListItem paddings="small" title={t('pages.settings.telegramBotProxy')} description={t('pages.settings.telegramBotProxyDesc')}>
+              <Input value={allSetting.tgBotProxy} placeholder="socks5://user:pass@host:1080" onChange={(e) => updateSetting({ tgBotProxy: e.target.value })} />
+            </SettingListItem>
 
             <SettingListItem paddings="small" title={t('pages.settings.telegramBotLanguage')}>
               <Select
