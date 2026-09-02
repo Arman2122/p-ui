@@ -57,6 +57,14 @@ export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
             <SettingListItem paddings="small" title={t('pages.settings.smtpEnable')} description={t('pages.settings.smtpEnableDesc')}>
               <Switch checked={allSetting.smtpEnable} onChange={(v) => updateSetting({ smtpEnable: v })} />
             </SettingListItem>
+            {allSetting.smtpLastError ? (
+              <Alert
+                type="warning"
+                showIcon
+                title={t('pages.settings.smtpLastError')}
+                description={`${allSetting.smtpLastErrorAt ? new Date(allSetting.smtpLastErrorAt * 1000).toLocaleString() : ''} ${allSetting.smtpLastError}`.trim()}
+              />
+            ) : null}
 
             <SettingListItem paddings="small" title={t('pages.settings.smtpHost')} description={t('pages.settings.smtpHostDesc')}>
               <Input value={allSetting.smtpHost} placeholder="smtp.gmail.com"

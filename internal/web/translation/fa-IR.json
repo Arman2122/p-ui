@@ -1489,6 +1489,7 @@
       "smtpSettings": "تنظیمات SMTP",
       "smtpEnable": "فعال‌سازی اعلان‌های ایمیلی",
       "smtpEnableDesc": "فعال‌سازی اعلان‌های ایمیلی از طریق SMTP",
+      "smtpLastError": "آخرین ارسال ایمیل ناموفق بود",
       "smtpHost": "میزبان SMTP",
       "smtpHostDesc": "نام میزبان سرور SMTP (مثلاً smtp.gmail.com)",
       "smtpPort": "پورت SMTP",

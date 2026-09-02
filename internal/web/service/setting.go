@@ -157,6 +157,8 @@ var defaultValueMap = map[string]string{
 	"smtpEnabledEvents": "login.attempt,cpu.high",
 	"smtpCpu":           "80",
 	"smtpMemory":        "80",
+	"smtpLastError":     "",
+	"smtpLastErrorAt":   "0",
 
 	// Consecutive failed observatory probes before an outbound.down event fires
 	"outboundDownThreshold": "3",
@@ -1111,6 +1113,33 @@ func (s *SettingService) SetTgEnabledEvents(events string) error {
 
 func (s *SettingService) GetSmtpEnabledEvents() (string, error) {
 	return s.getString("smtpEnabledEvents")
+}
+
+func (s *SettingService) GetSmtpLastError() (string, int64, error) {
+	msg, err := s.getString("smtpLastError")
+	if err != nil {
+		return "", 0, err
+	}
+	at, err := s.getInt("smtpLastErrorAt")
+	if err != nil {
+		return msg, 0, err
+	}
+	return msg, int64(at), nil
+}
+
+// RecordSmtpDelivery keeps the last delivery failure where the Email tab can
+// show it, and clears it on the next success.
+func (s *SettingService) RecordSmtpDelivery(sendErr error) error {
+	if sendErr == nil {
+		if err := s.setString("smtpLastError", ""); err != nil {
+			return err
+		}
+		return s.setInt("smtpLastErrorAt", 0)
+	}
+	if err := s.setString("smtpLastError", sendErr.Error()); err != nil {
+		return err
+	}
+	return s.setInt("smtpLastErrorAt", int(time.Now().Unix()))
 }
 
 func (s *SettingService) SetSmtpEnabledEvents(events string) error {
