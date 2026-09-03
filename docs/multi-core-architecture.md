@@ -1,7 +1,7 @@
 # Penhoon UI — Multi-Core Architecture
 
 > Design document for turning Penhoon UI from an Xray-core panel into a multi-core VPN
-> panel (OpenVPN, IKEv2/IPsec, L2TP, OpenConnect, WireGuard/AmneziaWG, SSTP, SSH, …)
+> panel (SSH, sing-box, OpenVPN, OpenConnect, IKEv2/IPsec, SSTP, WireGuard/AmneziaWG, …)
 > with cross-protocol egress and one unified per-user quota.
 >
 > Status: **in progress** — P-1 through P5 are implemented; see §12 for what each phase
@@ -166,7 +166,7 @@ type Kind string
 
 type Core interface {
     Describe() Descriptor   // ID, i18n title key, declared capabilities
-    Kinds() []Kind          // one driver may serve several (accel-ppp: l2tp, pptp, sstp)
+    Kinds() []Kind          // one driver may serve several (a sing-box shard: tuic, anytls)
     Preflight(ctx context.Context) error // binary present? kernel module? version ok?
 }
 ```
@@ -495,7 +495,6 @@ RADIUS is a tempting unifier and it is the wrong backbone here, for one decisive
 | strongSwan `eap-radius` | yes | yes (opt-in) | yes, but matches on **User-Name only** |
 | accel-ppp | yes | yes | yes, richest matcher |
 | OpenVPN `radiusplugin` | yes | yes | **no** — kill via management interface |
-| SoftEther | PAP only | **no** (upstream: no plan) | no |
 | **Xray / sing-box / mtg** | **no** | **no** | **no** |
 
 Recommendation: **embed a RADIUS server** (`layeh.com/radius`) on `127.0.0.1:1812/1813`,
@@ -834,31 +833,31 @@ present: `wireguard`, `l2tp_ppp`, `l2tp_netlink`, `ppp_mppe`, `gre`, `xfrm_user`
 |---|---|---|---|---|---|
 | **xray** | vendored | gRPC stats, monotonic | `AlterInbound` | RemoveUser | shipped |
 | **mtproto** (mtg-proxy) | bundled binary | HTTP `/stats` | `PUT /secrets` | `[secret-limits]` | shipped |
-| **wireguard / amnezia** | `wireguard-tools 1.0.2025` | `wg show transfer` (per-peer, monotonic) | `ConfigureDevice(ReplacePeers=false)` | remove peer | **1st** |
-| **ocserv** | `1.3.0` | `occtl -j show users` (RX/TX) | append to `ocpasswd`, immediate | `occtl disconnect user` | **2nd** |
-| **openvpn** | `2.7.0` | management `bytecount` / `status 3` | `--management-client-auth`, CCD | `client-kill` | **3rd** |
-| **strongswan (IKEv2)** | `6.0.4` | `list-sas` bytes-in/out per CHILD_SA | `swanctl --load-creds` | `terminate` | **4th** |
-| **L2TP/IPsec** | `strongswan` + `xl2tpd 1.3.20` | RADIUS acct | chap-secrets reload | RADIUS DM | 5th |
-| **SSTP** | **SoftEther `5.01`** | SoftEther JSON-RPC | RPC | RPC | 6th |
-| **ssh** | `openssh` / custom Go server | **none natively** | — | kill sessions | last |
-| **pptp** | **absent** | — | — | — | not recommended |
+| **wireguard / amnezia** | kernel module, `wgctrl` over netlink | per-peer netlink counters, monotonic | `ConfigureDevice(ReplacePeers=false)` | remove peer | shipped |
+| **ssh** | in-process Go server | counted `io.Copy` splices, exact | in-process | close the user's sessions | **1st** |
+| **sing-box** | bundled binary | `v2ray_api` counters under the v2ray service name | none: batched validate → swap → HUP per shard | 1.14 `api` `CloseConnection` | **2nd** |
+| **openvpn** | `2.7.0` | management `bytecount` / `status 3` (link bytes) | `--management-client-auth`, CCD | `client-kill` | **3rd** |
+| **ocserv** | `1.3.0` | RADIUS accounting (occtl's RX/TX reset per reconnect) | RADIUS, or `ocpasswd` append | `occtl disconnect user` | **4th** |
+| **strongswan (IKEv2)** | `6.0.4` | `list-sas` per CHILD_SA, folded across rekeys, or RADIUS | `swanctl --load-creds` | `terminate` | **4th** |
+| **SSTP (accel-ppp)** | source-built, bundled | RADIUS acct | RADIUS | RADIUS DM | 5th |
 
 ### 6.1 Packaging notes that change the plan
 
-- **`accel-ppp` is in no Debian or Ubuntu release, ever.** The tidy "one accel-ppp core
-  covers PPTP + L2TP + SSTP" answer costs a from-source build **and DKMS maintenance on
-  every kernel update**. That is a recurring tax, not a one-off.
-- **`pptpd` is in Debian (1.4.0/1.5.0) but not Ubuntu 24.04 or 26.04** (Ubuntu 22.04 only).
-  PPTP's MS-CHAPv2 is offline-crackable; Ubuntu dropped it deliberately. Ship it as a
-  checkbox at most.
-- **SoftEther is packaged (5.01)** and covers SSTP + L2TP/IPsec + OpenVPN + SSL-VPN in one
-  daemon with a JSON-RPC API and per-user counters. For the legacy PPP family it is the
-  strongest *packaged* answer — at the cost of a large opaque dependency and PAP-only RADIUS.
-- **CRITICAL — sequencing.** WireGuard and ocserv are first not because they are the most
-  wanted, but because WG has the cleanest per-peer counters (`wgctrl`, pure Go, no daemon)
-  and ocserv has the cleanest management CLI. They stress the contract in opposite
-  directions for the least implementation risk.
-- **Market note:** OpenVPN, L2TP, PPTP and plain IKEv2 are heavily DPI-blocked inside Iran.
+- **`accel-ppp` is in no Debian or Ubuntu release, ever.** It is built from source and
+  bundled like `mtg-proxy`. With IPoE and VLAN monitoring left out it needs **no
+  out-of-tree kernel module** — SSTP is userspace TLS over `ppp_generic` — so there is no
+  DKMS and nothing to rebuild on a kernel update. An earlier version of this note priced
+  in DKMS maintenance; that applied only to the IPoE driver.
+- **sing-box is bundled the way `mtg-proxy` is**: a release tarball per architecture fetched
+  by `release.yml` at an exact tag with a verified checksum, never a Go import (§12.5a).
+- **`ocserv` camouflage needs 1.2+**, absent on Ubuntu 22.04 and Debian 12, so the Preflight
+  version probe gates that field per node. The package must be `systemctl disable --now`
+  and masked (`ocserv.service` and `ocserv.socket`) at install, or it takes port 443 from
+  under REALITY.
+- **OpenVPN DCO** is impossible on Ubuntu 22.04 and needs the `openvpn-dco-dkms` package
+  until the running kernel ships the in-tree `ovpn` module; Preflight reports the active
+  plane the way AmneziaWG reports its module.
+- **Market note:** OpenVPN, plain OpenConnect and IKEv2 are heavily DPI-blocked inside Iran.
   They serve other markets, enterprise and domestic use — they do not replace Xray/REALITY
   for censored users. Rank accordingly; the architecture is indifferent.
 
@@ -871,13 +870,16 @@ first-class accounting, and it is a real subsystem, not an adapter. Until then, 
 declare **no** `TrafficSource` capability rather than fake one — which is exactly what the
 optional-capability design exists to permit.
 
+**Resolved 2026-08-15, extended 2026-09-03:** the Go server is the design, and it ships
+with the WebSocket, framed-WebSocket and WSS transports the market runs (§12.5a).
+
 ---
 
 ## 7. Supervision and deployment
 
 **Cores must stop being children of the panel.** `update.sh` restarts the panel at 12 sites
 (`:222, :290, :489, :490, :494, :500, :501, :569, :663, :723, :757, :855`). With one proxy
-core that is a reconnect blip; with IKEv2 and L2TP parented to `p-ui` it is **a full VPN
+core that is a reconnect blip; with OpenVPN and ocserv parented to `p-ui` it is **a full VPN
 outage per ACME renewal**. Also `p-ui.service.debian` has **no `User=`** — the panel runs
 as root and every forked child inherits it.
 
@@ -1468,7 +1470,7 @@ Two obligations the port revealed, both now written down rather than discovered 
   the second delta. `OnlineEmails` replays the last scrape instead. Any core whose
   `TrafficSource` and `OnlineReporter` share a source owes the same treatment.
 - **`Kinds()` is not `Describe().ID`.** They coincide for mtproto and will not for accel-ppp,
-  which answers `l2tp`, `pptp` and `sstp` from one descriptor.
+  which answers `tuic` and `anytls` from one descriptor.
 
 ### 12.2 What porting core #2 corrected, and what it found
 
@@ -1672,6 +1674,8 @@ option and its cost on the table.
 
 The build order, converged on independently by two roster passes:
 
+*(Superseded on 2026-09-03 by §12.5a, which keeps the reasoning below as the record.)*
+
 1. **AmneziaWG — KERNEL module, latest upstream.** Still a *variant* of wgkernel —
    identity, counters and the diff engine reuse wholesale — but the honest shape is
    vendored module source with a panel-owned DKMS lifecycle in the installer, a
@@ -1724,6 +1728,84 @@ Four contract gaps gate named roster items, each readable at its seam today:
 
 Fix each once, before the core that hits it: the §12.1 lesson, priced in advance this time.
 
+### 12.5a The 2026-09-03 roster decision
+
+A design review on 2026-09-03 checked the roster against the tree at `0922d810` and the
+research corpus, and the owner decided the protocol set from it. §12.5 stays as the record
+of how the roster was reasoned; the order below is the one in force.
+
+**The roster**, each core with the production-grade shape the review settled on:
+
+- **SSH** — the in-process Go server of §12.5 item 2, plus the transports that are the
+  product: plain TCP; a bare `101` WebSocket upgrade for HTTP-Injector-class clients, which
+  expect no frame encoding; framed RFC 6455 WebSocket for a CDN in front; and WSS on the
+  panel's certificate. Port 443 is shared with REALITY through the Xray fallback path.
+  Per-user concurrent-session caps live in the server. No `PermitTunnel` mode.
+- **sing-box** — a child process, never a linked library: its dependency tree carries a
+  second QUIC stack, a second uTLS fork and a second gVisor next to Xray's, and cgo paths
+  that would have to stay tag-excluded forever. For TUIC v5 and AnyTLS first, ShadowTLS v3
+  and NaiveProxy after. sing-box has no hot user add: a reload rebuilds the instance,
+  killing every session on it and zeroing every counter. So one process per inbound,
+  counters drained before every reload, edits coalesced by one job into validate → swap →
+  HUP, and per-user kills through the 1.14 `api` service (stable since 2026-08-31), which
+  streams connections with a `user` field and offers `CloseConnection`. Accounting through
+  `v2ray_api`, wire-identical to the Xray stats client but registered under the v2ray
+  service name.
+- **OpenVPN** — two inbounds for UDP and TCP, since one process serves one protocol on one
+  port, sharing a server identity. CA-free identity is the design, not a shortcut:
+  `verify-client-cert none`, the panel as the `auth-user-pass-verify` authenticator, one
+  `tls-crypt-v2` key per client so a revoked client cannot complete a handshake, and
+  clients pinning the server by `peer-fingerprint`. Client certificates with a
+  panel-operated CA are a declared later option. DCO is the throughput plane, reported at
+  Preflight. Link-byte accounting carries a 5–12 % skew against payload counters;
+  normalise it or label it.
+- **OpenConnect (ocserv)** — §12.5 item 4 stands. RADIUS is the only exact accounting and
+  the only rate-limit path.
+- **IKEv2 (strongSwan)** — §12.5 item 4 stands: EAP-MSCHAPv2 with a server certificate.
+  Client certificates are a declared later option that needs a credential-vocabulary
+  extension.
+- **SSTP (accel-ppp)** — the one PPP member kept: TLS on 443 that looks like HTTPS, with
+  no other packaged daemon anywhere. Ingress-only, RADIUS for everything, no out-of-tree
+  kernel module (§6.1).
+
+**Dropped, with the reason on record.** PPTP: MS-CHAPv2 has been offline-crackable since
+2012 and MPPE gives no confidentiality; the client left iOS and macOS in 2016 and Android
+in 12 (2021); the server is not packaged on Ubuntu 24.04 or later. L2TP/IPsec: needs an
+IKEv1 transport-mode connection with one PSK for every user on the same charon as the
+IKEv2 inbound, fails with several clients behind one NAT, left the Android client in 12,
+and every OS with an L2TP client has a better native IKEv2 client; plain L2TP is
+unencrypted. Cisco IPsec (IKEv1/XAuth): IKEv2 replaces it. Hysteria v1: retired upstream
+for v2, which Xray serves natively. Snell: Surge-only. SoftEther: no per-user byte quota,
+so nothing to bill on. `xl2tpd` + `pppd`: a process per session and no control API.
+Tailscale and Tor: sing-box egress only; there is no multi-user server in them.
+
+**The order in force, and why it moved.** Three cores share three pieces of
+infrastructure, and building a core first means building that infrastructure inside it
+and moving it later.
+
+1. **Shared infrastructure.** The §7 supervisor with a systemd backend and a non-root
+   service user — a child-per-inbound VPN core drops every tunnel on a panel restart, which
+   Xray users never notice and tunnel users always do. The embedded RADIUS server of §4.4.
+   Certificate hot-reload through `GetCertificate` with a reload signal to daemons — the
+   panel loads its certificates once into a static `tls.Config`, and three new cores pin
+   one. And the contract gaps below.
+2. **SSH.**
+3. **sing-box**, once queued dispatch exists.
+4. **OpenVPN.**
+5. **ocserv and IKEv2 together** — both on RADIUS, both needing a gap below, both pinning
+   a rotating certificate.
+6. **SSTP.**
+
+**An eighth contract gap.** `runtime.Runtime` dispatches every client operation
+immediately. sing-box is the first core for which the honest answer to a client edit is
+"queued, applied within N seconds"; the runtime must be able to say so, and report it,
+before that adapter is written. It joins the four in §12.5 and the three the roster
+verdict carried: the `shaping.Owns` namespace seam (closed in `eba337d4`), `CapSniffing`'s
+by-name enumeration, and a rate-pushdown seam for the two daemons that enforce rates
+themselves. `IngressSubnet` exists as a vocabulary value (`core/caps.go:379`) with no
+consumer yet.
+
+
 ---
 
 ## 13. Open decisions
@@ -1759,10 +1841,13 @@ Fix each once, before the core that hits it: the §12.1 lesson, priced in advanc
    daemon is packaged anywhere, and SoftEther is a frozen 2020 snapshot already absent on
    trixie. SSTP rides accel-ppp's `[sstp]` section; PPTP ships only behind a
    typed-confirmation gate; the whole family is ingress-only (§12.5).
+   **Narrowed 2026-09-03:** the family is SSTP only; PPTP and L2TP are dropped (§12.5a).
 4. ~~**Whether SSH ships at all** without a Go SSH server to give it real accounting.~~
    **RESOLVED 2026-08-15: it ships, and the Go server is the panel itself** — an embedded
    `x/crypto/ssh` server in-process (§12.5), whose counted `io.Copy` splices are exact
    per-user accounting, better than any daemon scrape in the tree.
+   **Extended 2026-09-03:** the server carries the WebSocket, framed-WebSocket and WSS
+   transports and the Xray-fallback path for 443 (§12.5a).
 5. ~~**Does p-ui support Xray `tun` inbounds?**~~ **RESOLVED: yes, supported.** `model.Tun`
    now exists, the xray core claims the kind, and `knownProtocolDivergence` is empty — all
    three protocol sources agree for the first time. P3 forced the decision by making an
