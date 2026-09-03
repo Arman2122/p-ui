@@ -19,6 +19,7 @@ const CORES = [
     clientCredentials: {},
     shaping: {},
     sessionKinds: [],
+    rateKinds: [],
     portlessKinds: ['tun'],
     available: true,
     unavailable: '',

@@ -99,7 +99,10 @@ type User struct {
 	Enable          bool
 	QuotaBytes      int64
 	ExpiryUnixMilli int64
-	Credentials     map[string]any
+	// LimitIP is the client's device cap, for a core that can refuse the extra
+	// source itself; 0 is uncapped. The panel's own enforcement still runs.
+	LimitIP     int
+	Credentials map[string]any
 }
 
 // CredString reads a credential a core expects to be a string. A value of any

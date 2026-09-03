@@ -15,7 +15,10 @@ coretest fails a core that declares one on its own.
 */
 
 const (
-	CredUUID         = "uuid"
+	CredUUID = "uuid"
+	// CredUsername is a login name a client types; an email is not one, since
+	// its @ breaks ssh:// URLs and every HTTP-Injector payload.
+	CredUsername     = "username"
 	CredPassword     = "password"
 	CredAuth         = "auth"
 	CredSecurity     = "security"
@@ -29,6 +32,7 @@ const (
 
 var clientCredentials = map[string]bool{
 	CredUUID:         true,
+	CredUsername:     true,
 	CredPassword:     true,
 	CredAuth:         true,
 	CredSecurity:     true,

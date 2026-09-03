@@ -4,6 +4,7 @@ import { HttpInboundSettingsSchema } from './http';
 import { HysteriaInboundSettingsSchema } from './hysteria';
 import { MixedInboundSettingsSchema } from './mixed';
 import { MtprotoInboundSettingsSchema } from './mtproto';
+import { SshInboundSettingsSchema } from './ssh';
 import { ShadowsocksInboundSettingsSchema } from './shadowsocks';
 import { TrojanInboundSettingsSchema } from './trojan';
 import { TunInboundSettingsSchema } from './tun';
@@ -18,6 +19,7 @@ export * from './http';
 export * from './hysteria';
 export * from './mixed';
 export * from './mtproto';
+export * from './ssh';
 export * from './shadowsocks';
 export * from './trojan';
 export * from './tun';
@@ -47,5 +49,6 @@ export const InboundSettingsSchema = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('tunnel'),      settings: TunnelInboundSettingsSchema }),
   z.object({ protocol: z.literal('tun'),         settings: TunInboundSettingsSchema }),
   z.object({ protocol: z.literal('mtproto'),     settings: MtprotoInboundSettingsSchema }),
+  z.object({ protocol: z.literal('ssh'),         settings: SshInboundSettingsSchema }),
 ]);
 export type InboundSettings = z.infer<typeof InboundSettingsSchema>;

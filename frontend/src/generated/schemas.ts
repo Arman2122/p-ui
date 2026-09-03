@@ -1569,6 +1569,16 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "rateKinds": {
+        "description": "RateKinds are the kinds whose core throttles each client inside itself, so\na plan's rates reach them without a kernel identity. Shaping's complement.",
+        "example": [
+          "ssh"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "sessionKinds": {
         "description": "/*\n\t\tSessionKinds are the kinds whose core can name each live connection and the\n\t\taddress it came from — the one thing an IP limit is decided from.\n\n\t\tA kind absent here cannot have a cap enforced however the form is filled\n\t\tin: EvaluateIPLimits only ever sees clients a core reported a session for,\n\t\tand mtg, for one, reports a secret in use and no address at all. The form\n\t\tsays so instead of accepting a number that does nothing. F120 / F302.\n\t*/",
         "example": [
@@ -1617,6 +1627,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "id",
       "kinds",
       "portlessKinds",
+      "rateKinds",
       "sessionKinds",
       "shaping",
       "titleKey",
@@ -2251,7 +2262,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "mtproto",
           "wgkernel",
           "awgkernel",
-          "tun"
+          "tun",
+          "ssh"
         ],
         "example": "vless",
         "type": "string"

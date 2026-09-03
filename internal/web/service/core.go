@@ -38,6 +38,9 @@ type CoreView struct {
 		says so instead of accepting a number that does nothing. F120 / F302.
 	*/
 	SessionKinds []string `json:"sessionKinds" example:"[\"vless\",\"wgkernel\"]"`
+	// RateKinds are the kinds whose core throttles each client inside itself, so
+	// a plan's rates reach them without a kernel identity. Shaping's complement.
+	RateKinds []string `json:"rateKinds" example:"[\"ssh\"]"`
 	/*
 		PortlessKinds are the kinds that bind no port at all — an Xray TUN device
 		is a kernel interface, not a listener.
@@ -86,11 +89,15 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		// Per CORE, not per kind: Sessions answers for the whole process, so a
 		// core either can report them for everything it serves or for nothing.
 		sessions := make([]string, 0, len(kinds))
+		rates := make([]string, 0, len(kinds))
 		portless := make([]string, 0, len(kinds))
 		for _, kind := range kinds {
 			names = append(names, string(kind))
 			if bound.Sessions != nil {
 				sessions = append(sessions, string(kind))
+			}
+			if bound.Rate != nil && bound.Rate.EnforcesRates(kind) {
+				rates = append(rates, string(kind))
 			}
 			if bound.Transports != nil && bound.Transports.Transports(kind, "", "").None {
 				portless = append(portless, string(kind))
@@ -117,6 +124,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		sort.Strings(names)
 		sort.Strings(exits)
 		sort.Strings(sessions)
+		sort.Strings(rates)
 		sort.Strings(portless)
 		unavailable := ""
 		if err := bound.Core.Preflight(ctx); err != nil {
@@ -136,6 +144,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			ClientCredentials: credentials,
 			Shaping:           shaping,
 			SessionKinds:      sessions,
+			RateKinds:         rates,
 			PortlessKinds:     portless,
 			Available:         unavailable == "",
 			Unavailable:       unavailable,

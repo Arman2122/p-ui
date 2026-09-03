@@ -38,6 +38,7 @@ func NewCorePolicyJob() *CorePolicyJob { return &CorePolicyJob{} }
 func (j *CorePolicyJob) Run() {
 	ctx := context.Background()
 	j.convergeShaping(ctx)
+	j.convergeRates(ctx)
 	j.enforceIPLimits(ctx)
 }
 
@@ -51,6 +52,14 @@ func (j *CorePolicyJob) convergeShaping(ctx context.Context) {
 		logger.Debug("shaping is not available on this host:", err)
 	default:
 		logger.Warning("shaping convergence failed:", err)
+	}
+}
+
+// convergeRates hands the cores that throttle in-process the rate each ladder
+// entitles a client to. Fail-open for the reason convergeShaping is.
+func (j *CorePolicyJob) convergeRates(ctx context.Context) {
+	if err := j.policyService.ConvergeRates(ctx); err != nil {
+		logger.Warning("rate convergence failed:", err)
 	}
 }
 

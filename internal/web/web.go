@@ -637,7 +637,12 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	// add/update/delete to either the local xray or a remote node panel.
 	// The closures bridge into XrayService (which owns the running xray
 	// process state) without forcing the runtime package to import service.
-	registry, err := cores.Default(cores.Deps{XrayBaseConfig: s.xrayService.GetXrayBaseConfig})
+	registry, err := cores.Default(cores.Deps{
+		XrayBaseConfig:  s.xrayService.GetXrayBaseConfig,
+		SSHHostKey:      s.settingService.GetSSHHostKey,
+		StoreSSHHostKey: s.settingService.SetSSHHostKey,
+		CoreAuthFailure: s.publishCoreAuthFailure,
+	})
 	if err != nil {
 		return err
 	}
@@ -862,6 +867,20 @@ func (s *Server) stopCron() {
 	case <-time.After(cronDrainTimeout):
 		logger.Warning("cron jobs still running after", cronDrainTimeout, "; continuing shutdown")
 	}
+}
+
+// publishCoreAuthFailure is the refused-login hook the cores are handed; the
+// log line is what a fail2ban jail can read, the event is what notifies.
+func (s *Server) publishCoreAuthFailure(coreID string, instanceID int, username, ip, reason string) {
+	logger.Warningf("[CORE_AUTH_FAIL] Core = %s || Inbound = %d || User = %s || IP = %s || Reason = %s", coreID, instanceID, username, ip, reason)
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(eventbus.Event{
+		Type:   eventbus.EventCoreAuthFailure,
+		Source: fmt.Sprintf("%s inbound %d", coreID, instanceID),
+		Data:   &eventbus.CoreAuthFailureData{CoreID: coreID, InstanceID: instanceID, Username: username, IP: ip, Reason: reason},
+	})
 }
 
 // stopCores stops the processes of every registered core. Registry-driven so a

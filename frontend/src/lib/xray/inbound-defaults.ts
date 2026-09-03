@@ -4,6 +4,7 @@ import type { HttpInboundSettings } from '@/schemas/protocols/inbound/http';
 import type { HysteriaClient, HysteriaInboundSettings } from '@/schemas/protocols/inbound/hysteria';
 import type { MixedInboundSettings } from '@/schemas/protocols/inbound/mixed';
 import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/inbound/mtproto';
+import type { SshInboundSettings } from '@/schemas/protocols/inbound/ssh';
 import type { ShadowsocksClient, ShadowsocksInboundSettings } from '@/schemas/protocols/inbound/shadowsocks';
 import type { TrojanClient, TrojanInboundSettings } from '@/schemas/protocols/inbound/trojan';
 import type { TunInboundSettings } from '@/schemas/protocols/inbound/tun';
@@ -214,6 +215,10 @@ export function generateMtprotoSecret(domain: string): string {
   return `ee${RandomUtil.randomSeq(32, { type: 'hex' })}${domainToHex(domain)}`;
 }
 
+export function createDefaultSshInboundSettings(): SshInboundSettings {
+  return { transport: 'tcp', path: '', certFile: '', keyFile: '', banner: '', clients: [] };
+}
+
 export function createDefaultMtprotoInboundSettings(): MtprotoInboundSettings {
   return {
     fakeTlsDomain: 'www.cloudflare.com',
@@ -301,7 +306,8 @@ export type AnyInboundSettings =
   | TunnelInboundSettings
   | WireguardInboundSettings
   | WgkernelInboundSettings
-  | MtprotoInboundSettings;
+  | MtprotoInboundSettings
+  | SshInboundSettings;
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
@@ -318,6 +324,7 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
     case 'wgkernel':
     case 'awgkernel':   return createDefaultWgkernelInboundSettings();
     case 'mtproto':     return createDefaultMtprotoInboundSettings();
+    case 'ssh':         return createDefaultSshInboundSettings();
     default:            return null;
   }
 }

@@ -105,6 +105,8 @@ func userOf(client map[string]json.RawMessage) core.User {
 			_ = json.Unmarshal(raw, &user.QuotaBytes)
 		case "expiryTime":
 			_ = json.Unmarshal(raw, &user.ExpiryUnixMilli)
+		case "limitIp":
+			_ = json.Unmarshal(raw, &user.LimitIP)
 		default:
 			// Decoded as-is: a credential is whatever its core expects, and
 			// wireguard's allowedIPs is a list, not a string.

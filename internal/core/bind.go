@@ -32,6 +32,7 @@ type Bound struct {
 	Versions    VersionManager
 	Link        LinkRenderer
 	Shape       ShapingHost
+	Rate        RateEnforcer
 	Ingress     RoutableIngress
 	Egress      RoutableEgress
 	Sessions    SessionReporter
@@ -86,6 +87,9 @@ func Bind(c Core) *Bound {
 	if v, ok := c.(ShapingHost); ok {
 		b.Shape = v
 	}
+	if v, ok := c.(RateEnforcer); ok {
+		b.Rate = v
+	}
 	if v, ok := c.(RoutableIngress); ok {
 		b.Ingress = v
 	}
@@ -125,6 +129,12 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	// core-grained and one core answers ten kinds; so its claim is read from those.
 	if b.Shape != nil && !shapesSomeKind(b.Core, b.Shape) {
 		problems = append(problems, "ShapingHost: implemented, but every kind answers SelectorNone; a core that can shape nothing declares nothing")
+	}
+	if b.Rate != nil && !ratesSomeKind(b.Core, b.Rate) {
+		problems = append(problems, "RateEnforcer: implemented, but every kind answers EnforcesRates false; a core that can throttle nobody declares nothing")
+	}
+	if b.Rate != nil && b.Shape != nil {
+		problems = append(problems, "RateEnforcer and ShapingHost: a core throttles inside itself or hands the panel a kernel identity, never both")
 	}
 	// Same shape as the shaping and routing rules: a core that provisions users
 	// for no kind it serves is claiming a capability it never applies.
@@ -223,6 +233,15 @@ func routesSomeKind(c Core, r RoutableIngress) bool {
 
 // shapesSomeKind reports whether any kind this core serves carries a kernel
 // identity, which is the whole of what implementing ShapingHost claims.
+func ratesSomeKind(c Core, r RateEnforcer) bool {
+	for _, kind := range c.Kinds() {
+		if r.EnforcesRates(kind) {
+			return true
+		}
+	}
+	return false
+}
+
 func shapesSomeKind(c Core, h ShapingHost) bool {
 	for _, kind := range c.Kinds() {
 		if h.ShapingSelector(kind) != SelectorNone {

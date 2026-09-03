@@ -124,6 +124,7 @@ const EMPTY: Values = {
   subId: '',
   uuid: '',
   password: '',
+  username: '',
   auth: '',
   flow: '',
   security: 'auto',
@@ -205,6 +206,7 @@ export default function ClientFormModal({
   const resetDays = useWatch({ control: methods.control, name: 'reset' });
   const delayedDays = useWatch({ control: methods.control, name: 'delayedDays' });
   const password = useWatch({ control: methods.control, name: 'password' });
+  const username = useWatch({ control: methods.control, name: 'username' });
   const subId = useWatch({ control: methods.control, name: 'subId' });
   const auth = useWatch({ control: methods.control, name: 'auth' });
   const wgPrivateKey = useWatch({ control: methods.control, name: 'wgPrivateKey' });
@@ -252,6 +254,7 @@ export default function ClientFormModal({
         subId: client.subId || '',
         uuid: client.uuid || '',
         password: client.password || '',
+        username: client.username || '',
         auth: client.auth || '',
         flow: client.flow || '',
         security: !client.security || client.security === 'none' || client.security === 'zero'
@@ -295,6 +298,7 @@ export default function ClientFormModal({
         uuid: RandomUtil.randomUUID(),
         subId: RandomUtil.randomLowerAndNum(16),
         password: RandomUtil.randomLowerAndNum(16),
+        username: '',
         auth: RandomUtil.randomLowerAndNum(16),
         wgPrivateKey: wgKeypair.privateKey,
         wgPublicKey: wgKeypair.publicKey,
@@ -369,6 +373,10 @@ export default function ClientFormModal({
     }
     return '';
   }, [inboundIds, inbounds]);
+
+  function regenerateUsername() {
+    methods.setValue('username', 'u' + RandomUtil.randomLowerAndNum(7));
+  }
 
   function regeneratePassword() {
     methods.setValue('password', ss2022Method
@@ -607,6 +615,9 @@ export default function ClientFormModal({
 
     if (showMtproto) {
       clientPayload.secret = values.secret;
+    }
+    if (credentials.has('username')) {
+      clientPayload.username = (values.username ?? '').trim();
     }
     if (credentials.has('adTag')) {
       const adTag = values.adTag.trim();
@@ -913,6 +924,15 @@ export default function ClientFormModal({
                           <Space.Compact style={{ display: 'flex' }}>
                             <Input value={uuid} style={{ flex: 1 }} onChange={(e) => methods.setValue('uuid', e.target.value)} />
                             <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('uuid', RandomUtil.randomUUID())} />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
+
+                      {credentials.has('username') && (
+                        <Form.Item label={t('pages.clients.username')} tooltip={t('pages.clients.usernameDesc')}>
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input value={username} style={{ flex: 1 }} onChange={(e) => methods.setValue('username', e.target.value)} />
+                            <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regenerateUsername} />
                           </Space.Compact>
                         </Form.Item>
                       )}

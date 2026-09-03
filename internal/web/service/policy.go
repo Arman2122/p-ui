@@ -338,6 +338,86 @@ func (s *PolicyService) ConvergeShaping(ctx context.Context) error {
 	return shapingManager.Converge(ctx, wants)
 }
 
+/*
+ConvergeRates is ShapingWants for the cores that throttle inside themselves:
+the same ladders, evaluated from the same committed usage, handed over as a
+number per client instead of installed on a device. Level-triggered like
+shaping, and fail-open per core: a core that will not take its rates is
+reported and the others still get theirs.
+*/
+func (s *PolicyService) ConvergeRates(ctx context.Context) error {
+	reg := registry()
+	if reg == nil {
+		return nil
+	}
+	type target struct {
+		bound *core.Bound
+		inst  core.Instance
+	}
+	var targets []target
+	var failures []error
+	for _, bound := range reg.Cores() {
+		if bound.Rate == nil {
+			continue
+		}
+		var kinds []core.Kind
+		for _, kind := range bound.Core.Kinds() {
+			if bound.Rate.EnforcesRates(kind) {
+				kinds = append(kinds, kind)
+			}
+		}
+		if len(kinds) == 0 {
+			continue
+		}
+		instances, err := s.inboundService.DesiredInstances(kinds)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("policy: desired state for %s: %w", bound.Core.Describe().ID, err))
+			continue
+		}
+		for _, inst := range instances {
+			targets = append(targets, target{bound: bound, inst: inst})
+		}
+	}
+	if len(targets) == 0 {
+		return errors.Join(failures...)
+	}
+	emails := make([]string, 0)
+	for _, t := range targets {
+		for _, u := range t.inst.Users {
+			emails = append(emails, u.Email)
+		}
+	}
+	sort.Strings(emails)
+	emails = slices.Compact(emails)
+	db := database.GetDB()
+	plans, err := Plans(db)
+	if err != nil {
+		return errors.Join(append(failures, err)...)
+	}
+	facts, err := factsFor(db, emails, plans)
+	if err != nil {
+		return errors.Join(append(failures, err)...)
+	}
+	for _, t := range targets {
+		limits := make(map[string]core.RateLimit, len(t.inst.Users))
+		for _, u := range t.inst.Users {
+			fact, known := facts[u.Email]
+			if !known || fact.unresolved {
+				continue
+			}
+			l := policy.Evaluate(fact.plan, fact.usedBytes)
+			if l == (policy.Limits{}) {
+				continue
+			}
+			limits[u.Email] = core.RateLimit{UpBps: l.UpBps, DownBps: l.DownBps}
+		}
+		if err := t.bound.Rate.EnforceRates(ctx, t.inst, limits); err != nil {
+			failures = append(failures, fmt.Errorf("policy: rates for inbound %d: %w", t.inst.ID, err))
+		}
+	}
+	return errors.Join(failures...)
+}
+
 // Sighting is one address as reported for one client. It is the key enforcement
 // is aimed with: which core saw a breach decides which core may be cut for it.
 type Sighting struct{ Email, IP string }

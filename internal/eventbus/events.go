@@ -34,6 +34,9 @@ const (
 
 	// Security
 	EventLoginAttempt EventType = "login.attempt"
+	// EventCoreAuthFailure is a core refusing a client login (SSH); kept apart
+	// from login.attempt, which is the panel's own admin login and locks accounts.
+	EventCoreAuthFailure EventType = "core.auth.failure"
 )
 
 // Event is the unit of information flowing through the bus.
@@ -50,6 +53,15 @@ type CoreCrashData struct {
 	CoreID     string
 	InstanceID int
 	Err        string
+}
+
+// CoreAuthFailureData carries one refused client login.
+type CoreAuthFailureData struct {
+	CoreID     string
+	InstanceID int
+	Username   string
+	IP         string
+	Reason     string
 }
 
 // OutboundHealthData carries observatory details for outbound events.

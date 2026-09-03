@@ -28,6 +28,7 @@ const base: CoreView = {
   clientCredentials: {},
   shaping: {},
   sessionKinds: ['vless'],
+  rateKinds: [],
   portlessKinds: [],
 };
 
@@ -38,6 +39,7 @@ const MTPROTO: CoreView = {
   kinds: ['mtproto'],
   // The point of the whole thing: it serves a kind and reports no sessions.
   sessionKinds: [],
+  rateKinds: [],
   portlessKinds: [],
 };
 

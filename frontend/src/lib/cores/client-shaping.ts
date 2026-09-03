@@ -22,6 +22,8 @@ export function shapingForKinds(cores: CoreView[], kinds: string[]): ShapingVerd
     for (const [kind, selector] of Object.entries(core.shaping ?? {})) {
       if (selector) declared.add(kind);
     }
+    /* A core that throttles inside itself reaches its clients without a kernel key. */
+    for (const kind of core.rateKinds ?? []) declared.add(kind);
   }
   const shapeable: string[] = [];
   const unshapeable: string[] = [];
@@ -39,6 +41,8 @@ export function shapeableKinds(cores: CoreView[]): string[] {
     for (const [kind, selector] of Object.entries(core.shaping ?? {})) {
       if (selector) out.add(kind);
     }
+    /* A core that throttles inside itself reaches its clients without a kernel key. */
+    for (const kind of core.rateKinds ?? []) out.add(kind);
   }
   return [...out].sort();
 }
