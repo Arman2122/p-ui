@@ -1038,6 +1038,28 @@ setup_fail2ban() {
 # it on the next daemon-reload/start. Same pattern already used for
 # /usr/bin/p-ui elsewhere in this script. source_is_url picks cp (from a
 # file already extracted from the release tarball) vs curl (GitHub fallback).
+# The user every core daemon runs as under systemd: no shell, no home, and only
+# the port-binding capability its unit grants. The panel itself stays root.
+ensure_core_user() {
+    if ! id -u p-ui-core > /dev/null 2>&1; then
+        useradd --system --no-create-home --home-dir /var/lib/p-ui --shell /usr/sbin/nologin --user-group p-ui-core > /dev/null 2>&1 \
+            || echo -e "${yellow}Could not create the p-ui-core user; core daemons will run as root until it exists${plain}"
+    fi
+    install -d -m 750 -o root -g p-ui-core /var/lib/p-ui > /dev/null 2>&1 || mkdir -p /var/lib/p-ui
+}
+
+# QUIC inbounds (TUIC, Hysteria2) are dropped by the kernel's default socket
+# buffers on a fast link; the drop-in is what makes the setting survive a reboot.
+install_quic_sysctl() {
+    cat > /etc/sysctl.d/99-p-ui-quic.conf <<'EOF'
+# Written by Penhoon UI: QUIC needs larger socket buffers than the kernel default.
+net.core.rmem_max=7500000
+net.core.wmem_max=7500000
+EOF
+    sysctl -q -p /etc/sysctl.d/99-p-ui-quic.conf > /dev/null 2>&1 || true
+}
+
+
 _install_pui_service_unit() {
     local source="$1"
     local source_is_url="$2"
@@ -1070,6 +1092,8 @@ update_p-ui() {
     cd ${pui_folder%/p-ui}/
 
     load_pui_env
+    ensure_core_user
+    install_quic_sysctl
 
     if [ -f "${pui_folder}/p-ui" ]; then
         current_pui_version=$(${pui_folder}/p-ui -v)

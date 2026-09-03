@@ -43,7 +43,8 @@ file locations when it can answer in one hop.
 ## Repo map
 - `main.go` — entry point + `p-ui` CLI (run, migrate, setting, cert).
 - `internal/config/` — env parsing (PUI_DEBUG, PUI_LOG_LEVEL, PUI_LOG_FOLDER,
-  PUI_BIN_FOLDER, PUI_SKIP_HSTS, PUI_PORT, PUI_DB_DSN, PUI_DB_MAX_*_CONNS).
+  PUI_BIN_FOLDER, PUI_SKIP_HSTS, PUI_PORT, PUI_DB_DSN, PUI_DB_MAX_*_CONNS,
+  PUI_SUPERVISOR).
 - `internal/database/` + `internal/database/model/` — GORM schema (~24 models;
   Inbound, Client, Setting, User are the core), inbound Protocol enum,
   AutoMigrate + hand-written migrations in `db.go`.

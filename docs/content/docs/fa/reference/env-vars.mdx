@@ -29,6 +29,7 @@ icon: Variable
 | `PUI_INIT_WEB_BASE_PATH` | `/`     | مسیر پایه‌ی وب اولیه در **نخستین** اجرا (مثلاً `/panel`).               |
 | `PUI_ENABLE_FAIL2BAN`    | `true`  | فعال‌سازی اعمالِ محدودیت IP مبتنی بر Fail2ban.                              |
 | `PUI_SKIP_HSTS`          | `false` | رد کردن هدر HSTS — وقتی TLS توسط یک پروکسی معکوس خاتمه می‌یابد، `true` تنظیم کنید. |
+| `PUI_SUPERVISOR`         | `auto`  | نحوه‌ی اجرای دیمن‌های هسته: `systemd` (واحدهای گذرا که از پنل بیشتر عمر می‌کنند، با کاربر `p-ui-core`)، `exec` (فرزندان پنل)، یا `auto` (وقتی پنل زیر systemd اجرا می‌شود، systemd). |
 
 ## لاگ‌گیری و باینری‌ها
 
