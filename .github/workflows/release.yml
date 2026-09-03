@@ -191,12 +191,13 @@ jobs:
           # same way the panel does. internal/arch pins SINGBOX_VER to the
           # version the sing-box core expects. Named by GOARCH like mtg, so the
           # panel resolves it without an installer rename.
-          GOBIN="$PWD/.singbox" go install -trimpath \
+          # No GOBIN: go refuses to install a cross-compiled binary with it set.
+          # A native build lands in GOPATH/bin, a cross build in bin/linux_<arch>.
+          go install -trimpath \
             -tags with_v2ray_api,with_quic,with_utls,with_clash_api,with_acme \
             -ldflags "-s -w -X github.com/sagernet/sing-box/constant.Version=${SINGBOX_VER#v}" \
             "github.com/sagernet/sing-box/cmd/sing-box@${SINGBOX_VER}"
-          mv "$(find .singbox -type f -name sing-box)" "sing-box-linux-${GOARCH}"
-          rm -rf .singbox
+          mv "$(find "$(go env GOPATH)/bin" -type f -name sing-box | head -1)" "sing-box-linux-${GOARCH}"
           cd ../..
 
       - name: Package
