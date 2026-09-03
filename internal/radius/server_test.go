@@ -63,12 +63,15 @@ func freeUDP(t *testing.T) string {
 	return addr
 }
 
-func newTestServer(t *testing.T) (*Server, *recordingSink) {
+// The Rejected hook is installed before Register opens the listener: the
+// server reads it from its own goroutine, and a later write is a race.
+func newTestServer(t *testing.T, rejected func(nasID, username string, peer Peer, reason string)) (*Server, *recordingSink) {
 	t.Helper()
 	srv, err := New("s3cret-host", freeUDP(t), freeUDP(t))
 	if err != nil {
 		t.Fatal(err)
 	}
+	srv.Rejected = rejected
 	sink := &recordingSink{password: "open-sesame"}
 	if err := srv.Register(NASIdentifier("openvpn", 4), sink); err != nil {
 		t.Fatalf("register: %v", err)
@@ -104,14 +107,13 @@ with the tunnel address the sink chose, a wrong one is rejected and reported,
 and a daemon nobody registered is rejected however right its password.
 */
 func TestAccessRequestIsAnsweredByTheNASsSink(t *testing.T) {
-	srv, sink := newTestServer(t)
 	var rejectMu sync.Mutex
 	var rejected []string
-	srv.Rejected = func(nasID, username string, peer Peer, reason string) {
+	srv, sink := newTestServer(t, func(nasID, username string, peer Peer, reason string) {
 		rejectMu.Lock()
 		defer rejectMu.Unlock()
 		rejected = append(rejected, nasID+"|"+username+"|"+peer.Source.String()+"|"+reason)
-	}
+	})
 	readRejected := func() []string {
 		rejectMu.Lock()
 		defer rejectMu.Unlock()
@@ -157,7 +159,7 @@ func TestAccessRequestIsAnsweredByTheNASsSink(t *testing.T) {
 // Accounting records reach the sink with the gigawords folded in, and the
 // NAS gets its response whatever the sink does with them.
 func TestAccountingIsFoldedAndAcknowledged(t *testing.T) {
-	srv, sink := newTestServer(t)
+	srv, sink := newTestServer(t, nil)
 	p := radius.New(radius.CodeAccountingRequest, []byte("s3cret-host"))
 	_ = rfc2865.UserName_SetString(p, "alice")
 	_ = rfc2865.NASIdentifier_SetString(p, NASIdentifier("openvpn", 4))
