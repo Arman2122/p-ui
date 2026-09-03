@@ -136,6 +136,13 @@ export const SCHEMAS: Record<string, unknown> = {
       "smtpHost": {
         "type": "string"
       },
+      "smtpLastError": {
+        "description": "SmtpLastError and SmtpLastErrorAt are written by the mailer and shown read-only.",
+        "type": "string"
+      },
+      "smtpLastErrorAt": {
+        "type": "integer"
+      },
       "smtpMemory": {
         "maximum": 100,
         "minimum": 0,
@@ -391,6 +398,8 @@ export const SCHEMAS: Record<string, unknown> = {
       "smtpFrom",
       "smtpFromName",
       "smtpHost",
+      "smtpLastError",
+      "smtpLastErrorAt",
       "smtpMemory",
       "smtpPassword",
       "smtpPort",
@@ -616,6 +625,13 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "smtpHost": {
         "type": "string"
+      },
+      "smtpLastError": {
+        "description": "SmtpLastError and SmtpLastErrorAt are written by the mailer and shown read-only.",
+        "type": "string"
+      },
+      "smtpLastErrorAt": {
+        "type": "integer"
       },
       "smtpMemory": {
         "maximum": 100,
@@ -879,6 +895,8 @@ export const SCHEMAS: Record<string, unknown> = {
       "smtpFrom",
       "smtpFromName",
       "smtpHost",
+      "smtpLastError",
+      "smtpLastErrorAt",
       "smtpMemory",
       "smtpPassword",
       "smtpPort",

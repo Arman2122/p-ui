@@ -41,6 +41,8 @@ export interface AllSetting {
   smtpFrom: string;
   smtpFromName: string;
   smtpHost: string;
+  smtpLastError: string;
+  smtpLastErrorAt: number;
   smtpMemory: number;
   smtpPassword: string;
   smtpPort: number;
@@ -155,6 +157,8 @@ export interface AllSettingView {
   smtpFrom: string;
   smtpFromName: string;
   smtpHost: string;
+  smtpLastError: string;
+  smtpLastErrorAt: number;
   smtpMemory: number;
   smtpPassword: string;
   smtpPort: number;

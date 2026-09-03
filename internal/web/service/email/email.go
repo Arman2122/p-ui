@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
-	"github.com/Arman2122/p-ui/internal/logger"
 	"mime"
 	"net"
 	"net/mail"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
