@@ -111,11 +111,17 @@ export const CAPABILITY_RULES: Record<string, CapabilityRule> = {
             "field": "protocol",
             "op": "in",
             "values": [
-              "mtproto",
-              "wgkernel",
-              "awgkernel"
-            ],
-            "not": true
+              "vmess",
+              "vless",
+              "trojan",
+              "shadowsocks",
+              "hysteria",
+              "wireguard",
+              "http",
+              "mixed",
+              "tunnel",
+              "tun"
+            ]
           }
         ]
       }

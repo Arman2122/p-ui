@@ -1815,7 +1815,11 @@
           "noExitDriver": "Nothing on this host knows how to route through {{ .exit }}.",
           "noSnat": "{{ .exit }} has no source address to send from, so traffic would leave with this server's own address.",
           "noDefaultOutbound": "Your Xray template has no {{ .protocol }} outbound for this rule to use.",
+          "exitTcpOnly": "{{ .exit }} carries TCP only, and this rule matches UDP alone, so it would send that traffic nowhere.",
           "noFront": "{{ .subject }} has no front device on this host, so its traffic never passes through Xray and this rule cannot match it. Nothing you can change on the rule fixes this."
+        },
+        "warn": {
+          "exitTcpNarrowed": "{{ .exit }} carries TCP only; this rule was narrowed to TCP, and the UDP it also matched keeps its previous route."
         },
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
         "domainReadFromTraffic": "The name is read from the connection itself — the TLS SNI, the HTTP Host header, or QUIC. Traffic that carries no name, such as a plain IP connection, is matched by the IP rules instead. The panel turns this reading on for the inbounds this rule names, in the generated config only.",

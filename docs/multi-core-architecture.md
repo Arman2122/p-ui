@@ -1805,6 +1805,13 @@ by-name enumeration, and a rate-pushdown seam for the two daemons that enforce r
 themselves. `IngressSubnet` exists as a vocabulary value (`core/caps.go:379`) with no
 consumer yet.
 
+**Closed 2026-09-03: the TCP-only exit flag** (`ExitHandle.TCPOnly`; the compiler pins,
+narrows with a warning, or refuses), **the one-per-node refusal shape**
+(`Descriptor.OnePerNode`, counted at the add gate) and **the sniffing enumeration** (a
+positive list of Xray's kinds). Still open: queued dispatch, the server-pushed exit
+address, the subnet selector's consumer, and rate pushdown — each lands with the core
+that hits it.
+
 
 ---
 
