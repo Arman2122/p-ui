@@ -82,6 +82,13 @@ func ClientShare(inst core.Instance, user core.User, host string) (core.Share, b
 	return share, true, nil
 }
 
+// SharesFile reports whether kind's core renders a client config file, which
+// the sub server then serves under /file/<inbound id>. URI-only kinds do not.
+func SharesFile(kind core.Kind) bool {
+	bound, ok := kindOwners().For(kind)
+	return ok && bound.Link != nil
+}
+
 // TransportAuthority is the core that answers what one kind binds, when any
 // does. A kind no core claims has no authority, and the caller keeps its own
 // oldest rule rather than inventing one here.
