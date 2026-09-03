@@ -78,7 +78,7 @@ ocserv drops privileges and then opens its sockets there.
 */
 func newE2ECore(t *testing.T, daemon, ctl string) *Core {
 	t.Helper()
-	srv, err := radius.New(radius.NewSecret(), "", "")
+	srv, err := radius.New(radius.NewSecret(), freeUDPAddr(t), freeUDPAddr(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,6 +224,7 @@ the state directory is one the daemon user can actually open its sockets in.
 */
 func TestRealTrafficUnderSystemd(t *testing.T) {
 	daemon, ctl, openconnect := e2eGate(t)
+	skipWhenAPanelWouldSweepTheUnit(t)
 	backend, err := supervisor.NewSystemd(context.Background())
 	if err != nil {
 		t.Skip("no systemd: ", err)
@@ -234,7 +235,7 @@ func TestRealTrafficUnderSystemd(t *testing.T) {
 		t.Skip("no p-ui-core user: ", err)
 	}
 	gid, _ := strconv.Atoi(who.Gid)
-	srv, err := radius.New(radius.NewSecret(), "", "")
+	srv, err := radius.New(radius.NewSecret(), freeUDPAddr(t), freeUDPAddr(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,4 +420,31 @@ func waitFor(t *testing.T, d time.Duration, cond func() bool, why func() string)
 		time.Sleep(250 * time.Millisecond)
 	}
 	t.Fatal(why())
+}
+
+/*
+A live panel on this host reconciles the same unit names and stops any it does
+not recognise -- which is exactly what this test's transient unit looks like to
+it. It gets stopped a few seconds in and the failure reads as a billing bug, so
+the test says so instead of spending a minute proving nothing.
+*/
+func skipWhenAPanelWouldSweepTheUnit(t *testing.T) {
+	t.Helper()
+	out, _ := exec.Command("systemctl", "is-active", "p-ui.service").Output()
+	if strings.TrimSpace(string(out)) == "active" {
+		t.Skip("p-ui.service is running and sweeps unit names this test uses; stop it for this run")
+	}
+}
+
+// Its own RADIUS ports, not the defaults: `go test ./...` runs packages in
+// parallel, so two cores' end-to-end tests would otherwise race for 1812/1813.
+func freeUDPAddr(t *testing.T) string {
+	t.Helper()
+	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := conn.LocalAddr().String()
+	_ = conn.Close()
+	return addr
 }

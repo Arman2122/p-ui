@@ -70,7 +70,7 @@ func e2eUser(n int) core.User {
 // newE2ECore: the panel's own RADIUS server on its default ports, the exec backend as root.
 func newE2ECore(t *testing.T, bin string) *Core {
 	t.Helper()
-	srv, err := radius.New(radius.NewSecret(), "", "")
+	srv, err := radius.New(radius.NewSecret(), freeLowUDP(t, 11), freeLowUDP(t, 29))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,9 +79,9 @@ func newE2ECore(t *testing.T, bin string) *Core {
 }
 
 // mintedSettings is an inbound as the panel would have saved it.
-func mintedSettings(t *testing.T, c *Core, subnet string) string {
+func mintedSettings(t *testing.T, c *Core, subnet, proto string) string {
 	t.Helper()
-	out, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"`+subnet+`"}`, "")
+	out, err := c.MintInstance(Kind, `{"proto":"`+proto+`","subnet":"`+subnet+`"}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestConformance(t *testing.T) {
 			c := newE2ECore(t, bin)
 			if current == nil {
 				current = c
-				settings = mintedSettings(t, c, "10.213.0.0/24")
+				settings = mintedSettings(t, c, "10.213.0.0/24", ProtoUDP)
 				for i := range candidates {
 					have := map[string]string{core.CredUsername: core.CredString(candidates[i].Credentials, core.CredUsername), core.CredPassword: core.CredString(candidates[i].Credentials, core.CredPassword)}
 					minted, err := c.MintClientCredentials(Kind, settings, have)
@@ -255,7 +255,19 @@ ends the session.
 */
 func TestRealTrafficIsBilledAndSeen(t *testing.T) {
 	bin := e2eGate(t)
-	realTraffic(t, bin, newE2ECore(t, bin))
+	realTraffic(t, bin, newE2ECore(t, bin), ProtoUDP)
+}
+
+/*
+The other transport, which the daemon serves from the same config and the
+profile follows: an inbound whose proto is tcp carries a real tunnel too.
+Worth its own run because nothing else exercises it end to end -- the only
+other TCP coverage is a unit test of the rendered config, which cannot show
+that a client connects.
+*/
+func TestRealTrafficOverTCP(t *testing.T) {
+	bin := e2eGate(t)
+	realTraffic(t, bin, newE2ECore(t, bin), ProtoTCP)
 }
 
 /*
@@ -266,6 +278,7 @@ status, socket and ccd entries, and open the tun device.
 */
 func TestRealTrafficUnderSystemd(t *testing.T) {
 	bin := e2eGate(t)
+	skipWhenAPanelWouldSweepTheUnit(t)
 	backend, err := supervisor.NewSystemd(context.Background())
 	if err != nil {
 		t.Skip("no systemd: ", err)
@@ -285,7 +298,7 @@ func TestRealTrafficUnderSystemd(t *testing.T) {
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := radius.New(radius.NewSecret(), "", "")
+	srv, err := radius.New(radius.NewSecret(), freeLowUDP(t, 11), freeLowUDP(t, 29))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,14 +309,14 @@ func TestRealTrafficUnderSystemd(t *testing.T) {
 			t.Log(shellOut("journalctl -u " + supervisor.UnitName(string(ID), 2) + " --no-pager -n 40 2>&1"))
 		}
 	})
-	realTraffic(t, bin, c)
+	realTraffic(t, bin, c, ProtoUDP)
 }
 
-func realTraffic(t *testing.T, bin string, c *Core) {
+func realTraffic(t *testing.T, bin string, c *Core, proto string) {
 	t.Helper()
 	t.Cleanup(func() { _ = c.StopAll(context.Background()) })
 	port := freeUDPPort(t)
-	inst := withClientKeys(t, c, core.Instance{ID: 2, Kind: Kind, Tag: "ovpn-2", Listen: "", Port: port, Enable: true, Settings: mintedSettings(t, c, "10.214.0.0/24"), Users: []core.User{e2eUser(1)}})
+	inst := withClientKeys(t, c, core.Instance{ID: 2, Kind: Kind, Tag: "ovpn-2", Listen: "", Port: port, Enable: true, Settings: mintedSettings(t, c, "10.214.0.0/24", proto), Users: []core.User{e2eUser(1)}})
 	alice := inst.Users[0]
 	if err := c.Reconcile(context.Background(), []core.Instance{inst}); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -442,3 +455,38 @@ func waitFor(t *testing.T, d time.Duration, cond func() bool, why func() string)
 }
 
 var _ = io.Discard
+
+/*
+A live panel on this host reconciles the same unit names and stops any it does
+not recognise -- which is exactly what this test's transient unit looks like to
+it. It gets stopped a few seconds in and the failure reads as a billing bug, so
+the test says so instead of spending a minute proving nothing.
+*/
+func skipWhenAPanelWouldSweepTheUnit(t *testing.T) {
+	t.Helper()
+	out, _ := exec.Command("systemctl", "is-active", "p-ui.service").Output()
+	if strings.TrimSpace(string(out)) == "active" {
+		t.Skip("p-ui.service is running and sweeps unit names this test uses; stop it for this run")
+	}
+}
+
+/*
+Its own RADIUS ports, not the defaults: `go test ./...` runs packages in
+parallel, so two cores' end-to-end tests would otherwise race for 1812/1813 and
+the loser fails instantly. Low ones, because the plugin holds a port in four
+characters.
+*/
+func freeLowUDP(t *testing.T, seed int) string {
+	t.Helper()
+	for port := 2000 + seed*97%6000; port < 9999; port++ {
+		addr := "127.0.0.1:" + strconv.Itoa(port)
+		conn, err := net.ListenPacket("udp", addr)
+		if err != nil {
+			continue
+		}
+		_ = conn.Close()
+		return addr
+	}
+	t.Fatal("no free UDP port in 2000-9999")
+	return ""
+}
