@@ -286,6 +286,7 @@ export default function InboundFormModal({
   const wTag = (useWatch({ control, name: 'tag' }) ?? '') as string;
   const wSsNetwork = useWatch({ control, name: 'settings.network' });
   const wTunnelNetwork = useWatch({ control, name: 'settings.allowedNetwork' });
+  const wOpenvpnProto = useWatch({ control, name: 'settings.proto' });
   const wTotal = (useWatch({ control, name: 'total' }) as number | undefined) ?? 0;
   const wExpiry = (useWatch({ control, name: 'expiryTime' }) as number | undefined) ?? 0;
   const trafficReset = useWatch({ control, name: 'trafficReset' }) ?? 'never';
@@ -296,7 +297,9 @@ export default function InboundFormModal({
     nodeId: typeof wNodeId === 'number' ? wNodeId : null,
     protocol,
     streamSettings: { network },
-    settings: { network: wSsNetwork, allowedNetwork: wTunnelNetwork, udp: mixedUdpOn },
+    settings: {
+      network: wSsNetwork, allowedNetwork: wTunnelNetwork, udp: mixedUdpOn, proto: wOpenvpnProto,
+    },
   });
   /*
   Read from the capability table, not restated here: the rule also excludes
@@ -457,7 +460,7 @@ export default function InboundFormModal({
       setV('tag', next);
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [open, wPort, wNodeId, protocol, network, mixedUdpOn, wSsNetwork, wTunnelNetwork]);
+  }, [open, wPort, wNodeId, protocol, network, mixedUdpOn, wSsNetwork, wTunnelNetwork, wOpenvpnProto]);
 
   /*
    * Keep the strategy value inside the visible option set: when `node` isn't
