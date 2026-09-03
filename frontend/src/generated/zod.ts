@@ -291,6 +291,7 @@ export const ClientSchema = z.object({
   tgId: z.number().int(),
   totalGB: z.number().int(),
   updated_at: z.number().int().optional(),
+  username: z.string().optional(),
 });
 export type Client = z.infer<typeof ClientSchema>;
 

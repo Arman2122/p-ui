@@ -167,13 +167,14 @@ func deleteClientCredentials(tx *gorm.DB, clientIds, inboundIds []int, keys ...s
 	return q.Delete(&model.ClientCredential{}).Error
 }
 
-// mtprotoCredentialRows projects a client's MTProto credentials onto rows for one
+// coreCredentialRows projects a client's per-core credentials onto rows for one
 // inbound. Empty is omitted, so a blob without them cannot clear an earlier save.
-func mtprotoCredentialRows(clientId, inboundId int, c *model.Client) []model.ClientCredential {
-	rows := make([]model.ClientCredential, 0, 2)
+func coreCredentialRows(clientId, inboundId int, c *model.Client) []model.ClientCredential {
+	rows := make([]model.ClientCredential, 0, 3)
 	for _, pair := range [][2]string{
 		{model.CredentialSecret, c.Secret},
 		{model.CredentialAdTag, c.AdTag},
+		{model.CredentialUsername, c.Username},
 	} {
 		if pair[1] == "" {
 			continue
@@ -185,8 +186,9 @@ func mtprotoCredentialRows(clientId, inboundId int, c *model.Client) []model.Cli
 	return rows
 }
 
-// applyMtprotoCredentials fills a client's MTProto fields from stored rows.
-func applyMtprotoCredentials(c *model.Client, byKey map[string]string) {
+// applyCoreCredentials fills a client's per-core fields from stored rows.
+func applyCoreCredentials(c *model.Client, byKey map[string]string) {
 	c.Secret = byKey[model.CredentialSecret]
 	c.AdTag = byKey[model.CredentialAdTag]
+	c.Username = byKey[model.CredentialUsername]
 }

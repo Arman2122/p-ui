@@ -281,6 +281,7 @@ export interface Client {
   tgId: number;
   totalGB: number;
   updated_at?: number;
+  username?: string;
 }
 
 export interface ClientConfigFile {

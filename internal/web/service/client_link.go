@@ -189,7 +189,7 @@ func (s *ClientService) SyncInbound(tx *gorm.DB, inboundId int, clients []model.
 			InboundId:    inboundId,
 			FlowOverride: clients[i].Flow,
 		})
-		creds = append(creds, mtprotoCredentialRows(id, inboundId, &clients[i])...)
+		creds = append(creds, coreCredentialRows(id, inboundId, &clients[i])...)
 	}
 	if len(links) > 0 {
 		if err := tx.CreateInBatches(links, 200).Error; err != nil {
@@ -234,7 +234,7 @@ func (s *ClientService) ListForInbound(tx *gorm.DB, inboundId int) ([]model.Clie
 	for i := range rows {
 		c := rows[i].ToClient()
 		c.Flow = rows[i].FlowOverride
-		applyMtprotoCredentials(c, byClient[rows[i].Id])
+		applyCoreCredentials(c, byClient[rows[i].Id])
 		out = append(out, *c)
 	}
 	return out, nil
@@ -275,7 +275,7 @@ func (s *ClientService) ListForInboundBySubId(tx *gorm.DB, inboundId int, subId 
 	for i := range rows {
 		c := rows[i].ToClient()
 		c.Flow = rows[i].FlowOverride
-		applyMtprotoCredentials(c, byClient[rows[i].Id])
+		applyCoreCredentials(c, byClient[rows[i].Id])
 		out = append(out, *c)
 	}
 	return out, nil

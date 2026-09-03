@@ -1186,6 +1186,10 @@ export const SCHEMAS: Record<string, unknown> = {
         "description": "Last update timestamp",
         "format": "int64",
         "type": "integer"
+      },
+      "username": {
+        "description": "Login name for a core that takes one (SSH)",
+        "type": "string"
       }
     },
     "required": [

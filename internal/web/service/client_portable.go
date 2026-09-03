@@ -60,7 +60,7 @@ func (s *ClientService) exportRecords(db *gorm.DB, rows []model.ClientRecord) ([
 
 	for i := range rows {
 		client := rows[i].ToClient()
-		applyMtprotoCredentials(client, credsByClient[rows[i].Id])
+		applyCoreCredentials(client, credsByClient[rows[i].Id])
 		// The per-inbound flow_override is the reliable flow for multi-inbound
 		// clients; the canonical column can be left stale by SyncInbound (#4792).
 		if flow, err := s.EffectiveFlow(db, rows[i].Id); err == nil && flow != "" {

@@ -124,12 +124,17 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		if client.Auth == "" {
 			client.Auth = existing.Auth
 		}
-		if client.Secret == "" {
+		if client.Secret == "" || client.Username == "" {
 			stored, sErr := storedClientCredentials(nil, existing.Id)
 			if sErr != nil {
 				return false, sErr
 			}
-			client.Secret = stored[model.CredentialSecret]
+			if client.Secret == "" {
+				client.Secret = stored[model.CredentialSecret]
+			}
+			if client.Username == "" {
+				client.Username = stored[model.CredentialUsername]
+			}
 		}
 	}
 
@@ -381,12 +386,17 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.Auth == "" {
 		updated.Auth = existing.Auth
 	}
-	if updated.Secret == "" {
+	if updated.Secret == "" || updated.Username == "" {
 		stored, sErr := storedClientCredentials(nil, id)
 		if sErr != nil {
 			return false, sErr
 		}
-		updated.Secret = stored[model.CredentialSecret]
+		if updated.Secret == "" {
+			updated.Secret = stored[model.CredentialSecret]
+		}
+		if updated.Username == "" {
+			updated.Username = stored[model.CredentialUsername]
+		}
 	}
 
 	/*

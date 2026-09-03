@@ -1442,6 +1442,9 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 			if prep[idx].client.Secret == "" {
 				prep[idx].client.Secret = credsByClient[rec.Id][model.CredentialSecret]
 			}
+			if prep[idx].client.Username == "" {
+				prep[idx].client.Username = credsByClient[rec.Id][model.CredentialUsername]
+			}
 		}
 		if owner, ok := existingSubOwner[prep[idx].client.SubID]; ok && owner != le {
 			failed[idx] = true

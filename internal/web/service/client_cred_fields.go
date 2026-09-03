@@ -22,6 +22,7 @@ func clientCredentialValues(c *model.Client) map[string]string {
 	return map[string]string{
 		core.CredUUID:         c.ID,
 		core.CredPassword:     c.Password,
+		core.CredUsername:     c.Username,
 		core.CredAuth:         c.Auth,
 		core.CredSecurity:     c.Security,
 		core.CredSecret:       c.Secret,
@@ -38,6 +39,8 @@ func setClientCredential(c *model.Client, name, value string) {
 		c.ID = value
 	case core.CredPassword:
 		c.Password = value
+	case core.CredUsername:
+		c.Username = value
 	case core.CredAuth:
 		c.Auth = value
 	case core.CredSecurity:

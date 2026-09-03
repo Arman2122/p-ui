@@ -968,6 +968,7 @@ type Client struct {
 	ID           string         `json:"id,omitempty"`       // Unique client identifier
 	Security     string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
 	Password     string         `json:"password,omitempty"` // Client password
+	Username     string         `json:"username,omitempty"` // Login name for a core that takes one (SSH)
 	Flow         string         `json:"flow,omitempty"`     // Flow control (XTLS)
 	Reverse      *ClientReverse `json:"reverse,omitempty"`  // VLESS simple reverse proxy settings
 	Auth         string         `json:"auth,omitempty"`     // Auth password (Hysteria)
@@ -1142,10 +1143,12 @@ type ClientCredential struct {
 
 func (ClientCredential) TableName() string { return "client_credentials" }
 
-// Credential keys stored in client_credentials. MTProto is the only tenant.
+// Credential keys stored in client_credentials: MTProto's two, and the login
+// name an SSH client types.
 const (
-	CredentialSecret = "secret"
-	CredentialAdTag  = "adTag"
+	CredentialSecret   = "secret"
+	CredentialAdTag    = "adTag"
+	CredentialUsername = "username"
 )
 
 // ClientExternalLink is a per-client entry surfaced in the client's
