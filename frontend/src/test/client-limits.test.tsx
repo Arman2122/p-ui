@@ -30,7 +30,7 @@ const WG_CORE: CoreView = {
 
 const XRAY_CORE: CoreView = { ...WG_CORE, id: 'xray', kinds: ['vless'], shaping: {} };
 
-const PLAN = { id: 1, name: 'fair use', tiers: [], createdAt: 0, updatedAt: 0 };
+const PLAN = { id: 1, name: 'fair use', tiers: [], rev: 1, createdAt: 0, updatedAt: 0 };
 
 const ENFORCED = {
   email: 'user1',

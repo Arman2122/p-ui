@@ -62,6 +62,13 @@ afterEach(async () => {
   cleanup();
   document.body.innerHTML = '';
   /*
+   * A file that calls vi.restoreAllMocks() restores these stubs too, and every
+   * later test in it then dials the real client: a relative URL fails to parse
+   * in Node, the failure raises an antd toast, and the toast's close timer
+   * fires after jsdom is torn down. Put the stubs back after every test.
+   */
+  stubHttp();
+  /*
    * React 19 defers passive-effect flushes onto a macrotask (setImmediate),
    * whose callback reads `window.event`. If one is still queued when vitest
    * tears down the jsdom environment, it fires after `window` is gone and
@@ -84,7 +91,12 @@ afterEach(async () => {
 
 import { HttpUtil } from '@/utils';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-vi.spyOn(HttpUtil, 'post').mockResolvedValue({ success: true, obj: {} } as any);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-vi.spyOn(HttpUtil, 'get').mockResolvedValue({ success: true, obj: {} } as any);
+// stubHttp keeps every test off the network; re-applied after each test because
+// vi.restoreAllMocks() in a file would otherwise strip it for the tests after.
+function stubHttp() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.spyOn(HttpUtil, 'post').mockResolvedValue({ success: true, obj: {} } as any);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.spyOn(HttpUtil, 'get').mockResolvedValue({ success: true, obj: {} } as any);
+}
+stubHttp();
