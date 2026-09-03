@@ -79,3 +79,20 @@ func TestGetPortOverride(t *testing.T) {
 		})
 	}
 }
+
+func TestSupervisorMode(t *testing.T) {
+	for _, tt := range []struct {
+		env, want string
+		wantErr   bool
+	}{
+		{"", "auto", false}, {"systemd", "systemd", false}, {" Exec ", "exec", false}, {"docker", "", true},
+	} {
+		t.Run(tt.env, func(t *testing.T) {
+			t.Setenv("PUI_SUPERVISOR", tt.env)
+			got, err := SupervisorMode()
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Fatalf("SupervisorMode() = %q, %v; want %q, err=%v", got, err, tt.want, tt.wantErr)
+			}
+		})
+	}
+}
