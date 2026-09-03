@@ -47,6 +47,9 @@ type Verdict struct {
 	ReplyMessage string
 	// FramedIP, when set, is pushed to the NAS as the client's tunnel address.
 	FramedIP netip.Addr
+	// InterimSeconds asks the NAS for an accounting record this often; 0 leaves
+	// only Start and Stop, and quota enforcement waits for the disconnect.
+	InterimSeconds int
 }
 
 // Peer is where a login or a session came from, as the NAS reported it.
@@ -257,6 +260,9 @@ func (s *Server) handleAuth(w radius.ResponseWriter, r *radius.Request) {
 	}
 	if verdict.ReplyMessage != "" {
 		_ = rfc2865.ReplyMessage_SetString(resp, verdict.ReplyMessage)
+	}
+	if verdict.InterimSeconds > 0 {
+		_ = rfc2869.AcctInterimInterval_Set(resp, rfc2869.AcctInterimInterval(verdict.InterimSeconds))
 	}
 	_ = w.Write(resp)
 }
