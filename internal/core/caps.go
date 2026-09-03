@@ -379,6 +379,12 @@ type FileShareDeclarer interface {
 	SharesFile(kind Kind) bool
 }
 
+// PanelOutliver says the core's daemons keep serving through a panel restart
+// (a supervisor holds them), so shutdown must not stop them; StopAll still does.
+type PanelOutliver interface {
+	OutlivesPanel() bool
+}
+
 // Share is one deliverable client config.
 type Share struct {
 	Kind     string `json:"kind"`

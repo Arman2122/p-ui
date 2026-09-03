@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,35 @@ func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
 		if _, ok := want[id]; !ok {
 			failures = append(failures, c.dropLocked(ctx, id))
 		}
+	}
+	failures = append(failures, c.sweepOrphansLocked(ctx, want))
+	return errors.Join(failures...)
+}
+
+// sweepOrphansLocked stops units of this core the backend still runs for an
+// inbound no longer desired: a daemon that outlived a panel which then
+// deleted its inbound would otherwise serve forever.
+func (c *Core) sweepOrphansLocked(ctx context.Context, want map[int]struct{}) error {
+	names, err := c.backend.List(ctx)
+	if err != nil {
+		return nil
+	}
+	prefix := supervisor.UnitName(string(ID), 0)
+	prefix = prefix[:len(prefix)-1]
+	var failures []error
+	for _, name := range names {
+		id, err := strconv.Atoi(strings.TrimPrefix(name, prefix))
+		if !strings.HasPrefix(name, prefix) || err != nil {
+			continue
+		}
+		if _, ok := want[id]; ok {
+			continue
+		}
+		if err := c.backend.Stop(ctx, name); err != nil {
+			failures = append(failures, fmt.Errorf("singbox: stop orphan %s: %w", name, err))
+			continue
+		}
+		logger.Infof("sing-box: stopped orphaned unit %s", name)
 	}
 	return errors.Join(failures...)
 }
@@ -401,22 +431,16 @@ func splitKey(key string) (email, dir string, ok bool) {
 	return key, "", false
 }
 
-// StopAll stops the daemons under the exec backend, where they would die with
-// the panel anyway. Under systemd they are left running: outliving a panel
-// restart is what that backend is for, and the next Reconcile adopts them.
+// OutlivesPanel: under systemd the units keep serving through a panel restart
+// and the next Reconcile adopts them; an operator's StopAll still stops them.
+func (c *Core) OutlivesPanel() bool { return c.backend.Name() == string(supervisor.ModeSystemd) }
+
 func (c *Core) StopAll(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.timer != nil {
 		c.timer.Stop()
 		c.timer = nil
-	}
-	if c.backend.Name() == string(supervisor.ModeSystemd) {
-		if len(c.instances) > 0 {
-			logger.Infof("sing-box: %d daemon(s) left running under systemd", len(c.instances))
-		}
-		c.instances = map[int]*instance{}
-		return nil
 	}
 	var failures []error
 	for id := range c.instances {
@@ -496,26 +520,40 @@ func withoutEmail(users []core.User, email string) []core.User {
 }
 
 // CollectTraffic hands out what was drained before reloads, then reads every
-// running daemon's counters through its own engine.
+// running daemon's counters through its own engine. The daemons are queried
+// outside the lock, so a hung one stalls no edit.
 func (c *Core) CollectTraffic(ctx context.Context) ([]core.TrafficDelta, error) {
+	type target struct {
+		id   int
+		port int
+	}
+	c.mu.Lock()
+	targets := make([]target, 0, len(c.instances))
+	for id, cur := range c.instances {
+		if cur.running {
+			targets = append(targets, target{id: id, port: cur.ctl.statsPort})
+		}
+	}
+	c.mu.Unlock()
+	sort.Slice(targets, func(i, j int) bool { return targets[i].id < targets[j].id })
+	var failures []error
+	answers := make(map[int]map[string]int64, len(targets))
+	for _, t := range targets {
+		readings, err := readUserStats(ctx, t.port)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		answers[t.id] = readings
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := append([]core.TrafficDelta(nil), c.pending...)
 	c.pending = nil
-	var failures []error
-	ids := make([]int, 0, len(c.instances))
-	for id := range c.instances {
-		ids = append(ids, id)
-	}
-	sort.Ints(ids)
-	for _, id := range ids {
-		cur := c.instances[id]
-		if !cur.running {
-			continue
-		}
-		readings, err := readUserStats(ctx, cur.ctl.statsPort)
-		if err != nil {
-			failures = append(failures, err)
+	for _, t := range targets {
+		cur, ok := c.instances[t.id]
+		readings, answered := answers[t.id]
+		if !ok || !answered || cur.ctl.statsPort != t.port {
 			continue
 		}
 		out = append(out, c.deltasLocked(cur, readings)...)
@@ -560,16 +598,20 @@ func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
 	c.mu.Unlock()
 	var out []core.Session
 	var failures []error
-	live := map[string]seenEntry{}
-	now := time.Now().UnixMilli()
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	var conns []liveConnection
 	for _, t := range targets {
-		conns, err := readConnections(ctx, t.ctl.apiPort, t.ctl.secret)
+		list, err := readConnections(ctx, t.ctl.apiPort, t.ctl.secret)
 		if err != nil {
 			failures = append(failures, err)
 			continue
 		}
+		conns = append(conns, list...)
+	}
+	live := map[string]seenEntry{}
+	now := time.Now().UnixMilli()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	{
 		for _, conn := range conns {
 			key := conn.id
 			if key == "" {

@@ -35,6 +35,7 @@ type Bound struct {
 	Rate          RateEnforcer
 	Deferred      DeferredApplier
 	FileShare     FileShareDeclarer
+	Outliver      PanelOutliver
 	Ingress       RoutableIngress
 	Egress        RoutableEgress
 	ExitSupervise ExitSupervisor
@@ -98,6 +99,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(FileShareDeclarer); ok {
 		b.FileShare = v
+	}
+	if v, ok := c.(PanelOutliver); ok {
+		b.Outliver = v
 	}
 	if v, ok := c.(RoutableIngress); ok {
 		b.Ingress = v

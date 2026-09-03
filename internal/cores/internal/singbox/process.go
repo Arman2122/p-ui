@@ -142,7 +142,7 @@ func randomToken(n int) string {
 func (c *Core) spec(inst core.Instance, dir, cfgPath string) supervisor.Spec {
 	s := supervisor.Spec{
 		Name:               supervisor.UnitName(string(ID), inst.ID),
-		Description:        fmt.Sprintf("Penhoon UI %s inbound %s", inst.Kind, inst.Tag),
+		Description:        fmt.Sprintf("Penhoon UI %s inbound %d", inst.Kind, inst.ID),
 		Exec:               []string{c.binaryPath(), "run", "-c", cfgPath, "-D", dir, "--disable-color"},
 		WorkingDir:         dir,
 		Restart:            supervisor.RestartOnFailure,

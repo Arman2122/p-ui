@@ -921,7 +921,7 @@ func (s *Server) stopCores() {
 		return
 	}
 	for _, bound := range s.cores.Cores() {
-		if bound.Supervise == nil {
+		if bound.Supervise == nil || (bound.Outliver != nil && bound.Outliver.OutlivesPanel()) {
 			continue
 		}
 		if err := bound.Supervise.StopAll(context.Background()); err != nil {

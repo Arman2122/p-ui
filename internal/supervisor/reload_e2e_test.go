@@ -18,23 +18,25 @@ import (
 func hupNotingSpec(t *testing.T, name string) (Spec, string) {
 	t.Helper()
 	mark := filepath.Join(t.TempDir(), "hup")
-	script := "trap 'echo reloaded >> " + mark + "' HUP; while :; do sleep 0.1; done"
+	// The trap comes first and the ready mark after it, so a signal sent once
+	// the mark exists cannot land on a shell with the default disposition.
+	script := "trap 'echo reloaded >> " + mark + "' HUP; echo ready > " + mark + ".ready; while :; do sleep 0.1; done"
 	return Spec{
 		Name: name, Description: "supervisor reload e2e",
 		Exec: []string{"/bin/sh", "-c", script}, Restart: RestartNo, StopTimeout: 3 * time.Second,
 	}, mark
 }
 
-func waitMark(t *testing.T, mark string) {
+func waitFile(t *testing.T, path, want string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if body, err := os.ReadFile(mark); err == nil && strings.Contains(string(body), "reloaded") {
+		if body, err := os.ReadFile(path); err == nil && strings.Contains(string(body), want) {
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("the daemon never saw the SIGHUP")
+	t.Fatalf("%s never contained %q", path, want)
 }
 
 func TestExecBackendReloadSignalsWithoutRestarting(t *testing.T) {
@@ -53,11 +55,12 @@ func TestExecBackendReloadSignalsWithoutRestarting(t *testing.T) {
 	if err := b.Ensure(ctx, spec); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
+	waitFile(t, mark+".ready", "ready")
 	before, _ := b.Status(ctx, spec.Name)
 	if err := b.Reload(ctx, spec.Name); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
-	waitMark(t, mark)
+	waitFile(t, mark, "reloaded")
 	if after, _ := b.Status(ctx, spec.Name); after.PID != before.PID || after.State != StateRunning {
 		t.Fatalf("a reload replaced the daemon: %+v -> %+v", before, after)
 	}
@@ -72,10 +75,11 @@ func TestSystemdBackendReloadSignalsWithoutRestarting(t *testing.T) {
 		t.Fatalf("Ensure: %v", err)
 	}
 	before := waitState(t, b, spec.Name, StateRunning)
+	waitFile(t, mark+".ready", "ready")
 	if err := b.Reload(ctx, spec.Name); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
-	waitMark(t, mark)
+	waitFile(t, mark, "reloaded")
 	if after, _ := b.Status(ctx, spec.Name); after.PID != before.PID || after.State != StateRunning {
 		t.Fatalf("a reload replaced the unit: %+v -> %+v", before, after)
 	}
