@@ -11,8 +11,10 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	osuser "os/user"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -21,6 +23,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/core/coretest"
 	"github.com/Arman2122/p-ui/internal/radius"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 )
 
 // The e2e half needs root, the daemon, the plugin and a network namespace for
@@ -252,7 +255,52 @@ ends the session.
 */
 func TestRealTrafficIsBilledAndSeen(t *testing.T) {
 	bin := e2eGate(t)
-	c := newE2ECore(t, bin)
+	realTraffic(t, bin, newE2ECore(t, bin))
+}
+
+/*
+The same tunnel under the backend production runs: a transient systemd unit
+as p-ui-core with the two ambient capabilities, the state directory group-owned
+by that user. This proves the daemon user can read its identity, write its
+status, socket and ccd entries, and open the tun device.
+*/
+func TestRealTrafficUnderSystemd(t *testing.T) {
+	bin := e2eGate(t)
+	backend, err := supervisor.NewSystemd(context.Background())
+	if err != nil {
+		t.Skip("no systemd: ", err)
+	}
+	t.Cleanup(func() { _ = backend.Close() })
+	daemon, err := osuser.Lookup("p-ui-core")
+	if err != nil {
+		t.Skip("no p-ui-core user: ", err)
+	}
+	gid, _ := strconv.Atoi(daemon.Gid)
+	// t.TempDir is root's and 0700; the daemon user must traverse into its dir.
+	dir, err := os.MkdirTemp("", "pui-ovpn-systemd-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := radius.New(radius.NewSecret(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close() })
+	c := New(Deps{Radius: srv, Binary: bin, StateDir: dir, Backend: backend, User: daemon.Username, Group: gid})
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log(shellOut("journalctl -u " + supervisor.UnitName(string(ID), 2) + " --no-pager -n 40 2>&1"))
+		}
+	})
+	realTraffic(t, bin, c)
+}
+
+func realTraffic(t *testing.T, bin string, c *Core) {
+	t.Helper()
 	t.Cleanup(func() { _ = c.StopAll(context.Background()) })
 	port := freeUDPPort(t)
 	inst := withClientKeys(t, c, core.Instance{ID: 2, Kind: Kind, Tag: "ovpn-2", Listen: "", Port: port, Enable: true, Settings: mintedSettings(t, c, "10.214.0.0/24"), Users: []core.User{e2eUser(1)}})

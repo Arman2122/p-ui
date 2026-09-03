@@ -277,6 +277,11 @@ func (c *Core) writeFilesLocked(cur *instance) error {
 		if err := os.MkdirAll(dir, 0o770); err != nil {
 			return err
 		}
+		// MkdirAll is subject to the umask; the daemon user must create its log,
+		// status file, socket and ccd entries here, so the mode is set explicitly.
+		if err := os.Chmod(dir, 0o770); err != nil {
+			return err
+		}
 		if err := c.chgrp(dir); err != nil {
 			return err
 		}
