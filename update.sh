@@ -1065,6 +1065,7 @@ EOF
 # the core reports it at preflight and every other core keeps working.
 install_openvpn_packages() {
     if ! dpkg -s openvpn > /dev/null 2>&1 || ! dpkg -s openvpn-auth-radius > /dev/null 2>&1; then
+        apt-get update -q > /dev/null 2>&1
         apt-get install -y -q openvpn openvpn-auth-radius > /dev/null 2>&1 \
             || echo -e "${yellow}Could not install openvpn and openvpn-auth-radius; the OpenVPN core stays unavailable until they are${plain}"
     fi
