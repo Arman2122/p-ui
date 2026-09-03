@@ -30,7 +30,7 @@ func (s *recordingSink) Authenticate(_ context.Context, username, password strin
 	if password != s.password {
 		return Verdict{Reason: "wrong password"}
 	}
-	return Verdict{Accept: true, FramedIP: netip.MustParseAddr("10.9.0.7")}
+	return Verdict{Accept: true, FramedIP: netip.MustParseAddr("10.9.0.7"), InterimSeconds: 30}
 }
 
 func (s *recordingSink) Account(_ context.Context, ev Event) {
@@ -92,9 +92,17 @@ and a daemon nobody registered is rejected however right its password.
 */
 func TestAccessRequestIsAnsweredByTheNASsSink(t *testing.T) {
 	srv, sink := newTestServer(t)
+	var rejectMu sync.Mutex
 	var rejected []string
 	srv.Rejected = func(nasID, username string, peer Peer, reason string) {
+		rejectMu.Lock()
+		defer rejectMu.Unlock()
 		rejected = append(rejected, nasID+"|"+username+"|"+peer.Source.String()+"|"+reason)
+	}
+	readRejected := func() []string {
+		rejectMu.Lock()
+		defer rejectMu.Unlock()
+		return append([]string(nil), rejected...)
 	}
 	nas := NASIdentifier("openvpn", 4)
 
@@ -105,13 +113,16 @@ func TestAccessRequestIsAnsweredByTheNASsSink(t *testing.T) {
 	if ip := rfc2865.FramedIPAddress_Get(resp); ip.String() != "10.9.0.7" {
 		t.Fatalf("Framed-IP-Address = %v, want the sink's 10.9.0.7", ip)
 	}
+	if got := rfc2869.AcctInterimInterval_Get(resp); got != 30 {
+		t.Fatalf("Acct-Interim-Interval = %d, want 30: without it the NAS reports only at disconnect", got)
+	}
 
 	resp = exchange(t, srv.AuthAddr(), accessRequest("s3cret-host", nas, "alice", "nope"))
 	if resp.Code != radius.CodeAccessReject || rfc2865.ReplyMessage_GetString(resp) != "wrong password" {
 		t.Fatalf("wrong password: %v %q, want Access-Reject with the reason", resp.Code, rfc2865.ReplyMessage_GetString(resp))
 	}
-	if len(rejected) != 1 || rejected[0] != nas+"|alice|203.0.113.7|wrong password" {
-		t.Fatalf("rejections reported: %v", rejected)
+	if r := readRejected(); len(r) != 1 || r[0] != nas+"|alice|203.0.113.7|wrong password" {
+		t.Fatalf("rejections reported: %v", r)
 	}
 
 	resp = exchange(t, srv.AuthAddr(), accessRequest("s3cret-host", NASIdentifier("openvpn", 99), "alice", "open-sesame"))
