@@ -687,7 +687,24 @@ func (s *SubService) GetLink(inbound *model.Inbound, email string) string {
 	if carriesWireguardClient(inbound.Protocol) {
 		return s.genWireguardLink(inbound, email)
 	}
-	return ""
+	return s.shareURI(inbound, email)
+}
+
+// shareURI asks the core that renders this kind's file whether it also has a
+// URI the list can carry; the registry answers, so no kind is named here.
+func (s *SubService) shareURI(inbound *model.Inbound, email string) string {
+	if !cores.SharesFile(core.Kind(inbound.Protocol)) {
+		return ""
+	}
+	client, ok := s.clientForLink(inbound, email)
+	if !ok {
+		return ""
+	}
+	share, renders, err := cores.ClientShare(instanceForShare(inbound), userForShare(client), s.resolveInboundAddress(inbound))
+	if err != nil || !renders {
+		return ""
+	}
+	return share.URI
 }
 
 // genWireguardLink builds a per-client wireguard:// share link mirroring the

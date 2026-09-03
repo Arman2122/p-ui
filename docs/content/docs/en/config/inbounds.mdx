@@ -72,6 +72,7 @@ The inbound editor accepts these protocols:
 | **Mixed (SOCKS/HTTP)** | A combined SOCKS + HTTP listener.                                        |
 | **Dokodemo-door / Tunnel** | Port forwarding / traffic redirect.                                 |
 | **MTProto**            | Telegram MTProto proxy, served by a bundled `mtg` process (not Xray).    |
+| **SSH**                | An SSH server built into the panel (not sshd): TCP, WebSocket or WebSocket over TLS. See below. |
 | **Kernel WireGuard**   | Selected as `wgkernel`. Served by the host kernel over netlink, not Xray. Needs host setup — see below. |
 
 <Callout type="info">
@@ -234,6 +235,42 @@ id is never reused.
 - **Do not add your own routes on a `pwg<id>` device.** Reconciliation owns that
   device's route table and removes routes it did not install. Put extra routes
   on another interface.
+
+## SSH (`ssh`)
+
+An SSH server built into the panel, not sshd. It offers `direct-tcpip`
+forwards, the dynamic (SOCKS) forwarding every SSH client app uses, on one of
+three transports per inbound:
+
+- **TCP** — a plain SSH port.
+- **WebSocket (HTTP)** — one port that answers both the bare `101` upgrade the
+  HTTP Injector family sends (raw SSH follows the status line) and a real
+  RFC 6455 upgrade, so a CDN can sit in front. A **path** limits what is
+  accepted; empty accepts any.
+- **WebSocket over TLS** — the same over TLS, with the certificate and key
+  files named on the inbound. The pair is re-read when it changes, so a renewal
+  needs no restart.
+
+To share port 443 with REALITY, keep this inbound on a local port and point an
+Xray inbound's fallback (with a path) at it.
+
+Each client gets a **username** — a short login name; an email is not one,
+since `@` breaks `ssh://` links and Injector payloads — and a **password**,
+both minted when left empty. The panel enforces, inside the server:
+
+- **Quota and expiry**: a depleted or expired client is refused, and its open
+  sessions are closed.
+- **IP limit**: counted as distinct source addresses at login, so the extra
+  device is refused before it connects. Sessions are also reported with their
+  source, so the IP-limit job sees them like every other core's.
+- **Speed plan**: applied as a per-client rate on every forward, both
+  directions. This is the first kind outside the kernel-WireGuard family whose
+  clients carry a rate, because the server counts the bytes itself.
+
+The client's config is served as a text file through the subscription file
+route (host, port, username, password, transport, path and the Injector payload
+template), and the subscription list carries an `ssh://` link for the apps that
+import one. Forwards are **TCP only**; UDP does not pass through this inbound.
 
 ## Fallbacks — multiple protocols on one port
 

@@ -257,6 +257,25 @@ type ShapingHost interface {
 	ShapingTargets(ctx context.Context, inst Instance) (ShapingTarget, error)
 }
 
+// RateLimit is what one client may push right now, per direction, in bits per
+// second from the client's side; 0 is unlimited. The mirror of policy.Limits.
+type RateLimit struct{ UpBps, DownBps int64 }
+
+/*
+RateEnforcer applies a per-user rate INSIDE the core, for a core whose users
+share one socket set and so can never be shaped on a device (SelectorNone).
+
+The complement of ShapingHost, not an alternative to it: a core answers one or
+the other. Like ShapingHost it is an enforcement primitive and never a policy —
+the panel evaluates the ladder and hands over the number. An email absent from
+limits is unlimited, so a cleared plan is one more call, not a special case.
+*/
+type RateEnforcer interface {
+	// EnforcesRates is per-kind and static, so a form can gate its speed fields.
+	EnforcesRates(kind Kind) bool
+	EnforceRates(ctx context.Context, inst Instance, limits map[string]RateLimit) error
+}
+
 // Session is one client's live connection as its core can see it.
 type Session struct {
 	Email string
@@ -347,6 +366,9 @@ type Share struct {
 	Kind     string `json:"kind"`
 	Filename string `json:"filename,omitempty"`
 	Body     string `json:"body"`
+	// URI is the link a subscription list can carry for this share when the
+	// client apps have one (ssh://); empty for a share that is only a file.
+	URI string `json:"uri,omitempty"`
 }
 
 /*

@@ -42,6 +42,9 @@ const (
 	// implemented; that gap is what stopped tun inbounds being served once the
 	// runtime resolved cores by protocol.
 	Tun Protocol = "tun"
+	// SSH is the in-process SSH server: direct-tcpip forwards over TCP, a bare
+	// or framed WebSocket, or WSS. Not sshd, and no daemon behind it.
+	SSH Protocol = "ssh"
 )
 
 // User represents a user account in the Penhoon UI panel.

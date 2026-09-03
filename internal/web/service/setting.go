@@ -159,6 +159,7 @@ var defaultValueMap = map[string]string{
 	"smtpMemory":        "80",
 	"smtpLastError":     "",
 	"smtpLastErrorAt":   "0",
+	"sshHostKey":        "",
 
 	// Consecutive failed observatory probes before an outbound.down event fires
 	"outboundDownThreshold": "3",
@@ -1114,6 +1115,12 @@ func (s *SettingService) SetTgEnabledEvents(events string) error {
 func (s *SettingService) GetSmtpEnabledEvents() (string, error) {
 	return s.getString("smtpEnabledEvents")
 }
+
+// GetSSHHostKey and SetSSHHostKey keep the SSH core's host key, per node and
+// never synced: a node's fingerprint is its own.
+func (s *SettingService) GetSSHHostKey() (string, error) { return s.getString("sshHostKey") }
+
+func (s *SettingService) SetSSHHostKey(pem string) error { return s.setString("sshHostKey", pem) }
 
 func (s *SettingService) GetSmtpLastError() (string, int64, error) {
 	msg, err := s.getString("smtpLastError")

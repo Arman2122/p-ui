@@ -24,6 +24,7 @@ const WG_CORE: CoreView = {
   clientCredentials: {},
   shaping: { wgkernel: 'innerIP' },
   sessionKinds: [],
+  rateKinds: [],
   portlessKinds: [],
 };
 

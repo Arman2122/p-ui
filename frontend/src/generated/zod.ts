@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const OnlineAPISupportSchema = z.number().int();
 export type OnlineAPISupport = z.infer<typeof OnlineAPISupportSchema>;
 
-export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun'] as const;
+export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun', 'ssh'] as const;
 export const ProtocolSchema = z.enum(PROTOCOL_VALUES);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
@@ -383,6 +383,7 @@ export const CoreViewSchema = z.object({
   id: z.string(),
   kinds: z.array(z.string()),
   portlessKinds: z.array(z.string()),
+  rateKinds: z.array(z.string()),
   sessionKinds: z.array(z.string()),
   shaping: z.record(z.string(), z.string()),
   titleKey: z.string(),
@@ -527,7 +528,7 @@ export const InboundSchema = z.object({
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
   port: z.number().int().min(0).max(65535),
-  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun']),
+  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun', 'ssh']),
   remark: z.string(),
   settings: z.unknown(),
   shareAddr: z.string(),

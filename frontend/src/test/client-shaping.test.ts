@@ -15,6 +15,7 @@ const CORES: CoreView[] = [
     clientCredentials: {},
     shaping: { wgkernel: 'innerIP' },
     sessionKinds: [],
+    rateKinds: [],
     portlessKinds: [],
   },
   {
@@ -28,6 +29,7 @@ const CORES: CoreView[] = [
     clientCredentials: { vless: ['uuid'] },
     shaping: {},
     sessionKinds: [],
+    rateKinds: [],
     portlessKinds: [],
   },
 ];

@@ -373,6 +373,9 @@ export const EXAMPLES: Record<string, unknown> = {
     "portlessKinds": [
       "tun"
     ],
+    "rateKinds": [
+      "ssh"
+    ],
     "sessionKinds": [
       "vless",
       "wgkernel"

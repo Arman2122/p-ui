@@ -470,6 +470,18 @@
         "mtgProxyProtocolListener": "Accept PROXY protocol (listener)",
         "mtgPreferIp": "IP preference",
         "mtgDebug": "Debug logging",
+        "sshTransport": "Transport",
+        "sshTransportHint": "Plain TCP; WebSocket, which answers both the bare 101 upgrade the HTTP Injector family sends and a framed RFC 6455 upgrade for a CDN in front; or WebSocket over TLS. To share port 443 with REALITY, point an Xray inbound's fallback at this port.",
+        "sshTransport_tcp": "TCP",
+        "sshTransport_ws": "WebSocket (HTTP)",
+        "sshTransport_wss": "WebSocket over TLS",
+        "sshPath": "Path",
+        "sshPathHint": "The HTTP path a client must request; empty accepts any.",
+        "sshCertFile": "Certificate file",
+        "sshKeyFile": "Key file",
+        "sshBanner": "Banner",
+        "sshBannerHint": "Shown to a client that opens a shell; nothing is ever executed.",
+        "sshTcpOnly": "An SSH forward carries TCP only; UDP does not pass through this inbound.",
         "mtgRouteThroughXray": "Route through Xray",
         "mtgRouteThroughXrayHint": "Send this proxy's Telegram traffic through Xray so it follows your routing rules. The mtg sidecar dials out via a loopback SOCKS bridge tagged with this inbound's tag; reference that tag in the Routing tab for advanced rules.",
         "mtgRouteOutbound": "Outbound",
@@ -970,6 +982,8 @@
       "wireguardPreSharedKey": "WireGuard Pre-Shared Key",
       "wireguardAllowedIPs": "WireGuard Allowed IPs",
       "wireguardAllowedIPsHint": "Leave empty to auto-assign; separate entries with commas",
+      "username": "Username",
+      "usernameDesc": "The SSH login name; leave empty to have one minted.",
       "mtprotoSecret": "MTProto secret",
       "mtprotoSecretHint": "The client's FakeTLS secret. Regenerate to rotate it.",
       "mtprotoAdTag": "Ad-tag (sponsored channel)",
@@ -2333,6 +2347,9 @@
     "statusUp": "UP"
   },
   "cores": {
+    "ssh": {
+      "title": "SSH"
+    },
     "mtproto": {
       "title": "MTProto"
     },

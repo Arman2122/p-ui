@@ -1812,6 +1812,13 @@ positive list of Xray's kinds). Still open: queued dispatch, the server-pushed e
 address, the subnet selector's consumer, and rate pushdown — each lands with the core
 that hits it.
 
+**Closed with the SSH core: rate pushdown for an in-process core.** `RateEnforcer` is
+ShapingHost's complement — a core whose users share one socket set throttles each client
+inside itself, fed by the policy job from the same ladders and committed usage the kernel
+shaping reads (`ConvergeRates`), and the core view carries `rateKinds` so the client form
+offers the speed fields. What stays open is the daemon-side half: handing a rate to ocserv
+or accel-ppp goes over RADIUS, and lands with the RADIUS server.
+
 
 ---
 

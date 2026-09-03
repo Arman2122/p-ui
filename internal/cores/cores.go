@@ -10,6 +10,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/amneziawg"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
+	"github.com/Arman2122/p-ui/internal/cores/internal/ssh"
 	"github.com/Arman2122/p-ui/internal/cores/internal/wireguard"
 	"github.com/Arman2122/p-ui/internal/cores/internal/xray"
 	engine "github.com/Arman2122/p-ui/internal/xray"
@@ -21,6 +22,13 @@ type Deps struct {
 	// XrayBaseConfig returns the Xray config with every section except inbounds
 	// filled in: routing, DNS and policy stay the panel's business.
 	XrayBaseConfig func() (*engine.Config, error)
+	// SSHHostKey and StoreSSHHostKey keep the in-process SSH server's host key
+	// where it survives a restart; nil mints a key that lasts one process.
+	SSHHostKey      func() (string, error)
+	StoreSSHHostKey func(pem string) error
+	// CoreAuthFailure hears every login a core refused, so the panel can alert
+	// and ban without the core knowing how.
+	CoreAuthFailure func(coreID string, instanceID int, username, ip, reason string)
 }
 
 /*
@@ -200,7 +208,21 @@ func Register(reg *core.Registry, deps Deps) error {
 	if err := reg.Register(wireguard.New()); err != nil {
 		return err
 	}
+	if err := reg.Register(ssh.New(sshDeps(deps))); err != nil {
+		return err
+	}
 	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))
+}
+
+// sshDeps narrows the panel-side facts to the ones the SSH core takes.
+func sshDeps(deps Deps) ssh.Deps {
+	out := ssh.Deps{LoadHostKey: deps.SSHHostKey, StoreHostKey: deps.StoreSSHHostKey}
+	if deps.CoreAuthFailure != nil {
+		out.AuthFailure = func(f ssh.AuthFailure) {
+			deps.CoreAuthFailure(string(ssh.ID), f.InstanceID, f.Username, f.IP, f.Reason)
+		}
+	}
+	return out
 }
 
 // Default builds the registry the panel runs with.

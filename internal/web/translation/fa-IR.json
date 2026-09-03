@@ -470,6 +470,18 @@
         "mtgProxyProtocolListener": "پذیرش پروتکل PROXY (شنونده)",
         "mtgPreferIp": "ترجیح IP",
         "mtgDebug": "گزارش اشکال‌زدایی",
+        "sshTransport": "انتقال",
+        "sshTransportHint": "TCP ساده؛ WebSocket که هم آپگرید ساده‌ی ۱۰۱ خانواده‌ی HTTP Injector را پاسخ می‌دهد و هم آپگرید فریم‌بندی‌شده‌ی RFC 6455 را برای CDN جلویی؛ یا WebSocket روی TLS. برای اشتراک پورت ۴۴۳ با REALITY، fallback یک ورودی Xray را به این پورت بدهید.",
+        "sshTransport_tcp": "TCP",
+        "sshTransport_ws": "WebSocket (HTTP)",
+        "sshTransport_wss": "WebSocket روی TLS",
+        "sshPath": "مسیر",
+        "sshPathHint": "مسیر HTTP که کلاینت باید درخواست کند؛ خالی یعنی هر مسیری.",
+        "sshCertFile": "فایل گواهی",
+        "sshKeyFile": "فایل کلید",
+        "sshBanner": "بنر",
+        "sshBannerHint": "به کلاینتی که شل باز می‌کند نشان داده می‌شود؛ هیچ فرمانی اجرا نمی‌شود.",
+        "sshTcpOnly": "فوروارد SSH فقط TCP را حمل می‌کند؛ UDP از این ورودی عبور نمی‌کند.",
         "mtgRouteThroughXray": "مسیریابی از طریق Xray",
         "mtgRouteThroughXrayHint": "ترافیک تلگرام این پراکسی را از طریق Xray بفرستید تا از قوانین مسیریابی شما پیروی کند. سرویس جانبی mtg از طریق یک پل SOCKS محلی که با تگ همین ورودی نشانه‌گذاری شده خارج می‌شود؛ برای قوانین پیشرفته در تب مسیریابی به همان تگ ارجاع دهید.",
         "mtgRouteOutbound": "خروجی",
@@ -970,6 +982,8 @@
       "wireguardPreSharedKey": "کلید پیش‌اشتراکی WireGuard",
       "wireguardAllowedIPs": "آی‌پی‌های مجاز WireGuard",
       "wireguardAllowedIPsHint": "برای تخصیص خودکار خالی بگذارید؛ ورودی‌ها را با کاما جدا کنید",
+      "username": "نام کاربری",
+      "usernameDesc": "نام ورود SSH؛ خالی بگذارید تا خودکار ساخته شود.",
       "mtprotoSecret": "سکرت MTProto",
       "mtprotoSecretHint": "سکرت FakeTLS این کلاینت. برای تعویض، دوباره تولید کنید.",
       "mtprotoAdTag": "برچسب تبلیغاتی (کانال حامی)",
@@ -2333,6 +2347,9 @@
     "statusUp": "وصل"
   },
   "cores": {
+    "ssh": {
+      "title": "SSH"
+    },
     "mtproto": {
       "title": "MTProto"
     },
