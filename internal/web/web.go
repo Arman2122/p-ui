@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/mtproto"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/crypto"
 	"github.com/Arman2122/p-ui/internal/util/sys"
@@ -149,6 +151,8 @@ type Server struct {
 	// cores is what supervision dispatches through, so shutdown stops a core
 	// because it is registered rather than because this file names it.
 	cores *core.Registry
+	// supervisor runs daemon cores; closed after they are stopped.
+	supervisor supervisor.Backend
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -637,7 +641,16 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	// add/update/delete to either the local xray or a remote node panel.
 	// The closures bridge into XrayService (which owns the running xray
 	// process state) without forcing the runtime package to import service.
+	backend, err := supervisor.Select(context.Background())
+	if err != nil {
+		return err
+	}
+	s.supervisor = backend
+	daemonUser, daemonGroup := daemonIdentity(backend)
 	registry, err := cores.Default(cores.Deps{
+		Supervisor:      backend,
+		DaemonUser:      daemonUser,
+		DaemonGroup:     daemonGroup,
 		XrayBaseConfig:  s.xrayService.GetXrayBaseConfig,
 		SSHHostKey:      s.settingService.GetSSHHostKey,
 		StoreSSHHostKey: s.settingService.SetSSHHostKey,
@@ -885,6 +898,24 @@ func (s *Server) publishCoreAuthFailure(coreID string, instanceID int, username,
 
 // stopCores stops the processes of every registered core. Registry-driven so a
 // core added later is stopped on shutdown without editing this file.
+// daemonIdentity is the p-ui-core user the installer made, when the backend can
+// switch to it; otherwise daemons keep the panel's own identity.
+func daemonIdentity(backend supervisor.Backend) (string, int) {
+	if backend.Name() != string(supervisor.ModeSystemd) {
+		return "", -1
+	}
+	u, err := user.Lookup("p-ui-core")
+	if err != nil {
+		logger.Warning("core daemons run as root: the p-ui-core user is missing (rerun install.sh to create it)")
+		return "", -1
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return "", -1
+	}
+	return u.Username, gid
+}
+
 func (s *Server) stopCores() {
 	if s.cores == nil {
 		return
@@ -896,6 +927,9 @@ func (s *Server) stopCores() {
 		if err := bound.Supervise.StopAll(context.Background()); err != nil {
 			logger.Warning("core", bound.Core.Describe().ID, "stop failed:", err)
 		}
+	}
+	if s.supervisor != nil {
+		_ = s.supervisor.Close()
 	}
 }
 

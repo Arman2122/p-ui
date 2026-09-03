@@ -483,6 +483,18 @@
         "sshBanner": "Banner",
         "sshBannerHint": "Shown to a client that opens a shell; nothing is ever executed.",
         "sshTcpOnly": "An SSH forward carries TCP only; UDP does not pass through this inbound.",
+        "singboxCertFile": "Certificate file",
+        "singboxKeyFile": "Key file",
+        "singboxServerName": "Server name",
+        "singboxServerNameHint": "The name clients verify the certificate against and put in their share link; empty uses the panel's address.",
+        "singboxAppliesLater": "Client changes on this protocol take effect within 10 seconds: sing-box applies a new user list by reloading its config.",
+        "singboxNoSpeedLimit": "No per-client speed limit on this protocol: sing-box has no rate control and its clients share one socket, so a speed plan does not apply here.",
+        "tuicCongestion": "Congestion control",
+        "tuicCongestionHint": "bbr suits lossy links; cubic and new_reno are the conservative choices.",
+        "tuicZeroRtt": "0-RTT handshake",
+        "tuicZeroRttHint": "Lets a returning client send data in its first packet. Faster, and replayable by design; leave off unless latency matters more.",
+        "anytlsPadding": "Padding scheme",
+        "anytlsPaddingHint": "One line per entry, in sing-box's padding-scheme syntax; empty keeps the built-in default.",
         "mtgRouteThroughXray": "Route through Xray",
         "mtgRouteThroughXrayHint": "Send this proxy's Telegram traffic through Xray so it follows your routing rules. The mtg sidecar dials out via a loopback SOCKS bridge tagged with this inbound's tag; reference that tag in the Routing tab for advanced rules.",
         "mtgRouteOutbound": "Outbound",
@@ -2363,6 +2375,9 @@
   "cores": {
     "ssh": {
       "title": "SSH"
+    },
+    "singbox": {
+      "title": "sing-box"
     },
     "mtproto": {
       "title": "MTProto"

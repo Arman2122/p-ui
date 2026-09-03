@@ -34,6 +34,7 @@ type Bound struct {
 	Shape         ShapingHost
 	Rate          RateEnforcer
 	Deferred      DeferredApplier
+	FileShare     FileShareDeclarer
 	Ingress       RoutableIngress
 	Egress        RoutableEgress
 	ExitSupervise ExitSupervisor
@@ -94,6 +95,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(DeferredApplier); ok {
 		b.Deferred = v
+	}
+	if v, ok := c.(FileShareDeclarer); ok {
+		b.FileShare = v
 	}
 	if v, ok := c.(RoutableIngress); ok {
 		b.Ingress = v

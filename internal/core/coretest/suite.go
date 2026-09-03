@@ -55,6 +55,10 @@ type Rig struct {
 	// off the device. Without it, a map the adapter invented cannot be told apart.
 	HostSubjects func() map[string][]string
 
+	// Settle forces a core that applies on its next pass (DeferredApplier) to
+	// take that pass now, so served users are read after the edit landed.
+	Settle func()
+
 	// FeedSession makes one session observable, so Sessions can be checked against
 	// something the suite controls rather than whatever happens to be live.
 	FeedSession func(email, source string, lastSeenUnixMilli int64)
@@ -63,6 +67,14 @@ type Rig struct {
 // Subject is the client the traffic and provisioning checks operate on. It is
 // fixed so a rig can pre-register it if its daemon needs users declared.
 const Subject = "a@example.com"
+
+// servedUsers reads the daemon after a deferred core has applied what it holds.
+func servedUsers(rig Rig) []string {
+	if rig.Settle != nil {
+		rig.Settle()
+	}
+	return rig.ServedUsers()
+}
 
 // SessionSource is the address the session checks drive. RFC 5737 documentation
 // space, so it can never collide with a real endpoint a rig's daemon reports.
@@ -571,7 +583,7 @@ func checkUsers(r *report, rig Rig, bound *core.Bound) {
 		r.fail("adduser/succeeds", "AddUser failed: %v", err)
 		return
 	}
-	if served := rig.ServedUsers(); !slices.Contains(served, extra.Email) {
+	if served := servedUsers(rig); !slices.Contains(served, extra.Email) {
 		r.fail("adduser/reaches-the-daemon", "after AddUser the daemon serves %v, without %q; the user cannot connect and nothing failed", served, extra.Email)
 	}
 
@@ -579,7 +591,7 @@ func checkUsers(r *report, rig Rig, bound *core.Bound) {
 		r.fail("removeuser/succeeds", "RemoveUser failed: %v", err)
 		return
 	}
-	if served := rig.ServedUsers(); slices.Contains(served, extra.Email) {
+	if served := servedUsers(rig); slices.Contains(served, extra.Email) {
 		r.fail("removeuser/reaches-the-daemon", "after RemoveUser the daemon still serves %v; a revoked client keeps connecting, which is how a depleted user keeps spending", served)
 	}
 }
@@ -607,8 +619,8 @@ func checkInstanceApply(r *report, rig Rig, bound *core.Bound) {
 		return
 	}
 	for _, u := range pair.Users {
-		if !slices.Contains(rig.ServedUsers(), u.Email) {
-			r.fail("apply/reaches-the-daemon", "after ApplyInstance the daemon serves %v, without %q", rig.ServedUsers(), u.Email)
+		if !slices.Contains(servedUsers(rig), u.Email) {
+			r.fail("apply/reaches-the-daemon", "after ApplyInstance the daemon serves %v, without %q", servedUsers(rig), u.Email)
 			return
 		}
 	}
@@ -619,7 +631,7 @@ func checkInstanceApply(r *report, rig Rig, bound *core.Bound) {
 		r.fail("apply/succeeds", "ApplyInstance with fewer users failed: %v", err)
 		return
 	}
-	if served := rig.ServedUsers(); slices.Contains(served, pair.Users[1].Email) {
+	if served := servedUsers(rig); slices.Contains(served, pair.Users[1].Email) {
 		r.fail("apply/replaces-rather-than-adds", "after applying a smaller user set the daemon still serves %v; ApplyInstance must converge on what it is given, not accumulate", served)
 	}
 

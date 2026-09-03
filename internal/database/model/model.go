@@ -45,6 +45,10 @@ const (
 	// SSH is the in-process SSH server: direct-tcpip forwards over TCP, a bare
 	// or framed WebSocket, or WSS. Not sshd, and no daemon behind it.
 	SSH Protocol = "ssh"
+
+	// TUIC and AnyTLS are served by the bundled sing-box, one process per inbound.
+	TUIC   Protocol = "tuic"
+	AnyTLS Protocol = "anytls"
 )
 
 // User represents a user account in the Penhoon UI panel.

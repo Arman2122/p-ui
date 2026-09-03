@@ -4,6 +4,8 @@ import {
   HysteriaClientSchema,
   MtprotoClientSchema,
   SshClientSchema,
+  TuicClientSchema,
+  AnytlsClientSchema,
   ShadowsocksClientSchema,
   TrojanClientSchema,
   VlessClientSchema,
@@ -265,6 +267,8 @@ function clientSchemaForProtocol(protocol: string): z.ZodType | null {
     case 'awgkernel': return WireguardClientSchema;
     case 'mtproto': return MtprotoClientSchema;
     case 'ssh': return SshClientSchema;
+    case 'tuic': return TuicClientSchema;
+    case 'anytls': return AnytlsClientSchema;
     default: return null;
   }
 }

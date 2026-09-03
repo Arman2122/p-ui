@@ -1992,3 +1992,47 @@ Until step 1 lands the interface has no implementer, which is the same state `Li
 is in: a declared slot the registry can already resolve, so adding it later is one method on
 one core rather than a change to the contract.
 
+
+### 12.5b The sing-box core (2026-09-03)
+
+Core #6, `internal/cores/internal/singbox/`, serves `tuic` and `anytls` with
+the bundled sing-box: one supervised process per inbound (§12.5a's
+`internal/supervisor`, as the `p-ui-core` user under systemd), a config the
+core renders and validates with `sing-box check`, per-user traffic from the
+`v2ray_api` stats service (the reason the release compiles upstream's tagged
+source with `with_v2ray_api` instead of downloading the published build), and
+live connections from the `api` service's `SubscribeConnections` stream, decoded
+with protowire so no generated types are vendored.
+
+What the contract learned from it:
+
+- **`DeferredApplier` is real now.** sing-box has no hot user add, so
+  `AddUser`/`RemoveUser`/`ApplyInstance` on a running daemon mark it dirty and
+  a coalesced pass ten seconds later rewrites the file and reloads. A daemon
+  not yet running starts at once, so a panel boot is not ten seconds of
+  downtime. `coretest.Rig.Settle` forces that pass, which is how the suite
+  still reads served users from the daemon rather than from the adapter.
+- **`Backend.Reload`.** A config-only change is a SIGHUP, not a unit restart;
+  the config hash stays out of the `Spec` so the unit hash is the process
+  identity and the file the config identity. sing-box rebuilds everything on
+  SIGHUP and zeroes its counters, so the core drains `user>>>*` through its
+  `Counter` under the old epoch first and hands the deltas out on the next
+  collect: a reload costs nothing already moved and bills nothing twice
+  (`TestRealTrafficIsBilledAndSeen` proves both over a real TUIC session).
+- **Control ports are the daemon's, not a band.** Each process gets two free
+  loopback ports at start (stats, API) and a fresh secret, all written into its
+  config; a daemon that outlived the panel is adopted by reading them back from
+  the file. Nothing is reserved, so no inbound is refused for a port the panel
+  merely might have wanted.
+- **Certificates under a daemon user.** The operator's pair is root 0600; the
+  core keeps a 0640 root:p-ui-core copy in `/var/lib/p-ui/singbox/<id>/`,
+  refreshed on change, and sing-box's own fsnotify watcher reloads it without
+  a SIGHUP.
+- **`FileShareDeclarer`.** `cores.SharesFile` assumed every `LinkRenderer`
+  serves a file; a `tuic://` link is the whole share, so a core can now say so.
+
+Deliberate v1 gaps, in the form and the CHANGELOG: no speed plan on these
+kinds (no `RateEnforcer`, no `ShapingHost`: sing-box has no per-user rate
+control and its clients share one socket), no `RoutableIngress` yet, and the
+conformance suite for this core runs only where a sing-box binary exists
+(`SINGBOX_E2E_BINARY`, the VM), so CI stays green without exercising it.

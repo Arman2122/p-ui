@@ -2278,7 +2278,9 @@ export const SCHEMAS: Record<string, unknown> = {
           "wgkernel",
           "awgkernel",
           "tun",
-          "ssh"
+          "ssh",
+          "tuic",
+          "anytls"
         ],
         "example": "vless",
         "type": "string"

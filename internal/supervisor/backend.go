@@ -44,6 +44,9 @@ type Backend interface {
 	Ensure(ctx context.Context, spec Spec) error
 	Status(ctx context.Context, name string) (Status, error)
 	Stop(ctx context.Context, name string) error
+	// Reload signals a running daemon to re-read its config (SIGHUP) without a
+	// restart; ErrNotRunning when there is nothing to signal.
+	Reload(ctx context.Context, name string) error
 	// List names every unit this backend runs under the panel's prefix, so a
 	// reconcile can stop what the desired set no longer contains.
 	List(ctx context.Context) ([]string, error)

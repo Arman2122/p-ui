@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	sd "github.com/coreos/go-systemd/v22/dbus"
@@ -138,6 +139,17 @@ func (s *Systemd) Ensure(ctx context.Context, spec Spec) error {
 	return s.await(ctx, unit, "start", func(ch chan<- string) (int, error) {
 		return s.conn.StartTransientUnitContext(ctx, unit, "replace", props, ch)
 	})
+}
+
+func (s *Systemd) Reload(ctx context.Context, name string) error {
+	cur, err := s.Status(ctx, name)
+	if err != nil {
+		return err
+	}
+	if cur.State != StateRunning {
+		return ErrNotRunning
+	}
+	return s.conn.KillUnitWithTarget(ctx, unitFile(name), sd.All, int32(syscall.SIGHUP))
 }
 
 func (s *Systemd) Stop(ctx context.Context, name string) error {

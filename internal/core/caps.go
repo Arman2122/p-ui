@@ -373,6 +373,12 @@ type LinkRenderer interface {
 	RenderClient(inst Instance, user User, host string) (Share, error)
 }
 
+// FileShareDeclarer says whether a kind's share is a file the subscription
+// serves by URL, or only a link; a LinkRenderer without it is taken as a file.
+type FileShareDeclarer interface {
+	SharesFile(kind Kind) bool
+}
+
 // Share is one deliverable client config.
 type Share struct {
 	Kind     string `json:"kind"`

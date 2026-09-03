@@ -1130,6 +1130,10 @@ export function getInboundClients(inbound: Inbound): ClientShape[] | null {
       return (inbound.settings.clients ?? []) as ClientShape[];
     case 'ssh':
       return (inbound.settings.clients ?? []) as ClientShape[];
+    case 'tuic':
+      return (inbound.settings.clients ?? []) as ClientShape[];
+    case 'anytls':
+      return (inbound.settings.clients ?? []) as ClientShape[];
     case 'shadowsocks': {
       const isMultiUser = inbound.settings.method !== '2022-blake3-chacha20-poly1305';
       return isMultiUser ? ((inbound.settings.clients ?? []) as ClientShape[]) : null;
@@ -1194,9 +1198,45 @@ export function genLink(input: GenLinkInput): string {
       });
     case 'mtproto':
       return genMtprotoLink({ inbound, address, port, clientSecret: client.secret ?? '' });
+    case 'tuic':
+      return genTuicLink({ inbound, address, port, remark, clientId: client.id ?? '', clientPassword: client.password ?? '', email: client.email ?? '' });
+    case 'anytls':
+      return genAnytlsLink({ inbound, address, port, remark, clientPassword: client.password ?? '', email: client.email ?? '' });
     default:
       return '';
   }
+}
+
+/* The two sing-box links, spelled the way the Go renderer spells them
+   (internal/cores/internal/singbox/settings.go): the subscription serves that
+   one, and this copy must never disagree with it. */
+function singboxSni(inbound: Inbound, address: string): string {
+  const st = inbound.settings as { serverName?: string };
+  return st.serverName || address;
+}
+
+export function genTuicLink(input: {
+  inbound: Inbound; address: string; port: number; remark: string; clientId: string; clientPassword: string; email: string;
+}): string {
+  const { inbound, address, port, remark, clientId, clientPassword, email } = input;
+  const st = inbound.settings as { congestionControl?: string };
+  const q = new URLSearchParams();
+  q.set('alpn', 'h3');
+  q.set('congestion_control', st.congestionControl || 'bbr');
+  q.set('sni', singboxSni(inbound, address));
+  q.set('udp_relay_mode', 'native');
+  const tag = remark || `${inbound.remark}-${email}`;
+  return `tuic://${encodeURIComponent(clientId)}:${encodeURIComponent(clientPassword)}@${address}:${port}?${q.toString()}#${encodeURIComponent(tag)}`;
+}
+
+export function genAnytlsLink(input: {
+  inbound: Inbound; address: string; port: number; remark: string; clientPassword: string; email: string;
+}): string {
+  const { inbound, address, port, remark, clientPassword, email } = input;
+  const q = new URLSearchParams();
+  q.set('sni', singboxSni(inbound, address));
+  const tag = remark || `${inbound.remark}-${email}`;
+  return `anytls://${encodeURIComponent(clientPassword)}@${address}:${port}?${q.toString()}#${encodeURIComponent(tag)}`;
 }
 
 export interface GenAllLinksEntry {

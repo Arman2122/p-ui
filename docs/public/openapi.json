@@ -2326,7 +2326,9 @@
               "wgkernel",
               "awgkernel",
               "tun",
-              "ssh"
+              "ssh",
+              "tuic",
+              "anytls"
             ],
             "example": "vless",
             "type": "string"

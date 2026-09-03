@@ -9,6 +9,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/util/proc"
@@ -79,6 +80,18 @@ func (e *Exec) Status(_ context.Context, name string) (Status, error) {
 		return Status{State: StateStopped}, ErrNotRunning
 	}
 	return unit.status(), nil
+}
+
+func (e *Exec) Reload(_ context.Context, name string) error {
+	e.mu.Lock()
+	cur, ok := e.units[name]
+	e.mu.Unlock()
+	if !ok || !cur.running() {
+		return ErrNotRunning
+	}
+	cur.mu.RLock()
+	defer cur.mu.RUnlock()
+	return cur.cmd.Process.Signal(syscall.SIGHUP)
 }
 
 func (e *Exec) Stop(_ context.Context, name string) error {

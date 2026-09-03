@@ -272,6 +272,49 @@ route (host, port, username, password, transport, path and the Injector payload
 template), and the subscription list carries an `ssh://` link for the apps that
 import one. Forwards are **TCP only**; UDP does not pass through this inbound.
 
+## TUIC (`tuic`) and AnyTLS (`anytls`)
+
+Two protocols Xray does not serve, run by the bundled **sing-box**: one
+sing-box process per inbound, supervised by systemd as the `p-ui-core` user
+(a system user with no shell that the installer creates) and kept alive
+across panel restarts and updates. The binary is compiled from upstream's
+tagged source at release time, because the published build omits the stats
+service the panel bills from; nothing in it is patched.
+
+- **TUIC** rides on QUIC over **UDP**, with the congestion control you pick
+  (`bbr` for lossy links) and an optional 0-RTT handshake. Each client has a
+  **uuid** and a **password**.
+- **AnyTLS** is TLS over **TCP** with a padding scheme; each client has a
+  **password**.
+
+Both are TLS-only, so the certificate and key files are named on the inbound
+along with the server name clients verify. The daemon reads the panel's own
+copy of the pair, which it can open as its user; a renewed certificate is
+picked up without a restart.
+
+What the panel enforces, and how:
+
+- **Quota and expiry**: a depleted or expired client is disabled and the
+  daemon reloads without it. Per-client traffic comes from sing-box's stats
+  API; the counters are drained before every reload, so a reload costs
+  nothing that was already moved.
+- **IP limit**: live connections are read from sing-box's daemon API with
+  their source, so the IP-limit job sees them like every other core's.
+- **Speed plan: not available.** sing-box has no per-user rate control and
+  its clients share one socket, so a speed plan does not apply on these
+  kinds; the form says so.
+
+Client edits land on the daemon's next pass, **within 10 seconds**: sing-box
+has no hot user add, so an edit is a config rewrite and a reload, coalesced.
+The save tells you when that is the case. A change to the port, the address
+or the TLS pair restarts the process.
+
+The subscription carries a `tuic://` or `anytls://` link the client apps
+import (sing-box, Clash Meta, NekoBox, v2rayN). QUIC needs larger socket
+buffers than the kernel default; the installer sets them in
+`/etc/sysctl.d/99-p-ui-quic.conf`.
+
+
 ## Fallbacks — multiple protocols on one port
 
 Fallbacks let a single TLS port (e.g. `443`) serve more than one protocol — for

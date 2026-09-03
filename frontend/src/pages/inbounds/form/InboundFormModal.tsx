@@ -70,6 +70,8 @@ import {
   MixedFields,
   MtprotoFields,
   SshFields,
+  TuicFields,
+  AnytlsFields,
   ShadowsocksFields,
   TunFields,
   TunnelFields,
@@ -766,6 +768,10 @@ export default function InboundFormModal({
 
       {protocol === Protocols.SSH && <SshFields />}
 
+      {protocol === Protocols.TUIC && <TuicFields />}
+
+      {protocol === Protocols.ANYTLS && <AnytlsFields />}
+
       {protocol === Protocols.SHADOWSOCKS && <ShadowsocksFields isSSWith2022={isSSWith2022} />}
 
       {protocol === Protocols.VLESS && <VlessFields saving={saving} selectedVlessAuth={selectedVlessAuth} vlessAuthKind={vlessAuthKind} network={network} security={security} getNewVlessEnc={getNewVlessEnc} clearVlessEnc={clearVlessEnc} />}
@@ -1062,6 +1068,8 @@ export default function InboundFormModal({
                 Protocols.AWGKERNEL,
                 Protocols.MTPROTO,
                 Protocols.SSH,
+                Protocols.TUIC,
+                Protocols.ANYTLS,
               ] as string[]).includes(protocol) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]
                 : []),

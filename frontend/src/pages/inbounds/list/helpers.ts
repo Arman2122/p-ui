@@ -74,6 +74,8 @@ export function isInboundMultiUser(record: { protocol: string; settings: unknown
     case 'hysteria':
     case 'mtproto':
     case 'ssh':
+    case 'tuic':
+    case 'anytls':
     case 'wireguard':
     case 'wgkernel':
     case 'awgkernel':

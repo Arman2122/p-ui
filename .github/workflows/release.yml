@@ -72,6 +72,7 @@ jobs:
       - name: Build P-UI
         run: |
           CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
+          SINGBOX_VER="v1.14.0"
           # 403 is in the retry list because that is what the release CDN answers
           # when seven matrix legs pull the same assets at once; -nv keeps the URL
           # and status in the log, where -q left only wget's bare exit 8.
@@ -182,6 +183,20 @@ jobs:
               rm -rf "${MTG_PKG}" "${MTG_PKG}.tar.gz"
               ;;
           esac
+          # sing-box is compiled from upstream's tagged source, not downloaded:
+          # the published binary omits the v2ray_api service the panel bills
+          # per-user traffic from, and that is one build tag, not a fork. The
+          # module proxy plus the checksum database verify the source; GOARCH
+          # and GOARM are already exported above, so this leg cross-compiles the
+          # same way the panel does. internal/arch pins SINGBOX_VER to the
+          # version the sing-box core expects. Named by GOARCH like mtg, so the
+          # panel resolves it without an installer rename.
+          GOBIN="$PWD/.singbox" go install -trimpath \
+            -tags with_v2ray_api,with_quic,with_utls,with_clash_api,with_acme \
+            -ldflags "-s -w -X github.com/sagernet/sing-box/constant.Version=${SINGBOX_VER#v}" \
+            "github.com/sagernet/sing-box/cmd/sing-box@${SINGBOX_VER}"
+          mv "$(find .singbox -type f -name sing-box)" "sing-box-linux-${GOARCH}"
+          rm -rf .singbox
           cd ../..
 
       - name: Package

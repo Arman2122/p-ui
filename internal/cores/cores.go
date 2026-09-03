@@ -11,9 +11,11 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/amneziawg"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
+	"github.com/Arman2122/p-ui/internal/cores/internal/singbox"
 	"github.com/Arman2122/p-ui/internal/cores/internal/ssh"
 	"github.com/Arman2122/p-ui/internal/cores/internal/wireguard"
 	"github.com/Arman2122/p-ui/internal/cores/internal/xray"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 	engine "github.com/Arman2122/p-ui/internal/xray"
 )
 
@@ -30,6 +32,11 @@ type Deps struct {
 	// CoreAuthFailure hears every login a core refused, so the panel can alert
 	// and ban without the core knowing how.
 	CoreAuthFailure func(coreID string, instanceID int, username, ip, reason string)
+	// Supervisor runs daemon cores; nil runs them as children of the panel.
+	// DaemonUser and DaemonGroup are the identity they get under systemd.
+	Supervisor  supervisor.Backend
+	DaemonUser  string
+	DaemonGroup int
 }
 
 /*
@@ -95,7 +102,13 @@ func ClientShare(inst core.Instance, user core.User, host string) (core.Share, b
 // the sub server then serves under /file/<inbound id>. URI-only kinds do not.
 func SharesFile(kind core.Kind) bool {
 	bound, ok := kindOwners().For(kind)
-	return ok && bound.Link != nil
+	if !ok || bound.Link == nil {
+		return false
+	}
+	if bound.FileShare != nil {
+		return bound.FileShare.SharesFile(kind)
+	}
+	return true
 }
 
 // TransportAuthority is the core that answers what one kind binds, when any
@@ -210,6 +223,9 @@ func Register(reg *core.Registry, deps Deps) error {
 		return err
 	}
 	if err := reg.Register(ssh.New(sshDeps(deps))); err != nil {
+		return err
+	}
+	if err := reg.Register(singbox.New(singbox.Deps{Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup})); err != nil {
 		return err
 	}
 	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))

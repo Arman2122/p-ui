@@ -5,6 +5,8 @@ import type { HysteriaClient, HysteriaInboundSettings } from '@/schemas/protocol
 import type { MixedInboundSettings } from '@/schemas/protocols/inbound/mixed';
 import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/inbound/mtproto';
 import type { SshInboundSettings } from '@/schemas/protocols/inbound/ssh';
+import type { TuicInboundSettings } from '@/schemas/protocols/inbound/tuic';
+import type { AnytlsInboundSettings } from '@/schemas/protocols/inbound/anytls';
 import type { ShadowsocksClient, ShadowsocksInboundSettings } from '@/schemas/protocols/inbound/shadowsocks';
 import type { TrojanClient, TrojanInboundSettings } from '@/schemas/protocols/inbound/trojan';
 import type { TunInboundSettings } from '@/schemas/protocols/inbound/tun';
@@ -219,6 +221,14 @@ export function createDefaultSshInboundSettings(): SshInboundSettings {
   return { transport: 'tcp', path: '', certFile: '', keyFile: '', banner: '', clients: [] };
 }
 
+export function createDefaultTuicInboundSettings(): TuicInboundSettings {
+  return { certFile: '', keyFile: '', serverName: '', congestionControl: 'bbr', zeroRttHandshake: false, clients: [] };
+}
+
+export function createDefaultAnytlsInboundSettings(): AnytlsInboundSettings {
+  return { certFile: '', keyFile: '', serverName: '', paddingScheme: [], clients: [] };
+}
+
 export function createDefaultMtprotoInboundSettings(): MtprotoInboundSettings {
   return {
     fakeTlsDomain: 'www.cloudflare.com',
@@ -307,7 +317,9 @@ export type AnyInboundSettings =
   | WireguardInboundSettings
   | WgkernelInboundSettings
   | MtprotoInboundSettings
-  | SshInboundSettings;
+  | SshInboundSettings
+  | TuicInboundSettings
+  | AnytlsInboundSettings;
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
@@ -325,6 +337,8 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
     case 'awgkernel':   return createDefaultWgkernelInboundSettings();
     case 'mtproto':     return createDefaultMtprotoInboundSettings();
     case 'ssh':         return createDefaultSshInboundSettings();
+    case 'tuic':        return createDefaultTuicInboundSettings();
+    case 'anytls':      return createDefaultAnytlsInboundSettings();
     default:            return null;
   }
 }
