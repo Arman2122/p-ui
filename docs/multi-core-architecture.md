@@ -8,9 +8,9 @@
 > landed, what it deliberately did not, and what is still a proposal. Companion to
 > `docs/architecture.md`, which describes the system as it is today.
 >
-> Every measurement in §2 was taken against the working tree at `02bc8dcc`, before any phase
+> Every measurement in §2 was taken against the working tree at `44fdf291`, before any phase
 > landed, and is kept as the baseline the refactor is judged against. Everything else was
-> re-verified against `e2478640`. §11 is the one section written as a **target**; it says so.
+> re-verified against `0ee48647`. §11 is the one section written as a **target**; it says so.
 
 ---
 
@@ -370,7 +370,7 @@ at least once. **There must be exactly one.**
 
 P2 deleted the mtproto copy: the manager now feeds raw cumulative readings to `core.Counter`
 and the bug is gone, with `TestCollectTrafficSurvivesAnMtgRestart` covering both restart
-signals. The xray copy followed (dc375f93, 2026-08-04): `XrayAPI` holds a `core.Counter`
+signals. The xray copy followed (61dea825, 2026-08-04): `XrayAPI` holds a `core.Counter`
 (`api.go:58`) and `GetTraffic` feeds it raw cumulative stats (`api.go:780`). Xray's stats
 carry no incarnation token, so a panel-caused restart arrives out of band through
 `NoteCoreRestart` and a reset counter is caught by the backwards-counter backstop. The one
@@ -442,7 +442,7 @@ pinned by a test in `counter_test.go`:
   directions.** The old prune dropped a baseline after one missing reading, and a partial
   scrape mid-reload re-billed a live subject its whole counter; this section then
   over-corrected to "never expire automatically", which grows the map with every subject
-  ever seen. As shipped (7d10dda2, 2026-08-04): a baseline is dropped after
+  ever seen. As shipped (1a4c83cd, 2026-08-04): a baseline is dropped after
   `baselineGrace = 10` consecutive readings without its key (`counter.go:30`) — 50 s at
   Xray's poll, 100 s at mtg's, far longer than any reload — and a reading with no subjects
   at all is evidence about nothing, so it counts no absences. `Counter.Forget` stays the
@@ -464,7 +464,7 @@ prescribed here; one resolved sideways, one half-landed:
   reconcile is the durable shape; the direct call is the residue.
 - Pushdown exists at both ends for mtg and neither for anyone else. `[secret-limits]`
   carries quota and expiry *into* the daemon at config render. The reverse edge shipped
-  2026-08-15 (a996a4e0): auto-renew clears the daemon-side counter through every core
+  2026-08-15 (153572b3): auto-renew clears the daemon-side counter through every core
   answering `QuotaEnforcer` (`resetCoreQuotas`, `service/inbound_mtproto.go:114`) — the
   capability's first production consumer — because a renewed client whose daemon keeps
   counting stays blocked however the panel feels about their quota. The
@@ -1121,9 +1121,9 @@ One more is raised inside the contract rather than `internal/arch`: `bind.go:124
 pinned by `core/routing_declaration_test.go`.
 
 **The ratchet's number is `dispatchTotal`, not this table.** After P5 it stood at **94**:
-109 seeded (P-1) → 106 (P1) → 99 (P3) → 94 (`e5cc0bc5`, which took `runtime/local.go` to
-zero) → 95 (`e2478640`, a one-off migration in `db.go`, a file already frozen as historical)
-→ 94 (`6fb1f026`, `RenderInbound` asking the registry instead of naming mtproto).
+109 seeded (P-1) → 106 (P1) → 99 (P3) → 94 (`5eda3eb8`, which took `runtime/local.go` to
+zero) → 95 (`0ee48647`, a one-off migration in `db.go`, a file already frozen as historical)
+→ 94 (`442f2eff`, `RenderInbound` asking the registry instead of naming mtproto).
 
 **That number was wrong until the detector was fixed.** It matched a `model.<Const>`
 selector and a comparison against an expression ending in `.Protocol`, so a `case "vless":`
@@ -1136,10 +1136,10 @@ Teaching it that shape moved the total to **123** with nothing having regressed.
 reading of P5 is therefore that it removed five dispatch sites out of 123, not out of 99 —
 the direction is right and the remaining distance is larger than the old number implied.
 **The number at HEAD is 101** (`dispatch_ratchet_test.go:66`), and the chain from 123 is
-the refactor's actual scoreboard: 123 → 116 (`acf29f7c`, P6-2a's abstraction fix) → 126
-(`09f926d7`, registering wgkernel) → 127 (`0d4d6f2e`, egress) → 126 (`dda88456` — P8 added
-the whole policy subsystem and still came out net −1) → 125 (`da46d28a`, routing declared
-through the contract) → **101** (`8d0dc878`, credential minting asked of the registry:
+the refactor's actual scoreboard: 123 → 116 (`9a0ba04c`, P6-2a's abstraction fix) → 126
+(`5276426b`, registering wgkernel) → 127 (`f9b9041b`, egress) → 126 (`ff428a4e` — P8 added
+the whole policy subsystem and still came out net −1) → 125 (`03ef9a40`, routing declared
+through the contract) → **101** (`152a78a2`, credential minting asked of the registry:
 `client_crud.go` went 6 → 0 **and out of the map entirely**, the first service file the
 ratchet has ever dropped, with `client_inbound_apply.go` 19 → 7 and `inbound.go` 18 → 12).
 Two arms stayed protocol-named on purpose: the update path's ad-tag check
@@ -1159,7 +1159,7 @@ and the test certifies nothing for a year.
 **The detector must be name-based, not type-based.** `client_inbound_apply.go` carried two
 sites shaped `if oldInbound.Protocol == "shadowsocks"` — both operands of static type
 `string`, so a `go/analysis` type-based analyzer sees nothing. Both have since migrated
-(`8d0dc878`); the argument outlives them. A `go/ast` name-based walk catches all three
+(`152a78a2`); the argument outlives them. A `go/ast` name-based walk catches all three
 shapes, uses only stdlib (house rule), and needs no new `go.mod` dependency.
 
 ---
@@ -1167,7 +1167,7 @@ shapes, uses only stdlib (house rule), and needs no new `go.mod` dependency.
 ## 11. Cost of core #11
 
 > **This section is a TARGET, not a measurement.** It was written in the present tense with
-> no marker and read as fact for four phases. §11.1 is what is achieved at `e2478640`;
+> no marker and read as fact for four phases. §11.1 is what is achieved at `0ee48647`;
 > §11.2 audits what a core costs today and **§11.2a is the compiled measurement from P6**;
 > §11.3 is the target and what must land to reach it. The old table was optimistic by roughly
 > an order of magnitude and named a file,
@@ -1180,7 +1180,7 @@ shapes, uses only stdlib (house rule), and needs no new `go.mod` dependency.
 - **The protocol enum costs no hand-written TypeScript.** `openapigen` emits the closed union;
   `frontend/src/schemas/primitives/protocol.ts` is a re-export and `Protocols` is a mapped
   type over the generated list. Pinned by `TestProtocolSourcesAgree` (§13, decision 2).
-- **The client credential form costs no TypeScript** (P5, `dbcdf012`). A core declares, per
+- **The client credential form costs no TypeScript** (P5, `834d1956`). A core declares, per
   kind, which credentials its clients carry (`core.CredentialDeclarer`); `GET /panel/api/cores`
   serves the manifest and `frontend/src/lib/cores/client-credentials.ts` takes the union over
   the inbounds a client is on. A kind nothing declares falls back to `uuid/password/auth`, so
@@ -1394,38 +1394,38 @@ after it, phase by phase, with the ratchet as the scoreboard — P6 itself shipp
 (2026-08-11):
 
 - **P7 — egress.** Kernel-WireGuard uplinks became a first-class exit the panel dials
-  (`0d4d6f2e`, ratchet 126 → 127), under the driver taxonomy §5 now describes
+  (`f9b9041b`, ratchet 126 → 127), under the driver taxonomy §5 now describes
   (`internal/egress/driver.go`). The legacy attach path — the `egresses/attach` endpoint,
-  `EgressService.Attach`, the per-inbound egress picker — is **deleted** (`b310b82f`,
+  `EgressService.Attach`, the per-inbound egress picker — is **deleted** (`516463d5`,
   −901 lines): a rule names an ingress; an inbound is never told its egress. The Egresses
-  page went with it (`dfb75f35`); exits are authored on the Outbounds page from
+  page went with it (`4c494f83`); exits are authored on the Outbounds page from
   registry-declared kinds (§9).
 - **P8 — policy** (v1.3.0/1.3.1, 2026-08-12): speed ladders, IP limits and threshold
   throttling, core-agnostic by construction and guarded so (`TestPolicyNamesNoProtocol`,
-  §10). A whole subsystem, net **−1** on the ratchet (127 → 126, `dda88456`).
+  §10). A whole subsystem, net **−1** on the ratchet (127 → 126, `ff428a4e`).
 - **P9** (v1.4.0, 2026-08-12): tunnel addresses per core. **P10**: the installer sets up
   wgkernel host networking.
-- **Routing** (`da46d28a`, `e30b1841`, `ff0978dc`; 126 → 125): cores declare
+- **Routing** (`03ef9a40`, `4e05f76a`, `83181b89`; 126 → 125): cores declare
   `RoutableIngress`/`RoutableEgress` (`core/caps.go:312`, `:366`), rules are
   `routing_rules` rows the panel owns, and `internal/routing/plan.go` compiles intent into
   rules and kernel state as one pure function. Device ingress is fronted by a gVisor tun
   the panel provisions and reaps for itself (`ensureFronts`/`reapFronts`,
   `service/routing.go:131`, `:171`) — and the editor **discloses what that costs**: a
-  fronted L3 inbound carries tcp/udp/icmp only (`9b562111`, RuleFormModal's `l3Fronted`
+  fronted L3 inbound carries tcp/udp/icmp only (`06525940`, RuleFormModal's `l3Fronted`
   alert). The kernel fast path that would remove the cost is reserved — `PatternKernel`,
   `routing/diag.go:21` — with **zero emitters**. Still open.
-- **P7-C** (`7c9b53ff`): a rule is pointed at an uplink from the routing page. That is
+- **P7-C** (`14808ebd`): a rule is pointed at an uplink from the routing page. That is
   also where the exit-authoring question settled: authored under Outbounds, consumed from
   Routing, never attached to an inbound.
-- **Credentials** (`331729bf`, `8d0dc878`; 125 → **101**): `CredentialDeclarer` grew
+- **Credentials** (`77db2ae0`, `152a78a2`; 125 → **101**): `CredentialDeclarer` grew
   `MintClientCredentials`/`ValidateClient`/`ClientIdentity`, and the engines host the
   protocol knowledge (`internal/xray/shadowsocks.go`, `internal/mtproto/secrets.go`) —
   §11.3's item 4, mostly paid (§12.4).
-- **Seams cut for the next arc** (§12.5): `shaping.Namespaces` registration (`eba337d4`,
-  §10); `LinkRenderer` implemented and consumed (`f8bbefd7`; §13, decision 1); the facade
-  answering from the one wired registry (`358775f9` — `cores.Use`, with the deps-free
+- **Seams cut for the next arc** (§12.5): `shaping.Namespaces` registration (`d4b8260b`,
+  §10); `LinkRenderer` implemented and consumed (`258c1edc`; §13, decision 1); the facade
+  answering from the one wired registry (`166f9679` — `cores.Use`, with the deps-free
   build as fallback only for unwired processes); auto-renew clearing daemon-side quota
-  through `QuotaEnforcer`, its first production consumer (`a996a4e0`).
+  through `QuotaEnforcer`, its first production consumer (`153572b3`).
 
 ### 12.1 What porting core #1 corrected in the contract
 
@@ -1600,18 +1600,18 @@ merge itself followed: the RESOLVED note in §12.4.
 
 ### 12.4 What P5 landed, and what it deliberately did not
 
-Five commits, `8afd5ed7..e2478640`:
+Five commits, `9f88133c..0ee48647`:
 
 | Commit | What |
 |---|---|
-| `8afd5ed7` | `GET /panel/api/cores` — id, i18n title key, the kinds each core serves, tri-state capabilities. Both lists sorted, because `Registry.Cores` is in registration order and an unsorted view made `gen-check` flap. No UI consumed it yet |
-| `c3d17d10` | `client_credentials (client_id, inbound_id, key)`, migration in `db.go`, MTProto's `secret` and `ad_tag` moved onto it and off `ClientRecord` — so the frozen-column guard **ratcheted down by two** |
-| `e5cc0bc5` | `Local.AddUser`/`RemoveUser` resolve `bound.Users` off the registry, so `core.UserProvisioner` finally has a production caller; `local.go` no longer imports `internal/xray` (`remote.go` still does, for the `xray.ClientTraffic` alias on the mTLS wire). Five hand-built credential maps deleted. Ratchet `local.go` 2 → entry gone, `client_bulk.go` 1 → gone, `client_inbound_apply.go` 12 → 10, total **99 → 94** |
-| `dbcdf012` | `core.CredentialDeclarer` + `internal/core/credentials.go`'s closed vocabulary + the descriptor-driven **client** form. `auth` had been rendered for every client on every protocol; it is Hysteria-only |
-| `e2478640` | Backfill restricted to mtproto inbounds. Found on the live panel's real data: a client on both a VLESS and an MTProto inbound had an MTProto secret stored against the VLESS one. `db.go` 5 → 6, total **94 → 95** |
+| `9f88133c` | `GET /panel/api/cores` — id, i18n title key, the kinds each core serves, tri-state capabilities. Both lists sorted, because `Registry.Cores` is in registration order and an unsorted view made `gen-check` flap. No UI consumed it yet |
+| `c2a7638d` | `client_credentials (client_id, inbound_id, key)`, migration in `db.go`, MTProto's `secret` and `ad_tag` moved onto it and off `ClientRecord` — so the frozen-column guard **ratcheted down by two** |
+| `5eda3eb8` | `Local.AddUser`/`RemoveUser` resolve `bound.Users` off the registry, so `core.UserProvisioner` finally has a production caller; `local.go` no longer imports `internal/xray` (`remote.go` still does, for the `xray.ClientTraffic` alias on the mTLS wire). Five hand-built credential maps deleted. Ratchet `local.go` 2 → entry gone, `client_bulk.go` 1 → gone, `client_inbound_apply.go` 12 → 10, total **99 → 94** |
+| `834d1956` | `core.CredentialDeclarer` + `internal/core/credentials.go`'s closed vocabulary + the descriptor-driven **client** form. `auth` had been rendered for every client on every protocol; it is Hysteria-only |
+| `0ee48647` | Backfill restricted to mtproto inbounds. Found on the live panel's real data: a client on both a VLESS and an MTProto inbound had an MTProto secret stored against the VLESS one. `db.go` 5 → 6, total **94 → 95** |
 
-Two fixes fell out of the port and are worth knowing about: `9b303d63` (bulk-add could not
-see mtproto inbounds) and `62c5b91c` (one email must be one live registration on key-indexed
+Two fixes fell out of the port and are worth knowing about: `7b797f44` (bulk-add could not
+see mtproto inbounds) and `84045246` (one email must be one live registration on key-indexed
 inbounds).
 
 **What P5 did NOT do.** Each was a decision, not an oversight, and P6 should plan around it:
@@ -1624,7 +1624,7 @@ inbounds).
   architecture; `TestClientRecordColumnsAreFrozen` holds the line.
 - **Credential *storage* generalised; credential *minting* did not** — then it did.
   P6-2a put `cores.ClientCredentials` behind the four WireGuard key gates, and
-  `331729bf` + `8d0dc878` finished it: `CredentialDeclarer` grew `MintClientCredentials`
+  `77db2ae0` + `152a78a2` finished it: `CredentialDeclarer` grew `MintClientCredentials`
   (missing-or-unusable semantics), `ValidateClient` (required-ness IS protocol knowledge,
   down to the exact historical refusal strings) and `ClientIdentity`, and `client_crud.go`
   now mints from the registry (`client_crud.go:161`) — zero dispatch sites, out of the
@@ -1685,7 +1685,7 @@ The build order, converged on independently by two roster passes:
    degraded fallback. What it needs from the tree: a second Plane, a carrier for the
    obfuscation params (Jc/Jmin/Jmax/S/H/I1–I5 have no home in `wgtypes.Config`), a device
    fingerprint that includes them or edits read as Noop, and the `pawg` prefix registered
-   on `shaping.Namespaces` — the seam `eba337d4` built for exactly this.
+   on `shaping.Namespaces` — the seam `d4b8260b` built for exactly this.
 2. **SSH — an embedded Go server in the panel process**, the first in-process core
    (`golang.org/x/crypto` is already a dependency). Ingress rides the mtproto
    SOCKS-bridge precedent (§12.3); accounting is counted `io.Copy` splices — exact
@@ -1730,7 +1730,7 @@ Fix each once, before the core that hits it: the §12.1 lesson, priced in advanc
 
 ### 12.5a The 2026-09-03 roster decision
 
-A design review on 2026-09-03 checked the roster against the tree at `0922d810` and the
+A design review on 2026-09-03 checked the roster against the tree at `6f5823a8` and the
 research corpus, and the owner decided the protocol set from it. §12.5 stays as the record
 of how the roster was reasoned; the order below is the one in force.
 
@@ -1801,7 +1801,7 @@ and moving it later.
 immediately. sing-box is the first core for which the honest answer to a client edit is
 "queued, applied within N seconds"; the runtime must be able to say so, and report it,
 before that adapter is written. It joins the four in §12.5 and the three the roster
-verdict carried: the `shaping.Owns` namespace seam (closed in `eba337d4`), `CapSniffing`'s
+verdict carried: the `shaping.Owns` namespace seam (closed in `d4b8260b`), `CapSniffing`'s
 by-name enumeration, and a rate-pushdown seam for the two daemons that enforce rates
 themselves. `IngressSubnet` exists as a vocabulary value (`core/caps.go:379`) with no
 consumer yet.
@@ -1834,7 +1834,7 @@ or accel-ppp goes over RADIUS, and lands with the RADIUS server.
    `wg0.conf`, `.sswan`, `.p12`), not URIs — so `Share.Kind == "file"` plus a backend
    endpoint means zero frontend link logic per core. Do not let an `.ovpn` template appear
    anywhere under `frontend/src/`.
-   **The file half is RESOLVED** (`f8bbefd7`): `LinkRenderer` is implemented — the
+   **The file half is RESOLVED** (`258c1edc`): `LinkRenderer` is implemented — the
    wireguard core's `.conf` (`cores/internal/wireguard/share.go`), field-synced with the
    frontend's builder and golden-tested — and consumed:
    `GET <subPath>/:subid/file/:inboundId` (`sub/controller.go:288`), the sub token
