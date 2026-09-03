@@ -27,10 +27,10 @@ func TestProtocolRuleAcceptsExactlyWhatACoreServes(t *testing.T) {
 	}
 
 	for _, rejected := range []string{
-		"",        // required still applies
-		"openvpn", // a core that is not ported yet
-		"VLESS",   // the wire value is lower-case
-		"vless ",  // no trimming
+		"",       // required still applies
+		"ftp",    // no core will ever serve it
+		"VLESS",  // the wire value is lower-case
+		"vless ", // no trimming
 		"vless,vmess",
 	} {
 		ib := model.Inbound{Protocol: model.Protocol(rejected), Port: 443, SubSortIndex: 1}
