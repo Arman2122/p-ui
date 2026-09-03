@@ -302,6 +302,17 @@ func radiusServerFor(deps Deps) *radius.Server {
 	if err != nil {
 		panic(err)
 	}
+	if deps.CoreAuthFailure != nil {
+		// Refusals the server makes itself (an unregistered NAS, no PAP password)
+		// are daemon misconfiguration; they reach the event under the server's name.
+		srv.Rejected = func(nasID, username string, peer radius.Peer, reason string) {
+			ip := ""
+			if peer.Source.IsValid() {
+				ip = peer.Source.String()
+			}
+			deps.CoreAuthFailure("radius", 0, username, ip, nasID+": "+reason)
+		}
+	}
 	return srv
 }
 
