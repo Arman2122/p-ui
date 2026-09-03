@@ -1754,8 +1754,9 @@ of how the roster was reasoned; the order below is the one in force.
 - **OpenVPN** — two inbounds for UDP and TCP, since one process serves one protocol on one
   port, sharing a server identity. CA-free identity is the design, not a shortcut:
   `verify-client-cert none`, the panel as the `auth-user-pass-verify` authenticator, one
-  `tls-crypt-v2` key per client so a revoked client cannot complete a handshake, and
-  clients pinning the server by `peer-fingerprint`. Client certificates with a
+  `tls-crypt-v2` key per client so nobody without a panel-issued profile completes a
+  handshake (a revoked client is refused at login), and clients pinning the server by
+  `peer-fingerprint`. Client certificates with a
   panel-operated CA are a declared later option. DCO is the throughput plane, reported at
   Preflight. Link-byte accounting carries a 5–12 % skew against payload counters;
   normalise it or label it.
