@@ -417,9 +417,14 @@ func (cw *countingWriter) Write(p []byte) (int, error) {
 				return written, err
 			}
 		}
+		// Billed before the write lands: the far side can echo the bytes back and
+		// a scrape read them before a post-write add would have run.
+		cw.n.Add(int64(len(chunk)))
 		n, err := cw.w.Write(chunk)
 		written += n
-		cw.n.Add(int64(n))
+		if n < len(chunk) {
+			cw.n.Add(int64(n - len(chunk)))
+		}
 		cw.seen.Store(time.Now().UnixMilli())
 		if err != nil {
 			return written, err
