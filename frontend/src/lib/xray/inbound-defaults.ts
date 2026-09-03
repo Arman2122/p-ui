@@ -7,6 +7,7 @@ import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/
 import type { SshInboundSettings } from '@/schemas/protocols/inbound/ssh';
 import type { TuicInboundSettings } from '@/schemas/protocols/inbound/tuic';
 import type { AnytlsInboundSettings } from '@/schemas/protocols/inbound/anytls';
+import type { OpenvpnInboundSettings } from '@/schemas/protocols/inbound/openvpn';
 import type { ShadowsocksClient, ShadowsocksInboundSettings } from '@/schemas/protocols/inbound/shadowsocks';
 import type { TrojanClient, TrojanInboundSettings } from '@/schemas/protocols/inbound/trojan';
 import type { TunInboundSettings } from '@/schemas/protocols/inbound/tun';
@@ -229,6 +230,10 @@ export function createDefaultAnytlsInboundSettings(): AnytlsInboundSettings {
   return { certFile: '', keyFile: '', serverName: '', paddingScheme: [], clients: [] };
 }
 
+export function createDefaultOpenvpnInboundSettings(): OpenvpnInboundSettings {
+  return { proto: 'udp', subnet: '10.9.0.0/24', dns: ['1.1.1.1'], redirectGateway: true, serverCert: '', serverKey: '', tlsCryptV2ServerKey: '', clients: [] };
+}
+
 export function createDefaultMtprotoInboundSettings(): MtprotoInboundSettings {
   return {
     fakeTlsDomain: 'www.cloudflare.com',
@@ -319,7 +324,8 @@ export type AnyInboundSettings =
   | MtprotoInboundSettings
   | SshInboundSettings
   | TuicInboundSettings
-  | AnytlsInboundSettings;
+  | AnytlsInboundSettings
+  | OpenvpnInboundSettings;
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
@@ -339,6 +345,7 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
     case 'ssh':         return createDefaultSshInboundSettings();
     case 'tuic':        return createDefaultTuicInboundSettings();
     case 'anytls':      return createDefaultAnytlsInboundSettings();
+    case 'openvpn':     return createDefaultOpenvpnInboundSettings();
     default:            return null;
   }
 }

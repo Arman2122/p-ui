@@ -2063,3 +2063,42 @@ is the first core that can ask), Disconnect/CoA (every consumer has its own
 kill path per §4.4's table), and any proxying or realm logic. The first
 consumer is OpenVPN, which also wires the host secret and the server into
 `cores.Deps`; until then the package has tests and no listener.
+
+### 12.5d The OpenVPN core (2026-09-03)
+
+Core #7, `internal/cores/internal/openvpn/`. The daemon is the distribution's;
+the panel renders its config, supervises it as `p-ui-core` with
+`CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`, and authenticates and accounts it
+through §12.5c's RADIUS server via `openvpn-auth-radius`, which the plugin
+proof in `internal/radius` pins (the plugin holds the RADIUS port in four
+characters; a 2.6 server needs a `ca` even with `verify-client-cert none`, so
+the self-signed server certificate doubles as it; OpenVPN buffers even its
+log file, so readiness is read off the device).
+
+What the contract gained:
+
+- **`InstanceMinter`.** Inbound-level secrets an operator cannot type and no
+  file may hold (§13's backup invariant): the service calls it on add and on
+  every update, the core fills only what is missing. ocserv and IKEv2 will
+  reuse it for their server certificates.
+- **`DeviceNamespacer`.** A core names the device prefix its interfaces use
+  (`pov`) and the shaping plane owns it at wiring, per `shaping.Namespaces`'s
+  own comment.
+- **`CredTLSCryptV2`.** The first credential added since the vocabulary was
+  closed; two guards now walk the vocabulary through every table, because the
+  SSH username showed what a half-wired credential costs.
+
+Design as built: users live in the RADIUS sink, never in the daemon's config,
+so a client edit is hot and a login never waits for a reload; the tunnel
+address is chosen at login (stable per email, moved past live sessions) and
+pushed as Framed-IP, which the plugin lands as `ifconfig-push`, so shaping
+keys by inner IP like kernel WireGuard; the ledger turns interim records
+into deltas and sessions; the management socket is opened per `kill` and
+never held, so the panel is not a dependency of a running tunnel.
+Server-level changes restart the daemon (OpenVPN cannot reload), tracked by a
+config hash in the unit's environment.
+
+Deliberate v1 choices: no client certificates (a declared later option), DCO
+off on the 2.6 line, link-byte accounting labelled rather than normalised,
+and the conformance suite runs only where the daemon and plugin exist
+(`OPENVPN_E2E`, the VM).

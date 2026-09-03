@@ -103,6 +103,23 @@ type InstanceValidator interface {
 }
 
 /*
+InstanceMinter fills the secrets an inbound needs that no operator can type
+and no file may hold: a server certificate and key, a tls-crypt-v2 server key.
+Called on add and on every update with the settings as saved; the core returns
+them with what was missing minted and everything else untouched, so a
+re-save never rotates what clients already pin.
+*/
+type InstanceMinter interface {
+	MintInstance(kind Kind, settings string) (string, error)
+}
+
+// DeviceNamespacer names the device prefix a core's kernel interfaces use, so
+// the shaping plane can own trees on them; letters only, see shaping.Register.
+type DeviceNamespacer interface {
+	DeviceNamespace() string
+}
+
+/*
 CredentialDeclarer names the credential fields one kind's clients carry, so the
 client form renders from what a core declares instead of from its own protocol
 branches. Names come from the closed vocabulary in credentials.go.

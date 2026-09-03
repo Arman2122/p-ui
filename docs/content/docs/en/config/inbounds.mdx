@@ -315,6 +315,43 @@ buffers than the kernel default; the installer sets them in
 `/etc/sysctl.d/99-p-ui-quic.conf`.
 
 
+## OpenVPN (`openvpn`)
+
+The distribution's OpenVPN (2.5 on Ubuntu 22.04, 2.6 on 24.04 and Debian 12),
+one supervised process per inbound, run as `p-ui-core` under systemd with only
+the capabilities a tun server needs. The installer adds the `openvpn` and
+`openvpn-auth-radius` packages.
+
+Identity is **CA-free**. On the first save the panel mints the server's
+certificate and its tls-crypt-v2 server key and keeps both in the inbound's
+row (a database restore is a complete restore). Clients pin the certificate by
+fingerprint, so no CA ships in a profile, and every client carries its own
+tls-crypt-v2 key wrapped by the server key: a removed client cannot even open
+a handshake. Clients present no certificate; they log in with a **username**
+and **password**, minted when left empty.
+
+Logins go through the panel's embedded RADIUS server via the plugin, which is
+also where traffic and sessions come from:
+
+- **Quota and expiry**: a depleted, expired or disabled client is refused at
+  login and its open sessions are ended through the management socket.
+- **IP limit**: counted as distinct source addresses over live sessions, so the
+  extra device is refused at login; sessions are also reported with their
+  source and tunnel address, so the IP-limit job sees them.
+- **Speed plan**: applied per client on the tun device by tunnel address, the
+  way kernel WireGuard's is. Each client keeps a stable tunnel address across
+  reconnects.
+- **Routing**: the inbound's decrypted traffic appears on `pov<id>`, so
+  routing rules select it like kernel WireGuard's.
+
+Accounting counts link bytes (encrypted, with control traffic), not payload;
+expect a few percent more than an Xray client moving the same data. The
+subscription serves the client's `.ovpn` file; there is no link form. One
+process serves one transport: for UDP and TCP on one host, create two
+inbounds. DCO is off on the 2.6 line, whose counters under it are not to be
+trusted.
+
+
 ## Fallbacks — multiple protocols on one port
 
 Fallbacks let a single TLS port (e.g. `443`) serve more than one protocol — for

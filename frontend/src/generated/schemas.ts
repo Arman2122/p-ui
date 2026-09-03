@@ -1177,6 +1177,10 @@ export const SCHEMAS: Record<string, unknown> = {
         "format": "int64",
         "type": "integer"
       },
+      "tlsCryptV2": {
+        "description": "OpenVPN wrapped client key, per inbound",
+        "type": "string"
+      },
       "totalGB": {
         "description": "Total traffic limit in GB",
         "format": "int64",
@@ -2280,7 +2284,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "tun",
           "ssh",
           "tuic",
-          "anytls"
+          "anytls",
+          "openvpn"
         ],
         "example": "vless",
         "type": "string"

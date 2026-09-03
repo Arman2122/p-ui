@@ -274,6 +274,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "security": "",
     "subId": "",
     "tgId": 0,
+    "tlsCryptV2": "",
     "totalGB": 0,
     "updated_at": 0,
     "username": ""

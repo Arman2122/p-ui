@@ -145,6 +145,25 @@ func validateInstanceForKind(inbound *model.Inbound) error {
 	return validator.ValidateInstance(kind, inbound.Settings)
 }
 
+// mintInstanceForKind lets the inbound's core fill the secrets an operator
+// cannot type, before validation sees them; a kind with no minter is untouched.
+func mintInstanceForKind(inbound *model.Inbound) error {
+	if inbound == nil {
+		return nil
+	}
+	kind := core.Kind(inbound.Protocol)
+	minter, ok := cores.InstanceMinterFor(kind)
+	if !ok {
+		return nil
+	}
+	settings, err := minter.MintInstance(kind, inbound.Settings)
+	if err != nil {
+		return err
+	}
+	inbound.Settings = settings
+	return nil
+}
+
 /*
 refuseOnlyIfWorsened judges an edit against what it replaces.
 

@@ -160,6 +160,7 @@ var defaultValueMap = map[string]string{
 	"smtpLastError":     "",
 	"smtpLastErrorAt":   "0",
 	"sshHostKey":        "",
+	"radiusSecret":      "",
 
 	// Consecutive failed observatory probes before an outbound.down event fires
 	"outboundDownThreshold": "3",
@@ -1121,6 +1122,14 @@ func (s *SettingService) GetSmtpEnabledEvents() (string, error) {
 func (s *SettingService) GetSSHHostKey() (string, error) { return s.getString("sshHostKey") }
 
 func (s *SettingService) SetSSHHostKey(pem string) error { return s.setString("sshHostKey", pem) }
+
+// The RADIUS host secret the daemon cores share with the embedded server; minted
+// once so daemons that outlive a panel restart still authenticate.
+func (s *SettingService) GetRadiusSecret() (string, error) { return s.getString("radiusSecret") }
+
+func (s *SettingService) SetRadiusSecret(secret string) error {
+	return s.setString("radiusSecret", secret)
+}
 
 func (s *SettingService) GetSmtpLastError() (string, int64, error) {
 	msg, err := s.getString("smtpLastError")

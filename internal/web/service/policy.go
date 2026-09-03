@@ -42,6 +42,9 @@ same registry rather than two copies of a list.
 */
 var shapingNamespaces = shaping.DefaultNamespaces()
 
+// RegisterShapingNamespace claims a device prefix a core brings, at wiring time.
+func RegisterShapingNamespace(prefix string) error { return shapingNamespaces.Register(prefix) }
+
 // shapingManager owns every qdisc, class and filter the ladders install. One,
 // for egressManager's reason: two writers to one host's kernel state disagree.
 var shapingManager = shaping.NewManager(shaping.HostPlane(), shapingNamespaces)

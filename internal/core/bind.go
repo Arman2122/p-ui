@@ -36,6 +36,8 @@ type Bound struct {
 	Deferred      DeferredApplier
 	FileShare     FileShareDeclarer
 	Outliver      PanelOutliver
+	Mint          InstanceMinter
+	Devices       DeviceNamespacer
 	Ingress       RoutableIngress
 	Egress        RoutableEgress
 	ExitSupervise ExitSupervisor
@@ -102,6 +104,12 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(PanelOutliver); ok {
 		b.Outliver = v
+	}
+	if v, ok := c.(InstanceMinter); ok {
+		b.Mint = v
+	}
+	if v, ok := c.(DeviceNamespacer); ok {
+		b.Devices = v
 	}
 	if v, ok := c.(RoutableIngress); ok {
 		b.Ingress = v

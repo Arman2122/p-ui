@@ -11,10 +11,13 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/amneziawg"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
+	"github.com/Arman2122/p-ui/internal/cores/internal/openvpn"
 	"github.com/Arman2122/p-ui/internal/cores/internal/singbox"
 	"github.com/Arman2122/p-ui/internal/cores/internal/ssh"
 	"github.com/Arman2122/p-ui/internal/cores/internal/wireguard"
 	"github.com/Arman2122/p-ui/internal/cores/internal/xray"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/radius"
 	"github.com/Arman2122/p-ui/internal/supervisor"
 	engine "github.com/Arman2122/p-ui/internal/xray"
 )
@@ -29,6 +32,10 @@ type Deps struct {
 	// where it survives a restart; nil mints a key that lasts one process.
 	SSHHostKey      func() (string, error)
 	StoreSSHHostKey func(pem string) error
+	// RadiusSecret and StoreRadiusSecret keep the host secret the embedded RADIUS
+	// server shares with every daemon core; nil mints one that lasts one process.
+	RadiusSecret      func() (string, error)
+	StoreRadiusSecret func(secret string) error
 	// CoreAuthFailure hears every login a core refused, so the panel can alert
 	// and ban without the core knowing how.
 	CoreAuthFailure func(coreID string, instanceID int, username, ip, reason string)
@@ -132,6 +139,30 @@ func InstanceValidatorFor(kind core.Kind) (core.InstanceValidator, bool) {
 	return bound.Validate, true
 }
 
+// InstanceMinterFor is the core that fills one kind's inbound-level secrets,
+// when any does.
+func InstanceMinterFor(kind core.Kind) (core.InstanceMinter, bool) {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Mint == nil {
+		return nil, false
+	}
+	return bound.Mint, true
+}
+
+// DeviceNamespaces lists every device prefix a registered core claims, for the
+// shaping plane to own at wiring time.
+func DeviceNamespaces() []string {
+	var out []string
+	for _, bound := range kindOwners().Cores() {
+		if bound.Devices != nil {
+			if p := bound.Devices.DeviceNamespace(); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
 // ClientCredentialAuthority is the core that answers for one kind's client
 // credentials, when any does. The caller keeps its own fallback for a kind no
 // core owns — a quarantined inbound's clients are neither loosened nor newly
@@ -228,7 +259,50 @@ func Register(reg *core.Registry, deps Deps) error {
 	if err := reg.Register(singbox.New(singbox.Deps{Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup})); err != nil {
 		return err
 	}
+	if err := reg.Register(openvpn.New(openvpnDeps(deps))); err != nil {
+		return err
+	}
 	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))
+}
+
+// openvpnDeps narrows the panel-side facts to the ones the OpenVPN core takes,
+// including the one RADIUS server every daemon core shares.
+func openvpnDeps(deps Deps) openvpn.Deps {
+	out := openvpn.Deps{Radius: radiusServerFor(deps), Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup}
+	if deps.CoreAuthFailure != nil {
+		out.AuthFailure = func(instanceID int, username, ip, reason string) {
+			deps.CoreAuthFailure(string(openvpn.ID), instanceID, username, ip, reason)
+		}
+	}
+	return out
+}
+
+/*
+radiusServerFor builds the panel's one RADIUS server on the host secret the
+settings keep, minting and storing it on first use so daemons that outlive a
+panel restart still authenticate; a registry built without a store (tests)
+gets a secret that lasts one process. Nothing listens until a core registers.
+*/
+func radiusServerFor(deps Deps) *radius.Server {
+	secret := ""
+	if deps.RadiusSecret != nil {
+		if stored, err := deps.RadiusSecret(); err == nil {
+			secret = stored
+		}
+	}
+	if secret == "" {
+		secret = radius.NewSecret()
+		if deps.StoreRadiusSecret != nil {
+			if err := deps.StoreRadiusSecret(secret); err != nil {
+				logger.Warning("radius: the host secret could not be stored; daemons must be restarted with the panel:", err)
+			}
+		}
+	}
+	srv, err := radius.New(secret, "", "")
+	if err != nil {
+		panic(err)
+	}
+	return srv
 }
 
 // sshDeps narrows the panel-side facts to the ones the SSH core takes.

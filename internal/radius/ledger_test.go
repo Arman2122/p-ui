@@ -35,6 +35,31 @@ func TestLedgerBillsEachByteOnce(t *testing.T) {
 	if again := l.Drain(); len(again) != 0 {
 		t.Fatalf("a second drain handed out %+v again", again)
 	}
+	// A session heard of only mid-flight is baselined, not billed: a panel that
+	// restarted under a live tunnel must not charge its first half again.
+	l.Apply(ev(Interim, "adopted", "carol", 5000, 6000))
+	if got := l.Drain(); len(got) != 0 {
+		t.Fatalf("an adopted session's first record was billed: %+v", got)
+	}
+	l.Apply(ev(Interim, "adopted", "carol", 5100, 6300))
+	if got := l.Drain(); len(got) != 1 || got[0].Up != 100 || got[0].Down != 300 {
+		t.Fatalf("an adopted session's later record billed %+v, want 100/300", got)
+	}
+	l.Apply(ev(Stop, "adopted", "carol", 5100, 6300))
+	if got := l.Drain(); len(got) != 0 {
+		t.Fatalf("a stop with no new bytes billed %+v", got)
+	}
+	// A nameless record closes a session the ledger knows and bills its tail to
+	// whoever opened it; one for an unknown session opens nothing.
+	l.Apply(Event{Status: Stop, SessionID: "s2", In: 20, Out: 30})
+	if got := l.Drain(); len(got) != 1 || got[0].Email != "alice" || got[0].Up != 10 || got[0].Down != 10 {
+		t.Fatalf("a nameless stop billed %+v, want alice 10/10", got)
+	}
+	l.Apply(Event{Status: Start, SessionID: "ghost"})
+	if s := l.Sessions(); len(s) != 0 {
+		t.Fatalf("a nameless start opened %+v", s)
+	}
+	l.Apply(ev(Start, "s2", "alice", 0, 0))
 	l.Apply(ev(Interim, "s2", "alice", 3, 4))
 	if got := l.Drain(); len(got) != 1 || got[0].Up != 3 || got[0].Down != 4 {
 		t.Fatalf("a session that went backwards billed %+v, want 3/4 from zero", got)

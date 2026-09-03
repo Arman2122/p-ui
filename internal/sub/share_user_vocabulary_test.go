@@ -18,6 +18,7 @@ func TestShareUserCarriesEveryScalarCredential(t *testing.T) {
 		ID: "uuid-value", Username: "username-value", Password: "password-value", Auth: "auth-value",
 		Security: "security-value", Secret: "secret-value", AdTag: "adTag-value",
 		PrivateKey: "privateKey-value", PublicKey: "publicKey-value", PreSharedKey: &psk,
+		TLSCryptV2: "tlsCryptV2-value",
 		AllowedIPs: []string{"10.0.0.2/32"}, Email: "a@x",
 	}
 	got := userForShare(client).Credentials

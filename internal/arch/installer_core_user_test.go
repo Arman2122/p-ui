@@ -28,6 +28,8 @@ func TestBothInstallersProvideTheCoreUserAndTheQuicBuffers(t *testing.T) {
 				"net.core.rmem_max=7500000",
 				"\n    ensure_core_user\n",
 				"\n    install_quic_sysctl\n",
+				"apt-get install -y -q openvpn openvpn-auth-radius",
+				"\n    install_openvpn_packages\n",
 			} {
 				if !strings.Contains(text, want) {
 					t.Fatalf("%s lacks %q", script, want)

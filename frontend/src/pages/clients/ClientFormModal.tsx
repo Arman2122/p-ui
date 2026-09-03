@@ -255,6 +255,7 @@ export default function ClientFormModal({
         uuid: client.uuid || '',
         password: client.password || '',
         username: client.username || '',
+        tlsCryptV2: client.tlsCryptV2 || '',
         auth: client.auth || '',
         flow: client.flow || '',
         security: !client.security || client.security === 'none' || client.security === 'zero'
@@ -299,6 +300,7 @@ export default function ClientFormModal({
         subId: RandomUtil.randomLowerAndNum(16),
         password: RandomUtil.randomLowerAndNum(16),
         username: '',
+        tlsCryptV2: '',
         auth: RandomUtil.randomLowerAndNum(16),
         wgPrivateKey: wgKeypair.privateKey,
         wgPublicKey: wgKeypair.publicKey,
@@ -618,6 +620,9 @@ export default function ClientFormModal({
     }
     if (credentials.has('username')) {
       clientPayload.username = (values.username ?? '').trim();
+    }
+    if (credentials.has('tlsCryptV2')) {
+      clientPayload.tlsCryptV2 = values.tlsCryptV2 ?? '';
     }
     if (credentials.has('adTag')) {
       const adTag = values.adTag.trim();
@@ -1022,6 +1027,11 @@ export default function ClientFormModal({
                             <Input value={secret} style={{ flex: 1 }} onChange={(e) => methods.setValue('secret', e.target.value)} />
                             <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regenerateMtprotoSecret} />
                           </Space.Compact>
+                        </Form.Item>
+                      )}
+                      {credentials.has('tlsCryptV2') && (
+                        <Form.Item label={t('pages.clients.tlsCryptV2')} extra={t('pages.clients.tlsCryptV2Hint')}>
+                          <Input.TextArea value={methods.watch('tlsCryptV2') || ''} readOnly rows={3} placeholder={t('pages.clients.tlsCryptV2Pending')} />
                         </Form.Item>
                       )}
                       {credentials.has('adTag') && (

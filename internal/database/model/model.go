@@ -49,6 +49,9 @@ const (
 	// TUIC and AnyTLS are served by the bundled sing-box, one process per inbound.
 	TUIC   Protocol = "tuic"
 	AnyTLS Protocol = "anytls"
+
+	// OpenVPN is the distribution's daemon, one supervised process per inbound.
+	OpenVPN Protocol = "openvpn"
 )
 
 // User represents a user account in the Penhoon UI panel.
@@ -969,13 +972,14 @@ type ClientReverse struct {
 
 // Client represents a client configuration for Xray inbounds with traffic limits and settings.
 type Client struct {
-	ID           string         `json:"id,omitempty"`       // Unique client identifier
-	Security     string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
-	Password     string         `json:"password,omitempty"` // Client password
-	Username     string         `json:"username,omitempty"` // Login name for a core that takes one (SSH)
-	Flow         string         `json:"flow,omitempty"`     // Flow control (XTLS)
-	Reverse      *ClientReverse `json:"reverse,omitempty"`  // VLESS simple reverse proxy settings
-	Auth         string         `json:"auth,omitempty"`     // Auth password (Hysteria)
+	ID           string         `json:"id,omitempty"`         // Unique client identifier
+	Security     string         `json:"security"`             // Security method (e.g., "auto", "aes-128-gcm")
+	Password     string         `json:"password,omitempty"`   // Client password
+	Username     string         `json:"username,omitempty"`   // Login name for a core that takes one (SSH)
+	TLSCryptV2   string         `json:"tlsCryptV2,omitempty"` // OpenVPN wrapped client key, per inbound
+	Flow         string         `json:"flow,omitempty"`       // Flow control (XTLS)
+	Reverse      *ClientReverse `json:"reverse,omitempty"`    // VLESS simple reverse proxy settings
+	Auth         string         `json:"auth,omitempty"`       // Auth password (Hysteria)
 	PrivateKey   string         `json:"privateKey,omitempty"`
 	PublicKey    string         `json:"publicKey,omitempty"`
 	AllowedIPs   []string       `json:"allowedIPs,omitempty"`
@@ -1150,9 +1154,10 @@ func (ClientCredential) TableName() string { return "client_credentials" }
 // Credential keys stored in client_credentials: MTProto's two, and the login
 // name an SSH client types.
 const (
-	CredentialSecret   = "secret"
-	CredentialAdTag    = "adTag"
-	CredentialUsername = "username"
+	CredentialSecret     = "secret"
+	CredentialAdTag      = "adTag"
+	CredentialUsername   = "username"
+	CredentialTLSCryptV2 = "tlsCryptV2"
 )
 
 // ClientExternalLink is a per-client entry surfaced in the client's

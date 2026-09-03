@@ -28,6 +28,9 @@ const (
 	CredPublicKey    = "publicKey"
 	CredPreSharedKey = "preSharedKey"
 	CredAllowedIPs   = "allowedIPs"
+	// CredTLSCryptV2 is an OpenVPN client's wrapped tls-crypt-v2 key: minted by
+	// the panel against the inbound's server key, never typed, one per inbound.
+	CredTLSCryptV2 = "tlsCryptV2"
 )
 
 var clientCredentials = map[string]bool{
@@ -42,6 +45,7 @@ var clientCredentials = map[string]bool{
 	CredPublicKey:    true,
 	CredPreSharedKey: true,
 	CredAllowedIPs:   true,
+	CredTLSCryptV2:   true,
 }
 
 // IsClientCredential reports whether name is one the client form can render.

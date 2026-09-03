@@ -39,18 +39,49 @@ func NewLedger(tag string) *Ledger {
 	return &Ledger{sessions: map[string]*session{}, pending: map[string]*core.TrafficDelta{}, tag: tag, now: time.Now}
 }
 
+// SetClock replaces the ledger's clock, for a test that stamps records; nil
+// restores the wall clock.
+func (l *Ledger) SetClock(now func() time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if now == nil {
+		now = time.Now
+	}
+	l.now = now
+}
+
 // Apply records one event. Bytes count from the session's previous totals; a
 // record that goes backwards (a NAS restart reusing an id) counts from zero.
+// An empty Username is a record for a user the caller no longer knows: it
+// applies to a session already open (a removed client's Stop must still close
+// it, and bill its tail to who it was) and opens nothing.
 func (l *Ledger) Apply(ev Event) {
-	if ev.SessionID == "" || ev.Username == "" {
+	if ev.SessionID == "" {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	cur, ok := l.sessions[ev.SessionID]
+	if ev.Username == "" {
+		if !ok {
+			return
+		}
+		ev.Username = cur.username
+	}
 	if !ok {
 		cur = &session{username: ev.Username, peer: ev.Peer}
 		l.sessions[ev.SessionID] = cur
+		// A session first heard of mid-flight (a panel restart adopted it) is
+		// baselined: its earlier bytes were billed by the previous process or are
+		// lost, and billing them now would charge a user twice. A Start is zero.
+		if ev.Status != Start {
+			cur.in, cur.out = ev.In, ev.Out
+			cur.lastSeen = l.now()
+			if ev.Status == Stop {
+				delete(l.sessions, ev.SessionID)
+			}
+			return
+		}
 	}
 	if ev.Peer.Source.IsValid() {
 		cur.peer.Source = ev.Peer.Source

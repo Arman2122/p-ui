@@ -76,6 +76,7 @@ export function isInboundMultiUser(record: { protocol: string; settings: unknown
     case 'ssh':
     case 'tuic':
     case 'anytls':
+    case 'openvpn':
     case 'wireguard':
     case 'wgkernel':
     case 'awgkernel':

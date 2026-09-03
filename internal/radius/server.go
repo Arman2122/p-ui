@@ -9,6 +9,8 @@ package radius
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -136,6 +138,16 @@ func (s *Server) AcctAddr() string { return s.acctAddr }
 
 // Secret is the host secret a core writes into its daemon's config.
 func (s *Server) Secret() string { return string(s.secret) }
+
+// NewSecret mints a host secret: 48 hex characters, which every consumer's
+// config accepts.
+func NewSecret() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
 
 // NASIdentifier is the name a core gives its inbound's daemon, so the packets
 // come back to the right sink.

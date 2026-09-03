@@ -124,7 +124,7 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		if client.Auth == "" {
 			client.Auth = existing.Auth
 		}
-		if client.Secret == "" || client.Username == "" {
+		if client.Secret == "" || client.Username == "" || client.TLSCryptV2 == "" {
 			stored, sErr := storedClientCredentials(nil, existing.Id)
 			if sErr != nil {
 				return false, sErr
@@ -134,6 +134,9 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 			}
 			if client.Username == "" {
 				client.Username = stored[model.CredentialUsername]
+			}
+			if client.TLSCryptV2 == "" {
+				client.TLSCryptV2 = stored[model.CredentialTLSCryptV2]
 			}
 		}
 	}
@@ -386,7 +389,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.Auth == "" {
 		updated.Auth = existing.Auth
 	}
-	if updated.Secret == "" || updated.Username == "" {
+	if updated.Secret == "" || updated.Username == "" || updated.TLSCryptV2 == "" {
 		stored, sErr := storedClientCredentials(nil, id)
 		if sErr != nil {
 			return false, sErr
@@ -396,6 +399,9 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		if updated.Username == "" {
 			updated.Username = stored[model.CredentialUsername]
+		}
+		if updated.TLSCryptV2 == "" {
+			updated.TLSCryptV2 = stored[model.CredentialTLSCryptV2]
 		}
 	}
 

@@ -1060,6 +1060,20 @@ EOF
 }
 
 
+# The OpenVPN core runs the distribution's daemon and authenticates through
+# its RADIUS plugin; both are apt packages. A miss never aborts the install:
+# the core reports it at preflight and every other core keeps working.
+install_openvpn_packages() {
+    if ! dpkg -s openvpn > /dev/null 2>&1 || ! dpkg -s openvpn-auth-radius > /dev/null 2>&1; then
+        apt-get install -y -q openvpn openvpn-auth-radius > /dev/null 2>&1 \
+            || echo -e "${yellow}Could not install openvpn and openvpn-auth-radius; the OpenVPN core stays unavailable until they are${plain}"
+    fi
+    # The package's generic unit serves nothing without /etc/openvpn/*.conf; the
+    # panel's daemons are its own units, so it stays off rather than surprising.
+    systemctl disable --now openvpn.service > /dev/null 2>&1 || true
+}
+
+
 _install_pui_service_unit() {
     local source="$1"
     local source_is_url="$2"
@@ -1094,6 +1108,7 @@ update_p-ui() {
     load_pui_env
     ensure_core_user
     install_quic_sysctl
+    install_openvpn_packages
 
     if [ -f "${pui_folder}/p-ui" ]; then
         current_pui_version=$(${pui_folder}/p-ui -v)

@@ -495,6 +495,17 @@
         "tuicZeroRttHint": "Lets a returning client send data in its first packet. Faster, and replayable by design; leave off unless latency matters more.",
         "anytlsPadding": "Padding scheme",
         "anytlsPaddingHint": "One line per entry, in sing-box's padding-scheme syntax; empty keeps the built-in default.",
+        "openvpnProto": "Transport",
+        "openvpnProtoHint": "UDP is the fast path; TCP passes networks that drop UDP. One process serves one; add a second inbound for the other.",
+        "openvpnSubnet": "Tunnel subnet",
+        "openvpnSubnetHint": "IPv4 prefix clients get their addresses from; the first address is the server's. Each inbound needs its own.",
+        "openvpnDns": "DNS servers pushed to clients",
+        "openvpnDnsHint": "Comma-separated; empty pushes none.",
+        "openvpnRedirect": "Route all client traffic",
+        "openvpnRedirectHint": "Pushes a default route so everything leaves through the tunnel; off, only the tunnel subnet is routed.",
+        "openvpnIdentityMinted": "Server identity is minted: clients pin this certificate's fingerprint and their profiles carry a key wrapped by this inbound's tls-crypt-v2 server key. It is kept on every save.",
+        "openvpnIdentityPending": "The server certificate and tls-crypt-v2 key are minted on the first save; no file to provide.",
+        "openvpnRadius": "Clients log in with a username and password through the panel's embedded RADIUS server (openvpn-auth-radius); traffic and sessions come from its accounting.",
         "mtgRouteThroughXray": "Route through Xray",
         "mtgRouteThroughXrayHint": "Send this proxy's Telegram traffic through Xray so it follows your routing rules. The mtg sidecar dials out via a loopback SOCKS bridge tagged with this inbound's tag; reference that tag in the Routing tab for advanced rules.",
         "mtgRouteOutbound": "Outbound",
@@ -997,6 +1008,9 @@
       "wireguardAllowedIPsHint": "Leave empty to auto-assign; separate entries with commas",
       "username": "Username",
       "usernameDesc": "The SSH login name; leave empty to have one minted.",
+      "tlsCryptV2": "tls-crypt-v2 client key",
+      "tlsCryptV2Hint": "Minted by the panel against the inbound's server key and embedded in the .ovpn file; a removed client cannot even start a handshake without it.",
+      "tlsCryptV2Pending": "Minted when the client is saved",
       "mtprotoSecret": "MTProto secret",
       "mtprotoSecretHint": "The client's FakeTLS secret. Regenerate to rotate it.",
       "mtprotoAdTag": "Ad-tag (sponsored channel)",
@@ -2381,6 +2395,9 @@
     },
     "singbox": {
       "title": "sing-box"
+    },
+    "openvpn": {
+      "title": "OpenVPN"
     },
     "mtproto": {
       "title": "MTProto"

@@ -648,16 +648,23 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	s.supervisor = backend
 	daemonUser, daemonGroup := daemonIdentity(backend)
 	registry, err := cores.Default(cores.Deps{
-		Supervisor:      backend,
-		DaemonUser:      daemonUser,
-		DaemonGroup:     daemonGroup,
-		XrayBaseConfig:  s.xrayService.GetXrayBaseConfig,
-		SSHHostKey:      s.settingService.GetSSHHostKey,
-		StoreSSHHostKey: s.settingService.SetSSHHostKey,
-		CoreAuthFailure: s.publishCoreAuthFailure,
+		Supervisor:        backend,
+		DaemonUser:        daemonUser,
+		DaemonGroup:       daemonGroup,
+		XrayBaseConfig:    s.xrayService.GetXrayBaseConfig,
+		SSHHostKey:        s.settingService.GetSSHHostKey,
+		StoreSSHHostKey:   s.settingService.SetSSHHostKey,
+		RadiusSecret:      s.settingService.GetRadiusSecret,
+		StoreRadiusSecret: s.settingService.SetRadiusSecret,
+		CoreAuthFailure:   s.publishCoreAuthFailure,
 	})
 	if err != nil {
 		return err
+	}
+	for _, prefix := range cores.DeviceNamespaces() {
+		if err := service.RegisterShapingNamespace(prefix); err != nil {
+			return err
+		}
 	}
 	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{
 		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },

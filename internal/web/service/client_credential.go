@@ -170,11 +170,12 @@ func deleteClientCredentials(tx *gorm.DB, clientIds, inboundIds []int, keys ...s
 // coreCredentialRows projects a client's per-core credentials onto rows for one
 // inbound. Empty is omitted, so a blob without them cannot clear an earlier save.
 func coreCredentialRows(clientId, inboundId int, c *model.Client) []model.ClientCredential {
-	rows := make([]model.ClientCredential, 0, 3)
+	rows := make([]model.ClientCredential, 0, 4)
 	for _, pair := range [][2]string{
 		{model.CredentialSecret, c.Secret},
 		{model.CredentialAdTag, c.AdTag},
 		{model.CredentialUsername, c.Username},
+		{model.CredentialTLSCryptV2, c.TLSCryptV2},
 	} {
 		if pair[1] == "" {
 			continue
@@ -191,4 +192,5 @@ func applyCoreCredentials(c *model.Client, byKey map[string]string) {
 	c.Secret = byKey[model.CredentialSecret]
 	c.AdTag = byKey[model.CredentialAdTag]
 	c.Username = byKey[model.CredentialUsername]
+	c.TLSCryptV2 = byKey[model.CredentialTLSCryptV2]
 }
