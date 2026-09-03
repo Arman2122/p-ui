@@ -1456,6 +1456,8 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 		}
 
 		ok := true
+		submitted := inboundBoundCredentials(&prep[idx].client)
+		boundTo := map[int]map[string]string{}
 		for _, ibId := range prep[idx].inboundIds {
 			ib, e := getIb(ibId)
 			if e != nil {
@@ -1464,12 +1466,15 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 				ok = false
 				break
 			}
+			// One row, one login, but one wrapped key per inbound it lands on.
+			setClientCredentials(&prep[idx].client, submitted)
 			if e := s.fillProtocolDefaults(&prep[idx].client, ib); e != nil {
 				failed[idx] = true
 				reason[idx] = e.Error()
 				ok = false
 				break
 			}
+			boundTo[ibId] = inboundBoundCredentials(&prep[idx].client)
 		}
 		if !ok {
 			continue
@@ -1492,7 +1497,9 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 			if _, seen := byInbound[ibId]; !seen {
 				inboundOrder = append(inboundOrder, ibId)
 			}
-			byInbound[ibId] = append(byInbound[ibId], clientWithInboundFlow(prep[idx].client, ib))
+			row := prep[idx].client
+			setClientCredentials(&row, boundTo[ibId])
+			byInbound[ibId] = append(byInbound[ibId], clientWithInboundFlow(row, ib))
 			idxByInbound[ibId] = append(idxByInbound[ibId], idx)
 		}
 	}

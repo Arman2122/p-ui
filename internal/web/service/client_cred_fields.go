@@ -61,6 +61,24 @@ func setClientCredential(c *model.Client, name, value string) {
 	}
 }
 
+// inboundBoundCredentials is what the operator submitted for the credentials
+// each inbound mints for itself, restored before every inbound's mint.
+func inboundBoundCredentials(c *model.Client) map[string]string {
+	out := map[string]string{}
+	for name, value := range clientCredentialValues(c) {
+		if core.InboundBound(name) {
+			out[name] = value
+		}
+	}
+	return out
+}
+
+func setClientCredentials(c *model.Client, values map[string]string) {
+	for name, value := range values {
+		setClientCredential(c, name, value)
+	}
+}
+
 // clientIdentityValue reads the field a core named as this kind's config
 // identity — a vocabulary credential, or the email every client carries.
 // identityFieldFor names the field the kind's core keys its user table on.

@@ -51,6 +51,10 @@ var clientCredentials = map[string]bool{
 // IsClientCredential reports whether name is one the client form can render.
 func IsClientCredential(name string) bool { return clientCredentials[name] }
 
+// InboundBound reports a credential wrapped by one inbound's own key: a
+// client on several inbounds carries one per inbound, never a copy.
+func InboundBound(name string) bool { return name == CredTLSCryptV2 }
+
 // ClientCredentialNames returns the vocabulary, sorted. openapigen emits it so
 // the renderer's literals are checked against this file instead of copied.
 func ClientCredentialNames() []string {

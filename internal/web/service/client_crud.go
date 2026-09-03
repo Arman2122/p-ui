@@ -124,7 +124,8 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		if client.Auth == "" {
 			client.Auth = existing.Auth
 		}
-		if client.Secret == "" || client.Username == "" || client.TLSCryptV2 == "" {
+		// The wrapped tls-crypt-v2 key is not reused: it belongs to one inbound.
+		if client.Secret == "" || client.Username == "" {
 			stored, sErr := storedClientCredentials(nil, existing.Id)
 			if sErr != nil {
 				return false, sErr
@@ -134,9 +135,6 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 			}
 			if client.Username == "" {
 				client.Username = stored[model.CredentialUsername]
-			}
-			if client.TLSCryptV2 == "" {
-				client.TLSCryptV2 = stored[model.CredentialTLSCryptV2]
 			}
 		}
 	}
@@ -159,11 +157,15 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	}
 
 	needRestart := false
+	submitted := inboundBoundCredentials(&client)
 	for _, ibId := range payload.InboundIds {
 		inbound, getErr := inboundSvc.GetInbound(ibId)
 		if getErr != nil {
 			return needRestart, getErr
 		}
+		// One login across inbounds but one wrapped key per inbound: what the
+		// last inbound minted must not reach the next.
+		setClientCredentials(&client, submitted)
 		if err := s.fillProtocolDefaults(&client, inbound); err != nil {
 			return needRestart, err
 		}
