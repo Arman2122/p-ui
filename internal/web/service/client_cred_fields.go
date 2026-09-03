@@ -79,6 +79,21 @@ func setClientCredentials(c *model.Client, values map[string]string) {
 	}
 }
 
+// restoreInboundBound fills what the caller omitted from the inbound's own
+// stored rows, so a partial edit keeps each inbound's key instead of minting one.
+func restoreInboundBound(c *model.Client, clientId, inboundId int) error {
+	stored, err := storedCredentialsFor(nil, clientId, inboundId)
+	if err != nil {
+		return err
+	}
+	for name, value := range clientCredentialValues(c) {
+		if core.InboundBound(name) && value == "" {
+			setClientCredential(c, name, stored[name])
+		}
+	}
+	return nil
+}
+
 // clientIdentityValue reads the field a core named as this kind's config
 // identity — a vocabulary credential, or the email every client carries.
 // identityFieldFor names the field the kind's core keys its user table on.

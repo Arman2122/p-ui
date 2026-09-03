@@ -391,7 +391,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.Auth == "" {
 		updated.Auth = existing.Auth
 	}
-	if updated.Secret == "" || updated.Username == "" || updated.TLSCryptV2 == "" {
+	if updated.Secret == "" || updated.Username == "" {
 		stored, sErr := storedClientCredentials(nil, id)
 		if sErr != nil {
 			return false, sErr
@@ -401,9 +401,6 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		if updated.Username == "" {
 			updated.Username = stored[model.CredentialUsername]
-		}
-		if updated.TLSCryptV2 == "" {
-			updated.TLSCryptV2 = stored[model.CredentialTLSCryptV2]
 		}
 	}
 
@@ -471,6 +468,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	}
 
 	needRestart := false
+	submitted := inboundBoundCredentials(&updated)
 	for _, ibId := range inboundIds {
 		inbound, getErr := inboundSvc.GetInbound(ibId)
 		if getErr != nil {
@@ -486,6 +484,12 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		if existing.Email == "" {
 			continue
+		}
+		// An omitted wrapped key means this inbound keeps its own, never the last
+		// inbound's and never a fresh one.
+		setClientCredentials(&updated, submitted)
+		if err := restoreInboundBound(&updated, id, ibId); err != nil {
+			return needRestart, err
 		}
 		if err := s.fillProtocolDefaults(&updated, inbound); err != nil {
 			return needRestart, err
