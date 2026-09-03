@@ -2,7 +2,7 @@
 Package openvpn drives the distribution's OpenVPN as a supervised process per
 inbound. Identity is CA-free: the panel mints the server certificate clients
 pin by fingerprint, a tls-crypt-v2 server key wraps one client key per user so
-a removed client cannot open a handshake, and the panel's embedded RADIUS
+nobody without a panel-issued profile gets a handshake, and the panel's embedded RADIUS
 server authenticates and accounts through openvpn-auth-radius. The
 management socket is used for one thing only: ending a session.
 */

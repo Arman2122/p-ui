@@ -326,8 +326,8 @@ Identity is **CA-free**. On the first save the panel mints the server's
 certificate and its tls-crypt-v2 server key and keeps both in the inbound's
 row (a database restore is a complete restore). Clients pin the certificate by
 fingerprint, so no CA ships in a profile, and every client carries its own
-tls-crypt-v2 key wrapped by the server key: a removed client cannot even open
-a handshake. Clients present no certificate; they log in with a **username**
+tls-crypt-v2 key wrapped by the server key: nobody without a panel-issued
+profile gets a handshake, and a removed client is refused at login. Clients present no certificate; they log in with a **username**
 and **password**, minted when left empty.
 
 Logins go through the panel's embedded RADIUS server via the plugin, which is
