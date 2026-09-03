@@ -39,6 +39,19 @@ func (s *recordingSink) Account(_ context.Context, ev Event) {
 	s.events = append(s.events, ev)
 }
 
+// The server appends from its own goroutine; the test reads under the lock.
+func (s *recordingSink) seenLogins() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.logins...)
+}
+
+func (s *recordingSink) seenEvents() []Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Event(nil), s.events...)
+}
+
 func freeUDP(t *testing.T) string {
 	t.Helper()
 	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -129,7 +142,7 @@ func TestAccessRequestIsAnsweredByTheNASsSink(t *testing.T) {
 	if resp.Code != radius.CodeAccessReject {
 		t.Fatalf("unknown NAS: %v, want Access-Reject", resp.Code)
 	}
-	if got := strings.Join(sink.logins, ","); got != "alice:open-sesame,alice:nope" {
+	if got := strings.Join(sink.seenLogins(), ","); got != "alice:open-sesame,alice:nope" {
 		t.Fatalf("the sink saw %q; the unknown NAS must never reach it", got)
 	}
 
@@ -162,18 +175,17 @@ func TestAccountingIsFoldedAndAcknowledged(t *testing.T) {
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		sink.mu.Lock()
-		n := len(sink.events)
-		sink.mu.Unlock()
+		n := len(sink.seenEvents())
 		if n == 1 || time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(sink.events) != 1 {
-		t.Fatalf("the sink got %d events", len(sink.events))
+	events := sink.seenEvents()
+	if len(events) != 1 {
+		t.Fatalf("the sink got %d events", len(events))
 	}
-	ev := sink.events[0]
+	ev := events[0]
 	want := Event{
 		Status: Interim, SessionID: "sess-1", Username: "alice", In: 1<<32 + 5, Out: 4000, SessionSeconds: 61,
 		Peer: Peer{Source: netip.MustParseAddr("203.0.113.7"), FramedIP: netip.MustParseAddr("10.9.0.7")},
