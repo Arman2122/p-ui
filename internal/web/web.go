@@ -24,6 +24,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
+	"github.com/Arman2122/p-ui/internal/util/crypto"
 	"github.com/Arman2122/p-ui/internal/util/sys"
 	"github.com/Arman2122/p-ui/internal/web/controller"
 	"github.com/Arman2122/p-ui/internal/web/entity"
@@ -702,7 +703,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err == nil {
 			c := &tls.Config{
-				Certificates: []tls.Certificate{cert},
+				GetCertificate: crypto.NewCertReloader(certFile, keyFile, cert).GetCertificate,
 			}
 			// Opt-in node mTLS: when a trust CA is configured, request and verify
 			// client certs (VerifyClientCertIfGiven keeps browsers working). With

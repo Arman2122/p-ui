@@ -155,8 +155,9 @@ runs on a systemd timer by default.
 <Callout type="warn">
   Certificates expire (Let's Encrypt: 90 days; IP certs: ~6 days). The menu and
   Certbot both renew automatically, but the panel keeps reading the **files** at
-  their fixed paths — so renew **in place** rather than moving the files, and the
-  panel picks up the new cert on its next restart. **Force Renew** (menu `20`)
+  their fixed paths — so renew **in place** rather than moving the files. The panel and
+  the subscription server serve the new pair on the next connection; no restart is
+  needed, and the installer's default ACME reload command only restarts xray-core. **Force Renew** (menu `20`)
   triggers a renewal on demand.
 </Callout>
 
