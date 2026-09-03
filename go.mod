@@ -3,6 +3,7 @@ module github.com/Arman2122/p-ui
 go 1.26.6
 
 require (
+	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-contrib/sessions v1.1.0
 	github.com/gin-gonic/gin v1.12.0
@@ -10,9 +11,11 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/goccy/go-json v0.10.6
 	github.com/goccy/go-yaml v1.19.2
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
+	github.com/mdlayher/genetlink v1.3.2
 	github.com/mdlayher/netlink v1.7.2
 	github.com/mymmrac/telego v1.11.1
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
@@ -38,7 +41,6 @@ require (
 require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
-	github.com/mdlayher/genetlink v1.3.2 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
 )
 

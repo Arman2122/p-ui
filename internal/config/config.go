@@ -202,3 +202,16 @@ func GetLogFolder() string {
 	}
 	return "/var/log/p-ui"
 }
+
+// SupervisorMode is PUI_SUPERVISOR: auto, systemd or exec. One knob for the
+// whole panel, so no core can be on a different backend from the others.
+func SupervisorMode() (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("PUI_SUPERVISOR")))
+	switch mode {
+	case "":
+		return "auto", nil
+	case "auto", "systemd", "exec":
+		return mode, nil
+	}
+	return "", fmt.Errorf("PUI_SUPERVISOR must be auto, systemd or exec, not %q", mode)
+}
