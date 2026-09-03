@@ -44,12 +44,19 @@ func (c *Core) RenderClient(inst core.Instance, user core.User, host string) (co
 		Kind:     "file",
 		Filename: safeName(cred.username) + ".txt",
 		Body:     b.String(),
-		URI:      shareURI(host, port, cred, settings, inst.Tag),
+		URI:      shareURI(host, port, cred, settings),
 	}, nil
 }
 
-func shareURI(host, port string, cred credential, settings Settings, remark string) string {
-	u := url.URL{Scheme: "ssh", User: url.UserPassword(cred.username, cred.password), Host: net.JoinHostPort(host, port), Fragment: remark}
+/*
+The URI carries no name. What a client app displays is the panel's to decide
+and is the same question for every protocol -- the operator's remark template,
+the inbound's remark, the client's own name -- so the subscription stamps it
+the way it stamps an Xray link's. A core that named it itself could only reach
+for the inbound tag, which is what it used to do.
+*/
+func shareURI(host, port string, cred credential, settings Settings) string {
+	u := url.URL{Scheme: "ssh", User: url.UserPassword(cred.username, cred.password), Host: net.JoinHostPort(host, port)}
 	q := url.Values{}
 	if settings.Transport != TransportTCP {
 		q.Set("transport", settings.Transport)

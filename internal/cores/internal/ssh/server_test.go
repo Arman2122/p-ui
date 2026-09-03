@@ -287,7 +287,12 @@ func TestShareCarriesEverythingAClientNeeds(t *testing.T) {
 	if share.Kind != "file" || share.Filename != "user0.txt" {
 		t.Fatalf("share = kind %q file %q", share.Kind, share.Filename)
 	}
-	if share.URI != "ssh://user0:secret-0@vpn.example.com:8880?path=%2Ft&transport=ws#ssh-ws" {
+	// No name: what a client app displays is the subscription's to stamp, and
+	// the only name a core could reach for is the inbound's tag.
+	if share.URI != "ssh://user0:secret-0@vpn.example.com:8880?path=%2Ft&transport=ws" {
 		t.Fatalf("URI = %q", share.URI)
+	}
+	if strings.Contains(share.URI, "#") {
+		t.Fatalf("the core named the link itself: %q", share.URI)
 	}
 }

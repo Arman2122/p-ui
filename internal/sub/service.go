@@ -690,8 +690,16 @@ func (s *SubService) GetLink(inbound *model.Inbound, email string) string {
 	return s.shareURI(inbound, email)
 }
 
-// shareURI asks the core that renders this kind's file whether it also has a
-// URI the list can carry; the registry answers, so no kind is named here.
+/*
+shareURI asks the core that renders this kind's file whether it also has a URI
+the list can carry; the registry answers, so no kind is named here.
+
+One link per Host row, like every other generator: a core is handed the host's
+address and port and renders the connection, and the remark is stamped here.
+Without the fan-out an SSH client behind a CDN was handed the origin address
+its Host row exists to replace, and without the remark the link was named
+after the inbound's tag rather than the person holding it.
+*/
 func (s *SubService) shareURI(inbound *model.Inbound, email string) string {
 	if !cores.SharesFile(core.Kind(inbound.Protocol)) {
 		return ""
@@ -700,11 +708,33 @@ func (s *SubService) shareURI(inbound *model.Inbound, email string) string {
 	if !ok {
 		return ""
 	}
-	share, renders, err := cores.ClientShare(instanceForShare(inbound), userForShare(client), s.resolveInboundAddress(inbound))
-	if err != nil || !renders {
-		return ""
+	inst, user := instanceForShare(inbound), userForShare(client)
+	render := func(at core.Instance, address string) string {
+		share, renders, err := cores.ClientShare(at, user, address)
+		if err != nil || !renders {
+			return ""
+		}
+		return share.URI
 	}
-	return share.URI
+	endpoints := externalProxyEndpoints(unmarshalStreamSettings(inbound.StreamSettings))
+	if len(endpoints) == 0 {
+		uri := render(inst, s.resolveInboundAddress(inbound))
+		if uri == "" {
+			return ""
+		}
+		return buildLinkWithParams(uri, nil, s.genRemark(inbound, email, "", ""))
+	}
+	links := make([]string, 0, len(endpoints))
+	for _, ep := range endpoints {
+		dest, _ := ep["dest"].(string)
+		port, _ := ep["port"].(float64)
+		hosted := inst
+		hosted.Port = int(port)
+		if uri := render(hosted, dest); uri != "" {
+			links = append(links, buildLinkWithParams(uri, nil, s.endpointRemark(inbound, email, ep, "")))
+		}
+	}
+	return strings.Join(links, "\n")
 }
 
 // genWireguardLink builds a per-client wireguard:// share link mirroring the
