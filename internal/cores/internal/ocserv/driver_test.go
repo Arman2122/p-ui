@@ -362,3 +362,42 @@ func caSignedCert(t *testing.T) string {
 	}
 	return body
 }
+
+/*
+Camouflage on a daemon too old for it is worse than a refusal: ocserv prints
+"skipping unknown option" and serves the inbound in the clear, so an operator
+who turned it on believes they are hidden. The save is refused instead, and a
+version the panel cannot read refuses nothing.
+*/
+func TestCamouflageIsRefusedOnADaemonThatIgnoresIt(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		want    bool
+	}{
+		{"1.2.4", true},
+		{"1.2", true},
+		{"1.3.0", true},
+		{"2.0.1", true},
+		{"1.1.6", false},
+		{"1.0.0", false},
+		{"0.12.6", false},
+		{"", false},
+		{"nonsense", false},
+		{"1.x", false},
+	} {
+		if got := supportsCamouflage(tc.version); got != tc.want {
+			t.Errorf("supportsCamouflage(%q) = %t, want %t", tc.version, got, tc.want)
+		}
+	}
+
+	// A host with no ocserv reads no version, and an inbound still saves: the
+	// missing daemon is Preflight's to report, not this validator's.
+	c := New(Deps{Binary: filepath.Join(t.TempDir(), "no-such-ocserv")})
+	settings, err := c.MintInstance(Kind, `{"subnet":"10.11.0.0/24","camouflage":true}`, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ValidateInstance(Kind, settings); err != nil {
+		t.Fatalf("a save was refused for a daemon that is not installed: %v", err)
+	}
+}

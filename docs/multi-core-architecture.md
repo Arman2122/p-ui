@@ -2108,8 +2108,9 @@ and the conformance suite runs only where the daemon and plugin exist
 
 Core #8, `internal/cores/internal/ocserv/`. The daemon is the distribution's
 `ocserv`; the panel renders its config, supervises one process per inbound
-(the daemon drops privileges to `p-ui-core` from its own config, so the unit
-grants no capabilities), and authenticates, accounts and throttles it through
+(the unit runs as root and grants no capabilities: ocserv's own model puts
+`run-as-user` on the per-client worker while main and sec-mod stay root, which
+the systemd e2e reads off the host), and authenticates, accounts and throttles it through
 §12.5c's RADIUS server via the radcli client compiled into it. The path was
 proven against the real daemon before the adapter existed, the way the
 OpenVPN plugin was, and it corrected the research on three points:
@@ -2145,7 +2146,9 @@ honours; the official Cisco client does not pin, so an operator pastes a
 certificate their clients already trust into the same two fields and the
 profile then carries none. Camouflage is offered because plain AnyConnect is
 filtered where this panel is used; the secret is minted with the inbound and
-rides the client's URL.
+rides the client's URL. A save is refused when the host's ocserv predates
+1.2, because that daemon warns and carries on rather than refusing, and an
+operator would believe an inbound was hidden that is not.
 
 Deliberate v1 choices: a changed speed plan reaches a client at its next
 login rather than mid-session (an Access-Accept is the only per-user thing

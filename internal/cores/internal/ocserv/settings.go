@@ -11,6 +11,7 @@ package ocserv
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -24,6 +25,8 @@ import (
 	"fmt"
 	"math/big"
 	"net/netip"
+	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -225,8 +228,9 @@ func selfSigned(certPEM string) bool {
 	return cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) == nil
 }
 
-// ValidateInstance: what the daemon would refuse at start, and the pinned
-// identity every existing client depends on.
+// ValidateInstance: what the daemon would refuse at start, the pinned identity
+// every existing client depends on, and the one option an older daemon accepts
+// without honouring.
 func (c *Core) ValidateInstance(kind core.Kind, raw string) error {
 	if kind != Kind {
 		return nil
@@ -240,7 +244,53 @@ func (c *Core) ValidateInstance(kind core.Kind, raw string) error {
 			return err
 		}
 	}
+	if s.Camouflage {
+		if v := c.daemonVersion(); v != "" && !supportsCamouflage(v) {
+			return fmt.Errorf("ocserv: camouflage needs ocserv 1.2 or newer; this host has %s", v)
+		}
+	}
 	return nil
+}
+
+/*
+An ocserv older than 1.2 does not refuse `camouflage`, it prints "skipping
+unknown option" and serves the inbound unhidden -- so an operator who turned
+it on would believe they were camouflaged and not be. That is the one thing
+worth reading the daemon's version for.
+*/
+func supportsCamouflage(version string) bool {
+	major, minor, ok := strings.Cut(version, ".")
+	if !ok {
+		return false
+	}
+	minor, _, _ = strings.Cut(minor, ".")
+	m, err := strconv.Atoi(strings.TrimSpace(major))
+	if err != nil {
+		return false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(minor))
+	if err != nil {
+		return false
+	}
+	return m > 1 || (m == 1 && n >= 2)
+}
+
+// daemonVersion is the number in "OpenConnect VPN Server 1.2.4", or empty when
+// the daemon is absent or answers something unexpected: an unknown version
+// refuses nothing, because Preflight already reports a missing daemon.
+func (c *Core) daemonVersion() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, c.binaryPath(), "--version").CombinedOutput()
+	if err != nil && len(out) == 0 {
+		return ""
+	}
+	for _, field := range strings.Fields(string(out)) {
+		if field != "" && field[0] >= '0' && field[0] <= '9' && strings.Contains(field, ".") {
+			return field
+		}
+	}
+	return ""
 }
 
 type credential struct{ username, password string }

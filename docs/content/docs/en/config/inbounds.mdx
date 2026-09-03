@@ -358,7 +358,13 @@ The distribution's `ocserv`, one supervised process per inbound, serving the
 AnyConnect protocol over TLS and DTLS on a single port. The installer adds the
 `ocserv` package and masks the units it ships: Debian starts it
 socket-activated on 443, which would take that port from the panel's own
-inbounds. Each inbound's daemon drops to the `p-ui-core` user.
+inbounds.
+
+The daemon's privilege model is its own, and it is not OpenVPN's: the process
+serving each connected client runs as `p-ui-core`, while the main process and
+the authentication helpers stay root, because they create the tun devices and
+own the control socket. The unit therefore runs as root and grants no
+capabilities.
 
 Everything about a client comes from the panel's embedded RADIUS server, and
 the daemon keeps no user database, so adding or removing a client writes no
@@ -392,7 +398,9 @@ own fields, and the profile then carries no pin.
 daemon answers every request that does not carry the secret exactly as a web
 server would, so a scan finds nothing; the secret is minted on save and rides
 each client's URL after a `?`. It needs ocserv 1.2 or newer, which is what
-Ubuntu 24.04 and Debian 13 ship.
+Ubuntu 24.04 and Debian 13 ship; on an older one the panel refuses the save
+and names the version, because that daemon accepts the option, prints
+"skipping unknown option" and serves the inbound in the clear.
 
 Accounting is exact per session and cumulative, read from the daemon's own
 accounting records rather than from interface counters, so it survives a

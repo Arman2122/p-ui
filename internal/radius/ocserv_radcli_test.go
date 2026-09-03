@@ -257,6 +257,15 @@ dtls-legacy = true
 		}
 		time.Sleep(time.Second)
 	}
+	// The client saw the disconnect and exited, so it staying away is the
+	// daemon's doing rather than a client that was never told.
+	if log := tailOf(filepath.Join(dir, "client.log")); !strings.Contains(log, "terminated by server") {
+		t.Fatalf("the client never saw the disconnect, so its absence proves nothing:\n%s", log)
+	}
+	ok, err := ProbeLogin(t.Context(), srv.AuthAddr(), srv.Secret(), NASIdentifier("ocserv", 1), "alice", "open-sesame")
+	if err != nil || ok {
+		t.Fatalf("a refused client can still log in (accepted=%t, err=%v)", ok, err)
+	}
 }
 
 func freeTCPPort(t *testing.T) int {
