@@ -16,7 +16,7 @@ type Core interface {
 	Describe() Descriptor
 
 	// Kinds are the protocols this core serves. One core may serve several —
-	// accel-ppp would answer l2tp, pptp and sstp.
+	// a sing-box adapter would answer tuic and anytls.
 	Kinds() []Kind
 
 	// Preflight reports whether this core can run here: binary present, kernel
