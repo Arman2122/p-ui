@@ -75,7 +75,8 @@ func TestCapabilityRules(t *testing.T) {
 
 		{"sniffing on vless", CapSniffing, Facts{Protocol: "vless"}, true},
 		{"sniffing not on mtproto", CapSniffing, Facts{Protocol: "mtproto"}, false},
-		{"sniffing on a core this build does not know", CapSniffing, Facts{Protocol: "openvpn"}, true},
+		// A positive list: a kind Xray does not serve gets no toggle without an edit.
+		{"no sniffing on a core this build does not know", CapSniffing, Facts{Protocol: "openvpn"}, false},
 
 		{"ss2022 by method prefix", CapSS2022, Facts{Protocol: "shadowsocks", Settings: map[string]string{"method": "2022-blake3-aes-128-gcm"}}, true},
 		{"legacy shadowsocks cipher is not 2022", CapSS2022, Facts{Protocol: "shadowsocks", Settings: map[string]string{"method": "aes-256-gcm"}}, false},

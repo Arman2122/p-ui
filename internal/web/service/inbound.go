@@ -997,6 +997,15 @@ func RefuseUnrunnableCore(inbound *model.Inbound) error {
 	if err := cores.PreflightFor(context.Background(), core.Kind(inbound.Protocol)); err != nil {
 		return common.NewErrorf("this host cannot run a %s inbound: %v", inbound.Protocol, err)
 	}
+	if cores.OnePerNode(core.Kind(inbound.Protocol)) {
+		var existing int64
+		if err := database.GetDB().Model(&model.Inbound{}).Where("protocol = ? AND node_id IS NULL AND id <> ?", inbound.Protocol, inbound.Id).Count(&existing).Error; err != nil {
+			return err
+		}
+		if existing > 0 {
+			return common.NewErrorf("this host already runs a %s inbound, and that daemon serves the whole host; edit the existing one", inbound.Protocol)
+		}
+	}
 	return nil
 }
 

@@ -33,6 +33,9 @@ type Descriptor struct {
 	// dead-key test counts them as referenced.
 	TitleKey string       `json:"titleKey"`
 	Caps     Capabilities `json:"caps"`
+	// OnePerNode is a host-global daemon (strongSwan owns UDP 500/4500 for the
+	// whole host): a second inbound of its kinds on one node is refused at add.
+	OnePerNode bool `json:"onePerNode,omitempty"`
 }
 
 // Capabilities is what a core claims it can do. Every field is a *bool because

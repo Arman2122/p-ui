@@ -515,6 +515,9 @@ type ExitHandle struct {
 	SocksPort int
 	XrayTag   string
 	Source    SourceOwner
+	// TCPOnly is an exit that carries no UDP (an SSH forward); the compiler
+	// narrows rules to TCP rather than let routed UDP vanish into it.
+	TCPOnly bool
 }
 
 /*

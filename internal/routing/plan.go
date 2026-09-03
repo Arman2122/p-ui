@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/egress"
@@ -268,6 +269,47 @@ the one property internal/egress guarantees. The row is what ties them together:
 the same enabled egress that answers ExitDevice here is the one whose Fill sets
 Marked, and the service layer converges the kernel before Xray is restarted.
 */
+type narrowResult int
+
+const (
+	narrowSilent narrowResult = iota
+	narrowWarned
+	narrowRefused
+)
+
+// narrowToTCP pins a rule bound for a TCP-only exit to network "tcp". A rule
+// that asked for UDP alone is refused; one that asked for both is narrowed and
+// the operator told, so no rule quietly sends UDP where it cannot go.
+func narrowToTCP(body map[string]json.RawMessage) narrowResult {
+	raw, ok := body["network"]
+	if !ok {
+		body["network"] = json.RawMessage(`"tcp"`)
+		return narrowSilent
+	}
+	var network string
+	if json.Unmarshal(raw, &network) != nil {
+		body["network"] = json.RawMessage(`"tcp"`)
+		return narrowWarned
+	}
+	hasTCP, hasUDP := false, false
+	for _, part := range strings.Split(network, ",") {
+		switch strings.TrimSpace(strings.ToLower(part)) {
+		case "tcp":
+			hasTCP = true
+		case "udp":
+			hasUDP = true
+		}
+	}
+	switch {
+	case hasUDP && !hasTCP:
+		return narrowRefused
+	case hasUDP:
+		body["network"] = json.RawMessage(`"tcp"`)
+		return narrowWarned
+	}
+	return narrowSilent
+}
+
 func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (json.RawMessage, Diag, json.RawMessage) {
 	diag := Diag{RuleID: rule.ID, SubjectTag: subject.Tag, Pattern: pattern, Severity: SeverityOK}
 
@@ -322,6 +364,17 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 			body["outboundTag"] = mustJSON(exit.Handle.XrayTag)
 			diag.Pattern = PatternProxy
 		case core.ExitSocksPort:
+			if exit.Handle.TCPOnly {
+				switch narrowToTCP(body) {
+				case narrowRefused:
+					diag.Severity, diag.Pattern, diag.MessageKey = SeverityInert, PatternInert, KeyExitTCPOnly
+					diag.Args = map[string]string{"exit": exit.Label}
+					return nil, diag, nil
+				case narrowWarned:
+					diag.Severity, diag.MessageKey = SeverityWarn, KeyExitTCPNarrowed
+					diag.Args = map[string]string{"exit": exit.Label}
+				}
+			}
 			name := exitOutboundTag(exit.ID)
 			outbound = socksOutbound(name, exit.Handle.SocksPort)
 			body["outboundTag"] = mustJSON(name)
