@@ -33,6 +33,7 @@ type Bound struct {
 	Link          LinkRenderer
 	Shape         ShapingHost
 	Rate          RateEnforcer
+	Deferred      DeferredApplier
 	Ingress       RoutableIngress
 	Egress        RoutableEgress
 	ExitSupervise ExitSupervisor
@@ -90,6 +91,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(RateEnforcer); ok {
 		b.Rate = v
+	}
+	if v, ok := c.(DeferredApplier); ok {
+		b.Deferred = v
 	}
 	if v, ok := c.(RoutableIngress); ok {
 		b.Ingress = v

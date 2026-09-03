@@ -201,6 +201,18 @@ func (s *ClientService) HasPendingNode(inboundSvc *InboundService, email string)
 	return inboundSvc.AnyNodePending(ids)
 }
 
+// ApplyDelayForEmail is ApplyDelayFor over the inbounds this client sits on.
+func (s *ClientService) ApplyDelayForEmail(inboundSvc *InboundService, email string) int {
+	if strings.TrimSpace(email) == "" {
+		return 0
+	}
+	ids, err := s.GetInboundIdsForEmail(nil, email)
+	if err != nil {
+		return 0
+	}
+	return inboundSvc.ApplyDelayFor(ids)
+}
+
 // findInboundIdsByClientEmail returns every inbound whose settings.clients[]
 // JSON contains an entry with the given email. Driver-portable (no JSON
 // operators) by parsing in Go — fine for the rare fallback path.

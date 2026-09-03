@@ -195,7 +195,8 @@ func (a *ClientController) create(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientAddSuccess"), pendingObj(a.inboundService.AnyNodePending(payload.InboundIds), needRestart), nil)
+	jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientAddSuccess"), pendingObj(a.inboundService.AnyNodePending(payload.InboundIds), needRestart),
+		applyDelayWarning(c, a.inboundService.ApplyDelayFor(payload.InboundIds)))
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}
@@ -215,7 +216,8 @@ func (a *ClientController) update(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientUpdateSuccess"), pendingObj(a.clientService.HasPendingNode(&a.inboundService, email), needRestart), nil)
+	jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientUpdateSuccess"), pendingObj(a.clientService.HasPendingNode(&a.inboundService, email), needRestart),
+		applyDelayWarning(c, a.clientService.ApplyDelayForEmail(&a.inboundService, email)))
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}
@@ -257,7 +259,8 @@ func (a *ClientController) attach(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientAddSuccess"), pendingObj(a.inboundService.AnyNodePending(body.InboundIds), needRestart), nil)
+	jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientAddSuccess"), pendingObj(a.inboundService.AnyNodePending(body.InboundIds), needRestart),
+		applyDelayWarning(c, a.inboundService.ApplyDelayFor(body.InboundIds)))
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}

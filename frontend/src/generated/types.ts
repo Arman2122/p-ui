@@ -358,6 +358,7 @@ export interface ClientTraffic {
 }
 
 export interface CoreView {
+  applyDelaySeconds: Record<string, number>;
   available: boolean;
   caps: Capabilities;
   clientCredentials: Record<string, string[]>;

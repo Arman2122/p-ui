@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/netip"
 	"slices"
+	"time"
 )
 
 /*
@@ -274,6 +275,17 @@ type RateEnforcer interface {
 	// EnforcesRates is per-kind and static, so a form can gate its speed fields.
 	EnforcesRates(kind Kind) bool
 	EnforceRates(ctx context.Context, inst Instance, limits map[string]RateLimit) error
+}
+
+/*
+DeferredApplier declares that this core applies a user or instance edit on its
+next reconcile pass rather than at once: sing-box has no hot user add, so an
+edit is a config rewrite and a reload, coalesced. Such a core's AddUser,
+RemoveUser and ApplyInstance record the wish and return nil; ApplyDelay is what
+the operator is told at save time — "takes effect within this long".
+*/
+type DeferredApplier interface {
+	ApplyDelay(kind Kind) time.Duration
 }
 
 // Session is one client's live connection as its core can see it.

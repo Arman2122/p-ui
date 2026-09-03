@@ -1507,6 +1507,16 @@ export const SCHEMAS: Record<string, unknown> = {
   "CoreView": {
     "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
     "properties": {
+      "applyDelaySeconds": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "description": "ApplyDelaySeconds, per kind, is how long an edit takes to land on a core\nthat applies on its next pass; a kind absent here applies at once.",
+        "example": {
+          "tuic": 10
+        },
+        "type": "object"
+      },
       "available": {
         "description": "Available is this host's Preflight answer and Unavailable is why not, so a\ncore the host cannot run is explained rather than silently offered.",
         "example": true,
@@ -1620,6 +1630,7 @@ export const SCHEMAS: Record<string, unknown> = {
       }
     },
     "required": [
+      "applyDelaySeconds",
       "available",
       "caps",
       "clientCredentials",

@@ -200,7 +200,7 @@ func (a *InboundController) addInbound(c *gin.Context) {
 	} else if needRestart {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, I18nWeb(c, "pages.inbounds.toasts.savedRestartPending"))
 	} else {
-		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, applyDelayWarning(c, a.inboundService.ApplyDelayFor([]int{inbound.Id})))
 	}
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
@@ -311,7 +311,7 @@ func (a *InboundController) updateInbound(c *gin.Context) {
 	} else if needRestart {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, I18nWeb(c, "pages.inbounds.toasts.savedRestartPending"))
 	} else {
-		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, nil)
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), inbound, applyDelayWarning(c, a.inboundService.ApplyDelayFor([]int{inbound.Id})))
 	}
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
@@ -483,7 +483,7 @@ func (a *InboundController) importInbound(c *gin.Context) {
 	} else if needRestart {
 		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, I18nWeb(c, "pages.inbounds.toasts.savedRestartPending"))
 	} else {
-		jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+		jsonMsgObjWarn(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, applyDelayWarning(c, a.inboundService.ApplyDelayFor([]int{inbound.Id})))
 	}
 	if needRestart {
 		a.xrayService.SetToNeedRestart()

@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -237,6 +238,15 @@ func pendingObj(nodePending, restartPending bool) any {
 		out["restartPending"] = true
 	}
 	return out
+}
+
+// applyDelayWarning tells the operator a save lands on the core's next pass,
+// or nothing when it applied at once.
+func applyDelayWarning(c *gin.Context, seconds int) string {
+	if seconds <= 0 {
+		return ""
+	}
+	return I18nWeb(c, "pages.inbounds.toasts.appliesWithin", "seconds=="+strconv.Itoa(seconds))
 }
 
 // pureJsonMsg sends a pure JSON message response with custom status code.

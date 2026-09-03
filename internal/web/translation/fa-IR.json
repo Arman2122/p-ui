@@ -427,6 +427,7 @@
         "inboundClientUpdateSuccess": "کلاینت ورودی به‌روزرسانی شد",
         "savedNodeOfflineWillSync": "به‌صورت محلی ذخیره شد. یک نود پشتیبان آفلاین یا غیرفعال است — تغییر پس از اتصال مجدد همگام‌سازی می‌شود.",
         "savedRestartPending": "ذخیره شد. پس از راه‌اندازی مجدد بعدی Xray اعمال می‌شود.",
+        "appliesWithin": "ذخیره شد. این پروتکل تغییرات را در گذر بعدی خود، حداکثر تا {{ .seconds }} ثانیه، اعمال می‌کند.",
         "resetAllClientTrafficSuccess": "تمام ترافیک کلاینت بازنشانی شد",
         "resetAllTrafficSuccess": "تمام ترافیک‌ها بازنشانی شدند",
         "resetInboundClientTrafficSuccess": "ترافیک بازنشانی شد",

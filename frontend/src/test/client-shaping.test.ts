@@ -16,6 +16,7 @@ const CORES: CoreView[] = [
     shaping: { wgkernel: 'innerIP' },
     sessionKinds: [],
     rateKinds: [],
+    applyDelaySeconds: {},
     portlessKinds: [],
   },
   {
@@ -30,6 +31,7 @@ const CORES: CoreView[] = [
     shaping: {},
     sessionKinds: [],
     rateKinds: [],
+    applyDelaySeconds: {},
     portlessKinds: [],
   },
 ];

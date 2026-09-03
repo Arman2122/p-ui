@@ -376,6 +376,7 @@ export const ClientTrafficSchema = z.object({
 export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
 
 export const CoreViewSchema = z.object({
+  applyDelaySeconds: z.record(z.string(), z.number().int()),
   available: z.boolean(),
   caps: z.lazy(() => CapabilitiesSchema),
   clientCredentials: z.record(z.string(), z.array(z.string())),

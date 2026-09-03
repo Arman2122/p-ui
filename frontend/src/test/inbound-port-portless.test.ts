@@ -20,6 +20,7 @@ const CORES = [
     shaping: {},
     sessionKinds: [],
     rateKinds: [],
+    applyDelaySeconds: {},
     portlessKinds: ['tun'],
     available: true,
     unavailable: '',

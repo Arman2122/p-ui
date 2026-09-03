@@ -345,6 +345,9 @@ export const EXAMPLES: Record<string, unknown> = {
     "uuid": "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
   },
   "CoreView": {
+    "applyDelaySeconds": {
+      "tuic": 10
+    },
     "available": true,
     "caps": {
       "onlineUsers": null,

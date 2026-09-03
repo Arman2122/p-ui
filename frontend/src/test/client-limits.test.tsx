@@ -25,6 +25,7 @@ const WG_CORE: CoreView = {
   shaping: { wgkernel: 'innerIP' },
   sessionKinds: [],
   rateKinds: [],
+  applyDelaySeconds: {},
   portlessKinds: [],
 };
 

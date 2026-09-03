@@ -427,6 +427,7 @@
         "inboundClientUpdateSuccess": "Inbound client has been updated.",
         "savedNodeOfflineWillSync": "Saved locally. A backing node is offline or disabled — the change will sync once it reconnects.",
         "savedRestartPending": "Saved. It takes effect after the next Xray restart.",
+        "appliesWithin": "Saved. This protocol applies changes on its next pass, within {{ .seconds }} seconds.",
         "resetAllClientTrafficSuccess": "Traffic for all clients has been reset.",
         "resetAllTrafficSuccess": "All traffic has been reset.",
         "resetInboundClientTrafficSuccess": "Traffic has been reset.",

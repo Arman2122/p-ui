@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/amneziawg"
@@ -302,6 +303,16 @@ func ExitHandleFor(ctx context.Context, exit core.Exit) (core.ExitHandleKind, co
 
 // ExitKinds names every kind that can terminate a route in this build, so a
 // picker is built from the registry rather than from a list somebody maintains.
+// ApplyDelayFor is how long an edit to kind takes to land, or 0 for a core that
+// applies at once.
+func ApplyDelayFor(kind core.Kind) time.Duration {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Deferred == nil {
+		return 0
+	}
+	return bound.Deferred.ApplyDelay(kind)
+}
+
 // ExitHandleKindFor is what kind of handle an exit of kind offers, without an
 // instance: ExitNone for a kind no core terminates.
 func ExitHandleKindFor(kind core.Kind) core.ExitHandleKind {

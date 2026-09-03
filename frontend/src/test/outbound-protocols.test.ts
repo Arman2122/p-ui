@@ -14,6 +14,7 @@ function core(over: Partial<CoreView>): CoreView {
     shaping: {},
     sessionKinds: [],
     rateKinds: [],
+    applyDelaySeconds: {},
     portlessKinds: [],
     available: true,
     unavailable: '',

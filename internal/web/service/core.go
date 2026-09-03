@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -41,6 +42,9 @@ type CoreView struct {
 	// RateKinds are the kinds whose core throttles each client inside itself, so
 	// a plan's rates reach them without a kernel identity. Shaping's complement.
 	RateKinds []string `json:"rateKinds" example:"[\"ssh\"]"`
+	// ApplyDelaySeconds, per kind, is how long an edit takes to land on a core
+	// that applies on its next pass; a kind absent here applies at once.
+	ApplyDelaySeconds map[string]int `json:"applyDelaySeconds" example:"{\"tuic\":10}"`
 	/*
 		PortlessKinds are the kinds that bind no port at all — an Xray TUN device
 		is a kernel interface, not a listener.
@@ -90,6 +94,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		// core either can report them for everything it serves or for nothing.
 		sessions := make([]string, 0, len(kinds))
 		rates := make([]string, 0, len(kinds))
+		delays := make(map[string]int, len(kinds))
 		portless := make([]string, 0, len(kinds))
 		for _, kind := range kinds {
 			names = append(names, string(kind))
@@ -98,6 +103,11 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			}
 			if bound.Rate != nil && bound.Rate.EnforcesRates(kind) {
 				rates = append(rates, string(kind))
+			}
+			if bound.Deferred != nil {
+				if d := bound.Deferred.ApplyDelay(kind); d > 0 {
+					delays[string(kind)] = int(d / time.Second)
+				}
 			}
 			if bound.Transports != nil && bound.Transports.Transports(kind, "", "").None {
 				portless = append(portless, string(kind))
@@ -145,6 +155,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			Shaping:           shaping,
 			SessionKinds:      sessions,
 			RateKinds:         rates,
+			ApplyDelaySeconds: delays,
 			PortlessKinds:     portless,
 			Available:         unavailable == "",
 			Unavailable:       unavailable,

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -64,6 +66,22 @@ func (s *InboundService) NodeIsPending(nodeID *int) bool {
 		return false
 	}
 	return (&NodeService{}).IsNodePending(*nodeID)
+}
+
+// ApplyDelayFor is the longest wait among these inbounds' cores before an edit
+// lands, in seconds; 0 when every one of them applies at once.
+func (s *InboundService) ApplyDelayFor(inboundIds []int) int {
+	longest := 0
+	for _, id := range inboundIds {
+		ib, err := s.GetInbound(id)
+		if err != nil {
+			continue
+		}
+		if secs := int(cores.ApplyDelayFor(core.Kind(ib.Protocol)) / time.Second); secs > longest {
+			longest = secs
+		}
+	}
+	return longest
 }
 
 func (s *InboundService) AnyNodePending(inboundIds []int) bool {
