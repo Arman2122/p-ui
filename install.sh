@@ -587,7 +587,7 @@ setup_ssl_certificate() {
     ~/.acme.sh/acme.sh --installcert --force -d ${domain} \
         --key-file /root/cert/${domain}/privkey.pem \
         --fullchain-file /root/cert/${domain}/fullchain.pem \
-        --reloadcmd "systemctl restart p-ui" > /dev/null 2>&1
+        --reloadcmd "systemctl reload p-ui" > /dev/null 2>&1
 
     if [ $? -ne 0 ]; then
         echo -e "${yellow}Failed to install certificate${plain}"
@@ -886,26 +886,27 @@ ssl_cert_issue() {
     fi
 
     # Setup reload command
-    reloadCmd="systemctl restart p-ui"
-    echo -e "${green}Default --reloadcmd for ACME is: ${yellow}systemctl restart p-ui${plain}"
-    echo -e "${green}This command will run on every certificate issue and renew.${plain}"
+    reloadCmd="systemctl reload p-ui"
+    echo -e "${green}Default --reloadcmd for ACME is: ${yellow}systemctl reload p-ui${plain}"
+    echo -e "${green}This command will run on every certificate issue and renew. The panel picks up the new${plain}"
+    echo -e "${green}certificate without a restart; the reload only restarts xray-core.${plain}"
     if [[ "$NONINTERACTIVE" == "1" ]]; then
         setReloadcmd="n"
     else
         read -rp "Would you like to modify --reloadcmd for ACME? (y/n): " setReloadcmd
     fi
     if [[ "$setReloadcmd" == "y" || "$setReloadcmd" == "Y" ]]; then
-        echo -e "\n${green}\t1.${plain} Preset: systemctl reload nginx ; systemctl restart p-ui"
+        echo -e "\n${green}\t1.${plain} Preset: systemctl reload nginx ; systemctl reload p-ui"
         echo -e "${green}\t2.${plain} Input your own command"
         echo -e "${green}\t0.${plain} Keep default reloadcmd"
         read -rp "Choose an option: " choice
         case "$choice" in
             1)
-                echo -e "${green}Reloadcmd is: systemctl reload nginx ; systemctl restart p-ui${plain}"
-                reloadCmd="systemctl reload nginx ; systemctl restart p-ui"
+                echo -e "${green}Reloadcmd is: systemctl reload nginx ; systemctl reload p-ui${plain}"
+                reloadCmd="systemctl reload nginx ; systemctl reload p-ui"
                 ;;
             2)
-                echo -e "${yellow}It's recommended to put p-ui restart at the end${plain}"
+                echo -e "${yellow}It's recommended to put 'systemctl reload p-ui' at the end${plain}"
                 read -rp "Please enter your custom reloadcmd: " reloadCmd
                 echo -e "${green}Reloadcmd is: ${reloadCmd}${plain}"
                 ;;
