@@ -78,7 +78,7 @@ func newE2ECore(t *testing.T, bin string) *Core {
 // mintedSettings is an inbound as the panel would have saved it.
 func mintedSettings(t *testing.T, c *Core, subnet string) string {
 	t.Helper()
-	out, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"`+subnet+`"}`)
+	out, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"`+subnet+`"}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}

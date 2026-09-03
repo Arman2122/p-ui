@@ -105,12 +105,14 @@ type InstanceValidator interface {
 /*
 InstanceMinter fills the secrets an inbound needs that no operator can type
 and no file may hold: a server certificate and key, a tls-crypt-v2 server key.
-Called on add and on every update with the settings as saved; the core returns
-them with what was missing minted and everything else untouched, so a
-re-save never rotates what clients already pin.
+Called on add and on every update; previous is what the row held before the
+edit (empty on add). The core carries its minted fields forward from previous
+when the new settings lack them, then mints only what is still missing, so a
+save that arrives without them (an API client sending the fields it knows, a
+form rebuilt from defaults) never rotates what clients already pin.
 */
 type InstanceMinter interface {
-	MintInstance(kind Kind, settings string) (string, error)
+	MintInstance(kind Kind, settings, previous string) (string, error)
 }
 
 // DeviceNamespacer names the device prefix a core's kernel interfaces use, so

@@ -25,7 +25,7 @@ so a re-save that rotated either would strand every profile ever issued.
 */
 func TestMintInstanceFillsOnceAndKeepsForever(t *testing.T) {
 	c := New(Deps{})
-	first, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`)
+	first, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,14 +47,27 @@ func TestMintInstanceFillsOnceAndKeepsForever(t *testing.T) {
 	if doc["proto"] != "udp" || doc["subnet"] != "10.9.0.0/24" {
 		t.Fatalf("minting touched the operator's fields: %s", first)
 	}
-	second, err := c.MintInstance(Kind, first)
+	second, err := c.MintInstance(Kind, first, first)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if second != first {
 		t.Fatal("a second mint rotated the identity every client pins")
 	}
-	untouched, _ := c.MintInstance("vless", `{"x":1}`)
+	// A save that arrives without the identity (an API client sending only the
+	// fields it knows) gets it back from what the row held, never a new one.
+	stripped, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var again map[string]any
+	_ = json.Unmarshal([]byte(stripped), &again)
+	for _, key := range []string{"serverCert", "serverKey", "tlsCryptV2ServerKey"} {
+		if again[key] != doc[key] {
+			t.Fatalf("%s was rotated by a save that omitted it", key)
+		}
+	}
+	untouched, _ := c.MintInstance("vless", `{"x":1}`, "")
 	if untouched != `{"x":1}` {
 		t.Fatalf("another kind's settings were touched: %s", untouched)
 	}
@@ -174,7 +187,7 @@ func TestRenderServerCarriesTheDesign(t *testing.T) {
 // The .ovpn is the whole client: pinned server, wrapped key, login inline.
 func TestRenderClientIsACompleteProfile(t *testing.T) {
 	c := New(Deps{})
-	minted, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`)
+	minted, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}

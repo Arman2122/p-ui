@@ -105,7 +105,7 @@ expiry is a rotation event the panel will own later) and the tls-crypt-v2
 server key. Whatever is present is kept: a re-save must never rotate what
 every client already pins.
 */
-func (c *Core) MintInstance(kind core.Kind, raw string) (string, error) {
+func (c *Core) MintInstance(kind core.Kind, raw, previous string) (string, error) {
 	if kind != Kind {
 		return raw, nil
 	}
@@ -113,6 +113,20 @@ func (c *Core) MintInstance(kind core.Kind, raw string) (string, error) {
 	if strings.TrimSpace(raw) != "" {
 		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 			return "", fmt.Errorf("openvpn: settings: %w", err)
+		}
+	}
+	// What the row already held outranks a save that omits it: the fields are
+	// pinned by every profile ever issued.
+	if strings.TrimSpace(previous) != "" {
+		old := map[string]any{}
+		if json.Unmarshal([]byte(previous), &old) == nil {
+			for _, key := range []string{"serverCert", "serverKey", "tlsCryptV2ServerKey"} {
+				if v, _ := doc[key].(string); v == "" {
+					if was, _ := old[key].(string); was != "" {
+						doc[key] = was
+					}
+				}
+			}
 		}
 	}
 	cert, _ := doc["serverCert"].(string)

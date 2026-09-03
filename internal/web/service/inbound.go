@@ -1033,7 +1033,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 
-	if err := mintInstanceForKind(inbound); err != nil {
+	if err := mintInstanceForKind(inbound, nil); err != nil {
 		return inbound, false, "", err
 	}
 	// Settings the core that owns this kind would refuse. Asked of the core, not
@@ -1614,7 +1614,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 
 	// Settings the core that owns this kind would refuse -- judged against what
 	// this edit replaces, so a row that already violates stays editable. Q1.
-	if err := mintInstanceForKind(inbound); err != nil {
+	if err := mintInstanceForKind(inbound, oldInbound); err != nil {
 		return inbound, false, "", err
 	}
 	if err := refuseOnlyIfWorsened("configuration", oldInbound, inbound, validateInstanceForKind); err != nil {
