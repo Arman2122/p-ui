@@ -9,6 +9,17 @@ export function isWireguardClient(client: ClientRecord | null | undefined): bool
   return !!(client.privateKey || client.publicKey || client.allowedIPs || client.preSharedKey || client.keepAlive);
 }
 
+/* Every WireGuard-like inbound the client sits on, in attachment order; a
+   client on more than one gets a picker, the single-inbound case the first. */
+export function findWireguardInbounds(
+  client: ClientRecord | null | undefined,
+  inboundsById: Record<number, InboundOption>,
+): InboundOption[] {
+  return (client?.inboundIds || [])
+    .map((id) => inboundsById[id])
+    .filter((ib): ib is InboundOption => !!ib && isWireguardLike(ib.protocol));
+}
+
 export function findWireguardInbound(
   client: ClientRecord | null | undefined,
   inboundsById: Record<number, InboundOption>,
