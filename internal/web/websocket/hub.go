@@ -153,7 +153,10 @@ func (h *Hub) Run() {
 			}
 		}
 	}
-	logger.Error("WebSocket hub stopped after exhausting restart attempts")
+	// Closing every socket is what makes the browsers notice: the poll fallback
+	// only kicks in once the socket is gone, and a silent hub never closes it.
+	h.shutdown()
+	logger.Error("WebSocket hub stopped after exhausting restart attempts; every socket was closed so browsers fall back to polling")
 }
 
 // runOnce drives the event loop once and returns true if the hub stopped
