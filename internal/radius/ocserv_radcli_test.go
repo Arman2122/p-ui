@@ -57,7 +57,9 @@ func TestOcservRadcliAuthenticatesAndAccountsThroughTheServer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	_ = os.Chmod(dir, 0o755)
-	sink := &spikeSink{password: "open-sesame", framed: netip.MustParseAddr("10.211.0.7")}
+	// A plan whose two directions differ, so which one the daemon applied where
+	// is visible: its dictionary and its own code disagree about the direction.
+	sink := &spikeSink{password: "open-sesame", framed: netip.MustParseAddr("10.211.0.7"), upBps: 8_000_000, downBps: 64_000_000}
 	srv, err := New("spike-secret", freeLowUDP(t), freeLowUDP(t))
 	if err != nil {
 		t.Fatal(err)
@@ -77,17 +79,26 @@ func TestOcservRadcliAuthenticatesAndAccountsThroughTheServer(t *testing.T) {
 	}
 	certFile, keyFile := write("server.crt", certPEM, 0o644), write("server.key", keyPEM, 0o600)
 
-	// radcli's own two files: the client config and the secret per server.
+	/*
+		radcli's three files: the client config, the secret per server, and a
+		dictionary. The distribution's dictionary leaves the vendor includes
+		commented out, and radcli silently drops an attribute it cannot name --
+		so the speed limits never reach the daemon until this file adds them back.
+	*/
 	serversFile := write("servers", "127.0.0.1\tspike-secret\n", 0o600)
+	dictionary := write("dictionary", `$INCLUDE /etc/radcli/dictionary
+$INCLUDE /etc/radcli/dictionary.roaringpenguin
+$INCLUDE /etc/radcli/dictionary.microsoft
+`, 0o644)
 	radcliConf := write("radiusclient.conf", fmt.Sprintf(`nas-identifier %s
 authserver %s
 acctserver %s
 servers %s
-dictionary /etc/radcli/dictionary
+dictionary %s
 radius_timeout 3
 radius_retries 2
 bindaddr *
-`, NASIdentifier("ocserv", 1), srv.AuthAddr(), srv.AcctAddr(), serversFile), 0o600)
+`, NASIdentifier("ocserv", 1), srv.AuthAddr(), srv.AcctAddr(), serversFile, dictionary), 0o600)
 
 	port := freeTCPPort(t)
 	occtlSock := filepath.Join(dir, "occtl.sock")
@@ -195,7 +206,21 @@ dtls-legacy = true
 	if sink.count(Start) != 1 {
 		t.Fatalf("Start records: %d, want 1", sink.count(Start))
 	}
-	t.Logf("occtl show users:\n%s", shellOut(t, occtl+" -s "+occtlSock+" -j show users"))
+	users := shellOut(t, occtl+" -s "+occtlSock+" -j show users")
+	t.Logf("occtl show users:\n%s", users)
+
+	/*
+		The speed plan the Accept carried, read back from the daemon: 8 megabits
+		up and 64 down, from the client's side. ocserv's RX is what it receives
+		FROM the client, so it holds the upload; TX is the download. This is the
+		measurement the mapping in setSpeedLimits is built on, kept as a test so
+		a library or daemon change that flips it is loud.
+	*/
+	for _, want := range []string{`"Limit RX":  "1.0 MB/s"`, `"Limit TX":  "8.0 MB/s"`} {
+		if !strings.Contains(users, want) {
+			t.Fatalf("the daemon did not apply the speed plan as %s:\n%s", want, users)
+		}
+	}
 
 	// 2. Bytes through the tunnel show up in interim records.
 	out := shellOut(t, fmt.Sprintf("ip netns exec %s curl -s -m 20 -o /dev/null -w '%%{http_code} %%{size_download}' http://10.212.0.1:%d/", ns, originPort))

@@ -255,12 +255,13 @@ verb 3
 }
 
 type spikeSink struct {
-	mu       sync.Mutex
-	password string
-	framed   netip.Addr
-	denied   bool
-	events   []Event
-	logins   []string
+	mu             sync.Mutex
+	password       string
+	framed         netip.Addr
+	upBps, downBps int64
+	denied         bool
+	events         []Event
+	logins         []string
 }
 
 func (s *spikeSink) Authenticate(_ context.Context, username, password string, _ Peer) Verdict {
@@ -274,7 +275,7 @@ func (s *spikeSink) Authenticate(_ context.Context, username, password string, _
 	if username != "alice" || password != s.password {
 		return Verdict{Reason: "wrong login"}
 	}
-	return Verdict{Accept: true, FramedIP: s.framed, InterimSeconds: 3}
+	return Verdict{Accept: true, FramedIP: s.framed, InterimSeconds: 3, UpBps: s.upBps, DownBps: s.downBps}
 }
 
 // deny is the panel deciding a client may no longer log in -- depleted,

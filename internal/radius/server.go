@@ -10,6 +10,7 @@ package radius
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -52,6 +53,11 @@ type Verdict struct {
 	// InterimSeconds asks the NAS for an accounting record this often; 0 leaves
 	// only Start and Stop, and quota enforcement waits for the disconnect.
 	InterimSeconds int
+	// UpBps and DownBps are the client's speed plan from the client's side, in
+	// bits per second, 0 for unlimited: the panel's RateLimit as a daemon that
+	// throttles for itself is told it. Applied by the NAS for this session only,
+	// so a changed plan reaches a client at its next login.
+	UpBps, DownBps int64
 }
 
 // Peer is where a login or a session came from, as the NAS reported it.
@@ -276,7 +282,51 @@ func (s *Server) handleAuth(w radius.ResponseWriter, r *radius.Request) {
 	if verdict.InterimSeconds > 0 {
 		_ = rfc2869.AcctInterimInterval_Set(resp, rfc2869.AcctInterimInterval(verdict.InterimSeconds))
 	}
+	setSpeedLimits(resp, verdict)
 	_ = w.Write(resp)
+}
+
+/*
+The two Roaring-Penguin attributes are how a RADIUS-fed daemon is handed a
+speed plan; layeh generates no helpers for that vendor, so the vendor-specific
+attribute is built here.
+
+Both the direction and the unit are measured rather than read, because the
+sources disagree: ocserv's dictionary calls attribute 1 the "tx" limit while
+its own code assigns it to rx_per_sec. What the daemon reports back is that
+Upstream is its RX, which is what the client SENDS, and that the value is
+kilobytes per second -- 1000 arrived as 1.0 MB/s. So a rate in bits from the
+client's side is divided by 8000, never below 1: a plan too small to express
+must not round down into no plan at all.
+*/
+func setSpeedLimits(p *radius.Packet, v Verdict) {
+	kilobytes := func(bps int64) uint32 {
+		if bps <= 0 {
+			return 0
+		}
+		return max(uint32(bps/8000), 1)
+	}
+	if kb := kilobytes(v.UpBps); kb > 0 {
+		setVendorInt(p, roaringPenguinVendor, rpUpstreamSpeedLimit, kb)
+	}
+	if kb := kilobytes(v.DownBps); kb > 0 {
+		setVendorInt(p, roaringPenguinVendor, rpDownstreamSpeedLimit, kb)
+	}
+}
+
+const (
+	roaringPenguinVendor   uint32 = 10055
+	rpUpstreamSpeedLimit   byte   = 1
+	rpDownstreamSpeedLimit byte   = 2
+)
+
+func setVendorInt(p *radius.Packet, vendor uint32, vendorType byte, value uint32) {
+	buf := make([]byte, 10)
+	binary.BigEndian.PutUint32(buf[0:4], vendor)
+	buf[4] = vendorType
+	buf[5] = 6 // the vendor attribute's own length: this header plus four bytes
+	binary.BigEndian.PutUint32(buf[6:10], value)
+	p.Add(rfc2865.VendorSpecific_Type, radius.Attribute(buf))
 }
 
 func (s *Server) reject(w radius.ResponseWriter, r *radius.Request, nasID, username string, peer Peer, reason string) {
