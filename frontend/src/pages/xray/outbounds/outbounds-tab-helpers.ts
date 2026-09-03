@@ -4,7 +4,7 @@ import { OutboundProtocols as Protocols } from '@/schemas/primitives';
 import { isUdpOutbound } from '@/hooks/useXraySetting';
 import type { OutboundTestMode, OutboundTestState, OutboundTrafficRow } from '@/hooks/useXraySetting';
 
-import { EGRESS_TYPE_UPLINK, UplinkSettingsSchema, exitKeyFor, type EgressRecord } from '@/schemas/api/egress';
+import { EGRESS_TYPE, EGRESS_TYPE_UPLINK, UplinkSettingsSchema, exitKeyFor, type EgressRecord } from '@/schemas/api/egress';
 
 import type { OutboundRow } from './outbounds-tab-types';
 
@@ -80,7 +80,7 @@ export function isUntestable(o: OutboundRow): boolean {
   if (!o) return true;
   // A disabled exit installs nothing, and a front is measured by testing the
   // outbound it targets — the backend refuses both rather than timing them.
-  if (o.egress) return !o.egress.enable || o.egress.type !== EGRESS_TYPE_UPLINK;
+  if (o.egress) return !o.egress.enable || o.egress.type === EGRESS_TYPE;
   if (o.protocol === Protocols.Blackhole || o.protocol === Protocols.Loopback || o.tag === 'blocked') return true;
   // freedom ("direct") and dns aren't proxies — a TCP dial has no endpoint and
   // an HTTP probe would only measure the host's own direct reachability, so
