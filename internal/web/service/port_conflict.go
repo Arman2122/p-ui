@@ -215,6 +215,16 @@ func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int)
 		}, nil
 	}
 
+	// The band core-owned exits serve their SOCKS ports in, loopback TCP.
+	if inbound.NodeID == nil && core.IsExitSocksPort(inbound.Port) &&
+		newBits&transportTCP != 0 && listenOverlaps("127.0.0.1", inbound.Listen) {
+		return &portConflictDetail{
+			Tag:        "exit-socks",
+			Listen:     "127.0.0.1",
+			Port:       inbound.Port,
+			Transports: transportTCP,
+		}, nil
+	}
 	if hit, err := panelListenerConflict(inbound, newBits); err != nil || hit != nil {
 		return hit, err
 	}

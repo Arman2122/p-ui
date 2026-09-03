@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/egress"
@@ -71,6 +73,13 @@ func (s *EgressService) probeOne(ctx context.Context, row *model.Egress, id int,
 		return result
 	}
 
+	// A core-owned SOCKS exit has no mark to stamp; it is probed through its port.
+	if kind := exitKindFor(row.Type); kind != "" && cores.ExitHandleKindFor(kind) == core.ExitSocksPort {
+		if _, handle, err := cores.ExitHandleFor(ctx, coreExit(row, kind)); err == nil {
+			outbound.ProbeSocks(handle.SocksPort, mode, result)
+			return result
+		}
+	}
 	routed, err := egressManager.MarkedExit(ctx, id)
 	if err != nil {
 		result.Error = err.Error()

@@ -37,7 +37,10 @@ export const EGRESS_TYPE_UPLINK = 'wg-client';
    what decides which module creates the device, and one dialled as wg-client
    would connect with no obfuscation while the row claims otherwise. */
 export const EGRESS_TYPE_AWG_UPLINK = 'awg-client';
-export const EGRESS_TYPES = [EGRESS_TYPE, EGRESS_TYPE_UPLINK, EGRESS_TYPE_AWG_UPLINK] as const;
+/* A core-owned exit is stored under its kind: the SSH core dials the remote and
+   fronts a loopback SOCKS port, and no plane driver is involved. */
+export const EGRESS_TYPE_SSH = 'ssh';
+export const EGRESS_TYPES = [EGRESS_TYPE, EGRESS_TYPE_UPLINK, EGRESS_TYPE_AWG_UPLINK, EGRESS_TYPE_SSH] as const;
 export type EgressType = (typeof EGRESS_TYPES)[number];
 
 /* An uplink carries no target: it IS the destination. Its settings are the
@@ -75,6 +78,13 @@ export const EgressFormFields = z.object({
   /* Carried through the form as one object, because ExitFormModal re-parses the
      values through this schema before toPayload ever sees them. */
   awg: AwgParamsSchema.optional(),
+  /* An SSH exit's own fields; a password or a key, and always the pin. */
+  sshHost: z.string().trim().default(''),
+  sshPort: z.number().int().min(1).max(65535).default(22),
+  sshUser: z.string().trim().default(''),
+  sshPassword: z.string().default(''),
+  sshKey: z.string().default(''),
+  sshFingerprint: z.string().trim().default(''),
 });
 
 /* Which fields are required depends on the type, so it is refined rather than
@@ -85,6 +95,18 @@ export const EgressFormSchema = EgressFormFields.superRefine((value, ctx) => {
   };
   if (value.type === EGRESS_TYPE) {
     need('target', 'pages.xray.egress.targetRequired');
+    return;
+  }
+  if (value.type === EGRESS_TYPE_SSH) {
+    const needSsh = (field: 'sshHost' | 'sshUser' | 'sshFingerprint', key: string) => {
+      if (!value[field]) ctx.addIssue({ code: 'custom', path: [field], message: key });
+    };
+    needSsh('sshHost', 'pages.xray.egress.sshHostRequired');
+    needSsh('sshUser', 'pages.xray.egress.sshUserRequired');
+    needSsh('sshFingerprint', 'pages.xray.egress.sshFingerprintRequired');
+    if (!value.sshPassword && !value.sshKey) {
+      ctx.addIssue({ code: 'custom', path: ['sshPassword'], message: 'pages.xray.egress.sshAuthRequired' });
+    }
     return;
   }
   need('privateKey', 'pages.xray.egress.privateKeyRequired');
@@ -141,4 +163,34 @@ function awgSettings(awg: AwgParams | undefined): { awg?: AwgParams } {
   if (!awg) return {};
   const set = Object.values(awg).some((v) => v !== undefined && v !== '' && v !== false && v !== 0);
   return set ? { awg } : {};
+}
+
+/* An SSH exit's stored settings, as the core reads them. */
+export const SshExitSettingsSchema = z.object({
+  host: z.string().trim().default(''),
+  port: z.number().int().min(1).max(65535).default(22),
+  username: z.string().trim().default(''),
+  password: z.string().default(''),
+  privateKey: z.string().default(''),
+  hostKeyFingerprint: z.string().trim().default(''),
+});
+
+export function sshPayload(form: EgressFormValues, remark: string): EgressPayload {
+  return {
+    id: form.id,
+    type: EGRESS_TYPE_SSH,
+    remark: remark.trim(),
+    target: '',
+    enable: form.enable,
+    owner: 'operator',
+    ingressInboundId: null,
+    settings: JSON.stringify({
+      host: form.sshHost,
+      port: form.sshPort,
+      username: form.sshUser,
+      password: form.sshPassword,
+      privateKey: form.sshKey,
+      hostKeyFingerprint: form.sshFingerprint,
+    }),
+  };
 }

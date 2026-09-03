@@ -17,26 +17,27 @@ capability assertion anywhere else, seeded at zero so it cannot regress.
 type Bound struct {
 	Core Core
 
-	Supervise   Supervisor
-	Apply       InstanceApplier
-	HotApply    HotApplier
-	Users       UserProvisioner
-	UserSet     WholeSetUserProvisioner
-	Creds       CredentialDeclarer
-	Validate    InstanceValidator
-	Transports  TransportDeclarer
-	Traffic     TrafficSource
-	TagTraffic  TagTrafficSource
-	Online      OnlineReporter
-	Quota       QuotaEnforcer
-	Versions    VersionManager
-	Link        LinkRenderer
-	Shape       ShapingHost
-	Rate        RateEnforcer
-	Ingress     RoutableIngress
-	Egress      RoutableEgress
-	Sessions    SessionReporter
-	CounterLoss CounterLossDeclarer
+	Supervise     Supervisor
+	Apply         InstanceApplier
+	HotApply      HotApplier
+	Users         UserProvisioner
+	UserSet       WholeSetUserProvisioner
+	Creds         CredentialDeclarer
+	Validate      InstanceValidator
+	Transports    TransportDeclarer
+	Traffic       TrafficSource
+	TagTraffic    TagTrafficSource
+	Online        OnlineReporter
+	Quota         QuotaEnforcer
+	Versions      VersionManager
+	Link          LinkRenderer
+	Shape         ShapingHost
+	Rate          RateEnforcer
+	Ingress       RoutableIngress
+	Egress        RoutableEgress
+	ExitSupervise ExitSupervisor
+	Sessions      SessionReporter
+	CounterLoss   CounterLossDeclarer
 }
 
 // Bind resolves every optional capability of c exactly once.
@@ -95,6 +96,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(RoutableEgress); ok {
 		b.Egress = v
+	}
+	if v, ok := c.(ExitSupervisor); ok {
+		b.ExitSupervise = v
 	}
 	if v, ok := c.(SessionReporter); ok {
 		b.Sessions = v

@@ -302,6 +302,25 @@ func ExitHandleFor(ctx context.Context, exit core.Exit) (core.ExitHandleKind, co
 
 // ExitKinds names every kind that can terminate a route in this build, so a
 // picker is built from the registry rather than from a list somebody maintains.
+// ExitHandleKindFor is what kind of handle an exit of kind offers, without an
+// instance: ExitNone for a kind no core terminates.
+func ExitHandleKindFor(kind core.Kind) core.ExitHandleKind {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.Egress == nil {
+		return core.ExitNone
+	}
+	return bound.Egress.ExitHandleKind(kind)
+}
+
+// ExitSupervisorFor is the core that runs exits of kind, when one does.
+func ExitSupervisorFor(kind core.Kind) (core.ExitSupervisor, bool) {
+	bound, ok := kindOwners().For(kind)
+	if !ok || bound.ExitSupervise == nil {
+		return nil, false
+	}
+	return bound.ExitSupervise, true
+}
+
 func ExitKinds() []core.Kind {
 	var out []core.Kind
 	for _, kind := range Kinds() {

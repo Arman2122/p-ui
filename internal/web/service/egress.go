@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -237,7 +238,7 @@ func (s *EgressService) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return egressManager.Reconcile(ctx, desired)
+	return errors.Join(egressManager.Reconcile(ctx, desired), reconcileCoreExits(ctx, rows))
 }
 
 /*
@@ -368,6 +369,11 @@ func (s *EgressService) desired(ctx context.Context, rows []*model.Egress) ([]eg
 	}
 	out := make([]egress.Egress, 0, len(rows))
 	for _, row := range rows {
+		// A core-owned exit has no plane state; fed to the plane it would report
+		// an unknown driver on every pass.
+		if _, known := egressDriverRegistry.For(row.Type); !known {
+			continue
+		}
 		converted := egressRow(row)
 		converted.Ingress = ingress[row.Id]
 		out = append(out, converted)
@@ -422,9 +428,8 @@ func egressDriverFills(row *model.Egress) error {
 }
 
 func (s *EgressService) validate(row *model.Egress) error {
-	_, known := egressDriverRegistry.For(row.Type)
-	if !known {
-		return fmt.Errorf("%w: %q — this build serves %v", ErrEgressUnknownType, row.Type, egressDriverRegistry.Types())
+	if _, known := egressDriverRegistry.For(row.Type); !known {
+		return validateCoreExit(row)
 	}
 	// A disabled row routes nothing, so its target is not resolved against
 	// anything: an egress whose outbound was deleted first can still be switched off.
@@ -452,6 +457,67 @@ func (s *EgressService) validate(row *model.Egress) error {
 		return fmt.Errorf("%w: %q is neither an outbound tag nor a balancer tag", ErrEgressTargetUnresolved, row.Target)
 	}
 	return nil
+}
+
+/*
+validateCoreExit accepts a row no egress driver knows when a core terminates its
+kind behind a SOCKS port, and lets that core refuse settings it cannot dial.
+Anything else keeps the unknown-type refusal, naming what this build serves.
+*/
+func validateCoreExit(row *model.Egress) error {
+	kind := exitKindFor(row.Type)
+	supervisor, supervised := cores.ExitSupervisorFor(kind)
+	if kind == "" || !supervised || cores.ExitHandleKindFor(kind) != core.ExitSocksPort {
+		return fmt.Errorf("%w: %q — this build serves %v", ErrEgressUnknownType, row.Type, append(egressDriverRegistry.Types(), coreExitTypes()...))
+	}
+	if !row.Enable {
+		return nil
+	}
+	return supervisor.ValidateExit(coreExit(row, kind))
+}
+
+func coreExitTypes() []string {
+	var out []string
+	for _, kind := range cores.ExitKinds() {
+		if _, ok := cores.ExitSupervisorFor(kind); ok {
+			out = append(out, string(kind))
+		}
+	}
+	return out
+}
+
+func coreExit(row *model.Egress, kind core.Kind) core.Exit {
+	return core.Exit{ID: row.Id, Kind: kind, Enable: row.Enable, Settings: row.Settings}
+}
+
+// reconcileCoreExits hands each supervising core the enabled rows of its kinds.
+// The plane never sees them: a SOCKS exit has no device, table or rule.
+func reconcileCoreExits(ctx context.Context, rows []*model.Egress) error {
+	reg := registry()
+	if reg == nil {
+		return nil
+	}
+	var failures []error
+	for _, bound := range reg.Cores() {
+		if bound.ExitSupervise == nil {
+			continue
+		}
+		var desired []core.Exit
+		for _, row := range rows {
+			if row == nil || !row.Enable || row.Owner == model.EgressOwnerPanel {
+				continue
+			}
+			kind := exitKindFor(row.Type)
+			if kind == "" || !slices.Contains(bound.Core.Kinds(), kind) {
+				continue
+			}
+			desired = append(desired, coreExit(row, kind))
+		}
+		if err := bound.ExitSupervise.ReconcileExits(ctx, desired); err != nil {
+			failures = append(failures, fmt.Errorf("%s exits: %w", bound.Core.Describe().ID, err))
+		}
+	}
+	return errors.Join(failures...)
 }
 
 // checkNotReferenced refuses to delete or disable a row a routing rule sends

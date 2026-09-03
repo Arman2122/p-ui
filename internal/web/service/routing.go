@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -942,6 +943,11 @@ func exitKindFor(rowType string) core.Kind {
 		return "wgkernel"
 	case awg.UplinkDriverType:
 		return "awgkernel"
+	}
+	// A core-owned exit is stored under its kind: with no driver there is nothing
+	// for a second vocabulary to distinguish.
+	if slices.Contains(cores.ExitKinds(), core.Kind(rowType)) {
+		return core.Kind(rowType)
 	}
 	return ""
 }

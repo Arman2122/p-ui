@@ -48,6 +48,19 @@ Assemble any outbound below and paste the JSON into **Xray Settings → Outbound
 
 <OutboundGenerator />
 
+### SSH exit
+
+An exit that is a remote SSH server. Pick **ssh** in the outbound form, give it
+the host, port and username, a password or a PEM private key, and the server's
+host key fingerprint, which is required: get it with
+`ssh-keyscan -t ed25519 HOST | ssh-keygen -lf -`. The panel keeps one SSH
+connection to that server, reconnecting with a backoff when it drops, and fronts
+it with a loopback SOCKS port (`41000` plus the exit's id). Routing rules that
+send traffic to the exit are compiled onto that port and narrowed to TCP: an SSH
+forward carries no UDP, and a rule asking for UDP alone is refused rather than
+sent into a port that drops it. **Test** on the Outbounds page probes through
+the port.
+
 ## Cloudflare WARP
 
 WARP lets your server egress through Cloudflare's network. Penhoon UI can register a

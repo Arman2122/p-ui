@@ -24,12 +24,13 @@ describe('an exit kind resolves to its own module', () => {
        either has a form or says so. Silently reusing another kind's is the bug. */
     expect(exitModuleForKind('openvpn')).toBeUndefined();
     expect(exitModuleForKind('')).toBeUndefined();
-    expect(authorableExitKinds()).toEqual(['wgkernel', 'awgkernel']);
+    expect(authorableExitKinds()).toEqual(['ssh', 'wgkernel', 'awgkernel']);
   });
 
   it('finds the module for a stored row by its type, since a row carries no kind', () => {
     expect(exitModuleForType('wg-client')).toBe(exitModuleForKind('wgkernel'));
     expect(exitModuleForType('awg-client')).toBe(exitModuleForKind('awgkernel'));
+    expect(exitModuleForType('ssh')).toBe(exitModuleForKind('ssh'));
     expect(exitModuleForType('xray-tun')).toBeUndefined();
     expect(exitModuleForType('openvpn-client')).toBeUndefined();
   });
