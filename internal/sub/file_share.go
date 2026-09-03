@@ -83,7 +83,7 @@ func userForShare(client model.Client) core.User {
 	credentials := map[string]any{}
 	for name, value := range map[string]string{
 		core.CredUUID: client.ID, core.CredPassword: client.Password, core.CredUsername: client.Username,
-		core.CredAuth: client.Auth, core.CredSecret: client.Secret, core.CredAdTag: client.AdTag,
+		core.CredAuth: client.Auth, core.CredSecurity: client.Security, core.CredSecret: client.Secret, core.CredAdTag: client.AdTag,
 	} {
 		if value != "" {
 			credentials[name] = value
