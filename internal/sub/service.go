@@ -281,25 +281,37 @@ func (s *SubService) matchingClients(inbound *model.Inbound, subId string) []mod
 
 // GetSubs retrieves subscription links for a given subscription ID and host.
 func (s *SubService) GetSubs(subId string, host string) ([]string, []string, int64, xray.ClientTraffic, error) {
-	return s.ForRequest(host).getSubs(subId)
+	result, emails, _, lastOnline, traffic, err := s.ForRequest(host).getSubs(subId)
+	return result, emails, lastOnline, traffic, err
 }
 
-func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.ClientTraffic, error) {
+// fileShapedInboundId is the inbound id when the kind hands out a config file
+// (the sub server serves it under /file/<id>), and 0 for a link-only kind.
+func fileShapedInboundId(inbound *model.Inbound) int {
+	switch inbound.Protocol {
+	case model.WireGuard, model.WGKernel, model.AWGKernel:
+		return inbound.Id
+	}
+	return 0
+}
+
+func (s *SubService) getSubs(subId string) ([]string, []string, []int, int64, xray.ClientTraffic, error) {
 	var result []string
 	var emails []string
+	var fileIds []int
 	var traffic xray.ClientTraffic
 	var hasEnabledClient bool
 	inbounds, err := s.getInboundsBySubId(subId)
 	if err != nil {
-		return nil, nil, 0, traffic, err
+		return nil, nil, nil, 0, traffic, err
 	}
 	externalLinks, err := s.getClientExternalLinksBySubId(subId)
 	if err != nil {
-		return nil, nil, 0, traffic, err
+		return nil, nil, nil, 0, traffic, err
 	}
 
 	if len(inbounds) == 0 && len(externalLinks) == 0 {
-		return nil, nil, 0, traffic, nil
+		return nil, nil, nil, 0, traffic, nil
 	}
 
 	seenEmails := make(map[string]struct{})
@@ -328,6 +340,7 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 			if link != "" {
 				result = append(result, link)
 				emails = append(emails, client.Email)
+				fileIds = append(fileIds, fileShapedInboundId(inbound))
 			}
 			seenEmails[client.Email] = struct{}{}
 		}
@@ -340,6 +353,7 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 			if link := applyRemarkToLink(el.Link, el.Name); link != "" {
 				result = append(result, link)
 				emails = append(emails, ext.Email)
+				fileIds = append(fileIds, 0)
 				seenEmails[ext.Email] = struct{}{}
 			}
 		}
@@ -351,7 +365,7 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 	}
 	traffic, lastOnline := s.AggregateTrafficByEmails(uniqueEmails)
 	traffic.Enable = hasEnabledClient
-	return result, emails, lastOnline, traffic, nil
+	return result, emails, fileIds, lastOnline, traffic, nil
 }
 
 // inboundLinks builds the share links for every distinct client of one inbound
@@ -2695,6 +2709,8 @@ type PageData struct {
 		the page is the one surface a person actually looks at. F249.
 	*/
 	Ended []bool
+	// FileUrls[i] is where the sub server serves Result[i]'s config file, or "".
+	FileUrls []string
 }
 
 // ResolveRequest extracts scheme and host info from request/headers consistently.
@@ -2817,7 +2833,7 @@ func (s *SubService) joinPathWithID(basePath, subId string) string {
 
 // BuildPageData parses header and prepares the template view model.
 // BuildPageData constructs page data for rendering the subscription information page.
-func (s *SubService) BuildPageData(subId string, hostHeader string, traffic xray.ClientTraffic, lastOnline int64, subs []string, emails []string, subURL, subJsonURL, subClashURL string, basePath string, subTitle string, subSupportUrl string) PageData {
+func (s *SubService) BuildPageData(subId string, hostHeader string, traffic xray.ClientTraffic, lastOnline int64, subs []string, emails []string, fileInboundIds []int, subURL, subJsonURL, subClashURL string, basePath string, subTitle string, subSupportUrl string) PageData {
 	download := common.FormatTraffic(traffic.Down)
 	upload := common.FormatTraffic(traffic.Up)
 	total := "∞"
@@ -2838,16 +2854,22 @@ func (s *SubService) BuildPageData(subId string, hostHeader string, traffic xray
 	pageLinks := make([]string, 0, len(subs))
 	pageEmails := make([]string, 0, len(subs))
 	pageEnded := make([]bool, 0, len(subs))
+	pageFiles := make([]string, 0, len(subs))
 	for i, sub := range subs {
 		email := ""
 		if i < len(emails) {
 			email = emails[i]
+		}
+		fileURL := ""
+		if i < len(fileInboundIds) && fileInboundIds[i] > 0 && subURL != "" {
+			fileURL = strings.TrimRight(subURL, "/") + "/file/" + strconv.Itoa(fileInboundIds[i])
 		}
 		_, off := ended[email]
 		for _, link := range splitLinkLines(sub) {
 			pageLinks = append(pageLinks, link)
 			pageEmails = append(pageEmails, email)
 			pageEnded = append(pageEnded, off)
+			pageFiles = append(pageFiles, fileURL)
 		}
 	}
 
@@ -2876,6 +2898,7 @@ func (s *SubService) BuildPageData(subId string, hostHeader string, traffic xray
 		Result:        pageLinks,
 		Emails:        pageEmails,
 		Ended:         pageEnded,
+		FileUrls:      pageFiles,
 	}
 }
 

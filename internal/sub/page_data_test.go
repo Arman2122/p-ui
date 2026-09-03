@@ -20,7 +20,7 @@ func TestBuildPageData_SplitsMultiHostLinks(t *testing.T) {
 	}
 	emails := []string{"john@x", "alice@x"}
 
-	page := s.BuildPageData("s1", "", xray.ClientTraffic{}, 0, subs, emails, "", "", "", "/", "", "")
+	page := s.BuildPageData("s1", "", xray.ClientTraffic{}, 0, subs, emails, nil, "", "", "", "/", "", "")
 
 	if len(page.Result) != 4 {
 		t.Fatalf("Result len = %d, want 4 (3 host links + 1 single link)", len(page.Result))
@@ -61,7 +61,7 @@ func TestSubIsOnline(t *testing.T) {
 func TestBuildPageData_IsOnlineFalseWithoutLiveConnections(t *testing.T) {
 	s := &SubService{}
 
-	page := s.BuildPageData("s1", "", xray.ClientTraffic{}, 0, []string{"vless://a@h1:443?type=tcp#DE-john@x"}, []string{"john@x"}, "", "", "", "/", "", "")
+	page := s.BuildPageData("s1", "", xray.ClientTraffic{}, 0, []string{"vless://a@h1:443?type=tcp#DE-john@x"}, []string{"john@x"}, nil, "", "", "", "/", "", "")
 
 	if page.IsOnline {
 		t.Fatal("IsOnline must be false when the subscription's client has no live connection")

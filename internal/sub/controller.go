@@ -344,7 +344,7 @@ func (a *SUBController) buildSubPageData(c *gin.Context) (PageData, bool) {
 	_, host, _, hostHeader := a.subService.ResolveRequest(c)
 	subReq := a.subService.ForRequest(host)
 	subReq.subscriptionBody = false
-	subs, emails, lastOnline, traffic, err := subReq.getSubs(subId)
+	subs, emails, fileIds, lastOnline, traffic, err := subReq.getSubs(subId)
 	if err != nil || len(subs) == 0 {
 		writeSubError(c, err)
 		return PageData{}, false
@@ -361,7 +361,7 @@ func (a *SUBController) buildSubPageData(c *gin.Context) (PageData, bool) {
 		basePath = "/"
 	}
 	basePathStr := basePath.(string)
-	page := subReq.BuildPageData(subId, hostHeader, traffic, lastOnline, subs, emails, subURL, subJsonURL, subClashURL, basePathStr, a.subTitle, a.subSupportUrl)
+	page := subReq.BuildPageData(subId, hostHeader, traffic, lastOnline, subs, emails, fileIds, subURL, subJsonURL, subClashURL, basePathStr, a.subTitle, a.subSupportUrl)
 	return page, true
 }
 
@@ -426,7 +426,7 @@ func (a *SUBController) subs(c *gin.Context) {
 	scheme, host, hostWithPort, _ := a.subService.ResolveRequest(c)
 	subReq := a.subService.ForRequest(host)
 	subReq.subscriptionBody = true
-	subs, _, _, traffic, err := subReq.getSubs(subId)
+	subs, _, _, _, traffic, err := subReq.getSubs(subId)
 	if err != nil || len(subs) == 0 {
 		writeSubError(c, err)
 	} else {
@@ -621,6 +621,7 @@ func (a *SUBController) subPageContext(page PageData) map[string]any {
 		// The link is still served so every app keeps parsing the body; the page
 		// is where a person is told. F249.
 		"ended":      page.Ended,
+		"fileUrls":   page.FileUrls,
 		"datepicker": datepicker,
 		"announce":   a.subAnnounce,
 	}
