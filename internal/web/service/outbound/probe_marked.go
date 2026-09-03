@@ -36,6 +36,20 @@ func ProbeMarked(mark uint32, network, mode string, result *TestOutboundResult) 
 	probeMarkedTargets(probeThroughRoute, probeTargets, mark, network, mode, result)
 }
 
+// ProbeSocks tests an exit that fronts a loopback SOCKS port rather than a
+// marked route: the same targets, the same fallback, through the port.
+func ProbeSocks(port int, mode string, result *TestOutboundResult) {
+	label := MarkedProbeMode(mode)
+	for i, target := range probeTargets {
+		attempt := TestOutboundResult{Tag: result.Tag, Mode: label}
+		probeThroughRoute(socksRoute{port: port}, target, httpProbeTimeout, mode == "real", &attempt)
+		if attempt.Success || i == len(probeTargets)-1 {
+			*result = attempt
+			return
+		}
+	}
+}
+
 // probeMarkedTargets is ProbeMarked with the prober and the targets injected, so
 // the fallback is testable without a network.
 func probeMarkedTargets(

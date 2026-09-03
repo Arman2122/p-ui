@@ -584,7 +584,7 @@ root and no routing at all, which makes xray→ocserv trivially Pattern A.
 | Uplink device | `pux1`…`pux999` | `"pux" + id` | yes |
 | Front gateway | `100.127.0.1/32`… | `DefaultGatewayBase` (100.127.0.0/16) + id | yes |
 | fwmark (data) | `0x0e000001`…`0x0e0003e7` | `0x0e000000 \| id`, exact match — no mask | yes |
-| Local SOCKS port | — | an `ExitSocksPort` handle names the core's own port | band not needed |
+| Local SOCKS port | 41001…41999 | `41000 + id`, loopback only (`core.ExitSocksPortFor`) | yes — the inbound port check refuses it |
 | Shaping upload mirror | `pifb1`…`pifb999` | `"pifb" + id`, ≤15 chars | yes |
 
 A front and an uplink are opposite ends — one terminates traffic the panel received, the

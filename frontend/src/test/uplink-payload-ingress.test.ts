@@ -24,6 +24,12 @@ describe('uplinkPayload', () => {
     endpoint: '198.51.100.7:51820',
     presharedKey: '',
     keepAlive: 25,
+    sshHost: '',
+    sshPort: 22,
+    sshUser: '',
+    sshPassword: '',
+    sshKey: '',
+    sshFingerprint: '',
   };
 
   it('selects no ingress rather than inbound zero', () => {

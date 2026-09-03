@@ -36,6 +36,7 @@ type Core struct {
 	mu        sync.Mutex
 	hostKey   gossh.Signer
 	instances map[int]*instance
+	exits     map[int]*exitClient
 	counter   *core.Counter
 	epoch     string
 	starts    int
@@ -53,7 +54,7 @@ type instance struct {
 
 // New returns the core; nothing listens until the first Reconcile.
 func New(deps Deps) *Core {
-	return &Core{deps: deps, instances: map[int]*instance{}, counter: core.NewCounter(), epoch: strconv.FormatInt(time.Now().UnixNano(), 36)}
+	return &Core{deps: deps, instances: map[int]*instance{}, exits: map[int]*exitClient{}, counter: core.NewCounter(), epoch: strconv.FormatInt(time.Now().UnixNano(), 36)}
 }
 
 func (c *Core) Kinds() []core.Kind { return []core.Kind{Kind} }
@@ -182,6 +183,10 @@ func (c *Core) StopAll(context.Context) error {
 	for id, cur := range c.instances {
 		cur.srv.stop()
 		delete(c.instances, id)
+	}
+	for id, ex := range c.exits {
+		ex.stop()
+		delete(c.exits, id)
 	}
 	return nil
 }

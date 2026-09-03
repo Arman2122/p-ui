@@ -2,9 +2,12 @@ import type { ComponentType } from 'react';
 
 import {
   EGRESS_TYPE_AWG_UPLINK,
+  EGRESS_TYPE_SSH,
   EGRESS_TYPE_UPLINK,
   EgressFormFields,
+  SshExitSettingsSchema,
   UplinkSettingsSchema,
+  sshPayload,
   uplinkPayload,
   type EgressFormValues,
   type EgressPayload,
@@ -12,6 +15,7 @@ import {
 } from '@/schemas/api/egress';
 
 import AwgkernelExitFields from './awgkernel-fields';
+import SshExitFields from './ssh-fields';
 import WgkernelExitFields from './wgkernel-fields';
 
 /*
@@ -19,7 +23,8 @@ One module per kind a route can exit on.
 
 The two vocabularies meet here and nowhere else: a CORE KIND is what the registry
 declares and what the picker shows, an EGRESS TYPE is what the row is stored as
-and which driver dials it. Before this, both were the WireGuard uplink's — so a
+and which driver dials it. A core-owned exit (ssh) has no driver, so its type is
+its kind. Before this, both were the WireGuard uplink's — so a
 second core declaring an exit rendered WireGuard's fields and saved itself as a
 wg-client, which the wrong driver would then try to dial.
 
@@ -64,7 +69,35 @@ function uplinkFromRecord(row: EgressRecord): EgressFormValues {
   }
 }
 
+function sshFromRecord(row: EgressRecord): EgressFormValues {
+  const base = EgressFormFields.parse({ type: EGRESS_TYPE_SSH, remark: row.remark ?? '', enable: row.enable ?? true });
+  if (!row.settings) return base;
+  try {
+    const parsed = SshExitSettingsSchema.safeParse(JSON.parse(row.settings));
+    if (!parsed.success) return base;
+    const s = parsed.data;
+    return {
+      ...base,
+      id: row.id,
+      sshHost: s.host,
+      sshPort: s.port,
+      sshUser: s.username,
+      sshPassword: s.password,
+      sshKey: s.privateKey,
+      sshFingerprint: s.hostKeyFingerprint,
+    };
+  } catch {
+    return base;
+  }
+}
+
 const MODULES: Record<string, ExitKindModule> = {
+  ssh: {
+    egressType: EGRESS_TYPE_SSH,
+    Fields: SshExitFields,
+    toPayload: sshPayload,
+    fromRecord: sshFromRecord,
+  },
   wgkernel: {
     egressType: EGRESS_TYPE_UPLINK,
     Fields: WgkernelExitFields,

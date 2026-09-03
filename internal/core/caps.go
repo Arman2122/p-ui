@@ -563,3 +563,24 @@ type RoutableEgress interface {
 	ExitHandleKind(kind Kind) ExitHandleKind
 	ExitHandle(ctx context.Context, exit Exit) (ExitHandle, error)
 }
+
+// ExitSocksPortBase is where a core-owned SOCKS exit listens: base + row id,
+// loopback only. Fixed so a panel restart compiles the same Xray config.
+const ExitSocksPortBase = 41000
+
+// ExitSocksPortFor is the loopback port an ExitSocksPort exit serves on.
+func ExitSocksPortFor(exitID int) int { return ExitSocksPortBase + exitID }
+
+// IsExitSocksPort reports whether port sits in the band the exits own.
+func IsExitSocksPort(port int) bool { return port > ExitSocksPortBase && port <= ExitSocksPortBase+999 }
+
+/*
+ExitSupervisor runs the exits a core owns: the SSH client behind a SOCKS port,
+one day an OpenVPN client. Supervisor's mirror for the outbound half — the
+panel hands over the enabled rows of the core's kinds and the core converges,
+so ExitHandle stays pure and a compile or a preview never dials anything.
+*/
+type ExitSupervisor interface {
+	ValidateExit(exit Exit) error
+	ReconcileExits(ctx context.Context, desired []Exit) error
+}
