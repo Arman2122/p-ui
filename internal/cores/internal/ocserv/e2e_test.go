@@ -10,8 +10,10 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	osuser "os/user"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -20,6 +22,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/core/coretest"
 	"github.com/Arman2122/p-ui/internal/radius"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 )
 
 // The e2e half needs root, the daemon, its client and a network namespace for
@@ -210,7 +213,51 @@ inbound's prefix, which is what keeps two inbounds' interfaces apart.
 */
 func TestRealTrafficIsBilledAndSeen(t *testing.T) {
 	daemon, ctl, openconnect := e2eGate(t)
-	c := newE2ECore(t, daemon, ctl)
+	realTraffic(t, openconnect, newE2ECore(t, daemon, ctl))
+}
+
+/*
+The same tunnel the way production runs it: a transient systemd unit, and the
+daemon dropping to p-ui-core from the config the core wrote. Under the exec
+backend it stays root and never drops, so this is the only run that proves
+the state directory is one the daemon user can actually open its sockets in.
+*/
+func TestRealTrafficUnderSystemd(t *testing.T) {
+	daemon, ctl, openconnect := e2eGate(t)
+	backend, err := supervisor.NewSystemd(context.Background())
+	if err != nil {
+		t.Skip("no systemd: ", err)
+	}
+	t.Cleanup(func() { _ = backend.Close() })
+	who, err := osuser.Lookup("p-ui-core")
+	if err != nil {
+		t.Skip("no p-ui-core user: ", err)
+	}
+	gid, _ := strconv.Atoi(who.Gid)
+	srv, err := radius.New(radius.NewSecret(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close() })
+	dir, err := os.MkdirTemp("", "pui-ocserv-systemd-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := New(Deps{Radius: srv, Binary: daemon, Occtl: ctl, StateDir: dir, Backend: backend, User: who.Username, Group: gid})
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log(shellOut("journalctl -u " + supervisor.UnitName(string(ID), 2) + " --no-pager -n 40 2>&1"))
+		}
+	})
+	realTraffic(t, openconnect, c)
+}
+
+func realTraffic(t *testing.T, openconnect string, c *Core) {
+	t.Helper()
 	t.Cleanup(func() { _ = c.StopAll(context.Background()) })
 	port := freeTCPPort(t)
 	inst := core.Instance{
