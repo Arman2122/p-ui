@@ -11,6 +11,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/amneziawg"
 	"github.com/Arman2122/p-ui/internal/cores/internal/mtproto"
+	"github.com/Arman2122/p-ui/internal/cores/internal/ocserv"
 	"github.com/Arman2122/p-ui/internal/cores/internal/openvpn"
 	"github.com/Arman2122/p-ui/internal/cores/internal/singbox"
 	"github.com/Arman2122/p-ui/internal/cores/internal/ssh"
@@ -262,7 +263,22 @@ func Register(reg *core.Registry, deps Deps) error {
 	if err := reg.Register(openvpn.New(openvpnDeps(deps))); err != nil {
 		return err
 	}
+	if err := reg.Register(ocserv.New(ocservDeps(deps))); err != nil {
+		return err
+	}
 	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))
+}
+
+// ocservDeps narrows the panel-side facts to the ones the OpenConnect core
+// takes, sharing the one RADIUS server every daemon core authenticates against.
+func ocservDeps(deps Deps) ocserv.Deps {
+	out := ocserv.Deps{Radius: radiusServerFor(deps), Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup}
+	if deps.CoreAuthFailure != nil {
+		out.AuthFailure = func(instanceID int, username, ip, reason string) {
+			deps.CoreAuthFailure(string(ocserv.ID), instanceID, username, ip, reason)
+		}
+	}
+	return out
 }
 
 // openvpnDeps narrows the panel-side facts to the ones the OpenVPN core takes,

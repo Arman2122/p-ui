@@ -2285,7 +2285,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "ssh",
           "tuic",
           "anytls",
-          "openvpn"
+          "openvpn",
+          "ocserv"
         ],
         "example": "vless",
         "type": "string"

@@ -2103,3 +2103,52 @@ Deliberate v1 choices: no client certificates (a declared later option), DCO
 off on the 2.6 line, link-byte accounting labelled rather than normalised,
 and the conformance suite runs only where the daemon and plugin exist
 (`OPENVPN_E2E`, the VM).
+
+### 12.5e The OpenConnect core (2026-09-03)
+
+Core #8, `internal/cores/internal/ocserv/`. The daemon is the distribution's
+`ocserv`; the panel renders its config, supervises one process per inbound
+(the daemon drops privileges to `p-ui-core` from its own config, so the unit
+grants no capabilities), and authenticates, accounts and throttles it through
+§12.5c's RADIUS server via the radcli client compiled into it. The path was
+proven against the real daemon before the adapter existed, the way the
+OpenVPN plugin was, and it corrected the research on three points:
+
+- **`groupconfig=true` is mandatory.** Without it the Access-Accept
+  authenticates and everything else in the reply -- Framed-IP-Address, DNS,
+  routes, the speed limits -- is dropped, and clients silently take pool
+  addresses the panel never chose.
+- **`occtl` has no `terminate` in 1.2.** Only `disconnect`, which leaves the
+  session cookie valid. Enforcement is therefore two steps in order: refuse
+  the next login in the sink, then disconnect. Either alone is a hole.
+- **The distribution's radcli dictionary comments out its vendor includes,**
+  and radcli drops an attribute it cannot name, so the panel writes its own
+  dictionary or the speed plan never arrives.
+
+What the contract gained: **`RateEnforcer` for a daemon core.** The SSH core
+closed the in-process half; this closes the daemon half named in §12.5a --
+the plan is handed over in the Access-Accept, in the two Roaring-Penguin
+attributes, whose direction and unit are measured rather than read (the
+daemon's dictionary and its own code disagree; Upstream is the daemon's RX,
+which is the client's upload, and the value is kilobytes per second).
+
+`IngressSubnet` gains its first declaring core and still no mechanism: every
+session gets its own transient device, so the honest handle is a
+`BlockedKey`, and a routing rule on this kind is refused rather than written
+against nothing. The device prefix ends in a separator (`poc<id>-`) because
+without one inbound 7's eighth session and inbound 78's first are the same
+interface name.
+
+Identity is a server certificate and nothing else. The panel mints a
+self-signed one and the profile pins its public key, which `openconnect`
+honours; the official Cisco client does not pin, so an operator pastes a
+certificate their clients already trust into the same two fields and the
+profile then carries none. Camouflage is offered because plain AnyConnect is
+filtered where this panel is used; the secret is minted with the inbound and
+rides the client's URL.
+
+Deliberate v1 choices: a changed speed plan reaches a client at its next
+login rather than mid-session (an Access-Accept is the only per-user thing
+this daemon reads), no routing until the egress plane can select `from
+<prefix>`, no client certificates, and the end-to-end tests run only where
+the daemon and its client exist (`OCSERV_E2E`, the VM).

@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const OnlineAPISupportSchema = z.number().int();
 export type OnlineAPISupport = z.infer<typeof OnlineAPISupportSchema>;
 
-export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun', 'ssh', 'tuic', 'anytls', 'openvpn'] as const;
+export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun', 'ssh', 'tuic', 'anytls', 'openvpn', 'ocserv'] as const;
 export const ProtocolSchema = z.enum(PROTOCOL_VALUES);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
@@ -531,7 +531,7 @@ export const InboundSchema = z.object({
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
   port: z.number().int().min(0).max(65535),
-  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun', 'ssh', 'tuic', 'anytls', 'openvpn']),
+  protocol: z.enum(['vmess', 'vless', 'tunnel', 'http', 'trojan', 'shadowsocks', 'mixed', 'wireguard', 'hysteria', 'mtproto', 'wgkernel', 'awgkernel', 'tun', 'ssh', 'tuic', 'anytls', 'openvpn', 'ocserv']),
   remark: z.string(),
   settings: z.unknown(),
   shareAddr: z.string(),

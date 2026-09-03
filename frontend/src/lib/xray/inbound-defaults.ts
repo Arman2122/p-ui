@@ -7,6 +7,7 @@ import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/
 import type { SshInboundSettings } from '@/schemas/protocols/inbound/ssh';
 import type { TuicInboundSettings } from '@/schemas/protocols/inbound/tuic';
 import type { AnytlsInboundSettings } from '@/schemas/protocols/inbound/anytls';
+import type { OcservInboundSettings } from '@/schemas/protocols/inbound/ocserv';
 import type { OpenvpnInboundSettings } from '@/schemas/protocols/inbound/openvpn';
 import type { ShadowsocksClient, ShadowsocksInboundSettings } from '@/schemas/protocols/inbound/shadowsocks';
 import type { TrojanClient, TrojanInboundSettings } from '@/schemas/protocols/inbound/trojan';
@@ -234,6 +235,10 @@ export function createDefaultOpenvpnInboundSettings(): OpenvpnInboundSettings {
   return { proto: 'udp', subnet: '10.9.0.0/24', dns: ['1.1.1.1'], redirectGateway: true, serverCert: '', serverKey: '', tlsCryptV2ServerKey: '', clients: [] };
 }
 
+export function createDefaultOcservInboundSettings(): OcservInboundSettings {
+  return { subnet: '10.11.0.0/24', dns: ['1.1.1.1'], redirectGateway: true, serverCert: '', serverKey: '', camouflage: false, camouflageSecret: '', clients: [] };
+}
+
 export function createDefaultMtprotoInboundSettings(): MtprotoInboundSettings {
   return {
     fakeTlsDomain: 'www.cloudflare.com',
@@ -325,7 +330,8 @@ export type AnyInboundSettings =
   | SshInboundSettings
   | TuicInboundSettings
   | AnytlsInboundSettings
-  | OpenvpnInboundSettings;
+  | OpenvpnInboundSettings
+  | OcservInboundSettings;
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
@@ -346,6 +352,7 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
     case 'tuic':        return createDefaultTuicInboundSettings();
     case 'anytls':      return createDefaultAnytlsInboundSettings();
     case 'openvpn':     return createDefaultOpenvpnInboundSettings();
+    case 'ocserv':      return createDefaultOcservInboundSettings();
     default:            return null;
   }
 }

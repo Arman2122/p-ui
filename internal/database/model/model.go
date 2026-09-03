@@ -52,6 +52,10 @@ const (
 
 	// OpenVPN is the distribution's daemon, one supervised process per inbound.
 	OpenVPN Protocol = "openvpn"
+
+	// OCServ is OpenConnect (the AnyConnect protocol) on the distribution's
+	// ocserv, one supervised process per inbound.
+	OCServ Protocol = "ocserv"
 )
 
 // User represents a user account in the Penhoon UI panel.

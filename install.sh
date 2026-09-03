@@ -1541,6 +1541,23 @@ install_openvpn_packages() {
     systemctl disable --now openvpn.service > /dev/null 2>&1 || true
 }
 
+# The OpenConnect core runs the distribution's ocserv and authenticates through
+# the radcli client compiled into it; occtl comes in the same package. A miss
+# never aborts the install: the core reports it at preflight and every other
+# core keeps working.
+install_ocserv_packages() {
+    if ! dpkg -s ocserv > /dev/null 2>&1; then
+        apt-get update -q > /dev/null 2>&1
+        apt-get install -y -q ocserv > /dev/null 2>&1 \
+            || echo -e "${yellow}Could not install ocserv; the OpenConnect core stays unavailable until it is${plain}"
+    fi
+    # Debian ships ocserv socket-activated on 443, which would take the port
+    # from the panel's own inbounds and serve /etc/ocserv/ocserv.conf, which
+    # the panel does not write. Both units stay masked, not merely stopped.
+    systemctl disable --now ocserv.socket ocserv.service > /dev/null 2>&1 || true
+    systemctl mask ocserv.socket ocserv.service > /dev/null 2>&1 || true
+}
+
 
 _install_pui_service_unit() {
     local source="$1"
@@ -1760,6 +1777,7 @@ install_p-ui() {
     ensure_core_user
     install_quic_sysctl
     install_openvpn_packages
+    install_ocserv_packages
 
     # PostgreSQL is mandatory and every `p-ui setting` call in
     # config_after_install needs a reachable database, so provision it first.

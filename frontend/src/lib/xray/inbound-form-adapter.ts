@@ -6,6 +6,7 @@ import {
   SshClientSchema,
   TuicClientSchema,
   AnytlsClientSchema,
+  OcservClientSchema,
   OpenvpnClientSchema,
   ShadowsocksClientSchema,
   TrojanClientSchema,
@@ -271,6 +272,7 @@ function clientSchemaForProtocol(protocol: string): z.ZodType | null {
     case 'tuic': return TuicClientSchema;
     case 'anytls': return AnytlsClientSchema;
     case 'openvpn': return OpenvpnClientSchema;
+    case 'ocserv': return OcservClientSchema;
     default: return null;
   }
 }

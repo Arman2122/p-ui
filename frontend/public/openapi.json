@@ -2333,7 +2333,8 @@
               "ssh",
               "tuic",
               "anytls",
-              "openvpn"
+              "openvpn",
+              "ocserv"
             ],
             "example": "vless",
             "type": "string"

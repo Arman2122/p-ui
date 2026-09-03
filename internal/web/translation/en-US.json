@@ -495,6 +495,17 @@
         "tuicZeroRttHint": "Lets a returning client send data in its first packet. Faster, and replayable by design; leave off unless latency matters more.",
         "anytlsPadding": "Padding scheme",
         "anytlsPaddingHint": "One line per entry, in sing-box's padding-scheme syntax; empty keeps the built-in default.",
+        "ocservSubnet": "Tunnel subnet",
+        "ocservSubnetHint": "IPv4 prefix clients get their addresses from; the first address is the server's. Each inbound needs its own.",
+        "ocservDns": "DNS servers pushed to clients",
+        "ocservDnsHint": "Comma-separated; empty pushes none.",
+        "ocservRedirect": "Route all client traffic",
+        "ocservRedirectHint": "Pushes a default route so everything leaves through the tunnel; off, only the tunnel subnet is routed.",
+        "ocservCamouflage": "Camouflage",
+        "ocservCamouflageHint": "The server answers anything without the secret as an ordinary web server would, so a scan finds no VPN. The secret is minted on save and rides each client's URL after a '?'.",
+        "ocservIdentityMinted": "Server identity is minted and kept on every save; client profiles pin this certificate. Paste your own certificate and key instead if your clients must trust it without a pin, which the official AnyConnect app requires.",
+        "ocservIdentityPending": "A self-signed certificate is minted on the first save; profiles pin it. You can paste your own certificate and key instead.",
+        "ocservRadius": "Clients log in with a username and password through the panel's embedded RADIUS server; traffic, sessions and speed limits all travel over it.",
         "openvpnProto": "Transport",
         "openvpnProtoHint": "UDP is the fast path; TCP passes networks that drop UDP. One process serves one; add a second inbound for the other.",
         "openvpnSubnet": "Tunnel subnet",
@@ -2178,6 +2189,7 @@
       "subjects": {
         "neverMatches": "Never matches",
         "neverMatchesTip": "This rule names an inbound the router cannot see. Pick a routable inbound or delete the rule.",
+        "reasonPerSessionDevice": "Each session of this inbound gets its own short-lived kernel device, so there is no interface a routing rule could name. Its clients reach the internet through the server's own route.",
         "reasonBridgeOff": "This inbound can be bridged into Xray's router, but its Route through Xray switch is off. Turn it on in the inbound's form and this tag becomes routable.",
         "reasonForcedOutbound": "This inbound has an Outbound set in its own settings, which the panel applies above every routing rule.",
         "reasonDisabled": "This inbound is disabled, so the router never sees it.",
@@ -2395,6 +2407,9 @@
     },
     "singbox": {
       "title": "sing-box"
+    },
+    "ocserv": {
+      "title": "OpenConnect"
     },
     "openvpn": {
       "title": "OpenVPN"

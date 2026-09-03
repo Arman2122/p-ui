@@ -72,6 +72,7 @@ import {
   SshFields,
   TuicFields,
   AnytlsFields,
+  OcservFields,
   OpenvpnFields,
   ShadowsocksFields,
   TunFields,
@@ -774,6 +775,7 @@ export default function InboundFormModal({
       {protocol === Protocols.ANYTLS && <AnytlsFields />}
 
       {protocol === Protocols.OPENVPN && <OpenvpnFields />}
+      {protocol === Protocols.OCSERV && <OcservFields />}
 
       {protocol === Protocols.SHADOWSOCKS && <ShadowsocksFields isSSWith2022={isSSWith2022} />}
 
@@ -1074,6 +1076,7 @@ export default function InboundFormModal({
                 Protocols.TUIC,
                 Protocols.ANYTLS,
                 Protocols.OPENVPN,
+                Protocols.OCSERV,
               ] as string[]).includes(protocol) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]
                 : []),

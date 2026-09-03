@@ -2,6 +2,7 @@ package arch
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -21,15 +22,17 @@ one release ahead, a core compiled out. The panel must leave it exactly as it
 found it.
 
 Behavioural rather than a source grep on purpose: the thing that broke was
-RenderInbound skipping non-Xray inbounds by naming mtproto, so an ocserv inbound
-would have been rendered into Xray's client shape and appended to the config.
+RenderInbound skipping non-Xray inbounds by naming mtproto, so an inbound of a
+kind it had never heard of would have been rendered into Xray's client shape
+and appended to the config.
 xray-core rejects a protocol it does not know and refuses to start, which takes
 every VLESS, VMess and Trojan inbound on the box down with it.
 */
 
 // quarantinedKind stands in for a row a newer panel wrote. It must stay a kind
-// no core in this build claims, which the guard asserts before anything else.
-const quarantinedKind model.Protocol = "ocserv"
+// no core in this build claims -- and no core on the roster either, or landing
+// that one turns this guard red. The guard asserts it before anything else.
+const quarantinedKind model.Protocol = "ftp"
 
 /*
 renderQuarantined reports a panic as the failure it is instead of letting it
@@ -104,7 +107,7 @@ func TestUnknownCoreRoundTripsByteForByte(t *testing.T) {
 			t.Fatalf("build the core registry: %v", err)
 		}
 		local := runtime.NewLocal(runtime.LocalDeps{Cores: registry, RenderInbound: svc.RenderInbound})
-		const want = `no core serves protocol "ocserv"`
+		want := fmt.Sprintf("no core serves protocol %q", quarantinedKind)
 
 		for _, op := range []struct {
 			name string

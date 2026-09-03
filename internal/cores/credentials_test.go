@@ -21,7 +21,8 @@ func TestClientCredentials(t *testing.T) {
 		{kind: "mtproto", want: []string{core.CredSecret, core.CredAdTag}},
 		{kind: "vmess", want: []string{core.CredUUID, core.CredSecurity}},
 		{kind: "http", want: nil},
-		{kind: "ocserv", want: nil},
+		{kind: "ocserv", want: []string{core.CredUsername, core.CredPassword}},
+		{kind: "ftp", want: nil},
 	}
 
 	for _, tc := range cases {

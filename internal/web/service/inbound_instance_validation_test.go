@@ -84,7 +84,7 @@ func TestAnInboundTheKernelWouldRefuseIsRefusedAtTheSave(t *testing.T) {
 func TestAKindWithNoValidatorIsUnaffected(t *testing.T) {
 	initTestDB(t)
 
-	for _, protocol := range []model.Protocol{model.VLESS, model.Mixed, model.Protocol("ocserv")} {
+	for _, protocol := range []model.Protocol{model.VLESS, model.Mixed, model.Protocol("ftp")} {
 		if err := validateInstanceForKind(&model.Inbound{
 			Protocol: protocol,
 			Settings: `{"anything":"at all"}`,
