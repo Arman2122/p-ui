@@ -34,7 +34,8 @@ func TestFileShapedInboundId(t *testing.T) {
 		protocol model.Protocol
 		want     int
 	}{
-		{model.WireGuard, 9}, {model.WGKernel, 9}, {model.AWGKernel, 9}, {model.VLESS, 0}, {model.MTProto, 0},
+		// Xray's own wireguard renders no file: the registry, not a protocol list, says so.
+		{model.WGKernel, 9}, {model.AWGKernel, 9}, {model.WireGuard, 0}, {model.VLESS, 0}, {model.MTProto, 0},
 	} {
 		if got := fileShapedInboundId(&model.Inbound{Id: 9, Protocol: tt.protocol}); got != tt.want {
 			t.Errorf("fileShapedInboundId(%s) = %d, want %d", tt.protocol, got, tt.want)

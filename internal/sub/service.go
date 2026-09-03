@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -285,11 +286,10 @@ func (s *SubService) GetSubs(subId string, host string) ([]string, []string, int
 	return result, emails, lastOnline, traffic, err
 }
 
-// fileShapedInboundId is the inbound id when the kind hands out a config file
+// fileShapedInboundId is the inbound id when its core renders a config file
 // (the sub server serves it under /file/<id>), and 0 for a link-only kind.
 func fileShapedInboundId(inbound *model.Inbound) int {
-	switch inbound.Protocol {
-	case model.WireGuard, model.WGKernel, model.AWGKernel:
+	if cores.SharesFile(core.Kind(inbound.Protocol)) {
 		return inbound.Id
 	}
 	return 0
