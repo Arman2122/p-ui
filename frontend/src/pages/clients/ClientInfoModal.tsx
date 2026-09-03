@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Divider, Modal, Popover, Tag, Tooltip, message } from 'antd';
+import { Button, Divider, Modal, Popover, Select, Tag, Tooltip, message } from 'antd';
 import { CopyOutlined, DownloadOutlined, EyeOutlined, QrcodeOutlined, ReloadOutlined } from '@ant-design/icons';
 
 import { ClipboardManager, FileManager, HttpUtil, IntlUtil, SizeFormatter } from '@/utils';
@@ -14,7 +14,7 @@ import { isPostQuantumLink } from '@/lib/xray/inbound-link';
 import { LinkTags, linkMetaText, parseLinkParts } from '@/lib/xray/link-label';
 import { QrPanel } from '@/pages/inbounds/qr';
 import ConfigBlock from '@/components/clients/ConfigBlock';
-import { findWireguardInbound, useWireguardClientConfig } from './wireguardConfig';
+import { findWireguardInbounds, useWireguardClientConfig } from './wireguardConfig';
 import './ClientInfoModal.css';
 
 const TUNNEL_TAG_STYLE = {
@@ -157,7 +157,10 @@ export default function ClientInfoModal({
   }, [client?.subId, subSettings?.subClashEnable, subSettings?.subClashURI]);
 
   const showSubscription = !!(subSettings?.enable && client?.subId);
-  const wgInbound = useMemo(() => findWireguardInbound(client, inboundsById), [client, inboundsById]);
+  const wgInbounds = useMemo(() => findWireguardInbounds(client, inboundsById), [client, inboundsById]);
+  const [wgInboundId, setWgInboundId] = useState<number | undefined>(undefined);
+  useEffect(() => { setWgInboundId(undefined); }, [client?.email]);
+  const wgInbound = wgInbounds.find((ib) => ib.id === wgInboundId) ?? wgInbounds[0];
   const wgConfigText = useWireguardClientConfig(open, client, wgInbound);
 
   async function copyValue(text: string) {
@@ -545,6 +548,15 @@ export default function ClientInfoModal({
             {wgConfigText && client && (
               <>
                 <Divider>{t('pages.clients.wireguardConfig')}</Divider>
+                {wgInbounds.length > 1 && (
+                  <Select
+                    size="small"
+                    style={{ width: '100%', marginBottom: 8 }}
+                    value={wgInbound?.id}
+                    onChange={setWgInboundId}
+                    options={wgInbounds.map((ib) => ({ value: ib.id, label: formatInboundLabel(ib.tag, ib.remark) }))}
+                  />
+                )}
                 <ConfigBlock
                   label={t('pages.clients.config')}
                   text={wgConfigText}
