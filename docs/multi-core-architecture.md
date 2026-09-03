@@ -2036,3 +2036,30 @@ kinds (no `RateEnforcer`, no `ShapingHost`: sing-box has no per-user rate
 control and its clients share one socket), no `RoutableIngress` yet, and the
 conformance suite for this core runs only where a sing-box binary exists
 (`SINGBOX_E2E_BINARY`, the VM), so CI stays green without exercising it.
+
+### 12.5c The embedded RADIUS server (2026-09-03)
+
+`internal/radius` is §4.4 built: one loopback listener pair (auth 1812,
+accounting 1813, both on 127.0.0.1), one host secret, PAP only, and a
+`NAS-Identifier` per inbound (`p-ui-<core>-<id>`) naming the `Sink` that
+answers for it. A core registers a sink per inbound; nothing listens until the
+first registration, so a panel with no RADIUS-speaking core opens no port.
+Authentication is the sink's verdict — the server never decides — and a
+refused login reaches the panel's `core.auth.failure` event through the
+server's `Rejected` hook. Accounting records are acknowledged before the sink
+sees them (a NAS retries an unanswered record, and a slow sink must never make
+it double-count), with gigawords folded into 64-bit totals.
+
+`Ledger` is the event-push half of §4.2's table: per-session totals become
+per-user deltas (each byte once across interims and the stop; a session that
+goes backwards counts from zero rather than as a refund), open sessions become
+`core.Session`s whose last-seen moves only with bytes, and a session silent
+past `Stale` is dropped so a dead tunnel never sits in the IP-limit count. A
+core embeds one ledger per inbound and drains it from `CollectTraffic`,
+`Sessions` and `OnlineEmails`.
+
+Deliberately not built: MS-CHAPv2 (Windows SSTP clients will want it; accel-ppp
+is the first core that can ask), Disconnect/CoA (every consumer has its own
+kill path per §4.4's table), and any proxying or realm logic. The first
+consumer is OpenVPN, which also wires the host secret and the server into
+`cores.Deps`; until then the package has tests and no listener.

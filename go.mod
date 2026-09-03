@@ -35,6 +35,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.2
+	layeh.com/radius v0.0.0-20231213012653-1006025d24f8
 	pgregory.net/rapid v1.3.0
 )
 
