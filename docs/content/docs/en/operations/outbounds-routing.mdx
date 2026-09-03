@@ -52,7 +52,9 @@ Assemble any outbound below and paste the JSON into **Xray Settings → Outbound
 
 An exit that is a remote SSH server. Pick **ssh** in the outbound form, give it
 the host, port and username, a password or a PEM private key, and the server's
-host key fingerprint, which is required: get it with
+host key fingerprint, which is required. **Fetch from server** under the field asks
+the panel to perform the key exchange and fills in what the server presented,
+for you to confirm; or get it yourself with
 `ssh-keyscan -t ed25519 HOST | ssh-keygen -lf -`. The panel keeps one SSH
 connection to that server, reconnecting with a backoff when it drops, and fronts
 it with a loopback SOCKS port (`41000` plus the exit's id). Routing rules that

@@ -29,6 +29,7 @@ func (a *EgressController) initRouter(g *gin.RouterGroup) {
 	g.GET("/preflight", a.preflight)
 
 	g.POST("/test", a.test)
+	g.POST("/hostkey", a.hostKey)
 	g.POST("/add", a.add)
 	g.POST("/update/:id", a.update)
 	g.POST("/del/:id", a.del)
@@ -145,4 +146,23 @@ func (a *EgressController) del(c *gin.Context) {
 	}
 	jsonObj(c, id, nil)
 	a.xrayService.SetToNeedRestart()
+}
+
+// hostKey scans an SSH server's host key so the exit form can be filled with
+// what the server really presents, for the operator to confirm and pin.
+func (a *EgressController) hostKey(c *gin.Context) {
+	var request struct {
+		Host string `json:"host"`
+		Port int    `json:"port"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	key, err := service.ScanSSHHostKey(c.Request.Context(), request.Host, request.Port)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	jsonObj(c, key, nil)
 }

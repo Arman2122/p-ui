@@ -845,6 +845,10 @@ export const EXAMPLES: Record<string, unknown> = {
     "sortIndex": 0,
     "updatedAt": 1700000000000
   },
+  "SSHHostKey": {
+    "fingerprint": "SHA256:slAhPUsjKT/+eP4DHWVimm+a5yTcX8Sw13dOOHWn/L4",
+    "keyType": "ssh-ed25519"
+  },
   "Setting": {
     "id": 0,
     "key": "",

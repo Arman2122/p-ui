@@ -3646,6 +3646,24 @@
         ],
         "type": "object"
       },
+      "SSHHostKey": {
+        "description": "SSHHostKey is what an SSH server presented, for the operator to pin.",
+        "properties": {
+          "fingerprint": {
+            "example": "SHA256:slAhPUsjKT/+eP4DHWVimm+a5yTcX8Sw13dOOHWn/L4",
+            "type": "string"
+          },
+          "keyType": {
+            "example": "ssh-ed25519",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "keyType"
+        ],
+        "type": "object"
+      },
       "Setting": {
         "description": "Setting stores key-value configuration settings for the Penhoon UI panel.",
         "properties": {
@@ -11139,6 +11157,59 @@
                       }
                     }
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/egresses/hostkey": {
+      "post": {
+        "tags": [
+          "Egresses"
+        ],
+        "summary": "Perform the key exchange with an SSH server and report the host key it presents, without authenticating, so an SSH exit's fingerprint field can be filled with what the server really answers and the operator only has to confirm the pin. Nothing is stored: the exit is saved with whatever fingerprint the operator submits.",
+        "operationId": "post_panel_api_egresses_hostkey",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "host": "91.107.151.123",
+                "port": 12878
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/SSHHostKey"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "fingerprint": "SHA256:slAhPUsjKT/+eP4DHWVimm+a5yTcX8Sw13dOOHWn/L4",
+                    "keyType": "ssh-ed25519"
+                  }
                 }
               }
             }

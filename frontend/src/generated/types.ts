@@ -787,6 +787,11 @@ export interface RuleView {
   updatedAt: number;
 }
 
+export interface SSHHostKey {
+  fingerprint: string;
+  keyType: string;
+}
+
 export interface Setting {
   id: number;
   key: string;

@@ -1789,6 +1789,9 @@
         "sshFingerprint": "Host key fingerprint",
         "sshFingerprintHint": "Pins the server. Get it with: ssh-keyscan -t ed25519 HOST | ssh-keygen -lf -",
         "sshFingerprintRequired": "An SSH exit needs the server's host key fingerprint; it will not trust whatever answers.",
+        "sshFingerprintFetch": "Fetch from server",
+        "sshFingerprintFetched": "The server presented this key. Pin it only if you trust the path you reached it over.",
+        "sshFingerprintFetchFailed": "Could not read the server's host key",
         "noEditableFields": "This kind of exit has no editable settings here. Its parameters come from the uplink or front it belongs to."
       },
       "balancerTagRequired": "Tag is required",

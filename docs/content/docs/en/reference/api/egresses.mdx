@@ -61,6 +61,13 @@ _openapi:
         that outbound is testable on its own row.'
       url: '#time-a-real-request-out-through-each-egress-and-report-the-exit-it-came-from-so-an-uplink-answers-the-same-question-an-outbound-does-mode-is-tcp-http-or-real-tcp-is-promoted-to-the-http-probe-because-a-bare-dial-proves-nothing-about-a-tunnel-whose-peer-ignores-unauthenticated-packets-every-probe-is-gated-on-the-host-agreeing-that-this-egresss-mark-reaches-its-own-device-a-mark-no-rule-catches-falls-through-to-the-main-table-and-leaves-with-the-servers-own-address-so-a-disabled-row-a-contained-one-or-one-whose-device-is-gone-answers-with-why-rather-than-with-a-latency-that-measured-the-direct-path-a-front-is-refused-outright--it-hands-its-traffic-to-an-outbound-tag-and-that-outbound-is-testable-on-its-own-row'
     - depth: 2
+      title: "Perform the key exchange with an SSH server and report the host key it
+        presents, without authenticating, so an SSH exit's fingerprint field can
+        be filled with what the server really answers and the operator only has
+        to confirm the pin. Nothing is stored: the exit is saved with whatever
+        fingerprint the operator submits."
+      url: '#perform-the-key-exchange-with-an-ssh-server-and-report-the-host-key-it-presents-without-authenticating-so-an-ssh-exits-fingerprint-field-can-be-filled-with-what-the-server-really-answers-and-the-operator-only-has-to-confirm-the-pin-nothing-is-stored-the-exit-is-saved-with-whatever-fingerprint-the-operator-submits'
+    - depth: 2
       title: Delete an egress and bring down the kernel state its id owns. Refused
         while a routing rule still sends traffic to it.
       url: '#delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-a-routing-rule-still-sends-traffic-to-it'
@@ -107,6 +114,12 @@ _openapi:
           direct path. A front is refused outright — it hands its traffic to an
           outbound tag, and that outbound is testable on its own row.'
         id: time-a-real-request-out-through-each-egress-and-report-the-exit-it-came-from-so-an-uplink-answers-the-same-question-an-outbound-does-mode-is-tcp-http-or-real-tcp-is-promoted-to-the-http-probe-because-a-bare-dial-proves-nothing-about-a-tunnel-whose-peer-ignores-unauthenticated-packets-every-probe-is-gated-on-the-host-agreeing-that-this-egresss-mark-reaches-its-own-device-a-mark-no-rule-catches-falls-through-to-the-main-table-and-leaves-with-the-servers-own-address-so-a-disabled-row-a-contained-one-or-one-whose-device-is-gone-answers-with-why-rather-than-with-a-latency-that-measured-the-direct-path-a-front-is-refused-outright--it-hands-its-traffic-to-an-outbound-tag-and-that-outbound-is-testable-on-its-own-row
+      - content: "Perform the key exchange with an SSH server and report the host key it
+          presents, without authenticating, so an SSH exit's fingerprint field
+          can be filled with what the server really answers and the operator
+          only has to confirm the pin. Nothing is stored: the exit is saved with
+          whatever fingerprint the operator submits."
+        id: perform-the-key-exchange-with-an-ssh-server-and-report-the-host-key-it-presents-without-authenticating-so-an-ssh-exits-fingerprint-field-can-be-filled-with-what-the-server-really-answers-and-the-operator-only-has-to-confirm-the-pin-nothing-is-stored-the-exit-is-saved-with-whatever-fingerprint-the-operator-submits
       - content: Delete an egress and bring down the kernel state its id owns. Refused
           while a routing rule still sends traffic to it.
         id: delete-an-egress-and-bring-down-the-kernel-state-its-id-owns-refused-while-a-routing-rule-still-sends-traffic-to-it
@@ -122,7 +135,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/egresses/list","method":"get"},{"path":"/panel/api/egresses/get/{id}","method":"get"},{"path":"/panel/api/egresses/preflight","method":"get"},{"path":"/panel/api/egresses/add","method":"post"},{"path":"/panel/api/egresses/update/{id}","method":"post"},{"path":"/panel/api/egresses/test","method":"post"},{"path":"/panel/api/egresses/del/{id}","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/egresses/list","method":"get"},{"path":"/panel/api/egresses/get/{id}","method":"get"},{"path":"/panel/api/egresses/preflight","method":"get"},{"path":"/panel/api/egresses/add","method":"post"},{"path":"/panel/api/egresses/update/{id}","method":"post"},{"path":"/panel/api/egresses/test","method":"post"},{"path":"/panel/api/egresses/hostkey","method":"post"},{"path":"/panel/api/egresses/del/{id}","method":"post"}]} showTitle />
     </>
   );
 }

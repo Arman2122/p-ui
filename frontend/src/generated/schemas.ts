@@ -3598,6 +3598,24 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "SSHHostKey": {
+    "description": "SSHHostKey is what an SSH server presented, for the operator to pin.",
+    "properties": {
+      "fingerprint": {
+        "example": "SHA256:slAhPUsjKT/+eP4DHWVimm+a5yTcX8Sw13dOOHWn/L4",
+        "type": "string"
+      },
+      "keyType": {
+        "example": "ssh-ed25519",
+        "type": "string"
+      }
+    },
+    "required": [
+      "fingerprint",
+      "keyType"
+    ],
+    "type": "object"
+  },
   "Setting": {
     "description": "Setting stores key-value configuration settings for the Penhoon UI panel.",
     "properties": {

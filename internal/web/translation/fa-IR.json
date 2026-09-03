@@ -1664,6 +1664,9 @@
         "sshFingerprint": "اثر انگشت کلید میزبان",
         "sshFingerprintHint": "سرور را سنجاق می‌کند. با این فرمان بگیرید: ssh-keyscan -t ed25519 HOST | ssh-keygen -lf -",
         "sshFingerprintRequired": "خروجی SSH به اثر انگشت کلید میزبانِ سرور نیاز دارد؛ به هرچه پاسخ دهد اعتماد نمی‌کند.",
+        "sshFingerprintFetch": "دریافت از سرور",
+        "sshFingerprintFetched": "سرور این کلید را ارائه کرد. فقط اگر به مسیری که از آن به سرور رسیدید اعتماد دارید، آن را پین کنید.",
+        "sshFingerprintFetchFailed": "کلید میزبان سرور خوانده نشد",
         "noEditableFields": "این نوع خروج تنظیمات قابل ویرایشی در اینجا ندارد. پارامترهای آن از اتصال خروجی یا دستگاه واسطی که به آن تعلق دارد می‌آید."
       },
       "balancerTagRequired": "تگ الزامی است",

@@ -831,6 +831,12 @@ export const RuleViewSchema = z.object({
 });
 export type RuleView = z.infer<typeof RuleViewSchema>;
 
+export const SSHHostKeySchema = z.object({
+  fingerprint: z.string(),
+  keyType: z.string(),
+});
+export type SSHHostKey = z.infer<typeof SSHHostKeySchema>;
+
 export const SettingSchema = z.object({
   id: z.number().int(),
   key: z.string(),

@@ -108,6 +108,7 @@ func run(root, outDir string) error {
 				"NodeMutationRequest",
 				"NodeView",
 				"ProbeResultUI",
+				"SSHHostKey",
 				"RealityScanResult",
 				"RoutingExitView",
 				"RoutingSubject",

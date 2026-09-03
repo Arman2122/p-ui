@@ -1240,6 +1240,14 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/egresses/hostkey',
+        summary:
+          "Perform the key exchange with an SSH server and report the host key it presents, without authenticating, so an SSH exit's fingerprint field can be filled with what the server really answers and the operator only has to confirm the pin. Nothing is stored: the exit is saved with whatever fingerprint the operator submits.",
+        body: '{\n  "host": "91.107.151.123",\n  "port": 12878\n}',
+        responseSchema: 'SSHHostKey',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/egresses/del/:id',
         summary:
           'Delete an egress and bring down the kernel state its id owns. Refused while a routing rule still sends traffic to it.',
