@@ -168,7 +168,7 @@ verb 3
 	t.Cleanup(func() { _ = syscall.Kill(-server.Process.Pid, syscall.SIGTERM); _ = server.Wait() })
 	waitFor(t, 15*time.Second, func() bool {
 		return fileContains(filepath.Join(dir, "server.log"), "Initialization Sequence Completed")
-	}, "server never came up:\n%s", tailOf(filepath.Join(dir, "server.log")))
+	}, func() string { return "server never came up:\n" + tailOf(filepath.Join(dir, "server.log")) })
 
 	// Something only reachable through the tunnel: an HTTP server on the host's
 	// 10.210.0.1, which the client's namespace has no route to except the push.
@@ -213,11 +213,13 @@ verb 3
 	// is read off the device, not off a log whose flushing is the daemon's.
 	clientAddr := func() string { return shellOut(t, "ip netns exec "+ns+" ip -4 -o addr show povclient 2>/dev/null") }
 	waitFor(t, 30*time.Second, func() bool { return strings.Contains(clientAddr(), "10.209.0.7/") },
-		"the client never got the pushed 10.209.0.7:\n%s\n--- sink saw logins %v, events %+v\n--- plugin lines:\n%s\n--- client log:\n%s\n--- namespace:\n%s",
-		clientAddr(), sink.seenLogins(), sink.all(),
-		shellOut(t, "grep -i 'radius\\|auth\\|ccd\\|ifconfig' "+dir+"/server.log | tail -20; cat "+dir+"/radiusplugin.cnf; ls -la "+dir+"/ccd"),
-		tailOf(filepath.Join(dir, "client.log")),
-		shellOut(t, "ip netns exec "+ns+" ip -br addr; ps -o pid,args -C openvpn"))
+		func() string {
+			return fmt.Sprintf("the client never got the pushed 10.209.0.7:\n%s\n--- sink saw logins %v, events %+v\n--- plugin lines:\n%s\n--- client log:\n%s\n--- namespace:\n%s",
+				clientAddr(), sink.seenLogins(), sink.all(),
+				shellOut(t, "grep -i 'radius\\|auth\\|ccd\\|ifconfig' "+dir+"/server.log | tail -20; cat "+dir+"/radiusplugin.cnf; ls -la "+dir+"/ccd"),
+				tailOf(filepath.Join(dir, "client.log")),
+				shellOut(t, "ip netns exec "+ns+" ip -br addr; ps -o pid,args -C openvpn"))
+		})
 	if sink.count(Start) != 1 {
 		t.Fatalf("Start records: %d, want 1", sink.count(Start))
 	}
@@ -227,7 +229,9 @@ verb 3
 	if !strings.HasPrefix(out, "200 ") {
 		t.Fatalf("GET through the tunnel: %q", out)
 	}
-	waitFor(t, 25*time.Second, func() bool { return sink.maxOut() >= payload }, "interim records never carried the %d-byte body; last: %+v", payload, sink.last())
+	waitFor(t, 25*time.Second, func() bool { return sink.maxOut() >= payload }, func() string {
+		return fmt.Sprintf("interim records never carried the %d-byte body; last: %+v", payload, sink.last())
+	})
 
 	// 3. A management kill ends the session with a Stop the sink hears.
 	mgmtConn, err := net.Dial("unix", mgmt)
@@ -242,7 +246,9 @@ verb 3
 	if !strings.Contains(string(buf[:n]), "SUCCESS") && !strings.Contains(string(buf[:n]), "INFO") {
 		t.Logf("management answered: %q", buf[:n])
 	}
-	waitFor(t, 20*time.Second, func() bool { return sink.count(Stop) == 1 }, "no Stop after the kill; events: %+v", sink.all())
+	waitFor(t, 20*time.Second, func() bool { return sink.count(Stop) == 1 }, func() string {
+		return fmt.Sprintf("no Stop after the kill; events: %+v", sink.all())
+	})
 	if last := sink.last(); last.Status != Stop || last.Out < payload {
 		t.Fatalf("the Stop record does not carry the session total: %+v", last)
 	}
@@ -252,6 +258,7 @@ type spikeSink struct {
 	mu       sync.Mutex
 	password string
 	framed   netip.Addr
+	denied   bool
 	events   []Event
 	logins   []string
 }
@@ -259,11 +266,24 @@ type spikeSink struct {
 func (s *spikeSink) Authenticate(_ context.Context, username, password string, _ Peer) Verdict {
 	s.mu.Lock()
 	s.logins = append(s.logins, username+":"+password)
+	denied := s.denied
 	s.mu.Unlock()
+	if denied {
+		return Verdict{Reason: "client is depleted"}
+	}
 	if username != "alice" || password != s.password {
 		return Verdict{Reason: "wrong login"}
 	}
 	return Verdict{Accept: true, FramedIP: s.framed, InterimSeconds: 3}
+}
+
+// deny is the panel deciding a client may no longer log in -- depleted,
+// expired or removed. What a daemon does with a session already open is
+// then the core's own job, which is what the proofs measure.
+func (s *spikeSink) deny() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.denied = true
 }
 
 func (s *spikeSink) Account(_ context.Context, ev Event) {
@@ -406,7 +426,10 @@ func fileContains(path, needle string) bool {
 	return err == nil && strings.Contains(string(body), needle)
 }
 
-func waitFor(t *testing.T, d time.Duration, cond func() bool, format string, args ...any) {
+// The diagnosis is a closure so it reads the daemon, the sink and the logs as
+// they are when the wait gives up. Eager arguments describe the moment before
+// the wait began, which is the one moment that explains nothing.
+func waitFor(t *testing.T, d time.Duration, cond func() bool, why func() string) {
 	t.Helper()
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
@@ -415,5 +438,5 @@ func waitFor(t *testing.T, d time.Duration, cond func() bool, format string, arg
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatalf(format, args...)
+	t.Fatal(why())
 }
