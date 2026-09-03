@@ -66,7 +66,7 @@ func TestTheSubscriptionPageMarksAnEndedEntry(t *testing.T) {
 		t.Fatalf("GetSubs: %v", err)
 	}
 	page := svc.BuildPageData("pagesub", "req.example.com", traffic, lastOnline,
-		links, emails, "", "", "", "/", "", "")
+		links, emails, nil, "", "", "", "/", "", "")
 
 	if len(page.Ended) != len(page.Result) {
 		t.Fatalf("Ended has %d entries for %d links; the page reads them by index", len(page.Ended), len(page.Result))

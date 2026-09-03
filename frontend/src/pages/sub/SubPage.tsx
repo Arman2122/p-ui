@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -67,6 +68,8 @@ const linkEmails: string[] = Array.isArray(subData.emails) ? subData.emails : []
    the body keeps parsing for every app that fetches it, so this page is the only
    place a person is told. F249. */
 const linkEnded: boolean[] = Array.isArray(subData.ended) ? subData.ended : [];
+/* Parallel to links: where the sub server serves entry i's config file, or "". */
+const linkFileUrls: string[] = Array.isArray(subData.fileUrls) ? subData.fileUrls : [];
 const subEmail = [...new Set(linkEmails.filter(Boolean))].join(', ');
 const datepicker = subData.datepicker || 'gregorian';
 const announce = subData.announce || '';
@@ -84,6 +87,23 @@ const isActive = (() => {
   if (expireMs > 0 && Date.now() >= expireMs) return false;
   return true;
 })();
+
+/* The server renders the .conf through the core that owns the inbound, hosts
+   and AmneziaWG parameters included; the link-assembled text is the fallback. */
+function ServedConfigBlock({ fileUrl, fallback, ...rest }: { fileUrl: string; fallback: string } & Omit<ComponentProps<typeof ConfigBlock>, 'text'>) {
+  const [served, setServed] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    setServed('');
+    if (!fileUrl) return undefined;
+    fetch(fileUrl, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.text() : ''))
+      .then((text) => { if (!cancelled) setServed(text); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [fileUrl]);
+  return <ConfigBlock {...rest} text={served || fallback} />;
+}
 
 export default function SubPage() {
   const { t } = useTranslation();
@@ -520,9 +540,10 @@ export default function SubPage() {
                             </div>
                           </div>
                           {isWireguardLink && (
-                            <ConfigBlock
+                            <ServedConfigBlock
+                              fileUrl={linkFileUrls[idx] || ''}
                               label={t(isAwgLink ? 'pages.clients.amneziawgConfig' : 'pages.clients.wireguardConfig')}
-                              text={wireguardConfigFromLink(link, rowTitle)}
+                              fallback={wireguardConfigFromLink(link, rowTitle)}
                               fileName={`${rowTitle || 'peer'}.conf`}
                               qrRemark={rowTitle}
                               tagColor="cyan"

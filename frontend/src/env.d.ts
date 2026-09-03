@@ -21,6 +21,7 @@ interface SubPageData {
      link is still served so the body keeps parsing for every app; the page is
      where a person is told. */
   ended?: boolean[];
+  fileUrls?: string[];
   datepicker?: 'gregorian' | 'jalalian';
   announce?: string;
   downloadByte?: string | number;
