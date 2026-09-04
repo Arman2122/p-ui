@@ -312,7 +312,7 @@ func TestPanelSourceOwnerExitIsRefused(t *testing.T) {
 }
 
 // A socks-port exit is the one exit shape that works today, and it is
-// injectMtprotoEgress generalised: one synthesized outbound, dialled on loopback.
+// injectXrayBridge generalised: one synthesized outbound, dialled on loopback.
 func TestSocksExitSynthesizesItsOutbound(t *testing.T) {
 	got := Plan(Input{
 		Subjects: []Subject{internalSubject(1, "vless-in")},

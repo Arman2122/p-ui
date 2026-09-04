@@ -42,9 +42,9 @@ dns, loopback in service/outbound/) out of a budget about *inbound* core kinds.
 // dispatchBudget is the measured count per file. Lower it as sites migrate to
 // the registry; never raise it without agreement that a new core needs the site.
 var dispatchBudget = map[string]int{
-	"internal/web/service/inbound.go":              5,
+	"internal/web/service/inbound.go":              3,
 	"internal/web/service/client_inbound_apply.go": 7,
-	"internal/web/service/xray.go":                 9,
+	"internal/web/service/xray.go":                 8,
 	"internal/web/service/inbound_clients.go":      0,
 	"internal/web/service/tgbot/protocols.go":      4,
 	"internal/sub/service.go":                      12,
@@ -64,7 +64,7 @@ var dispatchBudget = map[string]int{
 // dispatchTotal guards the guard. If the detector stops matching the code — a
 // rename of Protocol, a moved const block — every per-file budget silently goes
 // green, and only a total that must still be met catches it.
-const dispatchTotal = 62
+const dispatchTotal = 59
 
 // frozenDispatch are sites that must NOT migrate to the registry. Historical
 // migrations are frozen facts about data written by past releases; rewriting

@@ -795,10 +795,12 @@ func (s *InboundService) normalizeMtprotoSecret(inbound *model.Inbound) {
 	}
 }
 
-// mtprotoRoutesThroughXray reports whether an mtproto inbound is configured to
-// egress through the core's router (the loopback SOCKS bridge in §xray.go).
-func mtprotoRoutesThroughXray(inbound *model.Inbound) bool {
-	if inbound == nil || inbound.Protocol != model.MTProto {
+// inboundIsBridged reports whether an inbound Xray does not serve is configured
+// to egress through Xray's router (the loopback SOCKS bridge in §xray.go). The
+// answer decides whether a change to it must regenerate the config, because the
+// bridge lives there and nowhere else.
+func inboundIsBridged(inbound *model.Inbound) bool {
+	if inbound == nil || cores.ServedByXray(core.Kind(inbound.Protocol)) {
 		return false
 	}
 	var parsed struct {
@@ -835,9 +837,11 @@ func parseRouteXrayPort(settings string) int {
 	return settingsRouteXrayPort(parsed)
 }
 
-// normalizeMtprotoXrayPort guarantees a routed mtproto inbound carries a stable
-// loopback egress port in its settings, so the generated Xray SOCKS bridge and
-// the mtg sidecar agree on where mtg dials out. The port is backend-owned: it is
+// normalizeXrayBridgePort guarantees a routed inbound Xray does not serve carries
+// a stable loopback egress port in its settings, so the generated Xray SOCKS
+// bridge and the core behind it agree on where that core dials out. mtproto's
+// sidecar was the first such core and SSH's in-process server is the second.
+// The port is backend-owned: it is
 // allocated once when routing is first enabled and preserved across edits
 // (carried over from oldSettings, which wins over any value the client echoed
 // back). When routing is off it — together with the now-inert outbound
@@ -874,6 +878,13 @@ func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
 	if port == reservedAPIPort() {
 		return true
 	}
+	// The SSH exits own a band of loopback ports that no inbound row shows, and
+	// the ephemeral range the allocator draws from covers it. checkPortConflict
+	// already reserves the band against an operator's own inbound; this is the
+	// same reservation for a port the panel hands itself.
+	if core.IsExitSocksPort(port) {
+		return true
+	}
 	var rows []*model.Inbound
 	q := db.Model(model.Inbound{}).Where("port = ? AND node_id IS NULL", port)
 	if ignoreID > 0 {
@@ -885,7 +896,7 @@ func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
 			"claimed" to a question that could not be asked burns every allocation
 			attempt and turns an unreadable table into a refused save; answering
 			"free" leaves exactly the behaviour that shipped before this check,
-			and injectMtprotoEgress still catches the collision at generation time.
+			and injectXrayBridge still catches the collision at generation time.
 		*/
 		logger.Warning("mtproto: cannot check whether the bridge port is claimed, allowing it:", err)
 		return false
@@ -902,8 +913,8 @@ func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
 	return false
 }
 
-func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSettings string) error {
-	if inbound.Protocol != model.MTProto {
+func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSettings string) error {
+	if cores.ServedByXray(core.Kind(inbound.Protocol)) {
 		return nil
 	}
 	var parsed map[string]any
@@ -936,7 +947,7 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 		it, which says the OS had that port free for an instant and nothing about
 		what the panel is about to generate; an API caller could send any number
 		at all. The bridge then landed on a port a real inbound holds, and
-		injectMtprotoEgress -- which does check -- skipped the bridge, so the
+		injectXrayBridge -- which does check -- skipped the bridge, so the
 		inbound saved clean, displayed as routed, and carried no Telegram traffic
 		with only a log line to say why.
 
@@ -1025,7 +1036,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, "", err
 	}
 	s.normalizeMtprotoSecret(inbound)
-	if err := s.normalizeMtprotoXrayPort(inbound, ""); err != nil {
+	if err := s.normalizeXrayBridgePort(inbound, ""); err != nil {
 		return inbound, false, "", err
 	}
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
@@ -1252,7 +1263,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	// A routed mtproto inbound is not an Xray inbound itself, so the runtime
 	// push above only (re)starts the mtg sidecar. The egress SOCKS bridge lives
 	// in the generated config, so force a regen to wire it in.
-	if mtprotoRoutesThroughXray(inbound) {
+	if inboundIsBridged(inbound) {
 		needRestart = true
 	}
 
@@ -1385,7 +1396,7 @@ func (s *InboundService) repairAfterInboundDeletes(deleted []*model.Inbound) boo
 		ids = append(ids, ib.Id)
 		// A routed mtproto inbound leaves its egress SOCKS bridge in the
 		// config, and only a restart drops it.
-		if mtprotoRoutesThroughXray(ib) {
+		if inboundIsBridged(ib) {
 			needRestart = true
 		}
 	}
@@ -1529,7 +1540,7 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 		return false, nil
 	}
 
-	if mtprotoRoutesThroughXray(inbound) {
+	if inboundIsBridged(inbound) {
 		needRestart = true
 	}
 
@@ -1696,8 +1707,8 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	// overwritten with the new values further down, then ensure a routed
 	// inbound keeps a stable egress port (reusing the one already stored).
 	oldProtocol := oldInbound.Protocol
-	oldRoutedMtproto := mtprotoRoutesThroughXray(oldInbound)
-	if err := s.normalizeMtprotoXrayPort(inbound, oldInbound.Settings); err != nil {
+	oldBridged := inboundIsBridged(oldInbound)
+	if err := s.normalizeXrayBridgePort(inbound, oldInbound.Settings); err != nil {
 		return inbound, false, "", err
 	}
 
@@ -1952,7 +1963,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		// (Re)generate the Xray config whenever routing was or is now enabled, so
 		// the egress SOCKS bridge is added, moved, or dropped to match the new
 		// settings.
-		if mtprotoRoutesThroughXray(inbound) || oldRoutedMtproto {
+		if inboundIsBridged(inbound) || oldBridged {
 			needRestart = true
 		}
 		return nil

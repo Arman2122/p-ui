@@ -23,7 +23,7 @@ func TestMtprotoRoutesThroughXray(t *testing.T) {
 		"nil":         {nil, false},
 	}
 	for name, c := range cases {
-		if got := mtprotoRoutesThroughXray(c.ib); got != c.want {
+		if got := inboundIsBridged(c.ib); got != c.want {
 			t.Fatalf("%s: got %v want %v", name, got, c.want)
 		}
 	}
@@ -43,7 +43,7 @@ func TestNormalizeMtprotoXrayPort(t *testing.T) {
 
 	// Non-mtproto inbounds are left alone.
 	ib := &model.Inbound{Protocol: model.VLESS, Settings: `{"x":1}`}
-	if err := s.normalizeMtprotoXrayPort(ib, ""); err != nil {
+	if err := s.normalizeXrayBridgePort(ib, ""); err != nil {
 		t.Fatal(err)
 	}
 	if ib.Settings != `{"x":1}` {
@@ -52,7 +52,7 @@ func TestNormalizeMtprotoXrayPort(t *testing.T) {
 
 	// Routing on with no existing port allocates a fresh one.
 	ib = &model.Inbound{Protocol: model.MTProto, Settings: `{"routeThroughXray":true}`}
-	if err := s.normalizeMtprotoXrayPort(ib, ""); err != nil {
+	if err := s.normalizeXrayBridgePort(ib, ""); err != nil {
 		t.Fatal(err)
 	}
 	if p := routeXrayPortOf(t, ib.Settings); p <= 0 {
@@ -62,7 +62,7 @@ func TestNormalizeMtprotoXrayPort(t *testing.T) {
 	// On update, the stored port wins over both a missing and a client-echoed
 	// value — the backend owns it, so no churn and no client override.
 	ib = &model.Inbound{Protocol: model.MTProto, Settings: `{"routeThroughXray":true,"routeXrayPort":99999}`}
-	if err := s.normalizeMtprotoXrayPort(ib, `{"routeThroughXray":true,"routeXrayPort":51000}`); err != nil {
+	if err := s.normalizeXrayBridgePort(ib, `{"routeThroughXray":true,"routeXrayPort":51000}`); err != nil {
 		t.Fatal(err)
 	}
 	if p := routeXrayPortOf(t, ib.Settings); p != 51000 {
@@ -72,7 +72,7 @@ func TestNormalizeMtprotoXrayPort(t *testing.T) {
 	// An already-present port (no old settings) is stable and not re-marshaled.
 	const stable = `{"routeThroughXray":true,"routeXrayPort":52000}`
 	ib = &model.Inbound{Protocol: model.MTProto, Settings: stable}
-	if err := s.normalizeMtprotoXrayPort(ib, ""); err != nil {
+	if err := s.normalizeXrayBridgePort(ib, ""); err != nil {
 		t.Fatal(err)
 	}
 	if ib.Settings != stable {
@@ -81,7 +81,7 @@ func TestNormalizeMtprotoXrayPort(t *testing.T) {
 
 	// Turning routing off strips both the bridge port and the inert outbound.
 	ib = &model.Inbound{Protocol: model.MTProto, Settings: `{"routeThroughXray":false,"routeXrayPort":53000,"outboundTag":"warp"}`}
-	if err := s.normalizeMtprotoXrayPort(ib, ""); err != nil {
+	if err := s.normalizeXrayBridgePort(ib, ""); err != nil {
 		t.Fatal(err)
 	}
 	if p := routeXrayPortOf(t, ib.Settings); p != 0 {

@@ -162,23 +162,28 @@ func (s *XrayService) GetXrayConfig(retireFronts bool) (*xray.Config, error) {
 		mergeSubscriptionOutbounds(xrayConfig, prepend, appendList)
 	}
 
-	// Route opted-in local mtproto inbounds through the core's router. Each one
-	// gets a loopback SOCKS bridge — tagged with the inbound's own tag so it is
-	// matchable in routing rules — that its mtg sidecar dials Telegram through.
-	// Done after the subscription merge so a selected subscription outbound (or
-	// balancer) is a valid rule target.
-	// Collected once: these rows are both what the bridge is built for and what
-	// its port guard must avoid, since mtg binds them outside Xray.
-	var localMtproto []*model.Inbound
+	/*
+		Route opted-in local inbounds that Xray does not serve through Xray's own
+		router. Each one gets a loopback SOCKS bridge, tagged with the inbound's
+		own tag so it is matchable in routing rules, which the core behind it
+		dials its destinations through. Done after the subscription merge so a
+		selected subscription outbound (or balancer) is a valid rule target.
+
+		Asked of the registry rather than named by protocol: mtproto was the first
+		of these and SSH is the second, and neither appears in the generated
+		config, so these rows are both what the bridge is built for and what its
+		port guard must avoid.
+	*/
+	var localBridged []*model.Inbound
 	for i := range inbounds {
 		inbound := inbounds[i]
-		if inbound.Protocol != model.MTProto || !inbound.Enable || inbound.NodeID != nil {
+		if cores.ServedByXray(core.Kind(inbound.Protocol)) || !inbound.Enable || inbound.NodeID != nil {
 			continue
 		}
-		localMtproto = append(localMtproto, inbound)
+		localBridged = append(localBridged, inbound)
 	}
-	for _, inbound := range localMtproto {
-		injectMtprotoEgress(xrayConfig, inbound, localMtproto)
+	for _, inbound := range localBridged {
+		injectXrayBridge(xrayConfig, inbound, localBridged)
 	}
 
 	// Wire the panel's own HTTP traffic through the configured outbound, after
@@ -692,20 +697,22 @@ func routingTagIsBalancer(routing map[string]any, tag string) bool {
 	return false
 }
 
-// mtprotoEgressSocksSettings is the loopback SOCKS server a routed mtproto
-// inbound exposes for its mtg sidecar to dial Telegram through. mtg makes plain
-// TCP connections, so UDP is left off (matching the panel egress bridge).
-const mtprotoEgressSocksSettings = `{"auth":"noauth","udp":false}`
+// xrayBridgeSocksSettings is the loopback SOCKS server a routed non-Xray
+// inbound exposes for its core to dial destinations through. Every core behind
+// it makes plain TCP connections, so UDP is left off (matching the panel
+// egress bridge). No credentials: it is bound to loopback and the panel's own
+// processes are the only callers, exactly as the panel egress bridge is.
+const xrayBridgeSocksSettings = `{"auth":"noauth","udp":false}`
 
-// injectMtprotoEgress wires one routed mtproto inbound into the generated
-// config after any selected outbound resolves in the final target set. Invalid
+// injectXrayBridge wires one routed non-Xray inbound into the generated config
+// after any selected outbound resolves in the final target set. Invalid
 // selected targets or routing data skip the entire injection; without a selected
 // outbound, the bridge retains default-route behavior. Generated state remains
 // hot-appliable, leaves the stored template untouched, and never forces a full
 // Xray restart. Mirrors injectPanelEgress.
-// siblings must be the local, enabled mtproto rows -- the caller already
-// filters them, and mtg binds their ports where no generated config shows.
-func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*model.Inbound) {
+// siblings must be the local, enabled rows Xray does not serve -- the caller
+// already filters them, and their cores bind ports no generated config shows.
+func injectXrayBridge(cfg *xray.Config, inbound *model.Inbound, siblings []*model.Inbound) {
 	var parsed struct {
 		RouteThroughXray bool   `json:"routeThroughXray"`
 		RouteXrayPort    int    `json:"routeXrayPort"`
@@ -721,7 +728,7 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 	for i := range cfg.InboundConfigs {
 		c := &cfg.InboundConfigs[i]
 		if c.Tag == tag {
-			logger.Warning("mtproto egress: inbound tag [", tag, "] already present in generated config, skipping bridge")
+			logger.Warning("xray bridge: inbound tag [", tag, "] already present in generated config, skipping bridge")
 			return
 		}
 		if c.Port != parsed.RouteXrayPort {
@@ -737,18 +744,28 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 		if inboundTransports(model.Protocol(c.Protocol), string(c.StreamSettings), string(c.Settings))&transportTCP == 0 {
 			continue
 		}
-		logger.Warning("mtproto egress: bridge port", parsed.RouteXrayPort, "for inbound [", tag,
+		logger.Warning("xray bridge: port", parsed.RouteXrayPort, "for inbound [", tag,
 			"] is already bound by [", c.Tag, "]; skipping the bridge, so this inbound's Telegram traffic fails until the conflict is resolved")
 		return
 	}
-	// mtproto rows never appear in the generated config -- mtg binds them
-	// outside Xray -- so the sidecar's own listeners need their own pass.
+	/*
+		These rows never appear in the generated config -- their own cores bind
+		the ports -- so their listeners need their own pass.
+
+		The same TCP conjunct the generated-config loop above applies, and it is
+		load-bearing now that the sibling set is every kind Xray does not serve
+		rather than mtproto alone: without it a UDP-only neighbour, a WireGuard
+		inbound on the same number, silently suppresses a working TCP bridge.
+	*/
 	for _, other := range siblings {
 		if other.Port != parsed.RouteXrayPort || !listenOverlaps(other.Listen, "127.0.0.1") {
 			continue
 		}
-		logger.Warning("mtproto egress: bridge port", parsed.RouteXrayPort, "for inbound [", tag,
-			"] is the listen port of mtproto inbound [", other.Tag, "]; skipping the bridge")
+		if inboundTransports(other.Protocol, other.StreamSettings, other.Settings)&transportTCP == 0 {
+			continue
+		}
+		logger.Warning("xray bridge: port", parsed.RouteXrayPort, "for inbound [", tag,
+			"] is the listen port of inbound [", other.Tag, "]; skipping the bridge")
 		return
 	}
 
@@ -756,12 +773,12 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 		routing := map[string]any{}
 		if len(cfg.RouterConfig) > 0 {
 			if err := json.Unmarshal(cfg.RouterConfig, &routing); err != nil {
-				logger.Warning("mtproto egress: routing section is unparsable, skipping injection:", err)
+				logger.Warning("xray bridge: routing section is unparsable, skipping injection:", err)
 				return
 			}
 		}
 		if !routingTargetExists(routing, cfg.OutboundConfigs, parsed.OutboundTag) {
-			logger.Warning("mtproto egress: target tag [", parsed.OutboundTag, "] not found, skipping injection")
+			logger.Warning("xray bridge: target tag [", parsed.OutboundTag, "] not found, skipping injection")
 			return
 		}
 		rules, _ := routing["rules"].([]any)
@@ -777,7 +794,7 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 		routing["rules"] = append([]any{rule}, rules...)
 		newRouting, err := json.Marshal(routing)
 		if err != nil {
-			logger.Warning("mtproto egress: failed to rebuild routing section, skipping injection:", err)
+			logger.Warning("xray bridge: failed to rebuild routing section, skipping injection:", err)
 			return
 		}
 		cfg.RouterConfig = json_util.RawMessage(newRouting)
@@ -798,7 +815,7 @@ func injectMtprotoEgress(cfg *xray.Config, inbound *model.Inbound, siblings []*m
 		Listen:   json_util.RawMessage(`"127.0.0.1"`),
 		Port:     parsed.RouteXrayPort,
 		Protocol: "socks",
-		Settings: json_util.RawMessage(mtprotoEgressSocksSettings),
+		Settings: json_util.RawMessage(xrayBridgeSocksSettings),
 		Tag:      tag,
 	})
 }
