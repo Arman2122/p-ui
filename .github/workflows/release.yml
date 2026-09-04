@@ -177,10 +177,19 @@ jobs:
               MTG_VER=$(curl -sf $CURL_RETRY -o /dev/null -w '%{redirect_url}' "https://github.com/Arman2122/mtg-proxy/releases/latest" | sed -n 's#.*/releases/tag/##p')
               if [ -z "$MTG_VER" ]; then echo "could not resolve the latest mtg-proxy release tag"; exit 1; fi
               MTG_PKG="mtg-proxy-${MTG_VER#v}-linux-${{ matrix.platform }}"
+              MTG_SUMS="mtg-proxy-${MTG_VER#v}-checksums.txt"
               curl -sfLRO $CURL_RETRY "https://github.com/Arman2122/mtg-proxy/releases/download/${MTG_VER}/${MTG_PKG}.tar.gz"
+              # The release publishes one checksums file covering every archive.
+              # Without this we unpack whatever the CDN hands us: a truncated
+              # object or a substituted one becomes a binary we ship to every
+              # customer, and nothing downstream would notice. --ignore-missing
+              # skips the other nine platforms' lines and still exits non-zero
+              # when nothing matched at all.
+              curl -sfLRO $CURL_RETRY "https://github.com/Arman2122/mtg-proxy/releases/download/${MTG_VER}/${MTG_SUMS}"
+              sha256sum -c --ignore-missing "${MTG_SUMS}"
               tar -xzf "${MTG_PKG}.tar.gz"
               mv "${MTG_PKG}/mtg-proxy" "mtg-linux-${{ matrix.platform }}"
-              rm -rf "${MTG_PKG}" "${MTG_PKG}.tar.gz"
+              rm -rf "${MTG_PKG}" "${MTG_PKG}.tar.gz" "${MTG_SUMS}"
               ;;
           esac
           # sing-box is compiled from upstream's tagged source, not downloaded:
