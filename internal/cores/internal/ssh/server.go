@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
+	"golang.org/x/net/proxy"
 	"golang.org/x/time/rate"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -40,9 +41,42 @@ const (
 	forwardChannel = "direct-tcpip"
 )
 
-// Dialer opens the forward's destination; the default dials directly, and a
-// SOCKS bridge into Xray is one swap of this function away.
+// Dialer opens the forward's destination; the default dials directly, and
+// bridgeDialer sends it through Xray's router instead.
 type Dialer func(ctx context.Context, network, address string) (net.Conn, error)
+
+/*
+bridgeDialer dials every forward through the panel's loopback SOCKS bridge, so
+Xray's router sees the connection and an operator's rule can act on it.
+
+proxy.Direct is the forward dialer on purpose: the hop being made here is to
+127.0.0.1, and x/net/proxy drops the caller's context unless the returned
+dialer implements ContextDialer, which the SOCKS5 dialer does.
+*/
+func bridgeDialer(port int) Dialer {
+	dialer, err := proxy.SOCKS5("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), nil, proxy.Direct)
+	if err != nil {
+		return refusingDialer(fmt.Errorf("ssh: bridge on port %d: %w", port, err))
+	}
+	ctxDialer, ok := dialer.(proxy.ContextDialer)
+	if !ok {
+		return refusingDialer(errors.New("ssh: the bridge dialer ignores deadlines"))
+	}
+	return ctxDialer.DialContext
+}
+
+/*
+refusingDialer is what an inbound gets when it is meant to route through Xray
+and cannot: the switch is on and no bridge port has been allocated yet.
+
+It refuses rather than falling back to a direct dial. A fallback would send the
+client's traffic out of the server's own address at exactly the moment the
+operator asked for it to leave somewhere else, which is the leak this feature
+exists to close, and it would do so silently.
+*/
+func refusingDialer(err error) Dialer {
+	return func(context.Context, string, string) (net.Conn, error) { return nil, err }
+}
 
 // server is one inbound's listener and everything that hangs off it.
 type server struct {

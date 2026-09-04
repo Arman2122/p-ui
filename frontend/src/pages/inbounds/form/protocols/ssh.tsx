@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Input, Select } from 'antd';
+import { Alert, Input, Select, Switch } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { FormField } from '@/components/form/rhf';
@@ -46,6 +46,14 @@ export default function SshFields() {
         tooltip={t('pages.inbounds.form.sshBannerHint')}
       >
         <Input allowClear />
+      </FormField>
+      <FormField
+        name={['settings', 'routeThroughXray']}
+        label={t('pages.inbounds.form.sshRouteThroughXray')}
+        tooltip={t('pages.inbounds.form.sshRouteThroughXrayHint')}
+        valueProp="checked"
+      >
+        <Switch />
       </FormField>
       <Alert type="info" showIcon title={t('pages.inbounds.form.sshTcpOnly')} />
     </>

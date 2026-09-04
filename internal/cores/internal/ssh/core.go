@@ -166,7 +166,7 @@ func (c *Core) ensureLocked(d core.Instance) error {
 		cur.srv.stop()
 		delete(c.instances, d.ID)
 	}
-	srv := newServer(d.ID, d.Tag, settings, c.hostKey, c.deps.Dial, c.deps.AuthFailure)
+	srv := newServer(d.ID, d.Tag, settings, c.hostKey, c.dialerFor(settings), c.deps.AuthFailure)
 	userErr := srv.setUsers(d.Users)
 	if _, err := listen(listenSpec{listen: d.Listen, port: d.Port}, srv); err != nil {
 		return fmt.Errorf("ssh: inbound %d: listen: %w", d.ID, err)
@@ -175,6 +175,28 @@ func (c *Core) ensureLocked(d core.Instance) error {
 	c.instances[d.ID] = &instance{inst: d, settings: settings, fingerprint: fp, srv: srv}
 	logger.Infof("ssh: inbound %d (%s) listening on %s:%d over %s", d.ID, d.Tag, d.Listen, d.Port, settings.Transport)
 	return userErr
+}
+
+/*
+dialerFor chooses how one inbound's forwards leave this host.
+
+Per instance rather than through Deps.Dial, which the exits share: an exit's
+own control connection reaches a remote SSH server, and pushing that through
+the bridge would let Xray route it back into an SSH exit and loop.
+
+Fails closed. With the switch on and no bridge port yet -- the window between
+enabling it and the allocator running -- the forward is refused rather than
+dialled directly, because a direct dial there is the leak the switch exists to
+prevent and nothing would report it.
+*/
+func (c *Core) dialerFor(settings Settings) Dialer {
+	if !settings.RouteThroughXray {
+		return c.deps.Dial
+	}
+	if settings.RouteXrayPort <= 0 {
+		return refusingDialer(errors.New("ssh: this inbound routes through Xray and has no bridge port yet; save it again"))
+	}
+	return bridgeDialer(settings.RouteXrayPort)
 }
 
 func (c *Core) StopAll(context.Context) error {

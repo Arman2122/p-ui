@@ -41,6 +41,20 @@ type Settings struct {
 	// Banner is written to a client that opens a shell, which many do only as
 	// a liveness probe.
 	Banner string `json:"banner"`
+	/*
+		RouteThroughXray sends every forward this inbound opens through Xray's
+		router instead of dialling the destination directly, which is what makes
+		a routing rule naming this inbound able to match. RouteXrayPort is the
+		loopback port the panel allocates for that bridge: backend-owned, never
+		typed, and absent until the switch is first turned on.
+
+		Deliberately NOT refused here when the switch is on and the port is
+		still zero. Validation runs before allocation on the update path, so
+		refusing that pair would make the first enable impossible; the core
+		fails the forward closed instead of dialling around the bridge.
+	*/
+	RouteThroughXray bool `json:"routeThroughXray"`
+	RouteXrayPort    int  `json:"routeXrayPort"`
 }
 
 func parseSettings(raw string) (Settings, error) {
@@ -71,7 +85,12 @@ func parseSettings(raw string) (Settings, error) {
 // listener, a change to anything else is applied to the running one.
 func fingerprint(inst core.Instance, s Settings) string {
 	h := sha256.New()
-	for _, part := range []string{inst.Listen, fmt.Sprint(inst.Port), s.Transport, s.Path, s.CertFile, s.KeyFile, s.Banner} {
+	// The bridge fields are in here so flipping the switch rebuilds the
+	// listener: the dialer is chosen when the server is built, and a hot apply
+	// would leave live forwards on the old one.
+	parts := []string{inst.Listen, fmt.Sprint(inst.Port), s.Transport, s.Path, s.CertFile, s.KeyFile, s.Banner}
+	parts = append(parts, fmt.Sprint(s.RouteThroughXray), fmt.Sprint(s.RouteXrayPort))
+	for _, part := range parts {
 		h.Write([]byte(part))
 		h.Write([]byte{0})
 	}

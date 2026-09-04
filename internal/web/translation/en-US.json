@@ -482,6 +482,8 @@
         "sshKeyFile": "Key file",
         "sshBanner": "Banner",
         "sshBannerHint": "Shown to a client that opens a shell; nothing is ever executed.",
+        "sshRouteThroughXray": "Route forwards through Xray",
+        "sshRouteThroughXrayHint": "Every forward this inbound opens is dialled through Xray instead of straight out, so routing rules can name this inbound. Two consequences: Xray becomes required, and while it is down forwards are refused rather than leaking out of the server's own address; and the Xray template's own rules, ad blocking and the private-address block, start applying to this traffic.",
         "sshTcpOnly": "An SSH forward carries TCP only; UDP does not pass through this inbound.",
         "singboxCertFile": "Certificate file",
         "singboxKeyFile": "Key file",

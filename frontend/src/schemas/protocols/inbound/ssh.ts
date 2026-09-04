@@ -33,6 +33,13 @@ export const SshInboundSettingsSchema = z.object({
   certFile: z.string().default(''),
   keyFile: z.string().default(''),
   banner: z.string().default(''),
+  /* Sends every forward through the panel's loopback bridge into Xray's
+     router, which is what lets a routing rule name this inbound.
+     `routeXrayPort` is the bridge's port: allocated by the backend, never
+     typed, and declared here because the object strips what it does not
+     declare and the save would drop it. */
+  routeThroughXray: z.boolean().optional(),
+  routeXrayPort: z.number().int().min(0).max(65535).optional(),
   clients: z.array(SshClientSchema).default([]),
 });
 export type SshInboundSettings = z.infer<typeof SshInboundSettingsSchema>;

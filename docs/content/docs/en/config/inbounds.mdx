@@ -272,6 +272,22 @@ route (host, port, username, password, transport, path and the Injector payload
 template), and the subscription list carries an `ssh://` link for the apps that
 import one. Forwards are **TCP only**; UDP does not pass through this inbound.
 
+**Routing.** By default an SSH inbound dials its forwards straight out, and no
+routing rule can name it. Turn on **Route forwards through Xray** and the panel
+gives that inbound a loopback bridge into Xray's router, so it becomes a
+routing subject like any other inbound and a rule can send its traffic through
+an exit. It is the same bridge MTProto uses, so the same two consequences
+apply: Xray becomes required, and while it is down forwards are refused rather
+than leaking out of the server's own address; and the Xray template's own
+rules, ad blocking and the private-address block, begin applying to this
+traffic.
+
+Rules on an SSH inbound may match address, port, network and domain. A client
+using dynamic forwarding sends a hostname, so a domain rule works; source and
+source-port rules do not, because Xray sees every one of these connections as
+coming from the panel on loopback, and the editor does not offer them.
+
+
 ## TUIC (`tuic`) and AnyTLS (`anytls`)
 
 Two protocols Xray does not serve, run by the bundled **sing-box**: one

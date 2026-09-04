@@ -71,6 +71,9 @@ func (s *RoutingService) Subjects(ctx context.Context) ([]routing.Subject, error
 		}
 		out = append(out, routing.Subject{
 			InboundID: inbound.Id, Tag: inbound.Tag, Handle: handle,
+			// A tag Xray does not serve is one the panel bridges into it, which
+			// is the containment question and not a matching one.
+			Bridged:      handle.Tag != "" && !cores.ServedByXray(core.Kind(inbound.Protocol)),
 			CriteriaMask: criteriaMaskFor(core.Kind(inbound.Protocol)),
 		})
 	}

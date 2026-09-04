@@ -40,9 +40,18 @@ const (
 // Subject is one inbound as a rule may name it, with its core's answer already
 // resolved. CriteriaMask names the criteria that can actually work on it.
 type Subject struct {
-	InboundID    int
-	Tag          string
-	Handle       core.IngressHandle
+	InboundID int
+	Tag       string
+	Handle    core.IngressHandle
+	/*
+		Bridged is an internal subject whose traffic reaches Xray through a
+		loopback inbound the PANEL dials into, rather than one a remote client
+		connects to. It changes nothing about matching and one thing about
+		containment: the dialer on the other side is a core on this host, so a
+		rule pointing at a private address would send it back into its own
+		bridge.
+	*/
+	Bridged      bool
 	CriteriaMask []string
 }
 
@@ -202,17 +211,20 @@ func Plan(in Input) Compiled {
 			out.Fronts = append(out.Fronts, FrontSpec{ID: frontID, Sniff: inspectedBy(rules, subject)})
 			// Strictly ahead of this front's own rules: a front is otherwise the one
 			// class of forwarded traffic exempt from the template's private block.
-			blackhole := in.Blackhole
-			if blackhole == "" {
-				// The guard is the whole reason a front is not exempt from the private
-				// block, so it is synthesized rather than skipped.
-				blackhole = synthBlockTag
-				if !emitted[synthBlockTag] {
-					emitted[synthBlockTag] = true
-					out.Outbounds = append(out.Outbounds, blackholeOutbound(synthBlockTag))
-				}
-			}
-			out.XrayRules = append(out.XrayRules, guardRule(tag, blackhole))
+			out.XrayRules = append(out.XrayRules, guardRule(tag, blackholeTag(in, &out, emitted)))
+		} else if subject.Bridged {
+			/*
+				A bridged subject is dialled into by a core on this host, so the
+				same containment applies for the same reason a front needs it: an
+				operator rule is spliced AHEAD of the template's own private
+				block, so without this a client naming the bridge's own address
+				drives core -> bridge -> router -> bridge in a circle.
+
+				It catches an address, not a name: the guard matches IP literals
+				and the shipped template resolves nothing, so a forward to a
+				hostname that happens to resolve to loopback is not covered.
+			*/
+			out.XrayRules = append(out.XrayRules, guardRule(tag, blackholeTag(in, &out, emitted)))
 		}
 
 		for _, rule := range rules {
@@ -231,6 +243,21 @@ func Plan(in Input) Compiled {
 		}
 	}
 	return out
+}
+
+// blackholeTag names the outbound a containment guard sends traffic to. The
+// guard is the whole reason a fronted or bridged subject is not exempt from the
+// template's private block, so one is synthesized rather than skipped when the
+// operator's own template has none.
+func blackholeTag(in Input, out *Compiled, emitted map[string]bool) string {
+	if in.Blackhole != "" {
+		return in.Blackhole
+	}
+	if !emitted[synthBlockTag] {
+		emitted[synthBlockTag] = true
+		out.Outbounds = append(out.Outbounds, blackholeOutbound(synthBlockTag))
+	}
+	return synthBlockTag
 }
 
 // groupRules expands scope and indexes by subject, preserving operator order.

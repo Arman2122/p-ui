@@ -2155,3 +2155,57 @@ login rather than mid-session (an Access-Accept is the only per-user thing
 this daemon reads), no routing until the egress plane can select `from
 <prefix>`, no client certificates, and the end-to-end tests run only where
 the daemon and its client exist (`OCSERV_E2E`, the VM).
+
+### 12.5f SSH becomes routable, and the bridge becomes a mechanism (2026-09-04)
+
+The loopback bridge that puts a core Xray does not serve into Xray's router was
+written for mtproto and named after it, in four places: the collection loop,
+the injector, the backend-owned port allocator and the regenerate predicate.
+The mechanism was never mtproto's, and the injector's own comment already
+named SSH as its second caller. All four now ask the registry whether Xray
+serves the kind, which REMOVES protocol dispatch rather than adding it -- the
+ratchet fell from 62 sites to 59 -- and emits byte-identical JSON for an
+existing mtproto row.
+
+SSH is the second consumer. An operator switch sends every forward through
+that bridge instead of dialling out directly, and the core then declares
+`IngressInternal` with the inbound's own tag. The dialer is chosen per
+instance rather than through `Deps.Dial`, which the exits share: an exit's
+control connection reaches a REMOTE SSH server, and pushing that through the
+bridge would let a rule route it back into an SSH exit and loop. It fails
+closed -- with the switch on and no port allocated yet, the window between
+saving and the allocator running, the forward is refused rather than dialled
+directly, because a direct dial there is exactly the leak the switch exists to
+prevent and nothing would report it.
+
+Two things the widening required. The sibling port scan now sees every kind
+Xray does not serve, so it needs the TCP conjunct the loop beside it already
+applied, or a UDP-only WireGuard neighbour on the same number silently
+suppresses a working bridge. And the allocator draws from the ephemeral range,
+which covers the loopback band the SSH exits bind and no inbound row shows.
+
+The criteria are deliberately narrower than the selector implies:
+`{ip, port, network, domain}`. Domain is real here -- a client using dynamic
+forwarding sends a hostname, so the compiler's sniffer has a name to read --
+while `source` and `sourcePort` would save and never match, since Xray stamps
+a session's source from the TCP peer and that peer is always the panel on
+127.0.0.1. That is the F060 shape, declared away rather than discovered.
+
+A bridged subject now carries the same containment guard a fronted one does:
+compiled rules are spliced ahead of the template's private block, so without it
+a client naming the bridge's own address drives core to bridge to router to
+bridge in a circle. It catches an address and not a name, which is stated
+rather than implied.
+
+One pre-existing bug had to go first. The save-time check compiled every
+stored rule together and returned the first refusal in the plan whoever owned
+it, so one inbound with its bridge off made every scope-all rule inert and no
+routing rule could be saved at all. A refusal now has to belong to the rule
+being saved.
+
+Known limits, in the form's hint and the CHANGELOG: no per-client routing (the
+bridge authenticates nobody, so `user` cannot be declared); TCP only; a
+node-hosted SSH inbound stays unroutable, as every bridged kind does; the SSH
+exit's own control connection is deliberately not routed; and there is a
+bounded window after the switch is flipped where the listener dials a bridge
+Xray has not built yet, in which forwards are refused and then heal.
