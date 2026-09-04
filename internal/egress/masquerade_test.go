@@ -1,6 +1,7 @@
 package egress
 
 import (
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -11,7 +12,7 @@ contract. These assert the three properties that decide whether a tunnel works
 and whether anything else on the box survives.
 */
 func TestMasqueradeRulesetTranslatesOnlyWhatLeaves(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2"}, nil)
+	got := masqueradeRuleset([]string{"pwg2"}, nil, nil)
 
 	if !strings.Contains(got, `iifname "pwg2" oifname != "pwg2" masquerade`) {
 		t.Fatalf("the rule must translate what ARRIVED on the device and is LEAVING elsewhere:\n%s", got)
@@ -29,7 +30,7 @@ that table alone. `flush ruleset` would take ufw, docker and fail2ban with it â€
 fail2ban owns table inet f2b-table on the very host this was measured on.
 */
 func TestMasqueradeNeverTouchesAnotherWritersRules(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil)
+	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil, nil)
 
 	if strings.Contains(got, "flush ruleset") {
 		t.Fatal("flush ruleset would delete every other writer's rules on the host")
@@ -48,8 +49,8 @@ func TestMasqueradeNeverTouchesAnotherWritersRules(t *testing.T) {
 // Deterministic output: the reconcile job applies this every ten seconds, and a
 // ruleset whose text depends on map order would rewrite the table forever.
 func TestMasqueradeRulesetIsStable(t *testing.T) {
-	first := masqueradeRuleset([]string{"pwg7", "pwg2"}, nil)
-	second := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil)
+	first := masqueradeRuleset([]string{"pwg7", "pwg2"}, nil, nil)
+	second := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil, nil)
 
 	if first != second {
 		t.Fatalf("the same devices in a different order must produce the same script:\n%s\n---\n%s", first, second)
@@ -61,7 +62,7 @@ func TestMasqueradeRulesetIsStable(t *testing.T) {
 
 // One rule per device, so a second inbound is covered without a second table.
 func TestMasqueradeCoversEveryDevice(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2", "pwg7", "ptun3"}, nil)
+	got := masqueradeRuleset([]string{"pwg2", "pwg7", "ptun3"}, nil, nil)
 
 	for _, device := range []string{"pwg2", "pwg7", "ptun3"} {
 		if !strings.Contains(got, `iifname "`+device+`"`) {
@@ -98,5 +99,42 @@ func TestMasqueradeTeardownRunsOnEveryTarget(t *testing.T) {
 		if !strings.Contains(line, masqueradeTable) {
 			t.Fatalf("teardown touches something other than the panel's table: %q", line)
 		}
+	}
+}
+
+/*
+An inbound with no interface to name is translated by its pool instead.
+
+Without this an OpenConnect client connects, is given an address, and reaches
+nothing: forwarding alone keeps the client's in-tunnel source and every upstream
+drops it. The device rules cannot cover it -- ocserv makes one tun per session,
+so there is no interface name that is true for longer than one connection.
+*/
+func TestMasqueradeTranslatesAPoolThatHasNoDevice(t *testing.T) {
+	pool := netip.MustParsePrefix("10.218.0.0/24")
+	got := masqueradeRuleset(nil, []netip.Prefix{pool}, []string{"peg9"})
+
+	if !strings.Contains(got, "ip saddr 10.218.0.0/24 ip daddr != 10.218.0.0/24") {
+		t.Fatalf("the rule must translate what CAME FROM the pool and is going elsewhere:\n%s", got)
+	}
+	// The front exemption is why a source criterion can match at all: postrouting
+	// runs before the tun hands the packet up, so a translated one reads as the
+	// gateway. Same reason as the device rules, same clause.
+	if !strings.Contains(got, `oifname != "peg9" masquerade`) {
+		t.Fatalf("a front must be exempted from a pool rule too:\n%s", got)
+	}
+	// And with neither devices nor pools there is nothing of ours to translate.
+	if inet := masqueradeRuleset(nil, nil, nil); strings.Contains(inet, "masquerade") {
+		t.Fatalf("an empty host produced a translation rule:\n%s", inet)
+	}
+}
+
+// Stable across pass order, like the devices: this is reapplied every ten
+// seconds and text that moved would rewrite the table forever.
+func TestMasqueradePoolsAreEmittedInAFixedOrder(t *testing.T) {
+	a, b := netip.MustParsePrefix("10.9.0.0/24"), netip.MustParsePrefix("10.218.0.0/24")
+	first := masqueradeRuleset(nil, []netip.Prefix{a, b}, nil)
+	if second := masqueradeRuleset(nil, []netip.Prefix{b, a}, nil); first != second {
+		t.Fatalf("the same pools in a different order produced different scripts:\n%s\n---\n%s", first, second)
 	}
 }

@@ -2193,7 +2193,7 @@
       "subjects": {
         "neverMatches": "Never matches",
         "neverMatchesTip": "This rule names an inbound the router cannot see. Pick a routable inbound or delete the rule.",
-        "reasonPerSessionDevice": "Each session of this inbound gets its own short-lived kernel device, so there is no interface a routing rule could name. Its clients reach the internet through the server's own route.",
+        "reasonNoPool": "This inbound's address pool cannot be read from its settings, so there is no source a routing rule could select on. Open the inbound, check its subnet and save it again.",
         "reasonBridgeOff": "This inbound can be bridged into Xray's router, but its Route through Xray switch is off. Turn it on in the inbound's form and this tag becomes routable.",
         "reasonForcedOutbound": "This inbound has an Outbound set in its own settings, which the panel applies above every routing rule.",
         "reasonDisabled": "This inbound is disabled, so the router never sees it.",

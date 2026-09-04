@@ -121,6 +121,7 @@ func Check(rig Rig) []Failure {
 	checkCredentials(r, bound)
 	checkUserKinds(r, bound)
 	checkTransports(r, bound)
+	checkIngress(r, rig, bound)
 	checkRegistry(r, rig)
 	checkSupervisor(r, rig, bound)
 	checkHotApply(r, rig, bound)
@@ -262,6 +263,60 @@ func checkTransports(r *report, bound *core.Bound) {
 			r.fail("transports/none-exclusive",
 				"kind %q answers None together with TCP=%v UDP=%v; a kind that binds nothing cannot also bind a port",
 				kind, answer.TCP, answer.UDP)
+		}
+	}
+}
+
+/*
+checkIngress: the surface an instance reports is the one its selector promised.
+
+The panel selects on exactly one thing per shape -- a tag it names in Xray's
+router, a device it writes an `iif` rule for, a pool it writes a `from` rule for
+-- so a handle carrying the wrong one is a rule that saves and never matches,
+which is the bug F060 was. Reporting nothing but a BlockedKey is always allowed:
+that is how a core says "not right now" and the editor says why.
+*/
+func checkIngress(r *report, rig Rig, bound *core.Bound) {
+	if bound.Ingress == nil {
+		return
+	}
+	inst := rig.Instance(1)
+	selector := bound.Ingress.IngressSelector(inst.Kind)
+	if selector == core.IngressNone {
+		return
+	}
+	handle, err := bound.Ingress.IngressHandle(context.Background(), inst)
+	if err != nil {
+		r.fail("ingress/handle", "IngressHandle returned an error: %v", err)
+		return
+	}
+	if handle.BlockedKey != "" {
+		if handle.Tag != "" || handle.Device != "" || len(handle.Sources) > 0 {
+			r.fail("ingress/handle", "IngressHandle reports a blocked reason AND a surface (%+v); the editor would offer a tag it also says cannot match", handle)
+		}
+		return
+	}
+	want, got := map[core.IngressSelector]string{
+		core.IngressInternal: "Tag", core.IngressDevice: "Device", core.IngressSubnet: "Sources",
+	}[selector], ""
+	switch {
+	case handle.Tag != "":
+		got = "Tag"
+	case handle.Device != "":
+		got = "Device"
+	case len(handle.Sources) > 0:
+		got = "Sources"
+	}
+	if got == "" {
+		r.fail("ingress/handle", "IngressSelector says %q but IngressHandle reports no surface and no blocked reason; nothing can select this inbound and nothing says why", selector)
+		return
+	}
+	if want != "" && got != want {
+		r.fail("ingress/handle", "IngressSelector says %q, which the panel selects on by %s, but IngressHandle reports %s", selector, want, got)
+	}
+	for _, prefix := range handle.Sources {
+		if !prefix.IsValid() || prefix != prefix.Masked() {
+			r.fail("ingress/handle", "IngressHandle reports source %q, which is not a masked prefix; the kernel rule derived from it would not be the one the pool means", prefix)
 		}
 	}
 }

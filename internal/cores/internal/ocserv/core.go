@@ -573,9 +573,8 @@ func (c *Core) OnlineEmails(ctx context.Context) ([]string, error) {
 /*
 IngressSelector: every session gets its own transient device, so no device
 name is stable enough for a routing rule. The stable handle is the pool the
-inbound hands addresses from, which is what IngressSubnet names -- and until
-the egress plane can select `from <prefix>`, a rule on this kind is refused
-rather than quietly written against nothing.
+inbound hands addresses from, which is what IngressSubnet names and what the
+egress plane now selects on.
 */
 func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
 	if kind != Kind {
@@ -584,20 +583,43 @@ func (c *Core) IngressSelector(kind core.Kind) core.IngressSelector {
 	return core.IngressSubnet
 }
 
+/*
+IngressCriteria: addresses, and the domain.
+
+The traffic crosses a front the panel synthesises, exactly as a device ingress
+does, so a source rule matches the client's own tunnel address and a sniffing
+block on that front reads the name out of the handshake. User and attrs stay
+out: the packets carry no Xray identity and no L7 request this core ever sees.
+*/
 func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
 	if kind != Kind {
 		return nil
 	}
-	return core.CriteriaByAddress()
+	return append(core.CriteriaByAddress(), core.CriterionDomain)
 }
 
-func (c *Core) IngressHandle(_ context.Context, _ core.Instance) (core.IngressHandle, error) {
-	return core.IngressHandle{BlockedKey: blockedPerSessionDevice}, nil
+/*
+IngressHandle names the pool this instance hands addresses from.
+
+Not a device: ocserv makes one tun per session and names it <prefix><n>, so the
+interface a rule would name does not exist until a client connects. The pool is
+what stays still, and the plane selects on it with `from <prefix>`.
+*/
+func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
+	settings, err := parseSettings(inst.Settings)
+	if err != nil {
+		return core.IngressHandle{BlockedKey: blockedNoPool}, nil
+	}
+	pool, err := settings.pool()
+	if err != nil || !pool.IsValid() {
+		return core.IngressHandle{BlockedKey: blockedNoPool}, nil
+	}
+	return core.IngressHandle{Sources: []netip.Prefix{pool}}, nil
 }
 
-// blockedPerSessionDevice is the i18n key the routing editor renders. Declared
-// here so the reason travels with the core that knows it.
-const blockedPerSessionDevice = "pages.xray.subjects.reasonPerSessionDevice"
+// blockedNoPool is the i18n key the routing editor renders. Declared here so
+// the reason travels with the core that knows it.
+const blockedNoPool = "pages.xray.subjects.reasonNoPool"
 
 /*
 EnforcesRates: a client's plan cannot be attached to a device the panel owns,

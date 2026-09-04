@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"sort"
 	"strings"
@@ -66,7 +67,7 @@ func (s *RoutingService) Subjects(ctx context.Context) ([]routing.Subject, error
 		if hErr != nil {
 			continue
 		}
-		if handle.Tag == "" && handle.Device == "" && handle.BlockedKey == "" {
+		if handle.Tag == "" && !handle.Fronted() && handle.BlockedKey == "" {
 			continue
 		}
 		out = append(out, routing.Subject{
@@ -191,7 +192,7 @@ func (s *RoutingService) ensureFronts(subjects []routing.Subject, rules []*model
 	out := map[int]int{}
 	db := database.GetDB()
 	for _, subject := range subjects {
-		if subject.Handle.Device == "" || !needed[subject.InboundID] {
+		if !subject.Handle.Fronted() || !needed[subject.InboundID] {
 			continue
 		}
 		row := &model.Egress{
@@ -612,7 +613,7 @@ func (s *RoutingService) SubjectViews(ctx context.Context) ([]RoutingSubjectView
 	out := make([]RoutingSubjectView, 0, len(subjects))
 	for _, subject := range subjects {
 		selector := "internal"
-		if subject.Handle.Device != "" {
+		if subject.Handle.Fronted() {
 			selector = "device"
 		}
 		out = append(out, RoutingSubjectView{
@@ -829,18 +830,25 @@ func (s *RoutingService) EnsureHostForwarding(ctx context.Context) error {
 		return err
 	}
 	var devices []string
+	var pools []netip.Prefix
 	for _, inbound := range inbounds {
-		if cores.IngressSelectorFor(core.Kind(inbound.Protocol)) != core.IngressDevice {
+		switch cores.IngressSelectorFor(core.Kind(inbound.Protocol)) {
+		case core.IngressDevice, core.IngressSubnet:
+		default:
 			continue
 		}
 		handle, hErr := cores.IngressHandleFor(ctx, core.Instance{
 			ID: inbound.Id, Kind: core.Kind(inbound.Protocol), Tag: inbound.Tag, Settings: inbound.Settings,
 		})
-		if hErr == nil && handle.Device != "" {
+		if hErr != nil {
+			continue
+		}
+		if handle.Device != "" {
 			devices = append(devices, handle.Device)
 		}
+		pools = append(pools, handle.Sources...)
 	}
-	if len(devices) == 0 {
+	if len(devices) == 0 && len(pools) == 0 {
 		// Nothing on this host forwards, so neither knob nor rule is ours to set.
 		// The table is still cleared, or a deleted inbound would leave one behind.
 		return dropMasquerade(ctx)
@@ -857,7 +865,7 @@ func (s *RoutingService) EnsureHostForwarding(ctx context.Context) error {
 	if fErr != nil {
 		failures = append(failures, fErr)
 	}
-	if err := egress.EnsureMasquerade(ctx, devices, fronts); err != nil && !errors.Is(err, egress.ErrNoNft) {
+	if err := egress.EnsureMasquerade(ctx, devices, pools, fronts); err != nil && !errors.Is(err, egress.ErrNoNft) {
 		failures = append(failures, err)
 	}
 	return errors.Join(failures...)
@@ -883,7 +891,7 @@ func panelFrontDevices() ([]string, error) {
 // dropMasquerade removes the panel's nat table, tolerating a host that never
 // had nft to begin with.
 func dropMasquerade(ctx context.Context) error {
-	if err := egress.EnsureMasquerade(ctx, nil, nil); err != nil && !errors.Is(err, egress.ErrNoNft) {
+	if err := egress.EnsureMasquerade(ctx, nil, nil, nil); err != nil && !errors.Is(err, egress.ErrNoNft) {
 		return err
 	}
 	return nil

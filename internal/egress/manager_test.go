@@ -934,3 +934,31 @@ func TestASourceSelectedEgressIsTornDownInReverse(t *testing.T) {
 	assertList(t, "rules", k.Rules(), nil)
 	assertList(t, "routes", k.Routes(), nil)
 }
+
+/*
+A pool that changed leaves no exception behind.
+
+The throw is withdrawn even though a rule still points at the table, which is
+the opposite of the blackhole's rule and deliberate: an exception nobody wants
+is a prefix released from the table to main, and this is the pass where the old
+one would otherwise be kept forever.
+*/
+func TestAChangedPoolWithdrawsTheOldException(t *testing.T) {
+	k := upHost(t)
+	m := newManager(t, k)
+	e := row()
+	e.Ingress = nil
+	e.Sources = []netip.Prefix{netip.MustParsePrefix("10.218.0.0/24")}
+	mustEnsure(t, m, e)
+
+	moved := e
+	moved.Sources = []netip.Prefix{netip.MustParsePrefix("10.219.0.0/24")}
+	mustEnsure(t, m, moved)
+
+	assertList(t, "rules", k.Rules(), []string{"v4 prio 31001 from 10.219.0.0/24 lookup 30001"})
+	for _, route := range k.Routes() {
+		if strings.Contains(route, "10.218.0.0/24") {
+			t.Fatalf("the old pool's exception survived the move:\n  %s", strings.Join(k.Routes(), "\n  "))
+		}
+	}
+}

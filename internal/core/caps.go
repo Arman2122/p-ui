@@ -435,11 +435,11 @@ const (
 		enough to route by. The stable handle is the instance's address pool, and
 		the kernel rule that selects it is `from <prefix>` rather than `iif <dev>`.
 
-		Declared here so the contract can SAY it before the egress plane can do
-		it. Nothing mechanizes it yet, which is exactly why the criteria guard
-		below refuses a payload criterion for it: a core shipping this selector is
-		routable by address as soon as the plane grows Src, and its rules cannot
-		silently claim more in the meantime.
+		The plane grew Src, so this is mechanized: the pool selects into the same
+		table, behind the same front, as a device does. One thing it needs that a
+		device does not is an exception for the pool itself -- the host holds an
+		address inside it and its own replies to clients would be caught -- which
+		the egress manager plans with the rule.
 	*/
 	IngressSubnet IngressSelector = "subnet"
 )
@@ -454,8 +454,9 @@ shape the question is: which inbound would carry the sniffing block?
   - IngressInternal: the inbound the core already answers to, or the loopback
     bridge the panel builds for it.
   - IngressDevice: the xray-tun front the panel synthesises for that device.
-  - IngressSubnet: nothing today. A per-session device has no front and no
-    bridge, so there is no inbound to attach a sniffer to.
+  - IngressSubnet: the same front. A source-prefix rule sends that traffic into
+    the same table a device rule does, so the sniffer has the same inbound to
+    attach to; only the selector on the way in is different.
 
 InspectableSelector answers that question once, and coretest and internal/arch
 both refuse a core declaring a payload criterion for a shape it answers false
@@ -467,7 +468,7 @@ on it.
 */
 func InspectableSelector(selector IngressSelector) bool {
 	switch selector {
-	case IngressInternal, IngressDevice:
+	case IngressInternal, IngressDevice, IngressSubnet:
 		return true
 	default:
 		return false
@@ -499,10 +500,24 @@ type IngressHandle struct {
 	// Tag is the inbound tag an internal ingress already answers to. Empty with
 	// BlockedKey set means the daemon exposes no tag today.
 	Tag string
+	// Sources are the address prefixes this instance's traffic carries, for a
+	// core whose sessions each get a transient device no rule could name. Empty
+	// is not a failure, for the same reason Device empty is not.
+	Sources []netip.Prefix
 	// BlockedKey is an i18n key naming why this instance cannot be routed now. It
 	// is a key rather than a sentence because the panel ships two locales.
 	BlockedKey string
 }
+
+/*
+Fronted reports whether this handle names traffic that reaches the panel across
+the kernel rather than through an Xray tag, so it needs a synthesised front.
+
+One predicate, asked everywhere, because the answer used to be spelled
+`Device != ""` in four places and a second kernel shape would have had to find
+all four.
+*/
+func (h IngressHandle) Fronted() bool { return h.Device != "" || len(h.Sources) > 0 }
 
 /*
 Criterion is one thing a routing rule can match traffic on. A closed vocabulary,

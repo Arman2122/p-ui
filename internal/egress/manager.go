@@ -432,11 +432,14 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 		}
 	}
 
-	// After the rules it excepted are gone, for the same reason they went in first.
+	/*
+		After the rules it excepted, for the reason they went in first -- and
+		unguarded, unlike the blackhole below. Withdrawing an exception only
+		tightens containment, so an unwanted one is removed even while another
+		rule still points at the table; a pool that CHANGED would otherwise leave
+		its old throw behind for good, quietly releasing that prefix to main.
+	*/
 	for _, route := range delThrow {
-		if live[route.Family] > 0 {
-			continue
-		}
 		if err := m.plane.DelRoute(ctx, route); err != nil && !settledDel(err) {
 			failures = append(failures, fmt.Errorf("egress: unexcept %s: %w", route, err))
 		}

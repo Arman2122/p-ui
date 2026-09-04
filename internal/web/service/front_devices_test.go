@@ -87,7 +87,7 @@ func TestTheFrontListReachesTheMasqueradeCall(t *testing.T) {
 	if !strings.Contains(body2, "panelFrontDevices()") {
 		t.Fatal("EnsureHostForwarding never asks which devices are fronts")
 	}
-	if !strings.Contains(body2, "egress.EnsureMasquerade(ctx, devices, fronts)") {
+	if !strings.Contains(body2, "egress.EnsureMasquerade(ctx, devices, pools, fronts)") {
 		t.Fatal("the front list is computed and not passed: every front is translated again, and a source criterion on an L3 inbound matches nothing")
 	}
 }

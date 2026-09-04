@@ -29,7 +29,7 @@ re-originates it." The rule was installed per-device regardless. F066.
 */
 
 func TestAFrontIsExemptFromTranslation(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2"}, []string{"peg9"})
+	got := masqueradeRuleset([]string{"pwg2"}, nil, []string{"peg9"})
 
 	want := `iifname "pwg2" oifname != "pwg2" oifname != "peg9" masquerade`
 	if !strings.Contains(got, want) {
@@ -41,7 +41,7 @@ func TestAFrontIsExemptFromTranslation(t *testing.T) {
 // ingress, so a packet crossing to another one is already somewhere it should
 // not be, and translating it there would hide that rather than fix it.
 func TestEveryFrontIsExemptFromEveryDevice(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, []string{"peg9", "peg4"})
+	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil, []string{"peg9", "peg4"})
 
 	for _, want := range []string{
 		`iifname "pwg2" oifname != "pwg2" oifname != "peg4" oifname != "peg9" masquerade`,
@@ -56,8 +56,8 @@ func TestEveryFrontIsExemptFromEveryDevice(t *testing.T) {
 // Sorted, like the device list, so a reconciler comparing two applies of the
 // same state sees the same text.
 func TestFrontExemptionsAreOrderIndependent(t *testing.T) {
-	first := masqueradeRuleset([]string{"pwg2"}, []string{"peg9", "peg4"})
-	second := masqueradeRuleset([]string{"pwg2"}, []string{"peg4", "peg9"})
+	first := masqueradeRuleset([]string{"pwg2"}, nil, []string{"peg9", "peg4"})
+	second := masqueradeRuleset([]string{"pwg2"}, nil, []string{"peg4", "peg9"})
 	if first != second {
 		t.Fatalf("the same state produced two rulesets:\n%s\n---\n%s", first, second)
 	}
@@ -70,7 +70,7 @@ Every deployment without a routing rule on an L3 inbound is in that state, so
 this is the assertion that says the change costs them nothing.
 */
 func TestWithNoFrontsTheRulesetIsUnchanged(t *testing.T) {
-	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil)
+	got := masqueradeRuleset([]string{"pwg2", "pwg7"}, nil, nil)
 
 	for _, want := range []string{
 		`iifname "pwg2" oifname != "pwg2" masquerade`,

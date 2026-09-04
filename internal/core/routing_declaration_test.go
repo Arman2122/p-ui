@@ -150,44 +150,57 @@ criterion -- domain, protocol, attrs -- is only answerable where the panel has
 an Xray inbound to hang a sniffer on: the one an internal ingress already
 answers to, or the front it synthesises for a device.
 
-A per-session ingress (IngressSubnet, for the PPP family and OpenConnect) has
-neither. A core shipping that selector and declaring `domain` would produce
-rules that save, display as active, and never fire -- F060 written again by the
-next core author, in a package nobody reviewing routing would look at.
+Every shape the vocabulary names has one today. A selector outside it does not,
+and outside it is exactly where the next one arrives: the vocabulary is closed,
+so an unrecognised value reads as "cannot route" and nothing can sniff it. A
+core shipping one and declaring `domain` would produce rules that save, display
+as active, and never fire -- F060 written again by the next core author, in a
+package nobody reviewing routing would look at.
 
 Caught in their own conformance run instead. The day the panel learns to sniff a
-new shape, InspectableSelector gains it and this stops firing.
+new shape, InspectableSelector gains it and this stops firing for that shape.
 */
-type subnetIngressFake struct {
+type unmechanizedIngressFake struct {
 	routingFake
 	criteria []Criterion
 }
 
-func (subnetIngressFake) IngressSelector(Kind) IngressSelector { return IngressSubnet }
-func (subnetIngressFake) IngressHandle(context.Context, Instance) (IngressHandle, error) {
+func (unmechanizedIngressFake) IngressSelector(Kind) IngressSelector {
+	return IngressSelector("carrier-pigeon")
+}
+
+func (unmechanizedIngressFake) IngressHandle(context.Context, Instance) (IngressHandle, error) {
 	return IngressHandle{}, nil
 }
-func (f subnetIngressFake) IngressCriteria(Kind) []Criterion { return f.criteria }
+func (f unmechanizedIngressFake) IngressCriteria(Kind) []Criterion { return f.criteria }
 
 func TestACoreCannotDeclareACriterionThePanelCannotProduce(t *testing.T) {
 	base := routingFake{kinds: []Kind{"ppp"}}
 
-	withDomain := subnetIngressFake{
+	withDomain := unmechanizedIngressFake{
 		routingFake: base,
 		criteria:    append(CriteriaByAddress(), CriterionDomain),
 	}
 	problems := Bind(withDomain).DeclaredMatchesImplemented()
 	const want = "declares criterion domain"
 	if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, want) }) {
-		t.Fatalf("a per-session ingress declaring a domain criterion passed conformance: %v", problems)
+		t.Fatalf("an unsniffable ingress declaring a domain criterion passed conformance: %v", problems)
 	}
 
 	// The same core routing by address alone is exactly right, and must pass.
-	byAddress := subnetIngressFake{routingFake: base, criteria: CriteriaByAddress()}
+	byAddress := unmechanizedIngressFake{routingFake: base, criteria: CriteriaByAddress()}
 	for _, problem := range Bind(byAddress).DeclaredMatchesImplemented() {
 		if strings.Contains(problem, "declares criterion") {
-			t.Fatalf("an address-only per-session ingress was refused: %q", problem)
+			t.Fatalf("an address-only unsniffable ingress was refused: %q", problem)
 		}
+	}
+}
+
+// A pool ingress is sniffable now, because its traffic crosses the same
+// synthesised front a device's does. It may name the domain like any other.
+func TestAPoolIngressMayDeclareTheDomain(t *testing.T) {
+	if !InspectableSelector(IngressSubnet) {
+		t.Fatal("IngressSubnet is not inspectable, so a rule on an OpenConnect inbound could not match a domain")
 	}
 }
 

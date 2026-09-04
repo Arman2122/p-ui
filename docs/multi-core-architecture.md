@@ -1803,15 +1803,14 @@ immediately. sing-box is the first core for which the honest answer to a client 
 before that adapter is written. It joins the four in §12.5 and the three the roster
 verdict carried: the `shaping.Owns` namespace seam (closed in `d4b8260b`), `CapSniffing`'s
 by-name enumeration, and a rate-pushdown seam for the two daemons that enforce rates
-themselves. `IngressSubnet` exists as a vocabulary value (`core/caps.go:379`) with no
-consumer yet.
+themselves. `IngressSubnet` was a vocabulary value with no consumer; §12.5h gave it one.
 
 **Closed 2026-09-03: the TCP-only exit flag** (`ExitHandle.TCPOnly`; the compiler pins,
 narrows with a warning, or refuses), **the one-per-node refusal shape**
 (`Descriptor.OnePerNode`, counted at the add gate) and **the sniffing enumeration** (a
 positive list of Xray's kinds). Still open: queued dispatch, the server-pushed exit
-address, the subnet selector's consumer, and rate pushdown — each lands with the core
-that hits it.
+address and rate pushdown -- each lands with the core that hits it. The subnet
+selector got its consumer and its mechanism in §12.5h.
 
 **Closed with the SSH core: rate pushdown for an in-process core.** `RateEnforcer` is
 ShapingHost's complement — a core whose users share one socket set throttles each client
@@ -2134,10 +2133,10 @@ attributes, whose direction and unit are measured rather than read (the
 daemon's dictionary and its own code disagree; Upstream is the daemon's RX,
 which is the client's upload, and the value is kilobytes per second).
 
-`IngressSubnet` gains its first declaring core and still no mechanism: every
-session gets its own transient device, so the honest handle is a
-`BlockedKey`, and a routing rule on this kind is refused rather than written
-against nothing. The device prefix ends in a separator (`poc<id>-`) because
+`IngressSubnet` gains its first declaring core, and at first no mechanism:
+every session gets its own transient device, so the handle was a `BlockedKey`
+and a rule on this kind was refused rather than written against nothing.
+§12.5h replaced that with the pool itself. The device prefix ends in a separator (`poc<id>-`) because
 without one inbound 7's eighth session and inbound 78's first are the same
 interface name.
 
@@ -2242,3 +2241,59 @@ Proven on the VM with three real processes: a sing-box serving the inbound, an
 xray carrying the bridge, and a SOCKS exit that records being used, with a real
 sing-box TUIC client fetching through the whole chain. It goes red when the
 renderer is made to ignore the switch.
+
+### 12.5h OpenConnect becomes routable, and the subnet selector gets its mechanism (2026-09-04)
+
+The other half of the routing vision, and the one the bridge cannot reach. SSH,
+TUIC and AnyTLS route because a proxy can be told where to dial; ocserv cannot
+be told anything of the sort. It forwards IP packets, and the only place to
+divert them is the kernel.
+
+`ip rule iif` was the shape every L3 core used, and it does not fit: ocserv
+makes one tun per SESSION, named `poc<id>-<n>`, so the interface a rule would
+name does not exist until a client connects and is gone when it leaves. The
+pool the inbound hands addresses from is the handle that stays still, which is
+what `IngressSubnet` has named since it was written with nothing behind it.
+
+Two mechanisms could have gone behind it, and the choice was measured rather
+than argued. An nft prerouting chain marking `iifname "poc7-*"` works -- the
+wildcard was checked on the box -- and would reuse the existing fwmark rule, but
+it costs a second kernel subsystem for the panel to own, sweep and reconcile
+against foreign entries. A source-prefix rule costs one field on `RuleSpec` and
+reuses the converge model already in place. The measurement chose the second by
+showing it sufficient: with a real ocserv daemon, a real openconnect client and
+a blackhole-only table, `from <pool>` dropped the client's forwarded traffic and
+released it again when the rule came out.
+
+The same measurement found the part no reading of the code would have: ocserv
+gives the HOST an address inside the pool (`poc2-0 inet 10.218.0.1 peer
+<client>/32`), so `from <pool>` catches the host's own replies to its clients,
+and with the rule alone a connected client could not reach its gateway. A
+`throw <pool>` route inside the table sends those back to the rules below and
+restores it, with forwarded traffic still selected. So the throw is not a
+detail: it is part of the shape, planned and ordered with the rule that needs
+it -- in before it, out after it, exactly as the blackhole already is.
+
+Three places had to learn the new objects or converge would fight itself: the
+snapshot reads `FRA_SRC` back, `ownedView` claims a throw in a reserved table,
+and preflight exempts one. All three are proven against a real kernel in a
+private namespace, because the fake stores a spec and returns the same one --
+it cannot fail the way netlink can.
+
+Downstream of the rule, nothing is different. The traffic lands in the same
+table, behind the same synthesised xray-tun front, so `InspectableSelector`
+gains `IngressSubnet` and a rule on one of these inbounds may match a domain
+like any other. That leaves `unmechanizedCriteria` with no shape in the
+vocabulary to fire on, which is correct and not vacuous: the vocabulary is
+closed, an unrecognised selector reads as "cannot route", and that is what its
+test now drives.
+
+Two things came with it. Overlapping pools were untidy while nothing selected on
+them and are a hijack now, so a save is refused when one inbound's pool covers
+another's -- asked through the contract, so the next core with a pool inherits
+it. And forwarding and masquerade followed the device list alone, which this
+core has none of: an OpenConnect-only box turned neither on, so a client
+connected, took an address and reached nothing. Both now follow the pool as
+well, the NAT rule written `ip saddr <pool> ip daddr != <pool>` in place of
+`iifname <dev> oifname != <dev>`, for the same two reasons the device form has
+them.

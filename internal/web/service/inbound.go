@@ -1074,6 +1074,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if conflict != nil {
 		return inbound, false, "", common.NewError(conflict.String())
 	}
+	if err := s.checkIngressPoolConflict(context.Background(), inbound, 0); err != nil {
+		return inbound, false, "", err
+	}
 	if err := s.checkWireguardAddressConflict(inbound, 0); err != nil {
 		return inbound, false, "", err
 	}
@@ -1693,6 +1696,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if conflict != nil {
 		return inbound, false, "", common.NewError(conflict.String())
 	}
+	if err := s.checkIngressPoolConflict(context.Background(), inbound, inbound.Id); err != nil {
+		return inbound, false, "", err
+	}
 	if err := s.checkWireguardAddressConflict(inbound, inbound.Id); err != nil {
 		return inbound, false, "", err
 	}
@@ -2251,7 +2257,7 @@ func routingSubjectReason(inbound *model.Inbound) string {
 	if handle.BlockedKey != "" {
 		return handle.BlockedKey
 	}
-	if handle.Tag == "" && handle.Device == "" {
+	if handle.Tag == "" && !handle.Fronted() {
 		return subjectReasonNoXray
 	}
 	return ""

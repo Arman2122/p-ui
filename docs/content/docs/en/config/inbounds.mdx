@@ -413,9 +413,14 @@ succeeds and everything else in the reply is dropped.
 - **Speed plan**: enforced by the daemon itself, handed over at login. A
   changed plan therefore reaches a client at its **next connection**, not
   mid-session.
-- **Routing**: not available. Every session gets its own short-lived kernel
-  device, so no interface name is stable enough for a rule; clients leave
-  through the server's own route.
+- **Routing**: available, selected by the inbound's own **subnet**. Every
+  session gets its own short-lived kernel device, so no interface name is
+  stable enough for a rule; the pool the inbound hands addresses from is, and
+  a rule naming this inbound sends everything sourced in that pool through the
+  chosen exit. Rules may match address, port, network and domain. Two pools
+  that overlap are refused at save: each installs its own kernel rule, and over
+  the addresses both cover one inbound's clients would leave through the
+  other's exit.
 
 Identity is a **server certificate and nothing else** — clients present none
 and log in with a **username** and **password**, minted when left empty. On the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os/exec"
 	"runtime"
 	"sort"
@@ -23,8 +24,10 @@ front, Xray re-originates it, and the kernel picks the host's own source at
 route lookup. It is needed for the plain case, which is also the common one:
 somebody makes a WireGuard inbound and expects the internet.
 
-Scoped to the devices the cores name, so it translates this panel's tunnel
-traffic and nothing else on the box.
+Scoped to the devices and the pools the cores name, so it translates this
+panel's tunnel traffic and nothing else on the box. A pool is how an inbound
+whose sessions each get a transient device names itself: it has no interface to
+write, and the source address is what every one of its packets carries.
 */
 
 // masqueradeTable is the panel's own nft table. Its own table, in the pattern
@@ -44,7 +47,7 @@ The whole table is replaced on every call rather than diffed. It is small, it is
 ours alone, and `nft -f` applies it atomically -- so there is no window where
 half the devices translate, and no drift for a reconciler to chase.
 */
-func EnsureMasquerade(ctx context.Context, devices, fronts []string) error {
+func EnsureMasquerade(ctx context.Context, devices []string, pools []netip.Prefix, fronts []string) error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
@@ -52,10 +55,10 @@ func EnsureMasquerade(ctx context.Context, devices, fronts []string) error {
 	if err != nil {
 		return ErrNoNft
 	}
-	if len(devices) == 0 {
+	if len(devices) == 0 && len(pools) == 0 {
 		return runNft(ctx, nft, masqueradeTeardown())
 	}
-	return runNft(ctx, nft, masqueradeRuleset(devices, fronts))
+	return runNft(ctx, nft, masqueradeRuleset(devices, pools, fronts))
 }
 
 /*
@@ -85,11 +88,13 @@ so Xray sees the front's own address and a `source` criterion can never match.
 Measured on the VM: with the plain rule the reader sees the gateway address,
 without it and with this exemption it sees the client's. F066.
 */
-func masqueradeRuleset(devices, fronts []string) string {
+func masqueradeRuleset(devices []string, pools []netip.Prefix, fronts []string) string {
 	sorted := append([]string(nil), devices...)
 	sort.Strings(sorted)
 	exempt := append([]string(nil), fronts...)
 	sort.Strings(exempt)
+	prefixes := append([]netip.Prefix(nil), pools...)
+	sort.Slice(prefixes, func(i, j int) bool { return prefixes[i].String() < prefixes[j].String() })
 
 	var b strings.Builder
 	b.WriteString("table inet " + masqueradeTable + " {\n")
@@ -103,6 +108,26 @@ func masqueradeRuleset(devices, fronts []string) string {
 			fmt.Fprintf(&b, " oifname != %q", front)
 		}
 		fmt.Fprintf(&b, " masquerade comment %q\n", "p-ui: forwarded out of "+device)
+	}
+	/*
+		A pool's rule is the device rule written with the selectors it has. The
+		source replaces the ingress device, and `daddr != <pool>` replaces
+		`oifname != <dev>`: one client reaching another is not leaving the host,
+		and rewriting its source would break the return path just the same.
+	*/
+	for _, pool := range prefixes {
+		if !pool.IsValid() {
+			continue
+		}
+		family := "ip"
+		if pool.Addr().Is6() {
+			family = "ip6"
+		}
+		fmt.Fprintf(&b, "\t\t%s saddr %s %s daddr != %s", family, pool, family, pool)
+		for _, front := range exempt {
+			fmt.Fprintf(&b, " oifname != %q", front)
+		}
+		fmt.Fprintf(&b, " masquerade comment %q\n", "p-ui: forwarded out of "+pool.String())
 	}
 	b.WriteString("\t}\n}\n")
 

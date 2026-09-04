@@ -22,6 +22,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/egress/drivers/wgclient"
 	"github.com/Arman2122/p-ui/internal/egress/drivers/xraytun"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/wireguard"
 )
 
@@ -76,16 +77,26 @@ device because cryptokey routing has already proven the peer's identity by the
 time a packet appears there.
 */
 func egressIngressDevice(ctx context.Context, inbound *model.Inbound) (string, bool) {
-	if inbound == nil {
+	handle, ok := egressIngressHandle(ctx, inbound)
+	if !ok || handle.Device == "" {
 		return "", false
+	}
+	return handle.Device, true
+}
+
+// egressIngressHandle is the whole surface, for the caller that selects on it:
+// a device for a core that owns one, a pool for a core whose sessions do not.
+func egressIngressHandle(ctx context.Context, inbound *model.Inbound) (core.IngressHandle, bool) {
+	if inbound == nil {
+		return core.IngressHandle{}, false
 	}
 	handle, err := cores.IngressHandleFor(ctx, core.Instance{
 		ID: inbound.Id, Kind: core.Kind(inbound.Protocol), Tag: inbound.Tag, Settings: inbound.Settings,
 	})
-	if err != nil || handle.Device == "" {
-		return "", false
+	if err != nil || !handle.Fronted() {
+		return core.IngressHandle{}, false
 	}
-	return handle.Device, true
+	return handle, true
 }
 
 // egressIngressSelectable is the static half: whether this KIND can ever be
@@ -94,7 +105,11 @@ func egressIngressSelectable(inbound *model.Inbound) bool {
 	if inbound == nil {
 		return false
 	}
-	return cores.IngressSelectorFor(core.Kind(inbound.Protocol)) == core.IngressDevice
+	switch cores.IngressSelectorFor(core.Kind(inbound.Protocol)) {
+	case core.IngressDevice, core.IngressSubnet:
+		return true
+	}
+	return false
 }
 
 // egressGatewayBase is where every front's own /32 is carved from. An addressless
@@ -346,6 +361,7 @@ func (s *EgressService) desired(ctx context.Context, rows []*model.Egress) ([]eg
 		}
 	}
 	ingress := map[int][]string{}
+	sources := map[int][]netip.Prefix{}
 	if len(byInbound) > 0 {
 		ids := make([]int, 0, len(byInbound))
 		for id := range byInbound {
@@ -359,12 +375,15 @@ func (s *EgressService) desired(ctx context.Context, rows []*model.Egress) ([]eg
 			return nil, err
 		}
 		for _, inbound := range inbounds {
-			device, ok := egressIngressDevice(ctx, inbound)
+			handle, ok := egressIngressHandle(ctx, inbound)
 			if !ok || inbound.NodeID != nil {
 				continue
 			}
 			front := byInbound[inbound.Id]
-			ingress[front] = append(ingress[front], device)
+			if handle.Device != "" {
+				ingress[front] = append(ingress[front], handle.Device)
+			}
+			sources[front] = append(sources[front], handle.Sources...)
 		}
 	}
 	out := make([]egress.Egress, 0, len(rows))
@@ -376,6 +395,7 @@ func (s *EgressService) desired(ctx context.Context, rows []*model.Egress) ([]eg
 		}
 		converted := egressRow(row)
 		converted.Ingress = ingress[row.Id]
+		converted.Sources = sources[row.Id]
 		out = append(out, converted)
 	}
 	return out, nil
@@ -560,3 +580,50 @@ func egressTargetResolves(tag string) (bool, error) {
 // egressKicks counts restart kicks in flight: a kick outlives its caller by the
 // whole ladder and reads a manager the test harness swaps. CI run 33641933638.
 var egressKicks sync.WaitGroup
+
+/*
+checkIngressPoolConflict refuses an inbound whose address pool overlaps one
+another inbound already hands out.
+
+Two pools that overlap were only untidy while nothing selected on them. They are
+a hijack now: each attached inbound installs `ip rule from <pool>` at its own
+priority, and for the addresses both cover the lower-priority rule never sees a
+packet -- one inbound's clients leave through the other's exit, silently and
+only for part of the range.
+
+Asked through the contract rather than by protocol, so a second core whose
+sessions have no device is covered by registering. WireGuard is not: it reports
+a device, and its own address check already refuses the same overlap.
+*/
+func (s *InboundService) checkIngressPoolConflict(ctx context.Context, inbound *model.Inbound, ignoreID int) error {
+	handle, ok := egressIngressHandle(ctx, inbound)
+	if !ok || len(handle.Sources) == 0 {
+		return nil
+	}
+	q := database.GetDB().Model(model.Inbound{}).Select("id", "protocol", "tag", "remark", "settings", "node_id")
+	if ignoreID > 0 {
+		q = q.Where("id != ?", ignoreID)
+	}
+	var candidates []*model.Inbound
+	if err := q.Find(&candidates).Error; err != nil {
+		return err
+	}
+	for _, other := range candidates {
+		if !sameNode(other.NodeID, inbound.NodeID) {
+			continue
+		}
+		taken, resolved := egressIngressHandle(ctx, other)
+		if !resolved {
+			continue
+		}
+		for _, mine := range handle.Sources {
+			for _, theirs := range taken.Sources {
+				if mine.Overlaps(theirs) {
+					return common.NewError("address pool", mine.String(), "overlaps", theirs.String(),
+						"already served by inbound", inboundName(other))
+				}
+			}
+		}
+	}
+	return nil
+}
