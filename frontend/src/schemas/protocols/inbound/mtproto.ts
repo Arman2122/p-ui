@@ -57,6 +57,11 @@ export const MtprotoInboundSettingsSchema = z.object({
   routeThroughXray: z.boolean().optional(),
   outboundTag: z.string().optional(),
   routeXrayPort: z.number().int().min(0).max(65535).optional(),
+  /* mtg's loopback [[listener]] for the dd/plain secret forms, so Telegram's own
+     WEB proxy front-end can use this inbound as its backend. Backend-owned like
+     routeXrayPort, and declared only so a save does not strip it. */
+  webBackendEnable: z.boolean().optional(),
+  webBackendPort: z.number().int().min(0).max(65535).optional(),
   // publicIpv4/publicIpv6 pin this server's reachable address the Telegram
   // middle proxy needs when clients carry ad-tags; blank = mtg auto-detects.
   publicIpv4: z.string().optional(),

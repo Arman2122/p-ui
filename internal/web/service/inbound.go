@@ -812,8 +812,8 @@ func inboundIsBridged(inbound *model.Inbound) bool {
 	return parsed.RouteThroughXray
 }
 
-func settingsRouteXrayPort(parsed map[string]any) int {
-	switch v := parsed["routeXrayPort"].(type) {
+func settingsPort(parsed map[string]any, key string) int {
+	switch v := parsed[key].(type) {
 	case float64:
 		return int(v)
 	case int:
@@ -826,7 +826,11 @@ func settingsRouteXrayPort(parsed map[string]any) int {
 	return 0
 }
 
-func parseRouteXrayPort(settings string) int {
+func settingsRouteXrayPort(parsed map[string]any) int {
+	return settingsPort(parsed, "routeXrayPort")
+}
+
+func parseSettingsPort(settings, key string) int {
 	if settings == "" {
 		return 0
 	}
@@ -834,7 +838,11 @@ func parseRouteXrayPort(settings string) int {
 	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
 		return 0
 	}
-	return settingsRouteXrayPort(parsed)
+	return settingsPort(parsed, key)
+}
+
+func parseRouteXrayPort(settings string) int {
+	return parseSettingsPort(settings, "routeXrayPort")
 }
 
 // normalizeXrayBridgePort guarantees a routed inbound Xray does not serve carries
@@ -994,6 +1002,74 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 	return nil
 }
 
+// normalizeWebBackendPort owns the sidecar's optional WEB backend port on the
+// bridge port's terms: allocated on enable, stable across edits, dropped on disable.
+func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSettings string) error {
+	if inbound == nil || cores.ServedByXray(core.Kind(inbound.Protocol)) {
+		return nil
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(inbound.Settings), &parsed); err != nil || parsed == nil {
+		return nil
+	}
+	if enabled, _ := parsed["webBackendEnable"].(bool); !enabled {
+		if _, hadPort := parsed["webBackendPort"]; !hadPort {
+			return nil
+		}
+		delete(parsed, "webBackendPort")
+		if bs, err := json.MarshalIndent(parsed, "", "  "); err == nil {
+			inbound.Settings = string(bs)
+		} else {
+			logger.Warning("mtproto: failed to marshal settings after disabling the WEB backend:", err)
+		}
+		return nil
+	}
+
+	// The bridge port lives in settings, not in the inbound row, so
+	// loopbackPortIsClaimed cannot see this inbound's own. It runs first.
+	bridge := settingsRouteXrayPort(parsed)
+	claimed := func(port int) bool {
+		return port == bridge || s.loopbackPortIsClaimed(port, inbound.Id)
+	}
+	port := parseSettingsPort(oldSettings, "webBackendPort")
+	if port > 0 && claimed(port) {
+		logger.Warning("mtproto: the stored WEB backend port", port, "for inbound [", inbound.Tag,
+			"] is now claimed; allocating a new one")
+		port = 0
+	}
+	if port <= 0 {
+		if sent := settingsPort(parsed, "webBackendPort"); sent > 0 && !claimed(sent) {
+			port = sent
+		}
+	}
+	for range mtprotoPortAllocationAttempts {
+		if port > 0 {
+			break
+		}
+		allocated, err := mtproto.FreeLocalPort()
+		if err != nil {
+			return common.NewError("mtproto: could not allocate a WEB backend port:", err)
+		}
+		if !claimed(allocated) {
+			port = allocated
+		}
+	}
+	if port <= 0 {
+		return common.NewError("mtproto: could not find a free WEB backend port after",
+			mtprotoPortAllocationAttempts, "attempts")
+	}
+	if settingsPort(parsed, "webBackendPort") == port {
+		return nil
+	}
+	parsed["webBackendPort"] = port
+	bs, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return common.NewError("mtproto: could not persist the WEB backend port:", err)
+	}
+	inbound.Settings = string(bs)
+	return nil
+}
+
 // AddInbound creates a new inbound configuration.
 // It validates port uniqueness, client email uniqueness, and required fields,
 // then saves the inbound to the database and optionally adds it to the running Xray instance.
@@ -1037,6 +1113,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	}
 	s.normalizeMtprotoSecret(inbound)
 	if err := s.normalizeXrayBridgePort(inbound, ""); err != nil {
+		return inbound, false, "", err
+	}
+	if err := s.normalizeWebBackendPort(inbound, ""); err != nil {
 		return inbound, false, "", err
 	}
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
@@ -1715,6 +1794,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	oldProtocol := oldInbound.Protocol
 	oldBridged := inboundIsBridged(oldInbound)
 	if err := s.normalizeXrayBridgePort(inbound, oldInbound.Settings); err != nil {
+		return inbound, false, "", err
+	}
+	if err := s.normalizeWebBackendPort(inbound, oldInbound.Settings); err != nil {
 		return inbound, false, "", err
 	}
 

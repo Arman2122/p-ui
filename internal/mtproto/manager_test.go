@@ -247,19 +247,21 @@ func TestFingerprintSplit(t *testing.T) {
 	base := Instance{Secrets: []SecretEntry{{Name: "a", Secret: "ee"}}, Listen: "0.0.0.0", Port: 443}
 
 	for name, mutate := range map[string]func(*Instance){
-		"debug":         func(i *Instance) { i.Debug = true },
-		"listener":      func(i *Instance) { i.ProxyProtocolListener = true },
-		"preferIp":      func(i *Instance) { i.PreferIP = "only-ipv4" },
-		"frontingIP":    func(i *Instance) { i.FrontingIP = "127.0.0.1" },
-		"frontingPort":  func(i *Instance) { i.FrontingPort = 9443 },
-		"frontingProxy": func(i *Instance) { i.FrontingProxyProtocol = true },
-		"throttle":      func(i *Instance) { i.ThrottleMaxConnections = 5000 },
-		"routeXray":     func(i *Instance) { i.RouteThroughXray = true },
-		"routeXrayPort": func(i *Instance) { i.XrayRoutePort = 50000 },
-		"port":          func(i *Instance) { i.Port = 8443 },
-		"listen":        func(i *Instance) { i.Listen = "127.0.0.1" },
-		"publicIpv4":    func(i *Instance) { i.PublicIPv4 = "1.2.3.4" },
-		"publicIpv6":    func(i *Instance) { i.PublicIPv6 = "2001:db8::1" },
+		"debug":          func(i *Instance) { i.Debug = true },
+		"listener":       func(i *Instance) { i.ProxyProtocolListener = true },
+		"preferIp":       func(i *Instance) { i.PreferIP = "only-ipv4" },
+		"frontingIP":     func(i *Instance) { i.FrontingIP = "127.0.0.1" },
+		"frontingPort":   func(i *Instance) { i.FrontingPort = 9443 },
+		"frontingProxy":  func(i *Instance) { i.FrontingProxyProtocol = true },
+		"throttle":       func(i *Instance) { i.ThrottleMaxConnections = 5000 },
+		"routeXray":      func(i *Instance) { i.RouteThroughXray = true },
+		"routeXrayPort":  func(i *Instance) { i.XrayRoutePort = 50000 },
+		"port":           func(i *Instance) { i.Port = 8443 },
+		"listen":         func(i *Instance) { i.Listen = "127.0.0.1" },
+		"publicIpv4":     func(i *Instance) { i.PublicIPv4 = "1.2.3.4" },
+		"publicIpv6":     func(i *Instance) { i.PublicIPv6 = "2001:db8::1" },
+		"webBackend":     func(i *Instance) { i.WebBackendEnable = true },
+		"webBackendPort": func(i *Instance) { i.WebBackendPort = 2398 },
 	} {
 		t.Run("structural/"+name, func(t *testing.T) {
 			changed := base

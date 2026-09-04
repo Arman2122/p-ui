@@ -72,6 +72,13 @@ type Instance struct {
 	// the egress obeys the core's routing rules instead of going out directly.
 	RouteThroughXray bool
 	XrayRoutePort    int
+
+	// WebBackendEnable adds a loopback [[listener]] accepting the pre-FakeTLS dd
+	// and plain secret forms, the only ones Telegram's WEB proxy front-end dials.
+	WebBackendEnable bool
+	// WebBackendPort is backend-owned, allocated and persisted on save by
+	// normalizeWebBackendPort; zero means none, so no listener is emitted.
+	WebBackendPort int
 }
 
 // bindTo renders the listen address mtg parses. JoinHostPort, not a bare colon:
@@ -103,6 +110,8 @@ func (inst Instance) StructuralFingerprint() string {
 		strconv.Itoa(inst.XrayRoutePort),
 		inst.PublicIPv4,
 		inst.PublicIPv6,
+		strconv.FormatBool(inst.WebBackendEnable),
+		strconv.Itoa(inst.WebBackendPort),
 	}
 	return strings.Join(parts, "|")
 }
@@ -149,6 +158,9 @@ type managed struct {
 	// the process because that is what is actually serving, not with whoever
 	// last happened to apply it.
 	routed bool
+	// features is what the last successful scrape said this binary supports. It
+	// is reported, never used to gate what the panel writes into the config.
+	features []string
 	// counter outlives the process it belongs to: mtg's counters restart at
 	// zero, and only a surviving baseline can tell that apart from idle.
 	counter *core.Counter
@@ -168,6 +180,32 @@ type Manager struct {
 	// swept records that the one-time startup cleanup of orphaned mtg
 	// processes (survivors of a previous p-ui run) has already run.
 	swept bool
+	// drawPort supplies the api-bind-to port. Nil means FreeLocalPort; a test
+	// substitutes a deterministic draw.
+	drawPort func() (int, error)
+}
+
+// apiPortDrawAttempts bounds the re-rolls when the OS keeps handing back the one
+// loopback port this instance may not have.
+const apiPortDrawAttempts = 8
+
+// drawAPIPort picks the sidecar's api-bind-to port, never avoid — the WEB backend
+// port of the same mtg, whose losing bind would be silent because it is non-fatal.
+func (m *Manager) drawAPIPort(avoid int) (int, error) {
+	draw := m.drawPort
+	if draw == nil {
+		draw = FreeLocalPort
+	}
+	for range apiPortDrawAttempts {
+		port, err := draw()
+		if err != nil {
+			return 0, err
+		}
+		if port != avoid {
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("mtproto: no api port clear of the WEB backend port %d after %d attempts", avoid, apiPortDrawAttempts)
 }
 
 var (
@@ -232,6 +270,8 @@ type instanceSettings struct {
 	ThrottleMaxConnections int    `json:"throttleMaxConnections"`
 	RouteThroughXray       bool   `json:"routeThroughXray"`
 	RouteXrayPort          int    `json:"routeXrayPort"`
+	WebBackendEnable       bool   `json:"webBackendEnable"`
+	WebBackendPort         int    `json:"webBackendPort"`
 	PublicIPv4             string `json:"publicIpv4"`
 	PublicIPv6             string `json:"publicIpv6"`
 	Clients                []struct {
@@ -256,6 +296,8 @@ func (s instanceSettings) applyTo(inst *Instance) {
 	inst.XrayRoutePort = s.RouteXrayPort
 	inst.PublicIPv4 = strings.TrimSpace(s.PublicIPv4)
 	inst.PublicIPv6 = strings.TrimSpace(s.PublicIPv6)
+	inst.WebBackendEnable = s.WebBackendEnable
+	inst.WebBackendPort = s.WebBackendPort
 }
 
 // ApplySettings fills the non-secret half of an Instance. Both ingest paths share
@@ -382,7 +424,13 @@ func (m *Manager) ensureLocked(inst Instance) error {
 			delete(m.procs, inst.Id)
 		}
 	}
-	apiPort, err := FreeLocalPort()
+	// The api port is drawn here and stored only in memory, so the panel-side
+	// claim check cannot see it; the WEB backend port is the one it must dodge.
+	avoid := 0
+	if inst.WebBackendEnable {
+		avoid = inst.WebBackendPort
+	}
+	apiPort, err := m.drawAPIPort(avoid)
 	if err != nil {
 		return err
 	}
@@ -486,6 +534,8 @@ func (m *Manager) CollectTraffic() (out []Traffic, online []string, failed []str
 	m.scrapeMu.Lock()
 	defer m.scrapeMu.Unlock()
 	type snap struct {
+		id       int
+		mg       *managed
 		apiPort  int
 		apiToken string
 		tag      string
@@ -496,11 +546,11 @@ func (m *Manager) CollectTraffic() (out []Traffic, online []string, failed []str
 	out = m.pending
 	m.pending = nil
 	snaps := make([]snap, 0, len(m.procs))
-	for _, cur := range m.procs {
+	for id, cur := range m.procs {
 		if cur.proc == nil || !cur.proc.IsRunning() {
 			continue
 		}
-		snaps = append(snaps, snap{apiPort: cur.apiPort, apiToken: cur.apiToken, tag: cur.tag, counter: cur.counter})
+		snaps = append(snaps, snap{id: id, mg: cur, apiPort: cur.apiPort, apiToken: cur.apiToken, tag: cur.tag, counter: cur.counter})
 	}
 	m.mu.Unlock()
 
@@ -510,6 +560,13 @@ func (m *Manager) CollectTraffic() (out []Traffic, online []string, failed []str
 			failed = append(failed, s.tag)
 			continue
 		}
+		m.mu.Lock()
+		// Only while this is still the same process: a restart in between would
+		// otherwise stamp the old binary's capabilities onto the new one.
+		if m.procs[s.id] == s.mg {
+			s.mg.features = stats.Features
+		}
+		m.mu.Unlock()
 		for email, u := range stats.Users {
 			if u.Connections > 0 {
 				online = append(online, email)
@@ -639,9 +696,9 @@ func FreeLocalPort() (int, error) {
 // precede any [section] header in TOML, and [secrets] must be the final section
 // so trailing keys are not swallowed by another table. The layout is therefore:
 // top-level scalars (incl. api-bind-to and api-token), then [domain-fronting],
-// [network] and [throttle], then [secret-ad-tags] for clients overriding the
-// global advertising tag, and finally [secrets] with one named secret per
-// active client.
+// [network], [throttle] and any [[listener]], then [secret-ad-tags] for clients
+// overriding the global advertising tag, and finally [secrets] with one named
+// secret per active client.
 func renderConfig(inst Instance, apiPort int, apiToken string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "bind-to = %q\n", inst.bindTo())
@@ -684,6 +741,11 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 	}
 	if inst.ThrottleMaxConnections > 0 {
 		fmt.Fprintf(&b, "\n[throttle]\nmax-connections = %d\n", inst.ThrottleMaxConnections)
+	}
+	// An array of tables must precede the trailing key-value tables. An older
+	// mtg-proxy ignores unknown TOML, so the block needs no capability gate.
+	if inst.WebBackendEnable && inst.WebBackendPort > 0 {
+		fmt.Fprintf(&b, "\n[[listener]]\nbind-to = \"127.0.0.1:%d\"\naccept = [\"dd\", \"plain\"]\n", inst.WebBackendPort)
 	}
 	// Only clients present in [secrets] may appear here: mtg rejects a config
 	// whose [secret-ad-tags] names an unknown secret, so a disabled client's
@@ -756,8 +818,11 @@ type statsUser struct {
 // mtgStats is the /stats payload. StartedAt names the process incarnation, so a
 // restart is billed in full; a build that omits it falls back to the backstop.
 type mtgStats struct {
-	StartedAt string               `json:"started_at"`
-	Users     map[string]statsUser `json:"users"`
+	StartedAt string `json:"started_at"`
+	// Features is the sidecar's capability list. A binary too old to publish one
+	// omits it, and this payload decodes non-strictly, so both shapes parse.
+	Features []string             `json:"features"`
+	Users    map[string]statsUser `json:"users"`
 }
 
 type secretPutEntry struct {
@@ -865,6 +930,18 @@ func scrapeStats(port int, token string) (mtgStats, bool) {
 		return mtgStats{}, false
 	}
 	return parsed, true
+}
+
+// Features names the capabilities the sidecar for an inbound reported on its
+// last successful scrape. Empty for a binary too old to publish the list.
+func (m *Manager) Features(id int) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur, ok := m.procs[id]
+	if !ok {
+		return nil
+	}
+	return slices.Clone(cur.features)
 }
 
 // RoutedTags names the running instances whose egress goes out through Xray's
