@@ -863,3 +863,74 @@ func TestAFrontRouteIntoASquatterIsWithdrawn(t *testing.T) {
 		"v6 table 30001 blackhole default metric 4096",
 	})
 }
+
+/*
+An egress selected by source prefix installs its rule, and the exception that
+keeps the host able to answer its own clients.
+
+The rule is the whole point: an inbound whose sessions each get a transient
+device can be named by no `iif`, and its pool is what stays still. The throw is
+not decoration. Measured on the VM with a real OpenConnect session: the host
+holds an address inside the pool, so `from <pool>` catches its own replies to
+clients, and with the rule alone a connected client could not reach its gateway.
+
+One family, not two. A v6 twin of a v4 source rule would carry no source at all,
+and a rule with no selector matches every packet on the box.
+*/
+func TestASourceSelectedEgressGetsItsRuleAndItsException(t *testing.T) {
+	k := upHost(t)
+	m := newManager(t, k)
+	e := row()
+	e.Ingress = nil
+	e.Sources = []netip.Prefix{netip.MustParsePrefix("10.218.0.0/24")}
+	mustEnsure(t, m, e)
+
+	assertList(t, "rules", k.Rules(), []string{"v4 prio 31001 from 10.218.0.0/24 lookup 30001"})
+	assertList(t, "routes", k.Routes(), []string{
+		"v4 table 30001 blackhole default metric 4096",
+		"v4 table 30001 default dev peg1 metric 100",
+		"v4 table 30001 throw 10.218.0.0/24 metric 0",
+		"v6 table 30001 blackhole default metric 4096",
+		"v6 table 30001 default dev peg1 metric 100",
+	})
+
+	throw := indexOf(k.Ops(), "route+ v4 table 30001 throw 10.218.0.0/24 metric 0")
+	rule := indexOf(k.Ops(), "rule+ v4 prio 31001 from 10.218.0.0/24 lookup 30001")
+	if throw < 0 || rule < 0 || throw > rule {
+		t.Fatalf("the throw is at op %d and its rule at %d; the rule must never select before its exception exists:\n  %s",
+			throw, rule, strings.Join(k.Ops(), "\n  "))
+	}
+
+	// And a converged pass writes nothing, or the throw would be rewritten every
+	// tick because the snapshot could not read one back.
+	k.ResetOps()
+	mustEnsure(t, m, e)
+	if writes := k.Writes(); writes != 0 {
+		t.Fatalf("a converged source-selected pass issued %d writes: %v", writes, k.Ops())
+	}
+}
+
+// Teardown reverses it: the rule stops selecting before the exception it needed
+// is withdrawn, and the table is uncontained last.
+func TestASourceSelectedEgressIsTornDownInReverse(t *testing.T) {
+	k := upHost(t)
+	m := newManager(t, k)
+	e := row()
+	e.Ingress = nil
+	e.Sources = []netip.Prefix{netip.MustParsePrefix("10.218.0.0/24")}
+	mustEnsure(t, m, e)
+	k.ResetOps()
+
+	if err := m.Remove(context.Background(), 1); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	rule := indexOf(k.Ops(), "rule- v4 prio 31001 from 10.218.0.0/24 lookup 30001")
+	throw := indexOf(k.Ops(), "route- v4 table 30001 throw 10.218.0.0/24 metric 0")
+	black := indexOf(k.Ops(), "route- v4 table 30001 blackhole default metric 4096")
+	if rule < 0 || throw < 0 || black < 0 || rule > throw || throw > black {
+		t.Fatalf("teardown order was rule %d, throw %d, blackhole %d; want that order:\n  %s",
+			rule, throw, black, strings.Join(k.Ops(), "\n  "))
+	}
+	assertList(t, "rules", k.Rules(), nil)
+	assertList(t, "routes", k.Routes(), nil)
+}

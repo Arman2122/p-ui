@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -98,6 +100,7 @@ func (m *Manager) Reconcile(ctx context.Context, rows []Egress) error {
 type want struct {
 	device     string
 	blackholes []RouteSpec
+	throws     []RouteSpec
 	fronts     []RouteSpec
 	rules      []RuleSpec
 	sysctls    map[string]string
@@ -159,6 +162,28 @@ func (m *Manager) plan(e Egress, snap Snapshot) (want, error) {
 			})
 		}
 	}
+	/*
+		A source prefix selects an inbound whose per-session devices no `iif` can
+		name. One family only -- the prefix's own -- because the twin rule would
+		carry no source at all and match every packet in the other family.
+
+		The throw travels with it and is not optional. The host holds an address
+		inside the pool, so `from <pool>` catches its own replies to clients too,
+		and the throw is what sends those back to the rules below. Measured: with
+		the rule alone, a connected client could not reach its own gateway.
+	*/
+	for _, src := range uniqueSortedPrefixes(e.Sources) {
+		family := FamilyV4
+		if src.Addr().Is6() {
+			family = FamilyV6
+		}
+		w.rules = append(w.rules, RuleSpec{
+			Family: family, Priority: Prio(e.ID), Src: src, Table: Table(e.ID),
+		})
+		w.throws = append(w.throws, RouteSpec{
+			Family: family, Table: Table(e.ID), Type: RouteThrow, Dst: src,
+		})
+	}
 	// A locally originated socket has no ingress device, so the mark is the only
 	// handle. Emitted with the table it selects, never on its own: a mark with no
 	// rule to catch it routes via main and leaves with the host's own address.
@@ -194,6 +219,7 @@ func fillCarries(fill Fill, family Family) bool {
 type have struct {
 	blackholes []RouteSpec
 	fronts     []RouteSpec
+	throws     []RouteSpec
 	rules      []RuleSpec
 	foreign    []string
 	// shadowing is the foreign subset that defeats this id's own containment: a
@@ -225,6 +251,10 @@ func ownedView(snap Snapshot, id int, device string) have {
 			h.blackholes = append(h.blackholes, route)
 		case route.Type == RouteUnicast && route.Dst == route.Family.DefaultRoute() && ownsDevice(device, route.Device):
 			h.fronts = append(h.fronts, route)
+		// Only this package writes a throw into a reserved table, so one found
+		// there is ours whatever its destination; diff removes the unwanted.
+		case route.Type == RouteThrow:
+			h.throws = append(h.throws, route)
 		default:
 			h.foreign = append(h.foreign, route.String())
 			// A unicast route out of this table beats the blackhole by metric or by
@@ -335,6 +365,7 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 
 	addRules, delRules := diff(w.rules, h.rules)
 	addBlack, delBlack := diff(w.blackholes, h.blackholes)
+	addThrow, delThrow := diff(w.throws, h.throws)
 	addFront, delFront := diff(w.fronts, h.fronts)
 
 	failures := []error{planErr, provisionErr}
@@ -365,6 +396,13 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 		}
 		contained[route.Family] = true
 	}
+	// Before the rules that need it, never after: a source rule installed while
+	// its throw is missing blackholes the host's own replies to its clients.
+	for _, route := range addThrow {
+		if err := m.plane.AddRoute(ctx, route); err != nil {
+			failures = append(failures, fmt.Errorf("egress: except %s: %w", route, err))
+		}
+	}
 	for _, rule := range addRules {
 		if !contained[rule.Family] {
 			failures = append(failures, fmt.Errorf("egress: refusing %s: its table has no blackhole, so the lookup would fall through to main", rule))
@@ -394,6 +432,15 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 		}
 	}
 
+	// After the rules it excepted are gone, for the same reason they went in first.
+	for _, route := range delThrow {
+		if live[route.Family] > 0 {
+			continue
+		}
+		if err := m.plane.DelRoute(ctx, route); err != nil && !settledDel(err) {
+			failures = append(failures, fmt.Errorf("egress: unexcept %s: %w", route, err))
+		}
+	}
 	for _, route := range delBlack {
 		if live[route.Family] > 0 {
 			failures = append(failures, fmt.Errorf("egress: keeping %s: a rule still points at its table", route))
@@ -461,6 +508,19 @@ func diff[T comparable](want, have []T) (add, del []T) {
 		}
 	}
 	return add, del
+}
+
+// uniqueSortedPrefixes is uniqueSorted for prefixes: the plan must be
+// byte-stable across passes or converge chases its own ordering.
+func uniqueSortedPrefixes(in []netip.Prefix) []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(in))
+	for _, prefix := range in {
+		if prefix.IsValid() {
+			out = append(out, prefix.Masked())
+		}
+	}
+	slices.SortFunc(out, func(a, b netip.Prefix) int { return strings.Compare(a.String(), b.String()) })
+	return slices.Compact(out)
 }
 
 func uniqueSorted(in []string) []string {

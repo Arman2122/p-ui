@@ -63,6 +63,19 @@ func TestPreflight(t *testing.T) {
 			names:   "v4 prio 31005 iif pwg9 lookup 30777 sits in the reserved priority band",
 		},
 		{
+			// The exception a source-selected egress needs is not a squatter, and
+			// refusing to start over one would take the whole panel down.
+			name: "the panel's own throw route is not foreign",
+			host: func(t *testing.T, k *egtest.Kernel) {
+				t.Helper()
+				k.SeedRoute(egress.RouteSpec{
+					Family: egress.FamilyV4, Table: 30005, Type: egress.RouteThrow,
+					Dst: mustPrefix(t, "10.218.0.0/24"),
+				})
+			},
+			base: egress.DefaultGatewayBase,
+		},
+		{
 			name: "a foreign route in a reserved table",
 			host: func(t *testing.T, k *egtest.Kernel) {
 				t.Helper()

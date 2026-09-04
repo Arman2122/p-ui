@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -525,5 +526,69 @@ func TestLivePreflightLeavesNoProbeRuleBehind(t *testing.T) {
 	}
 	if strings.Contains(string(out), probeDevice) {
 		t.Fatalf("the probe rule survived preflight:\n%s", out)
+	}
+}
+
+/*
+A source-selected egress survives the round trip through netlink.
+
+The fake stores a RuleSpec and hands the same one back, so it cannot fail the
+way this can: if the snapshot does not read FRA_SRC back, every pass sees its
+own rule as missing and rewrites it forever, and a throw route it cannot
+classify is reported as somebody else's. Both look perfect in egtest.
+*/
+func TestLiveSourceSelectionConverges(t *testing.T) {
+	m := liveManager(t)
+	addFront(t)
+	ctx := context.Background()
+
+	if err := m.Ensure(ctx, liveSourceRow()); err != nil {
+		t.Fatalf("first Ensure: %v", err)
+	}
+	assertBand(t, band(t, m), sourceBand())
+
+	if err := m.Ensure(ctx, liveSourceRow()); err != nil {
+		t.Fatalf("second Ensure re-issued writes the kernel already had: %v", err)
+	}
+	assertBand(t, band(t, m), sourceBand())
+}
+
+// And the same objects made by hand are adopted, not rebuilt: what iproute2
+// writes is what this plane has to recognise.
+func TestLiveAdoptionOfAHandMadeSourceSelection(t *testing.T) {
+	m := liveManager(t)
+	addFront(t)
+	table, prio := "30901", "31901"
+
+	run(t, "ip", "route", "add", "blackhole", "default", "table", table, "metric", "4096")
+	run(t, "ip", "route", "add", "default", "dev", Device(e2eID), "table", table, "metric", "100")
+	run(t, "ip", "route", "add", "throw", "10.218.0.0/24", "table", table)
+	run(t, "ip", "rule", "add", "from", "10.218.0.0/24", "lookup", table, "priority", prio)
+	run(t, "ip", "-6", "route", "add", "blackhole", "default", "table", table, "metric", "4096")
+	run(t, "ip", "-6", "route", "add", "default", "dev", Device(e2eID), "table", table, "metric", "100")
+
+	before := band(t, m)
+	assertBand(t, before, sourceBand())
+	if err := m.Ensure(context.Background(), liveSourceRow()); err != nil {
+		t.Fatalf("Ensure over hand-made state: %v", err)
+	}
+	assertBand(t, band(t, m), before)
+}
+
+func liveSourceRow() Egress {
+	return Egress{
+		ID: e2eID, Type: "e2e", Enable: true,
+		Sources: []netip.Prefix{netip.MustParsePrefix("10.218.0.0/24")},
+	}
+}
+
+func sourceBand() []string {
+	return []string{
+		"v4 prio 31901 from 10.218.0.0/24 lookup 30901",
+		"v4 table 30901 blackhole default metric 4096",
+		"v4 table 30901 default dev peg901 metric 100",
+		"v4 table 30901 throw 10.218.0.0/24 metric 0",
+		"v6 table 30901 blackhole default metric 4096",
+		"v6 table 30901 default dev peg901 metric 100",
 	}
 }

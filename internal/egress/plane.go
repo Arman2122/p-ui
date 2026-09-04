@@ -46,11 +46,18 @@ type RuleSpec struct {
 	// which is how traffic an L7 core originates on this host reaches an exit.
 	// Zero means "no mark", so an iif rule is unchanged by its presence.
 	Mark uint32
+	// Src selects by the packet's own source prefix, for an inbound whose
+	// sessions each get a transient device no `iif` can name. Invalid means "no
+	// source", so a rule selecting either other way is unchanged by its presence.
+	Src netip.Prefix
 }
 
 func (r RuleSpec) String() string {
-	if r.Mark != 0 {
+	switch {
+	case r.Mark != 0:
 		return fmt.Sprintf("%s prio %d fwmark %#x lookup %d", r.Family, r.Priority, r.Mark, r.Table)
+	case r.Src.IsValid():
+		return fmt.Sprintf("%s prio %d from %s lookup %d", r.Family, r.Priority, r.Src, r.Table)
 	}
 	return fmt.Sprintf("%s prio %d iif %s lookup %d", r.Family, r.Priority, r.Iif, r.Table)
 }
@@ -62,6 +69,15 @@ type RouteType uint8
 const (
 	RouteUnicast RouteType = iota
 	RouteBlackhole
+	/*
+		RouteThrow sends one destination back out of the table to the rules below.
+
+		A source-prefix rule catches more than the traffic it was written for: the
+		host itself holds an address inside an L3 inbound's pool, so its own reply
+		to a client matches too, and without this it is blackholed. Measured on the
+		VM: with the rule alone a client could not reach its own gateway.
+	*/
+	RouteThrow
 	// RouteOther is anything else the kernel reports from a reserved table. It is
 	// named by preflight and never touched, because the panel did not write it.
 	RouteOther
@@ -73,6 +89,8 @@ func (t RouteType) String() string {
 		return "blackhole"
 	case RouteUnicast:
 		return "unicast"
+	case RouteThrow:
+		return "throw"
 	}
 	return "other"
 }
@@ -100,8 +118,8 @@ func (r RouteSpec) String() string {
 	if r.Dst.IsValid() && r.Dst.Bits() != 0 {
 		dst = r.Dst.String()
 	}
-	if r.Type == RouteBlackhole {
-		return fmt.Sprintf("%s table %d blackhole %s metric %d", r.Family, r.Table, dst, r.Metric)
+	if r.Type == RouteBlackhole || r.Type == RouteThrow {
+		return fmt.Sprintf("%s table %d %s %s metric %d", r.Family, r.Table, r.Type, dst, r.Metric)
 	}
 	return fmt.Sprintf("%s table %d %s dev %s metric %d", r.Family, r.Table, dst, r.Device, r.Metric)
 }

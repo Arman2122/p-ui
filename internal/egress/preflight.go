@@ -178,6 +178,12 @@ func foreignBandObjects(snap Snapshot) []error {
 		if _, mine := tableEgressID(route.Table); !mine {
 			continue
 		}
+		// A throw is this package's own: it is what excepts a source-selected
+		// inbound's own pool from the table that blackholes everything else, and
+		// nothing but this package writes one into a reserved table.
+		if route.Type == RouteThrow {
+			continue
+		}
 		// Ownership here is what an id names for itself, because preflight holds no
 		// rows. A driver that names its own device must be consulted from here.
 		if route.Dst == route.Family.DefaultRoute() {

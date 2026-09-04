@@ -23,6 +23,10 @@ type Egress struct {
 	// Ingress names the devices whose traffic this egress claims, one `iif`
 	// selector each. This package never learns what kind of device they are.
 	Ingress []string
+	// Sources names the address prefixes whose traffic this egress claims, one
+	// `from` selector each. It is the handle an inbound offers when its sessions
+	// each get a transient device: the pool is stable, the device names are not.
+	Sources []netip.Prefix
 }
 
 // Fill is what a driver puts in its egress's routing table besides the blackhole

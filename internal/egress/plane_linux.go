@@ -79,6 +79,9 @@ func (kernelPlane) Snapshot(context.Context) (Snapshot, error) {
 			if r.Mark != 0 {
 				spec.Mark = r.Mark
 			}
+			if prefix, ok := toPrefix(r.Src); ok {
+				spec.Src = prefix
+			}
 			snap.Rules = append(snap.Rules, spec)
 		}
 
@@ -112,6 +115,8 @@ func toRouteSpec(family Family, r netlink.Route, byIndex map[int]string) RouteSp
 		spec.Device = byIndex[r.LinkIndex]
 	case unix.RTN_BLACKHOLE:
 		spec.Type = RouteBlackhole
+	case unix.RTN_THROW:
+		spec.Type = RouteThrow
 	default:
 		spec.Type = RouteOther
 		spec.Device = byIndex[r.LinkIndex]
@@ -140,11 +145,14 @@ func toNetlinkRule(spec RuleSpec) *netlink.Rule {
 	rule.Family = netlinkFamily(spec.Family)
 	rule.Priority = spec.Priority
 	rule.Table = spec.Table
-	// One selector or the other, never both: a rule carrying an empty iif AND a
-	// mark of zero matches everything, which is the one thing it must not do.
-	if spec.Mark != 0 {
+	// One selector and one only: a rule carrying an empty iif, no mark and no
+	// source matches everything, which is the one thing it must not do.
+	switch {
+	case spec.Mark != 0:
 		rule.Mark = spec.Mark
-	} else {
+	case spec.Src.IsValid():
+		rule.Src = toIPNet(spec.Src)
+	default:
 		rule.IifName = spec.Iif
 	}
 	return rule
@@ -166,8 +174,12 @@ func toNetlinkRoute(spec RouteSpec, index int) *netlink.Route {
 		dst = spec.Family.DefaultRoute()
 	}
 	route := &netlink.Route{Table: spec.Table, Dst: toIPNet(dst), Priority: spec.Metric}
-	if spec.Type == RouteBlackhole {
+	switch spec.Type {
+	case RouteBlackhole:
 		route.Type = unix.RTN_BLACKHOLE
+		return route
+	case RouteThrow:
+		route.Type = unix.RTN_THROW
 		return route
 	}
 	route.LinkIndex = index
@@ -225,7 +237,7 @@ func (kernelPlane) DelRoute(_ context.Context, spec RouteSpec) error {
 // routeLinkIndex resolves the device on every call. An Xray restart gives the
 // front a new ifindex, so an index cached from an earlier pass names nothing.
 func routeLinkIndex(spec RouteSpec) (int, error) {
-	if spec.Type == RouteBlackhole || spec.Device == "" {
+	if spec.Type == RouteBlackhole || spec.Type == RouteThrow || spec.Device == "" {
 		return 0, nil
 	}
 	link, err := netlink.LinkByName(spec.Device)
