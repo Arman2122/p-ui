@@ -635,7 +635,7 @@ func (s *RoutingService) Add(ctx context.Context, rule *model.RoutingRule) (*mod
 	if cErr != nil {
 		return nil, cErr
 	}
-	if err := s.refuseInertRule(ctx, candidate); err != nil {
+	if err := s.refuseInertRule(ctx, candidate, rule.Id); err != nil {
 		return nil, err
 	}
 
@@ -669,7 +669,7 @@ func (s *RoutingService) Update(ctx context.Context, rule *model.RoutingRule) (*
 	if cErr != nil {
 		return nil, cErr
 	}
-	if err := s.refuseInertRule(ctx, candidate); err != nil {
+	if err := s.refuseInertRule(ctx, candidate, rule.Id); err != nil {
 		return nil, err
 	}
 	err := database.GetDB().Model(&model.RoutingRule{}).Where("id = ?", rule.Id).Updates(map[string]any{
@@ -1000,7 +1000,21 @@ behind, so this answers FrontIDFor unconditionally. KeyNoFront cannot fire as a
 result, which is correct: a missing front is an infrastructure failure the
 operator cannot fix by editing the rule.
 */
-func (s *RoutingService) refuseInertRule(ctx context.Context, candidate []*model.RoutingRule) error {
+/*
+refuseInertRule refuses a save the compiler would drop, and only for the rule
+being saved.
+
+The whole candidate set is compiled because a rule's effect depends on the
+others, but a refusal belongs to the rule that produced it. It used to return
+the first refusal in the plan whoever owned it, so one inbound whose bridge was
+switched off made every scope-all rule inert and from then on NO rule could be
+saved or edited: the operator was shown a reason about a rule they were not
+touching, fixable only by finding and deleting that other rule.
+
+A rule being added carries id 0, which no stored rule has, so it matches its own
+diagnostics and nobody else's.
+*/
+func (s *RoutingService) refuseInertRule(ctx context.Context, candidate []*model.RoutingRule, ruleID int) error {
 	subjects, err := s.Subjects(ctx)
 	if err != nil {
 		return err
@@ -1016,7 +1030,7 @@ func (s *RoutingService) refuseInertRule(ctx context.Context, candidate []*model
 		FrontIDFor: func(int) (int, bool) { return 1, true },
 	})
 	for _, diag := range compiled.Refusals() {
-		if diag.MessageKey == "" {
+		if diag.MessageKey == "" || diag.RuleID != ruleID {
 			continue
 		}
 		return &RefusalError{Key: diag.MessageKey, Args: diag.Args}
