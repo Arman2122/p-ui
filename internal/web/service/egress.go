@@ -594,6 +594,9 @@ only for part of the range.
 Asked through the contract rather than by protocol, so a second core whose
 sessions have no device is covered by registering. WireGuard is not: it reports
 a device, and its own address check already refuses the same overlap.
+
+A DISABLED inbound still holds its pool here, deliberately: re-enabling it is
+what would create the hijack, and it is not the moment to discover that.
 */
 func (s *InboundService) checkIngressPoolConflict(ctx context.Context, inbound *model.Inbound, ignoreID int) error {
 	handle, ok := egressIngressHandle(ctx, inbound)
