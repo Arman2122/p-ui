@@ -2034,8 +2034,9 @@ What the contract learned from it:
 
 Deliberate v1 gaps, in the form and the CHANGELOG: no speed plan on these
 kinds (no `RateEnforcer`, no `ShapingHost`: sing-box has no per-user rate
-control and its clients share one socket), no `RoutableIngress` yet, and the
-conformance suite for this core runs only where a sing-box binary exists
+control and its clients share one socket), no `RoutableIngress` yet (closed in
+§12.5g), and the conformance suite for this core runs only where a sing-box
+binary exists
 (`SINGBOX_E2E_BINARY`, the VM), so CI stays green without exercising it.
 
 ### 12.5c The embedded RADIUS server (2026-09-03)
@@ -2209,3 +2210,35 @@ node-hosted SSH inbound stays unroutable, as every bridged kind does; the SSH
 exit's own control connection is deliberately not routed; and there is a
 bounded window after the switch is flipped where the listener dials a bridge
 Xray has not built yet, in which forwards are refused and then heal.
+
+### 12.5g TUIC and AnyTLS become routable (2026-09-04)
+
+The bridge's third consumer, and the one that shows it is a mechanism: the
+delta is a settings pair, four lines of generated config and a declaration.
+Everything between -- the backend-owned port allocation, the injected loopback
+inbound, the regenerate trigger, the subject's containment guard -- was already
+generic after §12.5f, and none of it needed touching.
+
+The daemon's own outbound section is where this lands. Its config carried one
+`direct` outbound with `route.final` pointing at it; with the switch on it
+carries a second, a `socks` client aimed at the panel's bridge port, and final
+points there instead. Verified against the shipped binary rather than the
+schema docs: sing-box 1.14 accepts that pair, checked with `sing-box check`.
+
+Fail-closed lives in the renderer here rather than in a dialer. A switch that
+is on with no bridge port yet makes `renderConfig` return an error, so the
+instance fails to apply and says so; serving `final: direct` in that window
+would put every client of the inbound on the server's own address at the
+moment the operator asked for otherwise, and the daemon would start cleanly
+and report nothing.
+
+The criteria match SSH's for the same reason: address, port, network and
+domain, with `source` and `sourcePort` refused because every connection
+reaches Xray from the daemon on 127.0.0.1. Domain is real -- sing-box carries
+the client's hostname to the bridge as a SOCKS address rather than resolving
+it first, so the sniffer the compiler attaches has a name to read.
+
+Proven on the VM with three real processes: a sing-box serving the inbound, an
+xray carrying the bridge, and a SOCKS exit that records being used, with a real
+sing-box TUIC client fetching through the whole chain. It goes red when the
+renderer is made to ignore the switch.

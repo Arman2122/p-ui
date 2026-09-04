@@ -331,6 +331,21 @@ buffers than the kernel default; the installer sets them in
 `/etc/sysctl.d/99-p-ui-quic.conf`.
 
 
+**Routing.** By default the daemon dials destinations itself and no routing
+rule can name this inbound. Turn on **Route traffic through Xray** and the
+panel gives it a loopback bridge into Xray's router, so it becomes a routing
+subject like any other inbound and a rule can send its traffic through an exit.
+Two consequences: Xray becomes required, and while it is down this inbound
+carries nothing rather than leaking out of the server's own address; and the
+Xray template's own rules, ad blocking and the private-address block, begin
+applying to this traffic.
+
+Rules on one of these inbounds may match address, port, network and domain.
+Source and source-port rules do not work, because Xray sees every one of these
+connections as coming from the daemon on loopback, and the editor does not
+offer them.
+
+
 ## OpenVPN (`openvpn`)
 
 The distribution's OpenVPN (2.5 on Ubuntu 22.04, 2.6 on 24.04 and Debian 12),

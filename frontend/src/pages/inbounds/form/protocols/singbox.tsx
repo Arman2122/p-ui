@@ -28,6 +28,22 @@ function TlsFields() {
   );
 }
 
+/* The bridge switch, shared by both kinds: it is a property of the daemon's
+   own outbound traffic, not of the protocol a client speaks to it. */
+function BridgeField() {
+  const { t } = useTranslation();
+  return (
+    <FormField
+      name={['settings', 'routeThroughXray']}
+      label={t('pages.inbounds.form.singboxRouteThroughXray')}
+      tooltip={t('pages.inbounds.form.singboxRouteThroughXrayHint')}
+      valueProp="checked"
+    >
+      <Switch />
+    </FormField>
+  );
+}
+
 function SingboxNotes() {
   const { t } = useTranslation();
   return (
@@ -59,6 +75,7 @@ export function TuicFields() {
       >
         <Switch checked={!!zeroRtt} onChange={(v) => setValue('settings.zeroRttHandshake', v, { shouldDirty: true })} />
       </FormField>
+      <BridgeField />
       <SingboxNotes />
     </>
   );
@@ -88,6 +105,7 @@ export function AnytlsFields() {
           }
         />
       </FormField>
+      <BridgeField />
       <SingboxNotes />
     </>
   );

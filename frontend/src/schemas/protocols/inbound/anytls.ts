@@ -25,6 +25,13 @@ export const AnytlsInboundSettingsSchema = z.object({
   keyFile: z.string().default(''),
   serverName: z.string().default(''),
   paddingScheme: z.array(z.string()).default([]),
+  /* Sends the daemon's own outbound traffic through the panel's loopback
+     bridge into Xray's router, which is what lets a routing rule name this
+     inbound. `routeXrayPort` is the bridge's port: allocated by the backend,
+     never typed, and declared here because the object strips what it does not
+     declare and the save would drop it. */
+  routeThroughXray: z.boolean().optional(),
+  routeXrayPort: z.number().int().min(0).max(65535).optional(),
   clients: z.array(AnytlsClientSchema).default([]),
 });
 export type AnytlsInboundSettings = z.infer<typeof AnytlsInboundSettingsSchema>;

@@ -29,6 +29,13 @@ export const TuicInboundSettingsSchema = z.object({
   serverName: z.string().default(''),
   congestionControl: z.enum(TUIC_CONGESTION_CONTROLS).default('bbr'),
   zeroRttHandshake: z.boolean().default(false),
+  /* Sends the daemon's own outbound traffic through the panel's loopback
+     bridge into Xray's router, which is what lets a routing rule name this
+     inbound. `routeXrayPort` is the bridge's port: allocated by the backend,
+     never typed, and declared here because the object strips what it does not
+     declare and the save would drop it. */
+  routeThroughXray: z.boolean().optional(),
+  routeXrayPort: z.number().int().min(0).max(65535).optional(),
   clients: z.array(TuicClientSchema).default([]),
 });
 export type TuicInboundSettings = z.infer<typeof TuicInboundSettingsSchema>;

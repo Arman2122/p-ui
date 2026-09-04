@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -75,6 +76,30 @@ func renderConfig(inst core.Instance, settings Settings, ctl control, certFile, 
 			inbound["padding_scheme"] = settings.PaddingScheme
 		}
 	}
+	/*
+		Where this daemon's own traffic goes. Direct unless the operator asked
+		for Xray's router, in which case everything leaves through the loopback
+		bridge the panel generates for this inbound's tag, and a routing rule
+		can act on it.
+
+		A switch that is on with no bridge port yet is refused rather than
+		quietly served direct: that is the window between saving and the port
+		being allocated, and going direct there puts every client on the
+		server's own address at the moment the operator asked for otherwise.
+	*/
+	outbounds := []map[string]any{{"type": "direct", "tag": "direct"}}
+	final := "direct"
+	if settings.RouteThroughXray {
+		if settings.RouteXrayPort <= 0 {
+			return nil, errors.New("singbox: this inbound routes through Xray and has no bridge port yet; save it again")
+		}
+		outbounds = append(outbounds, map[string]any{
+			"type": "socks", "tag": xrayBridgeTag,
+			"server": "127.0.0.1", "server_port": settings.RouteXrayPort,
+		})
+		final = xrayBridgeTag
+	}
+
 	doc := map[string]any{
 		"log": map[string]any{"level": "warn", "timestamp": true},
 		"experimental": map[string]any{
@@ -91,8 +116,8 @@ func renderConfig(inst core.Instance, settings Settings, ctl control, certFile, 
 			"secret":      ctl.secret,
 		}},
 		"inbounds":  []map[string]any{inbound},
-		"outbounds": []map[string]any{{"type": "direct", "tag": "direct"}},
-		"route":     map[string]any{"final": "direct"},
+		"outbounds": outbounds,
+		"route":     map[string]any{"final": final},
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -191,3 +216,8 @@ func readControl(path string) (control, bool) {
 	}
 	return ctl, true
 }
+
+// xrayBridgeTag names the outbound that carries this daemon's traffic into the
+// panel's loopback bridge. Local to the generated config; the routing subject
+// the panel exposes is the inbound's own tag.
+const xrayBridgeTag = "xray-bridge"

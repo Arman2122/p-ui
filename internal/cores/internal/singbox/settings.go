@@ -42,6 +42,20 @@ type Settings struct {
 	ZeroRTTHandshake  bool   `json:"zeroRttHandshake"`
 	// PaddingScheme is AnyTLS's, one line per entry; empty keeps sing-box's default.
 	PaddingScheme []string `json:"paddingScheme"`
+	/*
+		RouteThroughXray sends the daemon's own outbound traffic through Xray's
+		router instead of straight out, which is what makes a routing rule
+		naming this inbound able to match. RouteXrayPort is the loopback port
+		the panel allocates for that bridge: backend-owned, never typed, and
+		absent until the switch is first turned on.
+
+		Not refused here when the switch is on and the port is still zero.
+		Validation runs before allocation on the update path, so refusing that
+		pair would make the first enable impossible; the config renderer fails
+		closed instead, which stops the daemon rather than letting it out.
+	*/
+	RouteThroughXray bool `json:"routeThroughXray"`
+	RouteXrayPort    int  `json:"routeXrayPort"`
 }
 
 func parseSettings(kind core.Kind, raw string) (Settings, error) {
