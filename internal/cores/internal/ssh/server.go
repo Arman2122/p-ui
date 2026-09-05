@@ -106,18 +106,75 @@ type counters struct{ up, down atomic.Int64 }
 
 type limiterPair struct{ up, down *rate.Limiter }
 
+/*
+The bounds one connection lives under. OpenSSH's own numbers: LoginGraceTime
+for the handshake, ClientAliveInterval and CountMax for the keepalive. Vars,
+so a test can shrink them.
+*/
+var (
+	handshakeTimeout   = 30 * time.Second
+	keepaliveInterval  = 30 * time.Second
+	keepaliveTimeout   = 15 * time.Second
+	keepaliveMisses    = 3
+	maxForwardsPerConn = int32(512)
+)
+
 // conn is one authenticated SSH connection.
 type conn struct {
 	sc       *gossh.ServerConn
 	email    string
 	source   netip.Addr
 	lastSeen atomic.Int64
+	forwards atomic.Int32
+	done     chan struct{}
 }
 
 // close tolerates a session the tests put there without a transport behind it.
 func (c *conn) close() {
 	if c.sc != nil {
 		_ = c.sc.Close()
+	}
+}
+
+/*
+ping asks the client to answer a global request and reads any reply, success
+or failure, as life. A peer that vanished mid-session (a phone that changed
+networks) never answers, and without this its connection would hold its
+device slot forever and the client's next login would be refused for it.
+*/
+func (c *conn) ping() bool {
+	answered := make(chan error, 1)
+	go func() {
+		_, _, err := c.sc.SendRequest("keepalive@openssh.com", true, nil)
+		answered <- err
+	}()
+	select {
+	case err := <-answered:
+		return err == nil
+	case <-time.After(keepaliveTimeout):
+		return false
+	}
+}
+
+func (s *server) keepAlive(c *conn) {
+	ticker := time.NewTicker(keepaliveInterval)
+	defer ticker.Stop()
+	misses := 0
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+		}
+		if c.ping() {
+			misses = 0
+			continue
+		}
+		if misses++; misses >= keepaliveMisses {
+			logger.Infof("ssh: inbound %d: %s at %s stopped answering; connection dropped", s.instanceID, c.email, c.source)
+			c.close()
+			return
+		}
 	}
 }
 
@@ -270,22 +327,28 @@ func (s *server) serve(ln net.Listener) {
 // handle runs one transport connection through the SSH handshake and its
 // channels; the transports hand it a net.Conn and never see SSH.
 func (s *server) handle(raw net.Conn) {
+	// A peer that connects and never finishes logging in holds a goroutine and
+	// a descriptor for as long as it likes; the deadline is OpenSSH's grace time.
+	_ = raw.SetDeadline(time.Now().Add(handshakeTimeout))
 	sc, chans, reqs, err := gossh.NewServerConn(raw, s.config())
 	if err != nil {
 		_ = raw.Close()
 		return
 	}
-	c := &conn{sc: sc, email: sc.Permissions.Extensions["email"], source: addrOf(sc.RemoteAddr())}
+	_ = raw.SetDeadline(time.Time{})
+	c := &conn{sc: sc, email: sc.Permissions.Extensions["email"], source: addrOf(sc.RemoteAddr()), done: make(chan struct{})}
 	c.lastSeen.Store(time.Now().UnixMilli())
 	s.mu.Lock()
 	s.conns[c] = struct{}{}
 	s.mu.Unlock()
 	defer func() {
+		close(c.done)
 		s.mu.Lock()
 		delete(s.conns, c)
 		s.mu.Unlock()
 		_ = sc.Close()
 	}()
+	go s.keepAlive(c)
 	go func() {
 		// Keepalives are answered; a reverse forward (tcpip-forward) is not a
 		// service this core offers, so every other request is refused.
@@ -356,6 +419,12 @@ func (s *server) forward(c *conn, nc gossh.NewChannel) {
 		_ = nc.Reject(gossh.Prohibited, "client is no longer served")
 		return
 	}
+	if c.forwards.Add(1) > maxForwardsPerConn {
+		c.forwards.Add(-1)
+		_ = nc.Reject(gossh.ResourceShortage, "too many open forwards on this connection")
+		return
+	}
+	defer c.forwards.Add(-1)
 	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 	dst, err := s.dial(ctx, "tcp", net.JoinHostPort(req.Host, strconv.Itoa(int(req.Port))))
 	cancel()
