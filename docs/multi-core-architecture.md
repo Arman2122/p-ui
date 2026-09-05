@@ -2481,5 +2481,11 @@ its only caller with the bounce and went with it.
 **Still open here.** Sing-box admits at no login, so its cap is cut-and-ban until sing-box grows
 an auth hook; Xray and WireGuard remain firewall-only; the cross-node view at login is as fresh
 as the last pass and sync (≤ 10 s local, plus the node heartbeat), so two devices arriving on two
-nodes inside one pass are both admitted and the pass cuts or bans the extra. A plan-level cap
+nodes inside one pass are both admitted and the pass cuts or bans the extra. Two one-pass lags
+follow from deciding per observer: a client over the cap from ONE address on two local cores
+(SSH and Xray, say) has the SSH session cut and no ban in the first pass, and the ban only in the
+next, once Xray is the sole observer; and an address the pass just cut is persisted with this
+pass's timestamp, so for at most one pass `AdmitLogin` still counts it as held — a phantom slot
+of ≤ 10 s. `AdmitLogin` warns on every login while the database is unreachable, which a long
+outage on a busy SSH inbound turns into a log storm; a rate limit is due there. A plan-level cap
 (the user's "plans idea") is the next consumer of `Admission.LimitIP`.
