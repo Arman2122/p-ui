@@ -1075,14 +1075,14 @@ install_openvpn_packages() {
 }
 
 # The OpenConnect core runs the distribution's ocserv and authenticates through
-# the radcli client compiled into it; occtl comes in the same package. A miss
-# never aborts the install: the core reports it at preflight and every other
-# core keeps working.
+# the radcli client compiled into it; occtl comes in the same package, and an
+# OpenConnect exit dials with the openconnect client. A miss never aborts the
+# update: the core reports it at preflight and every other core keeps working.
 install_ocserv_packages() {
-    if ! dpkg -s ocserv > /dev/null 2>&1; then
+    if ! dpkg -s ocserv > /dev/null 2>&1 || ! dpkg -s openconnect > /dev/null 2>&1; then
         apt-get update -q > /dev/null 2>&1
-        apt-get install -y -q ocserv > /dev/null 2>&1 \
-            || echo -e "${yellow}Could not install ocserv; the OpenConnect core stays unavailable until it is${plain}"
+        apt-get install -y -q ocserv openconnect > /dev/null 2>&1 \
+            || echo -e "${yellow}Could not install ocserv and openconnect; the OpenConnect core stays unavailable until they are${plain}"
     fi
     # Debian ships ocserv socket-activated on 443, which would take the port
     # from the panel's own inbounds and serve /etc/ocserv/ocserv.conf, which
