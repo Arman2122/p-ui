@@ -28,6 +28,38 @@ _openapi:
         no daemon this panel supervises is refused.'
       url: '#restart-one-cores-daemons-stop-them-then-converge-them-back-on-the-inbounds-they-should-be-serving-the-id-is-a-core-id-from-get-panelapicores-never-a-protocol--one-core-serves-many-kinds-xray-is-converged-through-its-generated-config-rather-than-an-instance-set-so-it-delegates-to-the-same-path-restartxrayservice-uses-a-core-that-runs-no-daemon-this-panel-supervises-is-refused'
     - depth: 2
+      title: 'How each core is doing right now, from the daemon’s side: state
+        (running, degraded, stopped, failed, idle or unknown), whether it
+        answers on its control surface, pid, supervisor restarts, since when,
+        the last exit or the reason it is not ready, per inbound for a core that
+        runs one daemon each, plus the installed version and whether the panel
+        may change it. Polled by the Cores page; GET /panel/api/cores is the
+        static half.'
+      url: '#how-each-core-is-doing-right-now-from-the-daemons-side-state-running-degraded-stopped-failed-idle-or-unknown-whether-it-answers-on-its-control-surface-pid-supervisor-restarts-since-when-the-last-exit-or-the-reason-it-is-not-ready-per-inbound-for-a-core-that-runs-one-daemon-each-plus-the-installed-version-and-whether-the-panel-may-change-it-polled-by-the-cores-page-get-panelapicores-is-the-static-half'
+    - depth: 2
+      title: The build of this core’s daemon on disk and, for a core that can install
+        one, the releases its own channel publishes. The list is cached for 15
+        minutes and a stale list is served over a failed refresh. A core that
+        names no version (SSH is the panel itself) is refused.
+      url: '#the-build-of-this-cores-daemon-on-disk-and-for-a-core-that-can-install-one-the-releases-its-own-channel-publishes-the-list-is-cached-for-15-minutes-and-a-stale-list-is-served-over-a-failed-refresh-a-core-that-names-no-version-ssh-is-the-panel-itself-is-refused'
+    - depth: 2
+      title: 'Download, verify and install one listed release of this core’s daemon.
+        The binary is staged beside the installed one, checked (a digest or
+        checksum the channel publishes, and for Xray whether the new binary
+        loads this panel’s config), then renamed into place. Nothing is
+        restarted: the running daemon keeps the old binary until POST
+        /cores/:id/restart. A version the channel does not list is refused. Only
+        cores that manage their own releases accept this — Xray and MTProto
+        today.'
+      url: '#download-verify-and-install-one-listed-release-of-this-cores-daemon-the-binary-is-staged-beside-the-installed-one-checked-a-digest-or-checksum-the-channel-publishes-and-for-xray-whether-the-new-binary-loads-this-panels-config-then-renamed-into-place-nothing-is-restarted-the-running-daemon-keeps-the-old-binary-until-post-coresidrestart-a-version-the-channel-does-not-list-is-refused-only-cores-that-manage-their-own-releases-accept-this--xray-and-mtproto-today'
+    - depth: 2
+      title: 'The last lines a core’s daemon wrote: the journal under systemd, the
+        panel’s own ring under exec, kept across the restart that repairs a
+        crash. For a core that runs one daemon per inbound pass
+        ?instance=<inbound id>; a single-process core takes none. A core that
+        keeps no log the panel can read is refused.'
+      url: '#the-last-lines-a-cores-daemon-wrote-the-journal-under-systemd-the-panels-own-ring-under-exec-kept-across-the-restart-that-repairs-a-crash-for-a-core-that-runs-one-daemon-per-inbound-pass-instanceinbound-id-a-single-process-core-takes-none-a-core-that-keeps-no-log-the-panel-can-read-is-refused'
+    - depth: 2
       title: 'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load
         averages, open connections, Xray state. Cached and refreshed every 2
         seconds in the background.'
@@ -201,6 +233,35 @@ _openapi:
           so it delegates to the same path /restartXrayService uses. A core that
           runs no daemon this panel supervises is refused.'
         id: restart-one-cores-daemons-stop-them-then-converge-them-back-on-the-inbounds-they-should-be-serving-the-id-is-a-core-id-from-get-panelapicores-never-a-protocol--one-core-serves-many-kinds-xray-is-converged-through-its-generated-config-rather-than-an-instance-set-so-it-delegates-to-the-same-path-restartxrayservice-uses-a-core-that-runs-no-daemon-this-panel-supervises-is-refused
+      - content: 'How each core is doing right now, from the daemon’s side: state
+          (running, degraded, stopped, failed, idle or unknown), whether it
+          answers on its control surface, pid, supervisor restarts, since when,
+          the last exit or the reason it is not ready, per inbound for a core
+          that runs one daemon each, plus the installed version and whether the
+          panel may change it. Polled by the Cores page; GET /panel/api/cores is
+          the static half.'
+        id: how-each-core-is-doing-right-now-from-the-daemons-side-state-running-degraded-stopped-failed-idle-or-unknown-whether-it-answers-on-its-control-surface-pid-supervisor-restarts-since-when-the-last-exit-or-the-reason-it-is-not-ready-per-inbound-for-a-core-that-runs-one-daemon-each-plus-the-installed-version-and-whether-the-panel-may-change-it-polled-by-the-cores-page-get-panelapicores-is-the-static-half
+      - content: The build of this core’s daemon on disk and, for a core that can
+          install one, the releases its own channel publishes. The list is
+          cached for 15 minutes and a stale list is served over a failed
+          refresh. A core that names no version (SSH is the panel itself) is
+          refused.
+        id: the-build-of-this-cores-daemon-on-disk-and-for-a-core-that-can-install-one-the-releases-its-own-channel-publishes-the-list-is-cached-for-15-minutes-and-a-stale-list-is-served-over-a-failed-refresh-a-core-that-names-no-version-ssh-is-the-panel-itself-is-refused
+      - content: 'Download, verify and install one listed release of this core’s daemon.
+          The binary is staged beside the installed one, checked (a digest or
+          checksum the channel publishes, and for Xray whether the new binary
+          loads this panel’s config), then renamed into place. Nothing is
+          restarted: the running daemon keeps the old binary until POST
+          /cores/:id/restart. A version the channel does not list is refused.
+          Only cores that manage their own releases accept this — Xray and
+          MTProto today.'
+        id: download-verify-and-install-one-listed-release-of-this-cores-daemon-the-binary-is-staged-beside-the-installed-one-checked-a-digest-or-checksum-the-channel-publishes-and-for-xray-whether-the-new-binary-loads-this-panels-config-then-renamed-into-place-nothing-is-restarted-the-running-daemon-keeps-the-old-binary-until-post-coresidrestart-a-version-the-channel-does-not-list-is-refused-only-cores-that-manage-their-own-releases-accept-this--xray-and-mtproto-today
+      - content: 'The last lines a core’s daemon wrote: the journal under systemd, the
+          panel’s own ring under exec, kept across the restart that repairs a
+          crash. For a core that runs one daemon per inbound pass
+          ?instance=<inbound id>; a single-process core takes none. A core that
+          keeps no log the panel can read is refused.'
+        id: the-last-lines-a-cores-daemon-wrote-the-journal-under-systemd-the-panels-own-ring-under-exec-kept-across-the-restart-that-repairs-a-crash-for-a-core-that-runs-one-daemon-per-inbound-pass-instanceinbound-id-a-single-process-core-takes-none-a-core-that-keeps-no-log-the-panel-can-read-is-refused
       - content: 'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load
           averages, open connections, Xray state. Cached and refreshed every 2
           seconds in the background.'
@@ -332,7 +393,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/openapi.json","method":"get"},{"path":"/panel/api/cores","method":"get"},{"path":"/panel/api/cores/{id}/restart","method":"post"},{"path":"/panel/api/server/status","method":"get"},{"path":"/panel/api/server/fail2banStatus","method":"get"},{"path":"/panel/api/server/cpuHistory/{bucket}","method":"get"},{"path":"/panel/api/server/history/{metric}/{bucket}","method":"get"},{"path":"/panel/api/server/xrayMetricsState","method":"get"},{"path":"/panel/api/server/xrayMetricsHistory/{metric}/{bucket}","method":"get"},{"path":"/panel/api/server/xrayObservatory","method":"get"},{"path":"/panel/api/server/xrayObservatoryHistory/{tag}/{bucket}","method":"get"},{"path":"/panel/api/server/getXrayVersion","method":"get"},{"path":"/panel/api/server/getPanelUpdateInfo","method":"get"},{"path":"/panel/api/server/getUpdateStatus","method":"get"},{"path":"/panel/api/server/getConfigJson","method":"get"},{"path":"/panel/api/server/getDb","method":"get"},{"path":"/panel/api/server/getNewUUID","method":"get"},{"path":"/panel/api/server/getWebCertFiles","method":"get"},{"path":"/panel/api/server/descendants","method":"get"},{"path":"/panel/api/server/getNewX25519Cert","method":"get"},{"path":"/panel/api/server/getNewmldsa65","method":"get"},{"path":"/panel/api/server/getNewmlkem768","method":"get"},{"path":"/panel/api/server/getNewVlessEnc","method":"get"},{"path":"/panel/api/server/stopXrayService","method":"post"},{"path":"/panel/api/server/restartXrayService","method":"post"},{"path":"/panel/api/server/installXray/{version}","method":"post"},{"path":"/panel/api/server/updatePanel","method":"post"},{"path":"/panel/api/server/setUpdateChannel","method":"post"},{"path":"/panel/api/server/updateGeofile","method":"post"},{"path":"/panel/api/server/updateGeofile/{fileName}","method":"post"},{"path":"/panel/api/server/logs/{count}","method":"post"},{"path":"/panel/api/server/xraylogs/{count}","method":"post"},{"path":"/panel/api/server/importDB","method":"post"},{"path":"/panel/api/server/getNewEchCert","method":"post"},{"path":"/panel/api/server/getCertHash","method":"post"},{"path":"/panel/api/server/getRemoteCertHash","method":"post"},{"path":"/panel/api/server/scanRealityTarget","method":"post"},{"path":"/panel/api/server/scanRealityTargets","method":"post"},{"path":"/panel/api/server/clientIps","method":"get"},{"path":"/panel/api/server/clientIps","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/openapi.json","method":"get"},{"path":"/panel/api/cores","method":"get"},{"path":"/panel/api/cores/{id}/restart","method":"post"},{"path":"/panel/api/cores/status","method":"get"},{"path":"/panel/api/cores/{id}/versions","method":"get"},{"path":"/panel/api/cores/{id}/install/{version}","method":"post"},{"path":"/panel/api/cores/{id}/logs","method":"get"},{"path":"/panel/api/server/status","method":"get"},{"path":"/panel/api/server/fail2banStatus","method":"get"},{"path":"/panel/api/server/cpuHistory/{bucket}","method":"get"},{"path":"/panel/api/server/history/{metric}/{bucket}","method":"get"},{"path":"/panel/api/server/xrayMetricsState","method":"get"},{"path":"/panel/api/server/xrayMetricsHistory/{metric}/{bucket}","method":"get"},{"path":"/panel/api/server/xrayObservatory","method":"get"},{"path":"/panel/api/server/xrayObservatoryHistory/{tag}/{bucket}","method":"get"},{"path":"/panel/api/server/getXrayVersion","method":"get"},{"path":"/panel/api/server/getPanelUpdateInfo","method":"get"},{"path":"/panel/api/server/getUpdateStatus","method":"get"},{"path":"/panel/api/server/getConfigJson","method":"get"},{"path":"/panel/api/server/getDb","method":"get"},{"path":"/panel/api/server/getNewUUID","method":"get"},{"path":"/panel/api/server/getWebCertFiles","method":"get"},{"path":"/panel/api/server/descendants","method":"get"},{"path":"/panel/api/server/getNewX25519Cert","method":"get"},{"path":"/panel/api/server/getNewmldsa65","method":"get"},{"path":"/panel/api/server/getNewmlkem768","method":"get"},{"path":"/panel/api/server/getNewVlessEnc","method":"get"},{"path":"/panel/api/server/stopXrayService","method":"post"},{"path":"/panel/api/server/restartXrayService","method":"post"},{"path":"/panel/api/server/installXray/{version}","method":"post"},{"path":"/panel/api/server/updatePanel","method":"post"},{"path":"/panel/api/server/setUpdateChannel","method":"post"},{"path":"/panel/api/server/updateGeofile","method":"post"},{"path":"/panel/api/server/updateGeofile/{fileName}","method":"post"},{"path":"/panel/api/server/logs/{count}","method":"post"},{"path":"/panel/api/server/xraylogs/{count}","method":"post"},{"path":"/panel/api/server/importDB","method":"post"},{"path":"/panel/api/server/getNewEchCert","method":"post"},{"path":"/panel/api/server/getCertHash","method":"post"},{"path":"/panel/api/server/getRemoteCertHash","method":"post"},{"path":"/panel/api/server/scanRealityTarget","method":"post"},{"path":"/panel/api/server/scanRealityTargets","method":"post"},{"path":"/panel/api/server/clientIps","method":"get"},{"path":"/panel/api/server/clientIps","method":"post"}]} showTitle />
     </>
   );
 }

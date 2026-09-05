@@ -23,6 +23,9 @@ type CoreSuperviseJob struct {
 	// panelConverged is the core the panel reconciles through its own config
 	// build; cores.PanelConvergedCore says why an instance set cannot describe it.
 	panelConverged core.Kind
+	// marks is what the last pass saw of each unit, keyed core/instance, so a
+	// crash is published once per outage and its all-clear once.
+	marks map[string]instanceMark
 }
 
 // NewCoreSuperviseJob is handed the panel-converged core rather than reading it,
@@ -45,6 +48,7 @@ func (j *CoreSuperviseJob) Run() {
 		if bound.Supervise == nil || id == j.panelConverged {
 			continue
 		}
+		j.observeHealth(ctx, bound)
 		desired, err := j.inboundService.DesiredInstances(bound.Core.Kinds())
 		if err != nil {
 			logger.Warning("core", id, "desired state read failed:", err)

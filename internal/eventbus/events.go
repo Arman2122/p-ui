@@ -20,6 +20,9 @@ const (
 		died so a notification can say so.
 	*/
 	EventCoreCrash EventType = "core.crash"
+	// EventCoreUp is the same daemon running and answering again after a crash
+	// this bus reported, so an alert has its all-clear; the payload is the crash's.
+	EventCoreUp EventType = "core.up"
 
 	// Xray core (local)
 	EventXrayCrash EventType = "xray.crash"

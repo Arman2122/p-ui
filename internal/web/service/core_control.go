@@ -88,3 +88,13 @@ func xrayVersions() (core.VersionManager, error) {
 	}
 	return bound.Versions, nil
 }
+
+// xrayReleases is the panel-converged core's release list through the per-core
+// cache, for the legacy /getXrayVersion.
+func xrayReleases(ctx context.Context) ([]string, error) {
+	versions, err := xrayVersions()
+	if err != nil {
+		return nil, err
+	}
+	return releasesCached(ctx, string(cores.PanelConvergedCore), versions)
+}

@@ -346,6 +346,49 @@ export const EXAMPLES: Record<string, unknown> = {
     "up": 1048576,
     "uuid": "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
   },
+  "CoreStatusView": {
+    "available": true,
+    "detail": "exit status 1: 2026-09-05T18:33:49+0000 ocserv[1234]: bind failed",
+    "healthError": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
+    "id": "openvpn",
+    "instances": [
+      {
+        "detail": "the management socket is not open yet",
+        "instanceId": 4,
+        "pid": 2046530,
+        "ready": true,
+        "restarts": 2,
+        "since": 1725000000000,
+        "state": "running",
+        "tag": "ocs-4"
+      }
+    ],
+    "logs": true,
+    "pid": 2046530,
+    "ready": true,
+    "restarts": 0,
+    "since": 1725000000000,
+    "state": "running",
+    "titleKey": "cores.openvpn.title",
+    "trafficError": "mtproto: stats unreadable for mtp-1",
+    "trafficSeenAt": 1725000000000,
+    "unavailable": "ocserv: stat /usr/sbin/ocserv: no such file (apt-get install ocserv)",
+    "version": {
+      "error": "core: daemon not installed",
+      "installed": "1.2.4",
+      "manageable": false,
+      "reported": true
+    }
+  },
+  "CoreVersionsView": {
+    "available": [
+      "v26.7.28",
+      "v26.6.27"
+    ],
+    "error": "core: daemon not installed",
+    "installed": "26.7.28",
+    "manageable": true
+  },
   "CoreView": {
     "applyDelaySeconds": {
       "tuic": 10
@@ -606,6 +649,16 @@ export const EXAMPLES: Record<string, unknown> = {
     "wgMtu": 0,
     "wgPublicKey": ""
   },
+  "InstanceStatusView": {
+    "detail": "the management socket is not open yet",
+    "instanceId": 4,
+    "pid": 2046530,
+    "ready": true,
+    "restarts": 2,
+    "since": 1725000000000,
+    "state": "running",
+    "tag": "ocs-4"
+  },
   "Msg": {
     "msg": "",
     "obj": null,
@@ -863,5 +916,11 @@ export const EXAMPLES: Record<string, unknown> = {
     "id": 0,
     "password": "",
     "username": ""
+  },
+  "VersionStatusView": {
+    "error": "core: daemon not installed",
+    "installed": "1.2.4",
+    "manageable": false,
+    "reported": true
   }
 };

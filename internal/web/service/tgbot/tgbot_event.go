@@ -91,6 +91,9 @@ func (t *Tgbot) formatEventMessage(e eventbus.Event) string {
 		}
 		return msg
 
+	case eventbus.EventCoreUp:
+		return header + "✅ " + t.I18nBot("tgbot.messages.eventCoreUp", "Core=="+coreCrashName(e))
+
 	case eventbus.EventXrayCrash:
 		errStr := ""
 		if e.Data != nil {

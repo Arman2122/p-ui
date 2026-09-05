@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -91,7 +92,11 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 
 	api.GET("/openapi.json", ServeOpenAPISpec)
 	api.GET("/cores", a.getCores)
+	api.GET("/cores/status", a.getCoresStatus)
 	api.POST("/cores/:id/restart", a.restartCore)
+	api.GET("/cores/:id/versions", a.getCoreVersions)
+	api.POST("/cores/:id/install/:version", middleware.LongRequest(), a.installCoreVersion)
+	api.GET("/cores/:id/logs", a.getCoreLogs)
 
 	// Inbounds API
 	inbounds := api.Group("/inbounds")
@@ -179,4 +184,38 @@ func readOnlyMethod(method string) bool {
 		return true
 	}
 	return false
+}
+
+func (a *APIController) getCoresStatus(c *gin.Context) {
+	jsonObj(c, service.CoreStatusViews(c.Request.Context()), nil)
+}
+
+func (a *APIController) getCoreVersions(c *gin.Context) {
+	view, err := service.CoreVersions(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "getVersion"), err)
+		return
+	}
+	jsonObj(c, view, nil)
+}
+
+// installCoreVersion lands the binary and stops there: the daemon keeps running
+// the old one until the operator restarts it, which the response says.
+func (a *APIController) installCoreVersion(c *gin.Context) {
+	err := service.InstallCoreVersion(c.Request.Context(), c.Param("id"), c.Param("version"))
+	jsonMsg(c, I18nWeb(c, "pages.cores.installed"), err)
+}
+
+func (a *APIController) getCoreLogs(c *gin.Context) {
+	instance, _ := strconv.Atoi(c.DefaultQuery("instance", "0"))
+	n, _ := strconv.Atoi(c.DefaultQuery("n", "200"))
+	if n <= 0 || n > 1000 {
+		n = 200
+	}
+	lines, err := service.CoreLogs(c.Request.Context(), c.Param("id"), instance, n)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.cores.logsUnavailable"), err)
+		return
+	}
+	jsonObj(c, lines, nil)
 }

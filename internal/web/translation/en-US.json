@@ -797,6 +797,10 @@
       },
       "sniffingDestOverride": "Destination override"
     },
+    "cores": {
+      "installed": "Installed. Restart the core to run the new build.",
+      "logsUnavailable": "The core's log could not be read"
+    },
     "clients": {
       "tabBasics": "Basics",
       "tabCredentials": "Credentials",
@@ -1706,6 +1710,9 @@
       "eventOutboundDown": "Down",
       "eventOutboundUp": "Up",
       "eventXrayCrash": "Crash",
+      "eventGroupCores": "Protocol cores",
+      "eventCoreCrash": "A core's daemon crashed",
+      "eventCoreUp": "A core's daemon is back up",
       "eventNodeDown": "Down",
       "eventNodeUp": "Up",
       "eventCPUHigh": "CPU high (%)",
@@ -2339,6 +2346,7 @@
       "eventLoginFallback": "Login failed from {{ .Source }}",
       "memoryThreshold": "Memory Load {{ .Percent }}% exceeds the threshold of {{ .Threshold }}%",
       "eventCoreCrash": "{{ .Core }} CRASHED",
+      "eventCoreUp": "{{ .Core }} is UP again",
       "resetAllSummary": "🔚 Traffic reset finished: {{ .Count }} of {{ .Total }} clients."
     },
     "buttons": {

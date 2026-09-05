@@ -29,6 +29,14 @@ const GROUPS: NotificationGroupConfig[] = [
     ],
   },
   {
+    icon: <ThunderboltOutlined />,
+    title: 'eventGroupCores',
+    events: [
+      { key: 'core.crash', label: 'eventCoreCrash', settingKey: '' },
+      { key: 'core.up', label: 'eventCoreUp', settingKey: '' },
+    ],
+  },
+  {
     icon: <DesktopOutlined />,
     title: 'eventGroupNode',
     events: [

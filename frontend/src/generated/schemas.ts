@@ -1512,6 +1512,127 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "CoreStatusView": {
+    "description": "/*\nCoreStatusView is one core as the Cores page shows it: what runs, whether it\nanswers, and which build is installed. Polled — unlike CoreView, which the\nfrontend fetches once because it changes only with the binary.\n\nState and Ready are core.Health.Overall's, so the page, the event pass and the\nconformance suite agree on what degraded means; a core that reports no health\nsays \"unknown\" rather than guessing.\n*/",
+    "properties": {
+      "available": {
+        "description": "Available is this host's Preflight answer and Unavailable is why not.",
+        "example": true,
+        "type": "boolean"
+      },
+      "detail": {
+        "example": "exit status 1: 2026-09-05T18:33:49+0000 ocserv[1234]: bind failed",
+        "type": "string"
+      },
+      "healthError": {
+        "example": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
+        "type": "string"
+      },
+      "id": {
+        "example": "openvpn",
+        "type": "string"
+      },
+      "instances": {
+        "description": "Instances are the per-inbound daemons of a core that runs one each; a\nsingle-process core lists none and fills the fields above instead.",
+        "items": {
+          "$ref": "#/components/schemas/InstanceStatusView"
+        },
+        "type": "array"
+      },
+      "logs": {
+        "description": "Logs says TailLog is available for this core, so the page offers the drawer.",
+        "example": true,
+        "type": "boolean"
+      },
+      "pid": {
+        "example": 2046530,
+        "type": "integer"
+      },
+      "ready": {
+        "example": true,
+        "type": "boolean"
+      },
+      "restarts": {
+        "example": 0,
+        "type": "integer"
+      },
+      "since": {
+        "example": 1725000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "state": {
+        "description": "State is running, degraded, stopped, failed, idle or unknown; Ready says\nthe daemon answers on its control surface; Detail is why not, or the last exit.",
+        "example": "running",
+        "type": "string"
+      },
+      "titleKey": {
+        "example": "cores.openvpn.title",
+        "type": "string"
+      },
+      "trafficError": {
+        "example": "mtproto: stats unreadable for mtp-1",
+        "type": "string"
+      },
+      "trafficSeenAt": {
+        "description": "TrafficSeenAt is when this core last reported traffic (Unix ms, 0 = not\nsince start) and TrafficError why the last poll failed, if it did.",
+        "example": 1725000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "unavailable": {
+        "example": "ocserv: stat /usr/sbin/ocserv: no such file (apt-get install ocserv)",
+        "type": "string"
+      },
+      "version": {
+        "$ref": "#/components/schemas/VersionStatusView"
+      }
+    },
+    "required": [
+      "available",
+      "id",
+      "instances",
+      "logs",
+      "ready",
+      "state",
+      "titleKey",
+      "version"
+    ],
+    "type": "object"
+  },
+  "CoreVersionsView": {
+    "description": "CoreVersionsView is a core's release picture: the build on disk and, when the\ncore can install one, the channel's list.",
+    "properties": {
+      "available": {
+        "example": [
+          "v26.7.28",
+          "v26.6.27"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "error": {
+        "description": "Error is why Installed or Available is missing; a missing binary is one.",
+        "example": "core: daemon not installed",
+        "type": "string"
+      },
+      "installed": {
+        "example": "26.7.28",
+        "type": "string"
+      },
+      "manageable": {
+        "example": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "available",
+      "manageable"
+    ],
+    "type": "object"
+  },
   "CoreView": {
     "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
     "properties": {
@@ -2519,6 +2640,51 @@ export const SCHEMAS: Record<string, unknown> = {
       "ssMethod",
       "tag",
       "tlsFlowCapable"
+    ],
+    "type": "object"
+  },
+  "InstanceStatusView": {
+    "description": "InstanceStatusView is one daemon of a per-inbound core.",
+    "properties": {
+      "detail": {
+        "example": "the management socket is not open yet",
+        "type": "string"
+      },
+      "instanceId": {
+        "example": 4,
+        "type": "integer"
+      },
+      "pid": {
+        "example": 2046530,
+        "type": "integer"
+      },
+      "ready": {
+        "example": true,
+        "type": "boolean"
+      },
+      "restarts": {
+        "example": 2,
+        "type": "integer"
+      },
+      "since": {
+        "example": 1725000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "state": {
+        "example": "running",
+        "type": "string"
+      },
+      "tag": {
+        "example": "ocs-4",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId",
+      "ready",
+      "state",
+      "tag"
     ],
     "type": "object"
   },
@@ -3670,6 +3836,32 @@ export const SCHEMAS: Record<string, unknown> = {
       "id",
       "password",
       "username"
+    ],
+    "type": "object"
+  },
+  "VersionStatusView": {
+    "description": "VersionStatusView is what is installed and whether the panel may change it.\nReported is false for a core that names no version at all (SSH is the panel).",
+    "properties": {
+      "error": {
+        "example": "core: daemon not installed",
+        "type": "string"
+      },
+      "installed": {
+        "example": "1.2.4",
+        "type": "string"
+      },
+      "manageable": {
+        "example": false,
+        "type": "boolean"
+      },
+      "reported": {
+        "example": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "manageable",
+      "reported"
     ],
     "type": "object"
   }

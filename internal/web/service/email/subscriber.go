@@ -143,6 +143,15 @@ func (s *Subscriber) formatMessage(e eventbus.Event) (subject, body string) {
 		}
 		body = wrap(i18n("tgbot.messages.eventCoreCrash", "Core=="+name), content)
 
+	case eventbus.EventCoreUp:
+		name := e.Source
+		if data, ok := e.Data.(*eventbus.CoreCrashData); ok && name == "" {
+			name = data.CoreID
+		}
+		subject = host + " " + i18n("tgbot.messages.eventCoreUp", "Core=="+name)
+		content := kvRaw(i18n("email.labelStatus"), `<span style="color:green">`+i18n("email.statusUp")+`</span>`)
+		body = wrap(i18n("tgbot.messages.eventCoreUp", "Core=="+name), content)
+
 	case eventbus.EventXrayCrash:
 		subject = host + " " + i18n("tgbot.messages.eventXrayCrash")
 		content := kvRaw(i18n("email.labelStatus"), `<span style="color:red">`+i18n("email.statusCrashed")+`</span>`)

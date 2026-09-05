@@ -359,6 +359,32 @@ export interface ClientTraffic {
   uuid: string;
 }
 
+export interface CoreStatusView {
+  available: boolean;
+  detail?: string;
+  healthError?: string;
+  id: string;
+  instances: InstanceStatusView[];
+  logs: boolean;
+  pid?: number;
+  ready: boolean;
+  restarts?: number;
+  since?: number;
+  state: string;
+  titleKey: string;
+  trafficError?: string;
+  trafficSeenAt?: number;
+  unavailable?: string;
+  version: VersionStatusView;
+}
+
+export interface CoreVersionsView {
+  available: string[];
+  error?: string;
+  installed?: string;
+  manageable: boolean;
+}
+
 export interface CoreView {
   applyDelaySeconds: Record<string, number>;
   available: boolean;
@@ -557,6 +583,17 @@ export interface InboundOption {
   wgDns?: string;
   wgMtu?: number;
   wgPublicKey?: string;
+}
+
+export interface InstanceStatusView {
+  detail?: string;
+  instanceId: number;
+  pid?: number;
+  ready: boolean;
+  restarts?: number;
+  since?: number;
+  state: string;
+  tag: string;
 }
 
 export interface Msg {
@@ -804,5 +841,12 @@ export interface User {
   id: number;
   password: string;
   username: string;
+}
+
+export interface VersionStatusView {
+  error?: string;
+  installed?: string;
+  manageable: boolean;
+  reported: boolean;
 }
 

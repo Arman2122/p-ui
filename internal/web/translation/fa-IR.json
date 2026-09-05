@@ -797,6 +797,10 @@
       },
       "sniffingDestOverride": "بازنویسی مقصد"
     },
+    "cores": {
+      "installed": "نصب شد. برای اجرای نسخهٴ جدید، هسته را ری‌استارت کنید.",
+      "logsUnavailable": "خواندن لاگ هسته ممکن نشد"
+    },
     "clients": {
       "tabBasics": "پایه",
       "tabCredentials": "اطلاعات اتصال",
@@ -1581,6 +1585,9 @@
       "eventOutboundDown": "قطع",
       "eventOutboundUp": "وصل",
       "eventXrayCrash": "کرش",
+      "eventGroupCores": "هسته‌های پروتکل",
+      "eventCoreCrash": "دیمن یک هسته از کار افتاد",
+      "eventCoreUp": "دیمن یک هسته دوباره برگشت",
       "eventNodeDown": "قطع",
       "eventNodeUp": "وصل",
       "eventCPUHigh": "بالا بودن CPU (٪)",
@@ -2339,6 +2346,7 @@
       "eventLoginFallback": "ورود ناموفق از {{ .Source }}",
       "memoryThreshold": "مصرف حافظه {{ .Percent }}% از حد آستانه {{ .Threshold }}% فراتر رفته است",
       "eventCoreCrash": "{{ .Core }} از کار افتاد",
+      "eventCoreUp": "{{ .Core }} دوباره وصل است",
       "resetAllSummary": "🔚 بازنشانی ترافیک تمام شد: {{ .Count }} از {{ .Total }} مشتری."
     },
     "buttons": {

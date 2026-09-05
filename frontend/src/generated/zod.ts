@@ -377,6 +377,34 @@ export const ClientTrafficSchema = z.object({
 });
 export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
 
+export const CoreStatusViewSchema = z.object({
+  available: z.boolean(),
+  detail: z.string().optional(),
+  healthError: z.string().optional(),
+  id: z.string(),
+  instances: z.array(z.lazy(() => InstanceStatusViewSchema)),
+  logs: z.boolean(),
+  pid: z.number().int().optional(),
+  ready: z.boolean(),
+  restarts: z.number().int().optional(),
+  since: z.number().int().optional(),
+  state: z.string(),
+  titleKey: z.string(),
+  trafficError: z.string().optional(),
+  trafficSeenAt: z.number().int().optional(),
+  unavailable: z.string().optional(),
+  version: z.lazy(() => VersionStatusViewSchema),
+});
+export type CoreStatusView = z.infer<typeof CoreStatusViewSchema>;
+
+export const CoreVersionsViewSchema = z.object({
+  available: z.array(z.string()),
+  error: z.string().optional(),
+  installed: z.string().optional(),
+  manageable: z.boolean(),
+});
+export type CoreVersionsView = z.infer<typeof CoreVersionsViewSchema>;
+
 export const CoreViewSchema = z.object({
   applyDelaySeconds: z.record(z.string(), z.number().int()),
   available: z.boolean(),
@@ -588,6 +616,18 @@ export const InboundOptionSchema = z.object({
   wgPublicKey: z.string().optional(),
 });
 export type InboundOption = z.infer<typeof InboundOptionSchema>;
+
+export const InstanceStatusViewSchema = z.object({
+  detail: z.string().optional(),
+  instanceId: z.number().int(),
+  pid: z.number().int().optional(),
+  ready: z.boolean(),
+  restarts: z.number().int().optional(),
+  since: z.number().int().optional(),
+  state: z.string(),
+  tag: z.string(),
+});
+export type InstanceStatusView = z.infer<typeof InstanceStatusViewSchema>;
 
 export const MsgSchema = z.object({
   msg: z.string(),
@@ -852,4 +892,12 @@ export const UserSchema = z.object({
   username: z.string(),
 });
 export type User = z.infer<typeof UserSchema>;
+
+export const VersionStatusViewSchema = z.object({
+  error: z.string().optional(),
+  installed: z.string().optional(),
+  manageable: z.boolean(),
+  reported: z.boolean(),
+});
+export type VersionStatusView = z.infer<typeof VersionStatusViewSchema>;
 

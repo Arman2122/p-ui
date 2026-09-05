@@ -23,7 +23,6 @@ import (
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/supervisor"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/crypto"
@@ -788,23 +787,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 			})
 		}
 	}
-	// An mtg sidecar dying used to be a log line and nothing else: one inbound's
-	// clients offline, no event, no notification. It publishes now, carrying
-	// which inbound died — mtg runs one process per inbound, not per host.
-	mtproto.OnCrash = func(inboundID int, err error) {
-		if s.bus == nil {
-			return
-		}
-		s.bus.Publish(eventbus.Event{
-			Type:   eventbus.EventCoreCrash,
-			Source: fmt.Sprintf("mtproto inbound %d", inboundID),
-			Data: &eventbus.CoreCrashData{
-				CoreID:     "mtproto",
-				InstanceID: inboundID,
-				Err:        err.Error(),
-			},
-		})
-	}
+	// Every other core's death is the supervise pass's to report (job.CoreSuperviseJob).
 
 	// Register email subscriber (always — it checks smtpEnable at runtime)
 	emailService := email.NewEmailService(s.settingService)

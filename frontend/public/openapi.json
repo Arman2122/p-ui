@@ -1560,6 +1560,127 @@
         ],
         "type": "object"
       },
+      "CoreStatusView": {
+        "description": "/*\nCoreStatusView is one core as the Cores page shows it: what runs, whether it\nanswers, and which build is installed. Polled — unlike CoreView, which the\nfrontend fetches once because it changes only with the binary.\n\nState and Ready are core.Health.Overall's, so the page, the event pass and the\nconformance suite agree on what degraded means; a core that reports no health\nsays \"unknown\" rather than guessing.\n*/",
+        "properties": {
+          "available": {
+            "description": "Available is this host's Preflight answer and Unavailable is why not.",
+            "example": true,
+            "type": "boolean"
+          },
+          "detail": {
+            "example": "exit status 1: 2026-09-05T18:33:49+0000 ocserv[1234]: bind failed",
+            "type": "string"
+          },
+          "healthError": {
+            "example": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
+            "type": "string"
+          },
+          "id": {
+            "example": "openvpn",
+            "type": "string"
+          },
+          "instances": {
+            "description": "Instances are the per-inbound daemons of a core that runs one each; a\nsingle-process core lists none and fills the fields above instead.",
+            "items": {
+              "$ref": "#/components/schemas/InstanceStatusView"
+            },
+            "type": "array"
+          },
+          "logs": {
+            "description": "Logs says TailLog is available for this core, so the page offers the drawer.",
+            "example": true,
+            "type": "boolean"
+          },
+          "pid": {
+            "example": 2046530,
+            "type": "integer"
+          },
+          "ready": {
+            "example": true,
+            "type": "boolean"
+          },
+          "restarts": {
+            "example": 0,
+            "type": "integer"
+          },
+          "since": {
+            "example": 1725000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is running, degraded, stopped, failed, idle or unknown; Ready says\nthe daemon answers on its control surface; Detail is why not, or the last exit.",
+            "example": "running",
+            "type": "string"
+          },
+          "titleKey": {
+            "example": "cores.openvpn.title",
+            "type": "string"
+          },
+          "trafficError": {
+            "example": "mtproto: stats unreadable for mtp-1",
+            "type": "string"
+          },
+          "trafficSeenAt": {
+            "description": "TrafficSeenAt is when this core last reported traffic (Unix ms, 0 = not\nsince start) and TrafficError why the last poll failed, if it did.",
+            "example": 1725000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "unavailable": {
+            "example": "ocserv: stat /usr/sbin/ocserv: no such file (apt-get install ocserv)",
+            "type": "string"
+          },
+          "version": {
+            "$ref": "#/components/schemas/VersionStatusView"
+          }
+        },
+        "required": [
+          "available",
+          "id",
+          "instances",
+          "logs",
+          "ready",
+          "state",
+          "titleKey",
+          "version"
+        ],
+        "type": "object"
+      },
+      "CoreVersionsView": {
+        "description": "CoreVersionsView is a core's release picture: the build on disk and, when the\ncore can install one, the channel's list.",
+        "properties": {
+          "available": {
+            "example": [
+              "v26.7.28",
+              "v26.6.27"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "error": {
+            "description": "Error is why Installed or Available is missing; a missing binary is one.",
+            "example": "core: daemon not installed",
+            "type": "string"
+          },
+          "installed": {
+            "example": "26.7.28",
+            "type": "string"
+          },
+          "manageable": {
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "manageable"
+        ],
+        "type": "object"
+      },
       "CoreView": {
         "description": "CoreView is one registered core as the UI sees it. Kinds is []string rather\nthan []core.Kind: openapigen emits none of the core contract's own type names.",
         "properties": {
@@ -2567,6 +2688,51 @@
           "ssMethod",
           "tag",
           "tlsFlowCapable"
+        ],
+        "type": "object"
+      },
+      "InstanceStatusView": {
+        "description": "InstanceStatusView is one daemon of a per-inbound core.",
+        "properties": {
+          "detail": {
+            "example": "the management socket is not open yet",
+            "type": "string"
+          },
+          "instanceId": {
+            "example": 4,
+            "type": "integer"
+          },
+          "pid": {
+            "example": 2046530,
+            "type": "integer"
+          },
+          "ready": {
+            "example": true,
+            "type": "boolean"
+          },
+          "restarts": {
+            "example": 2,
+            "type": "integer"
+          },
+          "since": {
+            "example": 1725000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "example": "running",
+            "type": "string"
+          },
+          "tag": {
+            "example": "ocs-4",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "ready",
+          "state",
+          "tag"
         ],
         "type": "object"
       },
@@ -3718,6 +3884,32 @@
           "id",
           "password",
           "username"
+        ],
+        "type": "object"
+      },
+      "VersionStatusView": {
+        "description": "VersionStatusView is what is installed and whether the panel may change it.\nReported is false for a core that names no version at all (SSH is the panel).",
+        "properties": {
+          "error": {
+            "example": "core: daemon not installed",
+            "type": "string"
+          },
+          "installed": {
+            "example": "1.2.4",
+            "type": "string"
+          },
+          "manageable": {
+            "example": false,
+            "type": "boolean"
+          },
+          "reported": {
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "manageable",
+          "reported"
         ],
         "type": "object"
       }
@@ -5140,6 +5332,250 @@
                     },
                     "obj": {}
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/cores/status": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "How each core is doing right now, from the daemon’s side: state (running, degraded, stopped, failed, idle or unknown), whether it answers on its control surface, pid, supervisor restarts, since when, the last exit or the reason it is not ready, per inbound for a core that runs one daemon each, plus the installed version and whether the panel may change it. Polled by the Cores page; GET /panel/api/cores is the static half.",
+        "operationId": "get_panel_api_cores_status",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CoreStatusView"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "available": true,
+                      "detail": "exit status 1: 2026-09-05T18:33:49+0000 ocserv[1234]: bind failed",
+                      "healthError": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
+                      "id": "openvpn",
+                      "instances": [
+                        {
+                          "detail": "the management socket is not open yet",
+                          "instanceId": 4,
+                          "pid": 2046530,
+                          "ready": true,
+                          "restarts": 2,
+                          "since": 1725000000000,
+                          "state": "running",
+                          "tag": "ocs-4"
+                        }
+                      ],
+                      "logs": true,
+                      "pid": 2046530,
+                      "ready": true,
+                      "restarts": 0,
+                      "since": 1725000000000,
+                      "state": "running",
+                      "titleKey": "cores.openvpn.title",
+                      "trafficError": "mtproto: stats unreadable for mtp-1",
+                      "trafficSeenAt": 1725000000000,
+                      "unavailable": "ocserv: stat /usr/sbin/ocserv: no such file (apt-get install ocserv)",
+                      "version": {
+                        "error": "core: daemon not installed",
+                        "installed": "1.2.4",
+                        "manageable": false,
+                        "reported": true
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/cores/{id}/versions": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "The build of this core’s daemon on disk and, for a core that can install one, the releases its own channel publishes. The list is cached for 15 minutes and a stale list is served over a failed refresh. A core that names no version (SSH is the panel itself) is refused.",
+        "operationId": "get_panel_api_cores_id_versions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Core id from GET /panel/api/cores.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/CoreVersionsView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "available": [
+                      "v26.7.28",
+                      "v26.6.27"
+                    ],
+                    "error": "core: daemon not installed",
+                    "installed": "26.7.28",
+                    "manageable": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/cores/{id}/install/{version}": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Download, verify and install one listed release of this core’s daemon. The binary is staged beside the installed one, checked (a digest or checksum the channel publishes, and for Xray whether the new binary loads this panel’s config), then renamed into place. Nothing is restarted: the running daemon keeps the old binary until POST /cores/:id/restart. A version the channel does not list is refused. Only cores that manage their own releases accept this — Xray and MTProto today.",
+        "operationId": "post_panel_api_cores_id_install_version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Core id from GET /panel/api/cores.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "description": "A tag from GET /panel/api/cores/:id/versions, e.g. v26.7.28.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/cores/{id}/logs": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "The last lines a core’s daemon wrote: the journal under systemd, the panel’s own ring under exec, kept across the restart that repairs a crash. For a core that runs one daemon per inbound pass ?instance=<inbound id>; a single-process core takes none. A core that keeps no log the panel can read is refused.",
+        "operationId": "get_panel_api_cores_id_logs",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Core id from GET /panel/api/cores.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "instance",
+            "in": "query",
+            "required": true,
+            "description": "Inbound id for a per-inbound core. Defaults to 0, the whole of a single-process core.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "n",
+            "in": "query",
+            "required": true,
+            "description": "Lines to return, newest last. Defaults to 200, capped at 1000.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    "2026-09-05T18:33:49+0000 ocserv[2044848]: listening (TCP) on 127.0.0.1:8443..."
+                  ]
                 }
               }
             }

@@ -293,6 +293,40 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/cores/status',
+        summary: 'How each core is doing right now, from the daemon’s side: state (running, degraded, stopped, failed, idle or unknown), whether it answers on its control surface, pid, supervisor restarts, since when, the last exit or the reason it is not ready, per inbound for a core that runs one daemon each, plus the installed version and whether the panel may change it. Polled by the Cores page; GET /panel/api/cores is the static half.',
+        responseSchema: 'CoreStatusView',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/cores/:id/versions',
+        summary: 'The build of this core’s daemon on disk and, for a core that can install one, the releases its own channel publishes. The list is cached for 15 minutes and a stale list is served over a failed refresh. A core that names no version (SSH is the panel itself) is refused.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Core id from GET /panel/api/cores.' }],
+        responseSchema: 'CoreVersionsView',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/cores/:id/install/:version',
+        summary: 'Download, verify and install one listed release of this core’s daemon. The binary is staged beside the installed one, checked (a digest or checksum the channel publishes, and for Xray whether the new binary loads this panel’s config), then renamed into place. Nothing is restarted: the running daemon keeps the old binary until POST /cores/:id/restart. A version the channel does not list is refused. Only cores that manage their own releases accept this — Xray and MTProto today.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Core id from GET /panel/api/cores.' },
+          { name: 'version', in: 'path', type: 'string', desc: 'A tag from GET /panel/api/cores/:id/versions, e.g. v26.7.28.' },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/cores/:id/logs',
+        summary: 'The last lines a core’s daemon wrote: the journal under systemd, the panel’s own ring under exec, kept across the restart that repairs a crash. For a core that runs one daemon per inbound pass ?instance=<inbound id>; a single-process core takes none. A core that keeps no log the panel can read is refused.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Core id from GET /panel/api/cores.' },
+          { name: 'instance', in: 'query', type: 'number', desc: 'Inbound id for a per-inbound core. Defaults to 0, the whole of a single-process core.' },
+          { name: 'n', in: 'query', type: 'number', desc: 'Lines to return, newest last. Defaults to 200, capped at 1000.' },
+        ],
+        response: '{\n  "success": true,\n  "obj": [\n    "2026-09-05T18:33:49+0000 ocserv[2044848]: listening (TCP) on 127.0.0.1:8443..."\n  ]\n}',
+      },
+      {
+        method: 'GET',
         path: '/panel/api/server/status',
         summary: 'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load averages, open connections, Xray state. Cached and refreshed every 2 seconds in the background.',
         response: '{\n  "success": true,\n  "obj": {\n    "cpu": 12.5,\n    "mem": { "current": 2147483648, "total": 8589934592 },\n    "swap": { "current": 0, "total": 4294967296 },\n    "disk": { "current": 53687091200, "total": 268435456000 },\n    "netIO": { "up": 1073741824, "down": 2147483648 },\n    "xray": { "state": "running", "version": "v25.10.31" },\n    "tcpCount": 42,\n    "load": { "load1": 0.5, "load5": 0.3, "load15": 0.2 }\n  }\n}',
