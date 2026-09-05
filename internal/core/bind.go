@@ -29,6 +29,7 @@ type Bound struct {
 	TagTraffic    TagTrafficSource
 	Online        OnlineReporter
 	Quota         QuotaEnforcer
+	Version       VersionReporter
 	Versions      VersionManager
 	Link          LinkRenderer
 	Shape         ShapingHost
@@ -45,6 +46,8 @@ type Bound struct {
 	CounterLoss   CounterLossDeclarer
 	Cut           SessionCutter
 	Admits        LoginAdmitter
+	Health        HealthReporter
+	Logs          LogTailer
 }
 
 // Bind resolves every optional capability of c exactly once.
@@ -85,6 +88,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(QuotaEnforcer); ok {
 		b.Quota = v
+	}
+	if v, ok := c.(VersionReporter); ok {
+		b.Version = v
 	}
 	if v, ok := c.(VersionManager); ok {
 		b.Versions = v
@@ -133,6 +139,12 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(LoginAdmitter); ok {
 		b.Admits = v
+	}
+	if v, ok := c.(HealthReporter); ok {
+		b.Health = v
+	}
+	if v, ok := c.(LogTailer); ok {
+		b.Logs = v
 	}
 	return b
 }

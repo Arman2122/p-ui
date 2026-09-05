@@ -28,6 +28,99 @@ type Supervisor interface {
 	StopAll(ctx context.Context) error
 }
 
+/*
+HealthReporter answers "how is this daemon" from the daemon's side rather than
+from a flag the panel set: the supervisor's state, and above it whether the
+daemon answers on its own control surface — the readiness §7 asks for, since a
+process that holds a PID and binds nothing is running and useless.
+
+Ready is the one question the panel can put to every core alike: does the
+control surface answer. It does not prove each listener bound (a sing-box whose
+TUIC port failed to open still answers stats), so Detail carries what the daemon
+said, and a core that knows more says it there.
+
+A core with one process fills the top level and leaves Instances nil; a core
+with one daemon per inbound fills Instances and leaves the top level zero, and
+Overall derives it — in one place, so the page, the event pass and the
+conformance suite agree on what degraded means.
+*/
+type HealthState string
+
+const (
+	HealthRunning  HealthState = "running"
+	HealthDegraded HealthState = "degraded"
+	HealthStopped  HealthState = "stopped"
+	HealthFailed   HealthState = "failed"
+	// HealthIdle is a per-inbound core with nothing to run: not a fault.
+	HealthIdle HealthState = "idle"
+)
+
+// InstanceHealth is one daemon's state. SinceUnixMilli is when this life of it
+// began; Restarts counts the ones the supervisor made on its own.
+type InstanceHealth struct {
+	InstanceID     int
+	Tag            string
+	State          HealthState
+	Ready          bool
+	Detail         string
+	PID            int
+	Restarts       uint32
+	SinceUnixMilli int64
+}
+
+type Health struct {
+	State          HealthState
+	Ready          bool
+	Detail         string
+	PID            int
+	Restarts       uint32
+	SinceUnixMilli int64
+	Instances      []InstanceHealth
+}
+
+// Overall is the one derivation of a core's state from its instances'.
+func (h Health) Overall() (HealthState, bool) {
+	if len(h.Instances) == 0 {
+		if h.State == "" {
+			return HealthIdle, true
+		}
+		return h.State, h.Ready
+	}
+	running, failed, ready := 0, 0, 0
+	for _, i := range h.Instances {
+		switch i.State {
+		case HealthRunning:
+			running++
+			if i.Ready {
+				ready++
+			}
+		case HealthFailed:
+			failed++
+		}
+	}
+	switch {
+	case running == len(h.Instances):
+		return HealthRunning, ready == running
+	case running == 0 && failed > 0:
+		return HealthFailed, false
+	case running == 0:
+		return HealthStopped, false
+	default:
+		return HealthDegraded, false
+	}
+}
+
+type HealthReporter interface {
+	Health(ctx context.Context) (Health, error)
+}
+
+// LogTailer returns the last n lines the daemon wrote: for a unit that died at
+// once, its stderr is the only place the reason is. instanceID 0 is a core with
+// one process.
+type LogTailer interface {
+	TailLog(ctx context.Context, instanceID, n int) ([]string, error)
+}
+
 // InstanceApplier applies one instance without disturbing the others, so an
 // edit to one inbound cannot drop a different inbound's connections. A core
 // without it is converged by reconciling the whole desired set, which is
@@ -433,29 +526,45 @@ type QuotaEnforcer interface {
 	ResetQuota(ctx context.Context, email string) error
 }
 
+// VersionReporter names the daemon build on disk. ErrNotInstalled is a normal
+// answer the UI renders, never a fault: a core the admin never used has none.
+type VersionReporter interface {
+	Installed(ctx context.Context) (string, error)
+}
+
 /*
-VersionManager lets the panel see and change which build of a core's daemon is
+VersionManager lets the panel change which build of a core's daemon is
 installed, without knowing where that daemon comes from.
 
-Today this exists once, for Xray, hardcoded in the web layer — GitHub release
-listing, architecture mapping, download, unpack, restart. mtg has none of it and
-core #3 would need a third copy. That is the per-core cost this contract exists
-to remove: a core knows its own release channel, and the panel only asks.
+This existed once, for Xray, hardcoded in the web layer — GitHub release
+listing, architecture mapping, download, unpack, restart. mtg had none of it and
+every further core would have needed its own copy. That is the per-core cost
+this contract exists to remove: a core knows its own release channel, and the
+panel only asks.
 
-Installed() answers even when the binary is missing or unreadable, because "not
-installed" is a normal state the UI has to render. Available() is allowed to be
-slow and to fail — it usually crosses the network — so callers cache it and fall
-back to showing only what is installed.
+Available() is allowed to be slow and to fail — it usually crosses the network —
+so callers cache it and fall back to showing only what is installed. Install
+replaces the binary on disk and refuses a version Available did not list. It
+does NOT restart the daemon: that is Supervisor's job, and keeping them separate
+is what lets the panel stage an upgrade and apply it when the traffic allows.
 
-Install replaces the binary on disk. It does NOT restart the daemon: that is
-Supervisor's job, and keeping them separate is what lets the panel stage an
-upgrade and apply it when the traffic allows.
+Reporting and managing are two capabilities on purpose: ocserv and OpenVPN come
+from apt and sing-box is pinned to the release its adapter was written against,
+so all three can say what is installed and none may install — and a UI that
+hides the install control needs that as a fact, not as an error from Available.
 */
 type VersionManager interface {
-	Installed(ctx context.Context) (string, error)
+	VersionReporter
 	Available(ctx context.Context) ([]string, error)
 	Install(ctx context.Context, version string) error
 }
+
+// ErrNotInstalled is Installed's answer for a binary that is not there.
+var ErrNotInstalled = errors.New("core: daemon not installed")
+
+// ErrUnknownVersion refuses an Install of a version Available did not list, so
+// the binary directory only ever receives what the core's own channel publishes.
+var ErrUnknownVersion = errors.New("core: version not in the release list")
 
 // LinkRenderer produces what an end user needs to connect. Kind distinguishes a
 // URI ("link") from a config file ("file") such as .ovpn or wg0.conf. host is

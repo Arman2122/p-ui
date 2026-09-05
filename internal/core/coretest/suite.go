@@ -3,10 +3,12 @@ package coretest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/netip"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -62,6 +64,10 @@ type Rig struct {
 	// FeedSession makes one session observable, so Sessions can be checked against
 	// something the suite controls rather than whatever happens to be live.
 	FeedSession func(email, source string, lastSeenUnixMilli int64)
+
+	// Alive reports whether the daemon is alive as the RIG knows it — a process,
+	// a device — so Health is checked against the truth and not against itself.
+	Alive func() bool
 }
 
 // Subject is the client the traffic and provisioning checks operate on. It is
@@ -118,12 +124,14 @@ func Check(rig Rig) []Failure {
 
 	checkIdentity(r, c)
 	checkDescriptor(r, bound)
+	checkVersions(r, bound)
 	checkCredentials(r, bound)
 	checkUserKinds(r, bound)
 	checkTransports(r, bound)
 	checkIngress(r, rig, bound)
 	checkRegistry(r, rig)
 	checkSupervisor(r, rig, bound)
+	checkHealth(r, rig, bound)
 	checkHotApply(r, rig, bound)
 	checkTraffic(r, rig, bound)
 	checkOnline(r, bound)
@@ -779,6 +787,94 @@ func checkTeardown(r *report, bound *core.Bound) {
 	}
 	if err := bound.Supervise.StopAll(ctx); err != nil {
 		r.fail("stopall/idempotent", "StopAll is not safe to call twice: %v", err)
+	}
+	if bound.Health == nil {
+		return
+	}
+	h, err := bound.Health.Health(ctx)
+	if err != nil {
+		r.fail("health/succeeds", "Health failed after StopAll: %v", err)
+		return
+	}
+	if state, _ := h.Overall(); state == core.HealthRunning {
+		r.fail("health/stopped-after-stopall", "Health says running after StopAll (%+v); a report that never goes red is the flag §7 forbids, wearing a new name", h)
+	}
+	for _, i := range h.Instances {
+		if i.State == core.HealthRunning {
+			r.fail("health/stopped-after-stopall", "instance %d still reports running after StopAll", i.InstanceID)
+		}
+	}
+}
+
+/*
+checkHealth runs with instance 2 reconciled by checkSupervisor. Health must
+answer, list the inbound where it lists instances at all, and agree with the
+rig about whether the daemon lives — the rig knows from the process or device,
+so a Health that reports the panel's own flag back is caught here.
+*/
+func checkHealth(r *report, rig Rig, bound *core.Bound) {
+	if bound.Health == nil || bound.Supervise == nil {
+		return
+	}
+	h, err := bound.Health.Health(context.Background())
+	if err != nil {
+		r.fail("health/succeeds", "Health failed with the daemon reconciled: %v", err)
+		return
+	}
+	want := rig.Instance(2).ID
+	if len(h.Instances) > 0 && !slices.ContainsFunc(h.Instances, func(i core.InstanceHealth) bool { return i.InstanceID == want }) {
+		r.fail("health/lists-instances", "Health lists %d instances, none of them inbound %d which is reconciled; an inbound missing from the report is one the page cannot show down", len(h.Instances), want)
+	}
+	state, _ := h.Overall()
+	if rig.Alive == nil {
+		r.fail("health/verifiable", "unverifiable: the rig supplies no Alive, so a Health that always answers running cannot be told from one that looks")
+		return
+	}
+	if alive := rig.Alive(); (state == core.HealthRunning) != alive {
+		r.fail("health/matches-the-daemon", "Health says %s while the rig sees the daemon alive=%v; the report must come from the daemon's side, not from what the panel last did", state, alive)
+	}
+}
+
+/*
+checkVersions asks what a version-aware core must never get wrong offline: a
+missing binary is ErrNotInstalled and not a fault, a named version is not
+blank, and — when the release list answers at all — Install refuses a version
+it did not publish, so nothing but the channel's own builds reach bin/.
+*/
+func checkVersions(r *report, bound *core.Bound) {
+	if bound.Version == nil {
+		return
+	}
+	ctx := context.Background()
+	installed, err := bound.Version.Installed(ctx)
+	switch {
+	case errors.Is(err, core.ErrNotInstalled):
+		if installed != "" {
+			r.fail("version/not-installed-is-empty", "Installed returned %q with ErrNotInstalled; a version that is not there has no name", installed)
+		}
+	case err != nil:
+		r.fail("version/installed-answers", "Installed failed: %v; a missing binary is ErrNotInstalled, because \"not installed\" is a state the UI renders rather than an error", err)
+	case strings.TrimSpace(installed) == "":
+		r.fail("version/installed-named", "Installed returned an empty version and no error")
+	}
+	if bound.Versions == nil {
+		return
+	}
+	available, err := bound.Versions.Available(ctx)
+	if err != nil {
+		return
+	}
+	seen := map[string]bool{}
+	for _, v := range available {
+		if strings.TrimSpace(v) == "" || seen[v] {
+			r.fail("version/available-well-formed", "Available returned %q twice or blank in %v", v, available)
+			break
+		}
+		seen[v] = true
+	}
+	const unlisted = "0.0.0-not-a-release-this-channel-publishes"
+	if err := bound.Versions.Install(ctx, unlisted); !errors.Is(err, core.ErrUnknownVersion) {
+		r.fail("version/install-refuses-unlisted", "Install(%q) returned %v, want ErrUnknownVersion: a version Available never listed must not be fetched, or bin/ receives whatever a URL names", unlisted, err)
 	}
 }
 
