@@ -1,0 +1,51 @@
+.cores-page .core-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cores-page .core-id {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.cores-page .core-detail {
+  display: block;
+  max-width: 420px;
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.core-log {
+  margin: 0;
+  padding: 12px;
+  max-height: 70vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.is-dark .core-log {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.core-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.core-version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

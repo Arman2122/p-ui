@@ -28,6 +28,7 @@ export const keys = {
   cores: {
     root: () => ['cores'] as const,
     list: () => ['cores', 'list'] as const,
+    status: () => ['cores', 'status'] as const,
   },
   inbounds: {
     root: () => ['inbounds'] as const,
