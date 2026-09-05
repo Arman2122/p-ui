@@ -134,7 +134,7 @@ cheaper to freeze than it is now.
 ```
 internal/core/                    # the contract. Importable by everyone.
     core.go                       #   Core, Kind, Descriptor
-    caps.go                       #   the optional capability interfaces (17 today)
+    caps.go                       #   the optional capability interfaces (19 today)
     bind.go                       #   Bound + Bind() — the ONLY place assertions live
     counter.go                    #   the ONE cumulative→delta engine
     traffic.go                    #   ClientTraffic (moved from internal/xray), TrafficDelta
@@ -158,7 +158,7 @@ It cannot be `//nolint`-ed, cannot rot, and costs **zero configuration lines per
 > Rejected: a `depguard` deny-list naming each core. One line per core, silently incomplete
 > forever after the first omission — precisely the marginal-cost problem being solved.
 
-### 3.2 Three mandatory methods, seventeen optional capabilities
+### 3.2 Three mandatory methods, nineteen optional capabilities
 
 ```go
 // internal/core/core.go — as implemented
@@ -189,7 +189,9 @@ Everything else is an **optional** interface:
 | `TrafficSource` | `CollectTraffic() ([]TrafficDelta, error)` — deltas, each core normalising its own counter semantics | all three |
 | `TagTrafficSource` | inbound/outbound totals, not per user (§12.3) | all three |
 | `OnlineReporter` | who is connected right now | all three |
-| `SessionReporter` | each live connection with its source address | xray, wgkernel — not mtg, which sees a secret in use and no address |
+| `SessionReporter` | each live connection with its source address, and when it opened where the core knows | xray, wgkernel, ssh, openvpn, ocserv, sing-box — not mtg, which sees a secret in use and no address |
+| `SessionCutter` | end one client's sessions from ONE source, by the id or address the daemon names them with (§4.3) | ssh, openvpn (`status 3` + `kill host:port`), ocserv (`occtl -j show users` + `disconnect id`), sing-box (`CloseConnection`) |
+| `LoginAdmitter` | does this kind refuse an over-cap device at its own login — derived from whether the core was wired with the panel's `AdmitFunc` (§4.3) | ssh, openvpn, ocserv |
 | `QuotaEnforcer` | a byte budget the daemon itself enforces (today: `ResetQuota`, §4.3) | mtproto |
 | `CounterLossDeclarer` | does removing a user destroy the counters the panel bills from | wgkernel (a peer remove zeroes them — measured) |
 | `ShapingHost` | a user's kernel identity on a device the panel owns, for rate limits | wgkernel |
@@ -292,6 +294,8 @@ type Bound struct {
     Egress      RoutableEgress
     Sessions    SessionReporter
     CounterLoss CounterLossDeclarer
+    Cut         SessionCutter
+    Admits      LoginAdmitter
 }
 ```
 
@@ -472,17 +476,45 @@ prescribed here; one resolved sideways, one half-landed:
   cannot ride their config (accel-ppp/RADIUS `Session-Octets-Limit`; ocserv per-user
   config).
 
-**An IP-limit bounce is per-CORE, and deliberately best-effort.** `core.Session` carries no
-instance id, so a breach is attributed to the core that reported it and never to one of its
-inbounds — and it cannot be otherwise: Xray's own online-user stats are keyed by email in a
-global namespace (`user>>>email>>>online`) and carry no inbound tag, so the core could not
-populate such a field if the contract had one. A client on two inbounds of one core therefore
-has the bounce land on whichever of them sorts first. That is acceptable because **the bounce is
-not the enforcement**: the fail2ban line is, and the jail bans the ADDRESS at the host firewall,
-which covers every inbound and every core at once. Removing and re-adding the user only hurries
-along the sessions already established. What must never happen is the bounce landing on a core
-that saw nothing, which is a different client's connections being cut — that is why the target is
-chosen by observation (`SessionScan.Observers`) and not by a sort order.
+**The IP cap: one rule, three actuators (2026-09-05, §12.5k).** The rule lives in
+`internal/policy` alone: a client's first N distinct live sources hold the slots and the latest
+arrival is *over*; `policy.Decide` applies it to a pass and `policy.Admit` to a login, so the two
+never disagree about who holds a slot. Arrival is `Observation.FirstSeenUnixMilli`, taken from
+`core.Session.StartedUnixMilli` where the core knows when a connection opened (ssh, the RADIUS
+ledger, sing-box) and stamped at first sighting otherwise, and persisted (`firstSeen`) so it
+survives a restart and a node sync. An address is live if a local core reported it this pass or
+another node reported it inside the live window (the attribution rows, not the union blob — only
+they say WHICH panel saw it); a persisted address no local core reported has ended, whatever its
+timestamp, so a phone that changed networks keeps its one slot.
+
+A core never counts sources itself. The three cores that admit at a login ask the panel through
+`cores.Deps.AdmitClient` → `PolicyService.AdmitLogin`, which adds the cluster's live sources
+(the union row within the window) to the ones the core reports (`Admission.Held`), takes the cap
+from the core's own user so no login pays a DB read for it, and bounds its one read to 2 s — a
+slow database decides the login on the core's view rather than blocking it.
+
+How an over-cap address is dealt with is chosen per address by the capability of the core that
+OBSERVED it (`enforcementFor`), never by which inbound sorts first:
+
+| Observing core | `LoginAdmitter` | `SessionCutter` | Enforcement |
+|---|---|---|---|
+| ssh, openvpn, ocserv | yes | yes | **cut only** — admission refuses the device's return; a firewall ban of a NATed address would take innocents with it |
+| sing-box (tuic, anytls) | no | yes | **cut and ban** — a cut alone flaps every pass |
+| xray, wgkernel, any node-hosted inbound | no | no (or unreachable) | **ban only** — the fail2ban line is the whole enforcement |
+
+Cuts are by `(email, source)`, never by email alone, and by the id or address the daemon names the
+session with: SSH closes its own connections, OpenVPN reads `status 3` and kills `host:port`,
+OpenConnect reads `occtl -j show users` and disconnects by id, sing-box calls `CloseConnection`.
+They go through `runtime.Runtime.CutSessions` (a no-op on a node), run every pass, and are
+idempotent — a straggler already connected when a cap is lowered is dropped on a host with no
+fail2ban at all. Only the ban line waits on fail2ban and only it is deduped by `AdvancedSince`.
+`EvaluateIPLimits` no longer takes the actuator's availability: deciding is not acting, and the
+job weighs what the host has when it acts. The bounce (`RemoveUser` + `AddUser`) is gone —
+measured against Xray it closed nothing, on the daemon cores it threw every device of the client
+off to catch one — and `CounterLossDeclarer` stays as the record of why a rule is never enforced
+by removing a user. `CoreView.ipLimitEnforcement` carries the same choice per kind so the client
+form opens the cap field for a kind enforced at login on a host without fail2ban and names the
+kinds the firewall would have to cover.
 
 ### 4.4 Why RADIUS is an adapter, not the architecture
 
@@ -2404,3 +2436,50 @@ another machine never sees it). Both e2e passed on the VM 2026-09-05.
 supervision pass (`spec()` called `stderrSink` before the hash compare): a descriptor leaked
 and the log was wiped every 10 s. The sink is now opened only for a start and the previous
 one closed; the e2e asserts a steady reconcile leaves the log alone.
+
+### 12.5k The IP cap becomes one rule with three actuators (2026-09-05)
+
+The first of the cross-core management items: an IP limit that is decided once and enforced
+by whatever the observing core can do. §4.3 has the resulting design; this is what was found
+and what was proven.
+
+**Two rules, opposite senses.** The pass kept a client's NEWEST addresses and banned the oldest —
+a cap that never stopped a shared account, because every new device displaced the owner's — while
+three cores refused at login on the opposite rule, each counting distinct sources itself, and
+none of them counting a device live on another core or node. Ties on Xray, which reports no
+connection start, were broken by IP string: a different device was banned on every pass.
+`policy.Decide` was flipped to first-arrival-holds; the red proof was seven failures in the
+package's own tests under the old `overCap`.
+
+**The roaming cost, and its mitigation.** With the flip, a capped Xray client that changes
+networks inside the old 120 s live window had its NEW address named over — for the jail's whole
+bantime. The window was for the cluster, not the host: a persisted address a local core did not
+report this pass has ended (the core answered), so it is history at once; only an address
+ANOTHER node reported inside the window still holds a slot, read from the `NodeClientIp`
+attribution rows rather than the union blob, which cannot say who saw what.
+`TestAnAddressTheCoresStoppedReportingFreesItsSlotAtOnce` was red under the old window.
+
+**The seam and the cutters.** `Admission`/`AdmitFunc` in the contract, `Deps.Admit` on each daemon
+core, `AdmitsAtLogin` DERIVED from whether the callback was wired (a declaration a core could make
+and never call would show only at a login). `SessionCutter` on four cores, each by the handle its
+daemon names a session with; a `coretest` case cuts a fed session and checks the other device
+survives and a second cut is nothing. The cut proof on the VM: OpenVPN and OpenConnect e2es cut
+a real client from one source and read the result back through the daemon's own Accounting-Stop
+(the session's start advances or it is gone — the ledger now carries `StartedUnixMilli`); sing-box
+holds a connection mid-transfer, cuts it, and the client's body read breaks off.
+
+**Found beside it.** The SSH "second device refused" test dialled TO `127.0.0.2` against a
+listener on `127.0.0.1`, so the TCP refusal passed for the cap's for as long as it existed; it
+now binds `127.0.0.2` as the LOCAL address and a transport failure is fatal. `occtl disconnect
+user` exits non-zero for a user with no session and the wrapper treated that as an error against
+its own comment — the cut leaves exactly that state for the removal that may follow. The daemon
+cores' `Authenticate` counted sources with the core's mutex released, so two logins in one RADIUS
+exchange could both pass; the panel's `Admit` sees the union row the previous pass wrote, which
+narrows but does not close that window — the pass's cut closes it. `AnyClientHasAnIPLimit` lost
+its only caller with the bounce and went with it.
+
+**Still open here.** Sing-box admits at no login, so its cap is cut-and-ban until sing-box grows
+an auth hook; Xray and WireGuard remain firewall-only; the cross-node view at login is as fresh
+as the last pass and sync (≤ 10 s local, plus the node heartbeat), so two devices arriving on two
+nodes inside one pass are both admitted and the pass cuts or bans the extra. A plan-level cap
+(the user's "plans idea") is the next consumer of `Admission.LimitIP`.

@@ -381,7 +381,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay) |
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation |
-| `@every 10s` | `check_client_ip_job` | Enforce per-client IP limits |
+| `@every 10s` | `core_policy` | Converge shaping and in-core rates; observe every core's sessions, decide each client's IP cap, cut the over-cap device through the core that saw it or write the fail2ban line (`internal/web/job/core_policy.go`) |
 | `@every 10s` | `core_supervise` | Reconcile every registered core on its desired inbounds (Xray excepted — the panel's own config build converges it) |
 | `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
