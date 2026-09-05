@@ -93,6 +93,8 @@ func (b *unitLedger) die(name string) {
 
 func (b *unitLedger) Reload(context.Context, string) error { return nil }
 
+func (b *unitLedger) Logs(context.Context, string, int) ([]string, error) { return nil, nil }
+
 func (b *unitLedger) List(context.Context) ([]string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

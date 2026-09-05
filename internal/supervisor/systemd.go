@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -220,6 +222,27 @@ func (s *Systemd) Status(ctx context.Context, name string) (Status, error) {
 		st.State = StateStopped
 	}
 	return st, nil
+}
+
+// Logs asks the journal, where a transient unit's output goes; short-iso stamps
+// each line the way the exec backend's ring does. An unknown unit has no lines.
+func (s *Systemd) Logs(ctx context.Context, name string, n int) ([]string, error) {
+	if n <= 0 {
+		n = ringLines
+	}
+	out, err := exec.CommandContext(ctx, "journalctl", "-u", unitFile(name), "-n", strconv.Itoa(n), "-o", "short-iso", "--no-pager", "-q").Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("supervisor: journalctl %s: %s", name, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return nil, fmt.Errorf("supervisor: journalctl %s: %w", name, err)
+	}
+	text := strings.TrimRight(string(out), "\n")
+	if text == "" {
+		return nil, nil
+	}
+	return strings.Split(text, "\n"), nil
 }
 
 // List names every unit under the panel's prefix, whatever state it is in, so

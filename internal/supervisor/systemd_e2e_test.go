@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -123,4 +124,34 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// A transient unit's output goes to the journal, and Logs must read it back:
+// under systemd a unit that failed at once left its reason nowhere else.
+func TestSystemdBackendReadsTheJournal(t *testing.T) {
+	b := requireSystemd(t)
+	ctx := context.Background()
+	spec := Spec{
+		Name: UnitName("e2elog", int(time.Now().Unix()%100000)), Description: "supervisor e2e journal",
+		Exec: []string{"/bin/sh", "-c", "echo hello-from-journal; exec sleep 300"}, Restart: RestartNo, StopTimeout: 3 * time.Second,
+	}
+	t.Cleanup(func() { _ = b.Stop(ctx, spec.Name) })
+	if err := b.Ensure(ctx, spec); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	waitState(t, b, spec.Name, StateRunning)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		lines, err := b.Logs(ctx, spec.Name, 10)
+		if err != nil {
+			t.Fatalf("Logs: %v", err)
+		}
+		if slices.ContainsFunc(lines, func(l string) bool { return strings.HasSuffix(l, "hello-from-journal") }) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Logs = %q; the unit's line never came back from the journal", lines)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }

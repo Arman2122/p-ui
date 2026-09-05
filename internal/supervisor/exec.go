@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -24,10 +25,14 @@ const forceStopTimeout = 2 * time.Second
 type Exec struct {
 	mu    sync.Mutex
 	units map[string]*execUnit
+	// rings are keyed by name, not unit, so the lines a daemon printed on its way
+	// down are still there after the Ensure that replaced it.
+	rings map[string]*lineRing
 }
 
 type execUnit struct {
 	spec Spec
+	ring *lineRing
 
 	mu              sync.RWMutex
 	cmd             *exec.Cmd
@@ -39,7 +44,7 @@ type execUnit struct {
 
 // NewExec returns a backend with nothing running.
 func NewExec() *Exec {
-	return &Exec{units: map[string]*execUnit{}}
+	return &Exec{units: map[string]*execUnit{}, rings: map[string]*lineRing{}}
 }
 
 func (e *Exec) Name() string { return string(ModeExec) }
@@ -64,12 +69,27 @@ func (e *Exec) Ensure(ctx context.Context, spec Spec) error {
 		}
 		delete(e.units, spec.Name)
 	}
-	unit := &execUnit{spec: spec}
+	ring, ok := e.rings[spec.Name]
+	if !ok {
+		ring = newLineRing(ringLines)
+		e.rings[spec.Name] = ring
+	}
+	unit := &execUnit{spec: spec, ring: ring}
 	if err := unit.start(); err != nil {
 		return err
 	}
 	e.units[spec.Name] = unit
 	return nil
+}
+
+func (e *Exec) Logs(_ context.Context, name string, n int) ([]string, error) {
+	e.mu.Lock()
+	ring, ok := e.rings[name]
+	e.mu.Unlock()
+	if !ok {
+		return nil, ErrNotRunning
+	}
+	return ring.tail(n), nil
 }
 
 func (e *Exec) Status(_ context.Context, name string) (Status, error) {
@@ -94,12 +114,15 @@ func (e *Exec) Reload(_ context.Context, name string) error {
 	return cur.cmd.Process.Signal(syscall.SIGHUP)
 }
 
+// Stop forgets the unit and its lines both: a stop is the panel's own act, with
+// nothing to explain, where a death keeps its lines for whoever asks why.
 func (e *Exec) Stop(_ context.Context, name string) error {
 	e.mu.Lock()
 	unit, ok := e.units[name]
 	if ok {
 		delete(e.units, name)
 	}
+	delete(e.rings, name)
 	e.mu.Unlock()
 	if !ok || !unit.running() {
 		return nil
@@ -141,9 +164,11 @@ func (u *execUnit) start() error {
 		cmd.Env = append(os.Environ(), u.spec.Env...)
 	}
 	cmd.Dir = u.spec.WorkingDir
+	var output io.Writer = u.ring
 	if u.spec.Output != nil {
-		cmd.Stdout, cmd.Stderr = u.spec.Output, u.spec.Output
+		output = io.MultiWriter(u.ring, u.spec.Output)
 	}
+	cmd.Stdout, cmd.Stderr = output, output
 	done := make(chan struct{})
 	u.mu.Lock()
 	u.cmd, u.done, u.exitErr, u.started = cmd, done, nil, time.Now()
@@ -163,6 +188,7 @@ func (u *execUnit) start() error {
 func (u *execUnit) wait(cmd *exec.Cmd, done chan struct{}) {
 	defer close(done)
 	err := cmd.Wait()
+	u.ring.Flush()
 	if flusher, ok := u.spec.Output.(interface{ Flush() }); ok {
 		flusher.Flush()
 	}

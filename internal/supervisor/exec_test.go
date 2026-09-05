@@ -123,3 +123,55 @@ func TestExecBackendRefusesAnotherUser(t *testing.T) {
 		t.Fatalf("Ensure with User set = %v, want a refusal", err)
 	}
 }
+
+/*
+The lines a daemon printed on its way down are the only account of why it died,
+and the Ensure that brings it back must not take them with it: the ring is the
+name's, not the unit's. A Stop is the panel's own act and forgets them.
+*/
+func TestExecBackendKeepsTheDaemonsLastLinesAcrossARestart(t *testing.T) {
+	requirePosixHost(t)
+	b := NewExec()
+	t.Cleanup(func() { _ = b.Close() })
+	ctx := context.Background()
+	spec := shSpec("talker", "echo first; echo dying >&2; exit 3")
+	if err := b.Ensure(ctx, spec); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	waitState(t, b, spec.Name, StateFailed)
+	lines, err := b.Logs(ctx, spec.Name, 10)
+	if err != nil || len(lines) != 2 || !strings.HasSuffix(lines[0], " first") || !strings.HasSuffix(lines[1], " dying") {
+		t.Fatalf("Logs after the crash = %q, %v; want the two stamped lines in order", lines, err)
+	}
+
+	reborn := spec
+	reborn.Exec = []string{"/bin/sh", "-c", "echo reborn; exec sleep 30"}
+	if err := b.Ensure(ctx, reborn); err != nil {
+		t.Fatalf("Ensure again: %v", err)
+	}
+	waitState(t, b, spec.Name, StateRunning)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		lines, err = b.Logs(ctx, spec.Name, 10)
+		if err == nil && len(lines) == 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Logs after the restart = %q, %v; want the crash's two lines and the new daemon's one", lines, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !strings.HasSuffix(lines[1], " dying") || !strings.HasSuffix(lines[2], " reborn") {
+		t.Fatalf("Logs after the restart = %q; the crash's lines must precede the new daemon's", lines)
+	}
+
+	if _, err := b.Logs(ctx, UnitName("test", 9), 5); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("Logs of a unit never started = %v, want ErrNotRunning", err)
+	}
+	if err := b.Stop(ctx, spec.Name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Logs(ctx, spec.Name, 5); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("Logs after Stop = %v, want ErrNotRunning: a stopped unit is forgotten, lines and all", err)
+	}
+}

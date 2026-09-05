@@ -50,6 +50,9 @@ type Backend interface {
 	// List names every unit this backend runs under the panel's prefix, so a
 	// reconcile can stop what the desired set no longer contains.
 	List(ctx context.Context) ([]string, error)
+	// Logs returns the daemon's last n lines, oldest first and time-stamped: the
+	// exec backend keeps them itself across restarts, systemd asks the journal.
+	Logs(ctx context.Context, name string, n int) ([]string, error)
 	Close() error
 }
 
