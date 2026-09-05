@@ -131,6 +131,7 @@ func Check(rig Rig) []Failure {
 	// takes the device with it, and neither identity is observable without one.
 	checkShaping(r, rig, bound)
 	checkSessions(r, rig, bound)
+	checkCutter(r, rig, bound)
 	checkUsers(r, rig, bound)
 	checkInstanceApply(r, rig, bound)
 	checkQuota(r, bound)
@@ -574,6 +575,62 @@ func checkSessionLocal(r *report, rig Rig, s *core.Session) {
 		if !held[addr] {
 			r.fail("sessions/local-is-the-hosts", "Sessions reports %s as %s's address inside the tunnel and the host holds %v; an address the panel shows but the device does not answer to sends one client's traffic to nobody", addr, Subject, rig.HostSubjects()[Subject])
 		}
+	}
+}
+
+// cutSurvivorSource is the subject's second device: the one a cut aimed at
+// SessionSource must leave connected.
+const cutSurvivorSource = "203.0.113.8"
+
+/*
+checkCutter drives the cut through sessions the rig controls: cutting the subject
+at SessionSource must end that session and no other, and cutting the same pair
+again is nothing to do rather than an error. A core whose cut reaches only a
+daemon the rig does not run reports nothing ended and is held to nothing here;
+its e2e is where that is proven.
+*/
+func checkCutter(r *report, rig Rig, bound *core.Bound) {
+	if bound.Cut == nil {
+		return
+	}
+	if rig.FeedSession == nil || bound.Sessions == nil {
+		r.fail("cut/verifiable", "unverifiable: core implements SessionCutter but the rig supplies no FeedSession, so there is no session the suite can cut")
+		return
+	}
+	ctx := context.Background()
+	if bound.Supervise != nil {
+		if err := bound.Supervise.Reconcile(ctx, []core.Instance{rig.Instance(2)}); err != nil {
+			r.fail("cut/reconcile", "reconciling before the cut checks failed: %v", err)
+			return
+		}
+	}
+	now := time.Now().UnixMilli()
+	rig.FeedSession(Subject, SessionSource, now)
+	rig.FeedSession(Subject, cutSurvivorSource, now)
+
+	ended, err := bound.Cut.CutSessions(ctx, Subject, netip.MustParseAddr(SessionSource))
+	if err != nil {
+		r.fail("cut/succeeds", "CutSessions failed: %v", err)
+		return
+	}
+	if ended == 0 {
+		return
+	}
+	left, err := bound.Sessions.Sessions(ctx)
+	if err != nil {
+		r.fail("sessions/succeeds", "Sessions failed after a cut: %v", err)
+		return
+	}
+	for _, s := range left {
+		if s.Email == Subject && s.Source.String() == SessionSource {
+			r.fail("cut/ends-the-session", "CutSessions reported %d ended and Sessions still lists %q from %s; a cut the core only claims leaves the device over its cap connected", ended, Subject, SessionSource)
+		}
+	}
+	if !slices.ContainsFunc(left, func(s core.Session) bool { return s.Email == Subject && s.Source.String() == cutSurvivorSource }) {
+		r.fail("cut/by-source", "the cut aimed at %s also ended %q's session from %s; a cut by email alone takes the devices inside the cap with the one over it", SessionSource, Subject, cutSurvivorSource)
+	}
+	if again, err := bound.Cut.CutSessions(ctx, Subject, netip.MustParseAddr(SessionSource)); err != nil || again != 0 {
+		r.fail("cut/idempotent", "cutting the same pair again returned (%d, %v), want (0, nil): a source with no session left is nothing to end", again, err)
 	}
 }
 

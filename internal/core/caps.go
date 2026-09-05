@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"slices"
 	"time"
@@ -337,6 +338,74 @@ recency and the cap itself are the panel's rules and never travel here.
 type SessionReporter interface {
 	Sessions(ctx context.Context) ([]Session, error)
 }
+
+// HeldSources is the distinct addresses a client's sessions come from, sorted:
+// what a core hands the panel when asking whether to admit one more.
+func HeldSources(sessions []Session, email string) []netip.Addr {
+	seen := map[netip.Addr]struct{}{}
+	var out []netip.Addr
+	for _, s := range sessions {
+		if s.Email != email || !s.Source.IsValid() {
+			continue
+		}
+		if _, dup := seen[s.Source]; dup {
+			continue
+		}
+		seen[s.Source] = struct{}{}
+		out = append(out, s.Source)
+	}
+	slices.SortFunc(out, func(a, b netip.Addr) int { return a.Compare(b) })
+	return out
+}
+
+/*
+SessionCutter ends a client's live sessions from one source address: how a device
+cap is enforced on a core that admits at the transport rather than at a login the
+panel can refuse. By (email, source) — the unit the cap is decided in — never by
+email alone, or the devices inside the cap would fall with the one over it. It
+answers how many it ended; a source with no session left is nothing to end, not
+an error. A core that cannot end a session (Xray; a kernel WireGuard peer, whose
+removal also zeroes its counters) leaves this out, and the panel falls back to
+the host firewall.
+*/
+type SessionCutter interface {
+	CutSessions(ctx context.Context, email string, source netip.Addr) (int, error)
+}
+
+/*
+LoginAdmitter is a core that asks the panel before admitting a login, so a
+device cap is refused at the door rather than cut after the fact. Answered per
+kind, and DERIVED by the core from whether it was wired with an AdmitFunc at all:
+a core built without one admits everyone and says so. That is what keeps the
+answer honest — a declaration could be made and the callback never called, and
+nothing but a login would show it.
+*/
+type LoginAdmitter interface {
+	AdmitsAtLogin(kind Kind) bool
+}
+
+/*
+Admission is one login a core asks the panel about. Held is every source this
+core itself currently has sessions from for the client, so the panel adds only
+what it knows from elsewhere; LimitIP is the cap the core's own user carries.
+Whether to admit is the panel's rule, never the core's.
+*/
+type Admission struct {
+	Kind       Kind
+	InstanceID int
+	Email      string
+	Source     netip.Addr
+	Held       []netip.Addr
+	LimitIP    int
+}
+
+// AdmitFunc answers an Admission. A non-nil error refuses the login, and its
+// text is the reason the client and the panel's auth-failure event both see.
+type AdmitFunc func(ctx context.Context, a Admission) error
+
+// ErrDeviceLimit is the refusal a full cap produces; the panel wraps it with the
+// count so a core can match it and a client can read it.
+var ErrDeviceLimit = errors.New("device limit reached")
 
 /*
 CounterLossDeclarer answers whether removing a user destroys the byte counters

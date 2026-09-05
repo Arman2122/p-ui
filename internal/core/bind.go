@@ -43,6 +43,8 @@ type Bound struct {
 	ExitSupervise ExitSupervisor
 	Sessions      SessionReporter
 	CounterLoss   CounterLossDeclarer
+	Cut           SessionCutter
+	Admits        LoginAdmitter
 }
 
 // Bind resolves every optional capability of c exactly once.
@@ -126,6 +128,12 @@ func Bind(c Core) *Bound {
 	if v, ok := c.(CounterLossDeclarer); ok {
 		b.CounterLoss = v
 	}
+	if v, ok := c.(SessionCutter); ok {
+		b.Cut = v
+	}
+	if v, ok := c.(LoginAdmitter); ok {
+		b.Admits = v
+	}
 	return b
 }
 
@@ -180,6 +188,11 @@ func (b *Bound) DeclaredMatchesImplemented() []string {
 	if b.CounterLoss != nil && !losesCountersOnSomeKind(b.Core, b.CounterLoss) {
 		problems = append(problems, "CounterLossDeclarer: implemented, but every kind answers false; not implementing it says the same thing")
 	}
+	if b.Cut != nil && b.Sessions == nil {
+		problems = append(problems, "SessionCutter: implemented without SessionReporter; a cut is aimed by a session the core must be able to name")
+	}
+	// LoginAdmitter has no all-false rule on purpose: false is the honest answer
+	// of a core wired without an AdmitFunc, and a registry built that way is valid.
 	return problems
 }
 
