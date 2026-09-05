@@ -31,14 +31,16 @@ type AuthFailure struct {
 }
 
 const (
-	maxAuthTries   = 3
-	dialTimeout    = 10 * time.Second
-	minBurstBytes  = 16 * 1024
-	serverVersion  = "SSH-2.0-OpenSSH_9.6"
-	dirUp          = "up"
-	dirDown        = "down"
-	sessionChannel = "session"
-	forwardChannel = "direct-tcpip"
+	maxAuthTries     = 3
+	dialTimeout      = 10 * time.Second
+	minBurstBytes    = 16 * 1024
+	serverVersion    = "SSH-2.0-OpenSSH_9.6"
+	dirUp            = "up"
+	dirDown          = "down"
+	sessionChannel   = "session"
+	forwardChannel   = "direct-tcpip"
+	acceptBackoffMin = 5 * time.Millisecond
+	acceptBackoffMax = time.Second
 )
 
 // Dialer opens the forward's destination; the default dials directly, and
@@ -227,24 +229,35 @@ func (s *server) distinctSources(email string, except netip.Addr) int {
 	return len(seen)
 }
 
+/*
+serve accepts until the listener is stopped. An accept error is never the end
+of the listener: a descriptor shortage or a transient kernel refusal passes,
+and giving up on it left the inbound silently dead until the next reconcile.
+The loop backs off instead, the way net/http does, and only a listener that
+is genuinely closed ends it.
+*/
 func (s *server) serve(ln net.Listener) {
 	s.ln = ln
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		var delay time.Duration
 		for {
 			raw, err := ln.Accept()
 			if err != nil {
-				if s.closed.Load() {
+				if s.closed.Load() || errors.Is(err, net.ErrClosed) {
 					return
 				}
-				var ne net.Error
-				if errors.As(err, &ne) && ne.Timeout() {
-					continue
+				if delay == 0 {
+					delay = acceptBackoffMin
+				} else {
+					delay = min(delay*2, acceptBackoffMax)
 				}
-				logger.Warning("ssh: accept on", ln.Addr(), "failed:", err)
-				return
+				logger.Warningf("ssh: accept on %s failed: %v; retrying in %s", ln.Addr(), err, delay)
+				time.Sleep(delay)
+				continue
 			}
+			delay = 0
 			s.wg.Add(1)
 			go func() {
 				defer s.wg.Done()
