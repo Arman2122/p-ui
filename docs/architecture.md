@@ -382,7 +382,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation |
 | `@every 10s` | `core_policy` | Converge shaping and in-core rates; observe every core's sessions, decide each client's IP cap, cut the over-cap device through the core that saw it or write the fail2ban line (`internal/web/job/core_policy.go`) |
-| `@every 10s` | `core_supervise` | Reconcile every registered core on its desired inbounds (Xray excepted — the panel's own config build converges it) |
+| `@every 10s` | `core_supervise` | Read every registered core's health, publishing `core.crash` once per outage and `core.up` on recovery, then reconcile it on its desired inbounds — a unit the backend reports down is started again (Xray excepted — the panel's own config build converges it; `internal/web/job/core_supervise.go`, `core_health.go`) |
 | `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
 | `@every 10m` | `clear_logs_job` (`PruneXrayLogsJob`) | Truncate Xray access/error logs once either exceeds 64 MiB |
@@ -508,6 +508,8 @@ for AutoMigrate in `internal/database/db.go`.
 | Xray auto-restart on **dead tunnel** | `internal/tunnelmonitor/` | `PUI_TUNNEL_HEALTH_*` in `internal/config/` |
 | **WARP / Nord** outbound integration | `service/integration/warp.go` / `nord.go` | `service/outbound_subscription.go` |
 | **MTProto** proxy issues | `internal/mtproto/manager.go`, `mtproto/process*.go` | `job/core_supervise.go` |
+| A core shows **failed / not answering** on the Cores page | `internal/web/service/core_status.go`, the core's `Health` in `internal/cores/internal/<core>/core.go`, `cores/internal/unithealth/` | `GET /panel/api/cores/:id/logs` → `internal/supervisor` `Logs` |
+| A core's **version / install** is wrong | `internal/cores/internal/xray/versions.go`, `internal/cores/internal/mtproto/versions.go`, `internal/web/service/core_versions.go` | `cores.Deps.HTTPClient` (the egress proxy is hosted by xray) |
 | **DB migration** / new column | `internal/database/db.go` (AutoMigrate list + hand-written migrations) | `model/model.go` |
 | **Cron schedule** changes | `web.go` → `startTask()` | the specific `job/*.go` |
 | **CORS / security headers / HTTPS** | `middleware/`, `web.go` (`initRouter`, TLS setup) | `config/` (env) |

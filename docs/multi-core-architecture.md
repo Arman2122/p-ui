@@ -134,7 +134,7 @@ cheaper to freeze than it is now.
 ```
 internal/core/                    # the contract. Importable by everyone.
     core.go                       #   Core, Kind, Descriptor
-    caps.go                       #   the optional capability interfaces (19 today)
+    caps.go                       #   the optional capability interfaces (22 today)
     bind.go                       #   Bound + Bind() — the ONLY place assertions live
     counter.go                    #   the ONE cumulative→delta engine
     traffic.go                    #   ClientTraffic (moved from internal/xray), TrafficDelta
@@ -158,7 +158,7 @@ It cannot be `//nolint`-ed, cannot rot, and costs **zero configuration lines per
 > Rejected: a `depguard` deny-list naming each core. One line per core, silently incomplete
 > forever after the first omission — precisely the marginal-cost problem being solved.
 
-### 3.2 Three mandatory methods, nineteen optional capabilities
+### 3.2 Three mandatory methods, twenty-two optional capabilities
 
 ```go
 // internal/core/core.go — as implemented
@@ -197,7 +197,10 @@ Everything else is an **optional** interface:
 | `ShapingHost` | a user's kernel identity on a device the panel owns, for rate limits | wgkernel |
 | `RoutableIngress` | may a routing rule name this core's inbounds as a source (§3.2b) | all three |
 | `RoutableEgress` | may this core terminate a route: exit kinds and handles (§3.2b) | wgkernel (wg-client uplinks) |
-| `VersionManager` | install/list the daemon's own releases (§15) | no implementer yet |
+| `VersionReporter` | name the daemon build on disk; `ErrNotInstalled` is a state, not a fault (§15) | xray, mtproto, sing-box, openvpn, ocserv, wgkernel, awgkernel — not ssh, which is the panel |
+| `VersionManager` | list the daemon's own channel and install one of its releases, staged and verified, restarting nothing (§15) | xray (XTLS releases, `.dgst`), mtproto (`Arman2122/mtg-proxy`, checksums file) |
+| `HealthReporter` | the daemon's state from the supervisor's side and whether it ANSWERS on its control surface, per process or per inbound; `Health.Overall` derives one state in one place (§7, §12.5l) | all eight |
+| `LogTailer` | the daemon's last lines — the journal under systemd, the panel's ring under exec, mtg's own ring — kept across the restart that repaired a crash (§12.5l) | sing-box, openvpn, ocserv, mtproto |
 | `LinkRenderer` | render the client's config; `host` resolved by the caller (§3.2a) | wgkernel (.conf) |
 
 All seventeen exist in `caps.go`; `VersionManager` is now the only declared slot with no
@@ -287,6 +290,7 @@ type Bound struct {
     TagTraffic  TagTrafficSource
     Online      OnlineReporter
     Quota       QuotaEnforcer
+    Version     VersionReporter
     Versions    VersionManager
     Link        LinkRenderer
     Shape       ShapingHost
@@ -296,6 +300,8 @@ type Bound struct {
     CounterLoss CounterLossDeclarer
     Cut         SessionCutter
     Admits      LoginAdmitter
+    Health      HealthReporter
+    Logs        LogTailer
 }
 ```
 
@@ -940,6 +946,16 @@ Two rules that are already violated today:
   (`xray run -test`, `ocserv -t`, `swanctl` dry-run). Validate against a temp path and leave
   the running config untouched on failure. Current failure mode: bad config lands, core
   dies, panel restarts it, core dies.
+
+**Landed 2026-09-05 (§12.5l).** Both rules are met as far as the daemons allow. `HealthReporter`
+is on all eight cores and none of them answers from a flag: the supervised three read the unit
+from the backend and then ask the daemon itself (sing-box's stats port, OpenVPN's management
+greeting, `occtl show status`), mtg is asked for `/stats`, Xray for its API port, SSH for its
+listener, the kernel cores for the device. The config check now runs for ocserv too
+(`--test-config` before every start; sing-box and Xray already checked; OpenVPN has no dry-run
+mode, so its stderr — readable through `Backend.Logs` — is the check). What the exec backend
+still does not do is restart on its own: a unit that dies under it is repaired by the next
+supervise pass (≤ 10 s), which is also where the crash is reported.
 
 Also fix `release.yml:152` — `MTG_MULTI_VER=$(curl … releases/latest)` is a **floating pin**,
 so two builds of the same panel tag are today different artifacts. Every bundled dependency
@@ -2025,9 +2041,24 @@ core the admin has never used, and the UI has to render it rather than error.
 4. `coretest` gains a conformance case, so a core that reports a version it cannot install —
    or an `Available` list not containing `Installed` — fails its adapter suite.
 
-Until step 1 lands the interface has no implementer, which is the same state `LinkRenderer`
-is in: a declared slot the registry can already resolve, so adding it later is one method on
-one core rather than a change to the contract.
+**All four landed 2026-09-05 (§12.5l), with one change to the shape.** Reporting and managing
+are two capabilities: `VersionReporter` (`Installed`) and `VersionManager` (embedding it, plus
+`Available`/`Install`). The split is a fact the UI needs rather than an error it could catch:
+ocserv and OpenVPN come from apt and sing-box is pinned to the release its adapter was written
+against (`singbox_pin_test`), so all three report and none installs. `ErrNotInstalled` makes a
+missing binary a state the page renders; `ErrUnknownVersion` is what an `Install` of a version
+the channel never listed returns, so `bin/` receives only what the channel publishes. Xray's
+manager keeps the L2 check — the NEW binary is asked whether it loads the config this box runs
+before anything is replaced — and mtg's asks the staged binary for its version, the one thing
+every mtg-proxy answers. The download client is injected (`cores.Deps.HTTPClient`) with the
+caveat the old code carried: the egress proxy is hosted BY xray, so every core must download
+while the old core still serves. The platform label an asset needs is the build's
+(`releasePlatform()` off the XTLS stamp), never guessed from GOARCH.
+
+**Found:** `Arman2122/mtg-proxy` answers 404 to every anonymous request — GitHub's answer for a
+private repository — so the mtg manager, correct against the published layout, installs nothing
+from a customer's box until the channel is public (and `release.yml`'s own anonymous fetch of the
+sidecar cannot be working either). Reported, not papered over; `MTG_INSTALL_E2E` is red for it.
 
 
 ### 12.5b The sing-box core (2026-09-03)
@@ -2489,3 +2520,72 @@ pass's timestamp, so for at most one pass `AdmitLogin` still counts it as held �
 of ≤ 10 s. `AdmitLogin` warns on every login while the database is unreachable, which a long
 outage on a busy SSH inbound turns into a log storm; a rate limit is due there. A plan-level cap
 (the user's "plans idea") is the next consumer of `Admission.LimitIP`.
+
+### 12.5l The management backend: health, versions, logs, and a crash that is an event (2026-09-05)
+
+**What was true before.** The panel ran up to eight daemons and could see one: the overview's
+Xray card. A dead OpenVPN or ocserv was an inbound that had quietly stopped moving bytes; the
+version switch existed for Xray alone, inside `ServerService`; a daemon's stderr went to a file
+the core reopened on every start, or nowhere. And the three supervised cores trusted a `running`
+flag they set at start and cleared only on drop, so under the exec backend — which restarts
+nothing — a daemon that crashed left its inbound down until the panel itself restarted, and under
+systemd a unit past its start limit sat in `failed` with no repair and no event. §7's "health must
+not be `IsRunning()`" was violated in its worst form: not even `IsRunning`.
+
+**The repair (74ca43e).** Each reconcile asks the backend before trusting the flag; a unit it
+reports anything but running is started, an unchanged running one is left alone (the
+idempotence the suite checks). sing-box decides start-versus-dirty in `wantLocked`, so the check
+lives there: in `applyLocked` it sat behind the coalesced delay and the daemon stayed dead for it.
+Proven with each real daemon SIGKILLed behind the panel's back and back after one reconcile.
+
+**The contract (b47f108).** One `Health` shape for a single-process core (top level) and a
+per-inbound core (`Instances`); `Overall` derives the one from the other in ONE place, so the
+page, the event pass and the conformance suite agree on what "degraded" means, and `HealthIdle`
+is a per-inbound core with nothing to run, not a fault. `Ready` is the one question the panel can
+put to every core alike — does the control surface answer — and is documented as exactly that: it
+does not prove each listener bound (a sing-box whose TUIC port failed still answers stats), so
+`Detail` carries what the daemon said. The suite verifies each capability WHEN BOUND and requires
+none, so the contract landed green and the cores grew into it; `Rig.Alive` is the rig's own view
+of the daemon (a pid the fake child wrote and the kernel confirms, a device in the fake kernel, a
+TCP connect to the listener, the unit's pid under exec), unverifiable without it as `Starts` is,
+so a Health that reports the panel's flag back is caught. The teardown check exempts a core whose
+daemons outlive the panel by design (kernel devices, systemd units): still running after
+`StopAll` is what that capability means.
+
+**The ring (ee2b538) and what it found (7521965).** `Backend.Logs`: the journal under systemd,
+a ring keyed by unit NAME under exec, so the lines a daemon printed on its way down survive the
+Ensure that replaces the unit; a Stop forgets them, being the panel's own act. Attaching a pipe
+to every exec unit surfaced a defect one commit later: `cmd.Wait` waits for every holder of the
+pipe, and a daemon's child — ocserv's workers, a shell's background job — kept it open after the
+daemon died, so a stop timed out and a killed OpenVPN was never seen to die. `cmd.WaitDelay`
+bounds that wait to a second after the process exits; a test with a deliberate grandchild pins it.
+mtg's stderr lands in the same ring type on its managed record, which outlives the process the
+way its counter does. sing-box at warn level says nothing in a healthy life, and a SIGKILL leaves
+no last words: an empty tail is honest there.
+
+**Versions (963a91c)** are §15's record above. **The web layer (580dd45)**: `GET /cores/status`
+(polled; `GET /cores` stays static and cached forever), `GET /cores/:id/versions` with a 15-minute
+per-core cache that serves a stale list over a failed refresh, `POST /cores/:id/install/:version`
+(lands the binary, restarts nothing, says so), `GET /cores/:id/logs`. Crash detection moved to the
+supervise pass, one place for every core: health is read BEFORE the reconcile that would repair,
+so a unit dead under exec is seen `failed` rather than only freshly started, and a unit systemd
+restarted on its own is seen by its `Restarts` count — the two backends' signals, neither of
+which fires on a config-change restart (exec never sets `Restarts`; a config change makes a new
+unit). One `core.crash` per outage, not per pass or per restart, and `core.up` once the daemon
+runs and answers again; mtg's own crash hook went (the pass reports it in the same words as every
+other core), the panel-converged core keeps `xray.crash`, its separately tested 1 s path. The
+notification toggles gain a Cores group — `core.crash` had never been in them, so the event
+existed and could not be enabled. **The page (the frontend commit)** shows it all, one badge for
+state and readiness together.
+
+**Found beside it.** ARM binary naming: `xray.GetBinaryName()` resolves arm through the
+UNSTAMPED fallback (`xray-linux-arm32`) while `release.yml` ships `xray-linux-armv7`, and
+`mtproto.GetBinaryName()` is `mtg-linux-arm` against a shipped `mtg-linux-armv7`; unverified on
+real ARM (no ARM target) and left for the user. The mtg-proxy repository is private (§15).
+
+**Still open here.** Sing-box reports its version and installs none (pinned adapter); there is no
+per-instance restart (`RestartCore` stops and converges the whole core); node-hosted cores are the
+node panel's and this page is host-local by design — core management stays outside
+`runtime.Runtime`, as `RestartCore` already did; the release-list cache is process-local; the
+exec backend still restarts nothing on its own, the pass does within 10 s; and §12.5k's
+`AdmitLogin` log storm is still owed a rate limit.
