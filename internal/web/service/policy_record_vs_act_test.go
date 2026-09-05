@@ -25,73 +25,50 @@ func storedAddresses(t *testing.T, email string) []string {
 }
 
 /*
-Deciding is not acting, and the actuator's absence used to suppress both.
-
-`enforce` is AnyClientHasAnIPLimit() && fail2BanIsInstalled(). When it was false
-the loop skipped past policy.Decide entirely, so a panel with no fail2ban kept a
-record of which addresses had been seen and none at all of who had exceeded their
-cap — the one thing the feature exists to tell an operator.
-
-The pair below is the whole statement: the same breach produces the same verdict
-either way, and `enforce` decides only whether anything acts on it.
+Deciding is not acting. The verdict names who is over the cap and which actuator
+reaches them; whether that actuator is present on this host is the job's to
+weigh when it carries the verdict out. So the same breach yields the same
+verdict on a box with fail2ban and one without — the record an operator reads is
+never a function of what the host happens to have installed.
 */
 func TestTheVerdictIsMadeWhetherOrNotAnythingCanActOnIt(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		enforce    bool
-		wantBounce bool
-	}{
-		{name: "no actuator on this host", enforce: false},
-		{name: "fail2ban present and limits configured", enforce: true, wantBounce: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			initTestDB(t)
-			svc := &PolicyService{}
+	initTestDB(t)
+	svc := &PolicyService{}
 
-			seen := &declaredCore{id: "proxy", kind: "vless"}
-			installCores(t, newProxyCore(seen))
-			seedPolicyInbound(t, "vless", "vless-capped", 45501, "capped")
-			setLimitIP(t, "capped", 2)
+	seen := &declaredCore{id: "proxy", kind: "vless"}
+	installCores(t, newProxyCore(seen))
+	seedPolicyInbound(t, "vless", "vless-capped", 45501, "capped")
+	setLimitIP(t, "capped", 2)
 
-			at := time.Now().Add(-10 * time.Minute)
-			seen.sessions = observe("capped", at, "198.51.100.1", "198.51.100.2", "198.51.100.3")
+	at := time.Now().Add(-10 * time.Minute)
+	seen.sessions = observe("capped", at, "198.51.100.1", "198.51.100.2", "198.51.100.3")
 
-			verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), tc.enforce)
-			if err != nil {
-				t.Fatalf("EvaluateIPLimits: %v", err)
-			}
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
+	if err != nil {
+		t.Fatalf("EvaluateIPLimits: %v", err)
+	}
 
-			// The record: same breach, same address over the cap, either way.
-			want := []string{"198.51.100.3"}
-			if got := overAddresses(verdicts, "capped"); !slices.Equal(got, want) {
-				t.Fatalf("over %v, want %v — the verdict is the record, and it is made whether or not anything can act on it", got, want)
-			}
+	// The record: the latest arrival is over, and the firewall is named for it —
+	// the one actuator that reaches a core which can neither admit nor cut.
+	verdict := verdictFor(t, verdicts, "capped")
+	want := []string{"198.51.100.3"}
+	if got := overAddresses(verdicts, "capped"); !slices.Equal(got, want) {
+		t.Fatalf("over %v, want %v — the verdict is the record, and it is made whether or not anything can act on it", got, want)
+	}
+	if got := banAddresses(verdict); !slices.Equal(got, want) {
+		t.Fatalf("ban %v, want %v: the verdict names the firewall; the job decides whether one is there", got, want)
+	}
+	if len(verdict.Cuts) != 0 {
+		t.Fatalf("no core here can cut an Xray session, yet a cut was scheduled: %+v", verdict.Cuts)
+	}
 
-			// The act: gated, and now the only thing that is.
-			verdict := verdictFor(t, verdicts, "capped")
-			if verdict.Bounce != tc.wantBounce {
-				t.Fatalf("Bounce = %v, want %v: enforce decides whether the ban is carried out, nothing else",
-					verdict.Bounce, tc.wantBounce)
-			}
-			if tc.wantBounce && verdict.Inbound == nil {
-				t.Fatal("a bounce was decided with no inbound to land it on")
-			}
-			if !tc.wantBounce && verdict.Inbound != nil {
-				t.Fatalf("nothing can act, but an inbound was still chosen to act on: %d", verdict.Inbound.Id)
-			}
-
-			/*
-				And the address the cap named stays on the stored list either way: it
-				is a connection that is still up, and this list is the one place the
-				panel reports it. Hiding it would empty the list for exactly the
-				clients it is about.
-			*/
-			stored := storedAddresses(t, "capped")
-			for _, live := range []string{"198.51.100.1", "198.51.100.2", "198.51.100.3"} {
-				if !slices.Contains(stored, live) {
-					t.Fatalf("a live address is missing from the stored list %v", stored)
-				}
-			}
-		})
+	// And every live address stays on the stored list, the over-cap one included:
+	// it is a connection that is still up, and this list is the one place the
+	// panel reports it.
+	stored := storedAddresses(t, "capped")
+	for _, live := range []string{"198.51.100.1", "198.51.100.2", "198.51.100.3"} {
+		if !slices.Contains(stored, live) {
+			t.Fatalf("a live address is missing from the stored list %v", stored)
+		}
 	}
 }

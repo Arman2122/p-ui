@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -244,6 +245,20 @@ func (l *Local) RemoveUser(ctx context.Context, ib *model.Inbound, email string)
 		return err
 	}
 	return bound.Users.RemoveUser(ctx, inst, email)
+}
+
+// CutSessions ends the client's sessions from one source on this inbound's core;
+// a core that cannot cut answers zero, and the caller then falls back to the
+// firewall. The core cuts across its own instances, so only the core is resolved.
+func (l *Local) CutSessions(ctx context.Context, ib *model.Inbound, email string, source netip.Addr) (int, error) {
+	bound, err := l.coreFor(ib)
+	if err != nil {
+		return 0, err
+	}
+	if bound.Cut == nil {
+		return 0, nil
+	}
+	return bound.Cut.CutSessions(ctx, email, source)
 }
 
 func (l *Local) AddClient(ctx context.Context, ib *model.Inbound, client model.Client) error {

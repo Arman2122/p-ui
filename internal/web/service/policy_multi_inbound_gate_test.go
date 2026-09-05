@@ -41,7 +41,7 @@ func TestTheCapStillAppliesWhenAnotherInboundIsEnabled(t *testing.T) {
 	}
 
 	scan := scanOf("alice@e", "198.51.100.1", "198.51.100.2", "198.51.100.3")
-	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scan, true)
+	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scan)
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestNoEnabledInboundStillDecidesNothing(t *testing.T) {
 	}
 
 	scan := scanOf("bob@e", "198.51.100.1", "198.51.100.2")
-	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scan, true)
+	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scan)
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}

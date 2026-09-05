@@ -86,59 +86,69 @@ func (j *CorePolicyJob) enforceIPLimits(ctx context.Context) {
 	if len(scan.ByEmail) == 0 {
 		return
 	}
-	// Without fail2ban nothing can act on the log line, so the pass collects the
-	// addresses for the panel to display and enforces nothing.
-	enforce := service.AnyClientHasAnIPLimit() && fail2BanCanEnforce()
-
-	verdicts, err := j.policyService.EvaluateIPLimits(scan, enforce)
+	verdicts, err := j.policyService.EvaluateIPLimits(scan)
 	if err != nil {
 		logger.Warning("ip limit evaluation failed:", err)
 		return
 	}
-	j.reportOverLimit(ctx, verdicts, enforce)
+	// A cut is the core's own mechanism and needs no firewall; only the ban line
+	// waits on fail2ban, so the two actuators are gated apart.
+	j.reportOverLimit(ctx, verdicts, fail2BanCanEnforce())
 }
 
 /*
-reportOverLimit writes the fail2ban line and cuts the sessions that can be cut.
+reportOverLimit carries out each verdict: it cuts the sessions a core can end,
+and writes the fail2ban line for the addresses only the firewall can reach.
 
-Both appliers run after the evaluation's transaction has committed, so their
-filesystem and network round trips never extend a write lock the node sync also
-takes.
+Both run after the evaluation's transaction has committed, so their filesystem and
+network round trips never extend a write lock the node sync also takes.
 
-AdvancedSince runs for EVERY evaluated client, not only the ones over a cap: it
-is what forgets a pair whose client came back under its limit, and a pair that is
-never forgotten can never be reported again once fail2ban's own ban lapses. It
-runs with enforcement off too, so flipping the toggle on does not then report
-every frozen pair at once — a frozen pair is a dead connection, not a reconnect.
+The cut is level-triggered and idempotent — run every pass, it drops a straggler
+still connected when a cap was lowered and then returns nothing once it is gone —
+so it needs no fail2ban and no dedup. The ban line does: AdvancedSince runs for
+EVERY verdict, so a client back under its cap is forgotten and a frozen pair is
+not re-reported once fail2ban's own ban lapses. It runs with banning off too, so
+flipping the toggle on does not then report every frozen pair at once.
 */
-func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.IPLimitVerdict, enforce bool) {
+func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.IPLimitVerdict, canBan bool) {
 	if j.bannedSeen == nil {
 		j.bannedSeen = make(map[string]int64)
 	}
+	for _, verdict := range verdicts {
+		for _, cut := range verdict.Cuts {
+			n, err := j.policyService.CutOverLimit(ctx, cut, verdict.Email)
+			if err != nil {
+				logger.Warningf("[LIMIT_IP] failed to cut %s from %s: %v", verdict.Email, cut.Source, err)
+				continue
+			}
+			if n > 0 {
+				logger.Infof("[LIMIT_IP] cut %d session(s) of %s from %s over its cap", n, verdict.Email, cut.Source)
+			}
+		}
+	}
+
 	type report struct {
-		verdict service.IPLimitVerdict
-		banned  []policy.Observation
+		email  string
+		banned []policy.Observation
 	}
 	var reports []report
 	for _, verdict := range verdicts {
-		actionable, next := policy.AdvancedSince(verdict.Email, verdict.Over, j.bannedSeen)
+		actionable, next := policy.AdvancedSince(verdict.Email, verdict.Ban, j.bannedSeen)
 		j.bannedSeen = next
 		if len(actionable) > 0 {
-			reports = append(reports, report{verdict: verdict, banned: actionable})
+			reports = append(reports, report{email: verdict.Email, banned: actionable})
 		}
 	}
 	if len(reports) == 0 {
 		return
 	}
 
-	if !enforce {
+	if !canBan {
 		// The line below is the jail's input, not a log message: a jail left
 		// installed would ban on it even though this host is set not to ban.
 		for _, entry := range reports {
-			// Debug, not Info: nothing cuts the connection, so it stays over its cap
-			// and would print this every tick for as long as it is up.
-			logger.Debugf("[LIMIT_IP] Client %s: %d address(es) over its cap, not reported (enforcement is off)",
-				entry.verdict.Email, len(entry.banned))
+			logger.Debugf("[LIMIT_IP] Client %s: %d address(es) the firewall would ban, held (banning is off)",
+				entry.email, len(entry.banned))
 		}
 		return
 	}
@@ -153,15 +163,9 @@ func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.
 
 	for _, entry := range reports {
 		for _, banned := range entry.banned {
-			banLogger.Printf(IPLimitLogFormat, entry.verdict.Email, banned.IP, banned.LastSeenUnixMilli/1000)
+			banLogger.Printf(IPLimitLogFormat, entry.email, banned.IP, banned.LastSeenUnixMilli/1000)
 		}
-		logger.Infof("[LIMIT_IP] Client %s: reported %d address(es) over its cap", entry.verdict.Email, len(entry.banned))
-		if !entry.verdict.Bounce {
-			continue
-		}
-		if err := j.policyService.BounceClient(ctx, entry.verdict.Inbound, entry.verdict.Email); err != nil {
-			logger.Warningf("[LIMIT_IP] Failed to cut %s off: %v", entry.verdict.Email, err)
-		}
+		logger.Infof("[LIMIT_IP] Client %s: %d address(es) sent to the firewall", entry.email, len(entry.banned))
 	}
 }
 

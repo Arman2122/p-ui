@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"sync/atomic"
 	"testing"
 
@@ -72,6 +73,10 @@ func (f *fakeNodeRuntime) AddUser(context.Context, *model.Inbound, string) error
 func (f *fakeNodeRuntime) RemoveUser(context.Context, *model.Inbound, string) error {
 	f.removeUser.Add(1)
 	return nil
+}
+
+func (f *fakeNodeRuntime) CutSessions(context.Context, *model.Inbound, string, netip.Addr) (int, error) {
+	return 0, nil
 }
 
 func (f *fakeNodeRuntime) UpdateUser(context.Context, *model.Inbound, string, model.Client) error {

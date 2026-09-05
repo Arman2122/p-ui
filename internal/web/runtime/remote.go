@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -513,6 +514,13 @@ func (r *Remote) AddUser(ctx context.Context, ib *model.Inbound, _ string) error
 
 func (r *Remote) RemoveUser(ctx context.Context, ib *model.Inbound, _ string) error {
 	return r.UpdateInbound(ctx, ib, ib)
+}
+
+// CutSessions is a no-op on a node: the daemon holding the session runs on the
+// far side of the sync, where its own policy pass cuts and its own jail bans.
+// The master falls back to the firewall line, which the node's jail acts on.
+func (r *Remote) CutSessions(_ context.Context, _ *model.Inbound, _ string, _ netip.Addr) (int, error) {
+	return 0, nil
 }
 
 func (r *Remote) AddClient(ctx context.Context, ib *model.Inbound, client model.Client) error {

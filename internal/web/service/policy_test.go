@@ -139,6 +139,59 @@ func newPeerCore(base *declaredCore) *peerCore {
 	}
 }
 
+// cutterCore can end one device's sessions and records every cut it is asked for.
+type cutterCore struct {
+	*declaredCore
+	cuts []string
+}
+
+func (c *cutterCore) CutSessions(_ context.Context, email string, source netip.Addr) (int, error) {
+	c.cuts = append(c.cuts, email+"@"+source.String())
+	return 1, nil
+}
+
+// admitterCore refuses an over-cap device at its own login, the way a core
+// wired with the panel's Admit does.
+type admitterCore struct{ *declaredCore }
+
+func (c admitterCore) AdmitsAtLogin(kind core.Kind) bool { return kind == c.kind }
+
+// A sing-box-shaped core: it can cut a session but admits at no login, so a cut
+// alone would flap and the firewall must back it.
+type cutOnlyCore struct {
+	*declaredCore
+	sessionCore
+	userCore
+	*cutterCore
+}
+
+// A daemon core (ssh, openvpn, ocserv): it cuts AND admits, with a kernel
+// identity whose counters live in its daemon, so a cut costs nothing and
+// finishes the job by itself.
+type daemonCore struct {
+	*declaredCore
+	shapingCore
+	sessionCore
+	userCore
+	*cutterCore
+	admitterCore
+}
+
+func newCutOnlyCore(base *declaredCore) *cutOnlyCore {
+	return &cutOnlyCore{declaredCore: base, sessionCore: sessionCore{base}, userCore: userCore{base}, cutterCore: &cutterCore{declaredCore: base}}
+}
+
+func newDaemonCore(base *declaredCore) *daemonCore {
+	return &daemonCore{
+		declaredCore: base,
+		shapingCore:  shapingCore{base},
+		sessionCore:  sessionCore{base},
+		userCore:     userCore{base},
+		cutterCore:   &cutterCore{declaredCore: base},
+		admitterCore: admitterCore{base},
+	}
+}
+
 // installCores makes these the cores the join asks, and restores whatever was
 // there so a shuffled run cannot leak a registry into another test.
 func installCores(t *testing.T, made ...core.Core) {
@@ -257,7 +310,7 @@ func TestIPLimitKeepsTheFirstDevicesAndNamesTheLatestOver(t *testing.T) {
 	now := time.Now().Add(-time.Minute)
 	base.sessions = observe("sharer", now, "203.0.113.1", "203.0.113.2", "203.0.113.3")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
@@ -267,7 +320,7 @@ func TestIPLimitKeepsTheFirstDevicesAndNamesTheLatestOver(t *testing.T) {
 
 	t.Run("a limit of zero is unlimited, never zero-allowed", func(t *testing.T) {
 		setLimitIP(t, "sharer", 0)
-		verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+		verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 		if err != nil {
 			t.Fatalf("EvaluateIPLimits: %v", err)
 		}
@@ -312,7 +365,7 @@ func TestIPLimitReachesACoreThatHasNoOnlineApi(t *testing.T) {
 	// endpoint at a time, so this roaming IS the key-sharing signal.
 	base.sessions = observe("roamer", time.Now().Add(-time.Minute), "198.51.100.1", "198.51.100.2", "198.51.100.3")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
@@ -320,62 +373,98 @@ func TestIPLimitReachesACoreThatHasNoOnlineApi(t *testing.T) {
 		t.Fatalf("over %v, want the latest arrival %v", got, want)
 	}
 
-	// Non-negotiable: a peer removed to satisfy a soft product rule loses its
-	// byte counters, so this client is reported and never cut.
-	for _, verdict := range verdicts {
-		if verdict.Email == "roamer" && verdict.Bounce {
-			t.Fatal("a client whose core LOSES its byte counters on removal must never be bounced: a soft product rule may not destroy billed bytes")
-		}
+	// Non-negotiable: this core cannot end one session, and removing the peer
+	// would zero the counters the panel bills from, so the firewall is the only
+	// actuator — the address is reported, the client is never cut.
+	verdict := verdictFor(t, verdicts, "roamer")
+	if len(verdict.Cuts) != 0 {
+		t.Fatalf("a client whose core cannot cut a session was scheduled for a cut: %+v", verdict.Cuts)
+	}
+	if got := banAddresses(verdict); !slices.Equal(got, []string{"198.51.100.3"}) {
+		t.Fatalf("the over-cap address must go to the firewall, got %v", got)
 	}
 }
 
 /*
-TestAShapeableCoreIsStillBouncedWhenRemovalCostsNothing.
+TestACoreThatAdmitsAndCutsIsCutAndNotBanned.
 
-The rule is about what a removal DESTROYS, not about whether the core can be
-shaped: those are orthogonal, and they coincide only on the single core that
-happens to do both today. A core with a kernel identity whose counters live in
-its daemon loses nothing by being cut, so it must be cut.
+A daemon core refuses the over-cap device at its next login and can end the
+session it already holds, so the cut finishes the enforcement by itself. A
+firewall ban on top would be wrong twice over: it is not needed, and a NATed
+address shared with innocent devices would take them with it.
 */
-func TestAShapeableCoreIsStillBouncedWhenRemovalCostsNothing(t *testing.T) {
+func TestACoreThatAdmitsAndCutsIsCutAndNotBanned(t *testing.T) {
 	initTestDB(t)
 	svc := &PolicyService{}
 
 	base := &declaredCore{
-		id: "innerip", kind: "ocserv", selector: core.SelectorInnerIP, device: "pwg9",
+		id: "tunnel", kind: "ocserv", selector: core.SelectorInnerIP, device: "poc9",
 	}
-	installCores(t, newTunnelCore(base))
-	seedPolicyInbound(t, "ocserv", "ocserv-cap", 45108, "sharer2")
+	installCores(t, newDaemonCore(base))
+	inbound := seedPolicyInbound(t, "ocserv", "ocserv-cap", 45108, "sharer2")
 	setLimitIP(t, "sharer2", 1)
 	base.sessions = observe("sharer2", time.Now().Add(-time.Minute), "198.51.100.7", "198.51.100.8")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if len(verdicts) != 1 || !verdicts[0].Bounce {
-		t.Fatalf("a shapeable core that keeps its counters outside the user object must still be cut, got %+v", verdicts)
+	verdict := verdictFor(t, verdicts, "sharer2")
+	if len(verdict.Cuts) != 1 || verdict.Cuts[0].Source != "198.51.100.8" || verdict.Cuts[0].Inbound.Id != inbound.Id {
+		t.Fatalf("want one cut of the latest arrival on inbound %d, got %+v", inbound.Id, verdict.Cuts)
+	}
+	if len(verdict.Ban) != 0 {
+		t.Fatalf("a core that admits at login needs no firewall behind its cut, yet %v would be banned", banAddresses(verdict))
 	}
 }
 
-// TestAProxyClientIsStillBounced is the other half of that decision: without it,
-// "never bounce" could pass by never bouncing anybody.
-func TestAProxyClientIsStillBounced(t *testing.T) {
+// TestACutOnlyCoreIsCutAndBanned: a core that can end a session but admits at no
+// login would see the device straight back; the firewall has to hold it away.
+func TestACutOnlyCoreIsCutAndBanned(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+
+	base := &declaredCore{id: "box", kind: "tuic"}
+	installCores(t, newCutOnlyCore(base))
+	seedPolicyInbound(t, "tuic", "tuic-cap", 45109, "sharer3")
+	setLimitIP(t, "sharer3", 1)
+	base.sessions = observe("sharer3", time.Now().Add(-time.Minute), "198.51.100.5", "198.51.100.6")
+
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
+	if err != nil {
+		t.Fatalf("EvaluateIPLimits: %v", err)
+	}
+	verdict := verdictFor(t, verdicts, "sharer3")
+	if len(verdict.Cuts) != 1 || verdict.Cuts[0].Source != "198.51.100.6" {
+		t.Fatalf("want one cut of the latest arrival, got %+v", verdict.Cuts)
+	}
+	if got := banAddresses(verdict); !slices.Equal(got, []string{"198.51.100.6"}) {
+		t.Fatalf("a cut without admission must be backed by the firewall, got ban %v", got)
+	}
+}
+
+// TestAProxyClientIsLeftToTheFirewall: a core that can neither admit nor cut
+// (Xray) has exactly one actuator, and the verdict names it.
+func TestAProxyClientIsLeftToTheFirewall(t *testing.T) {
 	initTestDB(t)
 	svc := &PolicyService{}
 
 	base := &declaredCore{id: "proxy", kind: "vless"}
 	installCores(t, newProxyCore(base))
-	seedPolicyInbound(t, "vless", "vless-bounce", 45103, "chatty")
+	seedPolicyInbound(t, "vless", "vless-firewall", 45103, "chatty")
 	setLimitIP(t, "chatty", 1)
 	base.sessions = observe("chatty", time.Now().Add(-time.Minute), "203.0.113.8", "203.0.113.9")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if len(verdicts) != 1 || !verdicts[0].Bounce {
-		t.Fatalf("a client on a core with no kernel identity must be cut off, got %+v", verdicts)
+	verdict := verdictFor(t, verdicts, "chatty")
+	if len(verdict.Cuts) != 0 {
+		t.Fatalf("nothing here can cut an Xray session, yet a cut was scheduled: %+v", verdict.Cuts)
+	}
+	if got := banAddresses(verdict); !slices.Equal(got, []string{"203.0.113.9"}) {
+		t.Fatalf("the latest arrival must go to the firewall, got %v", got)
 	}
 }
 
@@ -404,7 +493,7 @@ func TestOneCoreFailingDoesNotSilenceTheOthers(t *testing.T) {
 	if !slices.Contains(scan.Silent, "broken") {
 		t.Fatalf("the failing core must be reported as silent, got %v", scan.Silent)
 	}
-	verdicts, err := svc.EvaluateIPLimits(scan, true)
+	verdicts, err := svc.EvaluateIPLimits(scan)
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
@@ -430,7 +519,7 @@ func TestAnObservationForADeletedClientDropsItsRow(t *testing.T) {
 	}
 	base.sessions = observe("renamed-away", time.Now(), "203.0.113.5")
 
-	if _, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true); err != nil {
+	if _, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background())); err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	var count int64
@@ -454,7 +543,7 @@ func TestAddressesAreCollectedWithoutALimit(t *testing.T) {
 	seedPolicyInbound(t, "vless", "no-limit", 45106, "nolimit")
 	base.sessions = observe("nolimit", time.Now(), "203.0.113.10")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), false)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
@@ -482,7 +571,7 @@ func TestPersistedAddressesStayInSeconds(t *testing.T) {
 	at := time.Now().Add(-time.Minute).Truncate(time.Second)
 	base.sessions = observe("unit", at, "203.0.113.44")
 
-	if _, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), false); err != nil {
+	if _, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background())); err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	var row model.InboundClientIps
@@ -964,7 +1053,7 @@ func TestACoreThatDeclaresNothingCostsNothing(t *testing.T) {
 	if len(scan.ByEmail) != 0 || len(scan.Silent) != 0 {
 		t.Fatalf("a core that cannot name its sessions is not a failing core, got %+v", scan)
 	}
-	verdicts, err := svc.EvaluateIPLimits(scan, true)
+	verdicts, err := svc.EvaluateIPLimits(scan)
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
@@ -1006,15 +1095,25 @@ func TestAnAssignmentToAMissingPlanFailsOpen(t *testing.T) {
 	}
 }
 
-// banningVerdicts keeps only the verdicts that act: a ban or a bounce. An
-// empty verdict is the record that lets the caller forget a client (F307) and
-// is not a ban.
+// banningVerdicts keeps only the verdicts that act: an over-cap address, a cut or
+// a ban. An empty verdict is the record that lets the caller forget a client
+// (F307) and is not a ban.
 func banningVerdicts(verdicts []IPLimitVerdict) []IPLimitVerdict {
 	var out []IPLimitVerdict
 	for _, v := range verdicts {
-		if len(v.Over) > 0 || v.Bounce {
+		if len(v.Over) > 0 || len(v.Cuts) > 0 || len(v.Ban) > 0 {
 			out = append(out, v)
 		}
 	}
+	return out
+}
+
+// banAddresses is the firewall half of one verdict, sorted.
+func banAddresses(verdict IPLimitVerdict) []string {
+	out := make([]string, 0, len(verdict.Ban))
+	for _, o := range verdict.Ban {
+		out = append(out, o.IP)
+	}
+	sort.Strings(out)
 	return out
 }

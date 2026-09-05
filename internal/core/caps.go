@@ -409,7 +409,9 @@ var ErrDeviceLimit = errors.New("device limit reached")
 
 /*
 CounterLossDeclarer answers whether removing a user destroys the byte counters
-the panel bills from, so a soft product rule is never enforced by losing money.
+the panel bills from. It is why no product rule is ever enforced by removing and
+re-adding a user: a cap is enforced by SessionCutter or the firewall, and a core
+that loses its counters on removal is exactly the one that must not be "bounced".
 
 Measured for wgkernel: a peer remove ZEROES its counters while an allowed-IP,
 keepalive or preshared-key edit preserves them. The panel cannot see that from

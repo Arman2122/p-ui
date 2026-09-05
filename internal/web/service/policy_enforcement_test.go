@@ -42,94 +42,101 @@ func verdictFor(t *testing.T, verdicts []IPLimitVerdict, email string) IPLimitVe
 }
 
 /*
-TestABounceNeverLandsOnACoreThatSawNothing.
+TestACutNeverLandsOnACoreThatSawNothing.
 
-A client on two cores has ONE merged address list, and cutting them is per-core:
-the runtime resolves the core from the inbound it is handed. Choosing the inbound
-by id therefore acts on whichever inbound sorts first, which is independent of the
-core that observed the breach — which is what this pins.
-
-It does NOT pin what the cut achieves. RemoveUser closes no established session
-(RUNTIME-RESULTS-2026-08-21.md §3); it refuses the next connection. This test was
-written believing otherwise, and the belief was never what it asserted.
+A client on two cores has ONE merged address list, and a cut is per-core: the
+runtime resolves the core from the inbound it is handed. Aiming by inbound id
+would act on whichever inbound sorts first, independent of the core that
+observed the address — so here the cuttable core sorts first, saw only the
+device inside the cap, and must be left alone while the addresses over it, all
+the tunnel's, go to the only actuator that reaches a tunnel: the firewall.
 */
-func TestABounceNeverLandsOnACoreThatSawNothing(t *testing.T) {
+func TestACutNeverLandsOnACoreThatSawNothing(t *testing.T) {
 	initTestDB(t)
 	svc := &PolicyService{}
 
-	quiet := &declaredCore{id: "proxy", kind: "vless"}
+	quiet := &declaredCore{id: "daemon", kind: "ssh"}
 	loud := &declaredCore{
 		id: "tunnel", kind: "wgkernel", selector: core.SelectorInnerIP, device: "pwg7",
 	}
-	installCores(t, newProxyCore(quiet), newPeerCore(loud))
+	cuttable := newDaemonCore(quiet)
+	installCores(t, cuttable, newPeerCore(loud))
 
-	// The vless inbound is created first, so it holds the LOWER id and is what an
+	// The ssh inbound is created first, so it holds the LOWER id and is what an
 	// id tie-break picks — while every over-cap address comes from the other core.
-	proxyInbound := seedPolicyInbound(t, "vless", "vless-quiet", 45401, "dual")
+	sshInbound := seedPolicyInbound(t, "ssh", "ssh-quiet", 45401, "dual")
 	tunnelInbound := seedPolicyInbound(t, "wgkernel", "wg-loud", 45402)
 	attachClient(t, tunnelInbound, "dual")
 	setLimitIP(t, "dual", 2)
 
-	// The proxy's device arrived first and holds a slot; the tunnel's three came later.
+	// The ssh device arrived first and holds a slot; the tunnel's three came later.
 	at := time.Now().Add(-10 * time.Minute)
 	loud.sessions = observe("dual", at, "198.51.100.1", "198.51.100.2", "198.51.100.3")
 	quiet.sessions = observe("dual", at.Add(-time.Hour), "203.0.113.9")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if proxyInbound.Id >= tunnelInbound.Id {
-		t.Fatalf("this only bites while the compliant inbound sorts first: %d vs %d", proxyInbound.Id, tunnelInbound.Id)
+	if sshInbound.Id >= tunnelInbound.Id {
+		t.Fatalf("this only bites while the cuttable inbound sorts first: %d vs %d", sshInbound.Id, tunnelInbound.Id)
 	}
 	if got, want := overAddresses(verdicts, "dual"), []string{"198.51.100.2", "198.51.100.3"}; !slices.Equal(got, want) {
 		t.Fatalf("over %v, want the two latest arrivals %v, every one of them the tunnel's", got, want)
 	}
 	verdict := verdictFor(t, verdicts, "dual")
-	if verdict.Bounce {
-		t.Fatalf("the bounce landed on inbound %d (%s): the only core that saw a banned address loses its counters when cut",
-			verdict.Inbound.Id, verdict.Inbound.Protocol)
+	if len(verdict.Cuts) != 0 {
+		t.Fatalf("a cut was aimed at inbound %d: the only cuttable core saw none of the over-cap addresses", verdict.Cuts[0].Inbound.Id)
+	}
+	if got := banAddresses(verdict); !slices.Equal(got, []string{"198.51.100.2", "198.51.100.3"}) {
+		t.Fatalf("the tunnel's addresses must go to the firewall, got %v", got)
 	}
 }
 
 /*
-TestABounceLandsOnTheCoreThatSawTheBreach is the mirror failure.
+TestACutLandsOnTheCoreThatSawTheBreach is the mirror failure.
 
-With the core that cannot safely be cut sorting first, an id tie-break refuses to
-cut anybody, and a genuine key-sharer on the OTHER core is never enforced at all.
+With the core that cannot cut sorting first, an id tie-break would find no
+cuttable inbound and hand a genuine sharer on the OTHER core to the firewall —
+when that core can end the sessions itself, and admits at login, so no ban is due.
 */
-func TestABounceLandsOnTheCoreThatSawTheBreach(t *testing.T) {
+func TestACutLandsOnTheCoreThatSawTheBreach(t *testing.T) {
 	initTestDB(t)
 	svc := &PolicyService{}
 
 	quiet := &declaredCore{
 		id: "tunnel", kind: "wgkernel", selector: core.SelectorInnerIP, device: "pwg7",
 	}
-	loud := &declaredCore{id: "proxy", kind: "vless"}
-	installCores(t, newPeerCore(quiet), newProxyCore(loud))
+	loud := &declaredCore{id: "daemon", kind: "ssh"}
+	installCores(t, newPeerCore(quiet), newDaemonCore(loud))
 
 	tunnelInbound := seedPolicyInbound(t, "wgkernel", "wg-quiet", 45403, "dual")
-	proxyInbound := seedPolicyInbound(t, "vless", "vless-loud", 45404)
-	attachClient(t, proxyInbound, "dual")
+	sshInbound := seedPolicyInbound(t, "ssh", "ssh-loud", 45404)
+	attachClient(t, sshInbound, "dual")
 	setLimitIP(t, "dual", 2)
 
 	at := time.Now().Add(-10 * time.Minute)
 	loud.sessions = observe("dual", at, "203.0.113.1", "203.0.113.2", "203.0.113.3")
 	quiet.sessions = observe("dual", at.Add(-time.Hour), "198.51.100.9")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if tunnelInbound.Id >= proxyInbound.Id {
-		t.Fatalf("this only bites while the unbounceable inbound sorts first: %d vs %d", tunnelInbound.Id, proxyInbound.Id)
+	if tunnelInbound.Id >= sshInbound.Id {
+		t.Fatalf("this only bites while the uncuttable inbound sorts first: %d vs %d", tunnelInbound.Id, sshInbound.Id)
 	}
 	verdict := verdictFor(t, verdicts, "dual")
-	if !verdict.Bounce {
-		t.Fatal("the core that observed the banned addresses can safely be cut, so the cap must be enforced")
+	if len(verdict.Cuts) != 2 {
+		t.Fatalf("the core that observed the over-cap addresses can end them, so both must be cut: %+v", verdict.Cuts)
 	}
-	if verdict.Inbound.Id != proxyInbound.Id {
-		t.Fatalf("bounce target = inbound %d, want the observing core's %d", verdict.Inbound.Id, proxyInbound.Id)
+	for _, cut := range verdict.Cuts {
+		if cut.Inbound.Id != sshInbound.Id {
+			t.Fatalf("cut aimed at inbound %d, want the observing core's %d", cut.Inbound.Id, sshInbound.Id)
+		}
+	}
+	if len(verdict.Ban) != 0 {
+		t.Fatalf("the cutting core admits at login, so nothing is the firewall's, yet %v would be banned", banAddresses(verdict))
 	}
 }
 
@@ -151,16 +158,16 @@ func TestAClientBackUnderItsCapIsStillReported(t *testing.T) {
 	setLimitIP(t, "behaving", 2)
 	base.sessions = observe("behaving", time.Now().Add(-time.Minute), "203.0.113.50")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	verdict := verdictFor(t, verdicts, "behaving")
 	if len(verdict.Over) != 0 {
-		t.Fatalf("a client inside its cap must carry an empty ban list, got %v", verdict.Over)
+		t.Fatalf("a client inside its cap must carry an empty over list, got %v", verdict.Over)
 	}
-	if verdict.Bounce {
-		t.Fatal("an empty ban list can never justify cutting a client off")
+	if len(verdict.Cuts) != 0 || len(verdict.Ban) != 0 {
+		t.Fatalf("nothing over the cap can justify a cut or a ban, got cuts %+v ban %v", verdict.Cuts, verdict.Ban)
 	}
 }
 

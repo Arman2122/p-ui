@@ -19,12 +19,12 @@ func TestAClientNoLongerCappedStillGetsAVerdict(t *testing.T) {
 	seedPolicyInbound(t, "vless", "vless-uncapped", 45502, "uncapped")
 	// No setLimitIP: the client is hosted and uncapped.
 
-	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scanOf("uncapped", "198.51.100.7"), true)
+	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scanOf("uncapped", "198.51.100.7"))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	verdict := verdictFor(t, verdicts, "uncapped")
-	if len(verdict.Over) != 0 || verdict.Bounce || verdict.Inbound != nil {
+	if len(verdict.Over) != 0 || len(verdict.Cuts) != 0 || len(verdict.Ban) != 0 {
 		t.Fatalf("verdict for an uncapped client = %+v, want empty: it exists so the memory forgets, not so anything acts", verdict)
 	}
 }
@@ -33,12 +33,12 @@ func TestADeletedClientStillGetsAVerdict(t *testing.T) {
 	initTestDB(t)
 	// "ghost" is hosted by no inbound: the orphaned-email branch.
 
-	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scanOf("ghost", "198.51.100.8"), true)
+	verdicts, err := (&PolicyService{}).EvaluateIPLimits(scanOf("ghost", "198.51.100.8"))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	verdict := verdictFor(t, verdicts, "ghost")
-	if len(verdict.Over) != 0 || verdict.Bounce {
+	if len(verdict.Over) != 0 || len(verdict.Cuts) != 0 || len(verdict.Ban) != 0 {
 		t.Fatalf("verdict for a deleted client = %+v, want empty", verdict)
 	}
 }

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
@@ -17,6 +18,13 @@ type Runtime interface {
 	// and only the core serving it knows which of them a protocol needs.
 	AddUser(ctx context.Context, ib *model.Inbound, email string) error
 	RemoveUser(ctx context.Context, ib *model.Inbound, email string) error
+
+	// CutSessions ends a client's live sessions from one source on the core
+	// serving this inbound, returning how many. A core that cannot cut, and a
+	// node the panel cannot reach, answer zero: the caller falls back to the
+	// firewall. It is how a device over its cap is dropped without removing the
+	// client, which would zero the byte counters some cores bill from.
+	CutSessions(ctx context.Context, ib *model.Inbound, email string, source netip.Addr) (int, error)
 
 	// Per-client operations that route through the node's clients API on
 	// Remote (instead of pushing the whole inbound) so the node applies

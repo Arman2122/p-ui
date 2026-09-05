@@ -26,12 +26,12 @@ func TestAnAddressTheCoresStoppedReportingFreesItsSlotAtOnce(t *testing.T) {
 	setLimitIP(t, "roamer", 1)
 
 	base.sessions = observe("roamer", time.Now().Add(-time.Minute), "198.51.100.1")
-	if _, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true); err != nil {
+	if _, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background())); err != nil {
 		t.Fatalf("first pass: %v", err)
 	}
 	// The phone moved networks: the old address is gone from the core's answer.
 	base.sessions = observe("roamer", time.Now(), "198.51.100.2")
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("second pass: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestAnAddressAnotherNodeHoldsKeepsItsSlot(t *testing.T) {
 	}
 	base.sessions = observe("shared", now, "198.51.100.9")
 
-	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
+	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()))
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}

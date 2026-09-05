@@ -55,32 +55,25 @@ func TestIPLimitPostgresScale(t *testing.T) {
 				}
 
 				start := time.Now()
-				probe := AnyClientHasAnIPLimit()
-				gate := time.Since(start)
-				if !probe {
-					t.Fatal("AnyClientHasAnIPLimit = false with every client capped")
-				}
-
-				start = time.Now()
 				scan := svc.ObserveSessions(context.Background())
 				observeFor := time.Since(start)
 
 				start = time.Now()
-				first, err := svc.EvaluateIPLimits(scan, true)
+				first, err := svc.EvaluateIPLimits(scan)
 				if err != nil {
 					t.Fatalf("first pass: %v", err)
 				}
 				firstFor := time.Since(start)
 
 				start = time.Now()
-				second, err := svc.EvaluateIPLimits(scan, true)
+				second, err := svc.EvaluateIPLimits(scan)
 				if err != nil {
 					t.Fatalf("second pass: %v", err)
 				}
 				secondFor := time.Since(start)
 
-				t.Logf("N=%-7d observed=%-5d gate=%-8v observe=%-8v first=%-10v second=%-10v (%.2fms/client)",
-					n, m, gate.Round(time.Millisecond), observeFor.Round(time.Millisecond),
+				t.Logf("N=%-7d observed=%-5d observe=%-8v first=%-10v second=%-10v (%.2fms/client)",
+					n, m, observeFor.Round(time.Millisecond),
 					firstFor.Round(time.Millisecond), secondFor.Round(time.Millisecond),
 					float64(secondFor.Milliseconds())/float64(m))
 

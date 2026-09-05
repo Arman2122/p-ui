@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"slices"
 	"sort"
 	"time"
@@ -532,24 +533,35 @@ func (s *PolicyService) AdmitLogin(ctx context.Context, a core.Admission) error 
 // never hold an SSH handshake or a RADIUS exchange past its own deadline.
 const admitLoginBudget = 2 * time.Second
 
-// IPLimitVerdict is one client's answer for this pass. Over is every live address
-// beyond the cap; Bounce says whether cutting the client's sessions is safe for its core.
+/*
+IPLimitVerdict is one client's answer for this pass. Over is every live address
+beyond the cap, for the record and the re-report memory; Cuts and Ban are how it
+is enforced — a cut through the core that saw the address, a fail2ban line where
+nothing local can cut it or a cut alone would flap.
+*/
 type IPLimitVerdict struct {
-	Email   string
-	Over    []policy.Observation
-	Bounce  bool
+	Email string
+	Over  []policy.Observation
+	Cuts  []IPLimitCut
+	Ban   []policy.Observation
+}
+
+// IPLimitCut is one over-cap source to end on the inbound whose core observed it.
+type IPLimitCut struct {
 	Inbound *model.Inbound
+	Source  string
 }
 
 /*
 EvaluateIPLimits merges what the cores reported into the persisted rows, applies
-each client's cap, and writes the result back.
+each client's cap, writes the result back, and decides how each over-cap address
+is enforced.
 
-Enforcement is deliberately the caller's: the fail2ban line and any bounce are
-network and filesystem work, and running them inside this write transaction is
-how a scan's lock is held across a round trip.
+Deciding is not acting: the cut and the fail2ban line are network and filesystem
+work, and running them inside this write transaction would hold its lock across a
+round trip. So the verdict names them and the caller carries them out.
 */
-func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLimitVerdict, error) {
+func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, error) {
 	emails := make([]string, 0, len(scan.ByEmail))
 	for email := range scan.ByEmail {
 		emails = append(emails, email)
@@ -640,16 +652,13 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 			continue
 		}
 		// A verdict for every hosted client, an EMPTY one included: the caller's
-		// re-ban memory forgets a client only through a verdict naming it (F307).
-		var target *model.Inbound
-		if enforce {
-			target = s.bounceTarget(hosted, scan, email, verdict.Over)
-		}
+		// re-report memory forgets a client only through a verdict naming it (F307).
+		cuts, ban := s.enforcementFor(hosted, scan, email, verdict.Over)
 		verdicts = append(verdicts, IPLimitVerdict{
-			Email:   email,
-			Over:    verdict.Over,
-			Bounce:  target != nil,
-			Inbound: target,
+			Email: email,
+			Over:  verdict.Over,
+			Cuts:  cuts,
+			Ban:   ban,
 		})
 	}
 
@@ -663,132 +672,82 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 }
 
 /*
-bounceTarget picks the inbound whose core actually observed the banned addresses.
+enforcementFor decides how each over-cap address is dealt with, by the capability
+of the core that observed it.
 
-Cutting a client is per-CORE and not per-client: the runtime resolves the core
-from the inbound it is handed. Choosing by id instead would act on a compliant
-core while the core that saw the breach carries on, and would do it silently —
-the retired job's protocol allowlist was the only thing that ever stopped a
-cross-core cut.
+A core that admits at login and can cut (ssh, openvpn, ocserv) is cut and not
+banned: admission already refuses the device's return, so the cut alone finishes
+it, and a firewall ban of a NATed address would take innocents with it. A core
+that can cut but not admit (sing-box) is cut AND banned, because without
+admission the cut flaps every pass. A core that can do neither (xray, a kernel
+WireGuard peer whose removal zeroes its counters) and any node-hosted inbound —
+whose daemon this host cannot reach — leave the firewall as the only actuator.
 
-What the cut actually achieves is narrower than it reads. Measured against the
-shipped core -- measured against it directly -- RemoveUser closes
-nothing: a session already established keeps flowing, and a warmed mux connection
-keeps carrying new requests. Only a NEW connection is refused. So this chooses
-where the refusal lands, not whose sessions end.
-
-No observing core that can safely be cut means report-only, which is the same
-answer the fail2ban line already carries.
+The cut is aimed at the inbound whose core saw the address: the runtime resolves
+the core from the inbound, and aiming by anything else cuts a compliant core
+while the offender carries on.
 */
-func (s *PolicyService) bounceTarget(hosted []*model.Inbound, scan SessionScan, email string, banned []policy.Observation) *model.Inbound {
+func (s *PolicyService) enforcementFor(hosted []*model.Inbound, scan SessionScan, email string, over []policy.Observation) (cuts []IPLimitCut, ban []policy.Observation) {
 	reg := registry()
-	if reg == nil || len(banned) == 0 {
-		return nil
-	}
-	saw := make(map[core.Kind]bool, len(banned))
-	for _, over := range banned {
-		for _, reporter := range scan.Observers[Sighting{Email: email, IP: over.IP}] {
-			saw[reporter] = true
+	for _, o := range over {
+		observers := scan.Observers[Sighting{Email: email, IP: o.IP}]
+		cutInbound, admitted := s.cutTargetFor(reg, hosted, observers)
+		switch {
+		case cutInbound == nil:
+			ban = append(ban, o) // nothing local can cut it: the firewall must
+		case admitted:
+			cuts = append(cuts, IPLimitCut{Inbound: cutInbound, Source: o.IP})
+		default:
+			cuts = append(cuts, IPLimitCut{Inbound: cutInbound, Source: o.IP})
+			ban = append(ban, o) // cut-only: a cut without admission flaps, so ban too
 		}
+	}
+	return cuts, ban
+}
+
+/*
+cutTargetFor finds a local inbound whose core observed the address and can cut it,
+and reports whether that core also admits at login. A node inbound is never a cut
+target: the daemon holding the session is on the far side of the sync.
+*/
+func (s *PolicyService) cutTargetFor(reg *core.Registry, hosted []*model.Inbound, observers []core.Kind) (*model.Inbound, bool) {
+	if reg == nil {
+		return nil, false
+	}
+	saw := make(map[core.Kind]bool, len(observers))
+	for _, reporter := range observers {
+		saw[reporter] = true
 	}
 	for _, inbound := range hosted {
-		bound, known := reg.For(core.Kind(inbound.Protocol))
-		if !known || !saw[bound.Core.Describe().ID] {
+		if inbound.NodeID != nil {
 			continue
 		}
-		if bounceable(inbound, bound) {
-			return inbound
+		kind := core.Kind(inbound.Protocol)
+		bound, known := reg.For(kind)
+		if !known || bound.Cut == nil || !saw[bound.Core.Describe().ID] {
+			continue
 		}
+		return inbound, bound.Admits != nil && bound.Admits.AdmitsAtLogin(kind)
 	}
-	return nil
+	return nil, false
 }
 
 /*
-bounceable reports whether cutting a client's sessions is a safe way to enforce
-a cap on this inbound's core.
-
-The question is what a removal COSTS, and only the core can answer it: for a
-wgkernel peer a remove ZEROES the byte counters the panel bills from, so losing
-real money to a soft product rule is never worth it. That is deliberately not
-inferred from whether the core can shape — two orthogonal properties that happen
-to coincide on the one core doing both today.
+CutOverLimit ends one over-cap device's sessions through the runtime, so the
+layering rule holds and a node's inbound is a no-op rather than a reach past the
+sync. It returns how many sessions were ended; zero is a device already gone.
 */
-func bounceable(inbound *model.Inbound, bound *core.Bound) bool {
-	if inbound == nil || inbound.NodeID != nil {
-		// A node's inbound is served by a core this host never ran, so its tag
-		// names nothing here and the cut would have to travel as a node push.
-		return false
-	}
-	if bound == nil || bound.Users == nil {
-		return false
-	}
-	if bound.CounterLoss == nil {
-		return true
-	}
-	return !bound.CounterLoss.RemovalLosesCounters(core.Kind(inbound.Protocol))
-}
-
-/*
-BounceClient drops a client's live connections by removing and re-adding it.
-
-It goes through the runtime rather than straight to a core's API, which is what
-removes both the layering violation and the protocol switch the old job carried:
-any core with a user provisioner is served by the same three lines.
-*/
-func (s *PolicyService) BounceClient(ctx context.Context, inbound *model.Inbound, email string) error {
-	rt, err := s.inboundService.runtimeFor(inbound)
+func (s *PolicyService) CutOverLimit(ctx context.Context, cut IPLimitCut, email string) (int, error) {
+	source, err := netip.ParseAddr(cut.Source)
 	if err != nil {
-		return err
+		return 0, fmt.Errorf("policy: cut %s: %w", email, err)
 	}
-	if err := rt.RemoveUser(ctx, inbound, email); err != nil {
-		return err
+	rt, err := s.inboundService.runtimeFor(cut.Inbound)
+	if err != nil {
+		return 0, err
 	}
-	// The daemon needs a moment to drop the sockets before the user is let back
-	// in, or the re-add races the disconnect it exists to force.
-	time.Sleep(bounceSettle)
-
-	var addErr error
-	for attempt := range bounceAddAttempts {
-		if attempt > 0 {
-			time.Sleep(time.Duration(attempt) * bounceRetryBackoff)
-		}
-		if addErr = rt.AddUser(ctx, inbound, email); addErr == nil {
-			return nil
-		}
-		logger.Warningf("[LIMIT_IP] re-adding %s after the cut failed (attempt %d/%d): %v",
-			email, attempt+1, bounceAddAttempts, addErr)
-	}
-
-	/*
-		Every retry failed, so the client is currently absent from the running core
-		— removed for exceeding an IP cap and never let back in. Nothing else
-		repairs that: the supervisor skips the panel-converged core, so it stands
-		until an unrelated edit rebuilds the config.
-
-		Re-applying the whole inbound rebuilds its user list from the panel's own
-		config, which is a stronger repair than a fourth AddUser of the same one.
-	*/
-	if repairErr := rt.UpdateInbound(ctx, inbound, inbound); repairErr != nil {
-		return fmt.Errorf("bounce: %s was removed from the core and could not be restored (add: %w, repair: %w)",
-			email, addErr, repairErr)
-	}
-	return fmt.Errorf("bounce: re-adding %s failed, the inbound was re-applied to restore it: %w", email, addErr)
+	return rt.CutSessions(ctx, cut.Inbound, email, source)
 }
-
-/*
-The bounce's time budget, which is not its own to spend.
-
-The IP-limit pass runs @every 10s under SkipIfStillRunning, so a pass that
-overruns its tick has the next one dropped with nothing logged. The success path
-adds none of this — only a bounce whose re-add is already failing pays, and its
-worst case is 100ms + 100ms + 200ms = 400ms of sleeping, 4% of the tick, plus one
-repair call that does not sleep at all.
-*/
-const (
-	bounceSettle       = 100 * time.Millisecond
-	bounceAddAttempts  = 3
-	bounceRetryBackoff = 100 * time.Millisecond
-)
 
 // recordAttribution files this pass's observations under this panel's guid, so a
 // master can say which node an address is on. Advisory: it never blocks a ban.
@@ -803,14 +762,6 @@ func (s *PolicyService) recordAttribution(attribution map[string][]model.ClientI
 	if err := s.inboundService.RecordLocalClientIps(guid, attribution); err != nil {
 		logger.Debug("policy: record local ip attribution failed:", err)
 	}
-}
-
-// AnyClientHasAnIPLimit probes the normalized clients table, so a panel with no
-// limits configured never pays for the rest of the pass.
-func AnyClientHasAnIPLimit() bool {
-	var probe int64
-	err := database.GetDB().Model(&model.ClientRecord{}).Where("limit_ip > 0").Limit(1).Count(&probe).Error
-	return err == nil && probe > 0
 }
 
 // The persisted blob is unix SECONDS and is synced between panels, so its unit
