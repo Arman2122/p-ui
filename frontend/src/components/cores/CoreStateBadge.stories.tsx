@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { CoreStateTag } from './CoreStateTag';
+import { CoreStateBadge } from './CoreStateBadge';
 
 const meta = {
-  title: 'Cores/CoreStateTag',
-  component: CoreStateTag,
+  title: 'Cores/CoreStateBadge',
+  component: CoreStateBadge,
   tags: ['autodocs'],
   parameters: {
     docs: {
@@ -19,7 +19,7 @@ const meta = {
     ready: { description: 'The daemon answers on its control surface.' },
     detail: { description: 'Why it is not ready, or the last exit; shown on hover.' },
   },
-} satisfies Meta<typeof CoreStateTag>;
+} satisfies Meta<typeof CoreStateBadge>;
 
 export default meta;
 

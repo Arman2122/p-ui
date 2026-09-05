@@ -10,7 +10,7 @@ import { useCoresStatusQuery } from '@/api/queries/useCoresStatusQuery';
 import AppSidebar from '@/layouts/AppSidebar';
 import { setMessageInstance } from '@/utils/messageBus';
 import { HttpUtil } from '@/utils';
-import { CoreStateTag } from '@/components/cores/CoreStateTag';
+import { CoreStateBadge } from '@/components/cores/CoreStateBadge';
 import { summarizeCores } from '@/lib/cores/status';
 import type { CoreStatusView, InstanceStatusView } from '@/generated/zod';
 import CoreVersionsModal from './CoreVersionsModal';
@@ -56,7 +56,7 @@ export default function CoresPage() {
 
   const instanceColumns = useMemo<ColumnsType<InstanceStatusView>>(() => [
     { title: t('pages.cores.columns.instance'), dataIndex: 'tag', key: 'tag', render: (tag: string, i) => <span>{tag} <span className="core-id">#{i.instanceId}</span></span> },
-    { title: t('pages.cores.columns.state'), key: 'state', render: (_, i) => <CoreStateTag state={i.state} ready={i.ready} detail={i.detail} /> },
+    { title: t('pages.cores.columns.state'), key: 'state', render: (_, i) => <CoreStateBadge state={i.state} ready={i.ready} detail={i.detail} /> },
     { title: 'PID', dataIndex: 'pid', key: 'pid', render: (pid?: number) => pid || '' },
     { title: t('pages.cores.columns.restarts'), dataIndex: 'restarts', key: 'restarts', render: (n?: number) => n ?? 0 },
     { title: t('pages.cores.columns.since'), dataIndex: 'since', key: 'since', render: (ms?: number) => when(ms) },
@@ -79,7 +79,7 @@ export default function CoresPage() {
       key: 'state',
       render: (_, c) => c.available ? (
         <Space direction="vertical" size={2}>
-          <CoreStateTag state={c.state} ready={c.ready} detail={c.detail || c.healthError} />
+          <CoreStateBadge state={c.state} ready={c.ready} detail={c.detail || c.healthError} />
           {(c.detail || c.healthError) && <span className="core-detail">{c.detail || c.healthError}</span>}
         </Space>
       ) : (
