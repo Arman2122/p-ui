@@ -407,6 +407,25 @@ func realTraffic(t *testing.T, bin string, c *Core, proto string) {
 		t.Fatalf("online = %v", online)
 	}
 
+	// A cut by source reaches the real daemon: status 3 names the device's
+	// host:port and the kill ends that session. Read back through the daemon's
+	// own Accounting-Stop — the session leaves the ledger, and a reconnect the
+	// client makes on its own is a NEW session with a later start.
+	before := startedFrom(c, alice.Email, "10.250.1.2")
+	if before == 0 {
+		t.Fatal("the ledger reports no start for the live session; the cut could not be told from a reconnect")
+	}
+	if cut, err := c.CutSessions(context.Background(), alice.Email, netip.MustParseAddr("10.250.1.2")); err != nil || cut != 1 {
+		t.Fatalf("CutSessions = (%d, %v), want (1, nil)\n--- server output:\n%s", cut, err, tailOf(filepath.Join(c.instances[2].paths.dir, "openvpn.err")))
+	}
+	waitFor(t, 30*time.Second, func() bool {
+		now := startedFrom(c, alice.Email, "10.250.1.2")
+		return now == 0 || now > before
+	}, func() string {
+		s, _ := c.Sessions(context.Background())
+		return fmt.Sprintf("the cut session is still up: %+v\n--- client log:\n%s", s, tailOf(filepath.Join(dir, "client.log")))
+	})
+
 	// Removing the client ends the session through the management socket.
 	if err := c.RemoveUser(context.Background(), inst, alice.Email); err != nil {
 		t.Fatalf("remove: %v", err)
@@ -426,6 +445,18 @@ func realTraffic(t *testing.T, bin string, c *Core, proto string) {
 	if served := c.servedByDaemon(t, []core.User{alice}); len(served) != 0 {
 		t.Fatalf("a removed client still logs in: %v", served)
 	}
+}
+
+// startedFrom is when the client's session from one source opened, per the
+// ledger, or 0 when it holds none: a cut is told from a reconnect by the start.
+func startedFrom(c *Core, email, source string) int64 {
+	sessions, _ := c.Sessions(context.Background())
+	for _, s := range sessions {
+		if s.Email == email && s.Source.String() == source {
+			return s.StartedUnixMilli
+		}
+	}
+	return 0
 }
 
 func shellOut(script string) string {

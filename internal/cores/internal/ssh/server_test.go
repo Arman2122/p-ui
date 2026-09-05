@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +19,21 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/policy"
 )
+
+// admitByCap stands in for the panel: it decides a login from the sources the
+// core reports it already holds, which is the same rule policy.Decide applies.
+func admitByCap(_ context.Context, a core.Admission) error {
+	held := make([]string, 0, len(a.Held))
+	for _, src := range a.Held {
+		held = append(held, src.String())
+	}
+	if policy.Admit(held, a.Source.String(), a.LimitIP) {
+		return nil
+	}
+	return core.ErrDeviceLimit
+}
 
 // echoListener is the destination every forward in these tests dials.
 func echoListener(t *testing.T) net.Listener {
@@ -50,7 +65,7 @@ func startCore(t *testing.T, settings string, users ...core.User) (*Core, core.I
 	keys := &memoryHostKey{pem: testHostKeyPEM(t)}
 	var failures []AuthFailure
 	var mu sync.Mutex
-	c := New(Deps{LoadHostKey: keys.load, StoreHostKey: keys.store, Dial: (&net.Dialer{Timeout: dialTimeout}).DialContext, AuthFailure: func(f AuthFailure) {
+	c := New(Deps{LoadHostKey: keys.load, StoreHostKey: keys.store, Dial: (&net.Dialer{Timeout: dialTimeout}).DialContext, Admit: admitByCap, AuthFailure: func(f AuthFailure) {
 		mu.Lock()
 		failures = append(failures, f)
 		mu.Unlock()
@@ -73,6 +88,27 @@ func clientConfig(user, password string) *gossh.ClientConfig {
 func dialTCP(t *testing.T, inst core.Instance, user, password string) (*gossh.Client, error) {
 	t.Helper()
 	return gossh.Dial("tcp", net.JoinHostPort(inst.Listen, itoa(inst.Port)), clientConfig(user, password))
+}
+
+/*
+dialFrom is a second device: the same listener, reached from another loopback
+address. Bound as the LOCAL address on purpose — a dial TO 127.0.0.2 never
+reaches a listener on 127.0.0.1, and its refusal at TCP once passed for the cap's.
+A transport failure is therefore fatal here; only an SSH refusal is an error.
+*/
+func dialFrom(t *testing.T, inst core.Instance, local, user, password string) (*gossh.Client, error) {
+	t.Helper()
+	d := &net.Dialer{Timeout: 5 * time.Second, LocalAddr: &net.TCPAddr{IP: net.ParseIP(local)}}
+	raw, err := d.Dial("tcp", net.JoinHostPort(inst.Listen, itoa(inst.Port)))
+	if err != nil {
+		t.Fatalf("tcp from %s: %v", local, err)
+	}
+	cc, chans, reqs, err := gossh.NewClientConn(raw, raw.RemoteAddr().String(), clientConfig(user, password))
+	if err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
+	return gossh.NewClient(cc, chans, reqs), nil
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
@@ -140,7 +176,8 @@ func TestForwardIsCountedAndCapped(t *testing.T) {
 	}
 
 	// A second device: the cap counts distinct sources, and 127.0.0.2 is one.
-	second, err := gossh.Dial("tcp", net.JoinHostPort("127.0.0.2", itoa(inst.Port)), clientConfig("user0", "secret-0"))
+	// The refusal is the panel's, asked through Deps.Admit at the handshake.
+	second, err := dialFrom(t, inst, "127.0.0.2", "user0", "secret-0")
 	if err == nil {
 		second.Close()
 		t.Fatal("a second source was admitted past a device cap of 1")
@@ -155,6 +192,43 @@ func TestForwardIsCountedAndCapped(t *testing.T) {
 	}
 	if _, err := client.Dial("tcp", echo.Addr().String()); err == nil {
 		t.Fatal("a removed client opened a new forward")
+	}
+}
+
+/*
+CutSessions ends one client's connections from ONE source, so the device over a
+cap is dropped while the ones inside it stay up. The whole point of by-source: a
+cut by email alone would take both.
+*/
+func TestCutSessionsEndsOnlyTheNamedSource(t *testing.T) {
+	alice := userN(0)
+	c, inst := startCore(t, `{"transport":"tcp"}`, alice)
+
+	first, err := dialTCP(t, inst, "user0", "secret-0")
+	if err != nil {
+		t.Fatalf("dial 127.0.0.1: %v", err)
+	}
+	defer first.Close()
+	second, err := dialFrom(t, inst, "127.0.0.2", "user0", "secret-0")
+	if err != nil {
+		t.Fatalf("login from 127.0.0.2: %v", err)
+	}
+	defer second.Close()
+	if sessions, _ := c.Sessions(context.Background()); len(sessions) != 2 {
+		t.Fatalf("want two sessions before the cut, got %+v", sessions)
+	}
+
+	cut, err := c.CutSessions(context.Background(), alice.Email, netip.MustParseAddr("127.0.0.2"))
+	if err != nil || cut != 1 {
+		t.Fatalf("CutSessions = (%d, %v), want (1, nil)", cut, err)
+	}
+	sessions, _ := c.Sessions(context.Background())
+	if len(sessions) != 1 || sessions[0].Source.String() != "127.0.0.1" {
+		t.Fatalf("after cutting 127.0.0.2 only the 127.0.0.1 device must remain, got %+v", sessions)
+	}
+	// Cutting the same source again is nothing to do, not an error.
+	if again, err := c.CutSessions(context.Background(), alice.Email, netip.MustParseAddr("127.0.0.2")); err != nil || again != 0 {
+		t.Fatalf("a second cut of the same source = (%d, %v), want (0, nil)", again, err)
 	}
 }
 

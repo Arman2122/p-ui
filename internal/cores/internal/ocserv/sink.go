@@ -22,13 +22,14 @@ type sink struct {
 }
 
 /*
-Authenticate is the whole admission policy for a login: the client must
-exist, be enabled and unexpired, present its password, and not already hold
-its device cap in live sessions. Refusals reach the panel's auth-failure
-event. The tunnel address and the speed plan are chosen here, once per
-session, because that reply is the only thing this daemon reads per user.
+Authenticate is the whole admission for a login: the client must exist, be
+enabled and unexpired, present its password, and the panel must admit one more
+device from where it connects — the cap is the panel's rule, asked through
+Deps.Admit. Refusals reach the panel's auth-failure event. The tunnel address
+and the speed plan are chosen here, once per session, because that reply is
+the only thing this daemon reads per user.
 */
-func (s *sink) Authenticate(_ context.Context, username, password string, peer radius.Peer) radius.Verdict {
+func (s *sink) Authenticate(ctx context.Context, username, password string, peer radius.Peer) radius.Verdict {
 	s.c.mu.Lock()
 	cur, ok := s.c.instances[s.id]
 	if !ok {
@@ -61,16 +62,8 @@ func (s *sink) Authenticate(_ context.Context, username, password string, peer r
 	if user.ExpiryUnixMilli > 0 && user.ExpiryUnixMilli < time.Now().UnixMilli() {
 		return refuse("client has expired")
 	}
-	if user.LimitIP > 0 {
-		sources := map[netip.Addr]struct{}{}
-		for _, sess := range sessions {
-			if sess.Email == user.Email && sess.Source.IsValid() {
-				sources[sess.Source] = struct{}{}
-			}
-		}
-		if _, known := sources[peer.Source]; !known && len(sources) >= user.LimitIP {
-			return refuse("device limit reached")
-		}
+	if err := s.c.admit(ctx, s.id, user, peer.Source, sessions); err != nil {
+		return refuse(err.Error())
 	}
 	addr, err := allocate(settings, user.Email, sessions)
 	if err != nil {

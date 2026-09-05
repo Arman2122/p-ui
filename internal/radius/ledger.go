@@ -32,6 +32,9 @@ type session struct {
 	peer     Peer
 	in, out  int64
 	lastSeen time.Time
+	// started is when this session opened, for the cap's arrival order. A session
+	// adopted mid-flight (a panel restart) has no earlier record, so it is now.
+	started time.Time
 }
 
 // NewLedger tags every delta it emits with the inbound's tag.
@@ -69,7 +72,7 @@ func (l *Ledger) Apply(ev Event) {
 		ev.Username = cur.username
 	}
 	if !ok {
-		cur = &session{username: ev.Username, peer: ev.Peer}
+		cur = &session{username: ev.Username, peer: ev.Peer, started: l.now()}
 		l.sessions[ev.SessionID] = cur
 		// A session first heard of mid-flight (a panel restart adopted it) is
 		// baselined: its earlier bytes were billed by the previous process or are
@@ -150,6 +153,9 @@ func (l *Ledger) Sessions() []core.Session {
 	for _, id := range ids {
 		cur := l.sessions[id]
 		s := core.Session{Email: cur.username, Source: cur.peer.Source, LastSeenUnixMilli: cur.lastSeen.UnixMilli()}
+		if !cur.started.IsZero() {
+			s.StartedUnixMilli = cur.started.UnixMilli()
+		}
 		if cur.peer.FramedIP.IsValid() {
 			s.Local = []netip.Addr{cur.peer.FramedIP}
 		}

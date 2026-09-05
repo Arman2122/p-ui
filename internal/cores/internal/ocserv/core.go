@@ -42,6 +42,9 @@ type Deps struct {
 	Group int
 	// AuthFailure hears every refused login.
 	AuthFailure func(instanceID int, username, ip, reason string)
+	// Admit asks the panel to decide a login against the client's cap; nil admits
+	// every login, which is what a core built without a panel does.
+	Admit core.AdmitFunc
 	// Binary, Occtl and StateDir override the daemon, its tool and the state dir;
 	// Openconnect is the client an exit dials with.
 	Binary      string
@@ -524,6 +527,51 @@ func (c *Core) endSessions(ctx context.Context, socket string, user core.User) e
 		return fmt.Errorf("ocserv: ending sessions of %s: %w", user.Email, err)
 	}
 	return nil
+}
+
+// admit asks the panel to decide a login; nil deps or no cap admits at once.
+func (c *Core) admit(ctx context.Context, id int, user core.User, source netip.Addr, sessions []core.Session) error {
+	if c.deps.Admit == nil || user.LimitIP <= 0 {
+		return nil
+	}
+	return c.deps.Admit(ctx, core.Admission{
+		Kind: Kind, InstanceID: id, Email: user.Email, Source: source,
+		Held: core.HeldSources(sessions, user.Email), LimitIP: user.LimitIP,
+	})
+}
+
+// AdmitsAtLogin: the RADIUS reply refuses an over-cap device, but only where a
+// panel wired the callback that decides it.
+func (c *Core) AdmitsAtLogin(kind core.Kind) bool { return c.deps.Admit != nil && kind == Kind }
+
+// CutSessions ends the client's sessions from one source: occtl names each
+// session's id and remote address, and only the ones from source are cut, so
+// the device over the cap goes and the rest stay up.
+func (c *Core) CutSessions(ctx context.Context, email string, source netip.Addr) (int, error) {
+	c.mu.Lock()
+	type target struct{ sock, name string }
+	var targets []target
+	for _, cur := range c.instances {
+		for _, u := range cur.inst.Users {
+			if u.Email != email {
+				continue
+			}
+			if name := core.CredString(u.Credentials, core.CredUsername); name != "" {
+				targets = append(targets, target{sock: cur.paths.ctl, name: name})
+			}
+		}
+	}
+	occtl := c.occtlPath()
+	c.mu.Unlock()
+	cut := 0
+	for _, t := range targets {
+		n, err := disconnectSource(ctx, occtl, t.sock, t.name, source)
+		if err != nil {
+			return cut, err
+		}
+		cut += n
+	}
+	return cut, nil
 }
 
 func withoutEmail(users []core.User, email string) []core.User {

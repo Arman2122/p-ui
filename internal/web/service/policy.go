@@ -487,6 +487,51 @@ func (s *PolicyService) ObserveSessions(ctx context.Context) SessionScan {
 	return scan
 }
 
+/*
+AdmitLogin is the panel's answer to a core asking whether to admit a login.
+
+The cap comes from the core's own user (a.LimitIP), so no login pays a DB round
+trip to read it. What the DB adds is the cross-node, cross-core view: the sources
+this client is already live from ANYWHERE, from the persisted union within the
+live window, unioned with the ones this core itself reported (a.Held). The rule
+is the same policy.Admit the pass decides with, so a login and a pass never
+disagree about who holds a slot.
+
+A DB that cannot answer in time does not decide the login either way: the
+sources the core handed over still apply, and the pass repairs the rest.
+*/
+func (s *PolicyService) AdmitLogin(ctx context.Context, a core.Admission) error {
+	if a.LimitIP <= 0 {
+		return nil
+	}
+	held := make([]string, 0, len(a.Held)+4)
+	for _, src := range a.Held {
+		held = append(held, src.String())
+	}
+	ctx, cancel := context.WithTimeout(ctx, admitLoginBudget)
+	defer cancel()
+	var rows []model.InboundClientIps
+	if err := database.GetDB().WithContext(ctx).Where("client_email = ?", a.Email).Limit(1).Find(&rows).Error; err != nil {
+		logger.Warningf("policy: admitting %s from %s on this core's view alone, the cluster's could not be read: %v", a.Email, a.Source, err)
+	}
+	cutoff := time.Now().Unix() - int64(ipLimitLiveWindow/time.Second)
+	for _, row := range rows {
+		for _, entry := range decodeClientIPs(row.Ips) {
+			if entry.LastSeenUnixMilli/1000 >= cutoff {
+				held = append(held, entry.IP)
+			}
+		}
+	}
+	if policy.Admit(held, a.Source.String(), a.LimitIP) {
+		return nil
+	}
+	return fmt.Errorf("%w: %d", core.ErrDeviceLimit, a.LimitIP)
+}
+
+// admitLoginBudget bounds the one DB read a login waits on; a slow database must
+// never hold an SSH handshake or a RADIUS exchange past its own deadline.
+const admitLoginBudget = 2 * time.Second
+
 // IPLimitVerdict is one client's answer for this pass. Over is every live address
 // beyond the cap; Bounce says whether cutting the client's sessions is safe for its core.
 type IPLimitVerdict struct {

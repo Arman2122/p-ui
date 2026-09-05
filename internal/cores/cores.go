@@ -41,6 +41,9 @@ type Deps struct {
 	// CoreAuthFailure hears every login a core refused, so the panel can alert
 	// and ban without the core knowing how.
 	CoreAuthFailure func(coreID string, instanceID int, username, ip, reason string)
+	// AdmitClient decides a login against the client's IP cap. The panel owns the
+	// rule; nil admits every login, which is what a registry built without one does.
+	AdmitClient core.AdmitFunc
 	// Supervisor runs daemon cores; nil runs them as children of the panel.
 	// DaemonUser and DaemonGroup are the identity they get under systemd.
 	Supervisor  supervisor.Backend
@@ -279,7 +282,7 @@ func Register(reg *core.Registry, deps Deps) error {
 // ocservDeps narrows the panel-side facts to the ones the OpenConnect core
 // takes, sharing the one RADIUS server every daemon core authenticates against.
 func ocservDeps(deps Deps) ocserv.Deps {
-	out := ocserv.Deps{Radius: radiusServerFor(deps), Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup}
+	out := ocserv.Deps{Radius: radiusServerFor(deps), Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup, Admit: deps.AdmitClient}
 	if deps.CoreAuthFailure != nil {
 		out.AuthFailure = func(instanceID int, username, ip, reason string) {
 			deps.CoreAuthFailure(string(ocserv.ID), instanceID, username, ip, reason)
@@ -291,7 +294,7 @@ func ocservDeps(deps Deps) ocserv.Deps {
 // openvpnDeps narrows the panel-side facts to the ones the OpenVPN core takes,
 // including the one RADIUS server every daemon core shares.
 func openvpnDeps(deps Deps) openvpn.Deps {
-	out := openvpn.Deps{Radius: radiusServerFor(deps), Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup}
+	out := openvpn.Deps{Radius: radiusServerFor(deps), Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup, Admit: deps.AdmitClient}
 	if deps.CoreAuthFailure != nil {
 		out.AuthFailure = func(instanceID int, username, ip, reason string) {
 			deps.CoreAuthFailure(string(openvpn.ID), instanceID, username, ip, reason)
@@ -341,7 +344,7 @@ func radiusServerFor(deps Deps) *radius.Server {
 
 // sshDeps narrows the panel-side facts to the ones the SSH core takes.
 func sshDeps(deps Deps) ssh.Deps {
-	out := ssh.Deps{LoadHostKey: deps.SSHHostKey, StoreHostKey: deps.StoreSSHHostKey}
+	out := ssh.Deps{LoadHostKey: deps.SSHHostKey, StoreHostKey: deps.StoreSSHHostKey, Admit: deps.AdmitClient}
 	if deps.CoreAuthFailure != nil {
 		out.AuthFailure = func(f ssh.AuthFailure) {
 			deps.CoreAuthFailure(string(ssh.ID), f.InstanceID, f.Username, f.IP, f.Reason)

@@ -25,6 +25,9 @@ type Deps struct {
 	LoadHostKey  func() (string, error)
 	StoreHostKey func(pem string) error
 	AuthFailure  func(AuthFailure)
+	// Admit asks the panel to decide a login against the client's cap; nil admits
+	// every login, which is what a core built without a panel does.
+	Admit core.AdmitFunc
 	// Dial replaces the destination dialer, policy and all; nil dials directly
 	// under the destination policy in policy.go.
 	Dial Dialer
@@ -167,7 +170,7 @@ func (c *Core) ensureLocked(d core.Instance) error {
 		cur.srv.stop()
 		delete(c.instances, d.ID)
 	}
-	srv := newServer(d.ID, d.Tag, settings, c.hostKeys, c.dialerFor(settings), c.deps.AuthFailure)
+	srv := newServer(d.ID, d.Tag, settings, c.hostKeys, c.dialerFor(settings), c.deps.AuthFailure, c.deps.Admit)
 	srv.udp = c.udpDialerFor(settings)
 	userErr := srv.setUsers(d.Users)
 	if _, err := listen(listenSpec{listen: d.Listen, port: d.Port}, srv); err != nil {
@@ -405,6 +408,26 @@ func (c *Core) Sessions(context.Context) ([]core.Session, error) {
 		out = append(out, cur.srv.sessions()...)
 	}
 	return out, nil
+}
+
+// AdmitsAtLogin: this core refuses an over-cap device at the SSH handshake, but
+// only when a panel wired the callback that decides it.
+func (c *Core) AdmitsAtLogin(kind core.Kind) bool { return c.deps.Admit != nil && kind == Kind }
+
+// CutSessions closes the client's live connections from one source; a reconnect
+// is then refused at login. By source so the devices inside the cap stay up.
+func (c *Core) CutSessions(_ context.Context, email string, source netip.Addr) (int, error) {
+	c.mu.Lock()
+	servers := make([]*server, 0, len(c.instances))
+	for _, cur := range c.instances {
+		servers = append(servers, cur.srv)
+	}
+	c.mu.Unlock()
+	cut := 0
+	for _, srv := range servers {
+		cut += srv.cut(email, source)
+	}
+	return cut, nil
 }
 
 func (c *Core) EnforceRates(_ context.Context, inst core.Instance, limits map[string]core.RateLimit) error {

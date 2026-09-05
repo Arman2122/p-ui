@@ -44,6 +44,9 @@ type Deps struct {
 	Group int
 	// AuthFailure hears every refused login.
 	AuthFailure func(instanceID int, username, ip, reason string)
+	// Admit asks the panel to decide a login against the client's cap; nil admits
+	// every login, which is what a core built without a panel does.
+	Admit core.AdmitFunc
 	// Binary and StateDir override the daemon and the state directory.
 	Binary   string
 	StateDir string
@@ -490,6 +493,49 @@ func (c *Core) endSessions(ctx context.Context, sock string, user core.User) err
 		return fmt.Errorf("openvpn: ending sessions of %s: %w", user.Email, err)
 	}
 	return nil
+}
+
+// admit asks the panel to decide a login; nil deps or no cap admits at once.
+func (c *Core) admit(ctx context.Context, id int, user core.User, source netip.Addr, sessions []core.Session) error {
+	if c.deps.Admit == nil || user.LimitIP <= 0 {
+		return nil
+	}
+	return c.deps.Admit(ctx, core.Admission{
+		Kind: Kind, InstanceID: id, Email: user.Email, Source: source,
+		Held: core.HeldSources(sessions, user.Email), LimitIP: user.LimitIP,
+	})
+}
+
+// AdmitsAtLogin: the RADIUS reply refuses an over-cap device, but only where a
+// panel wired the callback that decides it.
+func (c *Core) AdmitsAtLogin(kind core.Kind) bool { return c.deps.Admit != nil && kind == Kind }
+
+// CutSessions ends the client's sessions from one source through the management
+// socket. By source, so the device over the cap goes and the rest stay up.
+func (c *Core) CutSessions(ctx context.Context, email string, source netip.Addr) (int, error) {
+	c.mu.Lock()
+	type target struct{ sock, cn string }
+	var targets []target
+	for _, cur := range c.instances {
+		for _, u := range cur.inst.Users {
+			if u.Email != email {
+				continue
+			}
+			if cn := core.CredString(u.Credentials, core.CredUsername); cn != "" {
+				targets = append(targets, target{sock: cur.paths.mgmt, cn: cn})
+			}
+		}
+	}
+	c.mu.Unlock()
+	cut := 0
+	for _, t := range targets {
+		n, err := cutSource(ctx, t.sock, t.cn, source)
+		if err != nil {
+			return cut, err
+		}
+		cut += n
+	}
+	return cut, nil
 }
 
 func withoutEmail(users []core.User, email string) []core.User {

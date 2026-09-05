@@ -1,6 +1,7 @@
 package openvpn
 
 import (
+	"context"
 	"encoding/json"
 	"net/netip"
 	"os/exec"
@@ -221,6 +222,57 @@ func TestRenderClientIsACompleteProfile(t *testing.T) {
 }
 
 // Accounting is billed to the email, not the login name the daemon reports.
+/*
+The device cap is the panel's rule, not the sink's: the sink hands the panel the
+sources it already holds and refuses the login only if the panel says so. This
+proves the callback is consulted with the right facts, its refusal is honored,
+and a nil callback (a core with no panel) admits.
+*/
+func TestSinkAsksThePanelToAdmit(t *testing.T) {
+	settings, err := New(Deps{}).MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := parseSettings(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice := user("alice@x", "alice")
+	alice.LimitIP = 1
+	build := func(admit core.AdmitFunc) *sink {
+		c := New(Deps{Admit: admit})
+		c.instances[4] = &instance{
+			inst:       core.Instance{ID: 4, Users: []core.User{alice}},
+			settings:   parsed,
+			ledger:     radius.NewLedger("ovpn-4"),
+			userByName: usersByName([]core.User{alice}),
+		}
+		return &sink{c: c, id: 4}
+	}
+
+	t.Run("the panel is asked with the client's cap and refuses", func(t *testing.T) {
+		var got core.Admission
+		s := build(func(_ context.Context, a core.Admission) error {
+			got = a
+			return core.ErrDeviceLimit
+		})
+		v := s.Authenticate(t.Context(), "alice", "secret-password", radius.Peer{Source: netip.MustParseAddr("203.0.113.9")})
+		if v.Accept {
+			t.Fatal("the panel refused the login and the sink admitted it anyway")
+		}
+		if got.Email != "alice@x" || got.LimitIP != 1 || got.Source.String() != "203.0.113.9" {
+			t.Fatalf("the panel was asked with the wrong facts: %+v", got)
+		}
+	})
+
+	t.Run("a nil callback admits, which is a core with no panel", func(t *testing.T) {
+		v := build(nil).Authenticate(t.Context(), "alice", "secret-password", radius.Peer{Source: netip.MustParseAddr("203.0.113.9")})
+		if !v.Accept {
+			t.Fatalf("a core wired without an Admit must admit every login: %+v", v)
+		}
+	})
+}
+
 func TestSinkBillsTheEmailBehindTheUsername(t *testing.T) {
 	c := New(Deps{})
 	cur := &instance{ledger: radius.NewLedger("ovpn-4"), userByName: usersByName([]core.User{user("alice@x", "alice")})}

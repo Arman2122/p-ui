@@ -657,6 +657,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		RadiusSecret:      s.settingService.GetRadiusSecret,
 		StoreRadiusSecret: s.settingService.SetRadiusSecret,
 		CoreAuthFailure:   s.publishCoreAuthFailure,
+		AdmitClient:       (&service.PolicyService{}).AdmitLogin,
 	})
 	if err != nil {
 		return err

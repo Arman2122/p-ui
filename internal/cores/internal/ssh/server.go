@@ -91,6 +91,8 @@ type server struct {
 	// inbound gets until its bridge port is allocated.
 	udp       udpDialer
 	onFailure func(AuthFailure)
+	// admit asks the panel to decide a login against the client's cap; nil admits.
+	admit core.AdmitFunc
 
 	mu       sync.RWMutex
 	byUser   map[string]*credential
@@ -127,6 +129,7 @@ type conn struct {
 	sc       *gossh.ServerConn
 	email    string
 	source   netip.Addr
+	opened   int64
 	lastSeen atomic.Int64
 	forwards atomic.Int32
 	done     chan struct{}
@@ -181,12 +184,12 @@ func (s *server) keepAlive(c *conn) {
 	}
 }
 
-func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.Signer, dial Dialer, onFailure func(AuthFailure)) *server {
+func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.Signer, dial Dialer, onFailure func(AuthFailure), admit core.AdmitFunc) *server {
 	if dial == nil {
 		dial = directDialer()
 	}
 	return &server{
-		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure,
+		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure, admit: admit,
 		byUser: map[string]*credential{}, byEmail: map[string]*credential{},
 		conns: map[*conn]struct{}{}, traffic: map[string]*counters{},
 		limits: map[string]core.RateLimit{}, limiters: map[string]*limiterPair{},
@@ -271,24 +274,38 @@ func (s *server) authenticate(meta gossh.ConnMetadata, password []byte) (*gossh.
 		return nil, errors.New("client has expired")
 	}
 	source := addrOf(meta.RemoteAddr())
-	if cred.limitIP > 0 && s.distinctSources(cred.email, source) >= cred.limitIP {
-		return nil, fmt.Errorf("device limit of %d reached", cred.limitIP)
+	if s.admit != nil && cred.limitIP > 0 {
+		admission := core.Admission{
+			Kind: Kind, InstanceID: s.instanceID, Email: cred.email,
+			Source: source, Held: core.HeldSources(s.sessions(), cred.email), LimitIP: cred.limitIP,
+		}
+		if err := s.admit(context.Background(), admission); err != nil {
+			return nil, err
+		}
 	}
 	return &gossh.Permissions{Extensions: map[string]string{"email": cred.email}}, nil
 }
 
-// distinctSources counts the addresses one client is connected from, not
-// counting the one asking, so a reconnect from a known device is never refused.
-func (s *server) distinctSources(email string, except netip.Addr) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	seen := map[netip.Addr]struct{}{}
+/*
+cut closes one client's connections from a single source, returning how many.
+By source, so cutting the device over the cap leaves the ones inside it up. The
+conns leave the set here, under the lock, rather than when handle's deferred
+delete runs: a Sessions read right after the cut must not still list them.
+*/
+func (s *server) cut(email string, source netip.Addr) int {
+	s.mu.Lock()
+	var doomed []*conn
 	for c := range s.conns {
-		if c.email == email && c.source != except {
-			seen[c.source] = struct{}{}
+		if c.email == email && c.source == source {
+			doomed = append(doomed, c)
+			delete(s.conns, c)
 		}
 	}
-	return len(seen)
+	s.mu.Unlock()
+	for _, c := range doomed {
+		c.close()
+	}
+	return len(doomed)
 }
 
 /*
@@ -341,8 +358,9 @@ func (s *server) handle(raw net.Conn) {
 		return
 	}
 	_ = raw.SetDeadline(time.Time{})
-	c := &conn{sc: sc, email: sc.Permissions.Extensions["email"], source: addrOf(sc.RemoteAddr()), done: make(chan struct{})}
-	c.lastSeen.Store(time.Now().UnixMilli())
+	now := time.Now().UnixMilli()
+	c := &conn{sc: sc, email: sc.Permissions.Extensions["email"], source: addrOf(sc.RemoteAddr()), opened: now, done: make(chan struct{})}
+	c.lastSeen.Store(now)
 	s.mu.Lock()
 	s.conns[c] = struct{}{}
 	s.mu.Unlock()
@@ -587,7 +605,7 @@ func (s *server) sessions() []core.Session {
 	defer s.mu.RUnlock()
 	out := make([]core.Session, 0, len(s.conns))
 	for c := range s.conns {
-		out = append(out, core.Session{Email: c.email, Source: c.source, LastSeenUnixMilli: c.lastSeen.Load()})
+		out = append(out, core.Session{Email: c.email, Source: c.source, LastSeenUnixMilli: c.lastSeen.Load(), StartedUnixMilli: c.opened})
 	}
 	return out
 }
