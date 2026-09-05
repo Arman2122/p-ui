@@ -174,6 +174,9 @@ func TestRenderServerCarriesTheDesign(t *testing.T) {
 		"verify-client-cert none", "username-as-common-name", "ca " + filepath.Join("/state/4", "server.crt"), "tls-crypt-v2 " + filepath.Join("/state/4", "tc2-server.key"),
 		"plugin " + PluginPath + " " + filepath.Join("/state/4", "radiusplugin.cnf"), "client-config-dir " + filepath.Join("/state/4", "ccd"), "management " + filepath.Join("/state/4", "mgmt.sock") + " unix",
 		"disable-dco", "push \"redirect-gateway def1 bypass-dhcp\"", "push \"dhcp-option DNS 1.1.1.1\"", "status " + filepath.Join("/state/4", "status.log") + " 10",
+		// Without duplicate-cn a client's second device disconnects its first, and
+		// the device cap the sink enforces could never admit two.
+		"\nduplicate-cn\n", "push \"block-outside-dns\"",
 	} {
 		if !strings.Contains(conf, want) {
 			t.Fatalf("server config lacks %q:\n%s", want, conf)
@@ -181,6 +184,14 @@ func TestRenderServerCarriesTheDesign(t *testing.T) {
 	}
 	if strings.Contains(conf, "\nuser ") || strings.Contains(conf, "explicit-exit-notify") || strings.Contains(conf, "status-version") {
 		t.Fatalf("a tcp server must not carry explicit-exit-notify, no user directive belongs in the config, and the status file stays in the version the plugin reads:\n%s", conf)
+	}
+	// stderr reaches the journal and is rotated there; a log-append file never is.
+	if strings.Contains(conf, "log-append") || strings.Contains(conf, "\nlog ") {
+		t.Fatalf("the daemon is told to log to a file nothing rotates:\n%s", conf)
+	}
+	split, _ := parseSettings(`{"proto":"tcp","subnet":"10.9.0.0/24","dns":["1.1.1.1"],"redirectGateway":false}`)
+	if conf := renderServer(inst, split, pathsIn("/state/4"), PluginPath); strings.Contains(conf, "block-outside-dns") {
+		t.Fatalf("a split tunnel must leave the client's own resolver alone:\n%s", conf)
 	}
 }
 

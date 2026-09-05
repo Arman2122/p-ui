@@ -376,7 +376,7 @@ func realTraffic(t *testing.T, bin string, c *Core, proto string) {
 	addr := func() string { return shellOut("ip netns exec " + ns + " ip -4 -o addr show povclient 2>/dev/null") }
 	waitFor(t, 30*time.Second, func() bool { return strings.Contains(addr(), "10.214.0.") }, func() string {
 		return "the client never came up: " + addr() + "\n--- client log:\n" + tailOf(filepath.Join(dir, "client.log")) + "\n--- client stderr:\n" + tailOf(filepath.Join(dir, "client.err")) +
-			"\n--- server log:\n" + tailOf(c.instances[2].paths.log) + "\n--- server stderr:\n" + tailOf(filepath.Join(c.instances[2].paths.dir, "openvpn.err")) + "\n--- server.conf:\n" + tailOf(c.instances[2].paths.conf)
+			"\n--- server output:\n" + tailOf(filepath.Join(c.instances[2].paths.dir, "openvpn.err")) + "\n--- server.conf:\n" + tailOf(c.instances[2].paths.conf)
 	})
 
 	out := shellOut(fmt.Sprintf("ip netns exec %s curl -s -m 20 -o /dev/null -w '%%{http_code} %%{size_download}' http://10.215.0.1:%d/", ns, ln.Addr().(*net.TCPAddr).Port))
@@ -421,7 +421,7 @@ func realTraffic(t *testing.T, bin string, c *Core, proto string) {
 		return true
 	}, func() string {
 		s, _ := c.Sessions(context.Background())
-		return fmt.Sprintf("alice still has a session after removal: %+v\n--- server log:\n%s\n--- client log:\n%s", s, tailOf(c.instances[2].paths.log), tailOf(filepath.Join(dir, "client.log")))
+		return fmt.Sprintf("alice still has a session after removal: %+v\n--- server output:\n%s\n--- client log:\n%s", s, tailOf(filepath.Join(c.instances[2].paths.dir, "openvpn.err")), tailOf(filepath.Join(dir, "client.log")))
 	})
 	if served := c.servedByDaemon(t, []core.User{alice}); len(served) != 0 {
 		t.Fatalf("a removed client still logs in: %v", served)

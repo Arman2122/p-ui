@@ -11,7 +11,7 @@ import (
 
 // paths is where one inbound's daemon keeps its files, under the state dir.
 type paths struct {
-	dir, conf, cert, key, tc2, plugin, ccd, tmp, mgmt, status, log string
+	dir, conf, cert, key, tc2, plugin, ccd, tmp, mgmt, status string
 }
 
 func pathsIn(dir string) paths {
@@ -20,7 +20,7 @@ func pathsIn(dir string) paths {
 		key: filepath.Join(dir, "server.key"), tc2: filepath.Join(dir, "tc2-server.key"),
 		plugin: filepath.Join(dir, "radiusplugin.cnf"), ccd: filepath.Join(dir, "ccd"),
 		tmp: filepath.Join(dir, "tmp"), mgmt: filepath.Join(dir, "mgmt.sock"),
-		status: filepath.Join(dir, "status.log"), log: filepath.Join(dir, "openvpn.log"),
+		status: filepath.Join(dir, "status.log"),
 	}
 }
 
@@ -31,6 +31,8 @@ the tls-crypt-v2 server key admits only wrapped client keys the panel minted.
 Users are authenticated and accounted by the plugin; ccd is where it lands
 the tunnel address the sink chose. No user/group here: the supervisor sets
 them. DCO stays off: the 2.6 line's counters under it are not to be trusted.
+duplicate-cn is on because the device cap is the sink's: without it OpenVPN
+disconnects a client's first device the moment its second connects.
 */
 func renderServer(inst core.Instance, s Settings, p paths, pluginSO string) string {
 	var b strings.Builder
@@ -44,10 +46,17 @@ func renderServer(inst core.Instance, s Settings, p paths, pluginSO string) stri
 	if s.RedirectGateway {
 		b.WriteString("push \"redirect-gateway def1 bypass-dhcp\"\n")
 	}
+	pushedDNS := 0
 	for _, dns := range s.DNS {
 		if dns = strings.TrimSpace(dns); dns != "" {
 			fmt.Fprintf(&b, "push \"dhcp-option DNS %s\"\n", dns)
+			pushedDNS++
 		}
+	}
+	// A Windows client keeps querying its LAN resolver beside the tunnel unless
+	// told not to; every other platform ignores a pushed Windows-only option.
+	if s.RedirectGateway && pushedDNS > 0 {
+		b.WriteString("push \"block-outside-dns\"\n")
 	}
 	fmt.Fprintf(&b, "ca %s\ncert %s\nkey %s\ndh none\ntls-crypt-v2 %s\n", p.cert, p.cert, p.key, p.tc2)
 	b.WriteString("verify-client-cert none\nusername-as-common-name\n")
@@ -57,11 +66,13 @@ func renderServer(inst core.Instance, s Settings, p paths, pluginSO string) stri
 	// version-1 layout; the panel itself never parses it.
 	fmt.Fprintf(&b, "management %s unix\nstatus %s 10\n", p.mgmt, p.status)
 	b.WriteString("disable-dco\ndata-ciphers AES-256-GCM:CHACHA20-POLY1305\nauth SHA256\ntls-version-min 1.2\n")
-	b.WriteString("keepalive 10 60\npersist-key\npersist-tun\nmax-clients 1024\n")
+	b.WriteString("keepalive 10 60\npersist-key\npersist-tun\nmax-clients 1024\nduplicate-cn\n")
 	if s.Proto == ProtoUDP {
 		b.WriteString("explicit-exit-notify 1\n")
 	}
-	fmt.Fprintf(&b, "log-append %s\nverb 3\nmute 20\n", p.log)
+	// No log file: the daemon logs to stderr, which is the journal under systemd
+	// and the supervisor's capture otherwise. A log-append file is never rotated.
+	b.WriteString("verb 3\nmute 20\n")
 	return b.String()
 }
 
