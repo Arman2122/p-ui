@@ -680,16 +680,26 @@ func resetQuota(port int, token, email string) error {
 	return fmt.Errorf("mtproto: reset-quota for %q returned %s", email, resp.Status)
 }
 
-// FreeLocalPort asks the OS for an unused loopback TCP port. It is used both
-// for mtg's /stats API endpoint and to allocate the per-inbound SOCKS egress
-// bridge port persisted into mtproto inbound settings.
+// FreeLocalPort asks the OS for a loopback port free on TCP and UDP alike: the
+// Xray bridge allocated from it binds both, and mtg's /stats endpoint one.
 func FreeLocalPort() (int, error) {
-	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
+	var lastErr error
+	for range 8 {
+		l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+		if err != nil {
+			return 0, err
+		}
+		port := l.Addr().(*net.TCPAddr).Port
+		pc, err := (&net.ListenConfig{}).ListenPacket(context.Background(), "udp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		_ = l.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_ = pc.Close()
+		return port, nil
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+	return 0, fmt.Errorf("mtproto: no loopback port free on both transports: %w", lastErr)
 }
 
 // renderConfig builds the mtg-proxy TOML for an instance. Top-level keys must

@@ -207,12 +207,16 @@ func (c *Core) dialerFor(settings Settings) Dialer {
 /*
 udpDialerFor is the UDPGW conversations' half of dialerFor. Direct, it is the
 same dialer with network udp, so the destination policy holds for datagrams
-too. Routed, it is nil: the bridge carries TCP alone, and a datagram dialled
-directly there would leave around the router the operator asked for.
+too. Routed, each conversation is a SOCKS5 UDP association on the bridge, so
+Xray's router sees it as it sees a TCP forward; with the switch on and no
+port yet it is nil, which refuses UDP rather than dialling around the router.
 */
 func (c *Core) udpDialerFor(settings Settings) udpDialer {
 	if settings.RouteThroughXray {
-		return nil
+		if settings.RouteXrayPort <= 0 {
+			return nil
+		}
+		return bridgeUDPDialer(settings.RouteXrayPort)
 	}
 	dial := c.deps.Dial
 	if dial == nil {

@@ -87,8 +87,8 @@ type server struct {
 	settings   Settings
 	hostKeys   []gossh.Signer
 	dial       Dialer
-	// udp opens a UDPGW conversation; nil refuses UDP, which is what an inbound
-	// gets while it routes through a bridge that carries none.
+	// udp opens a UDPGW conversation; nil refuses UDP, which is what a routed
+	// inbound gets until its bridge port is allocated.
 	udp       udpDialer
 	onFailure func(AuthFailure)
 

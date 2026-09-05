@@ -99,7 +99,7 @@ type udpgwConn struct {
 // udpgw answers one UDPGW forward for the life of the channel.
 func (s *server) udpgw(c *conn, nc gossh.NewChannel) {
 	if s.udp == nil {
-		_ = nc.Reject(gossh.Prohibited, "UDP is not carried while this inbound routes through Xray")
+		_ = nc.Reject(gossh.Prohibited, "this inbound routes through Xray and has no bridge port yet; save it again")
 		return
 	}
 	ch, reqs, err := nc.Accept()

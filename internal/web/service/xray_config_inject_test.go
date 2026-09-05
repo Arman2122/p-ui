@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/egress"
@@ -579,10 +580,9 @@ therefore takes down every inbound on the box, not just this one.
 Skipping costs this inbound's Telegram traffic and says so in the log. The
 alternative, bumping the port, cannot work: the sidecar dials this exact number.
 
-The guard uses checkPortConflict's own three conjuncts rather than bare port
-equality, because the bridge is loopback TCP and FreeLocalPort hands out
-ephemeral ports from the same range WireGuard commonly sits in -- a UDP-only
-neighbour on the same number is not a conflict and must still bridge. F035/F216.
+The guard uses listen overlap rather than bare port equality, because a
+neighbour pinned to another address is no clash; the bridge binds loopback on
+TCP and UDP both, so a neighbour on either transport is. F035/F216.
 */
 func TestInjectMtprotoEgress_SkipsABridgePortAlreadyBound(t *testing.T) {
 	cfg := egressTestConfig()
@@ -630,21 +630,31 @@ func TestInjectMtprotoEgress_SkipsAPortAnotherMtprotoInboundListensOn(t *testing
 	}
 }
 
-// The other half: a UDP-only neighbour on the same number is not a conflict and
-// the bridge must still be built, or the guard breaks working panels.
-func TestInjectMtprotoEgress_UdpNeighbourStillBridges(t *testing.T) {
+/*
+A UDP-only neighbour on the same number is a conflict too: the bridge binds
+UDP as well as TCP since it began carrying UDPGW and sing-box datagrams, and
+Xray fails the whole config on a port it cannot bind. The bridge is skipped,
+as it is for a TCP neighbour, and the allocator draws another port.
+*/
+func TestInjectMtprotoEgress_UdpNeighbourBlocksTheBridge(t *testing.T) {
 	cfg := egressTestConfig()
 	cfg.InboundConfigs = append(cfg.InboundConfigs, xray.InboundConfig{
 		Port: 50008, Protocol: "wireguard", Tag: "wg-in", Listen: json_util.RawMessage(`"0.0.0.0"`),
 	})
+	before := len(cfg.InboundConfigs)
 
 	injectXrayBridge(cfg, mtprotoInbound("inbound-443",
 		`{"routeThroughXray":true,"routeXrayPort":50008,"outboundTag":"warp"}`), nil)
 
-	if len(cfg.InboundConfigs) != 3 {
-		t.Fatalf("a UDP-only neighbour on the same port number blocked the bridge; got %d inbounds, want 3", len(cfg.InboundConfigs))
+	if len(cfg.InboundConfigs) != before {
+		t.Fatalf("the bridge was appended onto a UDP port [wg-in] already binds; got %d inbounds, want %d", len(cfg.InboundConfigs), before)
 	}
-	if got := cfg.InboundConfigs[2]; got.Port != 50008 || got.Tag != "inbound-443" {
-		t.Fatalf("appended entry = port %d tag %q, want 50008 / inbound-443", got.Port, got.Tag)
+	// And the bridge itself binds UDP: that is what makes the neighbour a clash.
+	cfg = egressTestConfig()
+	injectXrayBridge(cfg, mtprotoInbound("inbound-443",
+		`{"routeThroughXray":true,"routeXrayPort":50010,"outboundTag":"warp"}`), nil)
+	bridge := cfg.InboundConfigs[len(cfg.InboundConfigs)-1]
+	if bridge.Tag != "inbound-443" || !strings.Contains(string(bridge.Settings), `"udp":true`) || !strings.Contains(string(bridge.Settings), `"ip":"127.0.0.1"`) {
+		t.Fatalf("the bridge does not carry UDP on loopback: %s", bridge.Settings)
 	}
 }

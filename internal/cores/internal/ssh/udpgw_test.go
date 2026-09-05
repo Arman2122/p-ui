@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"io"
 	"net"
 	"net/netip"
 	"strings"
@@ -55,16 +54,42 @@ func udpgwFrame(flags byte, conid uint16, dst netip.AddrPort, payload []byte) []
 	return append(frame, body...)
 }
 
-func readUDPGWFrame(t *testing.T, r io.Reader) (flags byte, conid uint16, from netip.AddrPort, payload []byte) {
+/*
+readWithin reads once or gives up. A gossh channel conn supports no deadline
+(SetReadDeadline returns an error), so an assertion that nothing arrives must
+bound the read itself or hang the whole package on failure.
+*/
+func readWithin(conn net.Conn, within time.Duration) ([]byte, error) {
+	type result struct {
+		n   int
+		err error
+	}
+	buf := make([]byte, udpgwMaxFrame+2)
+	done := make(chan result, 1)
+	go func() {
+		n, err := conn.Read(buf)
+		done <- result{n, err}
+	}()
+	select {
+	case r := <-done:
+		return buf[:r.n], r.err
+	case <-time.After(within):
+		return nil, context.DeadlineExceeded
+	}
+}
+
+func readUDPGWFrame(t *testing.T, conn net.Conn) (flags byte, conid uint16, from netip.AddrPort, payload []byte) {
 	t.Helper()
-	head := make([]byte, 2)
-	if _, err := io.ReadFull(r, head); err != nil {
-		t.Fatalf("frame head: %v", err)
+	var body []byte
+	deadline := time.Now().Add(10 * time.Second)
+	for len(body) < 2 || len(body) < 2+int(binary.LittleEndian.Uint16(body[:2])) {
+		chunk, err := readWithin(conn, time.Until(deadline))
+		if err != nil {
+			t.Fatalf("frame: %v (have %d bytes)", err, len(body))
+		}
+		body = append(body, chunk...)
 	}
-	body := make([]byte, binary.LittleEndian.Uint16(head))
-	if _, err := io.ReadFull(r, body); err != nil {
-		t.Fatalf("frame body: %v", err)
-	}
+	body = body[2:]
 	flags, conid = body[0], binary.LittleEndian.Uint16(body[1:3])
 	rest := body[3:]
 	if flags&udpgwFlagIPv6 != 0 {
@@ -83,7 +108,6 @@ func openUDPGW(t *testing.T, client *gossh.Client, port int) net.Conn {
 	if err != nil {
 		t.Fatalf("the UDPGW forward was refused: %v", err)
 	}
-	_ = gw.SetDeadline(time.Now().Add(10 * time.Second))
 	return gw
 }
 
@@ -167,21 +191,40 @@ func TestUDPGWAnswersOnlyItsOwnAddress(t *testing.T) {
 	}
 }
 
-// Routed through Xray, UDP is refused rather than sent around the router.
-func TestUDPGWIsRefusedWhileRoutedThroughXray(t *testing.T) {
-	_, inst := startCore(t, `{"transport":"tcp","udpgw":true,"routeThroughXray":true,"routeXrayPort":1}`, userN(0))
-	client, err := dialTCP(t, inst, "user0", "secret-0")
+/*
+Routed through Xray, a datagram never leaves around the router. With the switch
+on and no bridge port yet the gateway is refused outright; with a port and no
+bridge behind it the conversation is attempted on the bridge and lost there,
+and the echo on loopback, which a direct dial would reach, hears nothing.
+*/
+func TestUDPGWNeverLeavesAroundTheRouter(t *testing.T) {
+	_, pending := startCore(t, `{"transport":"tcp","udpgw":true,"routeThroughXray":true}`, userN(0))
+	client, err := dialTCP(t, pending, "user0", "secret-0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	gw, err := client.Dial("tcp", "127.0.0.1:7300")
-	if err == nil {
+	if gw, err := client.Dial("tcp", "127.0.0.1:7300"); err == nil {
 		_ = gw.Close()
-		t.Fatal("a UDPGW session was opened on an inbound that routes through Xray; its datagrams would leave around the router")
-	}
-	if !strings.Contains(err.Error(), "routes through Xray") {
+		t.Fatal("a UDPGW session was opened on a routed inbound with no bridge port")
+	} else if !strings.Contains(err.Error(), "bridge port") {
 		t.Fatalf("the refusal does not say why: %v", err)
+	}
+
+	echo := udpEcho(t)
+	_, dead := startCore(t, `{"transport":"tcp","udpgw":true,"routeThroughXray":true,"routeXrayPort":1}`, userN(0))
+	routed, err := dialTCP(t, dead, "user0", "secret-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer routed.Close()
+	gw := openUDPGW(t, routed, udpgwDefaultPort)
+	defer gw.Close()
+	if _, err := gw.Write(udpgwFrame(0, 1, echo, []byte("leak?"))); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := readWithin(gw, 700*time.Millisecond); err == nil {
+		t.Fatalf("a datagram reached the loopback echo directly while the inbound was meant to route through Xray: %q", got)
 	}
 }
 

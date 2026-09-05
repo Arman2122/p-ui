@@ -697,12 +697,15 @@ func routingTagIsBalancer(routing map[string]any, tag string) bool {
 	return false
 }
 
-// xrayBridgeSocksSettings is the loopback SOCKS server a routed non-Xray
-// inbound exposes for its core to dial destinations through. Every core behind
-// it makes plain TCP connections, so UDP is left off (matching the panel
-// egress bridge). No credentials: it is bound to loopback and the panel's own
-// processes are the only callers, exactly as the panel egress bridge is.
-const xrayBridgeSocksSettings = `{"auth":"noauth","udp":false}`
+/*
+xrayBridgeSocksSettings is the loopback SOCKS server a routed non-Xray inbound
+exposes for its core to dial destinations through. It carries UDP too: SSH's
+UDPGW conversations and sing-box's UDP sessions reach the router as SOCKS5 UDP
+associations, and the relay address handed back is the loopback the bridge
+listens on. No credentials: it is bound to loopback and the panel's own
+processes are the only callers, exactly as the panel egress bridge is.
+*/
+const xrayBridgeSocksSettings = `{"auth":"noauth","udp":true,"ip":"127.0.0.1"}`
 
 // injectXrayBridge wires one routed non-Xray inbound into the generated config
 // after any selected outbound resolves in the final target set. Invalid
@@ -734,14 +737,14 @@ func injectXrayBridge(cfg *xray.Config, inbound *model.Inbound, siblings []*mode
 		if c.Port != parsed.RouteXrayPort {
 			continue
 		}
-		// The same three conjuncts checkPortConflict uses: the bridge is
-		// loopback TCP, so a UDP-only or public-IP-pinned neighbour is no clash.
+		// The bridge binds loopback on both transports, so only a neighbour that
+		// binds no port at all, or one pinned to another address, is no clash.
 		var listen string
 		_ = json.Unmarshal(c.Listen, &listen)
 		if !listenOverlaps(listen, "127.0.0.1") {
 			continue
 		}
-		if inboundTransports(model.Protocol(c.Protocol), string(c.StreamSettings), string(c.Settings))&transportTCP == 0 {
+		if inboundTransports(model.Protocol(c.Protocol), string(c.StreamSettings), string(c.Settings)) == 0 {
 			continue
 		}
 		logger.Warning("xray bridge: port", parsed.RouteXrayPort, "for inbound [", tag,
@@ -750,18 +753,15 @@ func injectXrayBridge(cfg *xray.Config, inbound *model.Inbound, siblings []*mode
 	}
 	/*
 		These rows never appear in the generated config -- their own cores bind
-		the ports -- so their listeners need their own pass.
-
-		The same TCP conjunct the generated-config loop above applies, and it is
-		load-bearing now that the sibling set is every kind Xray does not serve
-		rather than mtproto alone: without it a UDP-only neighbour, a WireGuard
-		inbound on the same number, silently suppresses a working TCP bridge.
+		the ports -- so their listeners need their own pass. A UDP-only neighbour
+		on the number, a WireGuard inbound, is a real clash now that the bridge
+		binds UDP as well: Xray fails the whole config on a port it cannot bind.
 	*/
 	for _, other := range siblings {
 		if other.Port != parsed.RouteXrayPort || !listenOverlaps(other.Listen, "127.0.0.1") {
 			continue
 		}
-		if inboundTransports(other.Protocol, other.StreamSettings, other.Settings)&transportTCP == 0 {
+		if inboundTransports(other.Protocol, other.StreamSettings, other.Settings) == 0 {
 			continue
 		}
 		logger.Warning("xray bridge: port", parsed.RouteXrayPort, "for inbound [", tag,

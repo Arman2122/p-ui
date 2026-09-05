@@ -485,7 +485,7 @@
         "sshRouteThroughXray": "Route forwards through Xray",
         "sshRouteThroughXrayHint": "Every forward this inbound opens is dialled through Xray instead of straight out, so routing rules can name this inbound. Two consequences: Xray becomes required, and while it is down forwards are refused rather than leaking out of the server's own address; and the Xray template's own rules, ad blocking and the private-address block, start applying to this traffic.",
         "sshUdpgw": "UDP through the tunnel (UDPGW)",
-        "sshUdpgwHint": "Serves badvpn's udpgw protocol on a loopback port inside the tunnel, which is how HTTP Injector, HTTP Custom and NapsternetV carry UDP (games, calls, DNS) over SSH: the app is given 127.0.0.1 and this port as its UDPGW address. Nothing extra listens on the host, and every datagram is billed and rate-limited like a TCP forward. While the inbound routes through Xray, UDP is refused rather than sent around the router.",
+        "sshUdpgwHint": "Serves badvpn's udpgw protocol on a loopback port inside the tunnel, which is how HTTP Injector, HTTP Custom and NapsternetV carry UDP (games, calls, DNS) over SSH: the app is given 127.0.0.1 and this port as its UDPGW address. Nothing extra listens on the host, and every datagram is billed and rate-limited like a TCP forward. Routed through Xray, these datagrams follow the routing rules like any TCP forward.",
         "sshUdpgwPort": "UDPGW port",
         "sshUdpgwPortHint": "The loopback port the app is told to use. 7300 is what the apps prefill.",
         "singboxCertFile": "Certificate file",

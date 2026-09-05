@@ -867,9 +867,9 @@ const mtprotoPortAllocationAttempts = 8
 loopbackPortIsClaimed reports whether another inbound would bind this port on
 127.0.0.1, which is where the mtproto bridge listens.
 
-The same three conjuncts checkPortConflict uses -- listen overlap, TCP, and the
-local panel only -- because the bridge is exactly an inbound of that shape. A
-node's inbounds are excluded: they run on their own box with their own core.
+Listen overlap and the local panel only, on either transport, because the
+bridge binds TCP and UDP on loopback. A node's inbounds are excluded: they run
+on their own box with their own core.
 */
 func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
 	if port <= 0 {
@@ -913,7 +913,8 @@ func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
 		if !listenOverlaps(row.Listen, "127.0.0.1") {
 			continue
 		}
-		if inboundTransports(row.Protocol, row.StreamSettings, row.Settings)&transportTCP == 0 {
+		// The bridge binds both transports; only a kind that binds nothing is free.
+		if inboundTransports(row.Protocol, row.StreamSettings, row.Settings) == 0 {
 			continue
 		}
 		return true

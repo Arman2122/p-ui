@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -113,53 +111,17 @@ func TestAForwardIsRefusedWhenTheRouterIsGone(t *testing.T) {
 // inbound: the loopback bridge, and a rule sending that tag to one outbound.
 func startXray(t *testing.T, bin string, bridgePort, exitPort int) func() {
 	t.Helper()
-	config := fmt.Sprintf(`{
+	return startXrayConfig(t, bin, bridgePort, fmt.Sprintf(`{
   "log": {"loglevel": "warning"},
   "inbounds": [
-    {"listen": "127.0.0.1", "port": %d, "protocol": "socks", "settings": {"auth": "noauth", "udp": false}, "tag": "ssh-e2e"}
+    {"listen": "127.0.0.1", "port": %d, "protocol": "socks", "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"}, "tag": "ssh-e2e"}
   ],
   "outbounds": [
     {"protocol": "socks", "settings": {"servers": [{"address": "127.0.0.1", "port": %d}]}, "tag": "exit"},
     {"protocol": "freedom", "tag": "direct"}
   ],
   "routing": {"rules": [{"type": "field", "inboundTag": ["ssh-e2e"], "outboundTag": "exit"}]}
-}`, bridgePort, exitPort)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(bin, "run", "-c", path)
-	logFile, _ := os.Create(filepath.Join(dir, "xray.log"))
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start xray: %v", err)
-	}
-	stopped := false
-	stop := func() {
-		if stopped {
-			return
-		}
-		stopped = true
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-	}
-	t.Cleanup(stop)
-
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(bridgePort)), time.Second)
-		if err == nil {
-			_ = conn.Close()
-			return stop
-		}
-		if time.Now().After(deadline) {
-			body, _ := os.ReadFile(filepath.Join(dir, "xray.log"))
-			t.Fatalf("xray never opened the bridge port:\n%s", body)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+}`, bridgePort, exitPort))
 }
 
 type socksExit struct {
