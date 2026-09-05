@@ -270,7 +270,23 @@ both minted when left empty. The panel enforces, inside the server:
 The client's config is served as a text file through the subscription file
 route (host, port, username, password, transport, path and the Injector payload
 template), and the subscription list carries an `ssh://` link for the apps that
-import one. Forwards are **TCP only**; UDP does not pass through this inbound.
+import one.
+
+**UDP.** With **UDP through the tunnel (UDPGW)** on, the inbound answers badvpn's
+udpgw protocol on a loopback port inside the tunnel (7300 by default), which is
+how HTTP Injector, HTTP Custom and NapsternetV carry UDP (games, calls, DNS)
+over SSH: the app is given `127.0.0.1` and that port as its UDPGW address.
+Nothing else listens on the host; every datagram is billed and rate-limited to
+the client like a TCP forward, DNS-flagged datagrams go to the server's own
+resolver, and destinations follow the same policy as TCP forwards. Routed
+through Xray, the datagrams follow the routing rules like any TCP forward.
+
+**Forward policy.** A forward cannot reach the server itself or a private
+network: loopback, link-local, private and reserved ranges and the host's own
+addresses are refused, after resolving a name, so the panel's own services are
+never one forward away. The server offers an ed25519 and an RSA host key, cuts
+off a handshake that never finishes, drops a peer that stops answering
+keepalives, and caps open forwards per connection.
 
 **Routing.** By default an SSH inbound dials its forwards straight out, and no
 routing rule can name it. Turn on **Route forwards through Xray** and the panel

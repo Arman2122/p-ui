@@ -2297,3 +2297,49 @@ connected, took an address and reached nothing. Both now follow the pool as
 well, the NAT rule written `ip saddr <pool> ip daddr != <pool>` in place of
 `iifname <dev> oifname != <dev>`, for the same two reasons the device form has
 them.
+
+### 12.5i UDP through the bridge, and the SSH server hardened (2026-09-05)
+
+The bridge of §12.5f carried TCP alone, which left two holes in the routing
+vision: an SSH client's UDP (the apps carry it as badvpn's udpgw, one forward
+to a loopback address with many conversations inside) had no way through the
+router, and a sing-box inbound whose clients spoke UDP sent it into a relay
+that dropped it. The bridge now has `udp` on with the relay address on the
+loopback it listens on. SSH opens one SOCKS5 UDP association per udpgw
+conversation, so Xray sees each as its own session with its own source and a
+`network: udp` rule applies; sing-box's socks outbound negotiates the
+association itself. Fail-closed is kept in both windows: no bridge port yet
+refuses UDP outright, a bridge that is down loses the datagram on the bridge
+and never sends it direct. Proven with a real xray both ways (a rule sinking
+UDP silences a loopback echo, the same rule to freedom makes it answer).
+
+The consequence for the allocator: a UDP-only neighbour on the bridge's port
+is a real conflict now, and the three places that ignored it (the injector's
+two passes, the port claim check) count it, while `FreeLocalPort` probes both
+transports before handing a port out.
+
+UDPGW itself lives in the SSH core (`udpgw.go`), in-process, because that is
+the only place every datagram can be billed to the client and rate-limited
+with the client's own limiter. The wire format was read from badvpn's source:
+16-bit little-endian length, flags, little-endian connection id, the address
+as it travels on the wire, then the datagram; badvpn's own rules for reuse,
+rebind, LRU eviction at 256 and the DNS flag (host resolver) are kept.
+
+The same pass hardened the server itself. The unrouted dialer refuses
+loopback, link-local, private, shared, multicast and reserved ranges and the
+host's own addresses after resolving the name, so the panel's own services
+are no longer one forward away; the routed path already had Xray's private
+block. A handshake runs under OpenSSH's grace time; a peer that stops
+answering keepalives is dropped after three misses, which frees the device
+slot the IP limit counts; forwards per connection are capped; a failed
+accept backs off instead of ending the listener. An RSA host key is offered
+beside ed25519 for the JSch-era Android apps, and because x/crypto's client
+prefers RSA, the SSH exits and the host-key scan share one ed25519-first
+preference so the fingerprint an operator pins is the key the exit connects
+with.
+
+OpenVPN gained `duplicate-cn` (the device cap is the sink's, and without it a
+second device replaced the first), a pushed `block-outside-dns`, and logs to
+stderr rather than an unrotated file; ocserv gained a TLS 1.2 floor and
+`switch-to-tcp-timeout`. Both change the rendered config, so every inbound of
+those kinds restarts once on the first reconcile after the upgrade.
