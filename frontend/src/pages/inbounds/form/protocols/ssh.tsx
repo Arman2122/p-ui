@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Input, Select, Switch } from 'antd';
+import { Input, InputNumber, Select, Switch } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { FormField } from '@/components/form/rhf';
@@ -9,6 +9,7 @@ export default function SshFields() {
   const { t } = useTranslation();
   const { control } = useFormContext();
   const transport = useWatch({ control, name: 'settings.transport' }) as string | undefined;
+  const udpgw = useWatch({ control, name: 'settings.udpgw' }) as boolean | undefined;
   const overWebSocket = transport === 'ws' || transport === 'wss';
   return (
     <>
@@ -55,7 +56,23 @@ export default function SshFields() {
       >
         <Switch />
       </FormField>
-      <Alert type="info" showIcon title={t('pages.inbounds.form.sshTcpOnly')} />
+      <FormField
+        name={['settings', 'udpgw']}
+        label={t('pages.inbounds.form.sshUdpgw')}
+        tooltip={t('pages.inbounds.form.sshUdpgwHint')}
+        valueProp="checked"
+      >
+        <Switch />
+      </FormField>
+      {udpgw && (
+        <FormField
+          name={['settings', 'udpgwPort']}
+          label={t('pages.inbounds.form.sshUdpgwPort')}
+          tooltip={t('pages.inbounds.form.sshUdpgwPortHint')}
+        >
+          <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+        </FormField>
+      )}
     </>
   );
 }

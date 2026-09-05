@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
+	"net/netip"
 	"sort"
 	"strconv"
 	"sync"
@@ -166,6 +168,7 @@ func (c *Core) ensureLocked(d core.Instance) error {
 		delete(c.instances, d.ID)
 	}
 	srv := newServer(d.ID, d.Tag, settings, c.hostKeys, c.dialerFor(settings), c.deps.AuthFailure)
+	srv.udp = c.udpDialerFor(settings)
 	userErr := srv.setUsers(d.Users)
 	if _, err := listen(listenSpec{listen: d.Listen, port: d.Port}, srv); err != nil {
 		return fmt.Errorf("ssh: inbound %d: listen: %w", d.ID, err)
@@ -199,6 +202,25 @@ func (c *Core) dialerFor(settings Settings) Dialer {
 		return refusingDialer(errors.New("ssh: this inbound routes through Xray and has no bridge port yet; save it again"))
 	}
 	return bridgeDialer(settings.RouteXrayPort)
+}
+
+/*
+udpDialerFor is the UDPGW conversations' half of dialerFor. Direct, it is the
+same dialer with network udp, so the destination policy holds for datagrams
+too. Routed, it is nil: the bridge carries TCP alone, and a datagram dialled
+directly there would leave around the router the operator asked for.
+*/
+func (c *Core) udpDialerFor(settings Settings) udpDialer {
+	if settings.RouteThroughXray {
+		return nil
+	}
+	dial := c.deps.Dial
+	if dial == nil {
+		dial = directDialer()
+	}
+	return func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
+		return dial(ctx, "udp", dst.String())
+	}
 }
 
 func (c *Core) StopAll(context.Context) error {

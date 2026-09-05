@@ -39,7 +39,11 @@ func (c *Core) RenderClient(inst core.Instance, user core.User, host string) (co
 	default:
 		b.WriteString("Transport: plain TCP\n")
 	}
-	b.WriteString("Forwarding: dynamic (SOCKS) or direct-tcpip; TCP only, no UDP\n")
+	if settings.UDPGW {
+		fmt.Fprintf(&b, "Forwarding: dynamic (SOCKS) or direct-tcpip\nUDPGW: 127.0.0.1:%d (the app's UDPGW address, for UDP through the tunnel)\n", settings.UDPGWPort)
+	} else {
+		b.WriteString("Forwarding: dynamic (SOCKS) or direct-tcpip; TCP only, no UDP\n")
+	}
 	return core.Share{
 		Kind:     "file",
 		Filename: safeName(cred.username) + ".txt",
@@ -61,6 +65,9 @@ func shareURI(host, port string, cred credential, settings Settings) string {
 	if settings.Transport != TransportTCP {
 		q.Set("transport", settings.Transport)
 		q.Set("path", pathOrRoot(settings.Path))
+	}
+	if settings.UDPGW {
+		q.Set("udpgw", strconv.Itoa(settings.UDPGWPort))
 	}
 	u.RawQuery = q.Encode()
 	return u.String()

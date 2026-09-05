@@ -220,7 +220,7 @@ export function generateMtprotoSecret(domain: string): string {
 }
 
 export function createDefaultSshInboundSettings(): SshInboundSettings {
-  return { transport: 'tcp', path: '', certFile: '', keyFile: '', banner: '', clients: [] };
+  return { transport: 'tcp', path: '', certFile: '', keyFile: '', banner: '', udpgw: true, udpgwPort: 7300, clients: [] };
 }
 
 export function createDefaultTuicInboundSettings(): TuicInboundSettings {

@@ -87,7 +87,10 @@ type server struct {
 	settings   Settings
 	hostKeys   []gossh.Signer
 	dial       Dialer
-	onFailure  func(AuthFailure)
+	// udp opens a UDPGW conversation; nil refuses UDP, which is what an inbound
+	// gets while it routes through a bridge that carries none.
+	udp       udpDialer
+	onFailure func(AuthFailure)
 
 	mu       sync.RWMutex
 	byUser   map[string]*credential
@@ -427,6 +430,12 @@ func (s *server) forward(c *conn, nc gossh.NewChannel) {
 		return
 	}
 	defer c.forwards.Add(-1)
+	// The UDPGW address is served here, never dialled: it is a port on loopback
+	// that exists only inside the tunnel.
+	if s.settings.UDPGW && int(req.Port) == s.settings.UDPGWPort && isUDPGWTarget(req.Host) {
+		s.udpgw(c, nc)
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 	dst, err := s.dial(ctx, "tcp", net.JoinHostPort(req.Host, strconv.Itoa(int(req.Port))))
 	cancel()

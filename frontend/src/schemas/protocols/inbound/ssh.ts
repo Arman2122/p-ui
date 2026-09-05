@@ -26,13 +26,15 @@ export type SshTransport = (typeof SSH_TRANSPORTS)[number];
 // The in-process SSH server: no Xray, no stream settings. One inbound is one
 // transport on one port; ws answers both the bare 101 the HTTP-Injector family
 // sends and a framed RFC 6455 upgrade, and wss is the same over TLS with the
-// pair named here. Forwards are TCP only.
+// pair named here. UDP rides the tunnel through the UDPGW port when enabled.
 export const SshInboundSettingsSchema = z.object({
   transport: z.enum(SSH_TRANSPORTS).default('tcp'),
   path: z.string().default(''),
   certFile: z.string().default(''),
   keyFile: z.string().default(''),
   banner: z.string().default(''),
+  udpgw: z.boolean().default(false),
+  udpgwPort: z.number().int().min(1).max(65535).default(7300),
   /* Sends every forward through the panel's loopback bridge into Xray's
      router, which is what lets a routing rule name this inbound.
      `routeXrayPort` is the bridge's port: allocated by the backend, never

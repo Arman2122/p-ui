@@ -1,8 +1,9 @@
 /*
 Package ssh is the in-process SSH core: an SSH server inside the panel offering
 direct-tcpip forwards over plain TCP, a WebSocket upgrade (bare 101 for the
-HTTP-Injector family, framed RFC 6455 for a CDN in front) or WSS. No sshd, no
-daemon, and every forwarded byte is counted in the process that moves it.
+HTTP-Injector family, framed RFC 6455 for a CDN in front) or WSS, and UDP
+through the tunnel by badvpn's udpgw protocol (udpgw.go). No sshd, no daemon,
+and every forwarded byte is counted in the process that moves it.
 */
 package ssh
 
@@ -55,6 +56,10 @@ type Settings struct {
 	*/
 	RouteThroughXray bool `json:"routeThroughXray"`
 	RouteXrayPort    int  `json:"routeXrayPort"`
+	// UDPGW answers badvpn's udpgw protocol on UDPGWPort inside the tunnel,
+	// which is how the HTTP-Injector family carries UDP over SSH.
+	UDPGW     bool `json:"udpgw"`
+	UDPGWPort int  `json:"udpgwPort"`
 }
 
 func parseSettings(raw string) (Settings, error) {
@@ -78,6 +83,12 @@ func parseSettings(raw string) (Settings, error) {
 	if s.Transport == TransportWSS && (s.CertFile == "" || s.KeyFile == "") {
 		return s, errors.New("ssh: wss needs a certificate and key file")
 	}
+	if s.UDPGW && s.UDPGWPort == 0 {
+		s.UDPGWPort = udpgwDefaultPort
+	}
+	if s.UDPGW && (s.UDPGWPort < 1 || s.UDPGWPort > 65535) {
+		return s, fmt.Errorf("ssh: udpgw port %d is out of range", s.UDPGWPort)
+	}
 	return s, nil
 }
 
@@ -89,7 +100,7 @@ func fingerprint(inst core.Instance, s Settings) string {
 	// listener: the dialer is chosen when the server is built, and a hot apply
 	// would leave live forwards on the old one.
 	parts := []string{inst.Listen, fmt.Sprint(inst.Port), s.Transport, s.Path, s.CertFile, s.KeyFile, s.Banner}
-	parts = append(parts, fmt.Sprint(s.RouteThroughXray), fmt.Sprint(s.RouteXrayPort))
+	parts = append(parts, fmt.Sprint(s.RouteThroughXray), fmt.Sprint(s.RouteXrayPort), fmt.Sprint(s.UDPGW), fmt.Sprint(s.UDPGWPort))
 	for _, part := range parts {
 		h.Write([]byte(part))
 		h.Write([]byte{0})
