@@ -10,8 +10,10 @@ import {
   Select,
   Space,
   Tabs,
+  Typography,
   message,
 } from 'antd';
+import type { DefaultOptionType } from 'antd/es/select';
 import { Controller, FormProvider, useForm, useWatch } from 'react-hook-form';
 import { FinalMaskField, SniffingField } from '@/lib/xray/forms/fields';
 import { FormField } from '@/components/form/rhf';
@@ -32,6 +34,7 @@ import {
   canEnableTlsFlow,
 } from '@/lib/xray/protocol-capabilities';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { kindLabel } from '@/lib/cores/kind-labels';
 import { outboundProtocolGroups } from '@/lib/cores/outbound-protocols';
 import {
   EgressFormFields,
@@ -143,13 +146,13 @@ export default function OutboundFormModal({
   /* A kind the registry declares but this build has no form for: offered, and
      refused with the reason rather than rendered as some other kind's fields. */
   const exitModule = isExit ? exitModuleForKind(protocol) : undefined;
-  const protocolOptions = useMemo(
+  const protocolOptions = useMemo<DefaultOptionType[]>(
     () => protocolGroups.map((group) => ({
       label: t(group.titleKey),
       title: t(group.titleKey),
       options: group.options.map((option) => ({
         value: option.kind,
-        label: option.kind,
+        label: kindLabel(t, option.kind),
         disabled: !!option.unavailable,
       })),
     })),
@@ -436,7 +439,25 @@ export default function OutboundFormModal({
                         label={t('protocol')}
                         name="protocol"
                       >
-                        <Select id="protocol" showSearch optionFilterProp="value" options={protocolOptions} />
+                        <Select
+                          id="protocol"
+                          showSearch
+                          virtual={false}
+                          options={protocolOptions}
+                          filterOption={(input, option) => {
+                            const needle = input.trim().toLowerCase();
+                            return String(option?.label ?? '').toLowerCase().includes(needle)
+                              || String(option?.value ?? '').toLowerCase().includes(needle);
+                          }}
+                          optionRender={(option) => (
+                            <span className="kind-option" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                              <span>{option.label}</span>
+                              <Typography.Text type="secondary" className="kind-code" style={{ fontSize: 12 }}>
+                                {String(option.value)}
+                              </Typography.Text>
+                            </span>
+                          )}
+                        />
                       </FormField>
 
                       <Controller

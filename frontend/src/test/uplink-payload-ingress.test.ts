@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { uplinkPayload } from '@/schemas/api/egress';
+import { EgressFormFields, uplinkPayload } from '@/schemas/api/egress';
 
 /*
 An uplink selects no ingress, and saying so with a zero made every create fail.
@@ -11,7 +11,7 @@ pointer on the server and reaches the column, where Postgres refuses it. This wa
 the panel's only path to authoring an uplink exit.
 */
 describe('uplinkPayload', () => {
-  const form = {
+  const form = EgressFormFields.parse({
     id: 0,
     type: 'wg-client' as const,
     remark: '',
@@ -30,7 +30,7 @@ describe('uplinkPayload', () => {
     sshPassword: '',
     sshKey: '',
     sshFingerprint: '',
-  };
+  });
 
   it('selects no ingress rather than inbound zero', () => {
     const payload = uplinkPayload(form, 'provider');

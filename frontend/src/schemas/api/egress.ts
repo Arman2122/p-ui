@@ -40,7 +40,13 @@ export const EGRESS_TYPE_AWG_UPLINK = 'awg-client';
 /* A core-owned exit is stored under its kind: the SSH core dials the remote and
    fronts a loopback SOCKS port, and no plane driver is involved. */
 export const EGRESS_TYPE_SSH = 'ssh';
-export const EGRESS_TYPES = [EGRESS_TYPE, EGRESS_TYPE_UPLINK, EGRESS_TYPE_AWG_UPLINK, EGRESS_TYPE_SSH] as const;
+/* Two more core-owned exits, each a client daemon the core runs whose tun the
+   plane routes into; stored under the kind like ssh. */
+export const EGRESS_TYPE_OPENVPN = 'openvpn';
+export const EGRESS_TYPE_OCSERV = 'ocserv';
+export const EGRESS_TYPES = [
+  EGRESS_TYPE, EGRESS_TYPE_UPLINK, EGRESS_TYPE_AWG_UPLINK, EGRESS_TYPE_SSH, EGRESS_TYPE_OPENVPN, EGRESS_TYPE_OCSERV,
+] as const;
 export type EgressType = (typeof EGRESS_TYPES)[number];
 
 /* An uplink carries no target: it IS the destination. Its settings are the
@@ -85,6 +91,16 @@ export const EgressFormFields = z.object({
   sshPassword: z.string().default(''),
   sshKey: z.string().default(''),
   sshFingerprint: z.string().trim().default(''),
+  /* An OpenVPN exit: the provider's profile and the login it asks for. */
+  ovpnProfile: z.string().default(''),
+  ovpnUser: z.string().trim().default(''),
+  ovpnPassword: z.string().default(''),
+  /* An OpenConnect exit: the server, the login, and the pin of a self-signed one. */
+  ocServer: z.string().trim().default(''),
+  ocUser: z.string().trim().default(''),
+  ocPassword: z.string().default(''),
+  ocPin: z.string().trim().default(''),
+  ocGroup: z.string().trim().default(''),
 });
 
 /* Which fields are required depends on the type, so it is refined rather than
@@ -107,6 +123,21 @@ export const EgressFormSchema = EgressFormFields.superRefine((value, ctx) => {
     if (!value.sshPassword && !value.sshKey) {
       ctx.addIssue({ code: 'custom', path: ['sshPassword'], message: 'pages.xray.egress.sshAuthRequired' });
     }
+    return;
+  }
+  if (value.type === EGRESS_TYPE_OPENVPN) {
+    if (!value.ovpnProfile.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['ovpnProfile'], message: 'pages.xray.egress.ovpnProfileRequired' });
+    }
+    return;
+  }
+  if (value.type === EGRESS_TYPE_OCSERV) {
+    const needOc = (field: 'ocServer' | 'ocUser' | 'ocPassword', key: string) => {
+      if (!value[field]) ctx.addIssue({ code: 'custom', path: [field], message: key });
+    };
+    needOc('ocServer', 'pages.xray.egress.ocServerRequired');
+    needOc('ocUser', 'pages.xray.egress.ocUserRequired');
+    needOc('ocPassword', 'pages.xray.egress.ocPasswordRequired');
     return;
   }
   need('privateKey', 'pages.xray.egress.privateKeyRequired');
@@ -191,6 +222,54 @@ export function sshPayload(form: EgressFormValues, remark: string): EgressPayloa
       password: form.sshPassword,
       privateKey: form.sshKey,
       hostKeyFingerprint: form.sshFingerprint,
+    }),
+  };
+}
+
+/* An OpenVPN exit's stored settings, as the core reads them. */
+export const OpenvpnExitSettingsSchema = z.object({
+  profile: z.string().default(''),
+  username: z.string().trim().default(''),
+  password: z.string().default(''),
+});
+
+export function openvpnPayload(form: EgressFormValues, remark: string): EgressPayload {
+  return {
+    id: form.id,
+    type: EGRESS_TYPE_OPENVPN,
+    remark: remark.trim(),
+    target: '',
+    enable: form.enable,
+    owner: 'operator',
+    ingressInboundId: null,
+    settings: JSON.stringify({ profile: form.ovpnProfile, username: form.ovpnUser, password: form.ovpnPassword }),
+  };
+}
+
+/* An OpenConnect exit's stored settings, as the core reads them. */
+export const OcservExitSettingsSchema = z.object({
+  server: z.string().trim().default(''),
+  username: z.string().trim().default(''),
+  password: z.string().default(''),
+  serverCertPin: z.string().trim().default(''),
+  group: z.string().trim().default(''),
+});
+
+export function ocservPayload(form: EgressFormValues, remark: string): EgressPayload {
+  return {
+    id: form.id,
+    type: EGRESS_TYPE_OCSERV,
+    remark: remark.trim(),
+    target: '',
+    enable: form.enable,
+    owner: 'operator',
+    ingressInboundId: null,
+    settings: JSON.stringify({
+      server: form.ocServer,
+      username: form.ocUser,
+      password: form.ocPassword,
+      serverCertPin: form.ocPin,
+      group: form.ocGroup,
     }),
   };
 }

@@ -5,7 +5,7 @@ import {
   exitModuleForKind,
   exitModuleForType,
 } from '@/pages/xray/outbounds/exits';
-import { EgressFormFields, type EgressRecord } from '@/schemas/api/egress';
+import { EgressFormFields, EgressFormSchema, type EgressRecord } from '@/schemas/api/egress';
 
 /*
 Before this registry both halves were the WireGuard uplink's: any kind a core
@@ -22,9 +22,9 @@ describe('an exit kind resolves to its own module', () => {
   it('has no module for a kind this build cannot author, rather than a wrong one', () => {
     /* The registry is the backend's answer about what CAN exit; this build
        either has a form or says so. Silently reusing another kind's is the bug. */
-    expect(exitModuleForKind('openvpn')).toBeUndefined();
+    expect(exitModuleForKind('tuic')).toBeUndefined();
     expect(exitModuleForKind('')).toBeUndefined();
-    expect(authorableExitKinds()).toEqual(['ssh', 'wgkernel', 'awgkernel']);
+    expect(authorableExitKinds()).toEqual(['ssh', 'openvpn', 'ocserv', 'wgkernel', 'awgkernel']);
   });
 
   it('finds the module for a stored row by its type, since a row carries no kind', () => {
@@ -33,6 +33,10 @@ describe('an exit kind resolves to its own module', () => {
     expect(exitModuleForType('ssh')).toBe(exitModuleForKind('ssh'));
     expect(exitModuleForType('xray-tun')).toBeUndefined();
     expect(exitModuleForType('openvpn-client')).toBeUndefined();
+    /* Stored under the kind, like ssh: the type is what the plane's driver and
+       the core both answer to, and a second vocabulary would let them disagree. */
+    expect(exitModuleForType('openvpn')).toBe(exitModuleForKind('openvpn'));
+    expect(exitModuleForType('ocserv')).toBe(exitModuleForKind('ocserv'));
   });
 
   /* The backend declares awgkernel as an exit and registers the awg-client
@@ -141,5 +145,45 @@ describe('the awgkernel module keeps the obfuscation it was given', () => {
     const plain = { ...row, type: 'wg-client', settings: JSON.stringify({ endpoint: 'x:1' }) } as EgressRecord;
     const payload = module.toPayload(EgressFormFields.parse(module.fromRecord(plain)), 'plain');
     expect(JSON.parse(payload.settings)).not.toHaveProperty('awg');
+  });
+});
+
+/* The two daemon-made exits round-trip their rows through the edit form's
+   re-parse, the profile verbatim: a stripped line would be a stripped certificate. */
+describe('the openvpn and ocserv modules round-trip a row', () => {
+  const profile = 'client\nremote vpn.example.net 1194\n<ca>\nMIIB\n</ca>\n';
+  const ovpn: EgressRecord = {
+    id: 11, type: 'openvpn', enable: true, remark: 'provider-de', target: '',
+    settings: JSON.stringify({ profile, username: 'alice', password: 'pw' }),
+    createdAt: 0, updatedAt: 0,
+  } as EgressRecord;
+  const ocs: EgressRecord = {
+    id: 12, type: 'ocserv', enable: true, remark: 'office', target: '',
+    settings: JSON.stringify({ server: 'vpn.example.net:8443', username: 'bob', password: 'pw2', serverCertPin: 'pin-sha256:AAAA', group: 'staff' }),
+    createdAt: 0, updatedAt: 0,
+  } as EgressRecord;
+
+  it('keeps the profile byte for byte and the login beside it', () => {
+    const module = exitModuleForKind('openvpn')!;
+    const form = EgressFormFields.parse(module.fromRecord(ovpn));
+    expect(form.ovpnProfile).toBe(profile);
+    const payload = module.toPayload(form, 'provider-de');
+    expect(payload.type).toBe('openvpn');
+    expect(JSON.parse(payload.settings)).toEqual({ profile, username: 'alice', password: 'pw' });
+  });
+
+  it('writes every OpenConnect field back under the name the core reads', () => {
+    const module = exitModuleForKind('ocserv')!;
+    const payload = module.toPayload(EgressFormFields.parse(module.fromRecord(ocs)), 'office');
+    expect(payload.type).toBe('ocserv');
+    expect(JSON.parse(payload.settings)).toEqual({
+      server: 'vpn.example.net:8443', username: 'bob', password: 'pw2', serverCertPin: 'pin-sha256:AAAA', group: 'staff',
+    });
+  });
+
+  it('refuses an OpenVPN exit without a profile and an OpenConnect one without a server', () => {
+    expect(EgressFormSchema.safeParse({ type: 'openvpn', ovpnProfile: '  ' }).success).toBe(false);
+    expect(EgressFormSchema.safeParse({ type: 'ocserv', ocUser: 'bob', ocPassword: 'x' }).success).toBe(false);
+    expect(EgressFormSchema.safeParse({ type: 'ocserv', ocServer: 'vpn.example.net', ocUser: 'bob', ocPassword: 'x' }).success).toBe(true);
   });
 });

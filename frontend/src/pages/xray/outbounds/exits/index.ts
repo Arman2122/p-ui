@@ -2,11 +2,17 @@ import type { ComponentType } from 'react';
 
 import {
   EGRESS_TYPE_AWG_UPLINK,
+  EGRESS_TYPE_OCSERV,
+  EGRESS_TYPE_OPENVPN,
   EGRESS_TYPE_SSH,
   EGRESS_TYPE_UPLINK,
   EgressFormFields,
+  OcservExitSettingsSchema,
+  OpenvpnExitSettingsSchema,
   SshExitSettingsSchema,
   UplinkSettingsSchema,
+  ocservPayload,
+  openvpnPayload,
   sshPayload,
   uplinkPayload,
   type EgressFormValues,
@@ -15,6 +21,8 @@ import {
 } from '@/schemas/api/egress';
 
 import AwgkernelExitFields from './awgkernel-fields';
+import OcservExitFields from './ocserv-fields';
+import OpenvpnExitFields from './openvpn-fields';
 import SshExitFields from './ssh-fields';
 import WgkernelExitFields from './wgkernel-fields';
 
@@ -91,12 +99,49 @@ function sshFromRecord(row: EgressRecord): EgressFormValues {
   }
 }
 
+function openvpnFromRecord(row: EgressRecord): EgressFormValues {
+  const base = EgressFormFields.parse({ type: EGRESS_TYPE_OPENVPN, remark: row.remark ?? '', enable: row.enable ?? true });
+  if (!row.settings) return base;
+  try {
+    const parsed = OpenvpnExitSettingsSchema.safeParse(JSON.parse(row.settings));
+    if (!parsed.success) return base;
+    return { ...base, id: row.id, ovpnProfile: parsed.data.profile, ovpnUser: parsed.data.username, ovpnPassword: parsed.data.password };
+  } catch {
+    return base;
+  }
+}
+
+function ocservFromRecord(row: EgressRecord): EgressFormValues {
+  const base = EgressFormFields.parse({ type: EGRESS_TYPE_OCSERV, remark: row.remark ?? '', enable: row.enable ?? true });
+  if (!row.settings) return base;
+  try {
+    const parsed = OcservExitSettingsSchema.safeParse(JSON.parse(row.settings));
+    if (!parsed.success) return base;
+    const s = parsed.data;
+    return { ...base, id: row.id, ocServer: s.server, ocUser: s.username, ocPassword: s.password, ocPin: s.serverCertPin, ocGroup: s.group };
+  } catch {
+    return base;
+  }
+}
+
 const MODULES: Record<string, ExitKindModule> = {
   ssh: {
     egressType: EGRESS_TYPE_SSH,
     Fields: SshExitFields,
     toPayload: sshPayload,
     fromRecord: sshFromRecord,
+  },
+  openvpn: {
+    egressType: EGRESS_TYPE_OPENVPN,
+    Fields: OpenvpnExitFields,
+    toPayload: openvpnPayload,
+    fromRecord: openvpnFromRecord,
+  },
+  ocserv: {
+    egressType: EGRESS_TYPE_OCSERV,
+    Fields: OcservExitFields,
+    toPayload: ocservPayload,
+    fromRecord: ocservFromRecord,
   },
   wgkernel: {
     egressType: EGRESS_TYPE_UPLINK,
