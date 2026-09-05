@@ -37,8 +37,7 @@ var (
 )
 
 // CoreVersions is GET /cores/:id/versions. A stale list is served over a failed
-// refresh, since the alternative is a version picker that goes blank whenever
-// GitHub blinks.
+// refresh: the alternative is a picker that goes blank whenever GitHub blinks.
 func CoreVersions(ctx context.Context, coreID string) (CoreVersionsView, error) {
 	bound, err := boundCore(coreID)
 	if err != nil {

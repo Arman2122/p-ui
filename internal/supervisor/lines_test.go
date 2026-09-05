@@ -7,9 +7,8 @@ import (
 	"time"
 )
 
-// The ring is what an operator reads after a daemon died under exec, so what
-// reaches it matters: a line split across two writes is one line, a last line
-// with no newline is kept at Flush, and only the newest limit lines remain.
+// This is what an operator reads after a death under exec: a split write is one
+// line, a last line with no newline is kept at Flush, only the newest limit stay.
 func TestLineRingKeepsWholeStampedLines(t *testing.T) {
 	stamp := time.Date(2026, 9, 5, 18, 0, 0, 0, time.UTC)
 	r := NewLineRing(3)

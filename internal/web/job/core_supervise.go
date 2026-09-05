@@ -23,8 +23,8 @@ type CoreSuperviseJob struct {
 	// panelConverged is the core the panel reconciles through its own config
 	// build; cores.PanelConvergedCore says why an instance set cannot describe it.
 	panelConverged core.Kind
-	// marks is what the last pass saw of each unit, keyed core/instance, so a
-	// crash is published once per outage and its all-clear once.
+	// marks is the last pass's view of each unit, keyed core/instance, so a crash
+	// is told once per outage. Unlocked: cron's SkipIfStillRunning serialises passes.
 	marks map[string]instanceMark
 }
 

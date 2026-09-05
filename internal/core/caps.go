@@ -115,8 +115,7 @@ type HealthReporter interface {
 }
 
 // LogTailer returns the last n lines the daemon wrote: for a unit that died at
-// once, its stderr is the only place the reason is. instanceID 0 is a core with
-// one process.
+// once its stderr is the only place the reason is. instanceID 0 = one process.
 type LogTailer interface {
 	TailLog(ctx context.Context, instanceID, n int) ([]string, error)
 }

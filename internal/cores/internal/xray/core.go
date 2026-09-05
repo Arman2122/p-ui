@@ -494,9 +494,8 @@ func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.Ingres
 	return core.IngressHandle{Tag: inst.Tag}, nil
 }
 
-// Health is the one process's: alive per the engine, ready when the API inbound
-// answers — Xray binds it with the rest of the config, so a listener there is a
-// config that loaded.
+// Health is the one process's: alive per the engine, ready once the API inbound
+// answers — Xray binds it with the whole config, so a listener means it loaded.
 func (c *Core) Health(ctx context.Context) (core.Health, error) {
 	process := c.mgr.Current()
 	if process == nil {

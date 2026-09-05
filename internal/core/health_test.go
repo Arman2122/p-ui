@@ -2,9 +2,8 @@ package core
 
 import "testing"
 
-// Overall is the one derivation every reader of a per-inbound core's health
-// shares, so each of its branches is pinned: the page, the event pass and the
-// conformance suite must never disagree on what degraded means.
+// Overall is the one derivation of a per-inbound core's health, so every branch
+// is pinned: the page, the event pass and coretest must agree on "degraded".
 func TestOverallDerivesOneStateFromTheInstances(t *testing.T) {
 	inst := func(state HealthState, ready bool) InstanceHealth {
 		return InstanceHealth{State: state, Ready: ready}

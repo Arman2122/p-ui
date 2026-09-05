@@ -70,9 +70,8 @@ func TestARealDeadDaemonIsStartedAgain(t *testing.T) {
 	if h, err := c.Health(ctx); err != nil || len(h.Instances) != 1 || h.Instances[0].State != core.HealthRunning || !h.Instances[0].Ready {
 		t.Fatalf("Health after the repair = %+v, %v; want running and ready", h, err)
 	}
-	// At warn level a healthy daemon says nothing, and a SIGKILL leaves no last
-	// words: the tail is legitimately empty here; the ring itself is proven in
-	// the supervisor's tests, this asks only that the unit is readable.
+	// At warn level a healthy daemon says nothing and SIGKILL leaves no last words:
+	// an empty tail is legitimate. The ring is proven in the supervisor's own tests.
 	if _, err := c.TailLog(ctx, 4, 50); err != nil {
 		t.Fatalf("TailLog: %v", err)
 	}
