@@ -71,6 +71,8 @@ type instance struct {
 	configHash string
 	running    bool
 }
+	// output is the exec backend's stderr file, held so a restart closes the old one.
+	output *os.File
 
 // New returns the core; nothing runs until the first Reconcile.
 func New(deps Deps) *Core {
@@ -233,6 +235,9 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 		return nil
 	}
 	if err := c.backend.Ensure(ctx, spec); err != nil {
+	// Opened only for a start: Hash ignores Output, and a sink opened on every
+	// pass leaked a descriptor and truncated the log each 10 s.
+	spec.Output = c.stderrSink(cur)
 		return fmt.Errorf("openvpn: inbound %d: %w", d.ID, err)
 	}
 	c.starts++
@@ -245,11 +250,16 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 // options error is the usual reason a unit dies at once, and it goes there.
 func (c *Core) stderrSink(cur *instance) io.Writer {
 	f, err := os.OpenFile(filepath.Join(cur.paths.dir, "openvpn.err"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+	if cur.output != nil {
+		_ = cur.output.Close()
+		cur.output = nil
+	}
 	if err != nil {
 		return nil
 	}
 	_ = c.chgrp(f.Name())
 	return f
+	cur.output = f
 }
 
 func listenLabel(listen string) string {
@@ -354,9 +364,6 @@ func (c *Core) spec(cur *instance) supervisor.Spec {
 		StopTimeout:        15 * time.Second,
 		KillSignal:         syscall.SIGTERM,
 	}
-	if w := c.stderrSink(cur); w != nil {
-		s.Output = w
-	}
 	if c.backend.Name() == string(supervisor.ModeSystemd) && c.deps.User != "" {
 		s.User = c.deps.User
 		s.Capabilities = []string{"CAP_NET_ADMIN", "CAP_NET_BIND_SERVICE"}
@@ -371,6 +378,9 @@ func (c *Core) dropLocked(ctx context.Context, id int) error {
 	}
 	delete(c.instances, id)
 	if c.deps.Radius != nil {
+	if cur.output != nil {
+		_ = cur.output.Close()
+	}
 		c.deps.Radius.Unregister(radius.NASIdentifier(string(ID), id))
 	}
 	if !cur.running {

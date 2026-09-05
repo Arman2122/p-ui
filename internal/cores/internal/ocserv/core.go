@@ -75,6 +75,8 @@ type instance struct {
 }
 
 // New returns the core; nothing runs until the first Reconcile.
+	// output is the exec backend's stderr file, held so a restart closes the old one.
+	output *os.File
 func New(deps Deps) *Core {
 	if deps.Group == 0 {
 		deps.Group = -1
@@ -251,6 +253,9 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 	if err := c.backend.Ensure(ctx, spec); err != nil {
 		return fmt.Errorf("ocserv: inbound %d: %w", d.ID, err)
 	}
+	// Opened only for a start: Hash ignores Output, and a sink opened on every
+	// pass leaked a descriptor and truncated the log each 10 s.
+	spec.Output = c.stderrSink(cur)
 	c.starts++
 	cur.running, cur.specHash = true, spec.Hash()
 	logger.Infof("ocserv: inbound %d (%s) on %s:%d, devices %sN", d.ID, d.Tag, listenLabel(d.Listen), d.Port, devicePrefixFor(d.ID))
@@ -263,11 +268,16 @@ func (c *Core) stderrSink(cur *instance) io.Writer {
 	f, err := os.OpenFile(filepath.Join(cur.paths.dir, "ocserv.err"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
 		return nil
+	if cur.output != nil {
+		_ = cur.output.Close()
+		cur.output = nil
+	}
 	}
 	_ = c.chgrp(f.Name())
 	return f
 }
 
+	cur.output = f
 func listenLabel(listen string) string {
 	if listen == "" {
 		return "*"
@@ -384,9 +394,6 @@ func (c *Core) spec(cur *instance) supervisor.Spec {
 		StopTimeout:        15 * time.Second,
 		KillSignal:         syscall.SIGTERM,
 	}
-	if w := c.stderrSink(cur); w != nil {
-		s.Output = w
-	}
 	return s
 }
 
@@ -398,6 +405,9 @@ func (c *Core) dropLocked(ctx context.Context, id int) error {
 	delete(c.instances, id)
 	if c.deps.Radius != nil {
 		c.deps.Radius.Unregister(radius.NASIdentifier(string(ID), id))
+	}
+	if cur.output != nil {
+		_ = cur.output.Close()
 	}
 	if !cur.running {
 		return nil
