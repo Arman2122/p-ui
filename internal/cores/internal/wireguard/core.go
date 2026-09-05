@@ -415,3 +415,8 @@ func (c *Core) ExitHandle(_ context.Context, exit core.Exit) (core.ExitHandle, e
 func (c *Core) Transports(core.Kind, string, string) core.Transports {
 	return core.Transports{UDP: true}
 }
+
+// Health is read off the kernel per device; there is no process to ask.
+func (c *Core) Health(ctx context.Context) (core.Health, error) {
+	return core.Health{Instances: c.mgr.Health(ctx)}, nil
+}

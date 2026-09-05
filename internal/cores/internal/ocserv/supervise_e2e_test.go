@@ -4,7 +4,11 @@ package ocserv
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -45,6 +49,9 @@ func TestARealDeadDaemonIsStartedAgain(t *testing.T) {
 		st, err := c.backend.Status(ctx, unit)
 		return err == nil && st.State == supervisor.StateFailed
 	}, func() string { return "the backend never saw the daemon die" })
+	if h, err := c.Health(ctx); err != nil || len(h.Instances) != 1 || h.Instances[0].State != core.HealthFailed || !strings.Contains(h.Instances[0].Detail, "signal: killed") {
+		t.Fatalf("Health after the crash = %+v, %v; want the one instance failed with the kill named", h, err)
+	}
 
 	if err := c.Reconcile(ctx, []core.Instance{inst}); err != nil {
 		t.Fatalf("reconcile after the crash: %v", err)
@@ -54,4 +61,39 @@ func TestARealDeadDaemonIsStartedAgain(t *testing.T) {
 		t.Fatalf("status after reconcile = %+v, %v; want a new running daemon (was pid %d)", after, err, before.PID)
 	}
 	waitFor(t, 10*time.Second, answers, func() string { return "the restarted daemon never answered occtl" })
+	waitFor(t, 10*time.Second, func() bool {
+		h, err := c.Health(ctx)
+		return err == nil && len(h.Instances) == 1 && h.Instances[0].State == core.HealthRunning && h.Instances[0].Ready
+	}, func() string {
+		h, _ := c.Health(ctx)
+		return fmt.Sprintf("Health after the repair = %+v; want running and ready", h)
+	})
+	if lines, err := c.TailLog(ctx, 6, 50); err != nil || len(lines) == 0 {
+		t.Fatalf("TailLog = %q, %v; want the daemon's own lines", lines, err)
+	}
+}
+
+// unitAlive asks the kernel about the unit's process, so Health is checked
+// against what runs and not against what the adapter believes.
+func unitAlive(b supervisor.Backend, id int) bool {
+	st, err := b.Status(context.Background(), supervisor.UnitName(string(ID), id))
+	if err != nil || st.PID <= 0 {
+		return false
+	}
+	return syscall.Kill(st.PID, 0) == nil
+}
+
+// The daemon's own check runs on the rendered file before a start, so a config
+// it would refuse never becomes a unit that dies at once. Proven on garbage.
+func TestConfigCheckRefusesWhatTheDaemonWould(t *testing.T) {
+	daemon, ctl, _ := e2eGate(t)
+	c := newE2ECore(t, daemon, ctl)
+	bad := filepath.Join(t.TempDir(), "bad.conf")
+	if err := os.WriteFile(bad, []byte("this is not = [an ocserv config\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := c.testConfig(context.Background(), bad)
+	if err == nil || !strings.Contains(err.Error(), "config refused") {
+		t.Fatalf("testConfig(garbage) = %v; want the daemon's refusal", err)
+	}
 }

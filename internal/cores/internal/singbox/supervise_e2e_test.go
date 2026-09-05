@@ -4,6 +4,7 @@ package singbox
 
 import (
 	"context"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -49,6 +50,9 @@ func TestARealDeadDaemonIsStartedAgain(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	if h, err := c.Health(ctx); err != nil || len(h.Instances) != 1 || h.Instances[0].State != core.HealthFailed || !strings.Contains(h.Instances[0].Detail, "signal: killed") {
+		t.Fatalf("Health after the crash = %+v, %v; want the one instance failed with the kill named", h, err)
+	}
 
 	if err := c.Reconcile(ctx, []core.Instance{inst}); err != nil {
 		t.Fatalf("reconcile after the crash: %v", err)
@@ -62,5 +66,14 @@ func TestARealDeadDaemonIsStartedAgain(t *testing.T) {
 	c.mu.Unlock()
 	if starts != 2 {
 		t.Fatalf("starts = %d; want 2, one per life of the daemon", starts)
+	}
+	if h, err := c.Health(ctx); err != nil || len(h.Instances) != 1 || h.Instances[0].State != core.HealthRunning || !h.Instances[0].Ready {
+		t.Fatalf("Health after the repair = %+v, %v; want running and ready", h, err)
+	}
+	// At warn level a healthy daemon says nothing, and a SIGKILL leaves no last
+	// words: the tail is legitimately empty here; the ring itself is proven in
+	// the supervisor's tests, this asks only that the unit is readable.
+	if _, err := c.TailLog(ctx, 4, 50); err != nil {
+		t.Fatalf("TailLog: %v", err)
 	}
 }

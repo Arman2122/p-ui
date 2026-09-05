@@ -6,10 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	engine "github.com/Arman2122/p-ui/internal/xray"
@@ -485,4 +488,41 @@ func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
 // ingress needs no device: the router is the same process that terminates it.
 func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.IngressHandle, error) {
 	return core.IngressHandle{Tag: inst.Tag}, nil
+}
+
+// Health is the one process's: alive per the engine, ready when the API inbound
+// answers — Xray binds it with the rest of the config, so a listener there is a
+// config that loaded.
+func (c *Core) Health(ctx context.Context) (core.Health, error) {
+	process := c.mgr.Current()
+	if process == nil {
+		return core.Health{State: core.HealthStopped, Detail: "never started"}, nil
+	}
+	h := core.Health{PID: process.PID(), SinceUnixMilli: process.StartTime().UnixMilli()}
+	switch {
+	case process.IsRunning():
+		h.State = core.HealthRunning
+		if err := apiAnswers(ctx, process.GetAPIPort()); err == nil {
+			h.Ready = true
+		} else {
+			h.Detail = "the API port does not answer: " + err.Error()
+		}
+	case process.GetErr() != nil:
+		h.State, h.Detail = core.HealthFailed, process.GetResult()
+	default:
+		h.State, h.Detail = core.HealthStopped, process.GetResult()
+	}
+	return h, nil
+}
+
+func apiAnswers(ctx context.Context, port int) error {
+	if port <= 0 {
+		return errors.New("no API port")
+	}
+	d := net.Dialer{Timeout: time.Second}
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }

@@ -339,3 +339,13 @@ const blockedForcedOutbound = "pages.xray.subjects.reasonForcedOutbound"
 func (c *Core) Transports(core.Kind, string, string) core.Transports {
 	return core.Transports{TCP: true}
 }
+
+// Health is per sidecar, read from the manager that runs them.
+func (c *Core) Health(context.Context) (core.Health, error) {
+	return core.Health{Instances: c.mgr.Health()}, nil
+}
+
+// TailLog is the sidecar's last lines, kept across its restarts.
+func (c *Core) TailLog(_ context.Context, instanceID, n int) ([]string, error) {
+	return c.mgr.Logs(instanceID, n)
+}

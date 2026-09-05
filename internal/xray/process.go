@@ -561,3 +561,16 @@ func pruneOldCrashReports(dir string, keep int) {
 		_ = os.Remove(filepath.Join(dir, old))
 	}
 }
+
+// PID is the child's, or 0 while none runs.
+func (p *process) PID() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
+}
+
+// StartTime is when this process was created, which is when its life began.
+func (p *process) StartTime() time.Time { return p.startTime }

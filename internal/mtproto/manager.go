@@ -23,6 +23,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 )
 
 // SecretEntry is one named FakeTLS secret served by an mtg-proxy process. Name is
@@ -164,6 +165,9 @@ type managed struct {
 	// counter outlives the process it belongs to: mtg's counters restart at
 	// zero, and only a surviving baseline can tell that apart from idle.
 	counter *core.Counter
+	// ring outlives it for the same reason: the lines a sidecar printed on its
+	// way down are read after the restart that replaced it.
+	ring *supervisor.LineRing
 }
 
 // Manager owns the set of running mtg processes keyed by inbound id.
@@ -399,6 +403,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 	structFP := inst.StructuralFingerprint()
 	secFP := inst.SecretsFingerprint()
 	counter := core.NewCounter()
+	ring := supervisor.NewLineRing(supervisor.RingLines)
 	if cur, ok := m.procs[inst.Id]; ok {
 		switch ensureActionFor(cur.proc.IsRunning(), cur.structuralFP, cur.secretsFP, structFP, secFP) {
 		case ensureNoop:
@@ -418,7 +423,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 			logger.Warningf("mtproto: live secret update unavailable for inbound %d, restarting", inst.Id)
 			fallthrough
 		case ensureRestart:
-			counter = cur.counter
+			counter, ring = cur.counter, cur.ring
 			m.billFinalLocked(cur)
 			_ = cur.proc.Stop()
 			delete(m.procs, inst.Id)
@@ -443,6 +448,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		return err
 	}
 	proc := newProcess(cfgPath, fmt.Sprintf("inbound %d", inst.Id), inst.Id)
+	proc.keepLines(ring)
 	if err := proc.Start(); err != nil {
 		return err
 	}
@@ -455,6 +461,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		apiToken:     apiToken,
 		routed:       inst.RouteThroughXray,
 		counter:      counter,
+		ring:         ring,
 	}
 	logger.Infof("mtproto: started mtg for inbound %d on %s", inst.Id, inst.bindTo())
 	return nil
@@ -1001,4 +1008,62 @@ func (m *Manager) removeStaleConfigsLocked(want map[int]struct{}) {
 	if removed > 0 {
 		logger.Infof("mtproto: removed %d config(s) for inbound(s) that no longer exist", removed)
 	}
+}
+
+// Health is each sidecar as the manager sees it, ready when its stats API
+// answers; a dead one carries its last line, since that is where mtg says why.
+func (m *Manager) Health() []core.InstanceHealth {
+	type probe struct {
+		id    int
+		tag   string
+		proc  *Process
+		port  int
+		token string
+	}
+	m.mu.Lock()
+	probes := make([]probe, 0, len(m.procs))
+	for id, cur := range m.procs {
+		probes = append(probes, probe{id: id, tag: cur.tag, proc: cur.proc, port: cur.apiPort, token: cur.apiToken})
+	}
+	m.mu.Unlock()
+	slices.SortFunc(probes, func(a, b probe) int { return a.id - b.id })
+	out := make([]core.InstanceHealth, 0, len(probes))
+	for _, p := range probes {
+		h := core.InstanceHealth{InstanceID: p.id, Tag: p.tag}
+		if p.proc == nil {
+			h.State, h.Detail = core.HealthStopped, "never started"
+			out = append(out, h)
+			continue
+		}
+		h.PID = p.proc.PID()
+		if started := p.proc.Started(); !started.IsZero() {
+			h.SinceUnixMilli = started.UnixMilli()
+		}
+		switch {
+		case p.proc.IsRunning():
+			h.State = core.HealthRunning
+			if _, ok := scrapeStats(p.port, p.token); ok {
+				h.Ready = true
+			} else {
+				h.Detail = "the stats API does not answer"
+			}
+		case p.proc.Crashed():
+			h.State, h.Detail = core.HealthFailed, p.proc.GetResult()
+		default:
+			h.State, h.Detail = core.HealthStopped, p.proc.GetResult()
+		}
+		out = append(out, h)
+	}
+	return out
+}
+
+// Logs is the sidecar's last n lines, kept across its restarts.
+func (m *Manager) Logs(id, n int) ([]string, error) {
+	m.mu.Lock()
+	cur, ok := m.procs[id]
+	m.mu.Unlock()
+	if !ok || cur.ring == nil {
+		return nil, fmt.Errorf("mtproto: no sidecar for inbound %d", id)
+	}
+	return cur.ring.Tail(n), nil
 }

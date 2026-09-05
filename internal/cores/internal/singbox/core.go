@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores/internal/unithealth"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/supervisor"
 )
@@ -674,4 +675,45 @@ func (c *Core) CutSessions(ctx context.Context, email string, source netip.Addr)
 		}
 	}
 	return cut, errors.Join(failures...)
+}
+
+// Health reads each unit from the backend and asks the daemon itself whether it
+// answers: a unit that runs and does not is a listener that never opened.
+func (c *Core) Health(ctx context.Context) (core.Health, error) {
+	c.mu.Lock()
+	ids := make([]int, 0, len(c.instances))
+	ctls := make(map[int]control, len(c.instances))
+	tags := make(map[int]string, len(c.instances))
+	for id, cur := range c.instances {
+		ids = append(ids, id)
+		ctls[id], tags[id] = cur.ctl, cur.inst.Tag
+	}
+	c.mu.Unlock()
+	sort.Ints(ids)
+	var h core.Health
+	for _, id := range ids {
+		ih, err := unithealth.Of(ctx, c.backend, supervisor.UnitName(string(ID), id))
+		if err != nil {
+			return core.Health{}, fmt.Errorf("singbox: inbound %d: %w", id, err)
+		}
+		ih.InstanceID, ih.Tag = id, tags[id]
+		if ih.State == core.HealthRunning {
+			if _, err := readUserStats(ctx, ctls[id].statsPort); err == nil {
+				ih.Ready = true
+			} else {
+				ih.Detail = "the stats API does not answer: " + err.Error()
+			}
+		}
+		h.Instances = append(h.Instances, ih)
+	}
+	return h, nil
+}
+
+// TailLog is the unit's last lines from the backend: the journal under systemd,
+// the panel's own ring under exec.
+func (c *Core) TailLog(ctx context.Context, instanceID, n int) ([]string, error) {
+	if instanceID <= 0 {
+		return nil, fmt.Errorf("singbox: logs are per inbound; %d names none", instanceID)
+	}
+	return c.backend.Logs(ctx, supervisor.UnitName(string(ID), instanceID), n)
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores/internal/unithealth"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/radius"
 	"github.com/Arman2122/p-ui/internal/supervisor"
@@ -260,6 +261,9 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 	}
 	if cur.running && spec.Hash() == cur.specHash {
 		return nil
+	}
+	if err := c.testConfig(ctx, cur.paths.conf); err != nil {
+		return fmt.Errorf("ocserv: inbound %d: %w", d.ID, err)
 	}
 	// Opened only for a start: Hash ignores Output, and a sink opened on every
 	// pass leaked a descriptor and truncated the log each 10 s.
@@ -760,4 +764,59 @@ func randomToken(n int) string {
 		out[i] = tokenAlphabet[int(b)%len(tokenAlphabet)]
 	}
 	return string(out)
+}
+
+// Health reads each unit from the backend and asks the daemon itself, through
+// occtl, whether its main process answers.
+func (c *Core) Health(ctx context.Context) (core.Health, error) {
+	c.mu.Lock()
+	ids := make([]int, 0, len(c.instances))
+	socks := make(map[int]string, len(c.instances))
+	tags := make(map[int]string, len(c.instances))
+	for id, cur := range c.instances {
+		ids = append(ids, id)
+		socks[id], tags[id] = cur.paths.ctl, cur.inst.Tag
+	}
+	c.mu.Unlock()
+	sort.Ints(ids)
+	var h core.Health
+	for _, id := range ids {
+		ih, err := unithealth.Of(ctx, c.backend, supervisor.UnitName(string(ID), id))
+		if err != nil {
+			return core.Health{}, fmt.Errorf("ocserv: inbound %d: %w", id, err)
+		}
+		ih.InstanceID, ih.Tag = id, tags[id]
+		if ih.State == core.HealthRunning {
+			if err := daemonAnswers(ctx, c.occtlPath(), socks[id]); err == nil {
+				ih.Ready = true
+			} else {
+				ih.Detail = "occtl does not answer: " + err.Error()
+			}
+		}
+		h.Instances = append(h.Instances, ih)
+	}
+	return h, nil
+}
+
+// TailLog is the unit's last lines from the backend: the journal under systemd,
+// the panel's own ring under exec.
+func (c *Core) TailLog(ctx context.Context, instanceID, n int) ([]string, error) {
+	if instanceID <= 0 {
+		return nil, fmt.Errorf("ocserv: logs are per inbound; %d names none", instanceID)
+	}
+	return c.backend.Logs(ctx, supervisor.UnitName(string(ID), instanceID), n)
+}
+
+// testConfig runs the daemon's own check on the rendered file, so a config it
+// would refuse is reported here rather than as a unit that dies at once.
+func (c *Core) testConfig(ctx context.Context, conf string) error {
+	// A missing daemon is Preflight's to report, not a fault of this config.
+	if _, err := os.Stat(c.binaryPath()); err != nil {
+		return nil
+	}
+	out, err := exec.CommandContext(ctx, c.binaryPath(), "--test-config", "-c", conf).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("config refused: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }

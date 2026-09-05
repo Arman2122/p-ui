@@ -103,9 +103,13 @@ type server struct {
 	limiters map[string]*limiterPair
 
 	ln     net.Listener
+	opened time.Time
 	closed atomic.Bool
 	wg     sync.WaitGroup
 }
+
+// listening: the listener was opened and nobody has stopped it.
+func (s *server) listening() bool { return s.ln != nil && !s.closed.Load() }
 
 type counters struct{ up, down atomic.Int64 }
 
@@ -189,7 +193,7 @@ func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.S
 		dial = directDialer()
 	}
 	return &server{
-		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure, admit: admit,
+		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure, admit: admit, opened: time.Now(),
 		byUser: map[string]*credential{}, byEmail: map[string]*credential{},
 		conns: map[*conn]struct{}{}, traffic: map[string]*counters{},
 		limits: map[string]core.RateLimit{}, limiters: map[string]*limiterPair{},

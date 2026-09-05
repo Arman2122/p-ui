@@ -35,6 +35,9 @@ func TestADeadDaemonIsStartedAgain(t *testing.T) {
 	}
 
 	ledger.die(unit)
+	if h, err := c.Health(ctx); err != nil || len(h.Instances) != 1 || h.Instances[0].State != core.HealthFailed || h.Instances[0].Detail != "signal: killed" {
+		t.Fatalf("Health with the daemon dead = %+v, %v; want the one instance failed, in the backend's words", h, err)
+	}
 	if err := c.Reconcile(ctx, []core.Instance{inst}); err != nil {
 		t.Fatal(err)
 	}

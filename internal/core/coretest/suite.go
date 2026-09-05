@@ -788,7 +788,9 @@ func checkTeardown(r *report, bound *core.Bound) {
 	if err := bound.Supervise.StopAll(ctx); err != nil {
 		r.fail("stopall/idempotent", "StopAll is not safe to call twice: %v", err)
 	}
-	if bound.Health == nil {
+	// A daemon that outlives the panel is still running after StopAll by design;
+	// only a core that takes its daemons down with it must report so.
+	if bound.Health == nil || (bound.Outliver != nil && bound.Outliver.OutlivesPanel()) {
 		return
 	}
 	h, err := bound.Health.Health(ctx)

@@ -156,6 +156,7 @@ func TestConformance(t *testing.T) {
 			return inst
 		},
 		Starts: func() int { current.mu.Lock(); defer current.mu.Unlock(); return current.starts },
+		Alive:  func() bool { return unitAlive(current.backend, 1) },
 		// The suite's first reading is a session the panel found already running
 		// (an interim record, baselined); after a daemon restart every client
 		// reconnects, so the next record of each opens a new session with a Start.

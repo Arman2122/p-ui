@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"os"
 	"sort"
 	"strconv"
 	"sync"
@@ -497,4 +498,28 @@ func randomToken(n int) string {
 		out[i] = tokenAlphabet[idx.Int64()]
 	}
 	return string(out)
+}
+
+// Health is per listener: the server is the panel's own process, so alive and
+// ready are one question — is the listener still open.
+func (c *Core) Health(context.Context) (core.Health, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ids := make([]int, 0, len(c.instances))
+	for id := range c.instances {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	var h core.Health
+	for _, id := range ids {
+		cur := c.instances[id]
+		ih := core.InstanceHealth{InstanceID: id, Tag: cur.inst.Tag, PID: os.Getpid(), SinceUnixMilli: cur.srv.opened.UnixMilli()}
+		if cur.srv.listening() {
+			ih.State, ih.Ready = core.HealthRunning, true
+		} else {
+			ih.State, ih.Detail = core.HealthStopped, "listener closed"
+		}
+		h.Instances = append(h.Instances, ih)
+	}
+	return h, nil
 }

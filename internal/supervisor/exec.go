@@ -19,6 +19,9 @@ import (
 // forceStopTimeout is the wait after SIGKILL, the same both cores used.
 const forceStopTimeout = 2 * time.Second
 
+// pipeDrainDelay is how long after the daemon exits its output is still read.
+const pipeDrainDelay = time.Second
+
 // Exec runs daemons as children of the panel: what internal/xray and
 // internal/mtproto did on their own, hoisted. A child dies with the panel, which
 // is why this is the fallback and systemd the target.
@@ -27,12 +30,12 @@ type Exec struct {
 	units map[string]*execUnit
 	// rings are keyed by name, not unit, so the lines a daemon printed on its way
 	// down are still there after the Ensure that replaced it.
-	rings map[string]*lineRing
+	rings map[string]*LineRing
 }
 
 type execUnit struct {
 	spec Spec
-	ring *lineRing
+	ring *LineRing
 
 	mu              sync.RWMutex
 	cmd             *exec.Cmd
@@ -44,7 +47,7 @@ type execUnit struct {
 
 // NewExec returns a backend with nothing running.
 func NewExec() *Exec {
-	return &Exec{units: map[string]*execUnit{}, rings: map[string]*lineRing{}}
+	return &Exec{units: map[string]*execUnit{}, rings: map[string]*LineRing{}}
 }
 
 func (e *Exec) Name() string { return string(ModeExec) }
@@ -71,7 +74,7 @@ func (e *Exec) Ensure(ctx context.Context, spec Spec) error {
 	}
 	ring, ok := e.rings[spec.Name]
 	if !ok {
-		ring = newLineRing(ringLines)
+		ring = NewLineRing(RingLines)
 		e.rings[spec.Name] = ring
 	}
 	unit := &execUnit{spec: spec, ring: ring}
@@ -89,7 +92,7 @@ func (e *Exec) Logs(_ context.Context, name string, n int) ([]string, error) {
 	if !ok {
 		return nil, ErrNotRunning
 	}
-	return ring.tail(n), nil
+	return ring.Tail(n), nil
 }
 
 func (e *Exec) Status(_ context.Context, name string) (Status, error) {
@@ -169,6 +172,9 @@ func (u *execUnit) start() error {
 		output = io.MultiWriter(u.ring, u.spec.Output)
 	}
 	cmd.Stdout, cmd.Stderr = output, output
+	// The pipes outlive the daemon when a child of its (ocserv's workers, a
+	// forked helper) inherits them; Wait must answer for the daemon, not them.
+	cmd.WaitDelay = pipeDrainDelay
 	done := make(chan struct{})
 	u.mu.Lock()
 	u.cmd, u.done, u.exitErr, u.started = cmd, done, nil, time.Now()

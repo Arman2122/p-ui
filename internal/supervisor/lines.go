@@ -8,17 +8,17 @@ import (
 )
 
 const (
-	// ringLines is how much of a daemon's past the exec backend keeps per unit;
+	// RingLines is how much of a daemon's past the exec backend keeps per unit;
 	// ringLineMax bounds one line, since a daemon in a loop can print anything.
-	ringLines   = 500
+	RingLines   = 500
 	ringLineMax = 2048
 	// stampLayout is journalctl's short-iso shape, so both backends read alike.
 	stampLayout = "2006-01-02T15:04:05-0700"
 )
 
-// lineRing keeps a daemon's last lines, stamped as they arrive, across the
-// restarts of one unit: the exec backend's stand-in for the journal.
-type lineRing struct {
+// LineRing keeps a daemon's last lines, stamped as they arrive, across restarts
+// of one unit: the journal's stand-in wherever the panel runs the child itself.
+type LineRing struct {
 	mu      sync.Mutex
 	lines   []string
 	partial string
@@ -26,9 +26,9 @@ type lineRing struct {
 	now     func() time.Time
 }
 
-func newLineRing(limit int) *lineRing { return &lineRing{limit: limit, now: time.Now} }
+func NewLineRing(limit int) *LineRing { return &LineRing{limit: limit, now: time.Now} }
 
-func (r *lineRing) Write(p []byte) (int, error) {
+func (r *LineRing) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	rest := r.partial + string(p)
@@ -46,7 +46,7 @@ func (r *lineRing) Write(p []byte) (int, error) {
 
 // Flush stamps a final line the daemon never terminated — its last words on
 // the way down, more often than not.
-func (r *lineRing) Flush() {
+func (r *LineRing) Flush() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.partial != "" {
@@ -55,7 +55,7 @@ func (r *lineRing) Flush() {
 	}
 }
 
-func (r *lineRing) pushLocked(line string) {
+func (r *LineRing) pushLocked(line string) {
 	line = strings.TrimRight(line, "\r")
 	if line == "" {
 		return
@@ -69,8 +69,8 @@ func (r *lineRing) pushLocked(line string) {
 	}
 }
 
-// tail returns the last n lines, or all of them for n <= 0.
-func (r *lineRing) tail(n int) []string {
+// Tail returns the last n lines, or all of them for n <= 0.
+func (r *LineRing) Tail(n int) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if n <= 0 || n > len(r.lines) {

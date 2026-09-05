@@ -175,3 +175,32 @@ func TestExecBackendKeepsTheDaemonsLastLinesAcrossARestart(t *testing.T) {
 		t.Fatalf("Logs after Stop = %v, want ErrNotRunning: a stopped unit is forgotten, lines and all", err)
 	}
 }
+
+/*
+A daemon's child inherits its pipes, and a stop that waits for those pipes to
+close waits for the child, not the daemon: ocserv's workers outlive a killed
+main for a moment, and a shell's background job outlives the shell for good.
+The unit here is a shell with such a job; stopping it must answer within the
+stop timeout and report the unit gone, because the daemon itself is.
+*/
+func TestExecBackendStopIsNotHeldByTheDaemonsChildren(t *testing.T) {
+	requirePosixHost(t)
+	b := NewExec()
+	t.Cleanup(func() { _ = b.Close() })
+	ctx := context.Background()
+	spec := shSpec("forker", "sleep 8 & sleep 8")
+	if err := b.Ensure(ctx, spec); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	waitState(t, b, spec.Name, StateRunning)
+	began := time.Now()
+	if err := b.Stop(ctx, spec.Name); err != nil {
+		t.Fatalf("Stop: %v — the orphaned child held the pipe and the stop waited on it instead of the daemon", err)
+	}
+	if took := time.Since(began); took > spec.StopTimeout {
+		t.Fatalf("Stop took %s, longer than the %s stop timeout; it waited on the daemon's child", took, spec.StopTimeout)
+	}
+	if _, err := b.Status(ctx, spec.Name); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("Status after Stop = %v, want ErrNotRunning", err)
+	}
+}

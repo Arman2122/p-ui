@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 
@@ -166,6 +168,7 @@ func TestConformance(t *testing.T) {
 			return inst
 		},
 		Starts:        func() int { current.mu.Lock(); defer current.mu.Unlock(); return current.starts },
+		Alive:         func() bool { return listenerAnswers(port) },
 		FeedTraffic:   func(email string, up, down int64) { current.feedTraffic(email, up, down) },
 		RestartSource: func() { current.restartSource() },
 		ServedUsers:   func() []string { return current.servedUsers() },
@@ -177,4 +180,15 @@ func TestConformance(t *testing.T) {
 	if current != nil {
 		_ = current.StopAll(t.Context())
 	}
+}
+
+// listenerAnswers is the rig's own view of the daemon: a TCP connect to the
+// port, which succeeds only while the accept loop holds it.
+func listenerAnswers(port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), time.Second)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }

@@ -99,3 +99,16 @@ func disconnectSource(ctx context.Context, occtl, socket, username string, sourc
 	}
 	return cut, nil
 }
+
+// daemonAnswers asks the main process for its status through occtl, which is
+// what "ready" means for a daemon whose listeners the panel cannot see.
+func daemonAnswers(ctx context.Context, occtl, socket string) error {
+	out, err := exec.CommandContext(ctx, occtl, "-s", socket, "show", "status").CombinedOutput()
+	if err != nil {
+		if msg := strings.TrimSpace(string(out)); msg != "" {
+			return errors.New(msg)
+		}
+		return err
+	}
+	return nil
+}

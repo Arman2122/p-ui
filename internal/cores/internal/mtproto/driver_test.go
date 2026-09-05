@@ -10,8 +10,10 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -286,6 +288,7 @@ func (r *rig) asRig() coretest.Rig {
 		NewCore:       func() (core.Core, error) { return New(), nil },
 		Instance:      r.instance,
 		Starts:        r.starts,
+		Alive:         r.alive,
 		FeedTraffic:   r.feed,
 		RestartSource: r.restart,
 		ServedUsers:   r.served,
@@ -445,4 +448,23 @@ func TestUnreadableSettingsDoNotStopALiveSidecar(t *testing.T) {
 			}
 		})
 	}
+}
+
+// alive asks the kernel about the last stand-in mtg, which is what the daemon is
+// here, so Health is checked against a process and not against the adapter.
+func (r *rig) alive() bool {
+	data, err := os.ReadFile(r.pidFile)
+	if err != nil {
+		return false
+	}
+	pids := strings.Fields(string(data))
+	if len(pids) == 0 {
+		return false
+	}
+	pid, err := strconv.Atoi(pids[len(pids)-1])
+	if err != nil {
+		return false
+	}
+	p, err := os.FindProcess(pid)
+	return err == nil && p.Signal(syscall.Signal(0)) == nil
 }

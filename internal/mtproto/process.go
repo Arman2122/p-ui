@@ -21,6 +21,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 	"github.com/Arman2122/p-ui/internal/util/proc"
 )
 
@@ -71,6 +72,9 @@ type procLogWriter struct {
 	label    string
 	buf      string
 	lastLine string
+	// ring keeps the last lines for TailLog; the manager hands one in that
+	// outlives this process, so a crash's last words survive the restart.
+	ring *supervisor.LineRing
 }
 
 func (w *procLogWriter) Write(p []byte) (int, error) {
@@ -107,6 +111,9 @@ func (w *procLogWriter) emitLocked(line string) {
 		return
 	}
 	w.lastLine = trimmed
+	if w.ring != nil {
+		_, _ = w.ring.Write([]byte(trimmed + "\n"))
+	}
 	logger.Infof("mtproto: mtg %s | %s", w.label, trimmed)
 }
 
@@ -124,6 +131,7 @@ type Process struct {
 	configPath      string
 	logWriter       *procLogWriter
 	exitErr         error
+	started         time.Time
 	inboundID       int
 	intentionalStop atomic.Bool
 }
@@ -191,6 +199,7 @@ func (p *Process) Start() error {
 	p.cmd = cmd
 	p.done = done
 	p.exitErr = nil
+	p.started = time.Now()
 	p.mu.Unlock()
 	p.intentionalStop.Store(false)
 	if err := cmd.Start(); err != nil {
@@ -238,4 +247,31 @@ func (p *Process) Stop() error {
 	}
 
 	return proc.Stop(cmd, done, gracefulStopTimeout, forceStopTimeout, "mtg process")
+}
+
+// keepLines routes the process's output into a ring the caller owns.
+func (p *Process) keepLines(ring *supervisor.LineRing) { p.logWriter.ring = ring }
+
+// PID is the child's, or 0 while none runs.
+func (p *Process) PID() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
+}
+
+// Started is when this life of the process began; zero before the first Start.
+func (p *Process) Started() time.Time {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.started
+}
+
+// Crashed reports an exit the panel did not ask for.
+func (p *Process) Crashed() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.exitErr != nil
 }

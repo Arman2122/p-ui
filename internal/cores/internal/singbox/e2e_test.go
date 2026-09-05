@@ -24,11 +24,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/core/coretest"
+	"github.com/Arman2122/p-ui/internal/supervisor"
 )
 
 // The e2e half runs where a sing-box built with with_v2ray_api exists; the
@@ -229,6 +231,7 @@ func TestConformance(t *testing.T) {
 			return inst
 		},
 		Starts:      func() int { current.mu.Lock(); defer current.mu.Unlock(); return current.starts },
+		Alive:       func() bool { return unitAlive(current.backend, 1) },
 		FeedTraffic: func(email string, up, down int64) { fed[email] = [2]int64{up, down} },
 		RestartSource: func() {
 			fed = map[string][2]int64{}
@@ -501,4 +504,15 @@ func TestRealTrafficIsBilledAndSeen(t *testing.T) {
 	if !strings.HasPrefix(c.instances[2].epoch, "") {
 		t.Fatal("unreachable")
 	}
+}
+
+// unitAlive asks the kernel about the unit's process, so Health is checked
+// against what runs and not against what the adapter believes.
+func unitAlive(b supervisor.Backend, id int) bool {
+	st, err := b.Status(context.Background(), supervisor.UnitName(string(ID), id))
+	if err != nil || st.PID <= 0 {
+		return false
+	}
+	p, err := os.FindProcess(st.PID)
+	return err == nil && p.Signal(syscall.Signal(0)) == nil
 }

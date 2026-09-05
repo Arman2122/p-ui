@@ -150,6 +150,7 @@ func (r *rig) asRig() coretest.Rig {
 		NewCore:       func() (core.Core, error) { return NewFor(Kind, r.mgr, r.mgr), nil },
 		Instance:      r.instance,
 		Starts:        r.starts,
+		Alive:         func() bool { return r.kernel.Exists(iface) },
 		FeedTraffic:   r.feed,
 		RestartSource: r.restart,
 		ServedUsers:   r.served,

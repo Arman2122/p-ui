@@ -228,7 +228,7 @@ func (s *Systemd) Status(ctx context.Context, name string) (Status, error) {
 // each line the way the exec backend's ring does. An unknown unit has no lines.
 func (s *Systemd) Logs(ctx context.Context, name string, n int) ([]string, error) {
 	if n <= 0 {
-		n = ringLines
+		n = RingLines
 	}
 	out, err := exec.CommandContext(ctx, "journalctl", "-u", unitFile(name), "-n", strconv.Itoa(n), "-o", "short-iso", "--no-pager", "-q").Output()
 	if err != nil {

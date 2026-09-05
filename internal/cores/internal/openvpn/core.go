@@ -23,6 +23,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/cores/internal/unithealth"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/radius"
 	"github.com/Arman2122/p-ui/internal/supervisor"
@@ -752,4 +753,50 @@ func tlsCryptV2ServerKeyOf(settings string) string {
 	}
 	_ = json.Unmarshal([]byte(settings), &doc)
 	return doc.Key
+}
+
+// Health reads each unit from the backend and asks the daemon itself whether it
+// answers on its management socket, which opens only once the config loaded.
+func (c *Core) Health(ctx context.Context) (core.Health, error) {
+	c.mu.Lock()
+	ids := make([]int, 0, len(c.instances))
+	socks := make(map[int]string, len(c.instances))
+	tags := make(map[int]string, len(c.instances))
+	for id, cur := range c.instances {
+		ids = append(ids, id)
+		socks[id], tags[id] = cur.paths.mgmt, cur.inst.Tag
+	}
+	c.mu.Unlock()
+	sort.Ints(ids)
+	var h core.Health
+	for _, id := range ids {
+		ih, err := unithealth.Of(ctx, c.backend, supervisor.UnitName(string(ID), id))
+		if err != nil {
+			return core.Health{}, fmt.Errorf("openvpn: inbound %d: %w", id, err)
+		}
+		ih.InstanceID, ih.Tag = id, tags[id]
+		if ih.State == core.HealthRunning {
+			conn, _, err := management(ctx, socks[id])
+			switch {
+			case err != nil:
+				ih.Detail = "the management socket does not answer: " + err.Error()
+			case conn == nil:
+				ih.Detail = "the management socket is not open yet"
+			default:
+				_ = conn.Close()
+				ih.Ready = true
+			}
+		}
+		h.Instances = append(h.Instances, ih)
+	}
+	return h, nil
+}
+
+// TailLog is the unit's last lines from the backend: the journal under systemd,
+// the panel's own ring under exec.
+func (c *Core) TailLog(ctx context.Context, instanceID, n int) ([]string, error) {
+	if instanceID <= 0 {
+		return nil, fmt.Errorf("openvpn: logs are per inbound; %d names none", instanceID)
+	}
+	return c.backend.Logs(ctx, supervisor.UnitName(string(ID), instanceID), n)
 }

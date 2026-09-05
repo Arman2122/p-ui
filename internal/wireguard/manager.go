@@ -688,3 +688,35 @@ func flatten(billed map[string]*Traffic) []Traffic {
 func isOnline(handshake time.Time) bool {
 	return !handshake.IsZero() && time.Since(handshake) <= handshakeWindow
 }
+
+// Health reads each managed device off the host: a device the kernel no longer
+// has is stopped whatever the manager remembers, and one that is down is not ready.
+func (m *Manager) Health(ctx context.Context) []core.InstanceHealth {
+	m.mu.Lock()
+	ids := make([]int, 0, len(m.devices))
+	tags := make(map[int]string, len(m.devices))
+	for id, rec := range m.devices {
+		ids = append(ids, id)
+		tags[id] = rec.tag
+	}
+	m.mu.Unlock()
+	slices.Sort(ids)
+	out := make([]core.InstanceHealth, 0, len(ids))
+	for _, id := range ids {
+		name := m.Name(id)
+		ih := core.InstanceHealth{InstanceID: id, Tag: tags[id]}
+		snap, err := m.plane.Snapshot(ctx, name)
+		switch {
+		case err != nil:
+			ih.State, ih.Detail = core.HealthFailed, err.Error()
+		case !snap.Exists:
+			ih.State, ih.Detail = core.HealthStopped, "device "+name+" is gone"
+		case !snap.Link.Up:
+			ih.State, ih.Detail = core.HealthRunning, "device "+name+" is down"
+		default:
+			ih.State, ih.Ready = core.HealthRunning, true
+		}
+		out = append(out, ih)
+	}
+	return out
+}
