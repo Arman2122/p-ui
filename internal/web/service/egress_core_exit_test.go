@@ -9,6 +9,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/egress"
 	"github.com/Arman2122/p-ui/internal/web/runtime"
 )
 
@@ -116,5 +117,41 @@ func TestInboundPortConflictRefusesTheExitSocksBand(t *testing.T) {
 	clear, err := svc.checkPortConflict(&model.Inbound{Protocol: model.VLESS, Port: 42999, Listen: "0.0.0.0", Settings: `{"clients":[]}`, StreamSettings: `{"network":"tcp"}`}, 0)
 	if err != nil || clear != nil {
 		t.Fatalf("a port outside the band was refused: %+v, %v", clear, err)
+	}
+}
+
+/*
+An exit whose core runs a client daemon that makes its own tun (the OpenVPN
+exit is the first) is the opposite of the SOCKS one: it has no port to dial,
+so the plane must route into the device -- which takes a driver the service
+registers for it -- while the core still validates and runs the row. A
+device-kind exit with no driver would be accepted, run, and never routed into.
+*/
+func TestACoreOwnedDeviceExitIsDrivenByThePlane(t *testing.T) {
+	driver, ok := egressDriverRegistry.For("openvpn")
+	if !ok {
+		t.Fatal("no plane driver serves the openvpn exit: nothing would ever route into its device")
+	}
+	fill, err := driver.Fill(egress.Egress{ID: 3, Type: "openvpn", Enable: true})
+	if err != nil || fill.Device != "pvx3" || !fill.Marked {
+		t.Fatalf("fill = %+v, %v; want the core's own device, marked", fill, err)
+	}
+	svc := &EgressService{}
+	serverProfile := &model.Egress{
+		Id: 3, Type: "openvpn", Enable: true, Owner: model.EgressOwnerOperator,
+		Settings: `{"profile":"server 10.8.0.0 255.255.255.0\nremote x 1\n"}`,
+	}
+	if err := svc.validate(serverProfile); err == nil || !strings.Contains(err.Error(), "server profile") {
+		t.Fatalf("validate did not hand the core's refusal back: %v", err)
+	}
+	if err := svc.validate(&model.Egress{Id: 3, Type: "openvpn", Enable: false, Owner: model.EgressOwnerOperator}); err != nil {
+		t.Fatalf("a disabled row was checked against the host: %v", err)
+	}
+	desired, err := svc.desired(context.Background(), []*model.Egress{serverProfile})
+	if err != nil {
+		t.Fatalf("desired: %v", err)
+	}
+	if len(desired) != 1 || desired[0].Type != "openvpn" {
+		t.Fatalf("desired handed the plane %+v; a device exit is the plane's to route into", desired)
 	}
 }
