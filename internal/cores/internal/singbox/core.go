@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -308,12 +309,13 @@ func (c *Core) applyLocked(ctx context.Context, cur *instance) error {
 	return waitControl(ctx, cur)
 }
 
-// The two daemon reads, as variables so a test can overlay what no client
-// can make a QUIC daemon count on its own.
+// The daemon calls, as variables so a test can overlay what no client can make
+// a QUIC daemon count — or close — on its own.
 var (
 	readUserStats   = queryUserStats
 	readConnections = listConnections
 	readStartedAt   = startedAt
+	closeConn       = closeConnection
 )
 
 // waitControl blocks until the daemon answers a stats query: Ensure returns
@@ -625,9 +627,46 @@ func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
 				entry = seenEntry{bytes: conn.bytes, lastSeen: now}
 			}
 			live[key] = entry
-			out = append(out, core.Session{Email: conn.user, Source: conn.source, LastSeenUnixMilli: entry.lastSeen})
+			out = append(out, core.Session{Email: conn.user, Source: conn.source, LastSeenUnixMilli: entry.lastSeen, StartedUnixMilli: conn.createdAt})
 		}
 	}
 	c.seen = live
 	return out, errors.Join(failures...)
+}
+
+/*
+CutSessions closes one client's live connections from one source, by the ids the
+connection stream names them with, so the device over its cap is dropped and the
+ones inside it stay up. sing-box admits at no login of its own, so the panel
+backs this with the firewall; a cut alone would see the device straight back.
+*/
+func (c *Core) CutSessions(ctx context.Context, email string, source netip.Addr) (int, error) {
+	c.mu.Lock()
+	targets := make([]control, 0, len(c.instances))
+	for _, cur := range c.instances {
+		if cur.running {
+			targets = append(targets, cur.ctl)
+		}
+	}
+	c.mu.Unlock()
+	cut := 0
+	var failures []error
+	for _, ctl := range targets {
+		list, err := readConnections(ctx, ctl.apiPort, ctl.secret)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		for _, conn := range list {
+			if conn.id == "" || conn.user != email || conn.source != source {
+				continue
+			}
+			if err := closeConn(ctx, ctl.apiPort, ctl.secret, conn.id); err != nil {
+				failures = append(failures, err)
+				continue
+			}
+			cut++
+		}
+	}
+	return cut, errors.Join(failures...)
 }

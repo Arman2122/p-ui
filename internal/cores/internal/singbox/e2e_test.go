@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,7 +197,20 @@ func TestConformance(t *testing.T) {
 		live, err := realConns(ctx, apiPort, secret)
 		return append(live, sessions...), err
 	}
-	t.Cleanup(func() { readUserStats, readConnections = realStats, realConns })
+	// A close of a fed connection removes it, as the daemon's would; a real one
+	// still reaches the daemon, so the suite exercises CutSessions' selection and
+	// the daemon's own answer alike.
+	realClose := closeConn
+	closeConn = func(ctx context.Context, apiPort int, secret, id string) error {
+		for i := range sessions {
+			if sessions[i].id == id {
+				sessions = slices.Delete(sessions, i, i+1)
+				return nil
+			}
+		}
+		return realClose(ctx, apiPort, secret, id)
+	}
+	t.Cleanup(func() { readUserStats, readConnections, closeConn = realStats, realConns, realClose })
 
 	var current *Core
 	rig := coretest.Rig{
@@ -276,6 +290,77 @@ func startClient(t *testing.T, bin string, serverPort int, user core.User) (prox
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	waitPort(t, proxyPort)
 	return proxyPort
+}
+
+/*
+A cut reaches the real daemon: the connection stream names a held connection's
+id, CloseConnection ends it, and the client on the far side sees its body break
+off. The daemon's own answer, not the ledger's: a cut the core only claimed
+would leave the read completing normally.
+*/
+func TestACutEndsTheRealConnection(t *testing.T) {
+	bin := e2eBinary(t)
+	certFile, keyFile := selfSigned(t, t.TempDir())
+	port := freePort(t)
+	c := New(Deps{Binary: bin, StateDir: t.TempDir(), ApplyDelay: time.Hour})
+	t.Cleanup(func() { _ = c.StopAll(context.Background()) })
+	alice := e2eUser(1)
+	inst := core.Instance{ID: 3, Kind: KindTUIC, Tag: "tuic-3", Listen: "127.0.0.1", Port: port, Enable: true, Settings: settingsJSON(t, certFile, keyFile), Users: []core.User{alice}}
+	if err := c.Reconcile(context.Background(), []core.Instance{inst}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	// An origin that answers half and then holds, so the connection is live and
+	// mid-transfer when it is cut. The handler is released before origin.Close
+	// runs — Close waits for it — so the release is registered AFTER Close (LIFO).
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	released := func() { releaseOnce.Do(func() { close(release) }) }
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "2048")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(make([]byte, 1024))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-release
+		_, _ = w.Write(make([]byte, 1024))
+	}))
+	t.Cleanup(origin.Close)
+	t.Cleanup(released)
+
+	proxyPort := startClient(t, bin, port, alice)
+	proxyURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", proxyPort))
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL), TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, Timeout: 30 * time.Second}
+	resp, err := client.Get(origin.URL)
+	if err != nil {
+		t.Fatalf("GET through the tunnel: %v", err)
+	}
+	defer resp.Body.Close()
+	if _, err := io.ReadFull(resp.Body, make([]byte, 1024)); err != nil {
+		t.Fatalf("first half: %v", err)
+	}
+	sessions, _ := c.Sessions(context.Background())
+	if !slices.ContainsFunc(sessions, func(s core.Session) bool { return s.Email == alice.Email && s.Source.String() == "127.0.0.1" }) {
+		t.Fatalf("the held connection is not reported for %s: %+v", alice.Email, sessions)
+	}
+
+	cut, err := c.CutSessions(context.Background(), alice.Email, netip.MustParseAddr("127.0.0.1"))
+	if err != nil || cut < 1 {
+		t.Fatalf("CutSessions = (%d, %v), want at least the held connection closed", cut, err)
+	}
+	// The origin is still holding the second half, so a body that ends here ended
+	// because the daemon closed the connection under it — and it must end NOW: a
+	// read that only gives up at the client's own timeout is a cut that did nothing.
+	start := time.Now()
+	rest, err := io.ReadAll(resp.Body)
+	if err == nil && len(rest) == 1024 {
+		t.Fatal("the body completed after the cut: the daemon did not close the connection")
+	}
+	if waited := time.Since(start); waited > 10*time.Second {
+		t.Fatalf("the body read ended only after %v (%v): the daemon did not close the connection", waited.Round(time.Second), err)
+	}
+	released()
 }
 
 func waitPort(t *testing.T, port int) {

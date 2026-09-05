@@ -223,6 +223,28 @@ func (rawCodec) Unmarshal(data []byte, v any) error {
 	return nil
 }
 
+const closeConnectionMethod = "/daemon.StartedService/CloseConnection"
+
+// closeConnection ends one live connection by the id the connection stream gave
+// it; CloseConnectionRequest{id=1}, answered with Empty.
+func closeConnection(ctx context.Context, port int, secret, id string) error {
+	conn, err := dial(port)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+secret)
+	req := protowire.AppendTag(nil, 1, protowire.BytesType)
+	req = protowire.AppendString(req, id)
+	var frame rawMessage
+	if err := conn.Invoke(ctx, closeConnectionMethod, rawMessage(req), &frame, grpc.ForceCodec(rawCodec{})); err != nil {
+		return fmt.Errorf("singbox: close connection %s on %d: %w", id, port, err)
+	}
+	return nil
+}
+
 const getStartedAtMethod = "/daemon.StartedService/GetStartedAt"
 
 // startedAt is when the daemon's current instance came up; it changes on a
