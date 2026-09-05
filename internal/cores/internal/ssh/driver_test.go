@@ -1,11 +1,16 @@
 package ssh
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/netip"
 	"sync"
 	"testing"
+
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/core/coretest"
@@ -15,6 +20,29 @@ import (
 type memoryHostKey struct {
 	mu  sync.Mutex
 	pem string
+}
+
+var testHostKey struct {
+	once sync.Once
+	pem  string
+}
+
+// testHostKeyPEM is one host key for the whole package, so a test that starts a
+// core does not mint one.
+func testHostKeyPEM(t *testing.T) string {
+	t.Helper()
+	testHostKey.once.Do(func() {
+		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		block, err := gossh.MarshalPrivateKey(priv, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		testHostKey.pem = string(pem.EncodeToMemory(block))
+	})
+	return testHostKey.pem
 }
 
 func (m *memoryHostKey) load() (string, error) {

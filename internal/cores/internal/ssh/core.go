@@ -25,7 +25,8 @@ type Deps struct {
 	LoadHostKey  func() (string, error)
 	StoreHostKey func(pem string) error
 	AuthFailure  func(AuthFailure)
-	// Dial replaces the destination dialer; nil dials directly.
+	// Dial replaces the destination dialer, policy and all; nil dials directly
+	// under the destination policy in policy.go.
 	Dial Dialer
 }
 
@@ -191,7 +192,10 @@ prevent and nothing would report it.
 */
 func (c *Core) dialerFor(settings Settings) Dialer {
 	if !settings.RouteThroughXray {
-		return c.deps.Dial
+		if c.deps.Dial != nil {
+			return c.deps.Dial
+		}
+		return directDialer()
 	}
 	if settings.RouteXrayPort <= 0 {
 		return refusingDialer(errors.New("ssh: this inbound routes through Xray and has no bridge port yet; save it again"))

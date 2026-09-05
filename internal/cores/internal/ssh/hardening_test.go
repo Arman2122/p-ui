@@ -69,7 +69,7 @@ backs off and carries on: after the failure a real client still gets in.
 */
 func TestTheListenerSurvivesAFailedAccept(t *testing.T) {
 	echo := echoListener(t)
-	srv := newServer(7, "ssh-7", Settings{Transport: TransportTCP}, testSigner(t), nil, nil)
+	srv := newServer(7, "ssh-7", Settings{Transport: TransportTCP}, testSigner(t), (&net.Dialer{}).DialContext, nil)
 	if err := srv.setUsers([]core.User{userN(0)}); err != nil {
 		t.Fatal(err)
 	}

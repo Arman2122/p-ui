@@ -90,8 +90,12 @@ func TestADialerIsChosenPerInboundAndFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if core.dialerFor(off) != nil {
-		t.Fatal("an unrouted inbound was given a dialer instead of the default")
+	direct := core.dialerFor(off)
+	if direct == nil {
+		t.Fatal("an unrouted inbound has no dialer")
+	}
+	if _, err := direct(t.Context(), "tcp", "127.0.0.1:1"); !errors.Is(err, errDestinationRefused) {
+		t.Fatalf("the unrouted dialer is not the guarded default: %v", err)
 	}
 
 	pending, err := parseSettings(`{"transport":"tcp","routeThroughXray":true}`)

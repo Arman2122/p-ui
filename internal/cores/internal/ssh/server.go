@@ -123,7 +123,7 @@ func (c *conn) close() {
 
 func newServer(instanceID int, tag string, settings Settings, hostKey gossh.Signer, dial Dialer, onFailure func(AuthFailure)) *server {
 	if dial == nil {
-		dial = (&net.Dialer{Timeout: dialTimeout}).DialContext
+		dial = directDialer()
 	}
 	return &server{
 		instanceID: instanceID, tag: tag, settings: settings, hostKey: hostKey, dial: dial, onFailure: onFailure,

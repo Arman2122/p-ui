@@ -43,12 +43,14 @@ func echoListener(t *testing.T) net.Listener {
 	return ln
 }
 
+// startCore runs one inbound on loopback. The dialer is injected so a forward
+// may reach the echo listener beside it, which the default policy refuses.
 func startCore(t *testing.T, settings string, users ...core.User) (*Core, core.Instance) {
 	t.Helper()
-	keys := &memoryHostKey{}
+	keys := &memoryHostKey{pem: testHostKeyPEM(t)}
 	var failures []AuthFailure
 	var mu sync.Mutex
-	c := New(Deps{LoadHostKey: keys.load, StoreHostKey: keys.store, AuthFailure: func(f AuthFailure) {
+	c := New(Deps{LoadHostKey: keys.load, StoreHostKey: keys.store, Dial: (&net.Dialer{Timeout: dialTimeout}).DialContext, AuthFailure: func(f AuthFailure) {
 		mu.Lock()
 		failures = append(failures, f)
 		mu.Unlock()
