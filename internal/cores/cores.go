@@ -4,6 +4,7 @@ package cores
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -74,6 +75,12 @@ with two subjects.
 func ServedByXray(kind core.Kind) bool {
 	bound, ok := kindOwners().For(kind)
 	return ok && bound.Core.Describe().ID == xray.ID
+}
+
+// SSHHostKeyAlgorithms is the host key preference the SSH exits connect with,
+// for the fingerprint scan to negotiate the same key the exit later pins.
+func SSHHostKeyAlgorithms() []string {
+	return slices.Clone(ssh.PreferredHostKeyAlgorithms)
 }
 
 // ClientCredentials names the credential fields one kind's clients carry, so a

@@ -71,7 +71,7 @@ backs off and carries on: after the failure a real client still gets in.
 */
 func TestTheListenerSurvivesAFailedAccept(t *testing.T) {
 	echo := echoListener(t)
-	srv := newServer(7, "ssh-7", Settings{Transport: TransportTCP}, testSigner(t), (&net.Dialer{}).DialContext, nil)
+	srv := newServer(7, "ssh-7", Settings{Transport: TransportTCP}, []gossh.Signer{testSigner(t)}, (&net.Dialer{}).DialContext, nil)
 	if err := srv.setUsers([]core.User{userN(0)}); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestTheListenerSurvivesAFailedAccept(t *testing.T) {
 // tune the package's bounds rather than drive a whole core.
 func serveOnLoopback(t *testing.T) (*server, string) {
 	t.Helper()
-	srv := newServer(7, "ssh-7", Settings{Transport: TransportTCP}, testSigner(t), (&net.Dialer{}).DialContext, nil)
+	srv := newServer(7, "ssh-7", Settings{Transport: TransportTCP}, []gossh.Signer{testSigner(t)}, (&net.Dialer{}).DialContext, nil)
 	if err := srv.setUsers([]core.User{userN(0)}); err != nil {
 		t.Fatal(err)
 	}

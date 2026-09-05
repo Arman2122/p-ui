@@ -9,6 +9,8 @@ import (
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/Arman2122/p-ui/internal/cores"
 )
 
 // SSHHostKey is what an SSH server presented, for the operator to pin.
@@ -39,6 +41,8 @@ func ScanSSHHostKey(ctx context.Context, host string, port int) (SSHHostKey, err
 	var seen SSHHostKey
 	cfg := &gossh.ClientConfig{
 		User: "hostkey-scan",
+		// The exit's own preference, so the key reported here is the key it pins.
+		HostKeyAlgorithms: cores.SSHHostKeyAlgorithms(),
 		HostKeyCallback: func(_ string, _ net.Addr, key gossh.PublicKey) error {
 			seen = SSHHostKey{Fingerprint: gossh.FingerprintSHA256(key), KeyType: key.Type()}
 			return errHostKeySeen

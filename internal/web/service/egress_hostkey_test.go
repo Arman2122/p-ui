@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"net"
 	"strings"
 	"testing"
@@ -25,6 +26,16 @@ func TestScanSSHHostKeyReportsWhatTheServerPresents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The server offers RSA too, as the panel's own SSH inbounds do. x/crypto
+	// would pick RSA by default, and the exit pins the ed25519 fingerprint.
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsaSigner, err := gossh.NewSignerFromKey(rsaKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +52,7 @@ func TestScanSSHHostKeyReportsWhatTheServerPresents(t *testing.T) {
 				authAttempts++
 				return nil, gossh.ErrNoAuth
 			}}
+			cfg.AddHostKey(rsaSigner)
 			cfg.AddHostKey(signer)
 			go func() {
 				sc, _, _, err := gossh.NewServerConn(conn, cfg)

@@ -213,8 +213,9 @@ func (ex *exitClient) clientConfig() (*gossh.ClientConfig, error) {
 	}
 	want := ex.settings.HostKeyFingerprint
 	return &gossh.ClientConfig{
-		User: ex.settings.Username,
-		Auth: auth,
+		User:              ex.settings.Username,
+		Auth:              auth,
+		HostKeyAlgorithms: PreferredHostKeyAlgorithms,
 		HostKeyCallback: func(_ string, _ net.Addr, key gossh.PublicKey) error {
 			if got := gossh.FingerprintSHA256(key); got != want {
 				return fmt.Errorf("host key %s does not match the pinned %s", got, want)

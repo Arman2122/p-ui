@@ -2,9 +2,7 @@ package ssh
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
@@ -35,7 +33,7 @@ type Core struct {
 	deps Deps
 
 	mu        sync.Mutex
-	hostKey   gossh.Signer
+	hostKeys  []gossh.Signer
 	instances map[int]*instance
 	exits     map[int]*exitClient
 	counter   *core.Counter
@@ -167,7 +165,7 @@ func (c *Core) ensureLocked(d core.Instance) error {
 		cur.srv.stop()
 		delete(c.instances, d.ID)
 	}
-	srv := newServer(d.ID, d.Tag, settings, c.hostKey, c.dialerFor(settings), c.deps.AuthFailure)
+	srv := newServer(d.ID, d.Tag, settings, c.hostKeys, c.dialerFor(settings), c.deps.AuthFailure)
 	userErr := srv.setUsers(d.Users)
 	if _, err := listen(listenSpec{listen: d.Listen, port: d.Port}, srv); err != nil {
 		return fmt.Errorf("ssh: inbound %d: listen: %w", d.ID, err)
@@ -394,56 +392,48 @@ func (c *Core) EnforceRates(_ context.Context, inst core.Instance, limits map[st
 	return nil
 }
 
-// ensureHostKeyLocked loads the node's key or mints one and stores it, so the
-// fingerprint every client pinned survives a reinstall.
+// ensureHostKeyLocked loads the node's host keys, mints whichever of the two
+// families is missing, and stores the set: what every client pinned is kept.
 func (c *Core) ensureHostKeyLocked() error {
-	if c.hostKey != nil {
+	if len(c.hostKeys) > 0 {
 		return nil
 	}
+	var stored string
 	if c.deps.LoadHostKey != nil {
-		stored, err := c.deps.LoadHostKey()
-		if err != nil {
+		var err error
+		if stored, err = c.deps.LoadHostKey(); err != nil {
 			return fmt.Errorf("ssh: load host key: %w", err)
 		}
-		if stored != "" {
-			signer, err := gossh.ParsePrivateKey([]byte(stored))
-			if err == nil {
-				c.hostKey = signer
-				return nil
-			}
-			logger.Warning("ssh: the stored host key does not parse and is replaced:", err)
+	}
+	keys := parseHostKeys(stored)
+	minted := false
+	for _, algo := range hostKeyAlgos {
+		if keys.has(algo) {
+			continue
 		}
+		if err := keys.mint(algo); err != nil {
+			return fmt.Errorf("ssh: mint %s host key: %w", algo, err)
+		}
+		minted = true
 	}
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return err
-	}
-	block, err := gossh.MarshalPrivateKey(priv, "p-ui")
-	if err != nil {
-		return err
-	}
-	encoded := string(pem.EncodeToMemory(block))
-	if c.deps.StoreHostKey != nil {
-		if err := c.deps.StoreHostKey(encoded); err != nil {
+	if minted && c.deps.StoreHostKey != nil {
+		if err := c.deps.StoreHostKey(keys.encode()); err != nil {
 			return fmt.Errorf("ssh: store host key: %w", err)
 		}
 	}
-	signer, err := gossh.ParsePrivateKey([]byte(encoded))
-	if err != nil {
-		return err
-	}
-	c.hostKey = signer
+	c.hostKeys = keys.signers()
 	return nil
 }
 
-// HostKeyFingerprint is what a client pins; shown so an operator can hand it out.
+// HostKeyFingerprint is the ed25519 key's, the one a client that can negotiate
+// it is shown; an operator hands it out and the exits pin it.
 func (c *Core) HostKeyFingerprint() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.hostKey == nil {
+	if len(c.hostKeys) == 0 {
 		return ""
 	}
-	return gossh.FingerprintSHA256(c.hostKey.PublicKey())
+	return gossh.FingerprintSHA256(c.hostKeys[0].PublicKey())
 }
 
 const tokenAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789"

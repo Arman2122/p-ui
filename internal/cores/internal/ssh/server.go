@@ -85,7 +85,7 @@ type server struct {
 	instanceID int
 	tag        string
 	settings   Settings
-	hostKey    gossh.Signer
+	hostKeys   []gossh.Signer
 	dial       Dialer
 	onFailure  func(AuthFailure)
 
@@ -178,12 +178,12 @@ func (s *server) keepAlive(c *conn) {
 	}
 }
 
-func newServer(instanceID int, tag string, settings Settings, hostKey gossh.Signer, dial Dialer, onFailure func(AuthFailure)) *server {
+func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.Signer, dial Dialer, onFailure func(AuthFailure)) *server {
 	if dial == nil {
 		dial = directDialer()
 	}
 	return &server{
-		instanceID: instanceID, tag: tag, settings: settings, hostKey: hostKey, dial: dial, onFailure: onFailure,
+		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure,
 		byUser: map[string]*credential{}, byEmail: map[string]*credential{},
 		conns: map[*conn]struct{}{}, traffic: map[string]*counters{},
 		limits: map[string]core.RateLimit{}, limiters: map[string]*limiterPair{},
@@ -244,7 +244,9 @@ func (s *server) config() *gossh.ServerConfig {
 			s.onFailure(AuthFailure{InstanceID: s.instanceID, Username: meta.User(), IP: hostOf(meta.RemoteAddr()), Reason: err.Error()})
 		},
 	}
-	cfg.AddHostKey(s.hostKey)
+	for _, key := range s.hostKeys {
+		cfg.AddHostKey(key)
+	}
 	return cfg
 }
 

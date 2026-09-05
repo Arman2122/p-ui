@@ -3,6 +3,7 @@ package ssh
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -27,20 +28,26 @@ var testHostKey struct {
 	pem  string
 }
 
-// testHostKeyPEM is one host key for the whole package, so a test that starts a
-// core does not mint one.
+// testHostKeyPEM is one host key set for the whole package, both families, so
+// a test that starts a core mints nothing.
 func testHostKeyPEM(t *testing.T) string {
 	t.Helper()
 	testHostKey.once.Do(func() {
-		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		_, ed, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatal(err)
 		}
-		block, err := gossh.MarshalPrivateKey(priv, "test")
+		rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
 			t.Fatal(err)
 		}
-		testHostKey.pem = string(pem.EncodeToMemory(block))
+		for _, priv := range []any{ed, rsaKey} {
+			block, err := gossh.MarshalPrivateKey(priv, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			testHostKey.pem += string(pem.EncodeToMemory(block))
+		}
 	})
 	return testHostKey.pem
 }
