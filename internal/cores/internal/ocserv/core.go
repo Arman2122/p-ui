@@ -42,10 +42,12 @@ type Deps struct {
 	Group int
 	// AuthFailure hears every refused login.
 	AuthFailure func(instanceID int, username, ip, reason string)
-	// Binary, Occtl and StateDir override the daemon, its tool and the state dir.
-	Binary   string
-	Occtl    string
-	StateDir string
+	// Binary, Occtl and StateDir override the daemon, its tool and the state dir;
+	// Openconnect is the client an exit dials with.
+	Binary      string
+	Occtl       string
+	Openconnect string
+	StateDir    string
 }
 
 // Core is the OpenConnect adapter: one supervised daemon per inbound, its
@@ -56,6 +58,7 @@ type Core struct {
 
 	mu        sync.Mutex
 	instances map[int]*instance
+	exits     map[int]*exitState
 	starts    int
 	active    map[string]struct{}
 }
@@ -72,11 +75,11 @@ type instance struct {
 	specHash   string
 	configHash string
 	running    bool
+	// output is the exec backend's stderr file, held so a restart closes the old one.
+	output *os.File
 }
 
 // New returns the core; nothing runs until the first Reconcile.
-	// output is the exec backend's stderr file, held so a restart closes the old one.
-	output *os.File
 func New(deps Deps) *Core {
 	if deps.Group == 0 {
 		deps.Group = -1
@@ -85,7 +88,7 @@ func New(deps Deps) *Core {
 	if backend == nil {
 		backend = supervisor.NewExec()
 	}
-	return &Core{deps: deps, backend: backend, instances: map[int]*instance{}}
+	return &Core{deps: deps, backend: backend, instances: map[int]*instance{}, exits: map[int]*exitState{}}
 }
 
 func (c *Core) Kinds() []core.Kind { return []core.Kind{Kind} }
@@ -250,12 +253,12 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 	if cur.running && spec.Hash() == cur.specHash {
 		return nil
 	}
-	if err := c.backend.Ensure(ctx, spec); err != nil {
-		return fmt.Errorf("ocserv: inbound %d: %w", d.ID, err)
-	}
 	// Opened only for a start: Hash ignores Output, and a sink opened on every
 	// pass leaked a descriptor and truncated the log each 10 s.
 	spec.Output = c.stderrSink(cur)
+	if err := c.backend.Ensure(ctx, spec); err != nil {
+		return fmt.Errorf("ocserv: inbound %d: %w", d.ID, err)
+	}
 	c.starts++
 	cur.running, cur.specHash = true, spec.Hash()
 	logger.Infof("ocserv: inbound %d (%s) on %s:%d, devices %sN", d.ID, d.Tag, listenLabel(d.Listen), d.Port, devicePrefixFor(d.ID))
@@ -265,19 +268,19 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 // stderrSink keeps what the daemon prints before its log file opens: a config
 // error is the usual reason a unit dies at once, and it goes there.
 func (c *Core) stderrSink(cur *instance) io.Writer {
-	f, err := os.OpenFile(filepath.Join(cur.paths.dir, "ocserv.err"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
-	if err != nil {
-		return nil
 	if cur.output != nil {
 		_ = cur.output.Close()
 		cur.output = nil
 	}
+	f, err := os.OpenFile(filepath.Join(cur.paths.dir, "ocserv.err"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+	if err != nil {
+		return nil
 	}
 	_ = c.chgrp(f.Name())
+	cur.output = f
 	return f
 }
 
-	cur.output = f
 func listenLabel(listen string) string {
 	if listen == "" {
 		return "*"
@@ -403,11 +406,11 @@ func (c *Core) dropLocked(ctx context.Context, id int) error {
 		return nil
 	}
 	delete(c.instances, id)
-	if c.deps.Radius != nil {
-		c.deps.Radius.Unregister(radius.NASIdentifier(string(ID), id))
-	}
 	if cur.output != nil {
 		_ = cur.output.Close()
+	}
+	if c.deps.Radius != nil {
+		c.deps.Radius.Unregister(radius.NASIdentifier(string(ID), id))
 	}
 	if !cur.running {
 		return nil
@@ -424,6 +427,9 @@ func (c *Core) StopAll(ctx context.Context) error {
 	var failures []error
 	for id := range c.instances {
 		failures = append(failures, c.dropLocked(ctx, id))
+	}
+	for id := range c.exits {
+		failures = append(failures, c.dropExitLocked(ctx, id))
 	}
 	return errors.Join(failures...)
 }
