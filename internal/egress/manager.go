@@ -227,7 +227,7 @@ type have struct {
 	shadowing []string
 }
 
-func ownedView(snap Snapshot, id int, device string) have {
+func ownedView(snap Snapshot, id int, device string, named func(string) bool) have {
 	var h have
 	for _, rule := range snap.Rules {
 		if rule.Priority != Prio(id) {
@@ -249,7 +249,7 @@ func ownedView(snap Snapshot, id int, device string) have {
 		switch {
 		case route.Type == RouteBlackhole && route.Dst == route.Family.DefaultRoute():
 			h.blackholes = append(h.blackholes, route)
-		case route.Type == RouteUnicast && route.Dst == route.Family.DefaultRoute() && ownsDevice(device, route.Device):
+		case route.Type == RouteUnicast && route.Dst == route.Family.DefaultRoute() && (ownsDevice(device, route.Device) || named(route.Device)):
 			h.fronts = append(h.fronts, route)
 		// Only this package writes a throw into a reserved table, so one found
 		// there is ours whatever its destination; diff removes the unwanted.
@@ -322,6 +322,25 @@ func (m *Manager) provision(ctx context.Context, e Egress) (bool, error) {
 	return err == nil, err
 }
 
+// namedFor answers whether a device is one some Namer derives for id, so a
+// torn-down row's front is recognised after its type is gone.
+func (m *Manager) namedFor(id int) func(string) bool {
+	return func(name string) bool {
+		for _, driverType := range m.drivers.Types() {
+			driver, known := m.drivers.For(driverType)
+			if !known {
+				continue
+			}
+			if namer, names := driver.(Namer); names {
+				if got, err := namer.DeviceName(id); err == nil && got == name {
+					return true
+				}
+			}
+		}
+		return false
+	}
+}
+
 func (m *Manager) deprovisionAll(ctx context.Context, id int) error {
 	var failures []error
 	for _, name := range m.drivers.Types() {
@@ -361,7 +380,7 @@ func (m *Manager) converge(ctx context.Context, snap Snapshot, e Egress) error {
 			w, planErr = m.plan(e, snap)
 		}
 	}
-	h := ownedView(snap, e.ID, w.device)
+	h := ownedView(snap, e.ID, w.device, m.namedFor(e.ID))
 
 	addRules, delRules := diff(w.rules, h.rules)
 	addBlack, delBlack := diff(w.blackholes, h.blackholes)

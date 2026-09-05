@@ -19,6 +19,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/egress"
+	"github.com/Arman2122/p-ui/internal/egress/drivers/coretun"
 	"github.com/Arman2122/p-ui/internal/egress/drivers/wgclient"
 	"github.com/Arman2122/p-ui/internal/egress/drivers/xraytun"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -50,7 +51,24 @@ func newEgressDriverRegistry() *egress.Registry {
 	// because the type decides which module makes the device and one dialled by
 	// the plain WireGuard driver would carry no obfuscation while claiming to.
 	_ = registry.Register(wgclient.NewTyped(awg.UplinkDriverType, awg.UplinkManager()).WithObfuscation(awg.ApplyUplinkObfuscation))
+	// A core whose client daemon makes its own tun (OpenVPN, OpenConnect) earns
+	// its driver by declaring a supervised device exit; the row type is the kind.
+	for _, kind := range cores.ExitKinds() {
+		if _, supervised := cores.ExitSupervisorFor(kind); !supervised || cores.ExitHandleKindFor(kind) != core.ExitDevice {
+			continue
+		}
+		_ = registry.Register(coretun.New(string(kind), coreExitDevice(kind)))
+	}
 	return registry
+}
+
+// coreExitDevice asks the core for the name it gives an exit's device, so the
+// plane routes into the device the daemon actually creates.
+func coreExitDevice(kind core.Kind) func(id int) (string, error) {
+	return func(id int) (string, error) {
+		_, handle, err := cores.ExitHandleFor(context.Background(), core.Exit{ID: id, Kind: kind, Enable: true})
+		return handle.Device, err
+	}
 }
 
 // egressManager owns every kernel object the band derives. One instance, because
@@ -448,12 +466,26 @@ func egressDriverFills(row *model.Egress) error {
 }
 
 func (s *EgressService) validate(row *model.Egress) error {
-	if _, known := egressDriverRegistry.For(row.Type); !known {
-		return validateCoreExit(row)
+	_, driven := egressDriverRegistry.For(row.Type)
+	kind := exitKindFor(row.Type)
+	supervisor, supervised := cores.ExitSupervisorFor(kind)
+	// A core-owned exit behind a SOCKS port needs no plane state. One behind a
+	// device needs a driver as well, or nothing would ever be routed into it.
+	if !driven && (!supervised || cores.ExitHandleKindFor(kind) != core.ExitSocksPort) {
+		return fmt.Errorf("%w: %q — this build serves %v", ErrEgressUnknownType, row.Type, servedEgressTypes())
 	}
-	// A disabled row routes nothing, so its target is not resolved against
-	// anything: an egress whose outbound was deleted first can still be switched off.
+	// A disabled row routes nothing, so nothing of it is resolved against the
+	// host: an egress whose outbound was deleted first can still be switched off.
 	if !row.Enable {
+		return nil
+	}
+	// The core that dials it refuses settings it cannot dial with.
+	if supervised {
+		if err := supervisor.ValidateExit(coreExit(row, kind)); err != nil {
+			return err
+		}
+	}
+	if !driven {
 		return nil
 	}
 	/*
@@ -479,31 +511,17 @@ func (s *EgressService) validate(row *model.Egress) error {
 	return nil
 }
 
-/*
-validateCoreExit accepts a row no egress driver knows when a core terminates its
-kind behind a SOCKS port, and lets that core refuse settings it cannot dial.
-Anything else keeps the unknown-type refusal, naming what this build serves.
-*/
-func validateCoreExit(row *model.Egress) error {
-	kind := exitKindFor(row.Type)
-	supervisor, supervised := cores.ExitSupervisorFor(kind)
-	if kind == "" || !supervised || cores.ExitHandleKindFor(kind) != core.ExitSocksPort {
-		return fmt.Errorf("%w: %q — this build serves %v", ErrEgressUnknownType, row.Type, append(egressDriverRegistry.Types(), coreExitTypes()...))
-	}
-	if !row.Enable {
-		return nil
-	}
-	return supervisor.ValidateExit(coreExit(row, kind))
-}
-
-func coreExitTypes() []string {
-	var out []string
+// servedEgressTypes names every type a row may carry in this build: the plane's
+// drivers and the kinds a core dials itself, once each.
+func servedEgressTypes() []string {
+	out := egressDriverRegistry.Types()
 	for _, kind := range cores.ExitKinds() {
 		if _, ok := cores.ExitSupervisorFor(kind); ok {
 			out = append(out, string(kind))
 		}
 	}
-	return out
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func coreExit(row *model.Egress, kind core.Kind) core.Exit {

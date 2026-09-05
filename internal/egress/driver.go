@@ -82,6 +82,16 @@ it implements Provisioner; an ikev2 uplink is dialled by strongSwan, which makes
 its own device, so it implements Driver alone. Adding openvpn is choosing one of
 these three and registering it.
 */
+/*
+Namer is a Driver whose device somebody else creates under a name only the
+driver can derive: a client daemon's tun. The plane asks every Namer when it
+tears a row down, because by then the row and its type are gone and nothing
+else can say whose front that is. Without it the front is a foreign route.
+*/
+type Namer interface {
+	DeviceName(id int) (string, error)
+}
+
 type Provisioner interface {
 	// Provision brings the device up, or reports why it cannot. It is called on
 	// every converge and must be idempotent: a device already correct is untouched.
