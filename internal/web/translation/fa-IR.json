@@ -2405,6 +2405,34 @@
     "statusDown": "قطع",
     "statusUp": "وصل"
   },
+  "protocols": {
+    "groups": {
+      "xray": "پروکسی‌های Xray",
+      "singbox": "پروکسی‌های sing-box",
+      "vpn": "VPN",
+      "tunnels": "تونل‌ها"
+    },
+    "names": {
+      "vless": "VLESS",
+      "vmess": "VMess",
+      "trojan": "Trojan",
+      "shadowsocks": "Shadowsocks",
+      "hysteria": "Hysteria",
+      "http": "پروکسی HTTP",
+      "mixed": "Mixed (SOCKS5 + HTTP)",
+      "tunnel": "Tunnel (پورت‌فوروارد)",
+      "tun": "دستگاه TUN",
+      "wireguard": "WireGuard (Xray)",
+      "tuic": "TUIC",
+      "anytls": "AnyTLS",
+      "wgkernel": "وایرگارد کرنل",
+      "awgkernel": "AmneziaWG کرنل",
+      "openvpn": "OpenVPN",
+      "ocserv": "Cisco AnyConnect (OpenConnect)",
+      "ssh": "SSH",
+      "mtproto": "MTProto (تلگرام)"
+    }
+  },
   "cores": {
     "ssh": {
       "title": "SSH"

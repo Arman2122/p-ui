@@ -2405,6 +2405,34 @@
     "statusDown": "DOWN",
     "statusUp": "UP"
   },
+  "protocols": {
+    "groups": {
+      "xray": "Xray proxies",
+      "singbox": "sing-box proxies",
+      "vpn": "VPN",
+      "tunnels": "Tunnels"
+    },
+    "names": {
+      "vless": "VLESS",
+      "vmess": "VMess",
+      "trojan": "Trojan",
+      "shadowsocks": "Shadowsocks",
+      "hysteria": "Hysteria",
+      "http": "HTTP proxy",
+      "mixed": "Mixed (SOCKS5 + HTTP)",
+      "tunnel": "Tunnel (port forward)",
+      "tun": "TUN device",
+      "wireguard": "WireGuard (Xray)",
+      "tuic": "TUIC",
+      "anytls": "AnyTLS",
+      "wgkernel": "WireGuard Kernel",
+      "awgkernel": "AmneziaWG Kernel",
+      "openvpn": "OpenVPN",
+      "ocserv": "Cisco AnyConnect (OpenConnect)",
+      "ssh": "SSH",
+      "mtproto": "MTProto (Telegram)"
+    }
+  },
   "cores": {
     "ssh": {
       "title": "SSH"

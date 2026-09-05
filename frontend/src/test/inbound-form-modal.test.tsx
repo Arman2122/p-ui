@@ -53,11 +53,12 @@ describe('InboundFormModal', () => {
     const distinctShapes = new Set(Object.values(labelsByProto).map((l) => l.join('|')));
     expect(distinctShapes.size).toBeGreaterThan(1);
 
-    // Spot-check a protocol-distinguishing field that must appear after the switch.
-    if (labelsByProto.shadowsocks) {
-      expect(labelsByProto.shadowsocks).toContain('Encryption method');
-    }
-  }, 30000); // iterates every protocol, re-rendering a heavy modal each time — slow on CI runners
+    /* Spot-check a protocol-distinguishing field that must appear after the switch.
+       Options are listed by display name; a rename must not make this vacuous. */
+    const shadowsocks = labelsByProto.Shadowsocks;
+    expect(shadowsocks, `no Shadowsocks option among ${Object.keys(labelsByProto).join(', ')}`).toBeDefined();
+    expect(shadowsocks).toContain('Encryption method');
+  }, 60000); // iterates every protocol, re-rendering a heavy modal each time — slow on CI runners
 
   it('preserves custom share address strategy when editing a local inbound', async () => {
     renderWithProviders(

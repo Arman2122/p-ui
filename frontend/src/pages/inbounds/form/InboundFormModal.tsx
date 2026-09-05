@@ -13,8 +13,10 @@ import {
   Switch,
   Tabs,
   Tooltip,
+  Typography,
   message,
 } from 'antd';
+import type { DefaultOptionType } from 'antd/es/select';
 import { Controller, FormProvider, useForm, useWatch } from 'react-hook-form';
 
 import { HttpUtil, NumberFormatter, RandomUtil, SizeFormatter, Wireguard } from '@/utils';
@@ -45,6 +47,7 @@ import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
 import { wireguardPoolUsage, type WireguardPoolClient } from '@/lib/xray/wireguard-pool';
 import { unavailableKinds } from '@/lib/cores/core-availability';
+import { KIND_GROUPS, kindLabel } from '@/lib/cores/kind-labels';
 import { kindBindsNoPort } from '@/lib/cores/port';
 import { Protocols } from '@/schemas/primitives';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
@@ -113,7 +116,6 @@ const labelWithHint = (label: string, hint: string) => (
   </span>
 );
 
-const PROTOCOL_NAMES = Object.values(Protocols);
 const TRAFFIC_RESETS = ['never', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const SHARE_ADDR_STRATEGIES = ['node', 'listen', 'custom'] as const;
 const SHARE_ADDR_HOSTNAME_RE = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
@@ -233,15 +235,19 @@ export default function InboundFormModal({
   const coresQuery = useCoresQuery();
   /* A kind whose core fails Preflight here can still be edited — only creating
      a new one is offered, because nothing downstream would ever serve it. */
-  const protocolOptions = useMemo(() => {
+  const protocolOptions = useMemo<DefaultOptionType[]>(() => {
     const blocked = unavailableKinds(coresQuery.data);
-    return PROTOCOL_NAMES.map((p) => ({
-      value: p,
-      label: p,
-      disabled: blocked.has(p),
-      title: blocked.get(p) || undefined,
+    return KIND_GROUPS.map((group) => ({
+      label: t(group.titleKey),
+      title: t(group.titleKey),
+      options: group.kinds.map((p) => ({
+        value: p,
+        label: kindLabel(t, p),
+        disabled: blocked.has(p),
+        title: blocked.get(p) || undefined,
+      })),
     }));
-  }, [coresQuery.data]);
+  }, [coresQuery.data, t]);
 
   const selectableNodes = (availableNodes || []).filter((n) => n.enable);
   const protocol = (useWatch({ control, name: 'protocol' }) ?? '') as string;
@@ -619,7 +625,26 @@ export default function InboundFormModal({
       )}
 
       <FormField name="protocol" label={t('pages.inbounds.protocol')}>
-        <Select id="protocol" disabled={mode === 'edit'} options={protocolOptions} />
+        <Select
+          id="protocol"
+          disabled={mode === 'edit'}
+          options={protocolOptions}
+          showSearch
+          virtual={false}
+          filterOption={(input, option) => {
+            const needle = input.trim().toLowerCase();
+            return String(option?.label ?? '').toLowerCase().includes(needle)
+              || String(option?.value ?? '').toLowerCase().includes(needle);
+          }}
+          optionRender={(option) => (
+            <span className="kind-option" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span>{option.label}</span>
+              <Typography.Text type="secondary" className="kind-code" style={{ fontSize: 12 }}>
+                {String(option.value)}
+              </Typography.Text>
+            </span>
+          )}
+        />
       </FormField>
 
       <FormField

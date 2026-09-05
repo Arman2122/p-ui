@@ -16,6 +16,7 @@ import {
 import { fetchInboundLinks, remarkFromLink } from '@/lib/xray/server-links';
 import { inboundFromDb } from '@/lib/xray/inbound-from-db';
 import { formatIpLimit } from '@/lib/policies/labels';
+import { kindLabel } from '@/lib/cores/kind-labels';
 
 import {
   buildInboundInfo,
@@ -478,7 +479,7 @@ export default function InboundInfoModal({
       <dl className="info-list">
         <div className="info-row">
           <dt>{t('pages.inbounds.protocol')}</dt>
-          <dd><Tag color="purple">{dbInbound.protocol}</Tag></dd>
+          <dd><Tag color="purple">{kindLabel(t, dbInbound.protocol)}</Tag></dd>
         </div>
         <div className="info-row">
           <dt>{t('pages.inbounds.address')}</dt>

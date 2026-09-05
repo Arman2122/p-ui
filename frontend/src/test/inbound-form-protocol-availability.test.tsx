@@ -37,9 +37,10 @@ async function openProtocolPicker() {
   });
 }
 
+/* Options read as a name plus the kind in small print; the kind is the handle. */
 function optionFor(kind: string): HTMLElement {
   const option = Array.from(document.querySelectorAll('.ant-select-item-option'))
-    .find((o) => (o.textContent ?? '').trim() === kind);
+    .find((o) => (o.querySelector('.kind-code')?.textContent ?? '').trim() === kind);
   if (!option) throw new Error(`no ${kind} option in the picker`);
   return option as HTMLElement;
 }

@@ -8,6 +8,7 @@ import { InfinityIcon } from '@/components/ui';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { coerceInboundJsonField } from '@/models/dbinbound';
+import { kindLabel } from '@/lib/cores/kind-labels';
 
 import { RowActionsCell } from './RowActions';
 import { SPEED_COLUMN_WIDTH, SPEED_TAG_CLASS_NAME, SPEED_TAG_STYLE } from '@/components/utility/speedTagStyle';
@@ -198,7 +199,7 @@ export function useInboundColumns({
         width: 190,
         sorter: (a, b) => compareText(a.protocol, b.protocol),
         render: (_, record) => {
-          const tags: ReactElement[] = [<Tag key="p" color="purple">{record.protocol}</Tag>];
+          const tags: ReactElement[] = [<Tag key="p" color="purple">{kindLabel(t, record.protocol)}</Tag>];
           if (record.isWireguard || record.isHysteria) {
             tags.push(<Tag key="n" color="green">UDP</Tag>);
           } else if (record.isSS) {

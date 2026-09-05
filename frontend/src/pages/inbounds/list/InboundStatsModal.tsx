@@ -4,6 +4,7 @@ import { Modal, Tag } from 'antd';
 import { SizeFormatter, IntlUtil, ColorUtils } from '@/utils';
 import { InfinityIcon } from '@/components/ui';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
+import { kindLabel } from '@/lib/cores/kind-labels';
 
 import {
   readStreamHints,
@@ -54,7 +55,7 @@ export default function InboundStatsModal({
         <div className="card-stats">
           <div className="stat-row">
             <span className="stat-label">{t('pages.inbounds.protocol')}</span>
-            <Tag color="purple">{record.protocol}</Tag>
+            <Tag color="purple">{kindLabel(t, record.protocol)}</Tag>
             {(record.isWireguard || record.isHysteria) && (
               <Tag color="green">UDP</Tag>
             )}
