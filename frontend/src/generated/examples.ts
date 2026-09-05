@@ -371,6 +371,10 @@ export const EXAMPLES: Record<string, unknown> = {
       "wgkernel"
     ],
     "id": "xray",
+    "ipLimitEnforcement": {
+      "ssh": "login",
+      "vless": "firewall"
+    },
     "kinds": [
       "vless",
       "vmess"

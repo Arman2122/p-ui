@@ -1064,7 +1064,9 @@
       "tabLimits": "محدودیت‌ها",
       "limitIpCapped": "محدود به",
       "amneziawgConfig": "کانفیگ AmneziaWG",
-      "limitIpUnsupportedKinds": "محدودیت IP برای {kinds} اعمال نمی‌شود: این پروتکل نمی‌تواند مبدأ اتصال را گزارش کند، پس محدودیت روی آن بی‌اثر است."
+      "limitIpUnsupportedKinds": "محدودیت IP برای {kinds} اعمال نمی‌شود: این پروتکل نمی‌تواند مبدأ اتصال را گزارش کند، پس محدودیت روی آن بی‌اثر است.",
+      "limitIpEnforcedAtLogin": "روی {kinds} دستگاه اضافی در زمان ورود رد می‌شود و دستگاهی که از قبل متصل است قطع می‌گردد؛ به Fail2ban نیازی نیست.",
+      "limitIpNeedsFail2ban": "روی {kinds} محدودیت با Fail2ban اعمال می‌شود."
     },
     "groups": {
       "name": "نام",

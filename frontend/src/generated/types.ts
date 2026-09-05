@@ -366,6 +366,7 @@ export interface CoreView {
   clientCredentials: Record<string, string[]>;
   exitKinds: string[];
   id: string;
+  ipLimitEnforcement?: Record<string, string>;
   kinds: string[];
   portlessKinds: string[];
   rateKinds: string[];

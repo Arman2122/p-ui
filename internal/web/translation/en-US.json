@@ -1064,7 +1064,9 @@
       "tabLimits": "Limits",
       "limitIpCapped": "Limit to",
       "amneziawgConfig": "AmneziaWG config",
-      "limitIpUnsupportedKinds": "No IP limit on {kinds}: that protocol cannot report where a connection came from, so a cap on it would do nothing."
+      "limitIpUnsupportedKinds": "No IP limit on {kinds}: that protocol cannot report where a connection came from, so a cap on it would do nothing.",
+      "limitIpEnforcedAtLogin": "On {kinds} an extra device is refused at login and one already connected is cut; Fail2ban is not needed.",
+      "limitIpNeedsFail2ban": "On {kinds} the cap is enforced by Fail2ban."
     },
     "groups": {
       "name": "Name",

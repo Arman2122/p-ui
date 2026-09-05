@@ -384,6 +384,7 @@ export const CoreViewSchema = z.object({
   clientCredentials: z.record(z.string(), z.array(z.string())),
   exitKinds: z.array(z.string()),
   id: z.string(),
+  ipLimitEnforcement: z.record(z.string(), z.string()).optional(),
   kinds: z.array(z.string()),
   portlessKinds: z.array(z.string()),
   rateKinds: z.array(z.string()),

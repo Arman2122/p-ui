@@ -31,3 +31,75 @@ export function kindsWithoutIpLimit(cores: CoreView[] | undefined, kinds: string
   }
   return out;
 }
+
+/*
+How a device over its cap is dealt with, per kind, as each core declares it:
+"login" is refused at the core's own login and cut, and needs no firewall;
+"cut" is cut by the core and held away by Fail2ban; "firewall" is Fail2ban alone.
+*/
+export type IpLimitEnforcement = 'login' | 'cut' | 'firewall';
+
+export function ipLimitEnforcementOf(
+  cores: CoreView[] | undefined,
+  kinds: string[],
+): Record<IpLimitEnforcement, string[]> {
+  const out: Record<IpLimitEnforcement, string[]> = { login: [], cut: [], firewall: [] };
+  if (!cores) return out;
+  const byKind = new Map<string, IpLimitEnforcement>();
+  for (const core of cores) {
+    for (const [kind, mode] of Object.entries(core.ipLimitEnforcement ?? {})) {
+      if (mode === 'login' || mode === 'cut' || mode === 'firewall') byKind.set(kind, mode);
+    }
+  }
+  for (const kind of kinds) {
+    const mode = byKind.get(kind);
+    if (mode && !out[mode].includes(kind)) out[mode].push(kind);
+  }
+  return out;
+}
+
+export interface IpLimitFieldState {
+  disabled: boolean;
+  notice: string;
+}
+
+type Translate = (key: string, options?: Record<string, string>) => string;
+
+/*
+Whether the cap can be set for this client, and what to tell the operator.
+
+Three reasons a cap may not bite, and they are not the same thing: the client
+sits on an inbound whose core cannot report sessions; the host has no Fail2ban
+and every attached kind relies on it; or only some of the attached kinds do.
+Only the first two disable the field — a kind enforced at its own login holds a
+cap on a host with no Fail2ban at all, so the field stays open and the notice
+says which kinds the firewall would have to cover.
+*/
+export function ipLimitFieldState(
+  cores: CoreView[] | undefined,
+  kinds: string[],
+  fail2banUsable: boolean,
+  hostNotice: string,
+  t: Translate,
+): IpLimitFieldState {
+  const unsupported = kindsWithoutIpLimit(cores, kinds);
+  if (kinds.length > 0 && unsupported.length === kinds.length) {
+    return { disabled: true, notice: t('pages.clients.limitIpUnsupportedKinds', { kinds: unsupported.join(', ') }) };
+  }
+  const { login, cut, firewall } = ipLimitEnforcementOf(cores, kinds);
+  const needsFirewall = [...cut, ...firewall];
+  if (login.length === 0 && !fail2banUsable) {
+    return { disabled: true, notice: hostNotice };
+  }
+  const parts: string[] = [];
+  if (unsupported.length > 0) {
+    parts.push(t('pages.clients.limitIpUnsupportedKinds', { kinds: unsupported.join(', ') }));
+  }
+  if (login.length > 0) {
+    parts.push(t('pages.clients.limitIpEnforcedAtLogin', { kinds: login.join(', ') }));
+  }
+  if (needsFirewall.length > 0 && !fail2banUsable) {
+    parts.push(`${t('pages.clients.limitIpNeedsFail2ban', { kinds: needsFirewall.join(', ') })} ${hostNotice}`.trim());
+  }
+  return { disabled: false, notice: parts.join(' ') };
+}

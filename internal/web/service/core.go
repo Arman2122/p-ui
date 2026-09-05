@@ -39,6 +39,15 @@ type CoreView struct {
 		says so instead of accepting a number that does nothing. F120 / F302.
 	*/
 	SessionKinds []string `json:"sessionKinds" example:"[\"vless\",\"wgkernel\"]"`
+	/*
+		IpLimitEnforcement says, per kind, how a device over its cap is dealt with:
+		"login" — refused at the core's own login and cut, no firewall needed;
+		"cut" — cut by the core and banned by fail2ban, since it admits at no login;
+		"firewall" — fail2ban alone. A kind absent here cannot be capped at all.
+		The form gates the cap on this rather than on fail2ban alone: a cap on an
+		SSH client holds on a host with no fail2ban, and one on Xray does not.
+	*/
+	IpLimitEnforcement map[string]string `json:"ipLimitEnforcement,omitempty" example:"{\"ssh\":\"login\",\"vless\":\"firewall\"}"`
 	// RateKinds are the kinds whose core throttles each client inside itself, so
 	// a plan's rates reach them without a kernel identity. Shaping's complement.
 	RateKinds []string `json:"rateKinds" example:"[\"ssh\"]"`
@@ -63,6 +72,19 @@ type CoreView struct {
 	// since start) and TrafficError why the last poll failed, if it did.
 	TrafficSeenAt int64  `json:"trafficSeenAt,omitempty" example:"1725000000000"`
 	TrafficError  string `json:"trafficError,omitempty" example:"mtproto: stats unreadable for mtp-1"`
+}
+
+// ipLimitEnforcementOf is the same choice enforcementFor makes per address, read
+// off a kind's capabilities so the form can say it before a cap is ever set.
+func ipLimitEnforcementOf(bound *core.Bound, kind core.Kind) string {
+	switch {
+	case bound.Cut != nil && bound.Admits != nil && bound.Admits.AdmitsAtLogin(kind):
+		return "login"
+	case bound.Cut != nil:
+		return "cut"
+	default:
+		return "firewall"
+	}
 }
 
 // CoreViews describes the cores this build can serve. The registry is read per
@@ -93,6 +115,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 		// Per CORE, not per kind: Sessions answers for the whole process, so a
 		// core either can report them for everything it serves or for nothing.
 		sessions := make([]string, 0, len(kinds))
+		enforcement := make(map[string]string, len(kinds))
 		rates := make([]string, 0, len(kinds))
 		delays := make(map[string]int, len(kinds))
 		portless := make([]string, 0, len(kinds))
@@ -100,6 +123,7 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			names = append(names, string(kind))
 			if bound.Sessions != nil {
 				sessions = append(sessions, string(kind))
+				enforcement[string(kind)] = ipLimitEnforcementOf(bound, kind)
 			}
 			if bound.Rate != nil && bound.Rate.EnforcesRates(kind) {
 				rates = append(rates, string(kind))
@@ -146,21 +170,22 @@ func coreViews(ctx context.Context, reg *core.Registry) []CoreView {
 			seenAt = seen.UnixMilli()
 		}
 		views = append(views, CoreView{
-			ID:                string(described.ID),
-			TitleKey:          described.TitleKey,
-			Kinds:             names,
-			ExitKinds:         exits,
-			Caps:              described.Caps,
-			ClientCredentials: credentials,
-			Shaping:           shaping,
-			SessionKinds:      sessions,
-			RateKinds:         rates,
-			ApplyDelaySeconds: delays,
-			PortlessKinds:     portless,
-			Available:         unavailable == "",
-			Unavailable:       unavailable,
-			TrafficSeenAt:     seenAt,
-			TrafficError:      trafficErr,
+			ID:                 string(described.ID),
+			TitleKey:           described.TitleKey,
+			Kinds:              names,
+			ExitKinds:          exits,
+			Caps:               described.Caps,
+			ClientCredentials:  credentials,
+			Shaping:            shaping,
+			SessionKinds:       sessions,
+			IpLimitEnforcement: enforcement,
+			RateKinds:          rates,
+			ApplyDelaySeconds:  delays,
+			PortlessKinds:      portless,
+			Available:          unavailable == "",
+			Unavailable:        unavailable,
+			TrafficSeenAt:      seenAt,
+			TrafficError:       trafficErr,
 		})
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })

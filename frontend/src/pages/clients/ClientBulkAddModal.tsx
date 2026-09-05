@@ -17,7 +17,7 @@ import { IpLimitControl } from '@/components/clients/IpLimitControl';
 import { useClients, type InboundOption } from '@/hooks/useClients';
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
-import { kindsWithoutIpLimit } from '@/lib/cores/ip-limit';
+import { ipLimitFieldState } from '@/lib/cores/ip-limit';
 import { ClientBulkAddFormSchema, type ClientBulkAddFormValues } from '@/schemas/client';
 
 const FLOW_OPTIONS = Object.values(TLS_FLOW_CONTROL);
@@ -82,12 +82,10 @@ export default function ClientBulkAddModal({
     }
     return kinds;
   }, [inboundIds, inbounds]);
-  const uncappableKinds = useMemo(() => kindsWithoutIpLimit(cores, attachedKinds), [cores, attachedKinds]);
-  const allUncappable = attachedKinds.length > 0 && uncappableKinds.length === attachedKinds.length;
-  const limitIpDisabled = !fail2ban.usable || allUncappable;
-  const limitIpNotice = allUncappable || uncappableKinds.length > 0
-    ? t('pages.clients.limitIpUnsupportedKinds', { kinds: [...new Set(uncappableKinds)].join(', ') })
-    : getLimitIpNotice(fail2ban, t);
+  const { disabled: limitIpDisabled, notice: limitIpNotice } = useMemo(
+    () => ipLimitFieldState(cores, attachedKinds, fail2ban.usable, getLimitIpNotice(fail2ban, t), t),
+    [cores, attachedKinds, fail2ban, t],
+  );
 
   useEffect(() => {
     if (!open) return;

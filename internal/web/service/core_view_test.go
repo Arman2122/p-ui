@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/netip"
 	"testing"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -53,6 +54,18 @@ type reportingCore struct {
 }
 
 func (r reportingCore) Sessions(context.Context) ([]core.Session, error) { return nil, nil }
+
+// cuttingCore can also end one device's sessions but admits at no login of its
+// own: sing-box's shape, whose cap is a cut backed by the firewall.
+type cuttingCore struct{ reportingCore }
+
+func (c cuttingCore) CutSessions(context.Context, string, netip.Addr) (int, error) { return 0, nil }
+
+// admittingCore cuts AND refuses at login, the daemon cores' shape once the panel
+// has wired its Admit: a cap that holds with no firewall at all.
+type admittingCore struct{ cuttingCore }
+
+func (a admittingCore) AdmitsAtLogin(core.Kind) bool { return true }
 
 type exitingCore struct {
 	stubCore
@@ -194,11 +207,24 @@ func TestCoreViews(t *testing.T) {
 				`"exitKinds":["wgkernel"],"clientCredentials":{},"shaping":{},"sessionKinds":[],"rateKinds":[],"applyDelaySeconds":{},"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
-			name: "a core that can name its live sessions says which kinds an IP limit reaches",
+			name: "a core that can name its live sessions says which kinds an IP limit reaches, and that only the firewall enforces it",
 			reg:  registryOf(t, reporting),
 			want: `[{"id":"wireguard","titleKey":"cores.wireguard.title","kinds":["wgkernel","wgtunnel"],` +
 				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
-				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["wgkernel","wgtunnel"],"rateKinds":[],"applyDelaySeconds":{},"portlessKinds":[],"available":true,"unavailable":""}]`,
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["wgkernel","wgtunnel"],"ipLimitEnforcement":{"wgkernel":"firewall","wgtunnel":"firewall"},"rateKinds":[],"applyDelaySeconds":{},"portlessKinds":[],"available":true,"unavailable":""}]`,
+		},
+		{
+			name: "a core that cuts but admits at no login is cut and banned; one that also admits needs no firewall",
+			reg: registryOf(t,
+				cuttingCore{reportingCore{stubCore{descriptor: core.Descriptor{ID: "singbox", TitleKey: "cores.singbox.title"}, kinds: []core.Kind{"tuic"}}}},
+				admittingCore{cuttingCore{reportingCore{stubCore{descriptor: core.Descriptor{ID: "ssh", TitleKey: "cores.ssh.title"}, kinds: []core.Kind{"ssh"}}}}},
+			),
+			want: `[{"id":"singbox","titleKey":"cores.singbox.title","kinds":["tuic"],` +
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["tuic"],"ipLimitEnforcement":{"tuic":"cut"},"rateKinds":[],"applyDelaySeconds":{},"portlessKinds":[],"available":true,"unavailable":""},` +
+				`{"id":"ssh","titleKey":"cores.ssh.title","kinds":["ssh"],` +
+				`"caps":{"userHotAdd":null,"perUserStats":null,"quotaPushdown":null,"onlineUsers":null,"shareLink":null},` +
+				`"exitKinds":[],"clientCredentials":{},"shaping":{},"sessionKinds":["ssh"],"ipLimitEnforcement":{"ssh":"login"},"rateKinds":[],"applyDelaySeconds":{},"portlessKinds":[],"available":true,"unavailable":""}]`,
 		},
 		{
 			name: "no registry is an empty list, not null",

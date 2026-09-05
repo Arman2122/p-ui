@@ -1566,6 +1566,17 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": "xray",
         "type": "string"
       },
+      "ipLimitEnforcement": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "/*\n\t\tIpLimitEnforcement says, per kind, how a device over its cap is dealt with:\n\t\t\"login\" — refused at the core's own login and cut, no firewall needed;\n\t\t\"cut\" — cut by the core and banned by fail2ban, since it admits at no login;\n\t\t\"firewall\" — fail2ban alone. A kind absent here cannot be capped at all.\n\t\tThe form gates the cap on this rather than on fail2ban alone: a cap on an\n\t\tSSH client holds on a host with no fail2ban, and one on Xray does not.\n\t*/",
+        "example": {
+          "ssh": "login",
+          "vless": "firewall"
+        },
+        "type": "object"
+      },
       "kinds": {
         "description": "Kinds are the inbound protocols this core serves; a core may serve many,\nso the id is not a protocol and must never be used as one.",
         "example": [
