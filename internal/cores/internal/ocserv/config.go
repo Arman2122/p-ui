@@ -45,6 +45,9 @@ func renderServer(inst core.Instance, s Settings, p paths, user string, interimS
 	}
 	fmt.Fprintf(&b, "socket-file = %s\nocctl-socket-file = %s\nuse-occtl = true\n", p.sock, p.ctl)
 	fmt.Fprintf(&b, "server-cert = %s\nserver-key = %s\n", p.cert, p.key)
+	// The daemon's own default plus a TLS 1.2 floor; DTLS versions are named
+	// separately in GnuTLS and are untouched, so dtls-legacy keeps working.
+	b.WriteString("tls-priorities = \"NORMAL:%SERVER_PRECEDENCE:%COMPAT:-RSA:-VERS-SSL3.0:-VERS-TLS1.0:-VERS-TLS1.1:-ARCFOUR-128\"\n")
 	fmt.Fprintf(&b, "device = %s\nisolate-workers = true\nmax-clients = 0\nmax-same-clients = 0\n", devicePrefixFor(inst.ID))
 	fmt.Fprintf(&b, "ipv4-network = %s\nipv4-netmask = %s\npredictable-ips = false\n", pool.Addr(), s.netmask())
 	if s.Camouflage {
@@ -56,6 +59,9 @@ func renderServer(inst core.Instance, s Settings, p paths, user string, interimS
 	fmt.Fprintf(&b, "log-level = 2\nstats-report-time = %d\n", interimSeconds)
 	b.WriteString("auth-timeout = 240\ncookie-timeout = 60\nidle-timeout = 1200\nmobile-idle-timeout = 2400\n")
 	b.WriteString("keepalive = 32400\ndpd = 90\nmobile-dpd = 1800\ntry-mtu-discovery = true\n")
+	// Where UDP is throttled or a NAT forgets the mapping, a session whose DTLS
+	// went quiet falls back to the TLS connection instead of hanging.
+	b.WriteString("switch-to-tcp-timeout = 25\n")
 	for _, dns := range s.DNS {
 		if dns = strings.TrimSpace(dns); dns != "" {
 			fmt.Fprintf(&b, "dns = %s\n", dns)

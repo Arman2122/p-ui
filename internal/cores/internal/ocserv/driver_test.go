@@ -174,6 +174,9 @@ func TestRenderServerCarriesTheDesign(t *testing.T) {
 		"occtl-socket-file = " + filepath.Join("/state/4", "occtl.sock"), "use-occtl = true",
 		"server-cert = " + filepath.Join("/state/4", "server.crt"), "stats-report-time = 20",
 		"dns = 1.1.1.1", "route = default", "camouflage = true", `camouflage_secret = "hidden"`,
+		// A TLS 1.2 floor that leaves the DTLS versions alone, and the fallback to
+		// TCP for a client whose UDP a middlebox has silently dropped.
+		`tls-priorities = "NORMAL:%SERVER_PRECEDENCE:%COMPAT:-RSA:-VERS-SSL3.0:-VERS-TLS1.0:-VERS-TLS1.1:-ARCFOUR-128"`, "switch-to-tcp-timeout = 25",
 	} {
 		if !strings.Contains(conf, want) {
 			t.Fatalf("server config lacks %q:\n%s", want, conf)
