@@ -63,6 +63,41 @@ forward carries no UDP, and a rule asking for UDP alone is refused rather than
 sent into a port that drops it. **Test** on the Outbounds page probes through
 the port.
 
+### OpenVPN exit
+
+An exit that is an OpenVPN provider. Pick **openvpn** in the outbound form and
+paste the provider's `.ovpn` whole — inline `<ca>`, `<cert>`, `<tls-crypt>`
+blocks included — plus the username and password it asks for; a login carried
+inside the profile itself is used when those are empty. The panel runs the
+distribution's OpenVPN as a client under systemd (as `p-ui-core`, with the one
+capability a tun needs) and takes the profile under its control: the device is
+the panel's (`pvx` plus the exit's id), `route-nopull` keeps the address the
+provider assigns and drops the routes and DNS it would push onto this server,
+and the daemon is restarted whenever it exits. A profile that would run a
+script on this host (`up`, `down`, `plugin`, `script-security`), one that
+names a file the panel does not have (`ca /etc/...` instead of an inline
+block), and a server's profile are refused at save with the reason. Routing
+rules that send traffic to the exit are compiled onto a marked outbound, the
+way a WireGuard uplink is reached, and the plane routes that mark into the tun.
+**Test** on the Outbounds page probes through it. Two v1 limits: IPv4 only,
+and nothing else on the server is rerouted.
+
+### OpenConnect exit
+
+An exit that is an AnyConnect or ocserv server. Pick **ocserv** in the outbound
+form and give it the server (`host` or `host:port`, 443 by default), a username
+and password, and for a self-signed server the certificate pin as
+`pin-sha256:…` — the form openconnect itself prints, and the one a Penhoon
+OpenConnect inbound shows in the profile it hands out; leave it empty for a
+server the system's CAs vouch for. A group answers a server that offers
+several. The panel runs `openconnect` as a client under systemd as
+`p-ui-core`, with the password on stdin from a file rather than on the command
+line, and with a script of its own that addresses the tunnel (`pcx` plus the
+exit's id) and touches no route and no resolver: the stock vpnc-script would
+rewrite this server's default route and resolv.conf. The installer adds the
+`openconnect` package beside `ocserv`. Routed, tested and limited exactly like
+the OpenVPN exit above.
+
 ## Cloudflare WARP
 
 WARP lets your server egress through Cloudflare's network. Penhoon UI can register a

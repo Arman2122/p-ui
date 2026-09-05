@@ -544,11 +544,16 @@ makes the device and `Injector` when the front is a device the core itself creat
 shapes map onto who owns the device: `xray-tun`'s front belongs to Xray and appears when
 Xray does, so it injects; a WireGuard uplink is dialled by this panel, so it provisions
 (`drivers/wgclient` — on the SAME engine that serves `pwg` inbounds, because an uplink and
-an inbound must never be two writers to one device namespace); an ikev2 uplink would be
-dialled by strongSwan, which makes its own device, so it is a `Driver` alone. Adding openvpn
-is choosing one of these three and adding one `Register` line to `newEgressDriverRegistry`
-(`internal/web/service/egress.go`) — explicit, never `init()`, for §3.4's reason. A type the
-registry does not serve is contained, never let out through the server's own identity.
+an inbound must never be two writers to one device namespace); a device a client DAEMON makes
+— OpenVPN's, openconnect's, strongSwan's — is the third shape, and it is built:
+`drivers/coretun` is a `Driver` alone that names the device the core's `ExitHandle` answers
+with, registered by `newEgressDriverRegistry` (`internal/web/service/egress.go`) for every
+core that supervises a device exit, so a new daemon core adds no `Register` line at all. The
+one seam that shape needed in the plane is `Namer`: with a row deleted there is no type to
+fill from, so `ownedView` asks every `Namer` whether a front's device is one it derives for
+that id, and withdraws it — before that the plane's own front read as a foreign route on
+teardown (§12.5j). A type the registry does not serve is contained, never let out through
+the server's own identity.
 
 Three corrections to that table, each measured on 6.8.0-111:
 
@@ -2343,3 +2348,59 @@ second device replaced the first), a pushed `block-outside-dns`, and logs to
 stderr rather than an unrotated file; ocserv gained a TLS 1.2 floor and
 `switch-to-tcp-timeout`. Both change the rendered config, so every inbound of
 those kinds restarts once on the first reconcile after the upgrade.
+
+### 12.5j OpenVPN and OpenConnect become exits (2026-09-05)
+
+The outbound half of the two daemon cores, and the first exits whose device is made by a
+client daemon rather than by the panel or by Xray — the third shape §5.2's taxonomy had
+priced but not built.
+
+**Shape.** Each core implements `RoutableEgress` (`ExitDevice`, `SourceOwnerDaemon`, a pure
+name: `pvx<id>` / `pcx<id>`, namespaces apart from the inbounds' `pov` / `poc` and from the
+plane's `peg` / `pux`) and `ExitSupervisor`: one supervised client unit per row,
+`p-ui-openvpn-exit-<id>` / `p-ui-ocserv-exit-<id>`, named so the inbound orphan sweep — which
+reads the number after the core's prefix — parses it as no inbound and leaves it alone, and
+swept by an exit sweep of its own. `drivers/coretun` is the plane driver: `Fill` names the
+device, marks the egress, carries IPv4 alone (the daemon assigns the address after the pure
+call, and a v6 route into a tun with no v6 address would borrow eth0's), and sets the
+device's `rp_filter` loose. The service registers one per supervised device-exit kind and
+`validate` now runs the core's `ValidateExit` for any supervised kind while requiring a
+driver for a device kind — a device exit nobody routes into would otherwise be accepted and
+run for nothing.
+
+**OpenVPN.** The row is the provider's `.ovpn` plus a login. `exit_profile.go` parses it:
+directives that run a command or read a file not present here are refused (`up`, `plugin`,
+`script-security`, `config`, a `ca FILE`…), a server's directives are refused, what the panel
+decides is dropped (device, routes, DNS, logging, process), the rest is kept verbatim with its
+inline blocks, and the panel's block comes last: `dev pvx<id>`, `route-nopull`, `nobind`,
+`persist-tun`, `auth-user-pass <file>`. The manual's `--route-nopull` still applies the pushed
+`ifconfig`, which is what gives the tun its address.
+
+**OpenConnect.** The row is server, login, optional `pin-sha256:` and group. The password
+reaches the client on stdin (`sh -c 'exec "$@" <"$PUI_PASSWD_FILE"'`), never the command
+line; `--script` is the panel's own three-line script that sets the address and MTU on
+`connect`/`reconnect` and nothing else, because the stock vpnc-script rewrites the default
+route and `resolv.conf` of what is everybody else's gateway.
+
+**The plane's teardown seam.** The e2e found that with a row deleted the plane classified its
+own `default dev pvx8` as a foreign, shadowing route — `ownsDevice` knew only its own
+namespaces — and would have logged `ErrForeignResource` on every pass until the daemon's
+device died. `Namer` (driver.go) lets a driver name the device for an id; `ownedView` consults
+every `Namer` and withdraws the front. `TestATornDownNamedFrontIsWithdrawn` was red without
+it.
+
+**Proof, on a host that is its own provider.** `exit_e2e_test.go` in each core: an inbound of
+the same core is the remote, the exit dials it with the profile / pin the panel itself hands
+out, the real plane fills the exit's table through `coretun`, and a socket carrying the exit's
+mark reaches an origin in another namespace ARRIVING FROM the tunnel address, where the same
+request unmarked arrives from the veth (`coretest.OriginInNamespace`). Two lessons the
+harness had to learn: a loopback-alias origin proves nothing, because the kernel's `local`
+table (priority 0) answers before any fwmark rule; and on a shared host what the provider
+decrypts carries a source the host itself holds, which `fib_validate_source` drops as a
+martian unless `accept_local` is set (`coretest.AllowLocalSources`, test-only — a provider on
+another machine never sees it). Both e2e passed on the VM 2026-09-05.
+
+**Found beside it.** Both daemon cores opened and truncated their stderr sink on EVERY
+supervision pass (`spec()` called `stderrSink` before the hash compare): a descriptor leaked
+and the log was wiped every 10 s. The sink is now opened only for a start and the previous
+one closed; the e2e asserts a steady reconcile leaves the log alone.
