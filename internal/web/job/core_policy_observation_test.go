@@ -125,7 +125,7 @@ turned banning off.
 func TestTheJailsInputIsWrittenOnlyWhereBanningIsOn(t *testing.T) {
 	over := []service.IPLimitVerdict{{
 		Email: "capped",
-		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
+		Over:  []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
 	}}
 
 	t.Run("enforcement off", func(t *testing.T) {

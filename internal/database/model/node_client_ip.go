@@ -1,12 +1,11 @@
 package model
 
-// ClientIpEntry is the wire/JSON shape of a single observed client IP with the
-// last time it was seen (unix seconds). It mirrors job.IPWithTimestamp and the
-// service-internal clientIpEntry so the per-node attribution blob round-trips
-// with the existing inbound_client_ips storage.
+// ClientIpEntry is the wire/JSON shape of one observed client address: the last
+// time it was seen and, while it is live, when its current run began (unix seconds).
 type ClientIpEntry struct {
 	IP        string `json:"ip"`
 	Timestamp int64  `json:"timestamp"`
+	FirstSeen int64  `json:"firstSeen,omitempty"`
 }
 
 // NodeClientIp records which panel (identified by its stable panelGuid) observed
@@ -15,8 +14,8 @@ type ClientIpEntry struct {
 // node), this table preserves attribution: it never mixes in IPs a parent pushed
 // down, so the master can tell exactly which node a given IP is connecting to.
 //
-// Rows under the local panel's own panelGuid are written by check_client_ip_job
-// from local Xray observations; rows under remote guids are merged in by the node
+// Rows under the local panel's own panelGuid are written by the policy pass from
+// what the local cores report; rows under remote guids are merged in by the node
 // sync job from each node's clientIpsByGuid report (its own panelGuid subtree plus
 // any descendants), so attribution survives across a chain of nodes.
 type NodeClientIp struct {

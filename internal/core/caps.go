@@ -319,6 +319,9 @@ type Session struct {
 	// LastSeenUnixMilli is load-bearing. A core refreshes it only on new activity, so
 	// a frozen value is a dead connection, not a reconnect. Zero means it cannot say.
 	LastSeenUnixMilli int64
+	// StartedUnixMilli is when the connection opened, for a core that knows. Zero
+	// means it cannot say, and the panel counts from when it first saw the address.
+	StartedUnixMilli int64
 }
 
 /*

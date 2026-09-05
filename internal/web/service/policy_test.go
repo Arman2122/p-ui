@@ -212,24 +212,27 @@ func setLimitIP(t *testing.T, email string, limit int) {
 func observe(email string, at time.Time, addresses ...string) []core.Session {
 	out := make([]core.Session, 0, len(addresses))
 	for i, address := range addresses {
-		// Distinct seconds so oldest-first is deterministic rather than a tie.
+		// The addresses arrive in the order given, a second apart, so arrival
+		// order is deterministic rather than a tie.
+		stamp := at.Add(time.Duration(i)*time.Second).Unix() * 1000
 		out = append(out, core.Session{
 			Email:             email,
 			Source:            netip.MustParseAddr(address),
-			LastSeenUnixMilli: at.Add(time.Duration(i)*time.Second).Unix() * 1000,
+			LastSeenUnixMilli: stamp,
+			StartedUnixMilli:  stamp,
 		})
 	}
 	return out
 }
 
-func bannedAddresses(verdicts []IPLimitVerdict, email string) []string {
+func overAddresses(verdicts []IPLimitVerdict, email string) []string {
 	for _, verdict := range verdicts {
 		if verdict.Email != email {
 			continue
 		}
-		out := make([]string, 0, len(verdict.Ban))
-		for _, banned := range verdict.Ban {
-			out = append(out, banned.IP)
+		out := make([]string, 0, len(verdict.Over))
+		for _, over := range verdict.Over {
+			out = append(out, over.IP)
 		}
 		sort.Strings(out)
 		return out
@@ -238,10 +241,11 @@ func bannedAddresses(verdicts []IPLimitVerdict, email string) []string {
 }
 
 /*
-TestIPLimitKeepsTheNewestAddressesAndBansTheRest is the brief's own scenario,
-driven through the real join rather than through the pure function it calls.
+TestIPLimitKeepsTheFirstDevicesAndNamesTheLatestOver is the brief's own
+scenario, driven through the real join rather than through the pure function
+it calls.
 */
-func TestIPLimitKeepsTheNewestAddressesAndBansTheRest(t *testing.T) {
+func TestIPLimitKeepsTheFirstDevicesAndNamesTheLatestOver(t *testing.T) {
 	initTestDB(t)
 	svc := &PolicyService{}
 
@@ -257,8 +261,8 @@ func TestIPLimitKeepsTheNewestAddressesAndBansTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if got, want := bannedAddresses(verdicts, "sharer"), []string{"203.0.113.1"}; !slices.Equal(got, want) {
-		t.Fatalf("banned %v, want the oldest address %v — the two newest keep the slots", got, want)
+	if got, want := overAddresses(verdicts, "sharer"), []string{"203.0.113.3"}; !slices.Equal(got, want) {
+		t.Fatalf("over %v, want the latest arrival %v — the first two devices hold the slots", got, want)
 	}
 
 	t.Run("a limit of zero is unlimited, never zero-allowed", func(t *testing.T) {
@@ -312,8 +316,8 @@ func TestIPLimitReachesACoreThatHasNoOnlineApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if got, want := bannedAddresses(verdicts, "roamer"), []string{"198.51.100.1"}; !slices.Equal(got, want) {
-		t.Fatalf("banned %v, want %v", got, want)
+	if got, want := overAddresses(verdicts, "roamer"), []string{"198.51.100.3"}; !slices.Equal(got, want) {
+		t.Fatalf("over %v, want the latest arrival %v", got, want)
 	}
 
 	// Non-negotiable: a peer removed to satisfy a soft product rule loses its
@@ -404,11 +408,11 @@ func TestOneCoreFailingDoesNotSilenceTheOthers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if got := bannedAddresses(verdicts, "onbroken"); got != nil {
+	if got := overAddresses(verdicts, "onbroken"); got != nil {
 		t.Errorf("a client whose core could not be asked must not be banned on a guess, got %v", got)
 	}
-	if got, want := bannedAddresses(verdicts, "onhealthy"), []string{"203.0.113.30"}; !slices.Equal(got, want) {
-		t.Fatalf("the healthy core's client must still be enforced: banned %v, want %v", got, want)
+	if got, want := overAddresses(verdicts, "onhealthy"), []string{"203.0.113.31"}; !slices.Equal(got, want) {
+		t.Fatalf("the healthy core's client must still be enforced: over %v, want %v", got, want)
 	}
 }
 
@@ -1008,7 +1012,7 @@ func TestAnAssignmentToAMissingPlanFailsOpen(t *testing.T) {
 func banningVerdicts(verdicts []IPLimitVerdict) []IPLimitVerdict {
 	var out []IPLimitVerdict
 	for _, v := range verdicts {
-		if len(v.Ban) > 0 || v.Bounce {
+		if len(v.Over) > 0 || v.Bounce {
 			out = append(out, v)
 		}
 	}

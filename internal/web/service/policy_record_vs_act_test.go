@@ -62,9 +62,9 @@ func TestTheVerdictIsMadeWhetherOrNotAnythingCanActOnIt(t *testing.T) {
 			}
 
 			// The record: same breach, same address over the cap, either way.
-			want := []string{"198.51.100.1"}
-			if got := bannedAddresses(verdicts, "capped"); !slices.Equal(got, want) {
-				t.Fatalf("banned %v, want %v — the verdict is the record, and it is made whether or not anything can act on it", got, want)
+			want := []string{"198.51.100.3"}
+			if got := overAddresses(verdicts, "capped"); !slices.Equal(got, want) {
+				t.Fatalf("over %v, want %v — the verdict is the record, and it is made whether or not anything can act on it", got, want)
 			}
 
 			// The act: gated, and now the only thing that is.
@@ -81,18 +81,15 @@ func TestTheVerdictIsMadeWhetherOrNotAnythingCanActOnIt(t *testing.T) {
 			}
 
 			/*
-				And the address the cap named: excluded from the stored list when it is
-				about to be cut, kept when nothing will cut it. Hiding a connection that
-				is still up would empty the list for exactly the clients it is about.
+				And the address the cap named stays on the stored list either way: it
+				is a connection that is still up, and this list is the one place the
+				panel reports it. Hiding it would empty the list for exactly the
+				clients it is about.
 			*/
 			stored := storedAddresses(t, "capped")
-			if got := slices.Contains(stored, "198.51.100.1"); got == tc.enforce {
-				t.Fatalf("the over-cap address is %s the stored list %v; with enforce=%v it should be the other way",
-					map[bool]string{true: "in", false: "missing from"}[got], stored, tc.enforce)
-			}
-			for _, kept := range []string{"198.51.100.2", "198.51.100.3"} {
-				if !slices.Contains(stored, kept) {
-					t.Fatalf("an address inside the cap is missing from the stored list %v", stored)
+			for _, live := range []string{"198.51.100.1", "198.51.100.2", "198.51.100.3"} {
+				if !slices.Contains(stored, live) {
+					t.Fatalf("a live address is missing from the stored list %v", stored)
 				}
 			}
 		})

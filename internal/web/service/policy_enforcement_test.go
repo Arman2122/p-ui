@@ -64,15 +64,16 @@ func TestABounceNeverLandsOnACoreThatSawNothing(t *testing.T) {
 	installCores(t, newProxyCore(quiet), newPeerCore(loud))
 
 	// The vless inbound is created first, so it holds the LOWER id and is what an
-	// id tie-break picks — while every banned address comes from the other core.
+	// id tie-break picks — while every over-cap address comes from the other core.
 	proxyInbound := seedPolicyInbound(t, "vless", "vless-quiet", 45401, "dual")
 	tunnelInbound := seedPolicyInbound(t, "wgkernel", "wg-loud", 45402)
 	attachClient(t, tunnelInbound, "dual")
 	setLimitIP(t, "dual", 2)
 
+	// The proxy's device arrived first and holds a slot; the tunnel's three came later.
 	at := time.Now().Add(-10 * time.Minute)
 	loud.sessions = observe("dual", at, "198.51.100.1", "198.51.100.2", "198.51.100.3")
-	quiet.sessions = observe("dual", at.Add(time.Hour), "203.0.113.9")
+	quiet.sessions = observe("dual", at.Add(-time.Hour), "203.0.113.9")
 
 	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
 	if err != nil {
@@ -81,8 +82,8 @@ func TestABounceNeverLandsOnACoreThatSawNothing(t *testing.T) {
 	if proxyInbound.Id >= tunnelInbound.Id {
 		t.Fatalf("this only bites while the compliant inbound sorts first: %d vs %d", proxyInbound.Id, tunnelInbound.Id)
 	}
-	if got, want := bannedAddresses(verdicts, "dual"), []string{"198.51.100.1", "198.51.100.2"}; !slices.Equal(got, want) {
-		t.Fatalf("banned %v, want the two oldest %v, every one of them the tunnel's", got, want)
+	if got, want := overAddresses(verdicts, "dual"), []string{"198.51.100.2", "198.51.100.3"}; !slices.Equal(got, want) {
+		t.Fatalf("over %v, want the two latest arrivals %v, every one of them the tunnel's", got, want)
 	}
 	verdict := verdictFor(t, verdicts, "dual")
 	if verdict.Bounce {
@@ -114,7 +115,7 @@ func TestABounceLandsOnTheCoreThatSawTheBreach(t *testing.T) {
 
 	at := time.Now().Add(-10 * time.Minute)
 	loud.sessions = observe("dual", at, "203.0.113.1", "203.0.113.2", "203.0.113.3")
-	quiet.sessions = observe("dual", at.Add(time.Hour), "198.51.100.9")
+	quiet.sessions = observe("dual", at.Add(-time.Hour), "198.51.100.9")
 
 	verdicts, err := svc.EvaluateIPLimits(svc.ObserveSessions(context.Background()), true)
 	if err != nil {
@@ -155,8 +156,8 @@ func TestAClientBackUnderItsCapIsStillReported(t *testing.T) {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	verdict := verdictFor(t, verdicts, "behaving")
-	if len(verdict.Ban) != 0 {
-		t.Fatalf("a client inside its cap must carry an empty ban list, got %v", verdict.Ban)
+	if len(verdict.Over) != 0 {
+		t.Fatalf("a client inside its cap must carry an empty ban list, got %v", verdict.Over)
 	}
 	if verdict.Bounce {
 		t.Fatal("an empty ban list can never justify cutting a client off")

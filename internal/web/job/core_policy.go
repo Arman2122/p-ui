@@ -121,7 +121,7 @@ func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.
 	}
 	var reports []report
 	for _, verdict := range verdicts {
-		actionable, next := policy.AdvancedSince(verdict.Email, verdict.Ban, j.bannedSeen)
+		actionable, next := policy.AdvancedSince(verdict.Email, verdict.Over, j.bannedSeen)
 		j.bannedSeen = next
 		if len(actionable) > 0 {
 			reports = append(reports, report{verdict: verdict, banned: actionable})

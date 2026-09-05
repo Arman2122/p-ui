@@ -52,7 +52,7 @@ func TestAReBanIsReportedAgainAfterAPassUnderTheCap(t *testing.T) {
 	const frozen = int64(1786398189000)
 	over := []service.IPLimitVerdict{{
 		Email: "alice",
-		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: frozen}},
+		Over:  []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: frozen}},
 	}}
 	// The client is back inside its cap: still evaluated, nothing to ban. This is
 	// the pass that must forget the pair.
@@ -93,7 +93,7 @@ func TestAPairIsNotReportedTwiceWithinOneBan(t *testing.T) {
 
 	over := []service.IPLimitVerdict{{
 		Email: "alice",
-		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
+		Over:  []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
 	}}
 	job.reportOverLimit(context.Background(), over, true)
 	job.reportOverLimit(context.Background(), over, true)
@@ -111,7 +111,7 @@ func TestTheRememberedPairIsReleased(t *testing.T) {
 
 	job.reportOverLimit(context.Background(), []service.IPLimitVerdict{{
 		Email: "alice",
-		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
+		Over:  []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
 	}}, true)
 	if len(job.bannedSeen) != 1 {
 		t.Fatalf("the banned pair must be remembered, got %v", job.bannedSeen)

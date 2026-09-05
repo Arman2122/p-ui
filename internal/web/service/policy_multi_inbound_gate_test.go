@@ -46,7 +46,7 @@ func TestTheCapStillAppliesWhenAnotherInboundIsEnabled(t *testing.T) {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 
-	banned := bannedAddresses(verdicts, "alice@e")
+	banned := overAddresses(verdicts, "alice@e")
 	if len(banned) == 0 {
 		t.Fatal("the cap was not applied: a client live on a second, enabled inbound escaped it because the lowest-id one was disabled")
 	}
@@ -80,7 +80,7 @@ func TestNoEnabledInboundStillDecidesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
-	if banned := bannedAddresses(verdicts, "bob@e"); len(banned) != 0 {
+	if banned := overAddresses(verdicts, "bob@e"); len(banned) != 0 {
 		t.Fatalf("no inbound carrying this client is enabled; nothing should have been banned, got %v", banned)
 	}
 }

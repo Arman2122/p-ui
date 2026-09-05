@@ -7,6 +7,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/logger"
 
 	"gorm.io/gorm/clause"
 )
@@ -18,30 +19,38 @@ import (
 // observations under its panelGuid, and the master merges every node's
 // guid-keyed report — never mixing in IPs a parent pushed down.
 
-// mergeModelClientIpEntries unions old and incoming observations, drops anything
-// older than cutoff, keeps the newest timestamp per IP, and sorts newest-first.
-// It mirrors mergeClientIpEntries but operates on the exported wire type.
-func mergeModelClientIpEntries(old, incoming []model.ClientIpEntry, cutoff int64) []model.ClientIpEntry {
-	ipMap := make(map[string]int64, len(old)+len(incoming))
-	for _, e := range old {
-		if e.IP == "" || e.Timestamp < cutoff {
+/*
+heldElsewhere is, per client, every address another node reported live since the
+given second — the cluster's half of a device cap. Read from the attribution rows
+rather than the union blob because only they say WHICH panel saw an address; an
+address this panel's own cores stopped reporting is over, not held.
+*/
+func (s *InboundService) heldElsewhere(emails []string, sinceSeconds int64) map[string]map[string]bool {
+	localGuid, _ := (&SettingService{}).GetPanelGuid()
+	db := database.GetDB()
+	out := map[string]map[string]bool{}
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		var rows []model.NodeClientIp
+		if err := db.Where("email IN ? AND node_guid <> ?", batch, localGuid).Find(&rows).Error; err != nil {
+			logger.Warning("policy: read node attribution:", err)
 			continue
 		}
-		ipMap[e.IP] = e.Timestamp
-	}
-	for _, e := range incoming {
-		if e.IP == "" || e.Timestamp < cutoff {
-			continue
+		for _, row := range rows {
+			var entries []model.ClientIpEntry
+			if json.Unmarshal([]byte(row.Ips), &entries) != nil {
+				continue
+			}
+			for _, e := range entries {
+				if e.IP == "" || e.Timestamp < sinceSeconds {
+					continue
+				}
+				if out[row.Email] == nil {
+					out[row.Email] = map[string]bool{}
+				}
+				out[row.Email][e.IP] = true
+			}
 		}
-		if cur, ok := ipMap[e.IP]; !ok || e.Timestamp > cur {
-			ipMap[e.IP] = e.Timestamp
-		}
 	}
-	out := make([]model.ClientIpEntry, 0, len(ipMap))
-	for ip, ts := range ipMap {
-		out = append(out, model.ClientIpEntry{IP: ip, Timestamp: ts})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp > out[j].Timestamp })
 	return out
 }
 
@@ -87,7 +96,7 @@ func upsertNodeClientIps(guid string, perEmail map[string][]model.ClientIpEntry)
 		if cur, ok := existingByEmail[email]; ok && cur.Ips != "" {
 			_ = json.Unmarshal([]byte(cur.Ips), &old)
 		}
-		merged := mergeModelClientIpEntries(old, incoming, cutoff)
+		merged := mergeClientIpEntries(old, incoming, cutoff)
 		if len(merged) == 0 {
 			// Nothing fresh: drop any stale row so attribution doesn't linger.
 			if _, ok := existingByEmail[email]; ok {
@@ -112,9 +121,8 @@ func upsertNodeClientIps(guid string, perEmail map[string][]model.ClientIpEntry)
 	return tx.Commit().Error
 }
 
-// RecordLocalClientIps stores this panel's own Xray observations under its
-// panelGuid. Called by check_client_ip_job each scan with the live per-email IPs
-// the local core reported.
+// RecordLocalClientIps stores this panel's own observations under its panelGuid:
+// the policy pass hands it the live per-email addresses the local cores reported.
 func (s *InboundService) RecordLocalClientIps(panelGuid string, observed map[string][]model.ClientIpEntry) error {
 	return upsertNodeClientIps(panelGuid, observed)
 }
@@ -168,7 +176,7 @@ func (s *InboundService) GetClientIpsByGuid() (map[string]map[string][]model.Cli
 		if err := json.Unmarshal([]byte(row.Ips), &entries); err != nil {
 			continue
 		}
-		fresh := mergeModelClientIpEntries(nil, entries, cutoff)
+		fresh := mergeClientIpEntries(nil, entries, cutoff)
 		if len(fresh) == 0 {
 			continue
 		}

@@ -55,8 +55,8 @@ type PolicyService struct {
 	inboundService InboundService
 }
 
-// ipLimitLiveWindow is how long an address a master synced but this node did not
-// observe still counts against the cap. It is what makes the cap cluster-wide.
+// ipLimitLiveWindow is how long after another node's last report of an address
+// it still holds a slot here. It is what makes the cap cluster-wide.
 const ipLimitLiveWindow = 120 * time.Second
 
 // ipLimitStaleAfter drops an address from the persisted row once nothing has
@@ -477,7 +477,7 @@ func (s *PolicyService) ObserveSessions(ctx context.Context) SessionScan {
 			}
 			address := session.Source.String()
 			scan.ByEmail[session.Email] = append(scan.ByEmail[session.Email],
-				policy.Observation{IP: address, LastSeenUnixMilli: seen})
+				policy.Observation{IP: address, LastSeenUnixMilli: seen, FirstSeenUnixMilli: session.StartedUnixMilli})
 			sighting := Sighting{Email: session.Email, IP: address}
 			if !slices.Contains(scan.Observers[sighting], reporter) {
 				scan.Observers[sighting] = append(scan.Observers[sighting], reporter)
@@ -487,11 +487,11 @@ func (s *PolicyService) ObserveSessions(ctx context.Context) SessionScan {
 	return scan
 }
 
-// IPLimitVerdict is one client's answer for this pass. Ban is what the caller
-// reports; Bounce says whether cutting the client's sessions is safe for its core.
+// IPLimitVerdict is one client's answer for this pass. Over is every live address
+// beyond the cap; Bounce says whether cutting the client's sessions is safe for its core.
 type IPLimitVerdict struct {
 	Email   string
-	Ban     []policy.Observation
+	Over    []policy.Observation
 	Bounce  bool
 	Inbound *model.Inbound
 }
@@ -522,6 +522,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 	nowSeconds := time.Now().Unix()
 	nowMilli := nowSeconds * 1000
 	staleCutoff := nowMilli - ipLimitStaleAfter.Milliseconds()
+	elsewhere := s.inboundService.heldElsewhere(emails, nowSeconds-int64(ipLimitLiveWindow/time.Second))
 
 	attribution := make(map[string][]model.ClientIpEntry, len(emails))
 	var verdicts []IPLimitVerdict
@@ -570,71 +571,38 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan, enforce bool) ([]IPLi
 		}
 		limit := limits[email]
 		/*
-			Deciding is not acting.
+			Deciding is not acting: the verdict is the record of who is over their
+			cap, made whether or not anything on this host can act on it, and the
+			bounce is the only thing the actuator's availability still gates.
 
-			enforce says whether anything on this host can carry out a ban, and it
-			used to gate the verdict too — so on a box without fail2ban the panel
-			kept no record of who had exceeded their cap, only of which addresses
-			had been seen. The two are complements: the verdict is the record, and
-			the actuator is what turns it into a consequence.
-
-			A client with no cap, or with no ENABLED inbound carrying it, still has
-			nothing to decide. Any enabled inbound, not hosted[0]: the cap is per
-			client (limit_ip is keyed by email alone), while hosted[0] is merely the
-			lowest-id local one. Disabling that inbound while the same client stayed
-			live on a second, enabled one skipped it entirely — the cap silently
-			stopped applying to a client who was still connecting.
+			The cap is per client (limit_ip is keyed by email alone) and applies
+			while ANY inbound carrying the client is enabled — not hosted[0], which
+			is merely the lowest-id local one. A client with no enabled inbound is
+			decided as uncapped, so the pass still records its addresses.
 		*/
-		if limit <= 0 || !slices.ContainsFunc(hosted, func(inbound *model.Inbound) bool { return inbound.Enable }) {
-			/*
-				Nothing to enforce: record what was seen so the panel can show it —
-				MERGED with what is already stored, not in place of it.
-
-				Replacing the blob outright meant the addresses shown for a client
-				the cap does not apply to were only the ones this poll happened to
-				catch, while every enforced client keeps its last 30 minutes. Two
-				clients side by side, one with a cap and one without, and the one
-				without looked like it had just connected from one address. F305.
-			*/
-			row.Ips = encodeClientIPs(observationsToEntries(
-				mergeRecentObservations(decodeClientIPs(row.Ips), observed, staleCutoff)))
-			if err := tx.Save(row).Error; err != nil {
-				logger.Error("policy: save observed ips:", err)
-			}
-			// Same reason as above: a client whose cap was removed is under it now,
-			// and the pairs remembered from when it was capped must be let go.
-			verdicts = append(verdicts, IPLimitVerdict{Email: email})
-			continue
+		if !slices.ContainsFunc(hosted, func(inbound *model.Inbound) bool { return inbound.Enable }) {
+			limit = 0
 		}
-
 		verdict := policy.Decide(decodeClientIPs(row.Ips), observed, limit,
-			nowMilli, staleCutoff, ipLimitLiveWindow, true)
+			nowMilli, staleCutoff, elsewhere[email])
 
-		// Kept-live plus historical stays in the blob so the panel keeps showing
-		// recently seen addresses; a banned one reappears if it reconnects.
-		shown := append(slices.Clone(verdict.Keep), verdict.Retain...)
-		if !enforce {
-			// Nothing cuts the over-cap addresses here, so dropping them would hide
-			// connections that are still up from the one list that reports them.
-			shown = append(slices.Clone(verdict.Ban), shown...)
-		}
+		// Every address, the over-cap ones included — they are live connections and
+		// this list is where the panel reports them; history keeps 30 minutes (F305).
+		shown := slices.Concat(verdict.Keep, verdict.Over, verdict.Retain)
 		row.Ips = encodeClientIPs(observationsToEntries(shown))
 		if err := tx.Save(row).Error; err != nil {
 			logger.Error("policy: save ip limit result:", err)
 			continue
 		}
-		// Every client the cap was actually applied to, an EMPTY ban included: the
-		// caller's re-ban memory is pruned by being handed the clients that are back
-		// under their cap, and a verdict it never sees can never be forgotten.
-		// The bounce is the acting half, and it is the ONLY thing the actuator's
-		// availability still gates.
+		// A verdict for every hosted client, an EMPTY one included: the caller's
+		// re-ban memory forgets a client only through a verdict naming it (F307).
 		var target *model.Inbound
 		if enforce {
-			target = s.bounceTarget(hosted, scan, email, verdict.Ban)
+			target = s.bounceTarget(hosted, scan, email, verdict.Over)
 		}
 		verdicts = append(verdicts, IPLimitVerdict{
 			Email:   email,
-			Ban:     verdict.Ban,
+			Over:    verdict.Over,
 			Bounce:  target != nil,
 			Inbound: target,
 		})
@@ -802,36 +770,12 @@ func AnyClientHasAnIPLimit() bool {
 
 // The persisted blob is unix SECONDS and is synced between panels, so its unit
 // is a compatibility contract; the rules work in milliseconds.
-/*
-mergeRecentObservations keeps the stored addresses still inside the stale window
-and lays this pass's observations over them, newest timestamp winning.
-
-The same window policy.Decide applies through Keep and Retain, so the two
-branches agree about how long an address stays on the list.
-*/
-func mergeRecentObservations(stored, observed []policy.Observation, staleCutoffMilli int64) []policy.Observation {
-	byIP := make(map[string]policy.Observation, len(stored)+len(observed))
-	for _, obs := range stored {
-		if obs.LastSeenUnixMilli >= staleCutoffMilli {
-			byIP[obs.IP] = obs
-		}
-	}
-	for _, obs := range observed {
-		if prev, ok := byIP[obs.IP]; !ok || obs.LastSeenUnixMilli > prev.LastSeenUnixMilli {
-			byIP[obs.IP] = obs
-		}
-	}
-	out := make([]policy.Observation, 0, len(byIP))
-	for _, ip := range slices.Sorted(maps.Keys(byIP)) {
-		out = append(out, byIP[ip])
-	}
-	return out
-}
-
 func observationsToEntries(observations []policy.Observation) []model.ClientIpEntry {
 	out := make([]model.ClientIpEntry, 0, len(observations))
 	for _, obs := range observations {
-		out = append(out, model.ClientIpEntry{IP: obs.IP, Timestamp: obs.LastSeenUnixMilli / 1000})
+		out = append(out, model.ClientIpEntry{
+			IP: obs.IP, Timestamp: obs.LastSeenUnixMilli / 1000, FirstSeen: obs.FirstSeenUnixMilli / 1000,
+		})
 	}
 	return out
 }
@@ -846,7 +790,9 @@ func decodeClientIPs(blob string) []policy.Observation {
 	}
 	out := make([]policy.Observation, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, policy.Observation{IP: entry.IP, LastSeenUnixMilli: entry.Timestamp * 1000})
+		out = append(out, policy.Observation{
+			IP: entry.IP, LastSeenUnixMilli: entry.Timestamp * 1000, FirstSeenUnixMilli: entry.FirstSeen * 1000,
+		})
 	}
 	return out
 }

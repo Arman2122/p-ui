@@ -24,7 +24,7 @@ func TestAClientNoLongerCappedStillGetsAVerdict(t *testing.T) {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	verdict := verdictFor(t, verdicts, "uncapped")
-	if len(verdict.Ban) != 0 || verdict.Bounce || verdict.Inbound != nil {
+	if len(verdict.Over) != 0 || verdict.Bounce || verdict.Inbound != nil {
 		t.Fatalf("verdict for an uncapped client = %+v, want empty: it exists so the memory forgets, not so anything acts", verdict)
 	}
 }
@@ -38,7 +38,7 @@ func TestADeletedClientStillGetsAVerdict(t *testing.T) {
 		t.Fatalf("EvaluateIPLimits: %v", err)
 	}
 	verdict := verdictFor(t, verdicts, "ghost")
-	if len(verdict.Ban) != 0 || verdict.Bounce {
+	if len(verdict.Over) != 0 || verdict.Bounce {
 		t.Fatalf("verdict for a deleted client = %+v, want empty", verdict)
 	}
 }

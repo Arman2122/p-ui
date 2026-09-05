@@ -25,38 +25,54 @@ func (s *InboundService) GetAllInboundClientIps() ([]model.InboundClientIps, err
 // a node has already pruned (otherwise the merge defeats the eviction cluster-wide).
 const clientIpStaleAfterSeconds = int64(30 * 60)
 
-// clientIpEntry is the on-disk shape of each element of InboundClientIps.Ips. Tags
-// match job.IPWithTimestamp so the blob round-trips with the access.log scanner.
-type clientIpEntry struct {
-	IP        string `json:"ip"`
-	Timestamp int64  `json:"timestamp"`
-}
+// clientIpEntry is the on-disk shape of each element of InboundClientIps.Ips: the
+// same wire shape the per-node attribution rows and every node sync carry.
+type clientIpEntry = model.ClientIpEntry
 
-// mergeClientIpEntries unions old and incoming IP observations, dropping anything
-// older than cutoff, keeping the most recent timestamp per IP, and returning the
-// result sorted newest-first.
+/*
+mergeClientIpEntries unions old and incoming observations, dropping anything
+older than cutoff, and returns the result sorted newest-first. One address is one
+run across the cluster: the later sighting and the earlier recorded start both
+win, so a node's own start for a live session survives the master's push-back.
+*/
 func mergeClientIpEntries(old, incoming []clientIpEntry, cutoff int64) []clientIpEntry {
-	ipMap := make(map[string]int64, len(old)+len(incoming))
+	byIP := make(map[string]clientIpEntry, len(old)+len(incoming))
 	for _, e := range old {
-		if e.Timestamp < cutoff {
+		if e.IP == "" || e.Timestamp < cutoff {
 			continue
 		}
-		ipMap[e.IP] = e.Timestamp
+		byIP[e.IP] = e
 	}
 	for _, e := range incoming {
-		if e.Timestamp < cutoff {
+		if e.IP == "" || e.Timestamp < cutoff {
 			continue
 		}
-		if cur, ok := ipMap[e.IP]; !ok || e.Timestamp > cur {
-			ipMap[e.IP] = e.Timestamp
+		cur, ok := byIP[e.IP]
+		if !ok {
+			byIP[e.IP] = e
+			continue
 		}
+		cur.Timestamp = max(cur.Timestamp, e.Timestamp)
+		cur.FirstSeen = earliestStart(cur.FirstSeen, e.FirstSeen)
+		byIP[e.IP] = cur
 	}
-	out := make([]clientIpEntry, 0, len(ipMap))
-	for ip, ts := range ipMap {
-		out = append(out, clientIpEntry{IP: ip, Timestamp: ts})
+	out := make([]clientIpEntry, 0, len(byIP))
+	for _, e := range byIP {
+		out = append(out, e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp > out[j].Timestamp })
 	return out
+}
+
+// earliestStart is the earlier of two run starts, ignoring one nobody recorded.
+func earliestStart(a, b int64) int64 {
+	switch {
+	case a == 0:
+		return b
+	case b == 0:
+		return a
+	}
+	return min(a, b)
 }
 
 // MergeInboundClientIps folds client IPs synced from another node into the local
