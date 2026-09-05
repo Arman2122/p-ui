@@ -253,6 +253,11 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 		return fmt.Errorf("ocserv: inbound %d: %w", d.ID, err)
 	}
 	spec := c.spec(cur)
+	// The flag says what the panel last did; whether the daemon is still there
+	// only the backend knows, and a unit it reports down is started, not kept.
+	if cur.running && !c.unitRunning(ctx, spec.Name) {
+		cur.running = false
+	}
 	if cur.running && spec.Hash() == cur.specHash {
 		return nil
 	}
@@ -401,6 +406,13 @@ func (c *Core) spec(cur *instance) supervisor.Spec {
 		KillSignal:         syscall.SIGTERM,
 	}
 	return s
+}
+
+// unitRunning asks the backend, whose answer outlives the flag: under exec a
+// daemon that exits stays down, and under systemd one past its start limit fails.
+func (c *Core) unitRunning(ctx context.Context, unit string) bool {
+	st, err := c.backend.Status(ctx, unit)
+	return err == nil && st.State == supervisor.StateRunning
 }
 
 func (c *Core) dropLocked(ctx context.Context, id int) error {

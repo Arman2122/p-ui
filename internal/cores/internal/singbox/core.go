@@ -196,6 +196,11 @@ func (c *Core) wantLocked(ctx context.Context, d core.Instance) error {
 		c.instances[d.ID] = cur
 	}
 	cur.inst, cur.settings, cur.dirty = d, settings, true
+	// The flag says what the panel last did; whether the daemon is still there
+	// only the backend knows, and a unit it reports down is started, not kept.
+	if cur.running && !c.unitRunning(ctx, cur) {
+		cur.running = false
+	}
 	if !cur.running {
 		return c.applyLocked(ctx, cur)
 	}
@@ -358,8 +363,8 @@ func waitReloaded(ctx context.Context, cur *instance, before int64) error {
 	}
 }
 
-// unitRunning asks the backend, which under systemd remembers a unit the panel
-// itself has not started this process.
+// unitRunning asks the backend, whose answer outlives the flag: a unit the panel
+// did not start this process, or one it started that has since died.
 func (c *Core) unitRunning(ctx context.Context, cur *instance) bool {
 	st, err := c.backend.Status(ctx, supervisor.UnitName(string(ID), cur.inst.ID))
 	return err == nil && st.State == supervisor.StateRunning

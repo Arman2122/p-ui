@@ -38,12 +38,17 @@ func TestExitSettingsAreChecked(t *testing.T) {
 }
 
 type unitLedger struct {
-	mu      sync.Mutex
-	units   map[string]supervisor.Spec
+	mu    sync.Mutex
+	units map[string]supervisor.Spec
+	// dead names units whose daemon exited on its own, reported the way the
+	// exec backend does: failed, with the spec still on the books.
+	dead    map[string]bool
 	ensures int
 }
 
-func newUnitLedger() *unitLedger { return &unitLedger{units: map[string]supervisor.Spec{}} }
+func newUnitLedger() *unitLedger {
+	return &unitLedger{units: map[string]supervisor.Spec{}, dead: map[string]bool{}}
+}
 
 func (b *unitLedger) Name() string { return "ledger" }
 
@@ -54,6 +59,7 @@ func (b *unitLedger) Ensure(_ context.Context, spec supervisor.Spec) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.units[spec.Name] = spec
+	delete(b.dead, spec.Name)
 	b.ensures++
 	return nil
 }
@@ -61,17 +67,28 @@ func (b *unitLedger) Ensure(_ context.Context, spec supervisor.Spec) error {
 func (b *unitLedger) Status(_ context.Context, name string) (supervisor.Status, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, ok := b.units[name]; ok {
-		return supervisor.Status{State: supervisor.StateRunning}, nil
+	if _, ok := b.units[name]; !ok {
+		return supervisor.Status{}, supervisor.ErrNotRunning
 	}
-	return supervisor.Status{}, supervisor.ErrNotRunning
+	if b.dead[name] {
+		return supervisor.Status{State: supervisor.StateFailed, Result: "signal: killed"}, nil
+	}
+	return supervisor.Status{State: supervisor.StateRunning}, nil
 }
 
 func (b *unitLedger) Stop(_ context.Context, name string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.units, name)
+	delete(b.dead, name)
 	return nil
+}
+
+// die is the daemon exiting behind the panel's back.
+func (b *unitLedger) die(name string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.dead[name] = true
 }
 
 func (b *unitLedger) Reload(context.Context, string) error { return nil }
