@@ -16,6 +16,7 @@ import (
 var (
 	ErrCoreUnknown       = errors.New("core: no core with that id is registered")
 	ErrCoreNotSupervised = errors.New("core: this core runs no daemon this panel supervises")
+	ErrCoreNotVersioned  = errors.New("core: this core does not manage its daemon's releases")
 )
 
 /*
@@ -73,4 +74,17 @@ func coreByID(reg *core.Registry, id string) (*core.Bound, bool) {
 		}
 	}
 	return nil, false
+}
+
+// xrayVersions is the panel-converged core's VersionManager, or why not.
+func xrayVersions() (core.VersionManager, error) {
+	manager := runtime.GetManager()
+	if manager == nil {
+		return nil, ErrCoreUnknown
+	}
+	bound, found := coreByID(manager.Cores(), string(cores.PanelConvergedCore))
+	if !found || bound.Versions == nil {
+		return nil, fmt.Errorf("%w: %q", ErrCoreNotVersioned, cores.PanelConvergedCore)
+	}
+	return bound.Versions, nil
 }

@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	engine "github.com/Arman2122/p-ui/internal/mtproto"
@@ -22,7 +24,8 @@ const Kind core.Kind = "mtproto"
 // Core is the mtproto adapter. It owns no state of its own beyond the last
 // online snapshot; the engine holds the processes.
 type Core struct {
-	mgr *engine.Manager
+	deps Deps
+	mgr  *engine.Manager
 
 	// routedTags answers which running tags egress through Xray. A field so a
 	// test can state it; in production it is always the engine's own answer.
@@ -33,10 +36,20 @@ type Core struct {
 	pendingTags map[string]core.TagDelta
 }
 
+// Deps are the panel-side facts the core cannot derive.
+type Deps struct {
+	// HTTPClient builds the client a download uses — the panel's, so it rides
+	// the egress proxy an operator configured; nil dials direct.
+	HTTPClient func(timeout time.Duration) *http.Client
+	// Platform is the release channel's label for this build (amd64, armv7, …),
+	// told by the build because GOARCH cannot name an ARM level; "" cannot install.
+	Platform string
+}
+
 // New returns a core over the process-wide mtg manager.
-func New() *Core {
+func New(deps Deps) *Core {
 	mgr := engine.GetManager()
-	return &Core{mgr: mgr, routedTags: mgr.RoutedTags}
+	return &Core{deps: deps, mgr: mgr, routedTags: mgr.RoutedTags}
 }
 
 func (c *Core) Kinds() []core.Kind { return []core.Kind{Kind} }

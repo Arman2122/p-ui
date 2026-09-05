@@ -1,0 +1,285 @@
+package mtproto
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/Arman2122/p-ui/internal/core"
+	engine "github.com/Arman2122/p-ui/internal/mtproto"
+)
+
+/*
+The release channel is Arman2122/mtg-proxy on GitHub, the fork the release
+workflow already bundles. Each release publishes mtg-proxy-<v>-linux-<platform>
+.tar.gz beside one checksums file of sha256 lines, and the platform label is
+the one release.yml builds the panel for — the panel is told it (Deps.Platform)
+rather than guessing from GOARCH, because 32-bit ARM is "arm" to Go and
+armv5/6/7 to the channel, and a v7 binary SIGILLs on a v5 board.
+
+Install stages the binary beside the installed one, asks it for its version
+(the one thing every mtg-proxy answers, so a corrupt or foreign file is caught
+before it is the installed one) and renames it into place. Running sidecars
+keep the old inode until they restart: that is Supervisor's, on purpose.
+*/
+var (
+	releasesURL  = "https://api.github.com/repos/Arman2122/mtg-proxy/releases"
+	downloadBase = "https://github.com/Arman2122/mtg-proxy/releases/download"
+)
+
+const (
+	maxListBytes    = 4 << 20
+	maxSumsBytes    = 64 << 10
+	maxArchiveBytes = 64 << 20
+	maxBinaryBytes  = 64 << 20
+)
+
+// Installed is what the binary on disk says of itself: "1.3.0" from
+// "1.3.0 (go1.26.6: …)". A binary that is not there is ErrNotInstalled.
+func (c *Core) Installed(ctx context.Context) (string, error) {
+	if _, err := os.Stat(engine.GetBinaryPath()); err != nil {
+		return "", core.ErrNotInstalled
+	}
+	return binaryVersion(ctx, engine.GetBinaryPath())
+}
+
+func binaryVersion(ctx context.Context, path string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--version").Output()
+	if err != nil {
+		return "", fmt.Errorf("mtproto: %s --version: %w", filepath.Base(path), err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return "", errors.New("mtproto: --version answered nothing")
+	}
+	return fields[0], nil
+}
+
+// Available lists the channel's release tags, newest first, pre-releases left out.
+func (c *Core) Available(ctx context.Context) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient(10 * time.Second).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mtproto: GitHub API returned %s", resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxListBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxListBytes {
+		return nil, fmt.Errorf("mtproto: release list exceeds %d bytes", maxListBytes)
+	}
+	var releases []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+	}
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, err
+	}
+	tags := make([]string, 0, len(releases))
+	for _, r := range releases {
+		if r.TagName != "" && !r.Prerelease {
+			tags = append(tags, r.TagName)
+		}
+	}
+	return tags, nil
+}
+
+// Install fetches, verifies, stages and lands one listed release; see the
+// package note for what it checks and why it restarts nothing.
+func (c *Core) Install(ctx context.Context, version string) error {
+	versions, err := c.Available(ctx)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(versions, version) {
+		return fmt.Errorf("%w: %q", core.ErrUnknownVersion, version)
+	}
+	if c.deps.Platform == "" {
+		return errors.New("mtproto: this build does not know its platform, so it cannot name the mtg-proxy asset")
+	}
+	bare := strings.TrimPrefix(version, "v")
+	pkg := fmt.Sprintf("mtg-proxy-%s-linux-%s", bare, c.deps.Platform)
+	client := c.httpClient(60 * time.Second)
+	want, err := publishedSum(ctx, client, fmt.Sprintf("%s/%s/mtg-proxy-%s-checksums.txt", downloadBase, version, bare), pkg+".tar.gz")
+	if err != nil {
+		return err
+	}
+	archive, err := download(ctx, client, fmt.Sprintf("%s/%s/%s.tar.gz", downloadBase, version, pkg), want)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(archive)
+	staged, err := stageFromTarGz(archive, pkg+"/mtg-proxy", engine.GetBinaryPath())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(staged) }()
+	if _, err := binaryVersion(ctx, staged); err != nil {
+		return fmt.Errorf("mtproto: the downloaded %s does not run here, so it was not installed: %w", pkg, err)
+	}
+	return os.Rename(staged, engine.GetBinaryPath())
+}
+
+func (c *Core) httpClient(timeout time.Duration) *http.Client {
+	if c.deps.HTTPClient != nil {
+		return c.deps.HTTPClient(timeout)
+	}
+	return &http.Client{Timeout: timeout}
+}
+
+// publishedSum reads the checksums file and returns the sha256 it lists for name.
+func publishedSum(ctx context.Context, client *http.Client, url, name string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("mtproto: download checksums: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("mtproto: download checksums: unexpected HTTP %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxSumsBytes))
+	if err != nil {
+		return "", err
+	}
+	return parseChecksum(raw, name)
+}
+
+// parseChecksum finds name in "<hex>  <name>" lines and returns its lowercase hex.
+func parseChecksum(sums []byte, name string) (string, error) {
+	for line := range strings.SplitSeq(string(sums), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[1] == name {
+			if len(fields[0]) != 64 {
+				return "", fmt.Errorf("mtproto: checksums: malformed entry for %s", name)
+			}
+			return strings.ToLower(fields[0]), nil
+		}
+	}
+	return "", fmt.Errorf("mtproto: checksums: no entry for %s", name)
+}
+
+// download fetches url to a temp file and refuses it unless its sha256 is want.
+func download(ctx context.Context, client *http.Client, url, want string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("mtproto: download: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("mtproto: download: unexpected HTTP %d", resp.StatusCode)
+	}
+	file, err := os.CreateTemp("", "mtg-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	ok := false
+	defer func() {
+		_ = file.Close()
+		if !ok {
+			_ = os.Remove(path)
+		}
+	}()
+	hasher := sha256.New()
+	n, err := io.Copy(io.MultiWriter(file, hasher), io.LimitReader(resp.Body, maxArchiveBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if n > maxArchiveBytes {
+		return "", fmt.Errorf("mtproto: download: archive exceeds %d bytes", maxArchiveBytes)
+	}
+	if got := hex.EncodeToString(hasher.Sum(nil)); got != want {
+		return "", fmt.Errorf("mtproto: the downloaded archive does not match the published checksum (expected %s, got %s); it was not installed", want, got)
+	}
+	ok = true
+	return path, nil
+}
+
+// stageFromTarGz extracts one member to a temp file beside dest, executable;
+// the caller renames it into place.
+func stageFromTarGz(archive, member, dest string) (string, error) {
+	f, err := os.Open(archive)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return "", fmt.Errorf("mtproto: %s is not in the archive", member)
+		}
+		if err != nil {
+			return "", err
+		}
+		if hdr.Typeflag != tar.TypeReg || filepath.ToSlash(hdr.Name) != member {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return "", err
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(dest), ".mtg-*")
+		if err != nil {
+			return "", err
+		}
+		path := tmp.Name()
+		ok := false
+		defer func() {
+			_ = tmp.Close()
+			if !ok {
+				_ = os.Remove(path)
+			}
+		}()
+		n, err := io.Copy(tmp, io.LimitReader(tr, maxBinaryBytes+1))
+		if err != nil {
+			return "", err
+		}
+		if n > maxBinaryBytes {
+			return "", fmt.Errorf("mtproto: binary exceeds %d bytes", maxBinaryBytes)
+		}
+		if err := tmp.Chmod(0o755); err != nil {
+			return "", err
+		}
+		if err := tmp.Close(); err != nil {
+			return "", err
+		}
+		ok = true
+		return path, nil
+	}
+}

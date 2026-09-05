@@ -820,3 +820,16 @@ func (c *Core) testConfig(ctx context.Context, conf string) error {
 	}
 	return nil
 }
+
+// Installed is the distribution's daemon version, read the way the camouflage
+// gate already reads it. Missing is ErrNotInstalled; apt owns the install.
+func (c *Core) Installed(context.Context) (string, error) {
+	if _, err := os.Stat(c.binaryPath()); err != nil {
+		return "", core.ErrNotInstalled
+	}
+	v := c.daemonVersion()
+	if v == "" {
+		return "", errors.New("ocserv: --version answered nothing this reads as a version")
+	}
+	return v, nil
+}

@@ -46,6 +46,10 @@ var tomlValue = regexp.MustCompile(`(?m)^(\S+)\s*=\s*"([^"]*)"`)
 // serveFakeMtg impersonates mtg-proxy: it binds the api address from its own
 // generated config and answers /stats from a file the test rewrites.
 func serveFakeMtg() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Println("9.9.9 (go1.26 fake)")
+		return
+	}
 	if f, err := os.OpenFile(os.Getenv("MTG_FAKE_PIDFILE"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
 		fmt.Fprintf(f, "%d\n", os.Getpid())
 		_ = f.Close()
@@ -285,7 +289,7 @@ func (r *rig) instance(users int) core.Instance {
 
 func (r *rig) asRig() coretest.Rig {
 	return coretest.Rig{
-		NewCore:       func() (core.Core, error) { return New(), nil },
+		NewCore:       func() (core.Core, error) { return New(Deps{}), nil },
 		Instance:      r.instance,
 		Starts:        r.starts,
 		Alive:         r.alive,
@@ -304,7 +308,7 @@ func TestMtprotoConformsToTheContract(t *testing.T) {
 
 func TestPreflightRejectsAMissingBinary(t *testing.T) {
 	t.Setenv("PUI_BIN_FOLDER", t.TempDir())
-	err := New().Preflight(t.Context())
+	err := New(Deps{}).Preflight(t.Context())
 	if err == nil {
 		t.Fatal("preflight must fail without an mtg binary, or every inbound fails one at a time instead")
 	}
@@ -318,7 +322,7 @@ func TestPreflightRejectsAMissingBinary(t *testing.T) {
 func TestAddUserIsAppliedWithoutRestarting(t *testing.T) {
 	requirePosixHost(t)
 	r := newRig(t)
-	c := New()
+	c := New(Deps{})
 	inst := r.instance(1)
 
 	if err := c.Reconcile(t.Context(), []core.Instance{inst}); err != nil {
@@ -365,7 +369,7 @@ func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
 }
 
 func TestPlanChangeSeparatesReloadFromRestart(t *testing.T) {
-	c := New()
+	c := New(Deps{})
 	base := core.Instance{
 		ID: 1, Tag: "in-1", Listen: "127.0.0.1", Port: 443, Enable: true,
 		Users: []core.User{{Email: "a@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee01"}}},

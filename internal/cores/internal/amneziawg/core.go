@@ -180,3 +180,8 @@ func (c *Core) applyParams(ctx context.Context, inst core.Instance) error {
 // conformance suite can drive this core against the fake kernel every other
 // core is checked against; the value is never configurable. F093.
 var configureParams = awg.ConfigureParams
+
+// Installed is the AmneziaWG module's version, not WireGuard's.
+func (c *Core) Installed(ctx context.Context) (string, error) {
+	return wgcore.ModuleVersion(ctx, c.Preflight, "amneziawg")
+}

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
@@ -21,7 +20,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -823,76 +821,38 @@ func (s *ServerService) sampleCPUUtilization() (float64, error) {
 	return s.emaCPU, nil
 }
 
-const (
-	maxXrayArchiveBytes = 200 << 20
-	maxXrayBinaryBytes  = 200 << 20
-	// maxXrayDigestBytes caps the .dgst checksum sidecar read; it is a few
-	// hundred bytes in practice.
-	maxXrayDigestBytes = 64 << 10
-	// maxXrayReleasesBytes caps the GitHub release-list read; a page is ~100 KiB. F285.
-	maxXrayReleasesBytes = 4 << 20
-)
-
+// GetXrayVersions is the xray core's own release list: the channel, the
+// architecture table and the download live with the core now (§15).
 func (s *ServerService) GetXrayVersions() ([]string, error) {
-	const bufferSize = 8192
-
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, xrayReleasesURL, nil)
-	if reqErr != nil {
-		return nil, reqErr
-	}
-	resp, err := s.settingService.NewProxiedHTTPClient(10 * time.Second).Do(req)
+	versions, err := xrayVersions()
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	return versions.Available(context.Background())
+}
 
-	// Check HTTP status code - GitHub API returns object instead of array on error
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxXrayDigestBytes))
-		var errorResponse struct {
-			Message string `json:"message"`
-		}
-		if json.Unmarshal(bodyBytes, &errorResponse) == nil && errorResponse.Message != "" {
-			return nil, fmt.Errorf("GitHub API error: %s", errorResponse.Message)
-		}
-		return nil, fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, resp.Status)
-	}
+/*
+UpdateXray installs one release through the core and restarts onto it.
 
-	buffer := bytes.NewBuffer(make([]byte, bufferSize))
-	buffer.Reset()
-	n, err := buffer.ReadFrom(io.LimitReader(resp.Body, maxXrayReleasesBytes+1))
+Nothing is stopped first, deliberately: the download rides the egress proxy
+that xray itself hosts, so it must happen while the old core still serves, and
+a failure anywhere in Install leaves the installed binary alone. RestartXray
+(true) owns the lifecycle after that; it runs the -test pre-flight before it
+stops anything.
+*/
+func (s *ServerService) UpdateXray(version string) error {
+	versions, err := xrayVersions()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if n > maxXrayReleasesBytes {
-		return nil, fmt.Errorf("xray release list exceeds %d bytes", maxXrayReleasesBytes)
+	if err := versions.Install(context.Background(), version); err != nil {
+		return err
 	}
-
-	var releases []Release
-	if err := json.Unmarshal(buffer.Bytes(), &releases); err != nil {
-		return nil, err
+	if err := s.xrayService.RestartXray(true); err != nil {
+		logger.Error("start xray failed:", err)
+		return err
 	}
-
-	var versions []string
-	for _, release := range releases {
-		tagVersion := strings.TrimPrefix(release.TagName, "v")
-		tagParts := strings.Split(tagVersion, ".")
-		if len(tagParts) != 3 {
-			continue
-		}
-
-		major, err1 := strconv.Atoi(tagParts[0])
-		minor, err2 := strconv.Atoi(tagParts[1])
-		patch, err3 := strconv.Atoi(tagParts[2])
-		if err1 != nil || err2 != nil || err3 != nil {
-			continue
-		}
-
-		if major > 26 || (major == 26 && minor > 6) || (major == 26 && minor == 6 && patch >= 27) {
-			versions = append(versions, release.TagName)
-		}
-	}
-	return versions, nil
+	return nil
 }
 
 func (s *ServerService) StopXrayService() error {
@@ -910,247 +870,6 @@ func (s *ServerService) RestartXrayService() error {
 		logger.Error("start xray failed:", err)
 		return err
 	}
-	return nil
-}
-
-// xrayReleaseBaseURL is a var so a test can point the download at an httptest
-// server, the same seam fetchXrayDigestSHA256 already takes its URL through.
-var xrayReleaseBaseURL = "https://github.com/XTLS/Xray-core/releases/download"
-
-var xrayReleasesURL = "https://api.github.com/repos/XTLS/Xray-core/releases"
-
-func (s *ServerService) downloadXRay(version string) (string, error) {
-	fileName := fmt.Sprintf("Xray-linux-%s.zip", xray.ReleaseAssetArch())
-	url := fmt.Sprintf("%s/%s/%s", xrayReleaseBaseURL, version, fileName)
-	client := s.settingService.NewProxiedHTTPClient(60 * time.Second)
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if reqErr != nil {
-		return "", reqErr
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download xray: unexpected HTTP %d", resp.StatusCode)
-	}
-	if resp.ContentLength > maxXrayArchiveBytes {
-		return "", fmt.Errorf("download xray: archive exceeds %d bytes", maxXrayArchiveBytes)
-	}
-
-	file, err := os.CreateTemp("", "xray-*.zip")
-	if err != nil {
-		return "", err
-	}
-	path := file.Name()
-	ok := false
-	defer func() {
-		_ = file.Close()
-		if !ok {
-			_ = os.Remove(path)
-		}
-	}()
-
-	n, err := io.Copy(file, io.LimitReader(resp.Body, maxXrayArchiveBytes+1))
-	if err != nil {
-		return "", err
-	}
-	if n > maxXrayArchiveBytes {
-		return "", fmt.Errorf("download xray: archive exceeds %d bytes", maxXrayArchiveBytes)
-	}
-
-	// Verify the archive against the SHA2-256 published in the release's .dgst
-	// sidecar before installing it. TLS protects the transport, not the artifact;
-	// a corrupted or tampered asset must not be installed and run as xray.
-	want, err := s.fetchXrayDigestSHA256(client, url+".dgst")
-	if err != nil {
-		return "", err
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
-	}
-	if got := hex.EncodeToString(hasher.Sum(nil)); !strings.EqualFold(got, want) {
-		// User-facing warning: the archive's SHA-256 does not match the official
-		// release checksum, so the download is corrupted or has been tampered
-		// with. Abort the install so a bad binary is never run, and tell the user
-		// to retry/re-download rather than proceed with a mismatched image.
-		return "", fmt.Errorf("Xray update aborted: the downloaded archive does not match the official SHA-256 checksum, so the image is corrupted or differs from the official release. Please exit and re-download the official image, then try again (expected %s, got %s)", want, got)
-	}
-
-	ok = true
-	return path, nil
-}
-
-// fetchXrayDigestSHA256 downloads the .dgst sidecar XTLS publishes next to each
-// release asset and returns the SHA2-256 hex digest it lists.
-func (s *ServerService) fetchXrayDigestSHA256(client *http.Client, dgstURL string) (string, error) {
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, dgstURL, nil)
-	if reqErr != nil {
-		return "", fmt.Errorf("download xray checksum: %w", reqErr)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("download xray checksum: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download xray checksum: unexpected HTTP %d", resp.StatusCode)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxXrayDigestBytes))
-	if err != nil {
-		return "", fmt.Errorf("download xray checksum: %w", err)
-	}
-	return parseXrayDigestSHA256(raw)
-}
-
-// parseXrayDigestSHA256 extracts the lowercase SHA2-256 hex from an XTLS .dgst
-// file, whose lines are "ALGO= <hex>" (the relevant one being "SHA2-256= ...").
-func parseXrayDigestSHA256(dgst []byte) (string, error) {
-	for line := range strings.SplitSeq(string(dgst), "\n") {
-		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "SHA2-256=")
-		if !ok {
-			continue
-		}
-		h := strings.ToLower(strings.TrimSpace(rest))
-		if len(h) != 64 {
-			return "", fmt.Errorf("xray checksum: malformed SHA2-256 entry in digest")
-		}
-		return h, nil
-	}
-	return "", fmt.Errorf("xray checksum: no SHA2-256 entry in digest")
-}
-
-func (s *ServerService) UpdateXray(version string) error {
-	versions, err := s.GetXrayVersions()
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(versions, version) {
-		return fmt.Errorf("xray version %q is not in the fetched release list", version)
-	}
-
-	/*
-		Nothing is stopped here, deliberately.
-
-		Stopping first made every failure below permanent: each is a bare return,
-		so a 404, a digest mismatch or a dropped connection left the box with xray
-		down and the old binary still in place. It also broke the download it was
-		preparing for — PanelEgressProxyURL answers "" while the process is not
-		running, because the panel's egress bridge is hosted BY xray, so the proxy
-		an operator configured to reach GitHub from a filtered network was
-		guaranteed unavailable exactly when the download needed it.
-
-		RestartXray(true) at the end owns the whole lifecycle instead. It runs the
-		-test pre-flight before it stops anything, so a binary that downloads and
-		verifies but cannot load this config is refused while the old core is still
-		serving.
-	*/
-
-	// 1. Download the zip
-	zipFileName, err := s.downloadXRay(version)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(zipFileName)
-
-	zipFile, err := os.Open(zipFileName)
-	if err != nil {
-		return err
-	}
-	defer zipFile.Close()
-
-	stat, err := zipFile.Stat()
-	if err != nil {
-		return err
-	}
-	reader, err := zip.NewReader(zipFile, stat.Size())
-	if err != nil {
-		return err
-	}
-
-	// 2. Extract one file from the zip to a temp path beside its destination.
-	//    The caller renames it into place once it is satisfied with it.
-	stageZipFile := func(zipName string, fileName string) (string, error) {
-		zipFile, err := reader.Open(zipName)
-		if err != nil {
-			return "", err
-		}
-		defer zipFile.Close()
-		if err := os.MkdirAll(filepath.Dir(fileName), 0o755); err != nil {
-			return "", err
-		}
-		tmpFile, err := os.CreateTemp(filepath.Dir(fileName), ".xray-*")
-		if err != nil {
-			return "", err
-		}
-		tmpPath := tmpFile.Name()
-		ok := false
-		defer func() {
-			_ = tmpFile.Close()
-			if !ok {
-				_ = os.Remove(tmpPath)
-			}
-		}()
-		n, err := io.Copy(tmpFile, io.LimitReader(zipFile, maxXrayBinaryBytes+1))
-		if err != nil {
-			return "", err
-		}
-		if n > maxXrayBinaryBytes {
-			return "", fmt.Errorf("xray binary exceeds %d bytes", maxXrayBinaryBytes)
-		}
-		if err := tmpFile.Chmod(0o755); err != nil {
-			return "", err
-		}
-		if err := tmpFile.Close(); err != nil {
-			return "", err
-		}
-		ok = true
-		return tmpPath, nil
-	}
-
-	// 3. Stage the binary beside its destination, without replacing anything yet.
-	stagedPath, err := stageZipFile("xray", xray.GetBinaryPath())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = os.Remove(stagedPath) }()
-
-	/*
-		4. Ask the NEW binary whether it can load the config this box is running,
-		while the old one is still the installed one.
-
-		RestartXray's own pre-flight runs after the rename, so a download that
-		verifies but cannot load was refused with the unusable binary already in
-		place — every later restart refused too, and nothing put the old one back.
-		Asking here keeps the failure recoverable. Ledger L2.
-
-		Being unable to ask is not a refusal, matching the pre-flight's own rule:
-		if the config cannot be built the check is skipped rather than blocking an
-		upgrade.
-	*/
-	if cfg, cfgErr := s.xrayService.GetXrayConfig(false); cfgErr == nil {
-		if err := xray.TestConfigWith(stagedPath, cfg); err != nil {
-			return fmt.Errorf("xray %s cannot load this panel's config, so it was not installed: %w", version, err)
-		}
-	} else {
-		logger.Warning("xray update pre-flight skipped:", cfgErr)
-	}
-
-	// 5. Move it into place and swap the process onto it. Renaming over a running
-	// executable is fine on Linux — the old process keeps its inode until it exits.
-	if err := os.Rename(stagedPath, xray.GetBinaryPath()); err != nil {
-		return err
-	}
-	if err := s.xrayService.RestartXray(true); err != nil {
-		logger.Error("start xray failed:", err)
-		return err
-	}
-
 	return nil
 }
 

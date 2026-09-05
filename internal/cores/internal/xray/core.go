@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -39,6 +40,9 @@ var kinds = []core.Kind{
 // policy and the API listener stay the panel's business.
 type Deps struct {
 	BaseConfig func() (*engine.Config, error)
+	// HTTPClient builds the client a download uses — the panel's, so it rides
+	// the egress proxy an operator configured; nil dials direct.
+	HTTPClient func(timeout time.Duration) *http.Client
 }
 
 // Core supervises the single Xray process and applies changes through its API.

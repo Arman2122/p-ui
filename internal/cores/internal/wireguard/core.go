@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -419,4 +420,25 @@ func (c *Core) Transports(core.Kind, string, string) core.Transports {
 // Health is read off the kernel per device; there is no process to ask.
 func (c *Core) Health(ctx context.Context) (core.Health, error) {
 	return core.Health{Instances: c.mgr.Health(ctx)}, nil
+}
+
+// Installed is the kernel module's version, which is the daemon's here.
+func (c *Core) Installed(ctx context.Context) (string, error) {
+	return ModuleVersion(ctx, c.mgr.Preflight, "wireguard")
+}
+
+// ModuleVersion answers for a kernel core: ErrNotInstalled when the probe fails,
+// else the module's own version, else the kernel release it is built into.
+func ModuleVersion(ctx context.Context, probe func(context.Context) error, module string) (string, error) {
+	if err := probe(ctx); err != nil {
+		return "", core.ErrNotInstalled
+	}
+	if v, err := os.ReadFile("/sys/module/" + module + "/version"); err == nil && strings.TrimSpace(string(v)) != "" {
+		return strings.TrimSpace(string(v)), nil
+	}
+	release, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		return "", fmt.Errorf("wireguard: kernel release: %w", err)
+	}
+	return "kernel " + strings.TrimSpace(string(release)), nil
 }

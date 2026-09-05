@@ -4,6 +4,7 @@ package cores
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -49,6 +50,9 @@ type Deps struct {
 	Supervisor  supervisor.Backend
 	DaemonUser  string
 	DaemonGroup int
+	// HTTPClient builds the client a core downloads its daemon with — the
+	// panel's, so the download rides the egress proxy; nil dials direct.
+	HTTPClient func(timeout time.Duration) *http.Client
 }
 
 /*
@@ -255,7 +259,7 @@ func Register(reg *core.Registry, deps Deps) error {
 	if reg == nil {
 		return fmt.Errorf("cores: Register(nil registry)")
 	}
-	if err := reg.Register(mtproto.New()); err != nil {
+	if err := reg.Register(mtproto.New(mtproto.Deps{HTTPClient: deps.HTTPClient, Platform: releasePlatform()})); err != nil {
 		return err
 	}
 	if err := reg.Register(amneziawg.New()); err != nil {
@@ -276,7 +280,7 @@ func Register(reg *core.Registry, deps Deps) error {
 	if err := reg.Register(ocserv.New(ocservDeps(deps))); err != nil {
 		return err
 	}
-	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig}))
+	return reg.Register(xray.New(xray.Deps{BaseConfig: deps.XrayBaseConfig, HTTPClient: deps.HTTPClient}))
 }
 
 // ocservDeps narrows the panel-side facts to the ones the OpenConnect core
@@ -471,4 +475,32 @@ func ExitKinds() []core.Kind {
 		}
 	}
 	return out
+}
+
+/*
+releasePlatform is the label release.yml builds the panel for, read off the one
+stamp the build carries (the XTLS asset suffix). A channel names its assets by
+this label, and GOARCH cannot: 32-bit ARM is "arm" to Go and armv5/6/7 to every
+channel, and a v7 binary SIGILLs on a v5 board. An unstamped ARM build answers
+"" and a core that needs the label refuses to guess.
+*/
+func releasePlatform() string {
+	switch engine.ReleaseAssetArch() {
+	case "64":
+		return "amd64"
+	case "arm64-v8a":
+		return "arm64"
+	case "arm32-v7a":
+		return "armv7"
+	case "arm32-v6":
+		return "armv6"
+	case "arm32-v5":
+		return "armv5"
+	case "32":
+		return "386"
+	case "s390x":
+		return "s390x"
+	default:
+		return ""
+	}
 }

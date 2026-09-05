@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -716,4 +717,27 @@ func (c *Core) TailLog(ctx context.Context, instanceID, n int) ([]string, error)
 		return nil, fmt.Errorf("singbox: logs are per inbound; %d names none", instanceID)
 	}
 	return c.backend.Logs(ctx, supervisor.UnitName(string(ID), instanceID), n)
+}
+
+// Installed is what the bundled binary says of itself: "1.14.0" from
+// "sing-box version 1.14.0". Missing is ErrNotInstalled, a state and not a fault.
+func (c *Core) Installed(ctx context.Context) (string, error) {
+	if _, err := os.Stat(c.binaryPath()); err != nil {
+		return "", core.ErrNotInstalled
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, c.binaryPath(), "version").Output()
+	if err != nil {
+		return "", fmt.Errorf("singbox: version: %w", err)
+	}
+	return parseVersion(string(out))
+}
+
+func parseVersion(out string) (string, error) {
+	fields := strings.Fields(out)
+	if len(fields) < 3 || fields[0] != "sing-box" || fields[1] != "version" {
+		return "", fmt.Errorf("singbox: version: unexpected answer %q", strings.TrimSpace(out))
+	}
+	return fields[2], nil
 }

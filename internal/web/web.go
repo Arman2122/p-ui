@@ -658,6 +658,9 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		StoreRadiusSecret: s.settingService.SetRadiusSecret,
 		CoreAuthFailure:   s.publishCoreAuthFailure,
 		AdmitClient:       (&service.PolicyService{}).AdmitLogin,
+		// The egress proxy is hosted BY xray, so it is gone exactly while xray is
+		// down: a core must download while the old core still serves, never after a stop.
+		HTTPClient: s.settingService.NewProxiedHTTPClient,
 	})
 	if err != nil {
 		return err

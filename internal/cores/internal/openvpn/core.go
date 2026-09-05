@@ -800,3 +800,31 @@ func (c *Core) TailLog(ctx context.Context, instanceID, n int) ([]string, error)
 	}
 	return c.backend.Logs(ctx, supervisor.UnitName(string(ID), instanceID), n)
 }
+
+// Installed is the distribution's daemon version: "2.6.19" from "OpenVPN 2.6.19
+// x86_64-pc-linux-gnu …". Missing is ErrNotInstalled; apt owns the install.
+func (c *Core) Installed(ctx context.Context) (string, error) {
+	if _, err := os.Stat(c.binaryPath()); err != nil {
+		return "", core.ErrNotInstalled
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, c.binaryPath(), "--version").Output()
+	if err != nil && len(out) == 0 {
+		return "", fmt.Errorf("openvpn: --version: %w", err)
+	}
+	return parseVersion(string(out))
+}
+
+func parseVersion(out string) (string, error) {
+	fields := strings.Fields(out)
+	if len(fields) < 2 || fields[0] != "OpenVPN" {
+		return "", fmt.Errorf("openvpn: --version: unexpected answer %q", firstLine(out))
+	}
+	return fields[1], nil
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
+}
