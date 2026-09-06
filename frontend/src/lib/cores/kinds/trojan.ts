@@ -8,4 +8,7 @@ export const trojan: KindModule = {
   clientSchema: TrojanClientSchema,
   multiUser: true,
   shareLink: true,
+  nodeEligible: true,
+  settingsTab: false,
+  fallbackHost: true,
 };

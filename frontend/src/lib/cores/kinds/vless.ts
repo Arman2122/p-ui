@@ -8,4 +8,7 @@ export const vless: KindModule = {
   clientSchema: VlessClientSchema,
   multiUser: true,
   shareLink: true,
+  nodeEligible: true,
+  fallbackHost: true,
+  clientReverseTag: true,
 };

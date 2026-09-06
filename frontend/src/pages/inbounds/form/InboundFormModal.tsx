@@ -26,7 +26,7 @@ import {
   formValuesToWirePayload,
 } from '@/lib/xray/inbound-form-adapter';
 import { awgObfuscationChanged } from '@/lib/inbounds/awg-diff';
-import { createDefaultInboundSettings } from '@/lib/cores/kinds';
+import { createDefaultInboundSettings, kindModule, streamModeOf } from '@/lib/cores/kinds';
 import { composeInboundTag, isAutoInboundTag, type InboundTagInput } from '@/lib/xray/inbound-tag';
 import {
   canEnableReality,
@@ -119,15 +119,6 @@ const labelWithHint = (label: string, hint: string) => (
 const TRAFFIC_RESETS = ['never', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const SHARE_ADDR_STRATEGIES = ['node', 'listen', 'custom'] as const;
 const SHARE_ADDR_HOSTNAME_RE = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
-const NODE_ELIGIBLE_PROTOCOLS = new Set<string>([
-  Protocols.VLESS,
-  Protocols.VMESS,
-  Protocols.TROJAN,
-  Protocols.SHADOWSOCKS,
-  Protocols.HYSTERIA,
-  Protocols.WIREGUARD,
-]);
-
 function isValidShareAddrInput(value: string): boolean {
   const v = value.trim();
   if (v.length === 0) return true;
@@ -251,7 +242,8 @@ export default function InboundFormModal({
 
   const selectableNodes = (availableNodes || []).filter((n) => n.enable);
   const protocol = (useWatch({ control, name: 'protocol' }) ?? '') as string;
-  const isNodeEligible = NODE_ELIGIBLE_PROTOCOLS.has(protocol);
+  const kind = kindModule(protocol);
+  const isNodeEligible = kind?.nodeEligible ?? false;
   /*
    * The `node` share-address strategy only means something when the inbound can
    * actually live on a node — otherwise the node address it would resolve to is
@@ -270,17 +262,10 @@ export default function InboundFormModal({
   const security = (useWatch({ control, name: 'streamSettings.security' }) ?? 'none') as string;
   const streamEnabled = canEnableStream({ protocol });
   const sniffingSupported = canEnableSniffing({ protocol });
-  /*
-   * Wireguard (always a UDP listener) and Tunnel (dokodemo-door) expose no
-   * user-selectable transport — their stream tab is just sockopt, which is all
-   * Tunnel's TProxy/redirect mode needs (sockopt.tproxy). Hysteria carries its
-   * own dedicated transport form. For all of these the RAW/mKCP/WS/... network
-   * picker and the per-network sub-forms are hidden.
-   */
-  const hasSelectableTransport =
-    protocol !== Protocols.HYSTERIA
-    && protocol !== Protocols.WIREGUARD
-    && protocol !== Protocols.TUNNEL;
+  /* Sockopt alone, Hysteria's own transport form, or the RAW/mKCP/WS/... picker
+     with its per-network sub-forms: the kind's module says which. */
+  const streamMode = streamModeOf(protocol);
+  const hasSelectableTransport = streamMode === 'selectable';
 
   const wPort = useWatch({ control, name: 'port' });
   const wListen = (useWatch({ control, name: 'listen' }) ?? '') as string;
@@ -441,7 +426,7 @@ export default function InboundFormModal({
     if (
       mode === 'edit'
       && dbInbound
-      && (dbInbound.protocol === Protocols.VLESS || dbInbound.protocol === Protocols.TROJAN)
+      && (kindModule(dbInbound.protocol)?.fallbackHost ?? false)
     ) {
       loadFallbacks(dbInbound.id);
     } else {
@@ -505,10 +490,11 @@ export default function InboundFormModal({
         (settings as { address?: string[] }).address = [suggestFreeSubnet(takenWgSubnets)];
       }
       setV('settings', settings);
-      if (!NODE_ELIGIBLE_PROTOCOLS.has(next)) {
+      if (!(kindModule(next)?.nodeEligible ?? false)) {
         setV('nodeId', null);
       }
-      if (next === Protocols.HYSTERIA) {
+      const nextStream = streamModeOf(next);
+      if (nextStream === 'hysteria') {
         setV('streamSettings', {
           network: 'hysteria',
           security: 'tls',
@@ -522,7 +508,7 @@ export default function InboundFormModal({
             }],
           },
         });
-      } else if (next === Protocols.WIREGUARD || next === Protocols.TUNNEL) {
+      } else if (nextStream === 'none') {
         setV('streamSettings', { security: 'none' });
       } else {
         const current = getV('streamSettings') as { network?: string } | undefined;
@@ -881,7 +867,7 @@ export default function InboundFormModal({
       {/* Inbound Hysteria stream sub-form. The transport for hysteria
           isn't user-selectable (always 'hysteria'), so the network
           dropdown is hidden above. */}
-      {protocol === Protocols.HYSTERIA && <HysteriaFields />}
+      {streamMode === 'hysteria' && <HysteriaFields />}
 
       {hasSelectableTransport && (
         <>
@@ -907,7 +893,7 @@ export default function InboundFormModal({
 
       {/* Transport masks don't apply to tunnel (a transparent forwarder), so
           its stream tab is just sockopt + TProxy. */}
-      {protocol !== Protocols.TUNNEL && (
+      {(kind?.transportMasks ?? true) && (
         <Controller
           control={control}
           name="streamSettings.finalmask"
@@ -927,7 +913,7 @@ export default function InboundFormModal({
 
   const tlsOk = canEnableTls({ protocol, streamSettings: { network, security } });
   const realityOk = canEnableReality({ protocol, streamSettings: { network, security } });
-  const tlsOnly = protocol === Protocols.HYSTERIA;
+  const tlsOnly = streamMode === 'hysteria';
 
   const securityTab = (
     <>
@@ -1089,29 +1075,13 @@ export default function InboundFormModal({
           >
             <Tabs items={[
               { key: 'basic', label: t('pages.xray.basicTemplate'), children: basicTab, forceRender: true },
-              ...(([
-                Protocols.VLESS,
-                Protocols.SHADOWSOCKS,
-                Protocols.HTTP,
-                Protocols.MIXED,
-                Protocols.TUNNEL,
-                Protocols.TUN,
-                Protocols.WIREGUARD,
-                Protocols.WGKERNEL,
-                Protocols.AWGKERNEL,
-                Protocols.MTPROTO,
-                Protocols.SSH,
-                Protocols.TUIC,
-                Protocols.ANYTLS,
-                Protocols.OPENVPN,
-                Protocols.OCSERV,
-              ] as string[]).includes(protocol) || isFallbackHost
+              ...((kind?.settingsTab ?? false) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]
                 : []),
               ...(streamEnabled
                 ? [
                   { key: 'stream', label: t('pages.inbounds.streamTab'), children: streamTab, forceRender: true },
-                  ...(protocol !== Protocols.WIREGUARD && protocol !== Protocols.TUNNEL
+                  ...(streamMode !== 'none'
                     ? [{ key: 'security', label: t('pages.inbounds.securityTab'), children: securityTab, forceRender: true }]
                     : []),
                 ]

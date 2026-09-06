@@ -9,4 +9,7 @@ export const hysteria: KindModule = {
   transports: () => UDP,
   multiUser: true,
   shareLink: true,
+  nodeEligible: true,
+  stream: 'hysteria',
+  settingsTab: false,
 };

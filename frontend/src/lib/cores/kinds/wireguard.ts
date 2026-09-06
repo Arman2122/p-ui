@@ -9,4 +9,7 @@ export const wireguard: KindModule = {
   transports: () => UDP,
   multiUser: true,
   shareLink: false,
+  nodeEligible: true,
+  /* Always a UDP listener: the stream tab is sockopt alone. */
+  stream: 'none',
 };

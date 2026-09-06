@@ -21,9 +21,9 @@ import { vless } from './vless';
 import { vmess } from './vmess';
 import { wgkernel } from './wgkernel';
 import { wireguard } from './wireguard';
-import { NONE, TCP, UDP, type KindModule, type TransportBits } from './module';
+import { NONE, TCP, UDP, type KindModule, type StreamMode, type TransportBits } from './module';
 
-export { NONE, TCP, UDP, type KindModule, type TransportBits };
+export { NONE, TCP, UDP, type KindModule, type StreamMode, type TransportBits };
 
 export const KIND_MODULES: Record<Protocol, KindModule> = {
   vless,
@@ -74,4 +74,8 @@ export function isMultiUserKind(kind: string, settings: { method?: string }): bo
 
 export function hasShareLink(kind: string): boolean {
   return kindModule(kind)?.shareLink ?? false;
+}
+
+export function streamModeOf(kind: string): StreamMode {
+  return kindModule(kind)?.stream ?? 'selectable';
 }

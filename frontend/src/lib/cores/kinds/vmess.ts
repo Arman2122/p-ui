@@ -8,4 +8,6 @@ export const vmess: KindModule = {
   clientSchema: VmessClientSchema,
   multiUser: true,
   shareLink: true,
+  nodeEligible: true,
+  settingsTab: false,
 };

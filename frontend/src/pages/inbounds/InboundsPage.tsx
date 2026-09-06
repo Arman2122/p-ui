@@ -248,16 +248,9 @@ export default function InboundsPage() {
     if (!client) return 0;
     const settings = coerceInboundJsonField(dbInbound.settings) as { clients?: ClientMatchTarget[] };
     const clients = settings.clients || [];
-    const idx = clients.findIndex((c) => {
-      if (!c) return false;
-      switch (dbInbound.protocol) {
-        case 'trojan':
-        case 'shadowsocks':
-          return c.password === client.password && c.email === client.email;
-        default:
-          return c.id === client.id && c.email === client.email;
-      }
-    });
+    /* The email is the client's identity, unique across every inbound, and is
+       what the backend matches an edit by; a credential can drift from it. */
+    const idx = clients.findIndex((c) => !!c && c.email === client.email);
     return idx >= 0 ? idx : 0;
   }, []);
 

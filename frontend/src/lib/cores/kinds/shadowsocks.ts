@@ -10,4 +10,5 @@ export const shadowsocks: KindModule = {
   /* Whether the cipher carries a client list is the capability table's call. */
   multiUser: (settings) => isSSMultiUser({ protocol: 'shadowsocks', settings }),
   shareLink: true,
+  nodeEligible: true,
 };

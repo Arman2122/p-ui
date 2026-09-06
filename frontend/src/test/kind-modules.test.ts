@@ -8,6 +8,7 @@ import {
   isMultiUserKind,
   KIND_MODULES,
   kindModule,
+  streamModeOf,
 } from '@/lib/cores/kinds';
 
 /*
@@ -45,5 +46,17 @@ describe('kind modules', () => {
   it('offers a share link only where the panel renders one', () => {
     const linked = PROTOCOL_VALUES.filter((kind) => hasShareLink(kind)).sort();
     expect(linked).toEqual(['hysteria', 'mtproto', 'shadowsocks', 'trojan', 'vless', 'vmess']);
+  });
+
+  it('tells the inbound form what each kind shows', () => {
+    const only = (pick: (kind: (typeof PROTOCOL_VALUES)[number]) => boolean) => PROTOCOL_VALUES.filter(pick).sort();
+    expect(only((kind) => KIND_MODULES[kind].nodeEligible === true))
+      .toEqual(['hysteria', 'shadowsocks', 'trojan', 'vless', 'vmess', 'wireguard']);
+    expect(only((kind) => streamModeOf(kind) === 'none')).toEqual(['tunnel', 'wireguard']);
+    expect(only((kind) => streamModeOf(kind) === 'hysteria')).toEqual(['hysteria']);
+    expect(streamModeOf('ftp')).toBe('selectable');
+    expect(only((kind) => KIND_MODULES[kind].settingsTab === false)).toEqual(['hysteria', 'trojan', 'vmess']);
+    expect(only((kind) => KIND_MODULES[kind].fallbackHost === true)).toEqual(['trojan', 'vless']);
+    expect(only((kind) => KIND_MODULES[kind].transportMasks === false)).toEqual(['tunnel']);
   });
 });

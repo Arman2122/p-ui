@@ -30,6 +30,7 @@ import { HttpUtil, RandomUtil, Wireguard } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { credentialsForKinds } from '@/lib/cores/client-credentials';
 import { ipLimitFieldState } from '@/lib/cores/ip-limit';
+import { kindModule } from '@/lib/cores/kinds';
 import type { ClientCredentialName } from '@/generated/capabilities';
 import { supportsMultipleClients } from '@/lib/inbounds/multi-client';
 import { generateMtprotoSecret } from '@/lib/xray/inbound-defaults';
@@ -318,10 +319,10 @@ export default function ClientFormModal({
     return ids;
   }, [inbounds]);
 
-  const vlessLikeIds = useMemo(() => {
+  const reverseTagIds = useMemo(() => {
     const ids = new Set<number>();
     for (const row of inbounds || []) {
-      if (row && row.protocol === 'vless') ids.add(row.id);
+      if (row && (kindModule(row.protocol ?? '')?.clientReverseTag ?? false)) ids.add(row.id);
     }
     return ids;
   }, [inbounds]);
@@ -357,7 +358,7 @@ export default function ClientFormModal({
   const mtprotoDomain = useMemo(() => {
     for (const id of inboundIds || []) {
       const ib = (inbounds || []).find((row) => row.id === id);
-      if (ib?.protocol === 'mtproto' && ib.mtprotoDomain) return ib.mtprotoDomain;
+      if (ib?.mtprotoDomain) return ib.mtprotoDomain;
     }
     return 'www.cloudflare.com';
   }, [inboundIds, inbounds]);
@@ -387,8 +388,8 @@ export default function ClientFormModal({
   );
 
   const showReverseTag = useMemo(
-    () => (inboundIds || []).some((id) => vlessLikeIds.has(id)),
-    [inboundIds, vlessLikeIds],
+    () => (inboundIds || []).some((id) => reverseTagIds.has(id)),
+    [inboundIds, reverseTagIds],
   );
 
   const showSecurity = credentials.has('security');
