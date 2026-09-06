@@ -1083,6 +1083,14 @@ Two hard constraints:
 - **Never narrow the generated Zod protocol enum to enabled cores.** It validates data read
   *out of* the DB; narrowing makes disabling a core break its existing inbounds client-side.
   Filter the picker, not the validator.
+
+Until the renderer exists, `src/lib/cores/kinds/` is what it renders into. One module per
+kind carries what the five protocol ladders used to answer and what the inbound form asks of
+a kind (§12.5n); `KIND_MODULES` is a Record over the generated union, so a kind without a
+module fails to compile. The renderer replaces the hand-written half of a module — the
+defaults, the client schema, the transports — with what the core declares; the module
+interface is its target, and the per-kind editor line in `InboundFormModal.tsx` is the
+ladder it retires.
 **The outbound picker is registry-driven, and exits are authored where outbounds are.**
 `GET /panel/api/cores` grew `exitKinds` (`service/core.go:24`, mirroring `cores.ExitKinds`
 per core rather than build-wide), and `outboundProtocolGroups`
@@ -1189,17 +1197,21 @@ to guard.
 Teaching it that shape moved the total to **123** with nothing having regressed. The honest
 reading of P5 is therefore that it removed five dispatch sites out of 123, not out of 99 —
 the direction is right and the remaining distance is larger than the old number implied.
-**The number at HEAD is 101** (`dispatch_ratchet_test.go:66`), and the chain from 123 is
+**The number at HEAD is 44** (`dispatch_ratchet_test.go:67`), and the chain from 123 is
 the refactor's actual scoreboard: 123 → 116 (`9a0ba04c`, P6-2a's abstraction fix) → 126
 (`5276426b`, registering wgkernel) → 127 (`f9b9041b`, egress) → 126 (`ff428a4e` — P8 added
 the whole policy subsystem and still came out net −1) → 125 (`03ef9a40`, routing declared
 through the contract) → **101** (`152a78a2`, credential minting asked of the registry:
 `client_crud.go` went 6 → 0 **and out of the map entirely**, the first service file the
-ratchet has ever dropped, with `client_inbound_apply.go` 19 → 7 and `inbound.go` 18 → 12).
-Two arms stayed protocol-named on purpose: the update path's ad-tag check
-(`client_inbound_apply.go:549`), which must not refuse a metadata-only edit whose secret
-hydrates after the payload, and copy-to-inbound's always-fresh mint switch
-(`inbound_clients.go`), whose semantics differ from add-time minting.
+ratchet has ever dropped, with `client_inbound_apply.go` 19 → 7 and `inbound.go` 18 → 12)
+→ 59 across P7, P8 and the management and speed-limit arcs (each §12.5 entry carries its
+own) → **44** (Phase 4, §12.5n: `inbound.go`, `client_inbound_apply.go`,
+`inbound_protocol.go` and `inbound_flow_restore.go` at 0, `inbound_mtproto.go` gone).
+The one arm that stayed protocol-named on purpose — the edit path's ad-tag check, which must
+not refuse a metadata-only edit before its stored fields are carried forward — is the core's
+`ValidateClient` now, asked after that carry-forward. What remains is Xray's own render
+(`xray.go`, 8), the link renderers §13.1 covers (`sub/` 24, `tgbot/protocols.go` 4), and
+the frozen migrations (8).
 
 **The ratchet must fail in both directions.** If it only fails upward, slack accumulates
 every time someone deletes a site and the guard dies quietly. Failing when the count is
@@ -1295,31 +1307,33 @@ Plus a per-core service file in a shared directory (`inbound_ocserv.go`, mirrori
 `inbound_mtproto.go`'s 26 references) and, until supervision merges, a per-core reconcile job
 (`job/ocserv_job.go`, mirroring `mtproto_job.go`).
 
-**TypeScript is ~11 files, not 0**, and this is the sharpest gap between §11.3 and the tree.
-The §9 `ui:`-tag descriptor renderer **does not exist anywhere**: `grep -rn 'ui:"'` over
-`--include=*.go` matches nothing, and `frontend/src/lib/cores/` holds only `capabilities.ts`
-and `client-credentials.ts`. The **inbound** form is still a hand-written ladder —
-`InboundFormModal.tsx` has 25 `protocol === Protocols.X` comparisons, 9 of them shaped
-`{protocol === Protocols.X && <XFields/>}`.
+**TypeScript is 3 new files and 5 one-line edits, not 0** (recounted 2026-09-06, §12.5n; core
+#3 measured 21 files in §11.2a). The §9 `ui:`-tag descriptor renderer still does not exist;
+what exists is `src/lib/cores/kinds/` — one module per kind holding what the five protocol
+ladders used to answer and what the inbound form asks of a kind (defaults, client schema,
+transports, multi-user, share link, node eligibility, transport tab mode, masks, settings tab,
+fallback host, reverse tag) — and `KIND_MODULES`, a Record over the generated `Protocol`
+union. The **inbound** form keeps one ladder, the per-kind editors
+(`{protocol === Protocols.X && <XFields/>}`, 14 lines), which is the renderer's to replace.
 
 | File | Kind |
 |---|---|
 | `src/schemas/protocols/inbound/ocserv.ts` | new — the settings Zod schema |
 | `src/pages/inbounds/form/protocols/ocserv.tsx` | new — the fields component |
-| `src/schemas/protocols/inbound/index.ts` | edit — the discriminated union `fillProtocolSettingsDefaults` reads |
+| `src/lib/cores/kinds/ocserv.ts` | new — the kind module |
+| `src/schemas/protocols/inbound/index.ts` | edit — the discriminated union, static by §9's rule |
 | `src/pages/inbounds/form/protocols/index.ts` | edit — export |
-| `src/pages/inbounds/form/InboundFormModal.tsx` | edit — ladder, picker list, transport/security gating |
-| `src/lib/xray/inbound-defaults.ts` | edit — `createDefaultInboundSettings`, ends `default: return null` |
-| `src/lib/xray/inbound-form-adapter.ts` | edit — `clientSchemaForProtocol`, ends `default: return null` |
-| `src/lib/xray/inbound-tag.ts` | edit — `inboundTransports`, the mirror of `port_conflict.go` |
-| `src/pages/inbounds/info/helpers.ts` | edit — `LINK_PROTOCOLS` / `hasShareLink` |
-| `src/pages/inbounds/list/helpers.ts` | edit — `isInboundMultiUser`, ends `default: return false` |
+| `src/lib/cores/kinds/index.ts` | edit — one line in `KIND_MODULES` |
+| `src/lib/cores/kind-labels.ts` | edit — the name key and the picker group |
+| `src/pages/inbounds/form/InboundFormModal.tsx` | edit — one editor line |
 | `src/models/dbinbound.ts` | edit — protocol flags |
 
-**None of them fails loudly.** Every TS dispatcher takes `protocol: string` and ends in a
-silent `default:` — `return null`, `return false`, or nothing rendered. The failure mode is a
-blank form or a missing share button on a working inbound, found by a user rather than CI.
-There is no frontend equivalent of the dispatch ratchet.
+**The registry fails loudly; the rest still does not.** A kind missing from `KIND_MODULES`
+is a compile error, `kind-modules.test.ts` and `kind-labels.test.ts` hold every lookup and
+every group to `PROTOCOL_VALUES`, and a kind this build does not know answers nothing rather
+than something else's answer. The editor ladder and the union stay silent: a kind without a
+fields line renders an empty protocol tab. There is still no frontend equivalent of the
+dispatch ratchet.
 
 ### 11.2a MEASURED: what core #3 actually cost (P6, `wgkernel`)
 
@@ -2211,7 +2225,8 @@ What the contract gained:
 - **`InstanceMinter`.** Inbound-level secrets an operator cannot type and no
   file may hold (§13's backup invariant): the service calls it on add and on
   every update, the core fills only what is missing. ocserv and IKEv2 will
-  reuse it for their server certificates.
+  reuse it for their server certificates; mtproto's gives a stored row the
+  shape mtg reads it in (§12.5n).
 - **`DeviceNamespacer`.** A core names the device prefix its interfaces use
   (`pov`) and the shaping plane owns it at wiring, per `shaping.Namespaces`'s
   own comment. Since §12.5m the answer is a `DeviceNamespace`: the prefix, and
@@ -2709,3 +2724,58 @@ clients and the node's own assignments are untouched; an old node answers 404 at
 
 **Still open here.** §13.6, and the memo's three measurements; MTProto's per-secret speed
 needs the user's fork; the `AdmitLogin` log storm from §12.5k is still owed a rate limit.
+
+### 12.5n The inbound and client pipelines (2026-09-06)
+
+Phase 4 of the 2026-09-03 order (§12.5a): an inbound's settings and a client's creation,
+edit and deletion take one path for every core, so the next core adds itself without
+touching either. Seven commits, each VM-verified, every behavioural test red-proven against
+the commit before it.
+
+**The runtime renders every core's inbound (`f18f18b`).** `runtime.Local` rendered an inbound
+before applying it — depleted and disabled clients dropped, fallbacks attached — only for the
+kinds Xray serves, and handed every other core the row as stored; so the add path hydrated
+for mtproto by name, and a whole-set core's user ops were handed the raw row, with the client
+depletion had cut off still in it. `RenderForRuntime` is now what the runtime applies for
+every kind: Xray's own render for its kinds, the row `DesiredInstances` builds for the rest,
+so an edit and a reconcile converge on one state; `desiredState` re-projects Users from the
+rendered settings, and a whole-set core's user ops get that instance.
+
+**Client ops and quota resets through the registry (`dc01bc2`).** The three apply sites, the
+bulk re-key and every traffic reset kept a second door for mtproto. Taking the generic
+branch found two gaps in every other core the panel converges: a bulk rotate re-keyed the
+row and reached the daemon only at its next reconcile, and a traffic reset never cleared a
+daemon's own counter. `inbound_mtproto.go` is gone; `resetCoreQuotas` and
+`resetCoreQuotasForAll` ask each `QuotaEnforcer` for the clients it serves and converge
+nothing (F217 holds by construction); F218's by-name re-push is `BulkSetEnable`'s job.
+
+**The minter and the edit-time validation (`0500df7`).** `normalizeMtprotoSecret` is the
+mtproto core's `MintInstance` (the engine's `NormalizeInboundSettings`), called from the
+three doors through `mintInstanceForKind`. The edit path now asks the kind's core
+`ValidateClient` as the add path does, after the fields an edit may omit are carried forward
+— which is where the ad-tag arm the ratchet had excused (§10) actually belonged.
+
+**The guards (`90cd9a5`) and the bridge (`ef78bad`).** Five remaining switches were rules that
+no longer needed one: the stored Shadowsocks client cipher is read by nothing (the adapter
+injects the inbound's, the render heals, links carry the inbound's), the testseed and
+flow-restore guards were redundant with the capability table, and the two client-form
+projections read what the settings carry. The bridge port allocator is
+`sys.FreeLoopbackPort`, its messages say `bridge:`, and
+`TestTheWebLayerReachesPortedEnginesThroughTheRegistry` pins the end state: `internal/web`
+and `internal/sub` import no ported engine.
+
+**The frontend (`32a3683`, `99bd0e0`).** `src/lib/cores/kinds/`: one module per kind, the five
+ladders and the form's six kind facts read it, the page matches a client by email as the
+backend does, the client form names no kind. §9 and §11.2 carry the recount.
+
+**The scoreboard.** `dispatchTotal` 59 → 44; `inbound.go`, `client_inbound_apply.go`,
+`inbound_protocol.go`, `inbound_flow_restore.go` at 0; TypeScript per core 3 new files and
+5 one-line edits against the 21 measured for core #3.
+
+**What remains, deliberately.** Xray's own render (`xray.go`, 8 sites — the Xray core's
+config generation living in the service, §11.3's next move); the link renderers (§13.1, 28
+sites); the per-kind editor ladder and the static union (§9's renderer); the WireGuard
+address-conflict checks and ocserv's pool check, both "address pool overlap" behind a kind
+predicate, one registry-driven check once a declaration exists for it; and the update and
+enable paths still pre-hydrate the row the runtime now renders itself — harmless twice over,
+and a small removal once the runtime's render has been in production a while.

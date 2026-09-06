@@ -484,6 +484,9 @@ for AutoMigrate in `internal/database/db.go`.
 | Add/modify an **API endpoint** | `controller/<resource>.go` (route registration at top of each file) | corresponding `service/*.go`, `frontend/src/pages/api-docs/endpoints.ts` |
 | **Inbound** create/update/delete behavior | `service/inbound.go`, `service/inbound_clients.go` | `runtime/*`, `service/xray.go` |
 | **Client** CRUD / limits / expiry | `service/client_crud.go`, `service/client_inbound_apply.go` | model `ClientRecord`, `service/inbound_traffic.go` |
+| A client op on a **non-Xray core** did not reach the daemon | `runtime/local.go` (`desiredState`, `userTarget`), `service/inbound_core.go` (`RenderForRuntime`) | `service/client_quota.go` (resets), `service/client_bulk.go` (the re-key) |
+| A client **edit** is refused with a core's wording | `service/client_inbound_apply.go` (`validateClientForKind` on the edit path) | the core's `ValidateClient` under `cores/internal/<core>/` |
+| The **inbound form** shows the wrong tabs or fields for a kind | `frontend/src/lib/cores/kinds/<kind>.ts` | `frontend/src/pages/inbounds/form/InboundFormModal.tsx` (the editor line) |
 | **Bulk** client operations slow/wrong | `service/client_bulk.go` | `service/client_paging.go` |
 | Xray **won't apply** a config change | `service/xray.go` (`RestartXray`, `tryHotApply`) | `xray/hot_diff.go`, `xray/process.go` |
 | Xray **restarts when it shouldn't** (kills connections) | `xray/hot_diff.go` (diff not classified as hot) | `service/xray.go` |
