@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/netip"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +45,6 @@ func TestSinkAsksThePanelToAdmit(t *testing.T) {
 			settings:   parsed,
 			ledger:     radius.NewLedger("ocs-4"),
 			userByName: usersByName([]core.User{alice}),
-			rates:      map[string]core.RateLimit{},
 		}
 		return &sink{c: c, id: 4}
 	}
@@ -332,41 +332,45 @@ func TestSinkBillsTheEmailBehindTheUsername(t *testing.T) {
 }
 
 /*
-A speed plan cannot be attached to a device that lasts one session, so the
-daemon is told the numbers at login. EnforceRates records them; the sink
-hands them to the next Access-Accept, and a cleared plan clears the reply.
+A session's identity is what the daemon lists for it: the device it made and
+the addresses it gave the client. A login this inbound does not serve, a row
+with no device and a row with no address are left out rather than guessed at,
+and the Access-Accept carries no rate: the limit is the kernel's, on the device.
 */
-func TestRatesReachTheLoginAndAreClearedWithThePlan(t *testing.T) {
+func TestTargetsFollowWhatTheDaemonLists(t *testing.T) {
 	c := New(Deps{})
 	settings, err := c.MintInstance(Kind, `{"subnet":"10.11.0.0/24"}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inst := core.Instance{ID: 4, Tag: "ocs-4", Port: 443, Settings: settings}
 	parsed, _ := parseSettings(settings)
+	byName := usersByName([]core.User{user("alice@x", "alice"), user("bob@x", "bob")})
 	c.instances[4] = &instance{
-		inst: inst, settings: parsed, ledger: radius.NewLedger("ocs-4"),
-		userByName: usersByName([]core.User{user("alice@x", "alice")}), rates: map[string]core.RateLimit{},
+		inst: core.Instance{ID: 4, Tag: "ocs-4", Port: 443, Settings: settings}, settings: parsed,
+		ledger: radius.NewLedger("ocs-4"), userByName: byName,
 	}
-	s := &sink{c: c, id: 4}
-	if v := s.Authenticate(t.Context(), "alice", "secret-password", radius.Peer{}); !v.Accept || v.UpBps != 0 || v.DownBps != 0 {
-		t.Fatalf("a client with no plan was given one: %+v", v)
+	v := (&sink{c: c, id: 4}).Authenticate(t.Context(), "alice", "secret-password", radius.Peer{})
+	if !v.Accept || v.UpBps != 0 || v.DownBps != 0 || !v.FramedIP.IsValid() || v.InterimSeconds == 0 {
+		t.Fatalf("the reply must carry an address and a cadence and no rate: %+v", v)
 	}
-	if err := c.EnforceRates(t.Context(), inst, map[string]core.RateLimit{"alice@x": {UpBps: 1_000_000, DownBps: 8_000_000}}); err != nil {
-		t.Fatal(err)
+
+	rows := []userRow{
+		{Username: "alice", Device: "poc4-0", IPv4: "10.11.0.2"},
+		{Username: "bob", Device: "poc4-1", IPv4: "10.11.0.3", IPv6: "fd00::3"},
+		{Username: "carol", Device: "poc4-2", IPv4: "10.11.0.4"},
+		{Username: "alice", Device: "", IPv4: "10.11.0.9"},
+		{Username: "bob", Device: "poc4-3", IPv4: "not-an-address"},
 	}
-	v := s.Authenticate(t.Context(), "alice", "secret-password", radius.Peer{})
-	if !v.Accept || v.UpBps != 1_000_000 || v.DownBps != 8_000_000 {
-		t.Fatalf("the plan did not reach the login: %+v", v)
+	want := []core.ShapingTarget{
+		{Device: "poc4-0", Selector: core.SelectorInnerIP, Keys: map[string]core.SubjectKey{
+			"alice@x": {Prefixes: []netip.Prefix{netip.MustParsePrefix("10.11.0.2/32")}},
+		}},
+		{Device: "poc4-1", Selector: core.SelectorInnerIP, Keys: map[string]core.SubjectKey{
+			"bob@x": {Prefixes: []netip.Prefix{netip.MustParsePrefix("10.11.0.3/32"), netip.MustParsePrefix("fd00::3/128")}},
+		}},
 	}
-	if !v.FramedIP.IsValid() || v.InterimSeconds == 0 {
-		t.Fatalf("the reply carries no address or no accounting cadence: %+v", v)
-	}
-	if err := c.EnforceRates(t.Context(), inst, map[string]core.RateLimit{}); err != nil {
-		t.Fatal(err)
-	}
-	if v := s.Authenticate(t.Context(), "alice", "secret-password", radius.Peer{}); v.UpBps != 0 || v.DownBps != 0 {
-		t.Fatalf("a cleared plan still throttles: %+v", v)
+	if got := targetsFromUsers(rows, byName); !reflect.DeepEqual(got, want) {
+		t.Fatalf("targets = %+v\nwant %+v", got, want)
 	}
 }
 

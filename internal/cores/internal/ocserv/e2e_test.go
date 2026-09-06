@@ -4,6 +4,7 @@ package ocserv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/core/coretest"
 	"github.com/Arman2122/p-ui/internal/radius"
+	"github.com/Arman2122/p-ui/internal/shaping"
 	"github.com/Arman2122/p-ui/internal/supervisor"
 )
 
@@ -106,6 +108,38 @@ servedByDaemon asks the way a login would: an Access-Request through the real
 RADIUS server for each candidate with its known password. Accepted means
 served. The daemon holds no user list to read; this is the honest one.
 */
+// hostSubjects is who the daemon holds on which tunnel address, as it lists
+// them itself; the only source a shaping target can be checked against.
+func (c *Core) hostSubjects(t *testing.T, id int) map[string][]string {
+	t.Helper()
+	c.mu.Lock()
+	cur, ok := c.instances[id]
+	var byName map[string]core.User
+	var socket string
+	if ok {
+		byName, socket = cur.userByName, cur.paths.ctl
+	}
+	c.mu.Unlock()
+	out := map[string][]string{}
+	if !ok {
+		return out
+	}
+	rows, err := listUsers(context.Background(), c.occtlPath(), socket)
+	if err != nil && !errors.Is(err, errNoDaemon) {
+		t.Fatalf("occtl show users: %v", err)
+	}
+	for _, row := range rows {
+		u, known := byName[row.Username]
+		if !known {
+			continue
+		}
+		if addr, err := netip.ParseAddr(row.IPv4); err == nil {
+			out[u.Email] = append(out[u.Email], netip.PrefixFrom(addr, 32).String())
+		}
+	}
+	return out
+}
+
 func (c *Core) servedByDaemon(t *testing.T, candidates []core.User) []string {
 	t.Helper()
 	c.mu.Lock()
@@ -183,6 +217,9 @@ func TestConformance(t *testing.T) {
 			}
 		},
 		ServedUsers: func() []string { return current.servedByDaemon(t, candidates) },
+		// Read off the daemon, never the adapter: with no client connected the
+		// daemon lists nobody, which is the truth a target must agree with.
+		HostSubjects: func() map[string][]string { return current.hostSubjects(t, 1) },
 		// A session fed with a stamp is one whose record arrived then: the ledger's
 		// clock is that stamp while the record lands, and the record moves bytes.
 		FeedSession: func(email, source string, lastSeen int64) {
@@ -314,11 +351,18 @@ func realTraffic(t *testing.T, openconnect string, c *Core) {
 	}
 
 	const payload = 300_000
+	const bigPayload = 2 << 20
 	ln, err := net.Listen("tcp", "10.217.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	origin := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(make([]byte, payload)) })}
+	origin := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := payload
+		if r.URL.Path == "/big" {
+			n = bigPayload
+		}
+		_, _ = w.Write(make([]byte, n))
+	})}
 	go func() { _ = origin.Serve(ln) }()
 	t.Cleanup(func() { _ = origin.Close() })
 
@@ -361,6 +405,21 @@ func realTraffic(t *testing.T, openconnect string, c *Core) {
 		}
 		return down >= payload
 	}, func() string { return fmt.Sprintf("billed %d down bytes to %s, want %d", down, alice.Email, payload) })
+
+	// The session's identity, read off the daemon: the device it made and the
+	// address the client holds, which is what a limit is attached to.
+	clientAddr := tunnelAddr(t, addr())
+	targets, err := c.ShapingTargets(context.Background(), inst)
+	if err != nil {
+		t.Fatalf("ShapingTargets: %v", err)
+	}
+	if len(targets) != 1 || !strings.HasPrefix(targets[0].Device, devicePrefixFor(2)) {
+		t.Fatalf("targets = %+v, want the one session device %sN", targets, devicePrefixFor(2))
+	}
+	if got, want := targets[0].Keys[alice.Email].Prefixes, []netip.Prefix{netip.PrefixFrom(clientAddr, 32)}; !slices.Equal(got, want) {
+		t.Fatalf("alice is keyed by %v on %s, want %v", got, targets[0].Device, want)
+	}
+	shapedDownload(t, targets[0], alice.Email, ns, fmt.Sprintf("http://10.217.0.1:%d/big", ln.Addr().(*net.TCPAddr).Port))
 
 	sessions, _ := c.Sessions(context.Background())
 	found := false
@@ -426,6 +485,69 @@ func startedFrom(c *Core, email, source string) int64 {
 		}
 	}
 	return 0
+}
+
+// tunnelAddr picks the client's tunnel address out of `ip -o addr show`.
+func tunnelAddr(t *testing.T, line string) netip.Addr {
+	t.Helper()
+	fields := strings.Fields(line)
+	for i, f := range fields {
+		if f == "inet" && i+1 < len(fields) {
+			if prefix, err := netip.ParsePrefix(fields[i+1]); err == nil {
+				return prefix.Addr()
+			}
+		}
+	}
+	t.Fatalf("no tunnel address in %q", line)
+	return netip.Addr{}
+}
+
+/*
+shapedDownload is the measured half: the panel's own shaping manager, driven
+against the session device the core named, holds a real download to the limit
+and lets it go when the want is withdrawn. Two mebibytes at two megabits is
+eight seconds; unshaped, off loopback, it is a fraction of one. Only real
+bytes through the real device prove this — a readback that agrees with the
+push cannot.
+*/
+func shapedDownload(t *testing.T, target core.ShapingTarget, email, ns, url string) {
+	t.Helper()
+	owned := shaping.DefaultNamespaces()
+	if err := owned.RegisterFamily(DevicePrefix); err != nil {
+		t.Fatal(err)
+	}
+	m := shaping.NewManager(shaping.HostPlane(), owned)
+	ctx := context.Background()
+	bare := []shaping.DeviceWant{{Device: target.Device}}
+	t.Cleanup(func() { _ = m.Converge(ctx, bare) })
+	want := []shaping.DeviceWant{{Device: target.Device, Subjects: []shaping.Subject{{
+		ID:     email,
+		Keys:   []shaping.Key{{Prefix: target.Keys[email].Prefixes[0]}},
+		Limits: shaping.Limits{DownBps: 2_000_000},
+	}}}}
+	if err := m.Converge(ctx, want); err != nil {
+		t.Fatalf("Converge on %s: %v", target.Device, err)
+	}
+	get := func() time.Duration {
+		start := time.Now()
+		out := shellOut(fmt.Sprintf("ip netns exec %s curl -s -m 60 -o /dev/null -w '%%{http_code} %%{size_download}' %s", ns, url))
+		if !strings.HasPrefix(out, "200 ") {
+			t.Fatalf("GET %s: %q", url, out)
+		}
+		return time.Since(start)
+	}
+	shaped := get()
+	if shaped < 5*time.Second {
+		t.Fatalf("2 MiB arrived in %s under a 2 Mbit limit on %s; the session device is not shaped", shaped, target.Device)
+	}
+	if err := m.Converge(ctx, bare); err != nil {
+		t.Fatalf("teardown on %s: %v", target.Device, err)
+	}
+	free := get()
+	if free > 2*time.Second {
+		t.Fatalf("2 MiB took %s after the limit was withdrawn; the tree on %s was not torn down", free, target.Device)
+	}
+	t.Logf("2 MiB through %s: %s at 2 Mbit, %s unshaped", target.Device, shaped.Round(time.Millisecond), free.Round(time.Millisecond))
 }
 
 func shellOut(script string) string {

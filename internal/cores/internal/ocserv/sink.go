@@ -15,7 +15,7 @@ import (
 const interimSeconds = 20
 
 // sink answers the RADIUS server for one inbound: the login decision, the
-// tunnel address, the speed plan, and the records that become the panel's bytes.
+// tunnel address, and the records that become the panel's bytes.
 type sink struct {
 	c  *Core
 	id int
@@ -26,8 +26,8 @@ Authenticate is the whole admission for a login: the client must exist, be
 enabled and unexpired, present its password, and the panel must admit one more
 device from where it connects — the cap is the panel's rule, asked through
 Deps.Admit. Refusals reach the panel's auth-failure event. The tunnel address
-and the speed plan are chosen here, once per session, because that reply is
-the only thing this daemon reads per user.
+is chosen here, once per session, because that reply is the only thing this
+daemon reads per user; a speed limit is the kernel's, on the session's device.
 */
 func (s *sink) Authenticate(ctx context.Context, username, password string, peer radius.Peer) radius.Verdict {
 	s.c.mu.Lock()
@@ -38,7 +38,6 @@ func (s *sink) Authenticate(ctx context.Context, username, password string, peer
 	}
 	user, found := cur.userByName[username]
 	settings := cur.settings
-	rate := cur.rates[user.Email]
 	var sessions []core.Session
 	if found {
 		sessions = cur.ledger.Sessions()
@@ -69,10 +68,7 @@ func (s *sink) Authenticate(ctx context.Context, username, password string, peer
 	if err != nil {
 		return refuse(err.Error())
 	}
-	return radius.Verdict{
-		Accept: true, FramedIP: addr, InterimSeconds: interimSeconds,
-		UpBps: rate.UpBps, DownBps: rate.DownBps,
-	}
+	return radius.Verdict{Accept: true, FramedIP: addr, InterimSeconds: interimSeconds}
 }
 
 /*

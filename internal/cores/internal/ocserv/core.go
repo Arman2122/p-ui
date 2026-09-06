@@ -71,9 +71,6 @@ type instance struct {
 	inst       core.Instance
 	settings   Settings
 	userByName map[string]core.User
-	// rates is the speed plan per email, handed to a client at its next login
-	// because an Access-Accept is the only per-user thing this daemon reads.
-	rates      map[string]core.RateLimit
 	ledger     *radius.Ledger
 	paths      paths
 	specHash   string
@@ -238,7 +235,6 @@ func (c *Core) applyLocked(ctx context.Context, d core.Instance) error {
 		cur = &instance{
 			ledger: radius.NewLedger(d.Tag),
 			paths:  pathsIn(filepath.Join(c.stateDir(), strconv.Itoa(d.ID))),
-			rates:  map[string]core.RateLimit{},
 		}
 		cur.ledger.Stale = 3 * interimSeconds * time.Second
 		c.instances[d.ID] = cur
@@ -520,7 +516,6 @@ func (c *Core) RemoveUser(ctx context.Context, inst core.Instance, email string)
 	}
 	cur.inst.Users = withoutEmail(cur.inst.Users, email)
 	cur.userByName = usersByName(cur.inst.Users)
-	delete(cur.rates, email)
 	socket := cur.paths.ctl
 	c.mu.Unlock()
 	if gone.Email == "" {
@@ -701,29 +696,80 @@ func (c *Core) IngressHandle(_ context.Context, inst core.Instance) (core.Ingres
 // the reason travels with the core that knows it.
 const blockedNoPool = "pages.xray.subjects.reasonNoPool"
 
-/*
-EnforcesRates: a client's plan cannot be attached to a device the panel owns,
-because the device is the daemon's and lasts one session. The daemon throttles
-for itself instead, told the numbers in the Access-Accept -- so a changed plan
-reaches a client at its next login, not mid-session.
-*/
-func (c *Core) EnforcesRates(kind core.Kind) bool { return kind == Kind }
+// ShapingSelector: every session is one tunnel address on a device of its own,
+// which the daemon names from the inbound's prefix and the panel owns as a family.
+func (c *Core) ShapingSelector(kind core.Kind) core.Selector {
+	if kind != Kind {
+		return core.SelectorNone
+	}
+	return core.SelectorInnerIP
+}
 
-func (c *Core) EnforceRates(_ context.Context, inst core.Instance, limits map[string]core.RateLimit) error {
+/*
+ShapingTargets keys each live session by the tunnel address the daemon lists
+for it, on the device the daemon made for it: the daemon is the only thing
+that knows which of its transient devices carries whom, so the panel's ledger
+is not consulted. A limit lands mid-session and lasts exactly as long as the
+device does; a session the daemon no longer lists has no device to shape.
+*/
+func (c *Core) ShapingTargets(ctx context.Context, inst core.Instance) ([]core.ShapingTarget, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	cur, ok := c.instances[inst.ID]
-	if !ok {
-		return nil
+	if !ok || !cur.running {
+		c.mu.Unlock()
+		return nil, nil
 	}
-	next := make(map[string]core.RateLimit, len(limits))
-	for email, limit := range limits {
-		if limit.UpBps > 0 || limit.DownBps > 0 {
-			next[email] = limit
+	byName, socket := cur.userByName, cur.paths.ctl
+	c.mu.Unlock()
+	rows, err := listUsers(ctx, c.occtlPath(), socket)
+	if err != nil {
+		if errors.Is(err, errNoDaemon) {
+			return nil, nil
 		}
+		return nil, fmt.Errorf("ocserv: inbound %d: %w", inst.ID, err)
 	}
-	cur.rates = next
-	return nil
+	return targetsFromUsers(rows, byName), nil
+}
+
+// targetsFromUsers is the pure half: one target per device the daemon names,
+// keyed by the session's addresses, for the logins this inbound serves.
+func targetsFromUsers(rows []userRow, byName map[string]core.User) []core.ShapingTarget {
+	byDevice := map[string]core.ShapingTarget{}
+	for _, row := range rows {
+		user, known := byName[row.Username]
+		if !known || row.Device == "" {
+			continue
+		}
+		var prefixes []netip.Prefix
+		for _, raw := range []string{row.IPv4, row.IPv6} {
+			addr, err := netip.ParseAddr(strings.TrimSpace(raw))
+			if err != nil {
+				continue
+			}
+			prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+		}
+		if len(prefixes) == 0 {
+			continue
+		}
+		target, seen := byDevice[row.Device]
+		if !seen {
+			target = core.ShapingTarget{Device: row.Device, Selector: core.SelectorInnerIP, Keys: map[string]core.SubjectKey{}}
+		}
+		key := target.Keys[user.Email]
+		key.Prefixes = append(key.Prefixes, prefixes...)
+		target.Keys[user.Email] = key
+		byDevice[row.Device] = target
+	}
+	devices := make([]string, 0, len(byDevice))
+	for device := range byDevice {
+		devices = append(devices, device)
+	}
+	sort.Strings(devices)
+	out := make([]core.ShapingTarget, 0, len(devices))
+	for _, device := range devices {
+		out = append(out, byDevice[device])
+	}
+	return out
 }
 
 // MintClientCredentials: a login name and password when missing. There is no

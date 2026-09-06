@@ -1,6 +1,7 @@
 package ocserv
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -63,26 +64,15 @@ func disconnectSource(ctx context.Context, occtl, socket, username string, sourc
 	if strings.ContainsAny(username, " \t\r\n\"'") {
 		return 0, fmt.Errorf("ocserv: refusing to disconnect %q", username)
 	}
-	if _, err := os.Stat(socket); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+	rows, err := listUsers(ctx, occtl, socket)
+	if err != nil {
+		if errors.Is(err, errNoDaemon) {
 			return 0, nil
 		}
-		return 0, fmt.Errorf("ocserv: control socket: %w", err)
+		return 0, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, occtl, "-s", socket, "-j", "show", "users").Output()
-	if err != nil {
-		return 0, fmt.Errorf("ocserv: show users: %w", err)
-	}
-	var rows []struct {
-		ID       json.Number `json:"ID"`
-		Username string      `json:"Username"`
-		RemoteIP string      `json:"Remote IP"`
-	}
-	if err := json.Unmarshal(out, &rows); err != nil {
-		return 0, fmt.Errorf("ocserv: parse users: %w", err)
-	}
 	cut := 0
 	for _, r := range rows {
 		if r.Username != username || r.ID == "" {
@@ -98,6 +88,45 @@ func disconnectSource(ctx context.Context, occtl, socket, username string, sourc
 		cut++
 	}
 	return cut, nil
+}
+
+// userRow is one session as `occtl -j show users` lists it. The keys are the
+// daemon's own; only the ones the panel reads are declared.
+type userRow struct {
+	ID       json.Number `json:"ID"`
+	Username string      `json:"Username"`
+	RemoteIP string      `json:"Remote IP"`
+	Device   string      `json:"Device"`
+	IPv4     string      `json:"IPv4"`
+	IPv6     string      `json:"IPv6"`
+}
+
+// errNoDaemon: no control socket means no daemon, and no daemon lists no session.
+var errNoDaemon = errors.New("ocserv: no control socket")
+
+// listUsers asks the daemon for its live sessions: the one source that knows
+// which of its transient devices carries whom.
+func listUsers(ctx context.Context, occtl, socket string) ([]userRow, error) {
+	if _, err := os.Stat(socket); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, errNoDaemon
+		}
+		return nil, fmt.Errorf("ocserv: control socket: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, occtl, "-s", socket, "-j", "show", "users").Output()
+	if err != nil {
+		return nil, fmt.Errorf("ocserv: show users: %w", err)
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil, nil
+	}
+	var rows []userRow
+	if err := json.Unmarshal(out, &rows); err != nil {
+		return nil, fmt.Errorf("ocserv: parse users: %w", err)
+	}
+	return rows, nil
 }
 
 // daemonAnswers asks the main process for its status through occtl, which is
