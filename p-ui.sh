@@ -2022,16 +2022,14 @@ ip_validation() {
 }
 
 iplimit_main() {
-    echo -e "\n${green}\t1.${plain} Install Fail2ban and configure IP Limit"
-    echo -e "${green}\t2.${plain} Change Ban Duration"
-    echo -e "${green}\t3.${plain} Unban Everyone"
-    echo -e "${green}\t4.${plain} Ban Logs"
-    echo -e "${green}\t5.${plain} Ban an IP Address"
-    echo -e "${green}\t6.${plain} Unban an IP Address"
-    echo -e "${green}\t7.${plain} Real-Time Logs"
-    echo -e "${green}\t8.${plain} Service Status"
-    echo -e "${green}\t9.${plain} Service Restart"
-    echo -e "${green}\t10.${plain} Uninstall Fail2ban and IP Limit"
+    echo -e "\n${green}\t1.${plain} List active bans"
+    echo -e "${green}\t2.${plain} Ban an IP address"
+    echo -e "${green}\t3.${plain} Release an IP address"
+    echo -e "${green}\t4.${plain} Release everyone"
+    echo -e "${green}\t5.${plain} Ban log"
+    echo -e "${green}\t6.${plain} Real-time ban log"
+    echo -e "${green}\t7.${plain} Ban duration and shared-address policy"
+    echo -e "${green}\t8.${plain} Remove the legacy Fail2ban jail"
     echo -e "${green}\t0.${plain} Back to Main Menu"
     read -rp "Choose an option: " choice
     case "$choice" in
@@ -2039,75 +2037,59 @@ iplimit_main() {
             show_menu
             ;;
         1)
-            confirm "Proceed with installation of Fail2ban & IP Limit?" "y"
-            if [[ $? == 0 ]]; then
-                install_iplimit
-            else
-                iplimit_main
-            fi
+            "${pui_folder}/p-ui" ban
+            iplimit_main
             ;;
         2)
-            read -rp "Please enter new Ban Duration in Minutes [default 30]: " NUM
-            if [[ $NUM =~ ^[0-9]+$ ]]; then
-                create_iplimit_jails ${NUM}
-                systemctl restart fail2ban
+            read -rp "Enter the IP address to ban: " ban_ip
+            ip_validation
+            if [[ $ban_ip =~ $ipv4_regex || $ban_ip =~ $ipv6_regex ]]; then
+                read -rp "For how many minutes [default: the panel's ban duration]: " ban_minutes
+                if [[ ! $ban_minutes =~ ^[0-9]+$ ]]; then
+                    ban_minutes=0
+                fi
+                "${pui_folder}/p-ui" ban -add "$ban_ip" -minutes "$ban_minutes"
             else
-                echo -e "${red}${NUM} is not a number! Please, try again.${plain}"
+                echo -e "${red}Invalid IP address format! Please try again.${plain}"
             fi
             iplimit_main
             ;;
         3)
-            confirm "Proceed with Unbanning everyone from IP Limit jail?" "y"
+            read -rp "Enter the IP address to release: " unban_ip
+            ip_validation
+            if [[ $unban_ip =~ $ipv4_regex || $unban_ip =~ $ipv6_regex ]]; then
+                "${pui_folder}/p-ui" ban -release "$unban_ip"
+            else
+                echo -e "${red}Invalid IP address format! Please try again.${plain}"
+            fi
+            iplimit_main
+            ;;
+        4)
+            confirm "Release every ban this panel holds?" "y"
             if [[ $? == 0 ]]; then
-                fail2ban-client reload --restart --unban p-ui-ipl
-                truncate -s 0 "${iplimit_banned_log_path}"
-                echo -e "${green}All users Unbanned successfully.${plain}"
-                iplimit_main
+                "${pui_folder}/p-ui" ban -release-all
             else
                 echo -e "${yellow}Cancelled.${plain}"
             fi
             iplimit_main
             ;;
-        4)
+        5)
             show_banlog
             iplimit_main
             ;;
-        5)
-            read -rp "Enter the IP address you want to ban: " ban_ip
-            ip_validation
-            if [[ $ban_ip =~ $ipv4_regex || $ban_ip =~ $ipv6_regex ]]; then
-                fail2ban-client set p-ui-ipl banip "$ban_ip"
-                echo -e "${green}IP Address ${ban_ip} has been banned successfully.${plain}"
-            else
-                echo -e "${red}Invalid IP address format! Please try again.${plain}"
-            fi
-            iplimit_main
-            ;;
         6)
-            read -rp "Enter the IP address you want to unban: " unban_ip
-            ip_validation
-            if [[ $unban_ip =~ $ipv4_regex || $unban_ip =~ $ipv6_regex ]]; then
-                fail2ban-client set p-ui-ipl unbanip "$unban_ip"
-                echo -e "${green}IP Address ${unban_ip} has been unbanned successfully.${plain}"
-            else
-                echo -e "${red}Invalid IP address format! Please try again.${plain}"
-            fi
+            touch "${iplimit_banned_log_path}" 2>/dev/null
+            tail -f "${iplimit_banned_log_path}"
             iplimit_main
             ;;
         7)
-            tail -f /var/log/fail2ban.log
+            echo -e "${green}The ban duration and the shared-address policy are panel settings:${plain}"
+            echo -e "  Settings → Device cap. The kernel releases a ban on time even if the panel is down."
             iplimit_main
             ;;
         8)
-            service fail2ban status
-            iplimit_main
-            ;;
-        9)
-            systemctl restart fail2ban
-            iplimit_main
-            ;;
-        10)
-            remove_iplimit
+            remove_legacy_iplimit_jail
+            iplimit_remove_conflicts
             iplimit_main
             ;;
         *)
@@ -2117,241 +2099,37 @@ iplimit_main() {
     esac
 }
 
-setup_fail2ban_iplimit() {
-    # Honor the same toggle the panel uses (isFail2BanEnabled): enabled when the
-    # var is unset or exactly "true"; any other explicit value means the operator
-    # opted out, so do nothing rather than install a fail2ban the panel ignores.
-    if [[ -n "${PUI_ENABLE_FAIL2BAN+x}" && "${PUI_ENABLE_FAIL2BAN}" != "true" ]]; then
-        echo -e "${yellow}PUI_ENABLE_FAIL2BAN=${PUI_ENABLE_FAIL2BAN}, skipping Fail2ban setup.${plain}\n"
-        return 0
-    fi
-
-    if ! command -v fail2ban-client &> /dev/null; then
-        echo -e "${green}Fail2ban is not installed. Installing now...!${plain}\n"
-
-        # Install fail2ban together with nftables. Recent fail2ban packages
-        # default to `banaction = nftables-multiport` in /etc/fail2ban/jail.conf,
-        # but the `nftables` package isn't pulled in as a dependency on most
-        # minimal server images (Debian 12+, Ubuntu 24+). Without `nft` in PATH
-        # the default sshd jail fails to ban with
-        #   stderr: '/bin/sh: 1: nft: not found'
-        # even though our own p-ui-ipl jail uses iptables. Bundling the binary
-        # at install time prevents that confusing log spam for new installs.
-        apt-get update
-        # Debian needs python3-systemd for the systemd backend. Ubuntu needs
-        # nothing extra: fail2ban 1.0.2-3ubuntu0.1 vendors its own asynchat
-        # shim and Depends on python3-pyasyncore, both from the archive.
-        case "${release}" in
-            debian)
-                apt-get install -y python3-systemd
-                ;;
-        esac
-        # Ubuntu's fail2ban 1.0.2 ships test files written before Python 3.12
-        # started warning on "\s"-style escapes, so byte-compiling them prints a
-        # screen of SyntaxWarnings that reads as a failed install. Scoped to this
-        # command and to that one warning class, so apt's own errors still show.
-        PYTHONWARNINGS=ignore::SyntaxWarning apt-get install -y fail2ban nftables
-
-        if ! command -v fail2ban-client &> /dev/null; then
-            echo -e "${red}Fail2ban installation failed.${plain}\n"
-            return 1
+# remove_legacy_iplimit_jail retires the fail2ban jail earlier releases installed
+# for the IP limit. The panel drops a device over its cap on its own nftables
+# table now, and a jail left behind would keep banning on every port. Never fatal.
+remove_legacy_iplimit_jail() {
+    local removed=0
+    local f
+    for f in /etc/fail2ban/jail.d/p-ui-ipl.conf /etc/fail2ban/filter.d/p-ui-ipl.conf /etc/fail2ban/action.d/p-ui-ipl.conf; do
+        if [[ -f "$f" ]]; then
+            rm -f "$f"
+            removed=1
         fi
-
-        echo -e "${green}Fail2ban installed successfully!${plain}\n"
-    else
-        echo -e "${yellow}Fail2ban is already installed.${plain}\n"
+    done
+    if [[ $removed == 1 ]]; then
+        echo -e "${green}Removed the legacy Fail2ban IP-limit jail; the panel bans on its own firewall table now.${plain}"
+        if systemctl is-active --quiet fail2ban 2>/dev/null; then
+            fail2ban-client reload >/dev/null 2>&1 || systemctl restart fail2ban >/dev/null 2>&1 || true
+        fi
     fi
-
-    echo -e "${green}Configuring IP Limit...${plain}\n"
-
-    # make sure there's no conflict for jail files
-    iplimit_remove_conflicts
-
-    # Check if log file exists
-    if ! test -f "${iplimit_banned_log_path}"; then
-        touch ${iplimit_banned_log_path}
-    fi
-
-    # Check if service log file exists so fail2ban won't return error
-    if ! test -f "${iplimit_log_path}"; then
-        touch ${iplimit_log_path}
-    fi
-
-    # Create the iplimit jail files
-    # we didn't pass the bantime here to use the default value
-    create_iplimit_jails
-
-    # Launching fail2ban
-    if ! systemctl is-active --quiet fail2ban; then
-        systemctl start fail2ban
-    else
-        systemctl restart fail2ban
-    fi
-    systemctl enable fail2ban
-
-    echo -e "${green}IP Limit installed and configured successfully!${plain}\n"
     return 0
 }
 
-# install_iplimit is the interactive (menu) entry point: it runs the shared
-# setup and then returns to the menu. The non-interactive installer path uses
-# setup_fail2ban_iplimit directly via `p-ui setup-fail2ban`.
-install_iplimit() {
-    setup_fail2ban_iplimit
-    before_show_menu
-}
-
-remove_iplimit() {
-    echo -e "${green}\t1.${plain} Only remove IP Limit configurations"
-    echo -e "${green}\t2.${plain} Uninstall Fail2ban and IP Limit"
-    echo -e "${green}\t0.${plain} Back to Main Menu"
-    read -rp "Choose an option: " num
-    case "$num" in
-        1)
-            rm -f /etc/fail2ban/filter.d/p-ui-ipl.conf
-            rm -f /etc/fail2ban/action.d/p-ui-ipl.conf
-            rm -f /etc/fail2ban/jail.d/p-ui-ipl.conf
-            systemctl restart fail2ban
-            echo -e "${green}IP Limit removed successfully!${plain}\n"
-            before_show_menu
-            ;;
-        2)
-            # Remove what p-ui owns, then let apt purge what apt owns. This
-            # used to rm -rf /etc/fail2ban, taking every jail, filter and
-            # .local override the operator wrote with it.
-            rm -f /etc/fail2ban/filter.d/p-ui-ipl.conf
-            rm -f /etc/fail2ban/action.d/p-ui-ipl.conf
-            rm -f /etc/fail2ban/jail.d/p-ui-ipl.conf
-            systemctl stop fail2ban
-            apt-get remove -y fail2ban
-            apt-get purge -y fail2ban
-            apt-get autoremove -y
-            echo -e "${green}Fail2ban and IP Limit removed successfully!${plain}\n"
-            before_show_menu
-            ;;
-        0)
-            show_menu
-            ;;
-        *)
-            echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
-            remove_iplimit
-            ;;
-    esac
-}
-
 show_banlog() {
-    local system_log="/var/log/fail2ban.log"
-
-    echo -e "${green}Checking ban logs...${plain}\n"
-
-    if ! systemctl is-active --quiet fail2ban; then
-        echo -e "${red}Fail2ban service is not running!${plain}\n"
-        return 1
-    fi
-
-    if [[ -f "$system_log" ]]; then
-        echo -e "${green}Recent system ban activities from fail2ban.log:${plain}"
-        grep "p-ui-ipl" "$system_log" | grep -E "Ban|Unban" | tail -n 10 || echo -e "${yellow}No recent system ban activities found${plain}"
-        echo ""
-    fi
-
-    if [[ -f "${iplimit_banned_log_path}" ]]; then
-        echo -e "${green}IP Limit ban log entries:${plain}"
-        if [[ -s "${iplimit_banned_log_path}" ]]; then
-            grep -v "INIT" "${iplimit_banned_log_path}" | tail -n 10 || echo -e "${yellow}No ban entries found${plain}"
-        else
-            echo -e "${yellow}Ban log file is empty${plain}"
-        fi
+    echo -e "${green}Active bans:${plain}"
+    "${pui_folder}/p-ui" ban || echo -e "${yellow}The panel could not list its bans (is the database reachable?).${plain}"
+    echo ""
+    if [[ -s "${iplimit_banned_log_path}" ]]; then
+        echo -e "${green}Recent ban log entries:${plain}"
+        tail -n 20 "${iplimit_banned_log_path}"
     else
-        echo -e "${red}Ban log file not found at: ${iplimit_banned_log_path}${plain}"
+        echo -e "${yellow}No ban log entries yet (${iplimit_banned_log_path}).${plain}"
     fi
-
-    echo -e "\n${green}Current jail status:${plain}"
-    fail2ban-client status p-ui-ipl || echo -e "${yellow}Unable to get jail status${plain}"
-}
-
-create_iplimit_jails() {
-    # Use default bantime if not passed => 30 minutes
-    local bantime="${1:-30}"
-
-    # Uncomment 'allowipv6 = auto' in fail2ban.conf
-    sed -i 's/#allowipv6 = auto/allowipv6 = auto/g' /etc/fail2ban/fail2ban.conf
-
-
-    cat << EOF > /etc/fail2ban/jail.d/p-ui-ipl.conf
-[p-ui-ipl]
-enabled=true
-backend=auto
-filter=p-ui-ipl
-action=p-ui-ipl
-logpath=${iplimit_log_path}
-maxretry=1
-findtime=32
-bantime=${bantime}m
-EOF
-
-    cat << EOF > /etc/fail2ban/filter.d/p-ui-ipl.conf
-[Definition]
-datepattern = ^%%Y/%%m/%%d %%H:%%M:%%S
-failregex   = \[LIMIT_IP\]\s*Email\s*=\s*<F-USER>.+</F-USER>\s*\|\|\s*Disconnecting OLD IP\s*=\s*<ADDR>\s*\|\|\s*Timestamp\s*=\s*\d+
-ignoreregex =
-EOF
-
-    # Ports to exempt from the ban so an over-limit proxy client can never lock
-    # the administrator out of SSH or the panel. The ban still covers every other
-    # TCP and UDP port (including all Xray inbounds, e.g. UDP-based Hysteria2), so
-    # IP-limit keeps working for inbounds added later without regenerating these files.
-    # sshd -T resolves the whole effective config, including the
-    # Include /etc/ssh/sshd_config.d/*.conf every cloud image ships — which the
-    # grep below cannot see, so a box with SSH on 2222 exempted port 22.
-    local ssh_ports
-    ssh_ports=$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | paste -sd, -)
-    if [[ -z "${ssh_ports}" ]]; then
-        ssh_ports=$(grep -rhoP '^[[:space:]]*Port[[:space:]]+\K[0-9]+' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null | paste -sd, -)
-    fi
-    # And the port this session is on, whatever the config says: sshd can be
-    # socket-activated, and a ban that takes SSH out is not recoverable remotely.
-    local live_ssh_port
-    live_ssh_port=$(ssh_listen_port)
-    if [[ -n "${live_ssh_port}" && ",${ssh_ports}," != *",${live_ssh_port},"* ]]; then
-        ssh_ports="${ssh_ports:+${ssh_ports},}${live_ssh_port}"
-    fi
-    [[ -z "${ssh_ports}" ]] && ssh_ports="22"
-    local panel_port
-    panel_port=$(${pui_folder}/p-ui setting -show true 2>/dev/null | grep -Eo 'port: .+' | awk '{print $2}')
-    local exempt_ports="${ssh_ports}"
-    [[ -n "${panel_port}" ]] && exempt_ports="${exempt_ports},${panel_port}"
-
-    cat << EOF > /etc/fail2ban/action.d/p-ui-ipl.conf
-[INCLUDES]
-before = iptables-allports.conf
-
-[Definition]
-actionstart = <iptables> -N f2b-<name>
-              <iptables> -A f2b-<name> -j <returntype>
-              <iptables> -I <chain> -j f2b-<name>
-
-actionstop = <iptables> -D <chain> -j f2b-<name>
-             <actionflush>
-             <iptables> -X f2b-<name>
-
-actioncheck = <iptables> -n -L <chain> | grep -q 'f2b-<name>[ \t]'
-
-actionban = <iptables> -I f2b-<name> 1 -s <ip> -p tcp -m multiport ! --dports <exemptports> -j <blocktype>
-            <iptables> -I f2b-<name> 1 -s <ip> -p udp -m multiport ! --dports <exemptports> -j <blocktype>
-            echo "\$(date +"%%Y/%%m/%%d %%H:%%M:%%S")   BAN   [Email] = <F-USER> [IP] = <ip> banned for <bantime> seconds." >> ${iplimit_banned_log_path}
-
-actionunban = <iptables> -D f2b-<name> -s <ip> -p tcp -m multiport ! --dports <exemptports> -j <blocktype>
-              <iptables> -D f2b-<name> -s <ip> -p udp -m multiport ! --dports <exemptports> -j <blocktype>
-              echo "\$(date +"%%Y/%%m/%%d %%H:%%M:%%S")   UNBAN   [Email] = <F-USER> [IP] = <ip> unbanned." >> ${iplimit_banned_log_path}
-
-[Init]
-name = default
-chain = INPUT
-exemptports = ${exempt_ports}
-EOF
-
-    echo -e "${green}Ip Limit jail files created with a bantime of ${bantime} minutes.${plain}"
 }
 
 iplimit_remove_conflicts() {
@@ -2922,7 +2700,8 @@ show_usage() {
 │  ${blue}p-ui enable${plain}                - Enable Autostart on OS Startup   │
 │  ${blue}p-ui disable${plain}               - Disable Autostart on OS Startup  │
 │  ${blue}p-ui log${plain}                   - Check logs                       │
-│  ${blue}p-ui banlog${plain}                - Check Fail2ban ban logs          │
+│  ${blue}p-ui banlog${plain}                - Device-cap bans and their log    │
+│  ${blue}p-ui ban [flags]${plain}           - List, add or release bans       │
 │  ${blue}p-ui update${plain}                - Update                           │
 │  ${blue}p-ui update-dev${plain}            - Update to Dev channel (latest)   │
 │  ${blue}p-ui update-all-geofiles${plain}   - Update all geo files             │
@@ -2964,7 +2743,7 @@ show_menu() {
 │────────────────────────────────────────────────│
 │  ${green}20.${plain} SSL Certificate Management                │
 │  ${green}21.${plain} Cloudflare SSL Certificate                │
-│  ${green}22.${plain} IP Limit Management                       │
+│  ${green}22.${plain} Device cap (IP limit) bans                │
 │  ${green}23.${plain} Firewall Management                       │
 │  ${green}24.${plain} SSH Port Forwarding Management            │
 │  ${green}25.${plain} PostgreSQL Management                     │
@@ -3103,8 +2882,13 @@ if [[ $# > 0 ]]; then
         "banlog")
             check_install 0 && show_banlog 0
             ;;
+        "ban")
+            check_install 0 && "${pui_folder}/p-ui" ban "${@:2}"
+            ;;
         "setup-fail2ban")
-            setup_fail2ban_iplimit
+            # Older installers still call this; the panel bans on its own now,
+            # so the only setup left is retiring the jail they used to make.
+            remove_legacy_iplimit_jail
             ;;
         "update")
             check_install 0 && update 0

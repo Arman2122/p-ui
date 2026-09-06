@@ -1475,27 +1475,23 @@ config_after_install() {
     ${pui_folder}/p-ui migrate
 }
 
-# setup_fail2ban auto-installs and configures fail2ban for the IP Limit feature
-# by invoking the freshly installed p-ui CLI. IP Limit is load-bearing on
-# fail2ban (without it the panel disables the limitIp field and zeroes existing
-# limits), so a fresh install should make it work out of the box. Non-fatal by
-# design: a fail2ban failure must never abort the panel install.
-setup_fail2ban() {
-    if [[ -n "${PUI_ENABLE_FAIL2BAN+x}" && "${PUI_ENABLE_FAIL2BAN}" != "true" ]]; then
-        echo -e "${yellow}PUI_ENABLE_FAIL2BAN=${PUI_ENABLE_FAIL2BAN}, skipping Fail2ban auto-setup.${plain}"
-        return 0
-    fi
-
-    if [[ ! -x /usr/bin/p-ui ]]; then
-        echo -e "${yellow}p-ui CLI not found; skipping Fail2ban auto-setup.${plain}"
-        return 0
-    fi
-
-    echo -e "${green}Setting up Fail2ban for the IP Limit feature...${plain}"
-    if /usr/bin/p-ui setup-fail2ban; then
-        echo -e "${green}Fail2ban setup complete.${plain}"
-    else
-        echo -e "${yellow}Fail2ban setup did not finish; IP Limit stays disabled until you run 'p-ui' and open the IP Limit menu. Continuing.${plain}"
+# remove_legacy_iplimit_jail retires the fail2ban jail earlier releases installed
+# for the IP limit. The panel drops a device over its cap on its own nftables
+# table now, and a jail left behind would keep banning on every port. Never fatal.
+remove_legacy_iplimit_jail() {
+    local removed=0
+    local f
+    for f in /etc/fail2ban/jail.d/p-ui-ipl.conf /etc/fail2ban/filter.d/p-ui-ipl.conf /etc/fail2ban/action.d/p-ui-ipl.conf; do
+        if [[ -f "$f" ]]; then
+            rm -f "$f"
+            removed=1
+        fi
+    done
+    if [[ $removed == 1 ]]; then
+        echo -e "${green}Removed the legacy Fail2ban IP-limit jail; the panel bans on its own firewall table now.${plain}"
+        if systemctl is-active --quiet fail2ban 2>/dev/null; then
+            fail2ban-client reload >/dev/null 2>&1 || systemctl restart fail2ban >/dev/null 2>&1 || true
+        fi
     fi
     return 0
 }
@@ -1837,9 +1833,9 @@ install_p-ui() {
         exit 1
     fi
 
-    # IP Limit relies on fail2ban; install + configure it now so the feature
-    # works out of the box (no-op when PUI_ENABLE_FAIL2BAN=false). Never fatal.
-    setup_fail2ban
+    # The panel bans a device over its cap on its own firewall table; a jail an
+    # older release installed for it is retired here. Never fatal.
+    remove_legacy_iplimit_jail
 
     if [[ "${PANEL_START_FAILED:-0}" == "1" ]]; then
         echo -e "${yellow}Penhoon UI ${tag_version}${plain} is installed but NOT running — see the failure above."
@@ -1859,7 +1855,7 @@ install_p-ui() {
 │  ${blue}p-ui enable${plain}       - Enable Autostart on OS Startup   │
 │  ${blue}p-ui disable${plain}      - Disable Autostart on OS Startup  │
 │  ${blue}p-ui log${plain}          - Check logs                       │
-│  ${blue}p-ui banlog${plain}       - Check Fail2ban ban logs          │
+│  ${blue}p-ui banlog${plain}       - Device-cap bans and their log    │
 │  ${blue}p-ui update${plain}       - Update                           │
 │  ${blue}p-ui legacy${plain}       - Legacy version                   │
 │  ${blue}p-ui install${plain}      - Install                          │

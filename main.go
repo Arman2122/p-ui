@@ -733,6 +733,14 @@ func main() {
 	settingCmd.StringVar(&tgbotchatid, "tgbotchatid", "", "Set chat ID for Telegram bot notifications")
 	settingCmd.BoolVar(&enabletgbot, "enabletgbot", false, "Enable notifications via Telegram bot")
 
+	banCmd := flag.NewFlagSet("ban", flag.ExitOnError)
+	var bans banOptions
+	banCmd.StringVar(&bans.add, "add", "", "Ban an address on every local inbound port")
+	banCmd.IntVar(&bans.minutes, "minutes", 0, "How long a -add ban lasts; 0 uses the ban duration setting")
+	banCmd.StringVar(&bans.release, "release", "", "Release an address; with -email, only that client's ban of it")
+	banCmd.StringVar(&bans.email, "email", "", "The client a -release names")
+	banCmd.BoolVar(&bans.releaseAll, "release-all", false, "Release every ban this panel holds")
+
 	oldUsage := flag.Usage
 	flag.Usage = func() {
 		oldUsage()
@@ -741,6 +749,7 @@ func main() {
 		fmt.Println("    run            run web panel")
 		fmt.Println("    migrate        run pending data migrations on the configured database")
 		fmt.Println("    setting        set settings")
+		fmt.Println("    ban            list, add or release device-cap bans")
 	}
 
 	flag.Parse()
@@ -809,6 +818,15 @@ func main() {
 		if enabletgbot {
 			updateTgbotEnableSts(enabletgbot)
 		}
+	case "ban":
+		if err := banCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Println(err)
+			return
+		}
+		if err := runBanCommand(bans); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	case "cert":
 		err := settingCmd.Parse(os.Args[2:])
 		if err != nil {
@@ -831,5 +849,7 @@ func main() {
 		runCmd.Usage()
 		fmt.Println()
 		settingCmd.Usage()
+		fmt.Println()
+		banCmd.Usage()
 	}
 }

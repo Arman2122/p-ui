@@ -84,7 +84,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Arman2122/p-ui/main/install.sh
 
 The installer:
 
-1. installs the service and its dependencies (including `nftables` and `fail2ban`);
+1. installs the service and its dependencies (including `nftables`);
 2. installs PostgreSQL and creates a dedicated role and database, or asks for the DSN of
    an existing server;
 3. generates a random **username**, **password** and **web base path**;
@@ -135,7 +135,8 @@ firewall, PostgreSQL, logs, BBR and more. Each entry is also a subcommand:
 | `p-ui settings` | Show the port, base path and SSL state |
 | `p-ui enable` / `disable` | Start on boot, or not |
 | `p-ui log` | Tail the panel log |
-| `p-ui banlog` | Fail2ban ban log |
+| `p-ui banlog` | Device-cap bans and their log |
+| `p-ui ban` | List device-cap bans; `-add <ip> [-minutes N]`, `-release <ip> [-email <client>]`, `-release-all` |
 | `p-ui update` | Update to the latest stable release |
 | `p-ui update-dev` | Update to the rolling `dev-latest` build |
 | `p-ui legacy` | Install a specific older version |
@@ -168,7 +169,7 @@ firewall, PostgreSQL, logs, BBR and more. Each entry is also a subcommand:
 
 ### Clients and subscriptions
 
-- Traffic quotas, expiry dates, IP limits enforced through Fail2ban, live online status,
+- Traffic quotas, expiry dates, IP limits enforced on the panel's own firewall table, live online status,
   and per-client, per-inbound and per-outbound statistics with reset controls.
 - One client across many inbounds, with share links, QR codes and a built-in
   subscription server that answers in raw, JSON and Clash formats, with
@@ -208,7 +209,7 @@ restart the service.
 | `PUI_DB_DSN` | — | **Required.** PostgreSQL connection string, e.g. `postgres://pui:password@127.0.0.1:5432/pui?sslmode=disable`. The panel refuses to start without it. |
 | `PUI_PORT` | — | Override the panel port; takes precedence over the stored setting |
 | `PUI_INIT_WEB_BASE_PATH` | `/` | Web base path on the first launch |
-| `PUI_ENABLE_FAIL2BAN` | `true` | Enforce per-client IP limits through Fail2ban |
+| `PUI_IP_LIMIT_BANS` | `true` | Drop a device over its IP limit on the panel's own nftables ban set, on its inbound's port (`PUI_ENABLE_FAIL2BAN` is still read as the old name) |
 | `PUI_SKIP_HSTS` | `false` | Skip the HSTS header when TLS terminates at a reverse proxy |
 | `PUI_LOG_LEVEL` | `info` | `debug`, `info`, `notice`, `warning` or `error` |
 | `PUI_DB_MAX_OPEN_CONNS` / `PUI_DB_MAX_IDLE_CONNS` | `25` | PostgreSQL connection-pool limits |
