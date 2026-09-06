@@ -36,10 +36,14 @@ func TestShapingTargetsLeavesAWiderPrefixUnshaped(t *testing.T) {
 		t.Fatalf("reconcile: %v", err)
 	}
 
-	target, err := c.ShapingTargets(context.Background(), inst)
+	targets, err := c.ShapingTargets(context.Background(), inst)
 	if err != nil {
 		t.Fatalf("ShapingTargets: %v", err)
 	}
+	if len(targets) != 1 {
+		t.Fatalf("got %d targets, want the inbound's one device", len(targets))
+	}
+	target := targets[0]
 	if key, keyed := target.Keys[inst.Users[1].Email]; keyed {
 		t.Errorf("%q is keyed by %v; a prefix wider than one address is not an identity and the client must be left unshaped", inst.Users[1].Email, key.Prefixes)
 	}
@@ -80,12 +84,12 @@ func TestShapingTargetsGoesQuietWithoutADevice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c, inst := tc.setup(t)
-			target, err := c.ShapingTargets(context.Background(), inst)
+			targets, err := c.ShapingTargets(context.Background(), inst)
 			if err != nil {
 				t.Fatalf("an absent device is retryable, not an error: %v", err)
 			}
-			if target.Device != "" || len(target.Keys) != 0 {
-				t.Errorf("got device %q with %d keys, want neither; a target built without a device attaches limits to something that is not there", target.Device, len(target.Keys))
+			if len(targets) != 0 {
+				t.Errorf("got %d target(s), want none; a target built without a device attaches limits to something that is not there", len(targets))
 			}
 		})
 	}

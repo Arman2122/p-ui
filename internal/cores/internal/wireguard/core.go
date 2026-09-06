@@ -279,14 +279,14 @@ it is the only thing that knows who currently answers to an address.
 A client with no single-address prefix is left out rather than keyed by a guess —
 a wider prefix would shape everyone inside it as that one client.
 */
-func (c *Core) ShapingTargets(ctx context.Context, inst core.Instance) (core.ShapingTarget, error) {
+func (c *Core) ShapingTargets(ctx context.Context, inst core.Instance) ([]core.ShapingTarget, error) {
 	held, err := c.mgr.PeerAllowedIPs(ctx, inst.ID)
 	if err != nil {
 		if errors.Is(err, engine.ErrNoDevice) {
 			// Not hosting it at this moment; the caller goes quiet and retries.
-			return core.ShapingTarget{}, nil
+			return nil, nil
 		}
-		return core.ShapingTarget{}, fmt.Errorf("wgkernel: inbound %d: %w", inst.ID, err)
+		return nil, fmt.Errorf("wgkernel: inbound %d: %w", inst.ID, err)
 	}
 	target := core.ShapingTarget{Device: c.mgr.Name(inst.ID), Selector: core.SelectorInnerIP}
 	for _, u := range inst.Users {
@@ -299,7 +299,7 @@ func (c *Core) ShapingTargets(ctx context.Context, inst core.Instance) (core.Sha
 		}
 		target.Keys[u.Email] = core.SubjectKey{Prefixes: hosts}
 	}
-	return target, nil
+	return []core.ShapingTarget{target}, nil
 }
 
 // hostPrefixes keeps the prefixes holding a single address. A site-to-site peer's

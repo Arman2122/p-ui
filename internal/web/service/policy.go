@@ -229,25 +229,24 @@ func (s *PolicyService) ShapingWants(ctx context.Context) ([]shaping.DeviceWant,
 			continue
 		}
 		for _, inst := range instances {
-			target, err := bound.Shape.ShapingTargets(ctx, inst)
+			reported, err := bound.Shape.ShapingTargets(ctx, inst)
 			if err != nil {
 				failures = append(failures, fmt.Errorf("policy: identities for inbound %d: %w", inst.ID, err))
 				continue
 			}
-			// An empty device is the core saying it is not hosting this instance
-			// right now. Shaping goes quiet and retries; it does not fail.
-			if target.Device == "" {
-				continue
+			// No target is the core saying it is not hosting this instance right
+			// now. Shaping goes quiet and retries; it does not fail.
+			for _, target := range reported {
+				// Named here rather than left to the plane: the refusal is a fact about
+				// the CORE's device naming, and the mechanism only ever sees a string.
+				if !shapingNamespaces.Owns(target.Device) {
+					failures = append(failures, fmt.Errorf(
+						"policy: core %s offered device %q for inbound %d, which is outside the namespaces this panel may shape: %w",
+						bound.Core.Describe().ID, target.Device, inst.ID, shaping.ErrNotOwned))
+					continue
+				}
+				targets = append(targets, deviceSubjects{device: target.Device, keys: target.Keys})
 			}
-			// Named here rather than left to the plane: the refusal is a fact about
-			// the CORE's device naming, and the mechanism only ever sees a string.
-			if !shapingNamespaces.Owns(target.Device) {
-				failures = append(failures, fmt.Errorf(
-					"policy: core %s offered device %q for inbound %d, which is outside the namespaces this panel may shape: %w",
-					bound.Core.Describe().ID, target.Device, inst.ID, shaping.ErrNotOwned))
-				continue
-			}
-			targets = append(targets, deviceSubjects{device: target.Device, keys: target.Keys})
 		}
 	}
 	if !shapeable {

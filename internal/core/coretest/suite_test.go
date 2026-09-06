@@ -39,8 +39,12 @@ type defects struct {
 	inventCredential    bool
 	// The identity defects, driven by shapingCore. They are separated only
 	// because a core that implements neither new interface must stay provable.
-	shapeNothing        bool
-	hideTheDevice       bool
+	shapeNothing     bool
+	hideTheDevice    bool
+	deviceLessTarget bool
+	// splitDevices is not a defect: the second user rides a second device, which
+	// is what a per-session core does and the suite must accept.
+	splitDevices        bool
 	inventSelector      bool
 	disagreeOnSelector  bool
 	shapeAWholeSubnet   bool
@@ -341,14 +345,14 @@ func (s *shapingCore) ShapingSelector(core.Kind) core.Selector {
 	}
 }
 
-func (s *shapingCore) ShapingTargets(_ context.Context, inst core.Instance) (core.ShapingTarget, error) {
+func (s *shapingCore) ShapingTargets(_ context.Context, inst core.Instance) ([]core.ShapingTarget, error) {
 	target := core.ShapingTarget{
 		Device:   "fake0",
 		Selector: s.ShapingSelector(inst.Kind),
 		Keys:     map[string]core.SubjectKey{},
 	}
 	if s.d.hideTheDevice {
-		target.Device = ""
+		return nil, nil
 	}
 	if s.d.disagreeOnSelector {
 		target.Selector = core.SelectorFwmark
@@ -369,7 +373,18 @@ func (s *shapingCore) ShapingTargets(_ context.Context, inst core.Instance) (cor
 	if s.d.shapeAStranger {
 		target.Keys["nobody@example.com"] = core.SubjectKey{Prefixes: []netip.Prefix{netip.MustParsePrefix("10.0.0.99/32")}}
 	}
-	return target, nil
+	if s.d.deviceLessTarget {
+		return []core.ShapingTarget{{Selector: target.Selector, Keys: target.Keys}}, nil
+	}
+	if s.d.splitDevices && len(inst.Users) > 1 {
+		second := core.ShapingTarget{Device: "fake1", Selector: target.Selector, Keys: map[string]core.SubjectKey{}}
+		if key, ok := target.Keys[inst.Users[1].Email]; ok {
+			second.Keys[inst.Users[1].Email] = key
+			delete(target.Keys, inst.Users[1].Email)
+		}
+		return []core.ShapingTarget{target, second}, nil
+	}
+	return []core.ShapingTarget{target}, nil
 }
 
 func (s *shapingCore) feedSession(email, source string, lastSeenUnixMilli int64) {
@@ -564,6 +579,11 @@ func TestSuiteCatchesBrokenIdentities(t *testing.T) {
 			wantInvariant: "shaping/names-the-device",
 		},
 		{
+			name:          "answers a target that names no device",
+			defects:       defects{deviceLessTarget: true},
+			wantInvariant: "shaping/names-the-device",
+		},
+		{
 			name:          "declares a selector nothing can key on",
 			defects:       defects{inventSelector: true},
 			wantInvariant: "shaping/selector-vocabulary",
@@ -616,6 +636,30 @@ func TestSuiteCatchesBrokenIdentities(t *testing.T) {
 			}
 			t.Errorf("suite did not catch %q: wanted invariant %q, got %v", tc.name, tc.wantInvariant, failures)
 		})
+	}
+}
+
+// A core that spreads one instance over several devices — one per session — is
+// the shape OpenConnect has, and every identity check must read across them.
+func TestSuiteAcceptsAnInstanceSpreadOverDevices(t *testing.T) {
+	shared := newShapingFake(defects{splitDevices: true})
+	for _, f := range Check(shapingRig(shared)) {
+		if strings.HasPrefix(f.Invariant, "shaping/") {
+			t.Errorf("a well-behaved per-session core was reported: %s", f)
+		}
+	}
+}
+
+// A per-session core with nobody connected names no device, and that is the
+// truth, not a hidden device: the host holds no identity for the suite to miss.
+func TestNoTargetIsNotAFaultWhileTheHostHoldsNobody(t *testing.T) {
+	shared := newShapingFake(defects{hideTheDevice: true})
+	rig := shapingRig(shared)
+	rig.HostSubjects = func() map[string][]string { return map[string][]string{} }
+	for _, f := range Check(rig) {
+		if strings.HasPrefix(f.Invariant, "shaping/") {
+			t.Errorf("a core with no session to shape was reported: %s", f)
+		}
 	}
 }
 

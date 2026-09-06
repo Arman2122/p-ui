@@ -35,6 +35,9 @@ type declaredCore struct {
 	selector core.Selector
 	device   string
 	keys     map[string]core.SubjectKey
+	// more are further devices the same instance spreads over, one per session
+	// on a core shaped like OpenConnect.
+	more     []core.ShapingTarget
 	sessions []core.Session
 	failWith error
 	shapeErr error
@@ -56,11 +59,12 @@ func (c shapingCore) ShapingSelector(kind core.Kind) core.Selector {
 	return c.selector
 }
 
-func (c shapingCore) ShapingTargets(context.Context, core.Instance) (core.ShapingTarget, error) {
+func (c shapingCore) ShapingTargets(context.Context, core.Instance) ([]core.ShapingTarget, error) {
 	if c.shapeErr != nil {
-		return core.ShapingTarget{}, c.shapeErr
+		return nil, c.shapeErr
 	}
-	return core.ShapingTarget{Device: c.device, Selector: c.selector, Keys: c.keys}, nil
+	first := core.ShapingTarget{Device: c.device, Selector: c.selector, Keys: c.keys}
+	return append([]core.ShapingTarget{first}, c.more...), nil
 }
 
 // sessionCore adds the observation half.
@@ -643,6 +647,51 @@ func tunnelWithClients(t *testing.T, device string, emails ...string) (*declared
 		seedClientRow(t, email, inbound.Id, 0, 0, 0)
 	}
 	return base, inbound
+}
+
+// registerSessionFamily claims the OpenConnect-shaped family once for the
+// package; a second claim is the duplicate the registry refuses, and that is fine.
+func registerSessionFamily(t *testing.T) {
+	t.Helper()
+	err := RegisterShapingNamespace(core.DeviceNamespace{Prefix: "poc", PerSession: true})
+	if err != nil && !errors.Is(err, shaping.ErrDuplicateNamespace) {
+		t.Fatalf("RegisterShapingNamespace: %v", err)
+	}
+}
+
+/*
+TestAnInstanceSpreadOverDevicesWantsEachDevice.
+
+A per-session core spreads one inbound over several devices, one per live
+session, and every one of them must be wanted: a client on the second device is
+otherwise never shaped, and nothing reports it.
+*/
+func TestAnInstanceSpreadOverDevicesWantsEachDevice(t *testing.T) {
+	initTestDB(t)
+	registerSessionFamily(t)
+	svc := &PolicyService{}
+	base, _ := tunnelWithClients(t, "poc7-0", "first", "second")
+	second := base.keys["second"]
+	delete(base.keys, "second")
+	base.more = []core.ShapingTarget{{
+		Device: "poc7-1", Selector: core.SelectorInnerIP,
+		Keys: map[string]core.SubjectKey{"second": second},
+	}}
+	seedPlan(t, "flat", []policy.Tier{{FromBytes: 0, UpBps: 1_000_000, DownBps: 1_000_000}}, "first", "second")
+
+	wants, err := svc.ShapingWants(context.Background())
+	if err != nil {
+		t.Fatalf("ShapingWants: %v", err)
+	}
+	byDevice := map[string][]string{}
+	for _, w := range wants {
+		for _, subject := range w.Subjects {
+			byDevice[w.Device] = append(byDevice[w.Device], subject.ID)
+		}
+	}
+	if !slices.Equal(byDevice["poc7-0"], []string{"first"}) || !slices.Equal(byDevice["poc7-1"], []string{"second"}) {
+		t.Fatalf("wants per device = %v; want first on poc7-0 and second on poc7-1", byDevice)
+	}
 }
 
 /*

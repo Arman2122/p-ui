@@ -435,24 +435,36 @@ func checkShaping(r *report, rig Rig, bound *core.Bound) {
 		}
 	}
 
-	target, err := bound.Shape.ShapingTargets(ctx, inst)
+	targets, err := bound.Shape.ShapingTargets(ctx, inst)
 	if err != nil {
 		r.fail("shaping/targets-succeed", "ShapingTargets failed: %v", err)
 		return
 	}
-	if target.Device == "" {
-		r.fail("shaping/names-the-device", "ShapingTargets named no device for an instance this core is serving; an empty Device means \"not hosting it right now\", so a core that always answers that is never shaped and nothing ever fails")
+	host := rig.HostSubjects()
+	if len(targets) == 0 {
+		// A per-session core with nobody connected has no device to name, and the
+		// host agrees; a core hiding a device the host holds is what is caught.
+		if len(host) == 0 {
+			return
+		}
+		r.fail("shaping/names-the-device", "ShapingTargets named no device while the host holds %d identit(ies) for this instance; no target means \"not hosting it right now\", so a core that always answers that is never shaped and nothing ever fails", len(host))
 		return
 	}
-	if declared := bound.Shape.ShapingSelector(inst.Kind); target.Selector != declared {
-		r.fail("shaping/selector-agrees", "kind %q declares selector %q but its instance reports %q; the client form gates on the first and the shaper keys on the second, so a limit is offered that nothing enforces", inst.Kind, declared, target.Selector)
+	for _, target := range targets {
+		if target.Device == "" {
+			r.fail("shaping/names-the-device", "a target names no device; a core not hosting the instance answers with no target at all, and a device-less one attaches limits to nothing")
+			return
+		}
+		if declared := bound.Shape.ShapingSelector(inst.Kind); target.Selector != declared {
+			r.fail("shaping/selector-agrees", "kind %q declares selector %q but its instance reports %q; the client form gates on the first and the shaper keys on the second, so a limit is offered that nothing enforces", inst.Kind, declared, target.Selector)
+		}
 	}
-	compareSubjects(r, inst, target, rig.HostSubjects())
+	compareSubjects(r, inst, targets, host)
 }
 
-// compareSubjects checks the target against the instance it belongs to and
+// compareSubjects checks the targets against the instance they belong to and
 // against the host, which is the only source that cannot be invented.
-func compareSubjects(r *report, inst core.Instance, target core.ShapingTarget, host map[string][]string) {
+func compareSubjects(r *report, inst core.Instance, targets []core.ShapingTarget, host map[string][]string) {
 	served := make(map[string]bool, len(inst.Users))
 	for _, u := range inst.Users {
 		served[u.Email] = true
@@ -462,23 +474,25 @@ func compareSubjects(r *report, inst core.Instance, target core.ShapingTarget, h
 	// clients sharing an address is named "first" is otherwise map order.
 	owner := map[netip.Prefix]string{}
 	got := map[string][]string{}
-	for _, email := range slices.Sorted(maps.Keys(target.Keys)) {
-		key := target.Keys[email]
-		if !served[email] {
-			r.fail("shaping/keys-match-users", "the target keys %q, who is not a user of instance %d; a stale map shapes a deleted client's successor", email, inst.ID)
-		}
-		if len(key.Prefixes) == 0 {
-			r.fail("shaping/keys-are-host-prefixes", "%q is keyed by no prefix at all; a client the core cannot distinguish belongs outside Keys, not inside it with an empty identity", email)
-		}
-		for _, prefix := range key.Prefixes {
-			switch other, taken := owner[prefix]; {
-			case !prefix.IsSingleIP():
-				r.fail("shaping/keys-are-host-prefixes", "%q is keyed by %s, which is not a single address; a wider prefix shapes everyone inside it as this one client", email, prefix)
-			case taken:
-				r.fail("shaping/keys-are-unique", "%s is claimed by both %q and %q; one of them is shaped as the other, which is the one failure a customer cannot detect for themselves", prefix, other, email)
-			default:
-				owner[prefix] = email
-				got[email] = append(got[email], prefix.String())
+	for _, target := range targets {
+		for _, email := range slices.Sorted(maps.Keys(target.Keys)) {
+			key := target.Keys[email]
+			if !served[email] {
+				r.fail("shaping/keys-match-users", "the target keys %q, who is not a user of instance %d; a stale map shapes a deleted client's successor", email, inst.ID)
+			}
+			if len(key.Prefixes) == 0 {
+				r.fail("shaping/keys-are-host-prefixes", "%q is keyed by no prefix at all; a client the core cannot distinguish belongs outside Keys, not inside it with an empty identity", email)
+			}
+			for _, prefix := range key.Prefixes {
+				switch other, taken := owner[prefix]; {
+				case !prefix.IsSingleIP():
+					r.fail("shaping/keys-are-host-prefixes", "%q is keyed by %s, which is not a single address; a wider prefix shapes everyone inside it as this one client", email, prefix)
+				case taken:
+					r.fail("shaping/keys-are-unique", "%s is claimed by both %q and %q; one of them is shaped as the other, which is the one failure a customer cannot detect for themselves", prefix, other, email)
+				default:
+					owner[prefix] = email
+					got[email] = append(got[email], prefix.String())
+				}
 			}
 		}
 	}

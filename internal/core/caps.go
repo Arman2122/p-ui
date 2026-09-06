@@ -346,12 +346,13 @@ type SubjectKey struct {
 	Mark     uint32
 }
 
-// ShapingTarget is one instance's shapeable surface as it stands right now.
+// ShapingTarget is one device of an instance's shapeable surface, as it stands
+// right now.
 type ShapingTarget struct {
-	// Device is the interface this instance's decrypted traffic crosses, and it MUST
-	// be named from one of the panel's own device namespaces (see shaping.Owns): the
-	// plane installs nothing on an interface it cannot prove it owns. Empty means the
-	// core is not hosting it now — shaping goes quiet and retries, it does not fail.
+	/* Device is the interface this target's decrypted traffic crosses, and it MUST
+	   be named from one of the panel's own device namespaces (see shaping.Owns): the
+	   plane installs nothing on an interface it cannot prove it owns. A core not
+	   hosting the instance answers with no target at all, never one with no device. */
 	Device   string
 	Selector Selector
 	// Keys maps email to kernel identity. An email absent from it is a client this
@@ -373,9 +374,9 @@ type ShapingHost interface {
 	// instance exists. Per-kind for CredentialDeclarer's reason: one core, ten kinds.
 	ShapingSelector(kind Kind) Selector
 
-	// ShapingTargets is per-instance and dynamic, because the device is per-instance
-	// and can be absent at any moment by design.
-	ShapingTargets(ctx context.Context, inst Instance) (ShapingTarget, error)
+	// ShapingTargets is per-instance and dynamic: one target per device the
+	// instance's traffic crosses right now, and none while the core is not hosting it.
+	ShapingTargets(ctx context.Context, inst Instance) ([]ShapingTarget, error)
 }
 
 // RateLimit is what one client may push right now, per direction, in bits per

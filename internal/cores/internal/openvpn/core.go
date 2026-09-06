@@ -642,12 +642,12 @@ func (c *Core) ShapingSelector(kind core.Kind) core.Selector {
 // ShapingTargets keys each client by the tunnel address its live session
 // holds, read from the accounting the daemon sent; a client with no session
 // is not shaped, and cannot be, since it has no address yet.
-func (c *Core) ShapingTargets(_ context.Context, inst core.Instance) (core.ShapingTarget, error) {
+func (c *Core) ShapingTargets(_ context.Context, inst core.Instance) ([]core.ShapingTarget, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cur, ok := c.instances[inst.ID]
 	if !ok || !cur.running {
-		return core.ShapingTarget{}, nil
+		return nil, nil
 	}
 	target := core.ShapingTarget{Device: deviceName(inst.ID), Selector: core.SelectorInnerIP}
 	for _, sess := range cur.ledger.Sessions() {
@@ -663,7 +663,7 @@ func (c *Core) ShapingTargets(_ context.Context, inst core.Instance) (core.Shapi
 		}
 		target.Keys[sess.Email] = key
 	}
-	return target, nil
+	return []core.ShapingTarget{target}, nil
 }
 
 /*
