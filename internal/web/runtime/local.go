@@ -296,6 +296,14 @@ func (l *Local) DeleteClient(context.Context, string) error {
 }
 
 func (l *Local) UpdateUser(ctx context.Context, ib *model.Inbound, oldEmail string, payload model.Client) error {
+	if bound, err := l.coreFor(ib); err == nil && bound.UserSet != nil {
+		// One push: the reloaded row already holds the edit, and a removal first
+		// would push the set without the client, which such a core reads as revoked.
+		if !payload.Enable {
+			return l.RemoveUser(ctx, ib, oldEmail)
+		}
+		return l.AddUser(ctx, ib, payload.Email)
+	}
 	if oldEmail != "" {
 		if err := l.RemoveUser(ctx, ib, oldEmail); err != nil &&
 			!errors.Is(err, core.ErrKindHasNoUsers) && !strings.Contains(err.Error(), "not found") {

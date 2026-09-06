@@ -324,3 +324,41 @@ func TestDeletingAClientOnAUserlessKindSucceeds(t *testing.T) {
 		t.Fatalf("DeleteUser = %v; a client on a legacy tun row is now undeletable through the panel", err)
 	}
 }
+
+/*
+An edit is one push on a whole-set core. The reloaded row already holds the
+edit, so a removal first would push the set without the client — which such a
+core reads as a revocation and mtg honours by cutting the client's connections —
+before the add pushed it back. A per-user core is told of the old user leaving
+and the new one arriving, which is two ops and always was.
+*/
+func TestAnEditOnAWholeSetCoreIsOnePush(t *testing.T) {
+	ib := &model.Inbound{
+		Id: 12, Protocol: "set", Tag: "in-12", Port: 8083, Enable: true,
+		Settings: `{"clients":[{"email":"a@x","enable":true,"totalGB":5}]}`,
+	}
+	edited := model.Client{Email: "a@x", Enable: true}
+
+	t.Run("wholeSet", func(t *testing.T) {
+		c := &setCore{userCore{kind: "set"}}
+		l, _ := localFor(t, c, ib)
+		if err := l.UpdateUser(t.Context(), ib, "a@x", edited); err != nil {
+			t.Fatalf("UpdateUser = %v", err)
+		}
+		if c.dropCalls != 0 || c.addCalls != 1 {
+			t.Fatalf("the core was asked to remove %d and add %d time(s); an edit must be one push of the set, or the client is revoked between two",
+				c.dropCalls, c.addCalls)
+		}
+	})
+
+	t.Run("perUser", func(t *testing.T) {
+		c := &userCore{kind: "set"}
+		l, _ := localFor(t, c, ib)
+		if err := l.UpdateUser(t.Context(), ib, "a@x", edited); err != nil {
+			t.Fatalf("UpdateUser = %v", err)
+		}
+		if c.dropCalls != 1 || c.addCalls != 1 {
+			t.Fatalf("the core was asked to remove %d and add %d time(s), want one of each", c.dropCalls, c.addCalls)
+		}
+	})
+}

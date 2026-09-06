@@ -857,27 +857,11 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		if oldInbound.NodeID == nil {
 			if !push {
 				needRestart = true
+			} else if err1 := rt.UpdateUser(context.Background(), oldInbound, oldEmail, clients[0]); err1 != nil {
+				logger.Debug("Error in editing client on", rt.Name(), ":", err1)
+				needRestart = true
 			} else {
-				if oldClients[clientIndex].Enable {
-					err1 := rt.RemoveUser(context.Background(), oldInbound, oldEmail)
-					if err1 == nil {
-						logger.Debug("Old client deleted on", rt.Name(), ":", oldEmail)
-					} else if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", oldEmail)) {
-						logger.Debug("User is already deleted. Nothing to do more...")
-					} else {
-						logger.Debug("Error in deleting client on", rt.Name(), ":", err1)
-						needRestart = true
-					}
-				}
-				if clients[0].Enable {
-					err1 := rt.AddUser(context.Background(), oldInbound, clients[0].Email)
-					if err1 == nil {
-						logger.Debug("Client edited on", rt.Name(), ":", clients[0].Email)
-					} else {
-						logger.Debug("Error in adding client on", rt.Name(), ":", err1)
-						needRestart = true
-					}
-				}
+				logger.Debug("Client edited on", rt.Name(), ":", clients[0].Email)
 			}
 		} else if push {
 			if err1 := rt.UpdateUser(context.Background(), oldInbound, oldEmail, clients[0]); err1 != nil {
