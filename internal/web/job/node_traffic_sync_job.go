@@ -37,6 +37,7 @@ type inboundSample struct {
 type NodeTrafficSyncJob struct {
 	nodeService    service.NodeService
 	inboundService service.InboundService
+	policyService  service.PolicyService
 	settingService service.SettingService
 	xrayService    service.XrayService
 	running        sync.Mutex
@@ -346,6 +347,25 @@ func (j *NodeTrafficSyncJob) maybePushGlobals(mgr *runtime.Manager, nodes []*mod
 					logger.Debugf("node traffic sync: node %s has no global-traffic endpoint (old build)", n.Name)
 				} else {
 					logger.Warningf("node traffic sync: push globals to %s failed: %v", n.Name, err)
+				}
+				return
+			}
+			// The usage says how far along each ladder a client is; the ladder
+			// itself is the other half of what the node's own policy pass needs.
+			emails := make([]string, 0, len(traffics))
+			for _, t := range traffics {
+				emails = append(emails, t.Email)
+			}
+			assignments, err := j.policyService.AssignmentsFor(emails)
+			if err != nil {
+				logger.Warningf("node traffic sync: resolve plans for %s failed: %v", n.Name, err)
+				return
+			}
+			if err := remote.PushPlanAssignments(ctx, masterGuid, assignments); err != nil {
+				if strings.Contains(err.Error(), "HTTP 404") {
+					logger.Debugf("node traffic sync: node %s has no plan endpoint (old build)", n.Name)
+				} else {
+					logger.Warningf("node traffic sync: push plans to %s failed: %v", n.Name, err)
 				}
 			}
 		})

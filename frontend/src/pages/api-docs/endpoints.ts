@@ -1349,6 +1349,17 @@ export const sections: readonly Section[] = [
           'Put one client on a plan, or take them off it with policyId 0. Keyed by email, like the client’s quota, so the assignment survives a delete-and-resync that mints the client a new id.',
         body: '{\n  "email": "user1",\n  "policyId": 1\n}',
       },
+      {
+        method: 'POST',
+        path: '/panel/api/policies/pushAssignments',
+        summary: 'Receive a master panel\'s resolved speed ladder for each client this node serves, keyed by the master\'s GUID. Stored beside the client and evaluated by the node\'s own policy pass from the usage the same master pushes; a client of that master absent from the push loses its ladder. Called panel-to-panel by the node traffic sync job.',
+        params: [
+          { name: 'masterGuid', in: 'body (json)', type: 'string', desc: 'Stable GUID of the pushing master panel.' },
+          { name: 'assignments', in: 'body (json)', type: 'object[]', desc: 'One entry per client on a plan with a ladder: email and tiers.' },
+        ],
+        body: '{\n  "masterGuid": "9f6c2d-…",\n  "assignments": [\n    { "email": "alice", "tiers": [ { "fromBytes": 0, "upBps": 10000000, "downBps": 10000000 } ] }\n  ]\n}',
+        response: '{\n  "success": true\n}',
+      },
     ],
   },
 

@@ -58,6 +58,13 @@ _openapi:
         email, like the client’s quota, so the assignment survives a
         delete-and-resync that mints the client a new id.
       url: '#put-one-client-on-a-plan-or-take-them-off-it-with-policyid-0-keyed-by-email-like-the-clients-quota-so-the-assignment-survives-a-delete-and-resync-that-mints-the-client-a-new-id'
+    - depth: 2
+      title: Receive a master panel's resolved speed ladder for each client this node
+        serves, keyed by the master's GUID. Stored beside the client and
+        evaluated by the node's own policy pass from the usage the same master
+        pushes; a client of that master absent from the push loses its ladder.
+        Called panel-to-panel by the node traffic sync job.
+      url: '#receive-a-master-panels-resolved-speed-ladder-for-each-client-this-node-serves-keyed-by-the-masters-guid-stored-beside-the-client-and-evaluated-by-the-nodes-own-policy-pass-from-the-usage-the-same-master-pushes-a-client-of-that-master-absent-from-the-push-loses-its-ladder-called-panel-to-panel-by-the-node-traffic-sync-job'
   structuredData:
     headings:
       - content: List every plan in id order.
@@ -92,6 +99,12 @@ _openapi:
           email, like the client’s quota, so the assignment survives a
           delete-and-resync that mints the client a new id.
         id: put-one-client-on-a-plan-or-take-them-off-it-with-policyid-0-keyed-by-email-like-the-clients-quota-so-the-assignment-survives-a-delete-and-resync-that-mints-the-client-a-new-id
+      - content: Receive a master panel's resolved speed ladder for each client this
+          node serves, keyed by the master's GUID. Stored beside the client and
+          evaluated by the node's own policy pass from the usage the same master
+          pushes; a client of that master absent from the push loses its ladder.
+          Called panel-to-panel by the node traffic sync job.
+        id: receive-a-master-panels-resolved-speed-ladder-for-each-client-this-node-serves-keyed-by-the-masters-guid-stored-beside-the-client-and-evaluated-by-the-nodes-own-policy-pass-from-the-usage-the-same-master-pushes-a-client-of-that-master-absent-from-the-push-loses-its-ladder-called-panel-to-panel-by-the-node-traffic-sync-job
     contents: []
 ---
 
@@ -104,7 +117,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"},{"path":"/panel/api/policies/pushAssignments","method":"post"}]} showTitle />
     </>
   );
 }

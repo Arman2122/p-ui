@@ -301,6 +301,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "overrideLimitIp": false,
     "overrideQuota": false,
     "policyId": 1,
+    "resolvedTiers": "[{\"fromBytes\":0,\"upBps\":0,\"downBps\":0}]",
     "updatedAt": 1700000000000
   },
   "ClientRecord": {

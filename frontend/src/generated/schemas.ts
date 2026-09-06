@@ -1305,6 +1305,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "nullable": true,
         "type": "integer"
       },
+      "resolvedTiers": {
+        "description": "ResolvedTiers is the ladder as the master that owns this client evaluated\nit, pushed to a node; NULL wherever the plan itself lives (policy_id).",
+        "example": "[{\"fromBytes\":0,\"upBps\":0,\"downBps\":0}]",
+        "nullable": true,
+        "type": "string"
+      },
       "updatedAt": {
         "example": 1700000000000,
         "format": "int64",

@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/core"
@@ -148,10 +149,13 @@ func factsFor(db *gorm.DB, emails []string, plans map[int]policy.Plan) (map[stri
 			// Assigned is the joined row's own key, so a surviving assignment can be
 			// told from no assignment at all once the FK has nulled its plan.
 			Assigned *string
+			// Resolved is a ladder the master pushed to this node, evaluated as-is.
+			Resolved *string
 		}
 		err := db.Table("client_traffics").
 			Select("client_traffics.email AS email, "+used+" AS used_bytes, "+
-				"client_policies.policy_id AS policy_id, client_policies.email AS assigned", usedArgs...).
+				"client_policies.policy_id AS policy_id, client_policies.email AS assigned, "+
+				"client_policies.resolved_tiers AS resolved", usedArgs...).
 			Joins("LEFT JOIN client_policies ON client_policies.email = client_traffics.email").
 			Where("client_traffics.email IN ?", batch).
 			Scan(&rows).Error
@@ -164,6 +168,11 @@ func factsFor(db *gorm.DB, emails []string, plans map[int]policy.Plan) (map[stri
 			case row.PolicyId != nil:
 				plan, known := plans[*row.PolicyId]
 				facts.plan, facts.unresolved = plan, !known
+			case row.Resolved != nil:
+				// A node: the master that owns this client resolved the plan and
+				// pushed the ladder itself, so there is no id to look up here.
+				plan, err := ParsePlan(*row.Resolved)
+				facts.plan, facts.unresolved = plan, err != nil
 			case row.Assigned != nil:
 				// The row outlived its plan: the FK is ON DELETE SET NULL precisely so
 				// this stays visible, and reading it as "never assigned" throws that away.
@@ -1072,6 +1081,95 @@ func (s *PolicyService) Assign(email string, policyID int) error {
 		Columns:   []clause.Column{{Name: "email"}},
 		DoUpdates: clause.AssignmentColumns([]string{"policy_id", "updated_at"}),
 	}).Create(&row).Error
+}
+
+/*
+AssignmentsFor is the master's half of a plan on a node: each named client's
+ladder, resolved here where the plan lives. Plan ids stay home, since two
+masters pushing to one node would collide on them; a client on no plan, on a
+plan that is gone, or on one with no ladder is simply not listed, which is what
+tells the node to drop whatever it holds for them.
+*/
+func (s *PolicyService) AssignmentsFor(emails []string) ([]policy.Assignment, error) {
+	if len(emails) == 0 {
+		return nil, nil
+	}
+	db := database.GetDB()
+	plans, err := Plans(db)
+	if err != nil {
+		return nil, err
+	}
+	var out []policy.Assignment
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		var rows []model.ClientPolicy
+		if err := db.Where("email IN ? AND policy_id IS NOT NULL", batch).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			plan, known := plans[*row.PolicyId]
+			if !known || len(plan.Tiers) == 0 {
+				continue
+			}
+			out = append(out, policy.Assignment{Email: row.Email, Tiers: plan.Tiers})
+		}
+	}
+	slices.SortFunc(out, func(a, b policy.Assignment) int { return strings.Compare(a.Email, b.Email) })
+	return out, nil
+}
+
+/*
+AcceptAssignments is the node's half: a pushed ladder is stored beside the
+client, keyed by email like every assignment, and evaluated by the same pass
+from the usage the same master pushes. Only clients this node serves are kept.
+The master's clients are known from its usage pushes, so one of them absent
+from this push has left its plan and its ladder is dropped; another master's
+clients, and this panel's own assignments, are never touched.
+*/
+func (s *PolicyService) AcceptAssignments(masterGuid string, rows []policy.Assignment) error {
+	masterGuid = strings.TrimSpace(masterGuid)
+	if masterGuid == "" {
+		return nil
+	}
+	pushed := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.Email == "" {
+			continue
+		}
+		blob, err := json.Marshal(SortTiers(row.Tiers))
+		if err != nil {
+			return err
+		}
+		pushed[row.Email] = string(blob)
+	}
+	return database.GetDB().Transaction(func(tx *gorm.DB) error {
+		for _, batch := range chunkStrings(slices.Sorted(maps.Keys(pushed)), sqlInChunk) {
+			var known []string
+			if err := tx.Table("client_traffics").Where("email IN ?", batch).Pluck("email", &known).Error; err != nil {
+				return err
+			}
+			for _, email := range known {
+				tiers := pushed[email]
+				row := model.ClientPolicy{Email: email, ResolvedTiers: &tiers}
+				if err := tx.Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "email"}},
+					DoUpdates: clause.AssignmentColumns([]string{"policy_id", "resolved_tiers", "updated_at"}),
+				}).Create(&row).Error; err != nil {
+					return err
+				}
+			}
+		}
+		var owned []string
+		if err := tx.Model(&model.ClientGlobalTraffic{}).Where("master_guid = ?", masterGuid).Pluck("email", &owned).Error; err != nil {
+			return err
+		}
+		stale := slices.DeleteFunc(owned, func(email string) bool { _, kept := pushed[email]; return kept })
+		for _, batch := range chunkStrings(stale, sqlInChunk) {
+			if err := tx.Where("email IN ? AND resolved_tiers IS NOT NULL", batch).Delete(&model.ClientPolicy{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 /*

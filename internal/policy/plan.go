@@ -38,3 +38,10 @@ func Evaluate(p Plan, usedBytes int64) Limits {
 	}
 	return Limits{UpBps: best.UpBps, DownBps: best.DownBps}
 }
+
+// Assignment is one client's resolved ladder as a master pushes it to a node:
+// the tiers themselves, since plan ids are one panel's and collide across two.
+type Assignment struct {
+	Email string `json:"email"`
+	Tiers []Tier `json:"tiers"`
+}

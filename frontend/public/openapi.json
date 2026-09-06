@@ -1353,6 +1353,12 @@
             "nullable": true,
             "type": "integer"
           },
+          "resolvedTiers": {
+            "description": "ResolvedTiers is the ladder as the master that owns this client evaluated\nit, pushed to a node; NULL wherever the plan itself lives (policy_id).",
+            "example": "[{\"fromBytes\":0,\"upBps\":0,\"downBps\":0}]",
+            "nullable": true,
+            "type": "string"
+          },
           "updatedAt": {
             "example": 1700000000000,
             "format": "int64",
@@ -12147,6 +12153,64 @@
                     },
                     "obj": {}
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/policies/pushAssignments": {
+      "post": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Receive a master panel's resolved speed ladder for each client this node serves, keyed by the master's GUID. Stored beside the client and evaluated by the node's own policy pass from the usage the same master pushes; a client of that master absent from the push loses its ladder. Called panel-to-panel by the node traffic sync job.",
+        "operationId": "post_panel_api_policies_pushAssignments",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "masterGuid": "9f6c2d-…",
+                "assignments": [
+                  {
+                    "email": "alice",
+                    "tiers": [
+                      {
+                        "fromBytes": 0,
+                        "upBps": 10000000,
+                        "downBps": 10000000
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true
                 }
               }
             }

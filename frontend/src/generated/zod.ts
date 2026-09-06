@@ -324,6 +324,7 @@ export const ClientPolicySchema = z.object({
   overrideLimitIp: z.boolean(),
   overrideQuota: z.boolean(),
   policyId: z.number().int().nullable().optional(),
+  resolvedTiers: z.string().nullable().optional(),
   updatedAt: z.number().int(),
 });
 export type ClientPolicy = z.infer<typeof ClientPolicySchema>;

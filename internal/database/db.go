@@ -167,6 +167,9 @@ func initModels() error {
 	if err := migrateSyncOrphanColumns(); err != nil {
 		return err
 	}
+	if err := migrateResolvedTiersColumn(); err != nil {
+		return err
+	}
 	if err := migrateRoutingIntent(); err != nil {
 		return err
 	}
@@ -334,6 +337,15 @@ func migrateSyncOrphanColumns() error {
 		return nil
 	}
 	return db.Exec("UPDATE clients SET sync_orphaned_at = 0 WHERE sync_orphaned_at IS NULL").Error
+}
+
+// migrateResolvedTiersColumn adds the node-side ladder column on a database that
+// predates it. NULL is its meaning ("not pushed"), so nothing is backfilled.
+func migrateResolvedTiersColumn() error {
+	if db.Migrator().HasColumn(&model.ClientPolicy{}, "resolved_tiers") {
+		return nil
+	}
+	return db.Migrator().AddColumn(&model.ClientPolicy{}, "ResolvedTiers")
 }
 
 /*

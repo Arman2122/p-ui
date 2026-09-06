@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/policy"
 	"github.com/Arman2122/p-ui/internal/web/middleware"
 	"github.com/Arman2122/p-ui/internal/web/service"
 
@@ -36,6 +37,7 @@ func (a *PolicyController) initRouter(g *gin.RouterGroup) {
 	g.POST("/update/:id", a.update)
 	g.POST("/del/:id", a.del)
 	g.POST("/assign", a.assign)
+	g.POST("/pushAssignments", a.pushAssignments)
 }
 
 func (a *PolicyController) list(c *gin.Context) {
@@ -135,4 +137,22 @@ func (a *PolicyController) assign(c *gin.Context) {
 		return
 	}
 	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientUpdateSuccess"), nil)
+}
+
+// pushAssignments receives a master's resolved ladder for each client this node
+// serves (see PolicyService.AcceptAssignments for the storage semantics).
+func (a *PolicyController) pushAssignments(c *gin.Context) {
+	var req struct {
+		MasterGuid  string              `json:"masterGuid"`
+		Assignments []policy.Assignment `json:"assignments"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.policyService.AcceptAssignments(req.MasterGuid, req.Assignments); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonMsg(c, "success", nil)
 }

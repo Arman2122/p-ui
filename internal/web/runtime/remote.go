@@ -20,6 +20,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/policy"
 	"github.com/Arman2122/p-ui/internal/util/netsafe"
 	"github.com/Arman2122/p-ui/internal/util/wirecodec"
 	"github.com/Arman2122/p-ui/internal/web/entity"
@@ -864,6 +865,14 @@ func (r *Remote) FetchAllClientIps(ctx context.Context) ([]model.InboundClientIp
 		}
 	}
 	return ips, nil
+}
+
+// PushPlanAssignments follows the usage push with each client's resolved ladder,
+// so the node's own policy pass can shape them from the usage beside it.
+func (r *Remote) PushPlanAssignments(ctx context.Context, masterGuid string, rows []policy.Assignment) error {
+	payload := map[string]any{"masterGuid": masterGuid, "assignments": rows}
+	_, err := r.do(ctx, http.MethodPost, "panel/api/policies/pushAssignments", payload)
+	return err
 }
 
 func (r *Remote) PushAllClientIps(ctx context.Context, ips []model.InboundClientIps) error {

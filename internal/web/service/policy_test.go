@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"net/netip"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -722,6 +723,90 @@ func TestAnInProcessCoreIsHandedItsRatesAndReadsThemBack(t *testing.T) {
 	}
 	if got.RateEnforced || len(base.rates) != 0 {
 		t.Fatalf("a cleared plan still reads as enforced: %+v (the core holds %+v)", got, base.rates)
+	}
+}
+
+func wantsRates(t *testing.T, svc *PolicyService) map[string]shaping.Limits {
+	t.Helper()
+	wants, err := svc.ShapingWants(context.Background())
+	if err != nil {
+		t.Fatalf("ShapingWants: %v", err)
+	}
+	return shapedRates(t, wants)
+}
+
+func seedGlobalTraffic(t *testing.T, masterGuid string, emails ...string) {
+	t.Helper()
+	for _, email := range emails {
+		row := model.ClientGlobalTraffic{MasterGuid: masterGuid, Email: email, UpdatedAt: time.Now().UnixMilli()}
+		if err := database.GetDB().Create(&row).Error; err != nil {
+			t.Fatalf("seed global traffic for %s: %v", email, err)
+		}
+	}
+}
+
+/*
+TestPushedLaddersAreEvaluatedOnANode.
+
+A node never held a plan: the ladders and the assignments lived on the master,
+the usage the master pushed lay beside clients nobody evaluated, and the node's
+policy pass shaped nobody. A pushed ladder is evaluated like a local one; a
+client the master stops naming loses it; another master's client keeps hers;
+and a client this node does not serve is never given one.
+*/
+func TestPushedLaddersAreEvaluatedOnANode(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+	tunnelWithClients(t, "pwg7", "roamer", "local")
+	// A master's usage push is how a node knows which clients are that master's.
+	seedGlobalTraffic(t, "master-1", "roamer")
+	seedGlobalTraffic(t, "master-2", "local")
+	ladder := []policy.Tier{{UpBps: 1_000_000, DownBps: 2_000_000}}
+	if err := svc.AcceptAssignments("master-1", []policy.Assignment{{Email: "roamer", Tiers: ladder}, {Email: "stranger", Tiers: ladder}}); err != nil {
+		t.Fatalf("AcceptAssignments: %v", err)
+	}
+	if err := svc.AcceptAssignments("master-2", []policy.Assignment{{Email: "local", Tiers: ladder}}); err != nil {
+		t.Fatalf("AcceptAssignments (second master): %v", err)
+	}
+	want := shaping.Limits{UpBps: 1_000_000, DownBps: 2_000_000}
+	if rates := wantsRates(t, svc); rates["roamer"] != want || rates["local"] != want {
+		t.Fatalf("rates = %+v; want the pushed ladder on both clients", rates)
+	}
+	var strangers int64
+	if err := database.GetDB().Model(&model.ClientPolicy{}).Where("email = ?", "stranger").Count(&strangers).Error; err != nil || strangers != 0 {
+		t.Fatalf("a ladder was stored for a client this node does not serve (%d rows, %v)", strangers, err)
+	}
+
+	// A push that no longer names the client is the plan's removal — for that
+	// master's clients alone.
+	if err := svc.AcceptAssignments("master-1", nil); err != nil {
+		t.Fatalf("AcceptAssignments (empty): %v", err)
+	}
+	if rates := wantsRates(t, svc); rates["roamer"] != (shaping.Limits{}) || rates["local"] != want {
+		t.Fatalf("rates = %+v; want roamer released and local, another master's client, untouched", rates)
+	}
+}
+
+// The master pushes only what a node can evaluate: a resolved ladder. A client
+// on no plan, on a plan that is gone, or on one with no ladder is not listed.
+func TestTheMasterPushesOnlyResolvedLadders(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+	tunnelWithClients(t, "pwg7", "laddered", "flat", "orphan", "free")
+	seedPlan(t, "the ladder", theLadder, "laddered")
+	seedPlan(t, "quota only", []policy.Tier{}, "flat")
+	gone := seedPlan(t, "gone", theLadder, "orphan")
+	if err := database.GetDB().Delete(&model.Policy{}, gone).Error; err != nil {
+		t.Fatalf("delete the plan: %v", err)
+	}
+
+	got, err := svc.AssignmentsFor([]string{"laddered", "flat", "orphan", "free", "nobody"})
+	if err != nil {
+		t.Fatalf("AssignmentsFor: %v", err)
+	}
+	want := []policy.Assignment{{Email: "laddered", Tiers: theLadder}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("AssignmentsFor = %+v\nwant %+v", got, want)
 	}
 }
 

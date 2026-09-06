@@ -310,6 +310,7 @@ export interface ClientPolicy {
   overrideLimitIp: boolean;
   overrideQuota: boolean;
   policyId?: number | null;
+  resolvedTiers?: string | null;
   updatedAt: number;
 }
 

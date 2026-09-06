@@ -101,6 +101,9 @@ type ClientPolicy struct {
 	// Node convergence rides MarkNodeDirtyTx and the pending indicator that exists.
 	AppliedRev int   `json:"appliedRev" gorm:"column:applied_rev;not null;default:0" example:"3"`
 	UpdatedAt  int64 `json:"updatedAt" gorm:"autoUpdateTime:milli" example:"1700000000000"`
+	// ResolvedTiers is the ladder as the master that owns this client evaluated
+	// it, pushed to a node; NULL wherever the plan itself lives (policy_id).
+	ResolvedTiers *string `json:"resolvedTiers" gorm:"column:resolved_tiers;type:jsonb" example:"[{\"fromBytes\":0,\"upBps\":0,\"downBps\":0}]"`
 }
 
 func (ClientPolicy) TableName() string { return "client_policies" }
