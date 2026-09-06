@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,9 +64,8 @@ func render(now time.Time, live []Entry) string {
 		if secs < 1 {
 			secs = 1
 		}
-		source := e.Source.Unmap()
-		element := fmt.Sprintf("%s . %d timeout %ds", source, e.Port, secs)
-		if source.Is4() {
+		element := fmt.Sprintf("%s . %d timeout %ds", e.Source, e.Port, secs)
+		if e.Source.Is4() {
 			v4 = append(v4, element)
 		} else {
 			v6 = append(v6, element)
@@ -102,10 +102,13 @@ func teardown() string {
 	return "add table inet " + Table + "\ndelete table inet " + Table + "\n"
 }
 
+// liveSorted is the want as the kernel can hold it: sources bare of any zone,
+// one element per source and port carrying the latest deadline, nothing expired.
 func liveSorted(now time.Time, entries []Entry) []Entry {
 	live := make([]Entry, 0, len(entries))
 	for _, e := range entries {
 		if e.Source.IsValid() && e.Port != 0 && e.Until.After(now) {
+			e.Source = e.Source.Unmap().WithZone("")
 			live = append(live, e)
 		}
 	}
@@ -113,9 +116,12 @@ func liveSorted(now time.Time, entries []Entry) []Entry {
 		if live[i].Source != live[j].Source {
 			return live[i].Source.Less(live[j].Source)
 		}
-		return live[i].Port < live[j].Port
+		if live[i].Port != live[j].Port {
+			return live[i].Port < live[j].Port
+		}
+		return live[i].Until.After(live[j].Until)
 	})
-	return live
+	return slices.CompactFunc(live, func(a, b Entry) bool { return a.Source == b.Source && a.Port == b.Port })
 }
 
 // fingerprint is the want itself: sources, ports and deadlines. Not the rendered
@@ -123,7 +129,7 @@ func liveSorted(now time.Time, entries []Entry) []Entry {
 func fingerprint(live []Entry) string {
 	var b strings.Builder
 	for _, e := range live {
-		b.WriteString(e.Source.Unmap().String())
+		b.WriteString(e.Source.String())
 		b.WriteByte('|')
 		b.WriteString(strconv.Itoa(int(e.Port)))
 		b.WriteByte('@')

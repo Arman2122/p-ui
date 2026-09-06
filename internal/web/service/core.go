@@ -42,10 +42,11 @@ type CoreView struct {
 	/*
 		IpLimitEnforcement says, per kind, how a device over its cap is dealt with:
 		"login" — refused at the core's own login and cut, no firewall needed;
-		"cut" — cut by the core and banned by fail2ban, since it admits at no login;
-		"firewall" — fail2ban alone. A kind absent here cannot be capped at all.
-		The form gates the cap on this rather than on fail2ban alone: a cap on an
-		SSH client holds on a host with no fail2ban, and one on Xray does not.
+		"cut" — cut by the core and dropped on the panel's ban set, since it admits
+		at no login; "firewall" — the ban set alone. A kind absent here cannot be
+		capped at all. The form gates the cap on this rather than on the firewall
+		alone: a cap on an SSH client holds where the set cannot be written, and
+		one on Xray does not.
 	*/
 	IpLimitEnforcement map[string]string `json:"ipLimitEnforcement,omitempty" example:"{\"ssh\":\"login\",\"vless\":\"firewall\"}"`
 	// RateKinds are the kinds whose core throttles each client inside itself, so

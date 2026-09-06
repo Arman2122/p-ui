@@ -556,8 +556,8 @@ const admitLoginBudget = 2 * time.Second
 /*
 IPLimitVerdict is one client's answer for this pass. Over is every live address
 beyond the cap, for the record and the re-report memory; Cuts and Ban are how it
-is enforced — a cut through the core that saw the address, a fail2ban line where
-nothing local can cut it or a cut alone would flap.
+is enforced — a cut through the core that saw the address, a ban row for the
+firewall where nothing local can cut it or a cut alone would flap.
 */
 type IPLimitVerdict struct {
 	Email string
@@ -593,9 +593,9 @@ EvaluateIPLimits merges what the cores reported into the persisted rows, applies
 each client's cap, writes the result back, and decides how each over-cap address
 is enforced.
 
-Deciding is not acting: the cut and the fail2ban line are network and filesystem
-work, and running them inside this write transaction would hold its lock across a
-round trip. So the verdict names them and the caller carries them out.
+Deciding is not acting: the cut and the ban are network and firewall work, and
+running them inside this write transaction would hold its lock across a round
+trip. So the verdict names them and the caller carries them out.
 */
 func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, error) {
 	nowSeconds := time.Now().Unix()
@@ -732,10 +732,11 @@ admission the cut flaps every pass. A core that can do neither (xray, a kernel
 WireGuard peer whose removal zeroes its counters) leaves the firewall as the
 only actuator.
 
-An address a node observed is that node's to drop: on its ports for the client,
-pushed there by the sync, and only for kinds whose mode is not login, since a
-login core on the node refuses the device itself and counts the cluster through
-the union rows. It is never banned here, where its traffic never arrives.
+An address a node observed is that node's to drop, on the ports of every enabled
+inbound the client has there, pushed by the sync. A login core there cannot be
+left to its own admission: a device already in the union row is admitted back,
+and this host cannot cut on a node. It is never banned here, where its traffic
+never arrives.
 
 The cut is aimed at the inbound whose core saw the address: the runtime resolves
 the core from the inbound, and aiming by anything else cuts a compliant core
@@ -762,7 +763,7 @@ func (s *PolicyService) enforcementFor(hosted []*model.Inbound, scan SessionScan
 			if keys == nil {
 				keys = s.nodeKeysFor(hosted)
 			}
-			if target, ok := nodeBanFor(reg, hosted, keys, guid, o.IP); ok {
+			if target, ok := nodeBanFor(hosted, keys, guid, o.IP); ok {
 				nodeBans = append(nodeBans, target)
 			}
 		}
@@ -791,18 +792,12 @@ func (s *PolicyService) nodeKeysFor(hosted []*model.Inbound) map[int]string {
 }
 
 // nodeBanFor is the drop one node makes for a source it observed: the client's
-// enabled inbounds there whose kind is not enforced at login.
-func nodeBanFor(reg *core.Registry, hosted []*model.Inbound, keys map[int]string, guid, source string) (IPLimitNodeBan, bool) {
+// enabled inbounds there, whatever their kind, since only that node can act.
+func nodeBanFor(hosted []*model.Inbound, keys map[int]string, guid, source string) (IPLimitNodeBan, bool) {
 	target := IPLimitNodeBan{Source: source, Guid: guid}
 	for _, inbound := range hosted {
 		if inbound.NodeID == nil || !inbound.Enable || keys[*inbound.NodeID] != guid {
 			continue
-		}
-		kind := core.Kind(inbound.Protocol)
-		if reg != nil {
-			if bound, known := reg.For(kind); known && ipLimitEnforcementOf(bound, kind) == "login" {
-				continue
-			}
 		}
 		if inbound.Port <= 0 || inbound.Port > 65535 {
 			continue

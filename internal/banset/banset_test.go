@@ -155,3 +155,24 @@ func TestAFailedWriteIsRetriedNextPass(t *testing.T) {
 		t.Fatalf("the want was not written once the failure cleared (%d writes)", len(p.scripts))
 	}
 }
+
+// Two clients behind one address, both banned on one port, are one element to
+// the kernel, and it keeps the first deadline it reads (measured, nft 1.0.9).
+func TestOneElementPerSourceAndPortWithTheLatestDeadline(t *testing.T) {
+	got := Ruleset(t0, []Entry{
+		entry("1.2.3.4", 443, t0.Add(10*time.Minute)),
+		entry("1.2.3.4", 443, t0.Add(30*time.Minute)),
+	})
+	if strings.Count(got, "1.2.3.4 . 443") != 1 || !strings.Contains(got, "1.2.3.4 . 443 timeout 1800s") {
+		t.Fatalf("want one element carrying the later deadline:\n%s", got)
+	}
+}
+
+// A zone is a host-local detail nft does not read: rendered, it would have the
+// whole transaction rejected and every ban on the host gone with it.
+func TestAZonedSourceRendersWithoutItsZone(t *testing.T) {
+	got := Ruleset(t0, []Entry{entry("fe80::1%eth0", 443, t0.Add(time.Hour))})
+	if !strings.Contains(got, "fe80::1 . 443 timeout 3600s") || strings.Contains(got, "%eth0") {
+		t.Fatalf("a zoned source must render as its bare address:\n%s", got)
+	}
+}

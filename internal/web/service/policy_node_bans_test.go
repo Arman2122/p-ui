@@ -216,10 +216,9 @@ func TestAnOlderNodesDeviceKeepsItsArrival(t *testing.T) {
 	}
 }
 
-// A login core on a node refuses the extra device itself, counting the cluster
-// through the union rows; a firewall ban pushed for it would be the NAT
-// collateral the login shape exists to avoid.
-func TestALoginCoreOnANodeIsLeftToItsOwnAdmission(t *testing.T) {
+// A login core on a node cannot be left to its own admission: a device already
+// in the union row is admitted back, and this host cannot cut on a node.
+func TestALoginCoreOnANodeIsDroppedThereToo(t *testing.T) {
 	initTestDB(t)
 	svc := &PolicyService{}
 	installCores(t, newProxyCore(&declaredCore{id: "proxy", kind: "vless"}), newDaemonCore(&declaredCore{id: "sshd", kind: "ssh"}))
@@ -240,8 +239,9 @@ func TestALoginCoreOnANodeIsLeftToItsOwnAdmission(t *testing.T) {
 	if got := overAddresses(verdicts, "shell"); !slices.Equal(got, []string{"203.0.113.41"}) {
 		t.Fatalf("over %v, want the later arrival", got)
 	}
-	if len(verdict.NodeBans) != 0 || len(verdict.Ban) != 0 {
-		t.Fatalf("a login core's device was named for the firewall: node %+v, here %v", verdict.NodeBans, banAddresses(verdict))
+	want := []IPLimitNodeBan{{Source: "203.0.113.41", NodeID: node.Id, Guid: "node-shell", Ports: []uint16{45861}}}
+	if !reflect.DeepEqual(verdict.NodeBans, want) || len(verdict.Ban) != 0 {
+		t.Fatalf("node bans %+v (here %v), want %+v and nothing here", verdict.NodeBans, banAddresses(verdict), want)
 	}
 }
 

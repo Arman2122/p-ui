@@ -3,44 +3,52 @@ package arch
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
 
 /*
-The IP-limit menu must not damage configuration it does not own.
+The legacy-jail removal must not damage configuration it does not own.
 
-Two of p-ui.sh's fail2ban paths deleted other people's work. "Uninstall Fail2ban
-and IP Limit" ran `rm -rf /etc/fail2ban`, taking every jail, filter and .local
-override the operator wrote — while the option directly above it already removed
+Two of the old menu's fail2ban paths deleted other people's work. "Uninstall
+Fail2ban and IP Limit" ran `rm -rf /etc/fail2ban`, taking every jail, filter and
+.local override the operator wrote, while the option above it already removed
 p-ui's three files surgically. And iplimit_remove_conflicts deleted from
 [p-ui-ipl] to the first BLANK line, which an INI file whose next section follows
 immediately does not have, so a routine update ate [sshd] and [recidive].
 
-Shell has no other test leverage, and both failures are silent.
+The removal now lives in three scripts, so each copy is held to the same three
+files. Shell has no other test leverage, and both failures are silent.
 */
-func TestTheIpLimitMenuOnlyDeletesWhatPuiOwns(t *testing.T) {
-	text := readPuiScript(t)
-
-	remove := shellFunctionBody(t, text, "remove_iplimit")
-	// Matched as a command, not as a substring: the comment explaining why it
-	// is gone contains the same words.
-	for _, line := range strings.Split(remove, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "rm -rf /etc/fail2ban") {
-			t.Fatal("remove_iplimit still rm -rf's /etc/fail2ban: that is every jail, filter and .local override the operator owns, not p-ui's three files")
+func TestTheLegacyJailRemovalOnlyDeletesWhatPuiOwns(t *testing.T) {
+	own := []string{
+		"/etc/fail2ban/jail.d/p-ui-ipl.conf",
+		"/etc/fail2ban/filter.d/p-ui-ipl.conf",
+		"/etc/fail2ban/action.d/p-ui-ipl.conf",
+	}
+	touched := regexp.MustCompile(`/etc/fail2ban/[^\s;"']+`)
+	for _, script := range []string{"p-ui.sh", "install.sh", "update.sh"} {
+		body := shellFunctionBody(t, readShellScript(t, script), "remove_legacy_iplimit_jail")
+		for _, line := range strings.Split(body, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "rm -rf") {
+				t.Fatalf("%s: remove_legacy_iplimit_jail runs %q; the jail is three files, not a tree", script, strings.TrimSpace(line))
+			}
+		}
+		for _, path := range touched.FindAllString(body, -1) {
+			if !slices.Contains(own, path) {
+				t.Fatalf("%s: remove_legacy_iplimit_jail touches %s, which p-ui does not own", script, path)
+			}
+		}
+		for _, path := range own {
+			if !strings.Contains(body, path) {
+				t.Fatalf("%s: remove_legacy_iplimit_jail no longer names %s; the jail would be left half-installed", script, path)
+			}
 		}
 	}
-	for _, own := range []string{
-		"rm -f /etc/fail2ban/filter.d/p-ui-ipl.conf",
-		"rm -f /etc/fail2ban/action.d/p-ui-ipl.conf",
-		"rm -f /etc/fail2ban/jail.d/p-ui-ipl.conf",
-	} {
-		if strings.Count(remove, own) < 2 {
-			t.Fatalf("both remove_iplimit options must delete %q; the uninstall path relies on apt to clean the rest", own)
-		}
-	}
 
-	conflicts := shellFunctionBody(t, text, "iplimit_remove_conflicts")
+	conflicts := shellFunctionBody(t, readPuiScript(t), "iplimit_remove_conflicts")
 	if strings.Contains(conflicts, `,/^$/d`) {
 		t.Fatal("iplimit_remove_conflicts deletes from [p-ui-ipl] to the first blank line: with no blank line before the next section that runs to EOF and eats the operator's other jails")
 	}
@@ -102,9 +110,14 @@ func TestFail2banIsInstalledFromTheDistroOnly(t *testing.T) {
 
 func readPuiScript(t *testing.T) string {
 	t.Helper()
-	body, err := os.ReadFile(filepath.Join(repoRoot(t), "p-ui.sh"))
+	return readShellScript(t, "p-ui.sh")
+}
+
+func readShellScript(t *testing.T, name string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), name))
 	if err != nil {
-		t.Fatalf("read p-ui.sh: %v", err)
+		t.Fatalf("read %s: %v", name, err)
 	}
 	return string(body)
 }

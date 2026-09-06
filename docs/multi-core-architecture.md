@@ -509,7 +509,7 @@ OBSERVED it (`enforcementFor`), never by which inbound sorts first:
 | ssh, openvpn, ocserv | yes | yes | **cut only** — admission refuses the device's return; a firewall ban of a NATed address would take innocents with it |
 | sing-box (tuic, anytls) | no | yes | **cut and ban** — a cut alone flaps every pass |
 | xray, wgkernel, awgkernel | no | no | **ban only** — a `client_bans` row, projected onto the panel's own nft set on the inbound's ports (§12.5o) |
-| any core on a node | — | — | **decided here, dropped there** — the master evaluates the node's sightings and pushes the ban to the node that observed the device, for kinds whose mode is not login (§12.5o) |
+| any core on a node | — | — | **decided here, dropped there** — the master evaluates the node's sightings and pushes the ban to the node that observed the device, on every enabled inbound the client has there (§12.5o) |
 
 Cuts are by `(email, source)`, never by email alone, and by the id or address the daemon names the
 session with: SSH closes its own connections, OpenVPN reads `status 3` and kills `host:port`,
@@ -2839,9 +2839,9 @@ registry the sync's merge fills, so it is bounded by the cluster's online set ra
 reading every attribution row each tick — and a node's sightings enter as observations of
 their own with the arrival the node recorded, or the sighting itself when an older node
 recorded none, which is the start a held address always had. The verdict names, per over-cap
-source, the node that observed it and the client's enabled inbounds there, for kinds whose mode
-is not login: a login core on the node refuses the device itself, counting the cluster through
-the union rows. What this host files as its own sightings stays its own cores'. The node is
+source, the node that observed it and every enabled inbound the client has there, a login core's
+included: its admission lets a device already in the union row back in, and the master cannot
+cut on a node, so nobody else can act. What this host files as its own sightings stays its own cores'. The node is
 handed the whole set the master holds for it — every sync tick it is non-empty, once more when
 it empties — on `POST panel/api/policies/pushBans`; it holds exactly that set from that master,
 drops what the master no longer sends, leaves what it decided itself alone, and holds nothing
@@ -2871,7 +2871,13 @@ shortage and once without — a wait, not a limit. `d267427`: the protocol tab h
 every kind but three since `99bd0e0` read the absent `settingsTab` fact as false; seven
 component tests were red at HEAD and nobody had run the components project since. Run the whole
 `npm test`, not the unit project, after a form change. A whole-tree `go test ./...` on the VM
-needs `ulimit -n 65536`.
+needs `ulimit -n 65536`. The completion review found three more: the node push had exempted login
+kinds on the theory the node refuses the device itself — it does not, `Admit` lets a source already
+in the union row back in and the master cannot cut on a node, so a device on a node's SSH inbound
+over the cluster cap was left to nobody; a zoned IPv6 source (`fe80::1%eth0`) would have nft
+reject the whole table and every ban with it; and two clients banned on one address and port
+rendered the element twice, the first deadline winning (both measured on 1.0.9). The set now
+carries each source bare of its zone, once per port, with the latest deadline.
 
 **Still open.** A pushed row a node releases by hand comes back with the next push: release where
 it was decided. The master lists node bans; a node's own panel lists only its own. The 22.04
