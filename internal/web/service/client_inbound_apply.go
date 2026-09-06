@@ -396,10 +396,6 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 		return false, err
 	}
 
-	if oldInbound.Protocol == model.Shadowsocks {
-		applyShadowsocksClientMethod(interfaceClients, oldSettings)
-	}
-
 	oldClients, _ := oldSettings["clients"].([]any)
 	oldClients = compactOrphans(database.GetDB(), oldClients)
 	oldClients = append(oldClients, interfaceClients...)
@@ -667,9 +663,6 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			preservedSubID, _ = oldMap["subId"].(string)
 		}
 	}
-	if oldInbound.Protocol == model.Shadowsocks {
-		applyShadowsocksClientMethod(interfaceClients, oldSettings)
-	}
 	if len(interfaceClients) > 0 {
 		if newMap, ok := interfaceClients[0].(map[string]any); ok {
 			if preservedCreated == nil {
@@ -717,21 +710,21 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	settingsClients[clientIndex] = interfaceClients[0]
 	oldSettings["clients"] = settingsClients
 
-	if oldInbound.Protocol == model.VLESS {
-		hasVisionFlow := false
-		for _, c := range settingsClients {
-			cm, ok := c.(map[string]any)
-			if !ok {
-				continue
-			}
-			if flow, _ := cm["flow"].(string); flow == "xtls-rprx-vision" {
-				hasVisionFlow = true
-				break
-			}
+	// A testseed is meaningful only beside a Vision client, and no other kind's
+	// clients carry a flow, so no protocol test is needed to drop an orphan.
+	hasVisionFlow := false
+	for _, c := range settingsClients {
+		cm, ok := c.(map[string]any)
+		if !ok {
+			continue
 		}
-		if !hasVisionFlow {
-			delete(oldSettings, "testseed")
+		if flow, _ := cm["flow"].(string); flow == "xtls-rprx-vision" {
+			hasVisionFlow = true
+			break
 		}
+	}
+	if !hasVisionFlow {
+		delete(oldSettings, "testseed")
 	}
 
 	newSettings, err := json.MarshalIndent(oldSettings, "", "  ")

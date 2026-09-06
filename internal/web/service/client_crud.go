@@ -302,32 +302,6 @@ func normalizeShadowsocksClientKeys(settings string) (string, bool) {
 	return string(bs), true
 }
 
-func applyShadowsocksClientMethod(clients []any, settings map[string]any) {
-	method, _ := settings["method"].(string)
-	is2022 := strings.HasPrefix(method, "2022-blake3-")
-	for i := range clients {
-		cm, ok := clients[i].(map[string]any)
-		if !ok {
-			continue
-		}
-		if is2022 {
-			if _, hasKey := cm["method"]; hasKey {
-				delete(cm, "method")
-				clients[i] = cm
-			}
-			continue
-		}
-		if method == "" {
-			continue
-		}
-		if existing, _ := cm["method"].(string); existing != "" {
-			continue
-		}
-		cm["method"] = method
-		clients[i] = cm
-	}
-}
-
 func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model.Client, inboundFilter ...int) (bool, error) {
 	existing, err := s.GetByID(id)
 	if err != nil {

@@ -371,11 +371,11 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 			Port:              r.Port,
 			Enable:            r.Enable,
 			TlsFlowCapable:    inboundCanEnableTlsFlow(r.Protocol, r.StreamSettings, r.Settings),
-			SsMethod:          inboundShadowsocksMethod(r.Protocol, r.Settings),
+			SsMethod:          inboundCipherMethod(r.Settings),
 			WgPublicKey:       wgPublicKey,
 			WgMtu:             wgMtu,
 			WgDns:             wgDns,
-			MtprotoDomain:     inboundMtprotoDomain(r.Protocol, r.Settings),
+			MtprotoDomain:     inboundFakeTLSDomain(r.Settings),
 			NodeId:            r.NodeId,
 			NodeAddress:       r.NodeAddress,
 			Listen:            r.Listen,
@@ -412,11 +412,10 @@ func inboundWireguardHints(protocol string, settings string) (string, int, strin
 	return publicKey, parsed.MTU, parsed.DNS
 }
 
-// inboundMtprotoDomain returns the inbound-level FakeTLS default domain, used by
-// the clients UI to seed a new mtproto client's secret with the right fronting
-// hostname.
-func inboundMtprotoDomain(protocol string, settings string) string {
-	if protocol != string(model.MTProto) || strings.TrimSpace(settings) == "" {
+// inboundFakeTLSDomain reads settings.fakeTlsDomain, which the clients UI uses
+// to seed a new mtproto client's secret with the right fronting hostname.
+func inboundFakeTLSDomain(settings string) string {
+	if strings.TrimSpace(settings) == "" {
 		return ""
 	}
 	var parsed struct {

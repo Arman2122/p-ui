@@ -66,9 +66,6 @@ func stripVisionFlowForIneligibleInbound(settings, streamSettings string, protoc
 // never overwrites an explicit non-empty flow. Returns the rewritten settings
 // JSON and whether anything changed.
 func (s *InboundService) restoreVisionFlowForEligibleInbound(tx *gorm.DB, settings, streamSettings string, protocol model.Protocol) (string, bool) {
-	if protocol != model.VLESS {
-		return settings, false
-	}
 	if !inboundCanEnableTlsFlow(string(protocol), streamSettings, settings) {
 		return settings, false
 	}

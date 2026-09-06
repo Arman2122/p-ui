@@ -8,11 +8,10 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
-// inboundShadowsocksMethod extracts settings.method for Shadowsocks inbounds so
-// the client UI can generate a valid PSK (base64 of the method's key length)
-// for Shadowsocks 2022 ciphers. Returns "" for non-Shadowsocks inbounds.
-func inboundShadowsocksMethod(protocol, settings string) string {
-	if protocol != string(model.Shadowsocks) || settings == "" {
+// inboundCipherMethod reads settings.method, which the client UI needs to mint
+// a PSK of the right length for a Shadowsocks 2022 cipher; "" when there is none.
+func inboundCipherMethod(settings string) string {
+	if settings == "" {
 		return ""
 	}
 	var s struct {
