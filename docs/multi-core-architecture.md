@@ -2729,7 +2729,7 @@ needs the user's fork; the `AdmitLogin` log storm from §12.5k is still owed a r
 
 Phase 4 of the 2026-09-03 order (§12.5a): an inbound's settings and a client's creation,
 edit and deletion take one path for every core, so the next core adds itself without
-touching either. Seven commits, each VM-verified, every behavioural test red-proven against
+touching either. Eight commits, each VM-verified, every behavioural test red-proven against
 the commit before it.
 
 **The runtime renders every core's inbound (`f18f18b`).** `runtime.Local` rendered an inbound
@@ -2748,6 +2748,14 @@ row and reached the daemon only at its next reconcile, and a traffic reset never
 daemon's own counter. `inbound_mtproto.go` is gone; `resetCoreQuotas` and
 `resetCoreQuotasForAll` ask each `QuotaEnforcer` for the clients it serves and converge
 nothing (F217 holds by construction); F218's by-name re-push is `BulkSetEnable`'s job.
+
+**One push per edit (`d28b870`).** Review of the commit above found what its tests could
+not: the generic remove-then-add is two pushes of the whole secret set on a whole-set core,
+and the first — made from the reloaded row that already holds the edit — pushes the set
+without the client, which such a core reads as a revocation. `Local.UpdateUser` hands a
+whole-set core one op, the add while the client stays enabled or the removal when the edit
+disables it, and the edit site calls it as its node branch already did.
+`TestAnEditOnAWholeSetCoreIsOnePush` counts the calls: one add, no removal.
 
 **The minter and the edit-time validation (`0500df7`).** `normalizeMtprotoSecret` is the
 mtproto core's `MintInstance` (the engine's `NormalizeInboundSettings`), called from the
