@@ -1960,6 +1960,33 @@ it holds.
      box's connection count.
    MTProto is the same decision in miniature and needs the fork either way: stamp a
    mark per secret, or throttle per secret behind `[secret-limits]`.
+   **Measured 2026-09-06 on the VM (kernel 6.8, Xray 26.7.28), no repo changes:**
+   - *The chain shapes real traffic, both directions.* A VLESS inbound with two users, the
+     shaped one routed by a `user` rule to a freedom outbound with `sockopt.mark` 0x400;
+     on the egress veth a clsact hook with `fw handle 0x400/0xfc00` redirecting to an IFB
+     HTB class at 2 Mbit for upload, and for download an nft `ct mark set meta mark &
+     0xfc00` in an output chain plus `matchall action connmark continue` and the same
+     `fw` filter on ingress redirecting to a second IFB. 2 MiB through it: **8.91 s down,
+     8.73 s up** (8.4 s theoretical); the unshaped user's **11 ms and 6 ms**. The socket
+     showed `fwmark:0x400`, the routing log the detour, and every filter and the nft rule
+     counted packets. One trap found on the way: freedom blocks private targets by default
+     for VLESS/VMess/Trojan/Shadowsocks/Hysteria/WireGuard inbounds unless a `finalRules`
+     allow precedes it — a routed exit on a private address needs that rule.
+   - *The rule multiplication is cheap.* 20,000 `user` rules over 5,000 marked freedom
+     outbounds (a 2.9 MB config) against a baseline of one rule: start-to-first-request
+     **0.68 s vs 0.10 s**, RSS **47 MiB vs 31 MiB**, a replace-all routing apply (the
+     panel's `ApplyRoutingConfig`) **0.47 s vs 0.05 s**, and the time to first byte for a
+     user no rule names — who scans all 20,000 — **3.8 ms vs 2.2 ms mean** (p95 7.9 vs
+     3.3 ms); a user matched by the first or the last rule is the same 3.6 ms.
+   - *Conntrack is already a fact on every panel host.* The panel's own `p-ui-nat`
+     masquerade table loads `nf_conntrack` regardless of which inbounds exist: the
+     production Xray box holds 360 entries against a 262,144 maximum (the VM 344 against
+     65,536; the default scales with RAM). The hazard is table sizing on a busy box, which
+     the panel would state and raise the way it raises the QUIC buffers.
+   With those numbers the kernel path's remaining costs are the ones already listed —
+   the masked egress rule, the hooks on a device the panel does not own, the outbound
+   multiplication, sing-box's capability, daemon exits outside it — and none is a
+   performance argument. The recommendation stands: path 1, inside the panel.
 
 ---
 
