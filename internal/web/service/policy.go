@@ -561,9 +561,13 @@ nothing local can cut it or a cut alone would flap.
 */
 type IPLimitVerdict struct {
 	Email string
+	Keep  []policy.Observation
 	Over  []policy.Observation
 	Cuts  []IPLimitCut
 	Ban   []policy.Observation
+	// BanPorts is where a ban lands on this host: every enabled local inbound
+	// the client is on. Empty, the client is served elsewhere and nothing is banned here.
+	BanPorts []uint16
 }
 
 // IPLimitCut is one over-cap source to end on the inbound whose core observed it.
@@ -675,10 +679,12 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 		// re-report memory forgets a client only through a verdict naming it (F307).
 		cuts, ban := s.enforcementFor(hosted, scan, email, verdict.Over)
 		verdicts = append(verdicts, IPLimitVerdict{
-			Email: email,
-			Over:  verdict.Over,
-			Cuts:  cuts,
-			Ban:   ban,
+			Email:    email,
+			Keep:     verdict.Keep,
+			Over:     verdict.Over,
+			Cuts:     cuts,
+			Ban:      ban,
+			BanPorts: localBanPorts(hosted),
 		})
 	}
 

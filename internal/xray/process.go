@@ -56,11 +56,6 @@ func GetGeoipPath() string {
 	return config.GetBinFolderPath() + "/geoip.dat"
 }
 
-// GetIPLimitLogPath returns the path to the IP limit log file.
-func GetIPLimitLogPath() string {
-	return config.GetLogFolder() + "/pui-ipl.log"
-}
-
 // GetIPLimitBannedLogPath returns the path to the banned IP log file.
 func GetIPLimitBannedLogPath() string {
 	return config.GetLogFolder() + "/pui-ipl-banned.log"

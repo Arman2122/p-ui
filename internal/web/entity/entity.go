@@ -138,6 +138,11 @@ type AllSetting struct {
 	LdapDefaultExpiryDays  int    `json:"ldapDefaultExpiryDays" form:"ldapDefaultExpiryDays" validate:"gte=0"`
 	LdapDefaultLimitIP     int    `json:"ldapDefaultLimitIP" form:"ldapDefaultLimitIP" validate:"gte=0"`
 
+	// Zero and "" are what a form that predates these posts; the service reads
+	// them as the defaults rather than refusing every settings save.
+	IpLimitBanMinutes          int    `json:"ipLimitBanMinutes" form:"ipLimitBanMinutes" validate:"gte=0"`
+	IpLimitSharedAddressAction string `json:"ipLimitSharedAddressAction" form:"ipLimitSharedAddressAction" validate:"omitempty,oneof=ban skip"`
+
 	WarpUpdateInterval int `json:"warpUpdateInterval" form:"warpUpdateInterval" validate:"gte=0"`
 }
 

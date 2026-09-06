@@ -79,6 +79,7 @@ func allModels() []any {
 		&model.ClientPolicy{},
 		&model.PolicyInbound{},
 		&model.RoutingRule{},
+		&model.ClientBan{},
 	}
 }
 

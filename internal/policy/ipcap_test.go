@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"maps"
 	"reflect"
 	"testing"
 )
@@ -242,67 +241,5 @@ func TestAdmitLetsAKnownDeviceBackAndANewOneIntoAFreeSlot(t *testing.T) {
 				t.Fatalf("Admit(%v, %q, %d) = %v, want %v", tt.held, tt.source, tt.limit, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestAdvancedSinceReportsAFrozenConnectionOnlyOnce(t *testing.T) {
-	const email = "a@example.test"
-	over := []Observation{obs("10.0.0.1", nowMilli)}
-
-	actionable, seen := AdvancedSince(email, over, nil)
-	assertObs(t, "first report", actionable, over)
-
-	actionable, seen = AdvancedSince(email, over, seen)
-	assertObs(t, "frozen rescan", actionable, nil)
-
-	reconnected := []Observation{obs("10.0.0.1", nowMilli+minuteMs)}
-	actionable, seen = AdvancedSince(email, reconnected, seen)
-	assertObs(t, "reconnect", actionable, reconnected)
-
-	actionable, seen = AdvancedSince(email, nil, seen)
-	assertObs(t, "no longer over the cap", actionable, nil)
-
-	// Pruned above, so the pair is actionable again even at its original —
-	// now older — timestamp.
-	actionable, _ = AdvancedSince(email, over, seen)
-	assertObs(t, "over again after clearing", actionable, over)
-}
-
-func TestAdvancedSinceIsScopedPerEmail(t *testing.T) {
-	t.Run("two emails over on one address are each actionable", func(t *testing.T) {
-		over := []Observation{obs("10.0.0.1", nowMilli)}
-		first, seen := AdvancedSince("a@example.test", over, nil)
-		second, _ := AdvancedSince("b@example.test", over, seen)
-		assertObs(t, "a@example.test", first, over)
-		assertObs(t, "b@example.test", second, over)
-	})
-
-	t.Run("clearing one email does not forget another's pair", func(t *testing.T) {
-		aOver := []Observation{obs("10.0.0.1", nowMilli)}
-		_, seen := AdvancedSince("a@example.test", aOver, nil)
-		_, seen = AdvancedSince("b@example.test", []Observation{obs("10.0.0.2", nowMilli)}, seen)
-		_, seen = AdvancedSince("b@example.test", nil, seen)
-
-		again, _ := AdvancedSince("a@example.test", aOver, seen)
-		assertObs(t, "a@example.test rescan", again, nil)
-	})
-}
-
-func TestAdvancedSinceDoesNotMutateTheCallersMap(t *testing.T) {
-	const email = "a@example.test"
-	_, seen := AdvancedSince(email, []Observation{obs("10.0.0.1", nowMilli)}, nil)
-	before := maps.Clone(seen)
-
-	_, _ = AdvancedSince(email, []Observation{obs("10.0.0.1", nowMilli+minuteMs)}, seen)
-	_, _ = AdvancedSince(email, nil, seen)
-
-	if !reflect.DeepEqual(seen, before) {
-		t.Fatalf("AdvancedSince mutated the map it was handed: %v, want %v", seen, before)
-	}
-}
-
-func TestAdvancedSinceNeverReturnsANilMap(t *testing.T) {
-	if _, next := AdvancedSince("a@example.test", nil, nil); next == nil {
-		t.Fatal("next map is nil; the caller has nothing to carry into the next pass")
 	}
 }

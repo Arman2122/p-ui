@@ -2,7 +2,6 @@ package policy
 
 import (
 	"sort"
-	"strings"
 )
 
 /*
@@ -155,35 +154,4 @@ func Admit(held []string, source string, limit int) bool {
 		distinct[h] = struct{}{}
 	}
 	return len(distinct) < limit
-}
-
-// AdvancedSince keeps only over-cap pairs whose lastSeen advanced since their last
-// report: a frozen value is a connection the daemon has not reaped, not a reconnect.
-func AdvancedSince(email string, over []Observation, seen map[string]int64) (actionable []Observation, next map[string]int64) {
-	prefix := email + "|"
-	current := make(map[string]struct{}, len(over))
-	for _, o := range over {
-		current[prefix+o.IP] = struct{}{}
-	}
-
-	// Copy rather than mutate, dropping this email's pairs that are no longer
-	// over so the caller's map cannot grow without bound.
-	next = make(map[string]int64, len(seen)+len(over))
-	for key, ts := range seen {
-		if _, still := current[key]; !still && strings.HasPrefix(key, prefix) {
-			continue
-		}
-		next[key] = ts
-	}
-
-	actionable = make([]Observation, 0, len(over))
-	for _, o := range over {
-		key := prefix + o.IP
-		if last, ok := next[key]; ok && o.LastSeenUnixMilli <= last {
-			continue
-		}
-		next[key] = o.LastSeenUnixMilli
-		actionable = append(actionable, o)
-	}
-	return actionable, next
 }

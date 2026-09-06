@@ -152,6 +152,11 @@ var defaultValueMap = map[string]string{
 	"ldapDefaultExpiryDays":  "0",
 	"ldapDefaultLimitIP":     "0",
 
+	// The device cap's ban: how long a device over it is dropped, and whether
+	// a source another client under its cap holds is dropped too.
+	"ipLimitBanMinutes":          "30",
+	"ipLimitSharedAddressAction": "ban",
+
 	// Event bus — per-subscriber event filtering (empty = all disabled)
 	"tgEnabledEvents":   "login.attempt,cpu.high",
 	"smtpEnabledEvents": "login.attempt,cpu.high",
@@ -1101,6 +1106,30 @@ func (s *SettingService) GetLdapDefaultExpiryDays() (int, error) {
 
 func (s *SettingService) GetLdapDefaultLimitIP() (int, error) {
 	return s.getInt("ldapDefaultLimitIP")
+}
+
+// GetIpLimitBanMinutes is never zero: a form that predates the setting posts
+// zero, and a ban of no minutes would be either forever or never.
+func (s *SettingService) GetIpLimitBanMinutes() (int, error) {
+	minutes, err := s.getInt("ipLimitBanMinutes")
+	if err != nil {
+		return 0, err
+	}
+	if minutes <= 0 {
+		return IPLimitBanMinutesDefault, nil
+	}
+	return minutes, nil
+}
+
+func (s *SettingService) GetIpLimitSharedAddressAction() (string, error) {
+	action, err := s.getString("ipLimitSharedAddressAction")
+	if err != nil {
+		return "", err
+	}
+	if action == "" {
+		return SharedAddressBan, nil
+	}
+	return action, nil
 }
 
 // Event bus — per-subscriber event filtering

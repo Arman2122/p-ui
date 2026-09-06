@@ -3,16 +3,14 @@ package service
 import "testing"
 
 /*
-The re-ban memory forgets a client only through a verdict that names it.
+A verdict for every client the pass saw, an empty one included.
 
-reportOverLimit runs AdvancedSince once per verdict, and AdvancedSince is what
-drops an email's remembered (email|ip) pairs. EvaluateIPLimits `continue`d
-without a verdict for a client with no cap and for a client with no inbound, so
-a client whose limit was removed, and a client who was deleted, stayed in the
-job's memory for the life of the process. F307.
-
-An empty verdict is the fix: nothing to ban, nothing to bounce, and the caller
-now sees the email and lets its pairs go.
+EvaluateIPLimits `continue`d without a verdict for a client with no cap and for
+a client with no inbound, so the caller never learned those clients had been
+evaluated: the re-ban memory of the day kept their pairs for the life of the
+process (F307), and a caller keying anything on "was this client decided" would
+miss them the same way. An empty verdict is the record that there was nothing
+to ban and nothing to bounce.
 */
 func TestAClientNoLongerCappedStillGetsAVerdict(t *testing.T) {
 	initTestDB(t)

@@ -15,6 +15,18 @@ export const SCHEMAS: Record<string, unknown> = {
       "externalTrafficInformURI": {
         "type": "string"
       },
+      "ipLimitBanMinutes": {
+        "description": "Zero and \"\" are what a form that predates these posts; the service reads\nthem as the defaults rather than refusing every settings save.",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "ipLimitSharedAddressAction": {
+        "enum": [
+          "ban",
+          "skip"
+        ],
+        "type": "string"
+      },
       "ldapAutoCreate": {
         "type": "boolean"
       },
@@ -364,6 +376,8 @@ export const SCHEMAS: Record<string, unknown> = {
       "expireDiff",
       "externalTrafficInformEnable",
       "externalTrafficInformURI",
+      "ipLimitBanMinutes",
+      "ipLimitSharedAddressAction",
       "ldapAutoCreate",
       "ldapAutoDelete",
       "ldapBaseDN",
@@ -504,6 +518,18 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "hasWarpSecret": {
         "type": "boolean"
+      },
+      "ipLimitBanMinutes": {
+        "description": "Zero and \"\" are what a form that predates these posts; the service reads\nthem as the defaults rather than refusing every settings save.",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "ipLimitSharedAddressAction": {
+        "enum": [
+          "ban",
+          "skip"
+        ],
+        "type": "string"
       },
       "ldapAutoCreate": {
         "type": "boolean"
@@ -861,6 +887,8 @@ export const SCHEMAS: Record<string, unknown> = {
       "hasTgBotToken",
       "hasTwoFactorToken",
       "hasWarpSecret",
+      "ipLimitBanMinutes",
+      "ipLimitSharedAddressAction",
       "ldapAutoCreate",
       "ldapAutoDelete",
       "ldapBaseDN",

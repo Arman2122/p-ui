@@ -47,7 +47,7 @@ func ensureFileExists(path string) error {
 
 // Here Run is an interface method of the Job interface
 func (j *ClearLogsJob) Run() {
-	logFiles := []string{xray.GetIPLimitLogPath(), xray.GetIPLimitBannedLogPath()}
+	logFiles := []string{xray.GetIPLimitBannedLogPath()}
 	logFilesPrev := []string{xray.GetIPLimitBannedPrevLogPath()}
 
 	// Ensure all log files and their paths exist

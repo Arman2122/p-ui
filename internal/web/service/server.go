@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/banset"
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -143,10 +144,6 @@ type ServerService struct {
 
 	lastStatusMu sync.RWMutex
 	lastStatus   *Status
-
-	fail2banMu        sync.Mutex
-	fail2banInstalled bool
-	fail2banCheckedAt time.Time
 }
 
 // allowedHistoryBuckets is the bucket-second whitelist for time-series
@@ -180,110 +177,52 @@ func (s *ServerService) LastStatus() *Status {
 	return s.lastStatus
 }
 
-// Fail2banStatus tells the frontend whether the per-client IP limit can
-// actually be enforced. Enforcement depends on fail2ban, so a limit set
-// without it would silently do nothing.
+/*
+Fail2banStatus tells the frontend whether a device over its cap can be dropped
+on this host. The names are the jail's until the endpoint is renamed: Installed
+is nft on the host, JailActive is whether the panel's own ban table can be
+written, and Usable is that with banning turned on.
+*/
 type Fail2banStatus struct {
-	Enabled   bool `json:"enabled" example:"true"`
-	Installed bool `json:"installed" example:"true"`
-	// JailActive is the one that decides whether a ban lands. Installed only
-	// means the client binary answered; the panel's own menu can delete the jail.
+	Enabled    bool `json:"enabled" example:"true"`
+	Installed  bool `json:"installed" example:"true"`
 	JailActive bool `json:"jailActive" example:"true"`
 	Usable     bool `json:"usable" example:"true"`
 }
 
-const fail2banInstalledCacheTTL = 30 * time.Second
+const ipLimitProbeCacheTTL = 30 * time.Second
 
-func (s *ServerService) GetFail2banStatus() Fail2banStatus {
-	enabled := isFail2banEnabled()
-
-	installed := false
-	jailActive := false
-	if enabled {
-		installed = s.isFail2banInstalled()
-		jailActive = installed && Fail2banJailIsRunning()
-	}
-
-	return Fail2banStatus{
-		Enabled:    enabled,
-		Installed:  installed,
-		JailActive: jailActive,
-		Usable:     enabled && installed && jailActive,
-	}
-}
-
-func isFail2banEnabled() bool {
-	value, ok := os.LookupEnv("PUI_ENABLE_FAIL2BAN")
-	return !ok || value == "true"
-}
-
-func (s *ServerService) isFail2banInstalled() bool {
-	s.fail2banMu.Lock()
-	defer s.fail2banMu.Unlock()
-
-	if !s.fail2banCheckedAt.IsZero() && time.Since(s.fail2banCheckedAt) < fail2banInstalledCacheTTL {
-		return s.fail2banInstalled
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), fail2banProbeTimeout)
-	defer cancel()
-	err := exec.CommandContext(ctx, "fail2ban-client", "-h").Run()
-	s.fail2banInstalled = err == nil
-	s.fail2banCheckedAt = time.Now()
-	return s.fail2banInstalled
-}
-
-// ipLimitJailName is the jail p-ui.sh installs. The probe below asks the daemon
-// about this jail, not about the client binary.
-const ipLimitJailName = "p-ui-ipl"
-
-/*
-fail2banProbeTimeout bounds every call that reaches fail2ban's socket.
-
-This probe runs inside enforceIPLimits, which runs inside a cron chain built
-with SkipIfStillRunning and a DiscardLogger, so one hung call would discard
-every later tick with nothing written anywhere. The previous code passed
-context.Background() and had no bound at all.
-*/
-const fail2banProbeTimeout = 5 * time.Second
-
-var jailProbe struct {
+var banProbe struct {
 	mu        sync.Mutex
-	running   bool
+	err       error
 	checkedAt time.Time
 }
 
-/*
-Fail2banJailIsRunning asks the daemon whether p-ui's jail is loaded.
-
-`fail2ban-client -h` proves only that a Python binary is on PATH — the client's
-own argparse answers it with the daemon stopped, and with p-ui's three jail
-files deleted, which the panel's own menu offers to do. The UI then showed the
-cap enabled and the job logged addresses over their cap while not one packet
-was dropped. This asks the question that decides whether a ban lands.
-*/
-func Fail2banJailIsRunning() bool {
-	jailProbe.mu.Lock()
-	defer jailProbe.mu.Unlock()
-
-	if !jailProbe.checkedAt.IsZero() && time.Since(jailProbe.checkedAt) < fail2banInstalledCacheTTL {
-		return jailProbe.running
+// IPLimitBansEnforceable asks the firewall whether this panel can write it,
+// memoised: the answer is an nft run, and the form asks on every open.
+func IPLimitBansEnforceable() error {
+	banProbe.mu.Lock()
+	defer banProbe.mu.Unlock()
+	if !banProbe.checkedAt.IsZero() && time.Since(banProbe.checkedAt) < ipLimitProbeCacheTTL {
+		return banProbe.err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), fail2banProbeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	jailProbe.running = exec.CommandContext(ctx, "fail2ban-client", "status", ipLimitJailName).Run() == nil
-	jailProbe.checkedAt = time.Now()
-	return jailProbe.running
+	banProbe.err = bansManager.Probe(ctx)
+	banProbe.checkedAt = time.Now()
+	return banProbe.err
 }
 
-// ResetFail2banJailProbeCache drops the memoised answer. Tests only: the cache
-// is process-wide, so a stale entry would leak across cases.
-func ResetFail2banJailProbeCache() {
-	jailProbe.mu.Lock()
-	defer jailProbe.mu.Unlock()
-	jailProbe.checkedAt = time.Time{}
-	jailProbe.running = false
+func (s *ServerService) GetFail2banStatus() Fail2banStatus {
+	enabled := config.IPLimitBansEnabled()
+	err := IPLimitBansEnforceable()
+	installed := !errors.Is(err, banset.ErrNoNft) && !errors.Is(err, banset.ErrPlatformUnsupported)
+	return Fail2banStatus{
+		Enabled:    enabled,
+		Installed:  installed,
+		JailActive: err == nil,
+		Usable:     enabled && err == nil,
+	}
 }
 
 // RefreshStatus collects a new system snapshot, stores it as LastStatus, and

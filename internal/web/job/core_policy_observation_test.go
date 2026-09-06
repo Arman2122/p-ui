@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/netip"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/Arman2122/p-ui/internal/policy"
 	"github.com/Arman2122/p-ui/internal/web/runtime"
 	"github.com/Arman2122/p-ui/internal/web/service"
-	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 // sessionFakeCore is fakeCore that also reports who is connected, which is the
@@ -74,8 +72,9 @@ enforcement is asking for.
 */
 func TestObservationSurvivesTheEnforcementToggle(t *testing.T) {
 	initTestDB(t)
-	t.Setenv("PUI_ENABLE_FAIL2BAN", "false")
+	t.Setenv("PUI_IP_LIMIT_BANS", "false")
 	t.Setenv("PUI_LOG_FOLDER", t.TempDir())
+	installBanPlane(t)
 
 	at := time.Now().Add(-5 * time.Minute)
 	seen := &sessionFakeCore{
@@ -114,38 +113,42 @@ func containsAddress(blob, address string) bool {
 }
 
 /*
-The [LIMIT_IP] line is the jail's input, and the jail does not read the toggle.
-
-Making the verdict independent of the actuator means the pass now has bans to
-report on a host that is set not to ban — and the installer leaves a jail
-watching that file whether or not PUI_ENABLE_FAIL2BAN is still true. Writing the
-line anyway would start banning addresses on exactly the panels whose operator
-turned banning off.
+The verdict is made whether or not this host bans; the ban is what the toggle
+gates. Off, no row is recorded and the firewall is handed nothing, so a host
+set not to ban drops nobody, under the toggle's new name and under the one it
+had while fail2ban banned.
 */
-func TestTheJailsInputIsWrittenOnlyWhereBanningIsOn(t *testing.T) {
+func TestNoBanIsRecordedWhereBanningIsOff(t *testing.T) {
 	over := []service.IPLimitVerdict{{
-		Email: "capped",
-		Ban:   []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
+		Email:    "capped",
+		Ban:      []policy.Observation{{IP: "10.0.0.9", LastSeenUnixMilli: 1786398189000}},
+		BanPorts: []uint16{443},
 	}}
-
-	t.Run("enforcement off", func(t *testing.T) {
+	for _, name := range []string{"PUI_IP_LIMIT_BANS", "PUI_ENABLE_FAIL2BAN"} {
+		t.Run(name+"=false", func(t *testing.T) {
+			initTestDB(t)
+			t.Setenv("PUI_LOG_FOLDER", t.TempDir())
+			t.Setenv(name, "false")
+			plane := installBanPlane(t)
+			NewCorePolicyJob().reportOverLimit(context.Background(), over, time.Now())
+			if rows := activeBans(t); len(rows) != 0 {
+				t.Fatalf("%d ban(s) recorded on a host set not to ban", len(rows))
+			}
+			if last := plane.last(); strings.Contains(last, "elements") {
+				t.Fatalf("the firewall was handed a ban on a host set not to ban:\n%s", last)
+			}
+		})
+	}
+	t.Run("banning on", func(t *testing.T) {
+		initTestDB(t)
 		t.Setenv("PUI_LOG_FOLDER", t.TempDir())
-		NewCorePolicyJob().reportOverLimit(context.Background(), over, false)
-		if lines := banLines(t); len(lines) != 0 {
-			t.Fatalf("%d line(s) written to the jail's input on a host set not to ban:\n%s",
-				len(lines), strings.Join(lines, "\n"))
+		plane := installBanPlane(t)
+		NewCorePolicyJob().reportOverLimit(context.Background(), over, time.Now())
+		if rows := activeBans(t); len(rows) != 1 {
+			t.Fatalf("%d ban(s), want the one: the toggle decides whether the ban lands, not whether the verdict exists", len(rows))
 		}
-		if _, err := os.Stat(xray.GetIPLimitLogPath()); !os.IsNotExist(err) {
-			t.Fatalf("the jail's input file was created on a host that never enforces, stat error: %v", err)
-		}
-	})
-
-	t.Run("enforcement on", func(t *testing.T) {
-		t.Setenv("PUI_LOG_FOLDER", t.TempDir())
-		NewCorePolicyJob().reportOverLimit(context.Background(), over, true)
-		if lines := banLines(t); len(lines) != 1 {
-			t.Fatalf("%d line(s), want the one ban: the gate must control where the line goes, not whether it exists",
-				len(lines))
+		if last := plane.last(); !strings.Contains(last, "10.0.0.9 . 443") {
+			t.Fatalf("the ban was recorded and not handed to the firewall:\n%s", last)
 		}
 	})
 }

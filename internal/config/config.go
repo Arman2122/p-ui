@@ -110,6 +110,17 @@ func IsSkipHSTS() bool {
 	return os.Getenv("PUI_SKIP_HSTS") == "true"
 }
 
+// IPLimitBansEnabled is whether a device over its cap is dropped on this host's
+// firewall. PUI_ENABLE_FAIL2BAN is honoured as the name it had while fail2ban banned.
+func IPLimitBansEnabled() bool {
+	for _, name := range []string{"PUI_IP_LIMIT_BANS", "PUI_ENABLE_FAIL2BAN"} {
+		if value, ok := os.LookupEnv(name); ok {
+			return value == "true"
+		}
+	}
+	return true
+}
+
 func GetPortOverride() (port int, configured bool, err error) {
 	value, ok := os.LookupEnv("PUI_PORT")
 	if !ok || strings.TrimSpace(value) == "" {
