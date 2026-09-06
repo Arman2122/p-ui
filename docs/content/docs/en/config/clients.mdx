@@ -17,7 +17,7 @@ inbounds** at once, with per-client traffic accounting.
 | **Password**   | Trojan, Shadowsocks   | The client credential.                                             |
 | **Auth**       | Hysteria2             | The client credential.                                             |
 | **Flow**       | VLESS                 | XTLS flow, e.g. `xtls-rprx-vision`.                                |
-| **Limit IP**   | all                   | Max simultaneous source IPs (enforced via Fail2ban).               |
+| **Limit IP**   | all                   | Max simultaneous source IPs (refused at login, cut, or dropped on the panel's firewall). |
 | **Total (GB)** | all                   | Traffic quota; the client is disabled when exhausted.              |
 | **Expiry**     | all                   | Date after which the client stops working.                        |
 | **Reset**      | all                   | Auto-renew **after expiry**: days to extend by. Needs an Expiry.   |
@@ -41,7 +41,7 @@ inbounds** at once, with per-client traffic accounting.
   renews**, because there is no deadline to move. Exhausting the traffic quota
   does not trigger it either; only the expiry date does. The field is labelled
   "Auto Renew (days)" in the panel.
-- **Limit IP** caps simultaneous source IPs. Enforcement relies on Fail2ban —
+- **Limit IP** caps simultaneous source IPs. Enforcement is the core's own login refusal or the panel's firewall table —
   see [Security](/docs/operations/security). You can view a client's recent IPs
   and clear them from the client's actions.
 - **Online status** and **last-online** times are tracked per client (and per

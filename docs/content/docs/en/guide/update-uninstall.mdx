@@ -35,7 +35,7 @@ The menu (items `0`–`28`) shows the panel/Xray status at the top, then:
 | 18–19 | Enable / Disable Autostart             | Toggle start-on-boot                                      |
 | 20    | SSL Certificate Management             | Let's Encrypt (domain or IP), custom paths, renew/revoke  |
 | 21    | Cloudflare SSL Certificate             | DNS-01 wildcard cert via Cloudflare                       |
-| 22    | IP Limit Management                    | Fail2ban-based per-client IP limits                       |
+| 22    | Device cap (IP limit) bans             | List, ban and release addresses; retire the legacy jail   |
 | 23    | Firewall Management                    | `ufw` install and port rules                              |
 | 24    | SSH Port Forwarding Management         | Bind the panel to localhost and tunnel over SSH           |
 | 25    | PostgreSQL Management                  | Install, inspect and control the PostgreSQL server        |
@@ -62,7 +62,8 @@ For scripts and quick actions, `p-ui` also takes a subcommand directly:
 | `p-ui setting -<flag> …`   | Repair one setting from the shell: `-port`, `-username`, `-password`, `-webBasePath`, `-listenIP`, `-webDomain`, `-sessionMaxAge`, `-trustedProxyCIDRs`, `-subListen`, `-subPort`, `-resetTwoFactor` (pass `-` to clear a string) |
 | `p-ui enable` / `disable`  | Toggle autostart on boot                            |
 | `p-ui log`                 | Tail the debug log                                  |
-| `p-ui banlog`              | Show Fail2ban ban log                               |
+| `p-ui banlog`              | Device-cap bans and their log                       |
+| `p-ui ban`                 | List, add (`-add`) or release (`-release`, `-release-all`) bans |
 | `p-ui update`              | Update to the latest stable release                 |
 | `p-ui update-dev`          | Update to the rolling `dev-latest` build            |
 | `p-ui legacy`              | Install a specific older version (prompts)          |

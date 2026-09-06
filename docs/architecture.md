@@ -381,7 +381,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay) |
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation; push global usage and each client's resolved speed ladder to nodes |
-| `@every 10s` | `core_policy` | Converge shaping and in-core rates; observe every core's sessions, decide each client's IP cap, cut the over-cap device through the core that saw it or write the fail2ban line (`internal/web/job/core_policy.go`) |
+| `@every 10s` | `core_policy` | Converge shaping and in-core rates; observe every core's sessions and every node's reported sightings, decide each client's IP cap, cut the over-cap device through the core that saw it or record a `client_bans` row, converge the panel's own nft ban set on the rows, and publish `client.device_limit` (`internal/web/job/core_policy.go`) |
 | `@every 10s` | `core_supervise` | Read every registered core's health, publishing `core.crash` once per outage and `core.up` on recovery, then reconcile it on its desired inbounds — a unit the backend reports down is started again (Xray excepted — the panel's own config build converges it; `internal/web/job/core_supervise.go`, `core_health.go`) |
 | `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
@@ -468,6 +468,7 @@ for AutoMigrate in `internal/database/db.go`.
 | `ClientGlobalTraffic` | Cross-master usage totals | `MasterGuid`, `Email`, `Up`, `Down` |
 | `xray.ClientTraffic` | Per-client counters (`client_traffics`) | `Email`, `Up`, `Down`, `Total`, `ExpiryTime`, `LastOnline` |
 | `InboundClientIps` | IP set per client email | drives IP-limit enforcement |
+| `ClientBan` | one banned (client, source) per host with ports and deadline | the re-ban memory and the source of the nft ban set (`internal/banset/`) |
 | `OutboundTraffics` | Outbound counters | per outbound tag |
 | `OutboundSubscription` | External provider subs | Warp/Nord style |
 | `Setting` | Key/value panel settings | everything configurable |
@@ -481,6 +482,9 @@ for AutoMigrate in `internal/database/db.go`.
 
 | Symptom / task | Primary file(s) | Then check |
 |---|---|---|
+| A device over its IP limit is not dropped, or dropped on the wrong port | `internal/web/service/policy_bans.go` (`RecordBans`, `ConvergeBans`), `internal/banset/` | `nft list table inet p-ui-ipl`; `internal/web/job/core_policy.go` (`reportOverLimit`); `PUI_IP_LIMIT_BANS` |
+| A ban for a client on a node never lands, or the cap ignores the node's devices | `internal/web/service/policy.go` (`EvaluateIPLimits`, `nodeObservations`, `enforcementFor`) | `policy_bans.go` (`BansForNode`, `AcceptBans`); `internal/web/job/node_traffic_sync_job.go` (`pushBans`) |
+| An operator or client was not told about a cut or a ban | `internal/web/job/core_policy.go` (`publishDeviceLimit`) | the `client.device_limit` toggle; `tgbot/tgbot_event.go`, `email/subscriber.go` |
 | Add/modify an **API endpoint** | `controller/<resource>.go` (route registration at top of each file) | corresponding `service/*.go`, `frontend/src/pages/api-docs/endpoints.ts` |
 | **Inbound** create/update/delete behavior | `service/inbound.go`, `service/inbound_clients.go` | `runtime/*`, `service/xray.go` |
 | **Client** CRUD / limits / expiry | `service/client_crud.go`, `service/client_inbound_apply.go` | model `ClientRecord`, `service/inbound_traffic.go` |

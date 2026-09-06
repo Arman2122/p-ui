@@ -491,7 +491,8 @@ never disagree about who holds a slot. Arrival is `Observation.FirstSeenUnixMill
 ledger, sing-box) and stamped at first sighting otherwise, and persisted (`firstSeen`) so it
 survives a restart and a node sync. An address is live if a local core reported it this pass or
 another node reported it inside the live window (the attribution rows, not the union blob — only
-they say WHICH panel saw it); a persisted address no local core reported has ended, whatever its
+they say WHICH panel saw it — read as observations of their own, with the arrival the node
+recorded, §12.5o); a persisted address no local core reported has ended, whatever its
 timestamp, so a phone that changed networks keeps its one slot.
 
 A core never counts sources itself. The three cores that admit at a login ask the panel through
@@ -507,21 +508,23 @@ OBSERVED it (`enforcementFor`), never by which inbound sorts first:
 |---|---|---|---|
 | ssh, openvpn, ocserv | yes | yes | **cut only** — admission refuses the device's return; a firewall ban of a NATed address would take innocents with it |
 | sing-box (tuic, anytls) | no | yes | **cut and ban** — a cut alone flaps every pass |
-| xray, wgkernel, any node-hosted inbound | no | no (or unreachable) | **ban only** — the fail2ban line is the whole enforcement |
+| xray, wgkernel, awgkernel | no | no | **ban only** — a `client_bans` row, projected onto the panel's own nft set on the inbound's ports (§12.5o) |
+| any core on a node | — | — | **decided here, dropped there** — the master evaluates the node's sightings and pushes the ban to the node that observed the device, for kinds whose mode is not login (§12.5o) |
 
 Cuts are by `(email, source)`, never by email alone, and by the id or address the daemon names the
 session with: SSH closes its own connections, OpenVPN reads `status 3` and kills `host:port`,
 OpenConnect reads `occtl -j show users` and disconnects by id, sing-box calls `CloseConnection`.
 They go through `runtime.Runtime.CutSessions` (a no-op on a node), run every pass, and are
-idempotent — a straggler already connected when a cap is lowered is dropped on a host with no
-fail2ban at all. Only the ban line waits on fail2ban and only it is deduped by `AdvancedSince`.
+idempotent — a straggler already connected when a cap is lowered is dropped on a host whose
+firewall cannot be written at all. Only the ban waits on the firewall, and its row is its own
+memory: a pair already held is not written again (§12.5o).
 `EvaluateIPLimits` no longer takes the actuator's availability: deciding is not acting, and the
 job weighs what the host has when it acts. The bounce (`RemoveUser` + `AddUser`) is gone —
 measured against Xray it closed nothing, on the daemon cores it threw every device of the client
 off to catch one — and `CounterLossDeclarer` stays as the record of why a rule is never enforced
 by removing a user. `CoreView.ipLimitEnforcement` carries the same choice per kind so the client
-form opens the cap field for a kind enforced at login on a host without fail2ban and names the
-kinds the firewall would have to cover.
+form opens the cap field for a kind enforced at login on a host whose firewall cannot be written
+and names the kinds the firewall would have to cover.
 
 ### 4.4 Why RADIUS is an adapter, not the architecture
 
@@ -2787,3 +2790,91 @@ address-conflict checks and ocserv's pool check, both "address pool overlap" beh
 predicate, one registry-driven check once a declaration exists for it; and the update and
 enable paths still pre-hydrate the row the runtime now renders itself — harmless twice over,
 and a small removal once the runtime's render has been in production a while.
+
+### 12.5o The device cap's actuator is the panel's own (2026-09-07)
+
+Phase 5 of the 2026-09-03 order, taken after the user ruled out an Xray fork and skipped
+per-user speed on Xray and sing-box for now: the IP limit's ban, rebuilt to the standard the
+rest of the cap already met. Seven commits and two fixes found on the way, each VM-verified,
+every behavioural test red-proven against a deliberate break.
+
+**What was true before.** A device over its cap on a core that could not cut it was banned by
+fail2ban: a `[LIMIT_IP]` line the pass wrote, a regex a jail matched, and an iptables rule that
+dropped the address on every port of the host but SSH and the panel's — behind one NAT, the
+whole server taken from everyone sharing the abuser's address. The line was written on the host
+the pass ran on, so a ban for a node-hosted inbound landed on the master's firewall, which the
+node's traffic never crosses; and two verified facts made the cross-node cap dead in both
+directions: `EvaluateIPLimits` evaluated only the clients its own cores reported, so a client
+served by nodes alone got no verdict at all, and `merge` gave an address held elsewhere a start
+equal to its last sighting, so it yielded to any locally recorded arrival — on both hosts alike,
+so pushing the attribution down could never have enforced it. The feature hung on a daemon, a
+jail file and a filter outside the panel, which the client form probed before it offered the field.
+
+**The mechanism (`e466530`).** `internal/banset`: the panel's own nft table `inet p-ui-ipl`,
+sets `v4`/`v6` of `addr . inet_service` with `flags timeout`, a drop on the input hook at
+priority -1, the whole table deleted and redefined in ONE `nft -f` transaction (no `destroy`,
+numeric priority, no interval flag — 22.04's nft 1.0.2 is relied on from documentation; the VM's
+1.0.9 on 6.8 measured). The manager is level-triggered: fingerprint over (addr, port, until),
+never the script whose timeouts count down; expired entries pruned BEFORE the render, since one
+zero timeout has nft reject the transaction and every ban with it; a failed write retried next
+pass. Conntrack is not touched: measured, a drop in any base chain is terminal for every packet
+of a flow already open, so the connection the device holds stops answering at the ban. The
+mechanism fence that kept shaping ignorant now covers it, and a core may import neither.
+
+**The rows and the pass (`90b3485`).** `client_bans` holds one row per (client, source, host)
+with the ports it covers and its deadline — the re-ban memory `AdvancedSince` used to be, and
+the source the set is projected from every tick: `RecordBans` writes a row for every over-cap
+source the firewall is named for, covering every enabled local inbound the client is on (banned
+on one port, the device hops to the other), and leaves an existing row alone; `ConvergeBans`
+prunes, projects, and with banning off releases every row and the table with it. The duration
+and the shared-address choice are settings that read zero and empty as their defaults, because
+a form that predates them posts exactly that. `PUI_IP_LIMIT_BANS` gates the ban with the old
+name still read; the jail's input, its format and the probe went with their four tests, and the
+panel writes the banned log itself. A shared address the operator chose not to ban is a row
+too, with no port to drop on, so it is reported once and a ban of the pair replaces the report.
+
+**Decided here, dropped there (`adf6618`).** The pass covers every client a local core saw and
+every client some node reported inside the live window — the key comes from an in-memory
+registry the sync's merge fills, so it is bounded by the cluster's online set rather than by
+reading every attribution row each tick — and a node's sightings enter as observations of
+their own with the arrival the node recorded, or the sighting itself when an older node
+recorded none, which is the start a held address always had. The verdict names, per over-cap
+source, the node that observed it and the client's enabled inbounds there, for kinds whose mode
+is not login: a login core on the node refuses the device itself, counting the cluster through
+the union rows. What this host files as its own sightings stays its own cores'. The node is
+handed the whole set the master holds for it — every sync tick it is non-empty, once more when
+it empties — on `POST panel/api/policies/pushBans`; it holds exactly that set from that master,
+drops what the master no longer sends, leaves what it decided itself alone, and holds nothing
+while banning is off there. Its own pass stays local-only, which under-enforces and never
+over-enforces. The Postgres scale test after this: 100k clients with 1000 observed, 685 ms a
+pass, 0.8 ms per client.
+
+**The event and the panel (`1878744`).** `client.device_limit` is one event per act — a cut that
+ended something, a ban recorded, a shared address reported — never one per pass, since the row's
+existence is what makes it fire once; the Telegram and email notifiers render it under a Clients
+toggle, and the bot tells the client with a Telegram id what happened to their connection and
+until when. `GET server/ipLimitStatus` replaces the fail2ban status with an honest shape
+(enabled, enforceable, reason); `policies/bans` lists every ban the panel decided with the
+node's name, and release, release-all and ban-by-hand sit beside it. Settings gained a Device
+cap tab (duration, shared-address choice, the bans table, a ban by hand); the client's address
+log shows that client's own bans. The reason column is a status dot with plain text: a coloured
+tag's preset palette fails the Storybook contrast rule, the lesson of `6df3555` again.
+
+**The shell (`0b98a2e`).** `p-ui ban` lists, adds and releases through the same service, so the
+firewall is converged on the way out; menu 22 is built on it; the installer and updater retire
+the jail an earlier release made and leave fail2ban itself alone; `p-ui setup-fail2ban` still
+answers older installers and retires the jail.
+
+**Found beside it.** `5916859`: the SSH cut test read the session list the instant the second
+handshake returned and lost that race under a whole-tree run, twice, once beside a descriptor
+shortage and once without — a wait, not a limit. `d267427`: the protocol tab had been gone for
+every kind but three since `99bd0e0` read the absent `settingsTab` fact as false; seven
+component tests were red at HEAD and nobody had run the components project since. Run the whole
+`npm test`, not the unit project, after a form change. A whole-tree `go test ./...` on the VM
+needs `ulimit -n 65536`.
+
+**Still open.** A pushed row a node releases by hand comes back with the next push: release where
+it was decided. The master lists node bans; a node's own panel lists only its own. The 22.04
+gate for the concatenated timeout set is documentation, not a measurement. A shared address
+offers ban or report, not a shorter ban. MTProto is the user's fork's to do, both the speed cap
+and the device cap.

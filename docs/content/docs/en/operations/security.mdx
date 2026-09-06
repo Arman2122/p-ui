@@ -17,29 +17,47 @@ A proxy panel is a high-value target. A few layers of hardening go a long way.
 
 See [First login](/docs/guide/first-login) for the full checklist.
 
-## Fail2ban & IP limits
+## IP limits (device cap)
 
 Set an **IP limit** per client (see [Clients](/docs/config/clients)) to cap the
-number of simultaneous source IPs. Enforcement is handled by **Fail2ban**, which
-Penhoon UI installs and configures for you (enabled by default; toggle it with
-`PUI_ENABLE_FAIL2BAN`).
+number of simultaneous source addresses. How a device over the cap is dealt with
+depends on the core serving the inbound:
 
-Manage it from the `p-ui` menu (**22 — IP Limit Management**): install/configure,
-change the ban duration (default **30 minutes**), ban/unban an IP, view ban logs,
-and check status. Under the hood:
+- **SSH, OpenVPN, OpenConnect** refuse the extra device at their own login and cut
+  one already connected. No firewall is involved.
+- **sing-box** (TUIC, AnyTLS) cuts the connection and the panel drops the address.
+- **Xray** (VLESS, VMess, Trojan, Shadowsocks, Hysteria, WireGuard) and **kernel
+  WireGuard** cannot end one session, so the panel drops the address.
 
-- The jail is named **`p-ui-ipl`**; ban logs live at `/var/log/p-ui/pui-ipl.log` and
-  `/var/log/p-ui/pui-ipl-banned.log` (also via `p-ui banlog`).
-- Bans cover all TCP/UDP **except** your SSH and panel ports, so a ban can't lock
-  you out of the server or panel.
+A drop is a row in the panel's database projected onto the panel's **own
+nftables table** (`inet p-ui-ipl`): the address is dropped only on the ports of
+the inbounds the client is on, never on the whole host, for the **ban duration**
+setting (30 minutes by default). The kernel releases it on time even if the
+panel is down. A client served by a node is decided on the master, from what the
+node reported, and the ban is pushed to that node.
+
+Manage it under **Settings → Device cap** (duration, what to do with an address
+another client under its own cap shares, the list of active bans with release),
+from the client's address log, or from the shell:
+
+```bash
+p-ui ban                                  # list active bans
+p-ui ban -add 203.0.113.7 -minutes 60     # ban an address on every inbound
+p-ui ban -release 203.0.113.7             # release it
+p-ui banlog                               # bans and the ban log
+```
+
+Set `PUI_IP_LIMIT_BANS=false` to record bans without dropping anything (the old
+name `PUI_ENABLE_FAIL2BAN` is still read). Enable the **Clients → device limit**
+notification to be told of every cut and ban; a client with a Telegram id is told
+too.
 
 <Callout type="warn">
-  **Upgrading an older script install?** The jail used to be called `3x-ipl` and is
-  not renamed for you. Remove the stale one first — delete `3x-ipl.conf` from
-  `/etc/fail2ban/jail.d/`, `/etc/fail2ban/filter.d/` and `/etc/fail2ban/action.d/` —
-  then recreate the jail from the `p-ui` menu (**22 — IP Limit Management**) and
-  restart Fail2ban. Left in place, the old jail keeps tailing `3xipl.log`, which
-  nothing writes to any more.
+  **Upgrading from a release that used Fail2ban?** The installer and updater
+  remove the `p-ui-ipl` jail (its files under `/etc/fail2ban/jail.d/`,
+  `filter.d/` and `action.d/`) so it stops banning every port beside the
+  panel's own table; `p-ui` menu **22** has the same entry. Fail2ban itself is
+  left installed for anything else you use it for.
 </Callout>
 
 ## Firewall

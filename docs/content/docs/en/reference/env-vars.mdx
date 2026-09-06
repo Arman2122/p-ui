@@ -27,7 +27,7 @@ exits at startup instead of falling back to anything — see
 | ------------------------ | ------- | ------------------------------------------------------------------------ |
 | `PUI_PORT`               | —       | Override the panel port (1–65535). Takes precedence over the stored setting. |
 | `PUI_INIT_WEB_BASE_PATH` | `/`     | Initial web base path on **first** launch (e.g. `/panel`).               |
-| `PUI_ENABLE_FAIL2BAN`    | `true`  | Enable Fail2ban-based IP-limit enforcement.                              |
+| `PUI_IP_LIMIT_BANS`      | `true`  | Drop a device over its IP limit on the panel's own nftables ban set, on its inbound's ports. `PUI_ENABLE_FAIL2BAN` is still read as the old name. |
 | `PUI_SKIP_HSTS`          | `false` | Skip the HSTS header — set `true` when TLS is terminated by a reverse proxy. |
 | `PUI_SUPERVISOR`         | `auto`  | How core daemons are run: `systemd` (transient units that outlive the panel, as the `p-ui-core` user), `exec` (children of the panel), or `auto` (systemd when the panel runs under it). |
 

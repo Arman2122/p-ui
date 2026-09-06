@@ -65,6 +65,33 @@ _openapi:
         pushes; a client of that master absent from the push loses its ladder.
         Called panel-to-panel by the node traffic sync job.
       url: '#receive-a-master-panels-resolved-speed-ladder-for-each-client-this-node-serves-keyed-by-the-masters-guid-stored-beside-the-client-and-evaluated-by-the-nodes-own-policy-pass-from-the-usage-the-same-master-pushes-a-client-of-that-master-absent-from-the-push-loses-its-ladder-called-panel-to-panel-by-the-node-traffic-sync-job'
+    - depth: 2
+      title: Receive every device-cap ban a master panel holds for this node, the
+        whole set each push, keyed by the master's GUID. The node then holds
+        exactly that set from that master and drops any it no longer sends; bans
+        this node decided itself are never touched, and nothing is held while
+        banning is off here. Node-only, over mTLS.
+      url: '#receive-every-device-cap-ban-a-master-panel-holds-for-this-node-the-whole-set-each-push-keyed-by-the-masters-guid-the-node-then-holds-exactly-that-set-from-that-master-and-drops-any-it-no-longer-sends-bans-this-node-decided-itself-are-never-touched-and-nothing-is-held-while-banning-is-off-here-node-only-over-mtls'
+    - depth: 2
+      title: 'List every device-cap ban this panel decided: held on this host, or held
+        for one of its nodes (node names the node). A row whose reason is
+        "shared-skipped" is a report, not a ban: the source is shared with
+        another client under its cap and the operator chose not to drop it. Rows
+        lapse at until.'
+      url: '#list-every-device-cap-ban-this-panel-decided-held-on-this-host-or-held-for-one-of-its-nodes-node-names-the-node-a-row-whose-reason-is-shared-skipped-is-a-report-not-a-ban-the-source-is-shared-with-another-client-under-its-cap-and-the-operator-chose-not-to-drop-it-rows-lapse-at-until'
+    - depth: 2
+      title: 'Release one (client, source) wherever this panel banned it: on this host
+        at once, on a node with the next sync push. Answers how many rows were
+        released.'
+      url: '#release-one-client-source-wherever-this-panel-banned-it-on-this-host-at-once-on-a-node-with-the-next-sync-push-answers-how-many-rows-were-released'
+    - depth: 2
+      title: Release every ban this panel decided, now.
+      url: '#release-every-ban-this-panel-decided-now'
+    - depth: 2
+      title: "Ban an address by hand: dropped on every local inbound port, resolved
+        each pass so an inbound added later is inside it, for the given minutes
+        or the operator's default ban duration."
+      url: '#ban-an-address-by-hand-dropped-on-every-local-inbound-port-resolved-each-pass-so-an-inbound-added-later-is-inside-it-for-the-given-minutes-or-the-operators-default-ban-duration'
   structuredData:
     headings:
       - content: List every plan in id order.
@@ -105,6 +132,28 @@ _openapi:
           pushes; a client of that master absent from the push loses its ladder.
           Called panel-to-panel by the node traffic sync job.
         id: receive-a-master-panels-resolved-speed-ladder-for-each-client-this-node-serves-keyed-by-the-masters-guid-stored-beside-the-client-and-evaluated-by-the-nodes-own-policy-pass-from-the-usage-the-same-master-pushes-a-client-of-that-master-absent-from-the-push-loses-its-ladder-called-panel-to-panel-by-the-node-traffic-sync-job
+      - content: Receive every device-cap ban a master panel holds for this node, the
+          whole set each push, keyed by the master's GUID. The node then holds
+          exactly that set from that master and drops any it no longer sends;
+          bans this node decided itself are never touched, and nothing is held
+          while banning is off here. Node-only, over mTLS.
+        id: receive-every-device-cap-ban-a-master-panel-holds-for-this-node-the-whole-set-each-push-keyed-by-the-masters-guid-the-node-then-holds-exactly-that-set-from-that-master-and-drops-any-it-no-longer-sends-bans-this-node-decided-itself-are-never-touched-and-nothing-is-held-while-banning-is-off-here-node-only-over-mtls
+      - content: 'List every device-cap ban this panel decided: held on this host, or
+          held for one of its nodes (node names the node). A row whose reason is
+          "shared-skipped" is a report, not a ban: the source is shared with
+          another client under its cap and the operator chose not to drop it.
+          Rows lapse at until.'
+        id: list-every-device-cap-ban-this-panel-decided-held-on-this-host-or-held-for-one-of-its-nodes-node-names-the-node-a-row-whose-reason-is-shared-skipped-is-a-report-not-a-ban-the-source-is-shared-with-another-client-under-its-cap-and-the-operator-chose-not-to-drop-it-rows-lapse-at-until
+      - content: 'Release one (client, source) wherever this panel banned it: on this
+          host at once, on a node with the next sync push. Answers how many rows
+          were released.'
+        id: release-one-client-source-wherever-this-panel-banned-it-on-this-host-at-once-on-a-node-with-the-next-sync-push-answers-how-many-rows-were-released
+      - content: Release every ban this panel decided, now.
+        id: release-every-ban-this-panel-decided-now
+      - content: "Ban an address by hand: dropped on every local inbound port, resolved
+          each pass so an inbound added later is inside it, for the given
+          minutes or the operator's default ban duration."
+        id: ban-an-address-by-hand-dropped-on-every-local-inbound-port-resolved-each-pass-so-an-inbound-added-later-is-inside-it-for-the-given-minutes-or-the-operators-default-ban-duration
     contents: []
 ---
 
@@ -117,7 +166,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"},{"path":"/panel/api/policies/pushAssignments","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"},{"path":"/panel/api/policies/pushAssignments","method":"post"},{"path":"/panel/api/policies/pushBans","method":"post"},{"path":"/panel/api/policies/bans","method":"get"},{"path":"/panel/api/policies/bans/release","method":"post"},{"path":"/panel/api/policies/bans/releaseAll","method":"post"},{"path":"/panel/api/policies/bans/add","method":"post"}]} showTitle />
     </>
   );
 }
