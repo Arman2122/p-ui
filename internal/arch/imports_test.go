@@ -160,6 +160,7 @@ func TestCoresDoNotImportPolicy(t *testing.T) {
 	forbidden := []string{
 		modulePrefix + "/internal/policy",
 		modulePrefix + "/internal/shaping",
+		modulePrefix + "/internal/banset",
 	}
 
 	var violations []string
@@ -219,47 +220,67 @@ func TestPolicyRulesImportOnlyStdlib(t *testing.T) {
 	}
 }
 
-// shapingAllowed is everything the mechanism package may reach for: the kernel,
-// the log, and itself. x/sys carries the ETH_P_* constants netlink does not, and
-// is the same dependency internal/egress's own plane already has.
-var shapingAllowed = []string{
-	"github.com/vishvananda/netlink",
-	"github.com/vishvananda/netns",
-	"golang.org/x/sys/unix",
-	modulePrefix + "/internal/logger",
-	modulePrefix + "/internal/shaping",
+/*
+mechanismFences keep each mechanism ignorant.
+
+internal/shaping drives qdiscs, classes and filters; internal/banset writes the
+firewall's ban set. Neither may learn what an email, a Kind, a tier or a quota
+is — so neither may import internal/core, internal/database, internal/web, or
+internal/policy, which holds the rules they exist to be the mechanism for. The
+allowances are the kernel, the log and the package itself; x/sys carries the
+ETH_P_* constants netlink does not, the same dependency internal/egress's own
+plane already has. Each seeded at zero while that was still free.
+*/
+var mechanismFences = []struct {
+	prefix  string
+	allowed []string
+	why     string
+}{
+	{
+		prefix: "internal/shaping/",
+		allowed: []string{
+			"github.com/vishvananda/netlink",
+			"github.com/vishvananda/netns",
+			"golang.org/x/sys/unix",
+			modulePrefix + "/internal/logger",
+			modulePrefix + "/internal/shaping",
+		},
+		why: "internal/shaping is the mechanism and knows only devices, selectors and bits per second; take the value as an argument instead of importing the thing that has it",
+	},
+	{
+		prefix:  "internal/banset/",
+		allowed: []string{modulePrefix + "/internal/banset"},
+		why:     "internal/banset is the mechanism and knows only addresses, ports and deadlines; who is banned and why stays in the service layer",
+	},
 }
 
-/*
-TestShapingImportsAreFenced keeps the mechanism ignorant.
-
-internal/shaping drives qdiscs, classes and filters and must never learn what an
-email, a Kind, a tier or a quota is — so it may not import internal/core,
-internal/database, internal/web, or internal/policy, which holds the rules it
-exists to be the mechanism for. Seeded at zero while that is still free.
-*/
-func TestShapingImportsAreFenced(t *testing.T) {
+func TestMechanismImportsAreFenced(t *testing.T) {
 	root := repoRoot(t)
-	var violations []string
-	checked := 0
-	for _, src := range parseNonTestGo(t, root) {
-		if !strings.HasPrefix(src.Rel, "internal/shaping/") {
-			continue
-		}
-		checked++
-		for _, path := range importPaths(src.File) {
-			if isStdlib(path) || slices.Contains(shapingAllowed, path) {
-				continue
+	sources := parseNonTestGo(t, root)
+	for _, fence := range mechanismFences {
+		t.Run(strings.TrimSuffix(fence.prefix, "/"), func(t *testing.T) {
+			var violations []string
+			checked := 0
+			for _, src := range sources {
+				if !strings.HasPrefix(src.Rel, fence.prefix) {
+					continue
+				}
+				checked++
+				for _, path := range importPaths(src.File) {
+					if isStdlib(path) || slices.Contains(fence.allowed, path) {
+						continue
+					}
+					violations = append(violations, src.Rel+" imports "+path)
+				}
 			}
-			violations = append(violations, src.Rel+" imports "+path)
-		}
-	}
-	if checked == 0 {
-		t.Fatal("parsed no files under internal/shaping; the mechanism fence is vacuous")
-	}
-	sort.Strings(violations)
-	for _, v := range violations {
-		t.Errorf("%s — internal/shaping is the mechanism and knows only devices, selectors and bits per second; take the value as an argument instead of importing the thing that has it", v)
+			if checked == 0 {
+				t.Fatalf("parsed no files under %s; the mechanism fence is vacuous", fence.prefix)
+			}
+			sort.Strings(violations)
+			for _, v := range violations {
+				t.Errorf("%s — %s", v, fence.why)
+			}
+		})
 	}
 }
 
