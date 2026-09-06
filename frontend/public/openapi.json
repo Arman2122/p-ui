@@ -12246,6 +12246,61 @@
         }
       }
     },
+    "/panel/api/policies/pushBans": {
+      "post": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Receive every device-cap ban a master panel holds for this node, the whole set each push, keyed by the master's GUID. The node then holds exactly that set from that master and drops any it no longer sends; bans this node decided itself are never touched, and nothing is held while banning is off here. Node-only, over mTLS.",
+        "operationId": "post_panel_api_policies_pushBans",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "masterGuid": "9f6c2d-…",
+                "bans": [
+                  {
+                    "clientEmail": "alice",
+                    "source": "203.0.113.7",
+                    "ports": "443,8443",
+                    "reason": "over-cap",
+                    "until": 1788700000
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/hosts/list": {
       "get": {
         "tags": [

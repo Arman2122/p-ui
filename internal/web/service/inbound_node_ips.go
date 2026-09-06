@@ -2,12 +2,14 @@ package service
 
 import (
 	"encoding/json"
+	"slices"
 	"sort"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/policy"
 
 	"gorm.io/gorm/clause"
 )
@@ -20,15 +22,18 @@ import (
 // guid-keyed report — never mixing in IPs a parent pushed down.
 
 /*
-heldElsewhere is, per client, every address another node reported live since the
-given second — the cluster's half of a device cap. Read from the attribution rows
-rather than the union blob because only they say WHICH panel saw an address; an
-address this panel's own cores stopped reporting is over, not held.
+nodeObservations is what other nodes reported live for these clients inside the
+window, as observations of their own: with the arrival the node recorded, or the
+sighting itself when an older node recorded none, which is the start the merge
+gave a held address before. Keyed back to the guid that saw each, for the push.
+Read from the attribution rows rather than the union blob because only they say
+WHICH panel saw an address.
 */
-func (s *InboundService) heldElsewhere(emails []string, sinceSeconds int64) map[string]map[string]bool {
+func (s *InboundService) nodeObservations(emails []string, sinceUnix int64) (map[string][]policy.Observation, map[Sighting][]string) {
 	localGuid, _ := (&SettingService{}).GetPanelGuid()
 	db := database.GetDB()
-	out := map[string]map[string]bool{}
+	observed := map[string][]policy.Observation{}
+	observers := map[Sighting][]string{}
 	for _, batch := range chunkStrings(emails, sqlInChunk) {
 		var rows []model.NodeClientIp
 		if err := db.Where("email IN ? AND node_guid <> ?", batch, localGuid).Find(&rows).Error; err != nil {
@@ -41,17 +46,24 @@ func (s *InboundService) heldElsewhere(emails []string, sinceSeconds int64) map[
 				continue
 			}
 			for _, e := range entries {
-				if e.IP == "" || e.Timestamp < sinceSeconds {
+				if e.IP == "" || e.Timestamp < sinceUnix {
 					continue
 				}
-				if out[row.Email] == nil {
-					out[row.Email] = map[string]bool{}
+				first := e.FirstSeen
+				if first == 0 {
+					first = e.Timestamp
 				}
-				out[row.Email][e.IP] = true
+				observed[row.Email] = append(observed[row.Email], policy.Observation{
+					IP: e.IP, LastSeenUnixMilli: e.Timestamp * 1000, FirstSeenUnixMilli: first * 1000,
+				})
+				sighting := Sighting{Email: row.Email, IP: e.IP}
+				if !slices.Contains(observers[sighting], row.NodeGuid) {
+					observers[sighting] = append(observers[sighting], row.NodeGuid)
+				}
 			}
 		}
 	}
-	return out
+	return observed, observers
 }
 
 // upsertNodeClientIps folds a guid's per-email observations into NodeClientIp,
@@ -152,6 +164,11 @@ func (s *InboundService) MergeClientIpsByGuid(node *model.Node, trees map[string
 	for guid, perEmail := range trees {
 		if err := upsertNodeClientIps(guid, perEmail); err != nil {
 			return err
+		}
+		for email, entries := range perEmail {
+			for _, e := range entries {
+				nodeSightings.Note(guid, email, e.Timestamp)
+			}
 		}
 	}
 	return nil

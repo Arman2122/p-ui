@@ -47,6 +47,9 @@ const (
 
 	BanReasonOverCap  = "over-cap"
 	BanReasonOperator = "operator"
+	// BanReasonSharedSkipped is a row with no ports: the memory that a shared
+	// address was reported and, by the operator's choice, not banned.
+	BanReasonSharedSkipped = "shared-skipped"
 
 	// The operator's answer to a source another client under its cap is live
 	// from: behind one NAT, that client's address is the abuser's too.
@@ -65,7 +68,8 @@ until now plus the operator's ban duration. A row that exists is left as it is,
 since the deadline releases a ban and not a later pass; so a device still over
 its cap is not banned again every pass, and one back after its ban lapsed is.
 A source another client under its cap is live from is shared, and the operator
-says whether it is banned or only reported. Answers the rows it created.
+says whether it is banned or only reported; a report is a row too, with no port
+to drop on, so it is made once and not every pass. Answers the rows it created.
 */
 func (s *PolicyService) RecordBans(ctx context.Context, verdicts []IPLimitVerdict, now time.Time) ([]model.ClientBan, error) {
 	settings := &SettingService{}
@@ -92,23 +96,34 @@ func (s *PolicyService) RecordBans(ctx context.Context, verdicts []IPLimitVerdic
 	until := now.Add(time.Duration(minutes) * time.Minute).Unix()
 	var created []model.ClientBan
 	for _, verdict := range verdicts {
-		if len(verdict.BanPorts) == 0 {
-			continue
+		var targets []model.ClientBan
+		if len(verdict.BanPorts) > 0 {
+			for _, over := range verdict.Ban {
+				targets = append(targets, model.ClientBan{ClientEmail: verdict.Email, Source: over.IP, Ports: portsCSV(verdict.BanPorts)})
+			}
 		}
-		for _, over := range verdict.Ban {
-			if others := sharedWith(holders[over.IP], verdict.Email); len(others) > 0 && onShared == SharedAddressSkip {
-				logger.Infof("[LIMIT_IP] %s is over its cap from %s, which %s hold inside theirs; not banned, as the shared-address setting says",
-					verdict.Email, over.IP, strings.Join(others, ", "))
-				continue
+		for _, nb := range verdict.NodeBans {
+			targets = append(targets, model.ClientBan{ClientEmail: verdict.Email, Source: nb.Source, NodeGuid: nb.Guid, Ports: portsCSV(nb.Ports)})
+		}
+		for _, row := range targets {
+			row.Reason, row.CreatedAt, row.Until = BanReasonOverCap, now.Unix(), until
+			shared := sharedWith(holders[row.Source], verdict.Email)
+			skipped := len(shared) > 0 && onShared == SharedAddressSkip
+			if skipped {
+				// Remembered like a ban, with no port to drop on: reported once, not every pass.
+				row.Ports, row.Reason = "", BanReasonSharedSkipped
 			}
-			row := model.ClientBan{
-				ClientEmail: verdict.Email, Source: over.IP, Ports: portsCSV(verdict.BanPorts),
-				Reason: BanReasonOverCap, CreatedAt: now.Unix(), Until: until,
-			}
-			result := db.Clauses(clause.OnConflict{
+			conflict := clause.OnConflict{
 				Columns:   []clause.Column{{Name: "client_email"}, {Name: "source"}, {Name: "node_guid"}},
 				DoNothing: true,
-			}).Create(&row)
+			}
+			if !skipped {
+				// A ban replaces a report of the same pair, never the other way round.
+				conflict.DoNothing = false
+				conflict.DoUpdates = clause.AssignmentColumns([]string{"ports", "reason", "created_at", "until"})
+				conflict.Where = clause.Where{Exprs: []clause.Expression{clause.Eq{Column: "client_bans.reason", Value: BanReasonSharedSkipped}}}
+			}
+			result := db.Clauses(conflict).Create(&row)
 			if result.Error != nil {
 				return created, result.Error
 			}
@@ -116,8 +131,18 @@ func (s *PolicyService) RecordBans(ctx context.Context, verdicts []IPLimitVerdic
 				continue
 			}
 			created = append(created, row)
+			where := "here"
+			if row.NodeGuid != "" {
+				where = "on node " + row.NodeGuid
+			}
+			if skipped {
+				banLog("reported, not banned (shared address)", row)
+				logger.Infof("[LIMIT_IP] %s is over its cap from %s %s, which %s hold inside theirs; reported and not banned, as the shared-address setting says",
+					verdict.Email, row.Source, where, strings.Join(shared, ", "))
+				continue
+			}
 			banLog("ban", row)
-			logger.Infof("[LIMIT_IP] %s from %s dropped on port(s) %s for %d minute(s)", verdict.Email, over.IP, row.Ports, minutes)
+			logger.Infof("[LIMIT_IP] %s from %s dropped %s on port(s) %s for %d minute(s)", verdict.Email, row.Source, where, row.Ports, minutes)
 		}
 	}
 	return created, nil
@@ -151,18 +176,19 @@ func (s *PolicyService) ConvergeBans(ctx context.Context, now time.Time) error {
 	return bansManager.Converge(ctx, now, entries)
 }
 
-// ActiveBans is every ban this host holds, soonest to lapse first.
+// ActiveBans is every ban this panel decided, its own and its nodes', soonest
+// to lapse first.
 func (s *PolicyService) ActiveBans(ctx context.Context) ([]model.ClientBan, error) {
 	var rows []model.ClientBan
-	err := database.GetDB().WithContext(ctx).Where("node_guid = ''").Order("until, id").Find(&rows).Error
+	err := database.GetDB().WithContext(ctx).Order("until, id").Find(&rows).Error
 	return rows, err
 }
 
-// ReleaseBan frees one source for one client on this host now, not at the next
-// pass, and answers how many rows it released.
+// ReleaseBan frees one source for one client wherever this panel banned it: here
+// at once, on a node with the next push. Answers how many rows it released.
 func (s *PolicyService) ReleaseBan(ctx context.Context, email, source string, now time.Time) (int, error) {
 	db := database.GetDB().WithContext(ctx)
-	scope := db.Where("node_guid = '' AND client_email = ? AND source = ?", email, source)
+	scope := db.Where("client_email = ? AND source = ?", email, source)
 	released, err := s.releaseCounted(ctx, scope, "operator")
 	if err != nil {
 		return 0, err
@@ -170,14 +196,77 @@ func (s *PolicyService) ReleaseBan(ctx context.Context, email, source string, no
 	return released, s.ConvergeBans(ctx, now)
 }
 
-// ReleaseAllBans frees every ban this host holds, now.
+// ReleaseAllBans frees every ban this panel decided, now.
 func (s *PolicyService) ReleaseAllBans(ctx context.Context, now time.Time) (int, error) {
 	db := database.GetDB().WithContext(ctx)
-	released, err := s.releaseCounted(ctx, db.Where("node_guid = ''"), "operator")
+	released, err := s.releaseCounted(ctx, db.Where("1 = 1"), "operator")
 	if err != nil {
 		return 0, err
 	}
 	return released, s.ConvergeBans(ctx, now)
+}
+
+// BansForNode is every live ban this panel holds for one node: the whole set,
+// which is what the node is handed each push.
+func (s *PolicyService) BansForNode(ctx context.Context, node *model.Node, now time.Time) ([]model.ClientBan, error) {
+	var rows []model.ClientBan
+	err := database.GetDB().WithContext(ctx).
+		Where("node_guid = ? AND until > ?", effectiveNodeKey(node), now.Unix()).
+		Order("id").Find(&rows).Error
+	return rows, err
+}
+
+/*
+AcceptBans is the node's half: it holds exactly the set the master pushed, keyed
+by the master's guid, and drops what that master no longer sends. A row this
+node decided for the same pair is left as it is, since the two deadlines were
+set seconds apart and the node's decision is not the master's to end. Nothing
+is held while banning is off here, or every push would insert what the next
+converge deletes.
+*/
+func (s *PolicyService) AcceptBans(ctx context.Context, masterGuid string, rows []model.ClientBan, now time.Time) error {
+	masterGuid = strings.TrimSpace(masterGuid)
+	if masterGuid == "" || !config.IPLimitBansEnabled() {
+		return nil
+	}
+	pushed := make(map[string]bool, len(rows))
+	err := database.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, row := range rows {
+			if row.Source == "" || row.Until <= now.Unix() {
+				continue
+			}
+			pushed[row.ClientEmail+"|"+row.Source] = true
+			held := model.ClientBan{
+				ClientEmail: row.ClientEmail, Source: row.Source, Ports: row.Ports, Reason: row.Reason,
+				CreatedAt: row.CreatedAt, Until: row.Until, Origin: masterGuid,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "client_email"}, {Name: "source"}, {Name: "node_guid"}},
+				DoUpdates: clause.AssignmentColumns([]string{"ports", "reason", "created_at", "until"}),
+				Where:     clause.Where{Exprs: []clause.Expression{clause.Eq{Column: "client_bans.origin", Value: masterGuid}}},
+			}).Create(&held).Error; err != nil {
+				return err
+			}
+		}
+		var mine []model.ClientBan
+		if err := tx.Where("origin = ? AND node_guid = ''", masterGuid).Find(&mine).Error; err != nil {
+			return err
+		}
+		for _, row := range mine {
+			if pushed[row.ClientEmail+"|"+row.Source] {
+				continue
+			}
+			if err := tx.Delete(&model.ClientBan{}, row.Id).Error; err != nil {
+				return err
+			}
+			banLog("release (dropped by its master)", row)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return s.ConvergeBans(ctx, now)
 }
 
 /*

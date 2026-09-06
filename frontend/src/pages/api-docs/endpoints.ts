@@ -1360,6 +1360,17 @@ export const sections: readonly Section[] = [
         body: '{\n  "masterGuid": "9f6c2d-…",\n  "assignments": [\n    { "email": "alice", "tiers": [ { "fromBytes": 0, "upBps": 10000000, "downBps": 10000000 } ] }\n  ]\n}',
         response: '{\n  "success": true\n}',
       },
+      {
+        method: 'POST',
+        path: '/panel/api/policies/pushBans',
+        summary: 'Receive every device-cap ban a master panel holds for this node, the whole set each push, keyed by the master\'s GUID. The node then holds exactly that set from that master and drops any it no longer sends; bans this node decided itself are never touched, and nothing is held while banning is off here. Node-only, over mTLS.',
+        params: [
+          { name: 'masterGuid', in: 'body (json)', type: 'string', desc: 'Stable GUID of the pushing master panel.' },
+          { name: 'bans', in: 'body (json)', type: 'object[]', desc: 'One entry per banned (client, source): clientEmail, source, ports (CSV of this node\'s inbound ports), reason, until (unix seconds).' },
+        ],
+        body: '{\n  "masterGuid": "9f6c2d-…",\n  "bans": [\n    { "clientEmail": "alice", "source": "203.0.113.7", "ports": "443,8443", "reason": "over-cap", "until": 1788700000 }\n  ]\n}',
+        response: '{\n  "success": true\n}',
+      },
     ],
   },
 

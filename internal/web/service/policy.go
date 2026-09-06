@@ -568,6 +568,16 @@ type IPLimitVerdict struct {
 	// BanPorts is where a ban lands on this host: every enabled local inbound
 	// the client is on. Empty, the client is served elsewhere and nothing is banned here.
 	BanPorts []uint16
+	// NodeBans is what the nodes that observed an over-cap source drop for it,
+	// each on its own ports for the client, pushed there by the sync.
+	NodeBans []IPLimitNodeBan
+}
+
+type IPLimitNodeBan struct {
+	Source string
+	NodeID int
+	Guid   string
+	Ports  []uint16
 }
 
 // IPLimitCut is one over-cap source to end on the inbound whose core observed it.
@@ -586,9 +596,18 @@ work, and running them inside this write transaction would hold its lock across 
 round trip. So the verdict names them and the caller carries them out.
 */
 func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, error) {
-	emails := make([]string, 0, len(scan.ByEmail))
-	for email := range scan.ByEmail {
-		emails = append(emails, email)
+	nowSeconds := time.Now().Unix()
+	nowMilli := nowSeconds * 1000
+	staleCutoff := nowMilli - ipLimitStaleAfter.Milliseconds()
+	liveSince := nowSeconds - int64(ipLimitLiveWindow/time.Second)
+
+	// Every client a local core saw, and every client some node reported inside
+	// the live window: one served by nodes alone is decided here, not nowhere.
+	emails := slices.Sorted(maps.Keys(scan.ByEmail))
+	for _, email := range nodeSightings.Fresh(liveSince) {
+		if _, local := scan.ByEmail[email]; !local {
+			emails = append(emails, email)
+		}
 	}
 	sort.Strings(emails)
 	if len(emails) == 0 {
@@ -599,11 +618,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 	limits := s.inboundService.limitIPByEmail(emails)
 	inbounds := s.inboundService.inboundsByEmail(emails)
 	persisted := s.inboundService.clientIPRows(emails)
-
-	nowSeconds := time.Now().Unix()
-	nowMilli := nowSeconds * 1000
-	staleCutoff := nowMilli - ipLimitStaleAfter.Milliseconds()
-	elsewhere := s.inboundService.heldElsewhere(emails, nowSeconds-int64(ipLimitLiveWindow/time.Second))
+	nodeObserved, nodeObservers := s.inboundService.nodeObservations(emails, liveSince)
 
 	attribution := make(map[string][]model.ClientIpEntry, len(emails))
 	var verdicts []IPLimitVerdict
@@ -620,7 +635,9 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 	}()
 
 	for _, email := range emails {
-		observed := scan.ByEmail[email]
+		// Attribution is this host's own sightings; the decision is everyone's.
+		local := scan.ByEmail[email]
+		observed := slices.Concat(local, nodeObserved[email])
 		hosted := inbounds[email]
 		if len(hosted) == 0 {
 			// The observation names a client that was renamed or deleted; drop the
@@ -638,8 +655,8 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 
 		// Stamped now, not at the connection's start: the stale cutoff would
 		// otherwise evict an address that is connected this second.
-		entries := make([]model.ClientIpEntry, 0, len(observed))
-		for _, obs := range observed {
+		entries := make([]model.ClientIpEntry, 0, len(local))
+		for _, obs := range local {
 			entries = append(entries, model.ClientIpEntry{IP: obs.IP, Timestamp: nowSeconds})
 		}
 		if len(entries) > 0 {
@@ -664,8 +681,10 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 		if !slices.ContainsFunc(hosted, func(inbound *model.Inbound) bool { return inbound.Enable }) {
 			limit = 0
 		}
+		// A node's addresses arrive as observations of their own, with the
+		// arrival the node recorded, so nothing is merely held elsewhere.
 		verdict := policy.Decide(decodeClientIPs(row.Ips), observed, limit,
-			nowMilli, staleCutoff, elsewhere[email])
+			nowMilli, staleCutoff, nil)
 
 		// Every address, the over-cap ones included — they are live connections and
 		// this list is where the panel reports them; history keeps 30 minutes (F305).
@@ -677,7 +696,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 		}
 		// A verdict for every hosted client, an EMPTY one included: the caller's
 		// re-report memory forgets a client only through a verdict naming it (F307).
-		cuts, ban := s.enforcementFor(hosted, scan, email, verdict.Over)
+		cuts, ban, nodeBans := s.enforcementFor(hosted, scan, nodeObservers, email, verdict.Over)
 		verdicts = append(verdicts, IPLimitVerdict{
 			Email:    email,
 			Keep:     verdict.Keep,
@@ -685,6 +704,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 			Cuts:     cuts,
 			Ban:      ban,
 			BanPorts: localBanPorts(hosted),
+			NodeBans: nodeBans,
 		})
 	}
 
@@ -706,29 +726,94 @@ banned: admission already refuses the device's return, so the cut alone finishes
 it, and a firewall ban of a NATed address would take innocents with it. A core
 that can cut but not admit (sing-box) is cut AND banned, because without
 admission the cut flaps every pass. A core that can do neither (xray, a kernel
-WireGuard peer whose removal zeroes its counters) and any node-hosted inbound —
-whose daemon this host cannot reach — leave the firewall as the only actuator.
+WireGuard peer whose removal zeroes its counters) leaves the firewall as the
+only actuator.
+
+An address a node observed is that node's to drop: on its ports for the client,
+pushed there by the sync, and only for kinds whose mode is not login, since a
+login core on the node refuses the device itself and counts the cluster through
+the union rows. It is never banned here, where its traffic never arrives.
 
 The cut is aimed at the inbound whose core saw the address: the runtime resolves
 the core from the inbound, and aiming by anything else cuts a compliant core
 while the offender carries on.
 */
-func (s *PolicyService) enforcementFor(hosted []*model.Inbound, scan SessionScan, email string, over []policy.Observation) (cuts []IPLimitCut, ban []policy.Observation) {
+func (s *PolicyService) enforcementFor(hosted []*model.Inbound, scan SessionScan, nodeObservers map[Sighting][]string, email string, over []policy.Observation) (cuts []IPLimitCut, ban []policy.Observation, nodeBans []IPLimitNodeBan) {
 	reg := registry()
+	var keys map[int]string
 	for _, o := range over {
-		observers := scan.Observers[Sighting{Email: email, IP: o.IP}]
-		cutInbound, admitted := s.cutTargetFor(reg, hosted, observers)
-		switch {
-		case cutInbound == nil:
-			ban = append(ban, o) // nothing local can cut it: the firewall must
-		case admitted:
-			cuts = append(cuts, IPLimitCut{Inbound: cutInbound, Source: o.IP})
-		default:
-			cuts = append(cuts, IPLimitCut{Inbound: cutInbound, Source: o.IP})
-			ban = append(ban, o) // cut-only: a cut without admission flaps, so ban too
+		sighting := Sighting{Email: email, IP: o.IP}
+		if observers := scan.Observers[sighting]; len(observers) > 0 {
+			cutInbound, admitted := s.cutTargetFor(reg, hosted, observers)
+			switch {
+			case cutInbound == nil:
+				ban = append(ban, o) // nothing local can cut it: the firewall must
+			case admitted:
+				cuts = append(cuts, IPLimitCut{Inbound: cutInbound, Source: o.IP})
+			default:
+				cuts = append(cuts, IPLimitCut{Inbound: cutInbound, Source: o.IP})
+				ban = append(ban, o) // cut-only: a cut without admission flaps, so ban too
+			}
+		}
+		for _, guid := range nodeObservers[sighting] {
+			if keys == nil {
+				keys = s.nodeKeysFor(hosted)
+			}
+			if target, ok := nodeBanFor(reg, hosted, keys, guid, o.IP); ok {
+				nodeBans = append(nodeBans, target)
+			}
 		}
 	}
-	return cuts, ban
+	return cuts, ban, nodeBans
+}
+
+// nodeKeysFor is the attribution key of every node these inbounds live on, the
+// key the sync files a node's sightings under.
+func (s *PolicyService) nodeKeysFor(hosted []*model.Inbound) map[int]string {
+	keys := map[int]string{}
+	for _, inbound := range hosted {
+		if inbound.NodeID == nil {
+			continue
+		}
+		if _, known := keys[*inbound.NodeID]; known {
+			continue
+		}
+		var node model.Node
+		if err := database.GetDB().First(&node, *inbound.NodeID).Error; err != nil {
+			continue
+		}
+		keys[*inbound.NodeID] = effectiveNodeKey(&node)
+	}
+	return keys
+}
+
+// nodeBanFor is the drop one node makes for a source it observed: the client's
+// enabled inbounds there whose kind is not enforced at login.
+func nodeBanFor(reg *core.Registry, hosted []*model.Inbound, keys map[int]string, guid, source string) (IPLimitNodeBan, bool) {
+	target := IPLimitNodeBan{Source: source, Guid: guid}
+	for _, inbound := range hosted {
+		if inbound.NodeID == nil || !inbound.Enable || keys[*inbound.NodeID] != guid {
+			continue
+		}
+		kind := core.Kind(inbound.Protocol)
+		if reg != nil {
+			if bound, known := reg.For(kind); known && ipLimitEnforcementOf(bound, kind) == "login" {
+				continue
+			}
+		}
+		if inbound.Port <= 0 || inbound.Port > 65535 {
+			continue
+		}
+		if port := uint16(inbound.Port); !slices.Contains(target.Ports, port) {
+			target.Ports = append(target.Ports, port)
+			target.NodeID = *inbound.NodeID
+		}
+	}
+	if len(target.Ports) == 0 {
+		return IPLimitNodeBan{}, false
+	}
+	slices.Sort(target.Ports)
+	return target, true
 }
 
 /*

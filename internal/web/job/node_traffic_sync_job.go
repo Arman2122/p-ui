@@ -46,6 +46,10 @@ type NodeTrafficSyncJob struct {
 	lastIpSync     int64
 	globalPushMu   sync.Mutex
 	lastGlobalPush int64
+	// noBanEndpoint and pushedBans are per node: the first notes a build without
+	// the ban door once, the second which nodes were last handed a non-empty set.
+	noBanEndpoint sync.Map
+	pushedBans    sync.Map
 	// noGuidIpEndpoint tracks nodes (by id) whose client-IP attribution endpoint
 	// returned 404, so an old-build node is noted once instead of every cycle.
 	noGuidIpEndpoint sync.Map
@@ -492,5 +496,45 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 			}
 		}
 	}
+	j.pushBans(n, rt)
 	return active
+}
+
+/*
+pushBans hands the node every device-cap ban the master holds for it: the whole
+set every tick it is non-empty, and once more when it has just emptied, so a
+release here is a release there. A build without the door answers 404, noted
+once per node.
+*/
+func (j *NodeTrafficSyncJob) pushBans(n *model.Node, rt *runtime.Remote) {
+	now := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), nodeTrafficSyncRequestTimeout)
+	defer cancel()
+	rows, err := j.policyService.BansForNode(ctx, n, now)
+	if err != nil {
+		logger.Debugf("node traffic sync: load bans for %s failed: %v", n.Name, err)
+		return
+	}
+	if len(rows) == 0 {
+		if _, had := j.pushedBans.LoadAndDelete(n.Id); !had {
+			return
+		}
+	} else {
+		j.pushedBans.Store(n.Id, true)
+	}
+	masterGuid, err := j.settingService.GetPanelGuid()
+	if err != nil || masterGuid == "" {
+		return
+	}
+	if err := rt.PushBans(ctx, masterGuid, rows); err != nil {
+		if strings.Contains(err.Error(), "HTTP 404") {
+			if _, seen := j.noBanEndpoint.LoadOrStore(n.Id, true); !seen {
+				logger.Debugf("node traffic sync: node %s has no ban endpoint (old build)", n.Name)
+			}
+		} else {
+			logger.Warningf("node traffic sync: push bans to %s failed: %v", n.Name, err)
+		}
+		return
+	}
+	j.noBanEndpoint.Delete(n.Id)
 }

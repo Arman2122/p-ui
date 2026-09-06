@@ -875,6 +875,14 @@ func (r *Remote) PushPlanAssignments(ctx context.Context, masterGuid string, row
 	return err
 }
 
+// PushBans hands a node every ban the master holds for it, the whole set each
+// time, so a release here is a release there on the next tick.
+func (r *Remote) PushBans(ctx context.Context, masterGuid string, rows []model.ClientBan) error {
+	payload := map[string]any{"masterGuid": masterGuid, "bans": rows}
+	_, err := r.do(ctx, http.MethodPost, "panel/api/policies/pushBans", payload)
+	return err
+}
+
 func (r *Remote) PushAllClientIps(ctx context.Context, ips []model.InboundClientIps) error {
 	_, err := r.do(ctx, http.MethodPost, "panel/api/server/clientIps", ips)
 	return err

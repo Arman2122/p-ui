@@ -85,7 +85,7 @@ is reported and not banned; when they chose to ban, it is banned like any other.
 func TestASharedAddressIsBannedOrSkippedAsTheOperatorChose(t *testing.T) {
 	initTestDB(t)
 	t.Setenv("PUI_LOG_FOLDER", t.TempDir())
-	installBanPlane(t)
+	plane := installBanPlane(t)
 	svc := &PolicyService{}
 	seen := &declaredCore{id: "proxy", kind: "vless"}
 	installCores(t, newProxyCore(seen))
@@ -104,21 +104,35 @@ func TestASharedAddressIsBannedOrSkippedAsTheOperatorChose(t *testing.T) {
 	}
 
 	setSetting(t, "ipLimitSharedAddressAction", SharedAddressSkip)
-	created, err := svc.RecordBans(context.Background(), verdicts, time.Now())
+	now := time.Now()
+	created, err := svc.RecordBans(context.Background(), verdicts, now)
 	if err != nil {
 		t.Fatalf("RecordBans: %v", err)
 	}
-	if len(created) != 0 {
-		t.Fatalf("skip: %+v banned, want nothing: the neighbour holds that address inside their cap", created)
+	if len(created) != 1 || created[0].Reason != BanReasonSharedSkipped || created[0].Ports != "" {
+		t.Fatalf("skip: %+v, want one report of the pair with no port to drop on: the neighbour holds that address inside their cap", created)
+	}
+	if err := svc.ConvergeBans(context.Background(), now); err != nil {
+		t.Fatalf("ConvergeBans: %v", err)
+	}
+	if last := plane.last(); strings.Contains(last, "203.0.113.9") {
+		t.Fatalf("a reported address reached the firewall:\n%s", last)
+	}
+	if again, err := svc.RecordBans(context.Background(), verdicts, now.Add(10*time.Second)); err != nil || len(again) != 0 {
+		t.Fatalf("the report must be made once, not every pass: %+v, %v", again, err)
 	}
 
 	setSetting(t, "ipLimitSharedAddressAction", SharedAddressBan)
-	created, err = svc.RecordBans(context.Background(), verdicts, time.Now())
+	created, err = svc.RecordBans(context.Background(), verdicts, now.Add(20*time.Second))
 	if err != nil {
 		t.Fatalf("RecordBans: %v", err)
 	}
-	if len(created) != 1 || created[0].ClientEmail != "over" || created[0].Source != "203.0.113.9" {
-		t.Fatalf("ban: %+v, want the one ban of over from 203.0.113.9", created)
+	if len(created) != 1 || created[0].ClientEmail != "over" || created[0].Source != "203.0.113.9" || created[0].Reason != BanReasonOverCap {
+		t.Fatalf("ban: %+v, want the report of over from 203.0.113.9 replaced by its ban", created)
+	}
+	rows, err := svc.ActiveBans(context.Background())
+	if err != nil || len(rows) != 1 || rows[0].Ports != "45821" {
+		t.Fatalf("after the ban: %+v (%v), want the one row, now with the port", rows, err)
 	}
 }
 

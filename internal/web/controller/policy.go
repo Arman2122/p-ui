@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/policy"
@@ -38,6 +39,7 @@ func (a *PolicyController) initRouter(g *gin.RouterGroup) {
 	g.POST("/del/:id", a.del)
 	g.POST("/assign", a.assign)
 	g.POST("/pushAssignments", a.pushAssignments)
+	g.POST("/pushBans", a.pushBans)
 }
 
 func (a *PolicyController) list(c *gin.Context) {
@@ -151,6 +153,24 @@ func (a *PolicyController) pushAssignments(c *gin.Context) {
 		return
 	}
 	if err := a.policyService.AcceptAssignments(req.MasterGuid, req.Assignments); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonMsg(c, "success", nil)
+}
+
+// pushBans receives every device-cap ban a master holds for this node, the whole
+// set, and the node then holds exactly that set from it (see AcceptBans).
+func (a *PolicyController) pushBans(c *gin.Context) {
+	var req struct {
+		MasterGuid string            `json:"masterGuid"`
+		Bans       []model.ClientBan `json:"bans"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.policyService.AcceptBans(c.Request.Context(), req.MasterGuid, req.Bans, time.Now()); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}

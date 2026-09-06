@@ -17,6 +17,9 @@ type ClientBan struct {
 	NodeGuid    string `json:"nodeGuid" gorm:"uniqueIndex:idx_client_bans_pair,priority:3;not null;default:''"`
 	Ports       string `json:"ports" gorm:"not null;default:''"`
 	Reason      string `json:"reason" gorm:"not null;default:''"`
+	// Origin is "" for a ban this panel decided, or the guid of the master
+	// that pushed it, which is the only one whose push may end it.
+	Origin string `json:"origin" gorm:"not null;default:''"`
 	// Unix seconds, the unit every synced timestamp in this panel carries.
 	CreatedAt int64 `json:"createdAt"`
 	Until     int64 `json:"until" gorm:"index"`
