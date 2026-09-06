@@ -380,7 +380,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 30s` | (inline func in `startTask`) | Debounced Xray restart — consumes the "need restart" flag (§5.1) |
 | `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay) |
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
-| `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation |
+| `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation; push global usage and each client's resolved speed ladder to nodes |
 | `@every 10s` | `core_policy` | Converge shaping and in-core rates; observe every core's sessions, decide each client's IP cap, cut the over-cap device through the core that saw it or write the fail2ban line (`internal/web/job/core_policy.go`) |
 | `@every 10s` | `core_supervise` | Read every registered core's health, publishing `core.crash` once per outage and `core.up` on recovery, then reconcile it on its desired inbounds — a unit the backend reports down is started again (Xray excepted — the panel's own config build converges it; `internal/web/job/core_supervise.go`, `core_health.go`) |
 | `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
@@ -489,6 +489,9 @@ for AutoMigrate in `internal/database/db.go`.
 | Xray **restarts when it shouldn't** (kills connections) | `xray/hot_diff.go` (diff not classified as hot) | `service/xray.go` |
 | **Traffic** counts wrong / reset behavior | `service/inbound_traffic.go`, `job/xray_traffic_job.go` | `service/traffic_writer.go`, `job/periodic_traffic_reset_job.go` |
 | **Node** operation not propagating | `runtime/remote.go`, `runtime/manager.go` | `service/inbound_node.go` |
+| A **speed plan** does nothing on a sub-node | `service/policy.go` (`AcceptAssignments`, `factsFor`) | `job/node_traffic_sync_job.go` (the push), `runtime/remote.go` |
+| An **OpenConnect** client's limit does not change mid-session | `cores/internal/ocserv/core.go` (`ShapingTargets`) | `shaping/namespaces.go` (families), `service/policy.go` (`ShapingWants`) |
+| The plan panel says **not enforced yet** for an SSH client | `service/policy.go` (`EnforcedFor`) | `cores/internal/ssh/server.go` (`enforcedRates`) |
 | **Multi-hop / cross-node attribution** (traffic or online clients on wrong panel) | `service/inbound_node.go` (GUID merge, `synthNodeGuid`, `effectiveNodeGuid`) | `service/node.go`, model `OriginNodeGuid`/`Node.Guid` |
 | Node stuck **offline / stale** | `job/node_heartbeat_job.go`, `service/node.go` (`Probe`, `UpdateHeartbeat`) | `runtime/tls_client.go` (TLS verify) |
 | Node **TLS / mTLS** auth failures | `runtime/tls_client.go`, `service/node_mtls.go`, `service/setting_mtls.go` | `service/node.go` (`FetchCertFingerprint`) |

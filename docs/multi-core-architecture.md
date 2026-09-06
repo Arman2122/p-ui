@@ -158,7 +158,7 @@ It cannot be `//nolint`-ed, cannot rot, and costs **zero configuration lines per
 > Rejected: a `depguard` deny-list naming each core. One line per core, silently incomplete
 > forever after the first omission — precisely the marginal-cost problem being solved.
 
-### 3.2 Three mandatory methods, twenty-two optional capabilities
+### 3.2 Three mandatory methods, twenty-three optional capabilities
 
 ```go
 // internal/core/core.go — as implemented
@@ -194,7 +194,8 @@ Everything else is an **optional** interface:
 | `LoginAdmitter` | does this kind refuse an over-cap device at its own login — derived from whether the core was wired with the panel's `AdmitFunc` (§4.3) | ssh, openvpn, ocserv |
 | `QuotaEnforcer` | a byte budget the daemon itself enforces (today: `ResetQuota`, §4.3) | mtproto |
 | `CounterLossDeclarer` | does removing a user destroy the counters the panel bills from | wgkernel (a peer remove zeroes them — measured) |
-| `ShapingHost` | a user's kernel identity on a device the panel owns, for rate limits | wgkernel |
+| `ShapingHost` | a user's kernel identity on a device the panel owns, for rate limits — one target per device the instance's traffic crosses right now (§12.5m) | wgkernel, awgkernel, openvpn, ocserv (one device per session) |
+| `RateEnforcer` | a per-user rate a core applies INSIDE itself when its users share one socket set, and reads back from the objects that throttle (§12.5m) | ssh |
 | `RoutableIngress` | may a routing rule name this core's inbounds as a source (§3.2b) | all three |
 | `RoutableEgress` | may this core terminate a route: exit kinds and handles (§3.2b) | wgkernel (wg-client uplinks) |
 | `VersionReporter` | name the daemon build on disk; `ErrNotInstalled` is a state, not a fault (§15) | xray, mtproto, sing-box, openvpn, ocserv, wgkernel, awgkernel — not ssh, which is the panel |
@@ -1871,6 +1872,9 @@ inside itself, fed by the policy job from the same ladders and committed usage t
 shaping reads (`ConvergeRates`), and the core view carries `rateKinds` so the client form
 offers the speed fields. What stays open is the daemon-side half: handing a rate to ocserv
 or accel-ppp goes over RADIUS, and lands with the RADIUS server.
+**Reversed in §12.5m:** a daemon whose sessions ride devices the panel can own is
+shaped in the kernel on those devices instead, and `RateEnforcer` reads back what
+it holds.
 
 
 ---
@@ -1925,6 +1929,37 @@ or accel-ppp goes over RADIUS, and lands with the RADIUS server.
    The lesson generalises: whenever a guard compares against "the protocols", ask *which*
    list it is really checking. P4 removed the question — the validator asks the registry, so
    the accepted set and the servable set are one list and cannot disagree.
+6. **Per-user speed on Xray and sing-box.** Neither core has one (Xray's is closed
+   upstream as not planned, verified 2026-09-02), and every other core's speed limit
+   now works mid-session (§12.5m). Two paths, each the largest single build in this
+   tree, and the choice is a product posture rather than an engineering one — so it is
+   the user's, and nothing of either is built until it is made:
+   - *Kernel fwmark* (`SelectorFwmark`, declared and unimplemented): a persisted mark
+     index per shaped user in bits 10–23 of the egress band (14 bits, 16,383 shaped
+     users per node); the egress `ip rule` made a masked match (§5.3 chose exact);
+     per-user copies of the compiled outbounds carrying `egressMark | userBits` — Xray
+     `user` rules multiplied by shaped users, sing-box `auth_user` rules with
+     `routing_mark`, which needs CAP_NET_ADMIN on a unit deliberately run as
+     `p-ui-core`; clsact-only hooks on every egress device Xray may leave through, the
+     WAN device the panel does not own included, never a root qdisc; `fw` filters by
+     mark for upload, an nft `ct mark set` plus `act_connmark` and `fw` for download,
+     both redirected into two host IFBs carrying the HTB/SFQ trees the plane already
+     builds. Daemon (SOCKS) exits are outside it. Conntrack becomes a stated dependency
+     (loaded today by the panel's own `p-ui-nat` masquerade; `nf_conntrack_max` 65536
+     by default). `ShapingTarget.Device` does not fit: the devices are the host's, not
+     an instance's.
+   - *An Xray fork:* a limiter pair beside the per-user `SizeStatWriter` in
+     `app/dispatcher`'s `getLink`, plus a set/list gRPC — precise, both directions, no
+     kernel state, and dynamic; a maintained fork, its own release channel, and the trust
+     posture that goes with it. The user maintains `mtg-proxy`'s channel already.
+   - *Before deciding, three measurements on the VM:* a hand-built tc chain with real
+     traffic in both directions; ~20k `user` rules and ~5k freedom outbounds — start
+     time, RSS, `ApplyRoutingConfig` time, and connection latency for an UNSHAPED user,
+     who scans every per-user rule before reaching the operator's; and conntrack on an
+     Xray-only host — whether it is loaded at all, and table-full behaviour against a real
+     box's connection count.
+   MTProto is the same decision in miniature and needs the fork either way: stamp a
+   mark per secret, or throttle per secret behind `[secret-limits]`.
 
 ---
 
@@ -2152,7 +2187,8 @@ What the contract gained:
   reuse it for their server certificates.
 - **`DeviceNamespacer`.** A core names the device prefix its interfaces use
   (`pov`) and the shaping plane owns it at wiring, per `shaping.Namespaces`'s
-  own comment.
+  own comment. Since §12.5m the answer is a `DeviceNamespace`: the prefix, and
+  whether it is per session (`poc<id>-<n>`), which the plane owns as a family.
 - **`CredTLSCryptV2`.** The first credential added since the vocabulary was
   closed; two guards now walk the vocabulary through every table, because the
   SSH username showed what a half-wired credential costs.
@@ -2201,6 +2237,10 @@ attributes, whose direction and unit are measured rather than read (the
 daemon's dictionary and its own code disagree; Upstream is the daemon's RX,
 which is the client's upload, and the value is kilobytes per second).
 
+**Superseded in §12.5m:** the daemon half is the kernel's now, on the session
+device; the two attributes stay in the server for a NAS with no device the panel
+can own.
+
 `IngressSubnet` gains its first declaring core, and at first no mechanism:
 every session gets its own transient device, so the handle was a `BlockedKey`
 and a rule on this kind was refused rather than written against nothing.
@@ -2220,8 +2260,9 @@ operator would believe an inbound was hidden that is not.
 
 Deliberate v1 choices: a changed speed plan reaches a client at its next
 login rather than mid-session (an Access-Accept is the only per-user thing
-this daemon reads), no routing until the egress plane can select `from
-<prefix>`, no client certificates, and the end-to-end tests run only where
+this daemon reads) — lifted in §12.5m, the session device is shaped by the
+kernel; no routing until the egress plane can select `from <prefix>`, lifted
+in §12.5h; no client certificates; and the end-to-end tests run only where
 the daemon and its client exist (`OCSERV_E2E`, the VM).
 
 ### 12.5f SSH becomes routable, and the bridge becomes a mechanism (2026-09-04)
@@ -2589,3 +2630,55 @@ node panel's and this page is host-local by design — core management stays out
 `runtime.Runtime`, as `RestartCore` already did; the release-list cache is process-local; the
 exec backend still restarts nothing on its own, the pass does within 10 s; and §12.5k's
 `AdmitLogin` log storm is still owed a rate limit.
+
+### 12.5m Speed limits, part A: the session device, the read-back, and the node (2026-09-06)
+
+**The brief.** "Speed limit, really well designed across all cores." Read against the tree
+before this pass: kernel shaping on wgkernel, awgkernel and openvpn worked and applied
+mid-session; SSH throttled in-process with no way to read back what it held; OpenConnect
+handed the rate over RADIUS, so it reached a client at its next login and an upgrade never
+mid-session; Xray and sing-box had no per-user speed at all; and a sub-node evaluated no plan
+whatsoever. The Xray/sing-box half is the user's decision (§13.6) and nothing of it is built.
+Everything else was independent of that decision and landed in five commits.
+
+**A device family (`fadd1e2`).** `shaping.Namespaces` knew one shape, `<prefix><id>`, and
+derived the upload mirror from the inbound id, so OpenConnect's `poc<id>-<n>` could not be
+owned and two sessions of one inbound would have claimed one `pifb`. A namespace is now
+one of two kinds — plain, or a per-session FAMILY registered by `RegisterFamily` under the
+same letters-only rule — and the mirror is named from the device's own suffix (`pifb2-3`),
+with the collector and the liveness check keyed on that suffix. `core.DeviceNamespace`
+carries the kind from the core that knows its daemon's naming.
+
+**One target per device (`643dac7`).** `ShapingTargets` answered one device per instance;
+it returns a target per device the instance's traffic crosses right now, and an empty answer
+is the one way to say "not hosting it". A target with no device is a fault the suite names;
+an empty answer is a fault only while the host holds an identity the core failed to name —
+the rig's host reading is what tells a per-session core with nobody connected from a core
+hiding a device. A limit is therefore per DEVICE: an OpenConnect client with two sessions
+holds two buckets (the IP limit normally keeps it to one).
+
+**OpenConnect on its session device (`4d4b41c`).** The core is a `ShapingHost`: each live
+session is one tunnel address on the device the daemon made for it, read from
+`occtl -j show users` — the only thing that knows which transient device carries whom.
+The RADIUS rate pushdown, the per-instance rate map and the `RateEnforcer` implementation
+are gone: with both, the stale reply would have double-shaped and an upgrade would still
+have waited for a reconnect. Measured on the VM with a real client against the panel's own
+manager: 2 MiB through `poc2-0` in 8.66 s under a 2 Mbit limit, 63 ms once withdrawn.
+
+**The read-back (`9f45081`).** `RateEnforcer.EnforcedRates` reads a limit back off the
+objects that throttle — SSH's live limiter where one exists, the table every new
+connection's limiter is set from where none does yet. The suite holds a rate core to the
+round trip and refuses the fakes that forget or keep; `EnforcedFor` asks the rate cores
+hosting a client's inbounds and reports `RateEnforced` beside `Shapeable`.
+
+**Plans on nodes (`ad3f0bf`).** A node never held a plan: the ladders and assignments lived on
+the master, the usage it pushed lay beside clients nobody evaluated. The master now follows
+its usage push with each client's RESOLVED ladder — the tiers, never a plan id, since ids are
+one panel's and two masters pushing to one node would collide — and the node stores it in
+`client_policies.resolved_tiers`, NULL wherever the plan itself lives, and `factsFor`
+evaluates it as a local plan from the same pushed usage. Only clients the node serves are
+kept; a client of that master absent from the push loses its ladder; another master's
+clients and the node's own assignments are untouched; an old node answers 404 at debug.
+
+**Still open here.** §13.6, and the memo's three measurements; MTProto's per-secret speed
+needs the user's fork; the `AdmitLogin` log storm from §12.5k is still owed a rate limit.
