@@ -27,12 +27,11 @@ type LocalDeps struct {
 	*/
 	LoadInbound func(id int) (*model.Inbound, error)
 	/*
-		RenderInbound produces the inbound exactly as the full config build would
-		emit it, so a hot apply and the next restart agree byte for byte.
+		RenderInbound produces the inbound exactly as a reconcile would apply it,
+		for every core, so a hot apply and the next reconcile agree byte for byte.
 
-		A nil config means the local Xray does not serve this inbound and the
-		stored sections stand — that is how an mtproto inbound reaches its own
-		core untouched. Nil the field itself and every inbound falls back to
+		A nil config means nothing local serves this inbound and the stored
+		sections stand. Nil the field itself and every inbound falls back to
 		those stored sections, which is the pre-unification behaviour.
 	*/
 	RenderInbound func(ib *model.Inbound) (*core.InboundConfig, error)
@@ -96,6 +95,9 @@ func (l *Local) desiredState(ib *model.Inbound) (core.Instance, error) {
 	inst.Settings = string(rendered.Settings)
 	inst.StreamSettings = string(rendered.StreamSettings)
 	inst.Sniffing = string(rendered.Sniffing)
+	// The render is where a depleted client leaves; a core reading Users must
+	// see the same set as one reading Settings.
+	inst.Users = usersOf(inst.Settings, "")
 	return inst, nil
 }
 
@@ -176,7 +178,9 @@ client the op provisions, "" when it only has to name one.
 
 A whole-set core reads every other client out of the instance, so it is rebuilt
 from the current row rather than the caller's copy: the copy is as old as the
-caller's own read, and on such a core "absent" means "revoked". Every other core
+caller's own read, and on such a core "absent" means "revoked". Rebuilt AND
+rendered: the row still lists a client depletion cut off, and the render is
+where that client leaves. Every other core
 touches the named client alone, and re-reading the row and re-projecting its
 clients for it cost O(inbound size) — 1.3s on a 200k-client inbound — per edit,
 which callers pay once per client in a fan-out.
@@ -219,7 +223,11 @@ func (l *Local) userTarget(ib *model.Inbound, named string) (*core.Bound, core.I
 			current = fresh
 		}
 	}
-	return bound, InstanceOf(current), nil
+	inst, err := l.desiredState(current)
+	if err != nil {
+		return nil, core.Instance{}, err
+	}
+	return bound, inst, nil
 }
 
 // AddUser hands the core the client as the inbound stores it. The credentials a

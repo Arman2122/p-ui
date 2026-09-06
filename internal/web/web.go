@@ -673,7 +673,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },
 		Cores:          registry,
 		LoadInbound:    (&service.InboundService{}).GetInbound,
-		RenderInbound:  s.xrayService.RenderInbound,
+		RenderInbound:  (&service.InboundService{}).RenderForRuntime,
 	}))
 	// The facade answers from THIS registry from here on — the same adapter
 	// instances the jobs drive. These two lines are one wiring: setting a

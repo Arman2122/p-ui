@@ -1299,32 +1299,19 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 					return perr
 				}
 				if push {
-					payload := inbound
-					pushable := true
-					if inbound.Protocol == model.MTProto {
-						if built, bErr := s.buildInboundForLocalRuntime(tx, inbound); bErr == nil {
-							payload = built
-						} else {
-							logger.Debug("Unable to prepare runtime inbound config:", bErr)
-							pushable = false
-							applyWarn = bErr.Error()
-						}
-					}
 					servedByXray := cores.ServedByXray(core.Kind(inbound.Protocol))
-					if pushable {
-						postCommitApply = func() {
-							if err1 := rt.AddInbound(context.Background(), payload); err1 == nil {
-								logger.Debug("New inbound added on", rt.Name(), ":", inbound.Tag)
-								return
-							} else if servedByXray {
-								logger.Debug("Unable to add inbound on", rt.Name(), ":", err1)
-								needRestart = true
-							} else {
-								// For a core the panel converges directly the push IS the apply:
-								// no restart repairs it, so the operator has to be told.
-								logger.Warning("Unable to add inbound on", rt.Name(), ":", err1)
-								applyWarn = err1.Error()
-							}
+					postCommitApply = func() {
+						if err1 := rt.AddInbound(context.Background(), inbound); err1 == nil {
+							logger.Debug("New inbound added on", rt.Name(), ":", inbound.Tag)
+							return
+						} else if servedByXray {
+							logger.Debug("Unable to add inbound on", rt.Name(), ":", err1)
+							needRestart = true
+						} else {
+							// For a core the panel converges directly the push IS the apply:
+							// no restart repairs it, so the operator has to be told.
+							logger.Warning("Unable to add inbound on", rt.Name(), ":", err1)
+							applyWarn = err1.Error()
 						}
 					}
 				}

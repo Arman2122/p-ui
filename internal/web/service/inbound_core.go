@@ -47,3 +47,23 @@ func (s *InboundService) DesiredInstances(kinds []core.Kind) ([]core.Instance, e
 	}
 	return instances, nil
 }
+
+/*
+RenderForRuntime is what the local runtime applies on the hot path: Xray's own
+render for the kinds Xray serves, and for every other kind the row built the
+way DesiredInstances builds it, so an edit and a reconcile converge on one
+state. Nil means nothing local serves the row — disabled, or a node's.
+*/
+func (s *InboundService) RenderForRuntime(inbound *model.Inbound) (*core.InboundConfig, error) {
+	if inbound == nil || !inbound.Enable || inbound.NodeID != nil {
+		return nil, nil
+	}
+	if servedByXrayCore(inbound.Protocol) {
+		return (&XrayService{}).RenderInbound(inbound)
+	}
+	built, err := s.buildInboundForLocalRuntime(database.GetDB(), inbound)
+	if err != nil {
+		return nil, err
+	}
+	return built.GenXrayInboundConfig(), nil
+}

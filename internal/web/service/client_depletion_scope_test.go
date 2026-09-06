@@ -5,10 +5,18 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 )
+
+func instanceEmails(inst core.Instance) []string {
+	out := make([]string, 0, len(inst.Users))
+	for _, u := range inst.Users {
+		out = append(out, u.Email)
+	}
+	return out
+}
 
 func settingsEmails(t *testing.T, settings string) []string {
 	t.Helper()
@@ -49,17 +57,20 @@ func TestDepletionAppliesToSiblingInbounds(t *testing.T) {
 	seedClientTraffic(t, owner.Id, "multi", false)
 	seedClientTraffic(t, sibling.Id, "solo", true)
 
-	t.Run("mtprotoReconcileJob", func(t *testing.T) {
-		instances, err := svc.DesiredMtprotoInstances()
+	t.Run("coreReconcile", func(t *testing.T) {
+		instances, err := svc.DesiredInstances([]core.Kind{core.Kind(model.MTProto)})
 		if err != nil {
-			t.Fatalf("DesiredMtprotoInstances: %v", err)
+			t.Fatalf("DesiredInstances: %v", err)
 		}
-		if len(instances) != 1 || instances[0].Id != sibling.Id {
-			t.Fatalf("want only inbound %d serving, got %+v", sibling.Id, instances)
+		users := map[int][]string{}
+		for _, inst := range instances {
+			users[inst.ID] = instanceEmails(inst)
 		}
-		want := []mtproto.SecretEntry{{Name: "solo", Secret: mtprotoTestSecretC}}
-		if !reflect.DeepEqual(instances[0].Secrets, want) {
-			t.Fatalf("sibling secrets: got %+v, want %+v", instances[0].Secrets, want)
+		if got, want := users[sibling.Id], []string{"solo"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("sibling users: got %v, want %v", got, want)
+		}
+		if got, ok := users[owner.Id]; !ok || len(got) != 0 {
+			t.Fatalf("owner users: got %v (desired: %v), want an instance carrying nobody", got, ok)
 		}
 	})
 
