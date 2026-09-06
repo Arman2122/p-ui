@@ -195,6 +195,24 @@ func TestForwardIsCountedAndCapped(t *testing.T) {
 	}
 }
 
+func waitForSessions(t *testing.T, c interface {
+	Sessions(context.Context) ([]core.Session, error)
+}, want int,
+) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		sessions, _ := c.Sessions(context.Background())
+		if len(sessions) == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("want %d sessions before the cut, got %+v", want, sessions)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 /*
 CutSessions ends one client's connections from ONE source, so the device over a
 cap is dropped while the ones inside it stay up. The whole point of by-source: a
@@ -214,9 +232,9 @@ func TestCutSessionsEndsOnlyTheNamedSource(t *testing.T) {
 		t.Fatalf("login from 127.0.0.2: %v", err)
 	}
 	defer second.Close()
-	if sessions, _ := c.Sessions(context.Background()); len(sessions) != 2 {
-		t.Fatalf("want two sessions before the cut, got %+v", sessions)
-	}
+	// The server files a session a goroutine hop after the handshake, and under
+	// a parallel run that hop can lose to this read; so the read waits for it.
+	waitForSessions(t, c, 2)
 
 	cut, err := c.CutSessions(context.Background(), alice.Email, netip.MustParseAddr("127.0.0.2"))
 	if err != nil || cut != 1 {
