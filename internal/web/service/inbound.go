@@ -775,26 +775,6 @@ func validateFinalMaskXmcProfiles(streamSettings string) error {
 	return common.NewError("XMC finalmask requires at least one complete Minecraft profile — each needs a username (3-16 of A-Z a-z 0-9 _), a UUID, and both texture fields from Mojang's session server (XTLS/Xray-core#6487). Complete the profiles or remove the XMC mask.")
 }
 
-// normalizeMtprotoSecret rebuilds every mtproto client's FakeTLS secret so it is
-// always valid before the row is persisted, and drops the vestigial inbound-level
-// secret and adTag: MTProto is multi-client, so mtg and every share link read
-// only the per-client values. Leaving an inbound-level secret behind is what
-// produced stale links that failed with "incorrect client random".
-func (s *InboundService) normalizeMtprotoSecret(inbound *model.Inbound) {
-	if inbound.Protocol != model.MTProto {
-		return
-	}
-	if stripped, ok := model.StripMtprotoInboundSecret(inbound.Settings); ok {
-		inbound.Settings = stripped
-	}
-	if stripped, ok := model.StripMtprotoInboundAdTag(inbound.Settings); ok {
-		inbound.Settings = stripped
-	}
-	if healed, ok := model.HealMtprotoClientSecrets(inbound.Settings); ok {
-		inbound.Settings = healed
-	}
-}
-
 // inboundIsBridged reports whether an inbound Xray does not serve is configured
 // to egress through Xray's router (the loopback SOCKS bridge in §xray.go). The
 // answer decides whether a change to it must regenerate the config, because the
@@ -1112,7 +1092,6 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if err := validateFinalMaskXmcProfiles(inbound.StreamSettings); err != nil {
 		return inbound, false, "", err
 	}
-	s.normalizeMtprotoSecret(inbound)
 	if err := s.normalizeXrayBridgePort(inbound, ""); err != nil {
 		return inbound, false, "", err
 	}
@@ -1682,7 +1661,6 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if err := validateFinalMaskXmcProfiles(inbound.StreamSettings); err != nil {
 		return inbound, false, "", err
 	}
-	s.normalizeMtprotoSecret(inbound)
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
 
 	oldInbound, err := s.GetInbound(inbound.Id)

@@ -93,6 +93,15 @@ func (c *Core) MintClientCredentials(kind core.Kind, settings string, have map[s
 	return minted, nil
 }
 
+// MintInstance mints nothing, an mtproto inbound holding no secret of its own;
+// it is where the row takes the shape mtg and every share link read it in.
+func (c *Core) MintInstance(kind core.Kind, settings, _ string) (string, error) {
+	if kind != Kind {
+		return settings, nil
+	}
+	return engine.NormalizeInboundSettings(settings), nil
+}
+
 // The refusal strings are the API's exact historical wording.
 func (c *Core) ValidateClient(kind core.Kind, _, _ string, have map[string]string) error {
 	if kind != Kind {

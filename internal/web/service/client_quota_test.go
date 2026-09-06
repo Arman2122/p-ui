@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,7 +35,12 @@ func (c *convergedCore) MintClientCredentials(_ core.Kind, _ string, have map[st
 	return map[string]string{core.CredPassword: "pw-" + strconv.FormatInt(c.mints.Add(1), 10)}, nil
 }
 
-func (*convergedCore) ValidateClient(core.Kind, string, string, map[string]string) error { return nil }
+func (*convergedCore) ValidateClient(_ core.Kind, _, _ string, have map[string]string) error {
+	if have[core.CredPassword] == "refused" {
+		return errors.New("convcore refuses that password")
+	}
+	return nil
+}
 
 func (*convergedCore) ClientIdentity(core.Kind) string { return "email" }
 
@@ -190,4 +197,35 @@ func TestATrafficResetClearsTheDaemonCounterThroughTheRegistry(t *testing.T) {
 			t.Fatalf("the core was asked to reset %v, want quota@x among them", got)
 		}
 	})
+}
+
+/*
+A client edit is validated by its core as an add is. The edit path kept one
+check of its own — mtproto's ad tag — and asked no core anything else, so a
+client its core could not serve was stored and pushed.
+*/
+func TestAClientEditIsValidatedByItsCore(t *testing.T) {
+	setupBulkDB(t)
+	useConvergedCore(t)
+	svc, inboundSvc := &ClientService{}, &InboundService{}
+	ib := mkInbound(t, 24703, model.Protocol("convkind"), `{"clients":[]}`)
+	if _, err := svc.Create(inboundSvc, &ClientCreatePayload{
+		Client:     model.Client{Email: "edit@x", SubID: "sub-edit", Enable: true},
+		InboundIds: []int{ib.Id},
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	before := storedPassword(t, inboundSvc, ib, "edit@x")
+	rec, err := svc.GetRecordByEmail(nil, "edit@x")
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	_, err = svc.Update(inboundSvc, rec.Id, model.Client{Email: "edit@x", SubID: "sub-edit", Enable: true, Password: "refused"})
+	if err == nil || !strings.Contains(err.Error(), "refuses that password") {
+		t.Fatalf("Update = %v, want the core's refusal", err)
+	}
+	if got := storedPassword(t, inboundSvc, ib, "edit@x"); got != before {
+		t.Fatalf("the refused edit was stored: password %q, want %q", got, before)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Arman2122/p-ui/internal/cores"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/mtproto"
 )
@@ -127,10 +128,12 @@ func TestFillProtocolDefaultsMtproto(t *testing.T) {
 	}
 }
 
-func TestNormalizeMtprotoSecretHealsClients(t *testing.T) {
-	s := &InboundService{}
+func TestAnMtprotoInboundIsNormalisedByItsCoreOnSave(t *testing.T) {
+	cores.Use(testCores(t))
 	ib := &model.Inbound{Protocol: model.MTProto, Settings: `{"fakeTlsDomain":"a.com","secret":"eedeadbeef","clients":[{"email":"x","secret":""}]}`}
-	s.normalizeMtprotoSecret(ib)
+	if err := mintInstanceForKind(ib, nil); err != nil {
+		t.Fatalf("mint: %v", err)
+	}
 
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(ib.Settings), &parsed); err != nil {

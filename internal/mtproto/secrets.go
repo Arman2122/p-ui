@@ -35,3 +35,22 @@ func MintFakeTLSSecret(settings string) string {
 
 // ValidAdTag reports whether a Telegram advertising tag is well-formed.
 func ValidAdTag(tag string) bool { return model.ValidMtprotoAdTag(tag) }
+
+/*
+NormalizeInboundSettings is the shape a stored mtproto inbound must have: no
+inbound-level secret or ad tag, since both live on clients and a stale inbound
+secret once leaked into links mtg rejected as "incorrect client random"; and
+every client secret rebuilt so it fronts a domain.
+*/
+func NormalizeInboundSettings(settings string) string {
+	if stripped, ok := model.StripMtprotoInboundSecret(settings); ok {
+		settings = stripped
+	}
+	if stripped, ok := model.StripMtprotoInboundAdTag(settings); ok {
+		settings = stripped
+	}
+	if healed, ok := model.HealMtprotoClientSecrets(settings); ok {
+		settings = healed
+	}
+	return settings
+}

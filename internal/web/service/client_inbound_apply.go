@@ -14,7 +14,6 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/random"
 	"github.com/Arman2122/p-ui/internal/web/runtime"
@@ -414,9 +413,11 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 
 	prevSettings := oldInbound.Settings
 	oldInbound.Settings = string(newSettings)
-	// The inbound save path normalises mtproto secrets; the client save path is
+	// The inbound save path lets the kind's core mint; the client save path is
 	// the second door into the same settings blob and skipped it. F172.
-	inboundSvc.normalizeMtprotoSecret(oldInbound)
+	if err := mintInstanceForKind(oldInbound, &model.Inbound{Protocol: oldInbound.Protocol, Settings: prevSettings}); err != nil {
+		return false, err
+	}
 
 	needRestart := false
 
@@ -565,10 +566,6 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	if strings.TrimSpace(clients[0].Email) == "" {
 		return false, common.NewError("client email is required")
 	}
-	if oldInbound.Protocol == model.MTProto && clients[0].AdTag != "" && !mtproto.ValidAdTag(clients[0].AdTag) {
-		return false, common.NewError("mtproto client ad tag must be 32 hex characters")
-	}
-
 	if clients[0].Email != oldEmail {
 		existEmail, err := s.checkEmailsExistForClients(inboundSvc, clients, nil)
 		if err != nil {
@@ -644,6 +641,12 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		if clients[0].KeepAlive == 0 {
 			clients[0].KeepAlive = old.KeepAlive
 		}
+	}
+
+	// The core's own refusal on an edit as on an add, once the stored fields an
+	// edit may omit are carried forward; the ad tag rule was the one check kept here.
+	if err := validateClientForKind(oldInbound.Protocol, oldInbound.Settings, &clients[0]); err != nil {
+		return false, err
 	}
 
 	var oldSettings map[string]any
@@ -742,9 +745,11 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 
 	prevSettings := oldInbound.Settings
 	oldInbound.Settings = string(newSettings)
-	// The inbound save path normalises mtproto secrets; the client save path is
+	// The inbound save path lets the kind's core mint; the client save path is
 	// the second door into the same settings blob and skipped it. F172.
-	inboundSvc.normalizeMtprotoSecret(oldInbound)
+	if err := mintInstanceForKind(oldInbound, &model.Inbound{Protocol: oldInbound.Protocol, Settings: prevSettings}); err != nil {
+		return false, err
+	}
 
 	needRestart := false
 
