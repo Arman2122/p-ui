@@ -1903,6 +1903,11 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": 1,
         "type": "integer"
       },
+      "rateEnforced": {
+        "description": "RateEnforced reports that a core throttling in-process holds a limit for this\nclient NOW, read back from that core; Shapeable's complement.",
+        "example": false,
+        "type": "boolean"
+      },
       "shapeable": {
         "description": "Shapeable reports whether the kernel holds state for this client NOW, which\nneeds a core that can identify them and a plan granting them a rate.",
         "example": true,
@@ -1934,6 +1939,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "enforcedDownBps",
       "enforcedUpBps",
       "policyId",
+      "rateEnforced",
       "shapeable",
       "unresolved",
       "usedBytes",

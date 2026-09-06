@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"strings"
@@ -53,6 +54,9 @@ type defects struct {
 	zeroSessionLastSeen bool
 	misattributeSession bool
 	inventSessionLocal  bool
+	// The rate defects, driven by rateCore.
+	forgetRates bool
+	keepRates   bool
 }
 
 type fakeCore struct {
@@ -416,6 +420,66 @@ func (s *shapingCore) Sessions(context.Context) ([]core.Session, error) {
 		out = append(out, session)
 	}
 	return out, nil
+}
+
+// rateCore throttles in-process: the table it is handed is what it reads back,
+// unless a defect makes it forget the numbers or keep them past a clear.
+type rateCore struct {
+	*fakeCore
+	held map[string]core.RateLimit
+}
+
+func newRateFake(d defects) *rateCore {
+	return &rateCore{fakeCore: newFake(d), held: map[string]core.RateLimit{}}
+}
+
+func (c *rateCore) EnforcesRates(core.Kind) bool { return true }
+
+func (c *rateCore) EnforceRates(_ context.Context, _ core.Instance, limits map[string]core.RateLimit) error {
+	if c.d.keepRates && len(limits) == 0 {
+		return nil
+	}
+	c.held = maps.Clone(limits)
+	return nil
+}
+
+func (c *rateCore) EnforcedRates(context.Context, core.Instance) (map[string]core.RateLimit, error) {
+	if c.d.forgetRates {
+		return map[string]core.RateLimit{}, nil
+	}
+	return maps.Clone(c.held), nil
+}
+
+func rateRig(c *rateCore) Rig {
+	return rigFor(c.fakeCore, func() (core.Core, error) { return c, nil })
+}
+
+// A rate that does not round-trip is one the panel can neither show nor trust:
+// the suite refuses a core that forgets what it was handed or keeps it past a clear.
+func TestSuiteHoldsARateCoreToARoundTrip(t *testing.T) {
+	for _, f := range Check(rateRig(newRateFake(defects{}))) {
+		if strings.HasPrefix(f.Invariant, "rates/") {
+			t.Errorf("a core that reads back exactly what it holds was reported: %s", f)
+		}
+	}
+	for _, tc := range []struct {
+		name          string
+		defects       defects
+		wantInvariant string
+	}{
+		{"reads back nothing it was handed", defects{forgetRates: true}, "rates/reads-back"},
+		{"keeps a limit after the table is cleared", defects{keepRates: true}, "rates/cleared"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			failures := Check(rateRig(newRateFake(tc.defects)))
+			for _, f := range failures {
+				if f.Invariant == tc.wantInvariant {
+					return
+				}
+			}
+			t.Errorf("suite did not catch %q: wanted invariant %q, got %v", tc.name, tc.wantInvariant, failures)
+		})
+	}
 }
 
 func shapingRig(s *shapingCore) Rig {

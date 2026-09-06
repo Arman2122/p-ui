@@ -515,6 +515,31 @@ func (s *server) limiterFor(email string) *limiterPair {
 	return pair
 }
 
+// enforcedRates reads each limit back off the live limiter where one exists and
+// off the table every new connection's limiter is set from where none does yet.
+func (s *server) enforcedRates() map[string]core.RateLimit {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]core.RateLimit, len(s.limits))
+	for email, l := range s.limits {
+		if pair, live := s.limiters[email]; live {
+			l = core.RateLimit{UpBps: bpsOf(pair.up), DownBps: bpsOf(pair.down)}
+		}
+		if l.UpBps > 0 || l.DownBps > 0 {
+			out[email] = l
+		}
+	}
+	return out
+}
+
+// bpsOf reads a limiter back into the contract's unit; unlimited is zero.
+func bpsOf(lim *rate.Limiter) int64 {
+	if lim.Limit() == rate.Inf {
+		return 0
+	}
+	return int64(lim.Limit()) * 8
+}
+
 // setLimits applies the panel's evaluated ladder. Every live connection picks
 // the new rate up on its next write; an email left out is unlimited.
 func (s *server) setLimits(limits map[string]core.RateLimit) {

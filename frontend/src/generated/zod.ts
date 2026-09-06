@@ -454,6 +454,7 @@ export const EnforcedLimitsSchema = z.object({
   enforcedDownBps: z.number().int(),
   enforcedUpBps: z.number().int(),
   policyId: z.number().int(),
+  rateEnforced: z.boolean(),
   shapeable: z.boolean(),
   unresolved: z.boolean(),
   usedBytes: z.number().int(),

@@ -190,6 +190,21 @@ func shapeableKinds(bound *core.Bound) []core.Kind {
 	return out
 }
 
+// rateKinds names the kinds one core throttles inside itself. Shaping's
+// complement: a core that shapes nothing in-process contributes none.
+func rateKinds(bound *core.Bound) []core.Kind {
+	if bound.Rate == nil {
+		return nil
+	}
+	var out []core.Kind
+	for _, kind := range bound.Core.Kinds() {
+		if bound.Rate.EnforcesRates(kind) {
+			out = append(out, kind)
+		}
+	}
+	return out
+}
+
 // deviceSubjects is one device's shapeable population before the rules are applied.
 type deviceSubjects struct {
 	device string
@@ -365,15 +380,7 @@ func (s *PolicyService) ConvergeRates(ctx context.Context) error {
 	var targets []target
 	var failures []error
 	for _, bound := range reg.Cores() {
-		if bound.Rate == nil {
-			continue
-		}
-		var kinds []core.Kind
-		for _, kind := range bound.Core.Kinds() {
-			if bound.Rate.EnforcesRates(kind) {
-				kinds = append(kinds, kind)
-			}
-		}
+		kinds := rateKinds(bound)
 		if len(kinds) == 0 {
 			continue
 		}
@@ -1099,7 +1106,10 @@ type EnforcedLimits struct {
 	Unresolved bool `json:"unresolved" example:"false"`
 	// Shapeable reports whether the kernel holds state for this client NOW, which
 	// needs a core that can identify them and a plan granting them a rate.
-	Shapeable       bool  `json:"shapeable" example:"true"`
+	Shapeable bool `json:"shapeable" example:"true"`
+	// RateEnforced reports that a core throttling in-process holds a limit for this
+	// client NOW, read back from that core; Shapeable's complement.
+	RateEnforced    bool  `json:"rateEnforced" example:"false"`
 	WantUpBps       int64 `json:"wantUpBps" example:"10000000"`
 	WantDownBps     int64 `json:"wantDownBps" example:"10000000"`
 	EnforcedUpBps   int64 `json:"enforcedUpBps" example:"10000000"`
@@ -1107,7 +1117,8 @@ type EnforcedLimits struct {
 }
 
 /*
-EnforcedFor reports one client's rules beside what the kernel holds for them.
+EnforcedFor reports one client's rules beside what the kernel holds for them,
+or what a core that throttles in-process holds, read back from that core.
 
 The enforced half is read out of the kernel rather than remembered, because the
 value the panel pushed is not evidence that anything is limited: a class that was
@@ -1153,6 +1164,32 @@ func (s *PolicyService) EnforcedFor(ctx context.Context, email string) (Enforced
 			return out, err
 		}
 		out.EnforcedUpBps, out.EnforcedDownBps = enforced[email].UpBps, enforced[email].DownBps
+	}
+
+	if reg := registry(); reg != nil {
+		for _, bound := range reg.Cores() {
+			kinds := rateKinds(bound)
+			if len(kinds) == 0 {
+				continue
+			}
+			instances, err := s.inboundService.DesiredInstances(kinds)
+			if err != nil {
+				return out, err
+			}
+			for _, inst := range instances {
+				if !slices.ContainsFunc(inst.Users, func(u core.User) bool { return u.Email == email }) {
+					continue
+				}
+				held, err := bound.Rate.EnforcedRates(ctx, inst)
+				if err != nil {
+					return out, err
+				}
+				if limit, ok := held[email]; ok {
+					out.RateEnforced = true
+					out.EnforcedUpBps, out.EnforcedDownBps = limit.UpBps, limit.DownBps
+				}
+			}
+		}
 	}
 	return out, nil
 }

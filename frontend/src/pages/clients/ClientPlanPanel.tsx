@@ -132,7 +132,7 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
             {
               key: 'enforced',
               label: t('pages.policies.enforced'),
-              children: enforced.shapeable ? (
+              children: enforced.shapeable || enforced.rateEnforced ? (
                 <span dir="ltr">
                   ↓ {formatRate(enforced.enforcedDownBps, t)} / ↑ {formatRate(enforced.enforcedUpBps, t)}
                 </span>

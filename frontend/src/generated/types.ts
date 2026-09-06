@@ -431,6 +431,7 @@ export interface EnforcedLimits {
   enforcedDownBps: number;
   enforcedUpBps: number;
   policyId: number;
+  rateEnforced: boolean;
   shapeable: boolean;
   unresolved: boolean;
   usedBytes: number;

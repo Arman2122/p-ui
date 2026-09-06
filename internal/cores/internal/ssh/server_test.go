@@ -249,12 +249,19 @@ func TestRateIsEnforcedInProcess(t *testing.T) {
 	if err := c.EnforceRates(context.Background(), inst, map[string]core.RateLimit{subjectEmail(): {UpBps: 256_000, DownBps: 256_000}}); err != nil {
 		t.Fatalf("EnforceRates: %v", err)
 	}
+	if held, err := c.EnforcedRates(context.Background(), inst); err != nil || held[subjectEmail()] != (core.RateLimit{UpBps: 256_000, DownBps: 256_000}) {
+		t.Fatalf("EnforcedRates = %+v, %v; the table must read back what it was handed", held, err)
+	}
 	start := time.Now()
 	roundTrip(t, client, echo.Addr(), payload)
 	limited := time.Since(start)
 
 	if err := c.EnforceRates(context.Background(), inst, map[string]core.RateLimit{}); err != nil {
 		t.Fatalf("EnforceRates clear: %v", err)
+	}
+	// Read off the LIVE limiter now: the round trip above created it.
+	if held, err := c.EnforcedRates(context.Background(), inst); err != nil || len(held) != 0 {
+		t.Fatalf("EnforcedRates after a clear = %+v, %v; the live limiter still throttles", held, err)
 	}
 	start = time.Now()
 	roundTrip(t, client, echo.Addr(), payload)

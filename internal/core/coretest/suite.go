@@ -138,6 +138,7 @@ func Check(rig Rig) []Failure {
 	// Both run here and not later: checkInstanceApply ends in DropInstance, which
 	// takes the device with it, and neither identity is observable without one.
 	checkShaping(r, rig, bound)
+	checkRates(r, rig, bound)
 	checkSessions(r, rig, bound)
 	checkCutter(r, rig, bound)
 	checkUsers(r, rig, bound)
@@ -528,6 +529,51 @@ func compareSubjects(r *report, inst core.Instance, targets []core.ShapingTarget
 		if _, known := want[email]; !known {
 			r.fail("shaping/verifiable", "the core reports %v for %q, which the host holds no address for; an invented key shapes an address nobody answers to", got[email], email)
 		}
+	}
+}
+
+/*
+checkRates holds a RateEnforcer to a round trip: what it is handed for a client
+is what it reads back for that client and for nobody else, and a cleared table
+reads back empty. Read back rather than trusted, for ServedUsers' reason: a core
+that stores the numbers and throttles nothing looks the same from the push.
+*/
+func checkRates(r *report, rig Rig, bound *core.Bound) {
+	if bound.Rate == nil {
+		return
+	}
+	ctx := context.Background()
+	inst := rig.Instance(2)
+	if bound.Supervise != nil {
+		if err := bound.Supervise.Reconcile(ctx, []core.Instance{inst}); err != nil {
+			r.fail("rates/reconcile", "reconciling before the rate checks failed: %v", err)
+			return
+		}
+	}
+	want := core.RateLimit{UpBps: 1_000_000, DownBps: 2_000_000}
+	if err := bound.Rate.EnforceRates(ctx, inst, map[string]core.RateLimit{Subject: want}); err != nil {
+		r.fail("rates/accepts", "EnforceRates failed: %v", err)
+		return
+	}
+	held, err := bound.Rate.EnforcedRates(ctx, inst)
+	if err != nil {
+		r.fail("rates/reads-back", "EnforcedRates failed: %v", err)
+		return
+	}
+	if held[Subject] != want {
+		r.fail("rates/reads-back", "handed %+v for %q and reading back %+v; a limit that does not round-trip is one the panel can neither show nor trust", want, Subject, held[Subject])
+	}
+	for email, limit := range held {
+		if email != Subject {
+			r.fail("rates/absent-is-unlimited", "%q was handed no limit and reads back %+v; an email absent from the table is unlimited, not whatever it was before", email, limit)
+		}
+	}
+	if err := bound.Rate.EnforceRates(ctx, inst, map[string]core.RateLimit{}); err != nil {
+		r.fail("rates/accepts", "clearing EnforceRates failed: %v", err)
+		return
+	}
+	if held, err := bound.Rate.EnforcedRates(ctx, inst); err != nil || len(held) != 0 {
+		r.fail("rates/cleared", "after an empty table the core still holds %+v (err %v); a cleared plan is one more call, not a special case", held, err)
 	}
 }
 

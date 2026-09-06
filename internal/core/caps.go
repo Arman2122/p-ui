@@ -396,6 +396,9 @@ type RateEnforcer interface {
 	// EnforcesRates is per-kind and static, so a form can gate its speed fields.
 	EnforcesRates(kind Kind) bool
 	EnforceRates(ctx context.Context, inst Instance, limits map[string]RateLimit) error
+	// EnforcedRates reads back what the core holds each client to right now, from
+	// the objects that throttle: a limit pushed and lost must not read as enforced.
+	EnforcedRates(ctx context.Context, inst Instance) (map[string]RateLimit, error)
 }
 
 /*

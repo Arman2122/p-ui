@@ -442,6 +442,16 @@ func (c *Core) EnforceRates(_ context.Context, inst core.Instance, limits map[st
 	return nil
 }
 
+func (c *Core) EnforcedRates(_ context.Context, inst core.Instance) (map[string]core.RateLimit, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cur, ok := c.instances[inst.ID]
+	if !ok {
+		return nil, nil
+	}
+	return cur.srv.enforcedRates(), nil
+}
+
 // ensureHostKeyLocked loads the node's host keys, mints whichever of the two
 // families is missing, and stores the set: what every client pinned is kept.
 func (c *Core) ensureHostKeyLocked() error {

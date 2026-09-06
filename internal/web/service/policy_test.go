@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"sort"
@@ -39,6 +40,8 @@ type declaredCore struct {
 	// on a core shaped like OpenConnect.
 	more     []core.ShapingTarget
 	sessions []core.Session
+	// rates is what a rateCore was last handed, and reads back.
+	rates    map[string]core.RateLimit
 	failWith error
 	shapeErr error
 }
@@ -122,6 +125,28 @@ type peerCore struct {
 
 func newProxyCore(base *declaredCore) *proxyCore {
 	return &proxyCore{declaredCore: base, sessionCore: sessionCore{base}, userCore: userCore{base}}
+}
+
+// rateCore throttles inside itself: an L7 core with no kernel identity whose
+// clients are handed a number, read back from the table that holds them.
+type rateCore struct {
+	*declaredCore
+	userCore
+}
+
+func newRateCore(base *declaredCore) *rateCore {
+	return &rateCore{declaredCore: base, userCore: userCore{base}}
+}
+
+func (c rateCore) EnforcesRates(kind core.Kind) bool { return kind == c.kind }
+
+func (c rateCore) EnforceRates(_ context.Context, _ core.Instance, limits map[string]core.RateLimit) error {
+	c.rates = maps.Clone(limits)
+	return nil
+}
+
+func (c rateCore) EnforcedRates(context.Context, core.Instance) (map[string]core.RateLimit, error) {
+	return maps.Clone(c.rates), nil
 }
 
 func newTunnelCore(base *declaredCore) *tunnelCore {
@@ -647,6 +672,57 @@ func tunnelWithClients(t *testing.T, device string, emails ...string) (*declared
 		seedClientRow(t, email, inbound.Id, 0, 0, 0)
 	}
 	return base, inbound
+}
+
+/*
+TestAnInProcessCoreIsHandedItsRatesAndReadsThemBack.
+
+The ladder reaches a core that throttles inside itself, and EnforcedFor reports
+what that core holds — read back, not remembered — so the panel shows a limit it
+can trust, and a cleared plan reads as nothing rather than as the last number.
+*/
+func TestAnInProcessCoreIsHandedItsRatesAndReadsThemBack(t *testing.T) {
+	initTestDB(t)
+	svc := &PolicyService{}
+	base := &declaredCore{id: "shell", kind: "ssh"}
+	installCores(t, newRateCore(base))
+	inbound := seedPolicyInbound(t, "ssh", "ssh-rates", 45210, "throttled", "free")
+	for _, email := range []string{"throttled", "free"} {
+		seedClientRow(t, email, inbound.Id, 0, 0, 0)
+	}
+	seedPlan(t, "flat", []policy.Tier{{FromBytes: 0, UpBps: 1_000_000, DownBps: 4_000_000}}, "throttled")
+
+	if err := svc.ConvergeRates(context.Background()); err != nil {
+		t.Fatalf("ConvergeRates: %v", err)
+	}
+	want := map[string]core.RateLimit{"throttled": {UpBps: 1_000_000, DownBps: 4_000_000}}
+	if !maps.Equal(base.rates, want) {
+		t.Fatalf("the core holds %+v, want %+v", base.rates, want)
+	}
+	got, err := svc.EnforcedFor(context.Background(), "throttled")
+	if err != nil {
+		t.Fatalf("EnforcedFor: %v", err)
+	}
+	if !got.RateEnforced || got.EnforcedUpBps != 1_000_000 || got.EnforcedDownBps != 4_000_000 || got.WantDownBps != 4_000_000 {
+		t.Fatalf("EnforcedFor = %+v; want the core's own numbers reported as enforced", got)
+	}
+	if free, err := svc.EnforcedFor(context.Background(), "free"); err != nil || free.RateEnforced {
+		t.Fatalf("a client on no plan reads as enforced: %+v (%v)", free, err)
+	}
+
+	if err := database.GetDB().Where("email = ?", "throttled").Delete(&model.ClientPolicy{}).Error; err != nil {
+		t.Fatalf("clear the plan: %v", err)
+	}
+	if err := svc.ConvergeRates(context.Background()); err != nil {
+		t.Fatalf("ConvergeRates after the clear: %v", err)
+	}
+	got, err = svc.EnforcedFor(context.Background(), "throttled")
+	if err != nil {
+		t.Fatalf("EnforcedFor after the clear: %v", err)
+	}
+	if got.RateEnforced || len(base.rates) != 0 {
+		t.Fatalf("a cleared plan still reads as enforced: %+v (the core holds %+v)", got, base.rates)
+	}
 }
 
 // registerSessionFamily claims the OpenConnect-shaped family once for the

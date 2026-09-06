@@ -465,6 +465,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "enforcedDownBps": 10000000,
     "enforcedUpBps": 10000000,
     "policyId": 1,
+    "rateEnforced": false,
     "shapeable": true,
     "unresolved": false,
     "usedBytes": 53687091200,

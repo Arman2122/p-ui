@@ -30,6 +30,7 @@ const WG_CORE: CoreView = {
 };
 
 const XRAY_CORE: CoreView = { ...WG_CORE, id: 'xray', kinds: ['vless'], shaping: {} };
+const SSH_CORE: CoreView = { ...WG_CORE, id: 'ssh', kinds: ['ssh'], shaping: {}, rateKinds: ['ssh'] };
 
 const PLAN = { id: 1, name: 'fair use', tiers: [], rev: 1, createdAt: 0, updatedAt: 0 };
 
@@ -39,6 +40,7 @@ const ENFORCED = {
   policyId: 1,
   unresolved: false,
   shapeable: true,
+  rateEnforced: false,
   wantUpBps: 10000000,
   wantDownBps: 10000000,
   enforcedUpBps: 10000000,
@@ -131,6 +133,17 @@ describe('ClientPlanPanel', () => {
     await renderPanel(['wgkernel'], [WG_CORE]);
 
     expect(document.body.textContent).toContain(enUS.pages.policies.notEnforcedYet);
+  });
+
+  /* A core that throttles in-process has no kernel state to read, so Shapeable is
+     false for its client; what it holds is read back from the core instead. */
+  it('a client on a core that throttles in-process reads what the core holds', async () => {
+    mockHost({ ...ENFORCED, shapeable: false, rateEnforced: true }, true, [SSH_CORE]);
+    await renderPanel(['ssh'], [SSH_CORE]);
+
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(enUS.pages.policies.enforced);
+    expect(text).not.toContain(enUS.pages.policies.notEnforcedYet);
   });
 
   it('offers a retry rather than guessing when the assignment cannot be read', async () => {
