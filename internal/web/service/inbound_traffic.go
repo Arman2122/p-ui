@@ -638,13 +638,10 @@ func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
 	if err != nil {
 		return err
 	}
-	s.resetMtprotoClientQuota(clientEmail)
 	if _, err = s.clientService.reEnableRecovered(s, wasDepleted); err != nil {
 		return err
 	}
-	// The daemon's counter for a client that was cut off is cleared only once
-	// the client is back on it; the reset above found nobody to reset.
-	resetCoreQuotas(context.Background(), wasDepleted)
+	resetCoreQuotas(context.Background(), []string{clientEmail})
 	return nil
 }
 
@@ -655,7 +652,7 @@ func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (needRes
 		return inner
 	})
 	if err == nil {
-		s.resetMtprotoClientQuota(clientEmail)
+		resetCoreQuotas(context.Background(), []string{clientEmail})
 	}
 	return
 }
@@ -758,7 +755,7 @@ func (s *InboundService) ResetAllTraffics() error {
 	})
 	if err == nil {
 		s.propagateResetAllTrafficsToNodes()
-		s.resetAllMtprotoQuotas()
+		resetCoreQuotasForAll(context.Background())
 	}
 	return err
 }

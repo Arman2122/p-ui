@@ -859,7 +859,15 @@ func (s *ClientService) bulkAdjustInboundClients(
 		}
 	}
 	if txErr == nil && credsChanged && oldInbound.NodeID == nil && !xrayServes {
-		inboundSvc.applyLocalMtproto(inboundId)
+		// A kind Xray serves took the restart above; every other core is handed
+		// each re-keyed client as the user op an edit would be.
+		if rt, rtErr := inboundSvc.runtimeFor(oldInbound); rtErr == nil {
+			for email := range foundEmails {
+				if err1 := rt.UpdateUser(context.Background(), oldInbound, email, *plan[email].record.ToClient()); err1 != nil {
+					logger.Warning("Error in re-keying client on", rt.Name(), ":", err1)
+				}
+			}
+		}
 	}
 
 	return res

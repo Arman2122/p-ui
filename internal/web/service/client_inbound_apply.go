@@ -459,8 +459,6 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 	if oldInbound.NodeID == nil {
 		if !push {
 			needRestart = true
-		} else if oldInbound.Protocol == model.MTProto {
-			inboundSvc.applyLocalMtproto(oldInbound.Id)
 		} else {
 			// Restarting Xray cannot apply a client to an inbound it does not serve;
 			// the core's own reconcile does, and the restart only drops everyone else.
@@ -861,8 +859,6 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		if oldInbound.NodeID == nil {
 			if !push {
 				needRestart = true
-			} else if oldInbound.Protocol == model.MTProto {
-				inboundSvc.applyLocalMtproto(oldInbound.Id)
 			} else {
 				if oldClients[clientIndex].Enable {
 					err1 := rt.RemoveUser(context.Background(), oldInbound, oldEmail)
@@ -1023,14 +1019,9 @@ func (s *ClientService) DelInboundClientByEmail(inboundSvc *InboundService, inbo
 	// inbound's runtime even when the same email survives in another inbound.
 	if len(email) > 0 {
 		if oldInbound.NodeID == nil {
-			if oldInbound.Protocol == model.MTProto {
-				// mtg serves the full secret set, so any client delete re-applies
-				// it (removing the last client stops the sidecar) regardless of the
-				// client's enable state.
-				inboundSvc.applyLocalMtproto(oldInbound.Id)
-			} else if needApiDel {
-				// Local inbound: a disabled client isn't in the running Xray, so only
-				// a live one (needApiDel) needs an API removal.
+			if needApiDel {
+				// A disabled client is on no core, so only a live one (needApiDel)
+				// needs a runtime removal.
 				if !push {
 					needRestart = true
 				} else if err1 := rt.RemoveUser(context.Background(), oldInbound, email); err1 == nil {

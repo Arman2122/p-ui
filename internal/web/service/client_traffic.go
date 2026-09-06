@@ -237,13 +237,10 @@ func (s *ClientService) ResetAllClientTraffics(inboundSvc *InboundService, id in
 	if err != nil {
 		return err
 	}
-	inboundSvc.resetAllMtprotoQuotas()
 	if _, err := s.reEnableRecovered(inboundSvc, wasDepleted); err != nil {
 		return err
 	}
-	// The by-name reset above only knows the desired set, which excludes a
-	// depleted client; its daemon counter is cleared here, after it is back.
-	resetCoreQuotas(context.Background(), wasDepleted)
+	resetCoreQuotasForAll(context.Background())
 	return nil
 }
 
@@ -345,12 +342,11 @@ func (s *ClientService) ResetAllTraffics(inboundSvc *InboundService) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	inboundSvc.resetAllMtprotoQuotas()
 	needRestart, err := s.reEnableRecovered(inboundSvc, wasDepleted)
 	if err != nil {
 		return false, err
 	}
-	resetCoreQuotas(context.Background(), wasDepleted)
+	resetCoreQuotasForAll(context.Background())
 	return needRestart || affected > 0, nil
 }
 

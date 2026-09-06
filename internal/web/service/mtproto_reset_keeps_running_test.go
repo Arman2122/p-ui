@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"testing"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/mtproto"
@@ -12,20 +14,14 @@ import (
 /*
 Resetting traffic must not stop an MTProto inbound.
 
-resetAllMtprotoQuotas converged before resetting, and it converged with
-Manager.Reconcile -- which treats absence from the desired set as "stop this".
-It was the only non-core caller of that destructive API in the tree.
+The reset once converged the desired set before resetting, with a call that
+treats absence from that set as "stop this" — and an inbound whose stored
+settings will not parse (a hand edit, a half-written import) is absent while
+its sidecar runs perfectly well, so a renewal took a working inbound offline.
 
-The desired set is built by DesiredMtprotoInstances, which SKIPS any inbound
-whose settings will not parse. So an inbound with a malformed settings blob --
-a hand edit, a partially written import, a field an older build wrote -- is
-absent from `desired` while its sidecar is running perfectly well. Resetting
-traffic then killed it, and the panel's own reset-and-re-enable path calls this,
-so a renewal was capable of taking a working inbound permanently offline.
-
-Ensure converges the instances that ARE desired and stops nothing. It is a
-strict behavioural subset of the call it replaces: Reconcile is exactly this
-loop plus the stop-the-absent pass. F217.
+A panel-wide reset now only asks each quota core to clear counters by name and
+converges nothing; an unreadable inbound makes it skip that core with a
+warning. This pins that nothing on the path stops a sidecar. F217.
 */
 func TestATrafficResetDoesNotStopAnUnparseableMtprotoInbound(t *testing.T) {
 	setupConflictDB(t)
@@ -55,20 +51,18 @@ func TestATrafficResetDoesNotStopAnUnparseableMtprotoInbound(t *testing.T) {
 		Update("settings", `{"clients": [ this is not json`).Error; err != nil {
 		t.Fatalf("corrupt the settings: %v", err)
 	}
-	desired, err := (&InboundService{}).DesiredMtprotoInstances()
-	if err != nil {
-		t.Fatalf("DesiredMtprotoInstances: %v", err)
-	}
-	for _, inst := range desired {
-		if inst.Id == seeded.Id {
-			t.Skip("the unreadable inbound is still desired; this test cannot see the bug")
+	if desired, err := (&InboundService{}).DesiredInstances([]core.Kind{core.Kind(model.MTProto)}); err == nil {
+		for _, inst := range desired {
+			if inst.ID == seeded.Id {
+				t.Skip("the unreadable inbound is still desired; this test cannot see the bug")
+			}
 		}
 	}
 	if !mtproto.GetManager().HasRunning() {
 		t.Fatal("the sidecar is not running before the reset; the rest proves nothing")
 	}
 
-	(&InboundService{}).resetAllMtprotoQuotas()
+	resetCoreQuotasForAll(context.Background())
 
 	if !mtproto.GetManager().HasRunning() {
 		t.Fatal("a traffic reset stopped a running MTProto sidecar because the panel could not parse that inbound's stored settings; every client on it is disconnected and nothing restarts it")
