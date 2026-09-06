@@ -1075,7 +1075,7 @@ export default function InboundFormModal({
           >
             <Tabs items={[
               { key: 'basic', label: t('pages.xray.basicTemplate'), children: basicTab, forceRender: true },
-              ...((kind?.settingsTab ?? false) || isFallbackHost
+              ...((kind?.settingsTab ?? true) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]
                 : []),
               ...(streamEnabled

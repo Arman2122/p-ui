@@ -100,3 +100,12 @@ function stubHttp() {
   vi.spyOn(HttpUtil, 'get').mockResolvedValue({ success: true, obj: {} } as any);
 }
 stubHttp();
+
+/* CodeMirror's selection layer measures text through Range.getClientRects, which
+   jsdom leaves undefined; without it every form that mounts an editor throws
+   mid-render. Zero-sized geometry is enough: nothing here asserts on layout. */
+if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'function') {
+  const emptyRect = (): DOMRect => ({ x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON: () => ({}) }) as DOMRect;
+  Range.prototype.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = emptyRect;
+}
