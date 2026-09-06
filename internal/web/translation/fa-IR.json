@@ -908,8 +908,6 @@
       "addClients": "افزودن کلاینت‌ها",
       "limitIp": "محدودیت IP",
       "limitIpDesc": "چند نشانی هم‌زمان می‌توانند از این کاربر استفاده کنند. «بدون محدودیت» هیچ سقفی نمی‌گذارد.",
-      "limitIpFail2banMissing": "Fail2ban نصب نشده است، بنابراین محدودیت IP اعمال نمی‌شود. برای فعال‌سازی این گزینه، Fail2ban را از منوی اسکریپت p-ui نصب کنید.",
-      "limitIpJailMissing": "Fail2ban نصب است، اما زندان (jail) محدودیت IP مربوط به p-ui در حال اجرا نیست — بنابراین هیچ اتصالی مسدود نمی‌شود. برای نصب دوباره، گزینه «مدیریت محدودیت IP» را در منوی اسکریپت p-ui اجرا کنید.",
       "limitIpDisabled": "قابلیت محدودیت IP روی این سرور غیرفعال است.",
       "password": "رمز عبور",
       "passwordDesc": "فقط توسط کلاینت‌های Trojan و Shadowsocks استفاده می‌شود؛ برای VLESS، VMess، Hysteria و WireGuard نادیده گرفته می‌شود.",
@@ -1118,8 +1116,11 @@
       "limitIpCapped": "محدود به",
       "amneziawgConfig": "کانفیگ AmneziaWG",
       "limitIpUnsupportedKinds": "محدودیت IP برای {kinds} اعمال نمی‌شود: این پروتکل نمی‌تواند مبدأ اتصال را گزارش کند، پس محدودیت روی آن بی‌اثر است.",
-      "limitIpEnforcedAtLogin": "روی {kinds} دستگاه اضافی در زمان ورود رد می‌شود و دستگاهی که از قبل متصل است قطع می‌گردد؛ به Fail2ban نیازی نیست.",
-      "limitIpNeedsFail2ban": "روی {kinds} محدودیت با Fail2ban اعمال می‌شود."
+      "limitIpEnforcedAtLogin": "در {kinds} دستگاه اضافه هنگام ورود رد می‌شود و دستگاهی که از قبل متصل است قطع می‌شود؛ نیازی به مسدودسازی فایروال نیست.",
+      "limitIpNotEnforceable": "این میزبان نمی‌تواند آدرس‌ها را در فایروال خود مسدود کند: {reason}. مسدودسازی‌ها ثبت می‌شوند اما تا رفع مشکل چیزی مسدود نمی‌شود.",
+      "limitIpEnforcedByFirewall": "در {kinds} دستگاه اضافه در فایروال میزبان و روی پورت همان ورودی مسدود می‌شود.",
+      "activeBans": "مسدودسازی‌های فعال",
+      "banRelease": "آزادسازی"
     },
     "groups": {
       "name": "نام",
@@ -1679,7 +1680,33 @@
       "secretClear": "پاک کردن",
       "secretClearUndo": "لغو پاک کردن",
       "telegramBotBackupSent": "پشتیبان به گفتگوهای مدیر تلگرام ارسال شد",
-      "telegramBotBackupFailed": "پشتیبان ارسال نشد"
+      "telegramBotBackupFailed": "پشتیبان ارسال نشد",
+      "eventGroupClients": "کلاینت‌ها",
+      "eventClientDeviceLimit": "دستگاهی فراتر از سقف یک کلاینت (قطع، مسدود یا گزارش‌شده)",
+      "ipLimit": "سقف دستگاه",
+      "ipLimitBanMinutes": "مدت مسدودسازی (دقیقه)",
+      "ipLimitBanMinutesDesc": "دستگاهی که از سقف فراتر رود چه مدت در فایروال مسدود بماند. هسته حتی اگر پنل خاموش باشد آن را سر وقت آزاد می‌کند.",
+      "ipLimitSharedAddressAction": "آدرس مشترک",
+      "ipLimitSharedAddressActionDesc": "آدرسی که کلاینت دیگری زیر سقف خود هم از آن استفاده می‌کند، مثل پشت یک NAT: به هر حال مسدود شود، یا فقط گزارش شود و چیزی مسدود نشود.",
+      "ipLimitSharedBan": "مسدود شود",
+      "ipLimitSharedSkip": "فقط گزارش",
+      "ipLimitBans": "مسدودسازی‌های فعال",
+      "ipLimitBansDesc": "هر مسدودسازی سقف دستگاه که این پنل تصمیم گرفته، اینجا یا روی یک نود، تا مهلتش. برای مسدود کردن یک آدرس روی همه ورودی‌ها آن را دستی وارد کنید.",
+      "ipLimitBansNone": "در حال حاضر هیچ آدرسی مسدود نیست.",
+      "ipLimitBanAddress": "مسدود کن",
+      "ipLimitBanSource": "مبدأ",
+      "ipLimitBanWhere": "کجا",
+      "ipLimitBanHere": "این میزبان",
+      "ipLimitBanPorts": "پورت‌ها",
+      "ipLimitBanAllPorts": "همه ورودی‌ها",
+      "ipLimitBanReason": "دلیل",
+      "ipLimitBanReasonOverCap": "فراتر از سقف",
+      "ipLimitBanReasonOperator": "توسط اپراتور",
+      "ipLimitBanReasonReported": "گزارش‌شده، مسدود نشده",
+      "ipLimitBanUntil": "تا",
+      "ipLimitRelease": "آزادسازی",
+      "ipLimitReleaseAll": "آزادسازی همه",
+      "ipLimitReleaseAllConfirm": "همه مسدودسازی‌ها همین حالا آزاد شوند؟"
     },
     "xray": {
       "save": "ذخیره",
@@ -2396,7 +2423,15 @@
       "memoryThreshold": "مصرف حافظه {{ .Percent }}% از حد آستانه {{ .Threshold }}% فراتر رفته است",
       "eventCoreCrash": "{{ .Core }} از کار افتاد",
       "eventCoreUp": "{{ .Core }} دوباره وصل است",
-      "resetAllSummary": "🔚 بازنشانی ترافیک تمام شد: {{ .Count }} از {{ .Total }} مشتری."
+      "resetAllSummary": "🔚 بازنشانی ترافیک تمام شد: {{ .Count }} از {{ .Total }} مشتری.",
+      "eventDeviceLimit": "سقف دستگاه: {{ .Email }} با {{ .Devices }} دستگاه، سقف {{ .Limit }}",
+      "eventDeviceLimitOnNode": " روی نود {{ .Node }}",
+      "eventDeviceLimitCut": "{{ .IP }} توسط هسته‌اش قطع شد{{ .Where }}",
+      "eventDeviceLimitBan": "{{ .IP }} تا {{ .Until }} مسدود است{{ .Where }}",
+      "eventDeviceLimitReported": "{{ .IP }} با کلاینت دیگری مشترک است و فقط گزارش شد، مسدود نشد",
+      "deviceLimitClient": "⚠️ سقف {{ .Limit }} دستگاه شما پر شده است. برای اتصال دوباره، دستگاه دیگری را قطع کنید.",
+      "deviceLimitClientCut": "اتصال شما از {{ .IP }} قطع شد.",
+      "deviceLimitClientBan": "اتصال شما از {{ .IP }} تا {{ .Until }} مسدود است."
     },
     "buttons": {
       "closeKeyboard": "❌ بستن کیبورد",
@@ -2483,7 +2518,12 @@
     "statusSuccess": "موفق",
     "statusFailed": "ناموفق",
     "statusDown": "قطع",
-    "statusUp": "وصل"
+    "statusUp": "وصل",
+    "labelAction": "اقدام",
+    "labelUntil": "تا",
+    "deviceLimitCut": "توسط هسته‌اش قطع شد",
+    "deviceLimitBan": "در فایروال مسدود شد",
+    "deviceLimitReported": "فقط گزارش شد، مسدود نشد (آدرس مشترک)"
   },
   "protocols": {
     "groups": {

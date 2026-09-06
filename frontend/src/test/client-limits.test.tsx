@@ -196,11 +196,11 @@ describe('IpLimitControl', () => {
 
   it('a host that cannot enforce the cap says so instead of showing it as unlimited', async () => {
     renderWithProviders(
-      <IpLimitControl value={0} onChange={() => {}} disabled notice="Fail2ban is not installed" />,
+      <IpLimitControl value={0} onChange={() => {}} disabled notice="This host cannot drop addresses" />,
     );
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
-    expect(document.body.textContent).toContain('Fail2ban is not installed');
+    expect(document.body.textContent).toContain('This host cannot drop addresses');
     expect(document.querySelector('.ant-segmented-disabled')).not.toBeNull();
   });
 });

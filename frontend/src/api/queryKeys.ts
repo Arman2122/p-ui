@@ -1,7 +1,7 @@
 export const keys = {
   server: {
     status: () => ['server', 'status'] as const,
-    fail2banStatus: () => ['server', 'fail2banStatus'] as const,
+    ipLimitStatus: () => ['server', 'ipLimitStatus'] as const,
   },
   nodes: {
     root: () => ['nodes'] as const,
@@ -59,5 +59,9 @@ export const keys = {
     root: () => ['policies'] as const,
     list: () => ['policies', 'list'] as const,
     enforced: (email: string) => ['policies', 'enforced', email] as const,
+  },
+  bans: {
+    root: () => ['bans'] as const,
+    list: () => ['bans', 'list'] as const,
   },
 } as const;

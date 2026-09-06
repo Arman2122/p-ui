@@ -35,7 +35,7 @@ function serveCores() {
   });
 }
 
-// ClientFormModal reads server state via react-query (useFail2banStatusQuery),
+// ClientFormModal reads server state via react-query (useIpLimitStatusQuery),
 // so it needs a QueryClientProvider on top of the shared ThemeProvider wrapper.
 function renderModal() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

@@ -127,6 +127,29 @@ func (s *Subscriber) formatMessage(e eventbus.Event) (subject, body string) {
 		}
 		body = wrap(i18n("tgbot.messages.eventOutboundUp", "Tag=="+e.Source), content)
 
+	case eventbus.EventClientDeviceLimit:
+		data, ok := e.Data.(*eventbus.ClientDeviceLimitData)
+		if !ok {
+			return "", ""
+		}
+		title := i18n("tgbot.messages.eventDeviceLimit",
+			"Email=="+data.Email, "Devices=="+strconv.Itoa(data.Devices), "Limit=="+strconv.Itoa(data.Limit))
+		subject = host + " " + title
+		content := kv(i18n("email.labelIP"), data.IP)
+		switch data.Action {
+		case "cut":
+			content += kv(i18n("email.labelAction"), i18n("email.deviceLimitCut"))
+		case "ban":
+			content += kv(i18n("email.labelAction"), i18n("email.deviceLimitBan"))
+			content += kv(i18n("email.labelUntil"), time.Unix(data.Until, 0).Format("2006-01-02 15:04:05"))
+		default:
+			content += kv(i18n("email.labelAction"), i18n("email.deviceLimitReported"))
+		}
+		if data.Where != "" {
+			content += kv(i18n("email.labelNode"), data.Where)
+		}
+		body = wrap(title, content)
+
 	case eventbus.EventCoreCrash:
 		name := e.Source
 		errText := ""

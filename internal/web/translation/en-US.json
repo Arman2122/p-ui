@@ -908,8 +908,6 @@
       "addClients": "Add Clients",
       "limitIp": "IP Limit",
       "limitIpDesc": "How many addresses may use this client at once. Unlimited places no cap.",
-      "limitIpFail2banMissing": "Fail2ban is not installed, so the IP limit cannot be enforced. Install Fail2ban from the p-ui bash menu to enable this option.",
-      "limitIpJailMissing": "Fail2ban is installed, but p-ui's IP-limit jail is not running — so nothing would be blocked. Re-run \"IP Limit Management\" in the p-ui bash menu to reinstall it.",
       "limitIpDisabled": "The IP limit feature is disabled on this server.",
       "password": "Password",
       "passwordDesc": "Only used by Trojan and Shadowsocks clients; ignored for VLESS, VMess, Hysteria, and WireGuard.",
@@ -1118,8 +1116,11 @@
       "limitIpCapped": "Limit to",
       "amneziawgConfig": "AmneziaWG config",
       "limitIpUnsupportedKinds": "No IP limit on {kinds}: that protocol cannot report where a connection came from, so a cap on it would do nothing.",
-      "limitIpEnforcedAtLogin": "On {kinds} an extra device is refused at login and one already connected is cut; Fail2ban is not needed.",
-      "limitIpNeedsFail2ban": "On {kinds} the cap is enforced by Fail2ban."
+      "limitIpEnforcedAtLogin": "On {kinds} an extra device is refused at login and one already connected is cut; no firewall ban is needed.",
+      "limitIpNotEnforceable": "This host cannot drop addresses on its firewall: {reason}. Bans are recorded but nothing is blocked until it can.",
+      "limitIpEnforcedByFirewall": "On {kinds} an extra device is dropped on the host firewall, on the inbound's port.",
+      "activeBans": "Active bans",
+      "banRelease": "Release"
     },
     "groups": {
       "name": "Name",
@@ -1804,7 +1805,33 @@
       "secretClear": "Clear",
       "secretClearUndo": "Undo clear",
       "telegramBotBackupSent": "Backup sent to the Telegram admin chats",
-      "telegramBotBackupFailed": "Backup was not sent"
+      "telegramBotBackupFailed": "Backup was not sent",
+      "eventGroupClients": "Clients",
+      "eventClientDeviceLimit": "A device over a client's cap (cut, dropped or reported)",
+      "ipLimit": "Device cap",
+      "ipLimitBanMinutes": "Ban duration (minutes)",
+      "ipLimitBanMinutesDesc": "How long a device over its cap is dropped on the firewall. The kernel releases it on time even if the panel is down.",
+      "ipLimitSharedAddressAction": "Shared address",
+      "ipLimitSharedAddressActionDesc": "A source another client under its cap is also using, as behind one NAT: ban it anyway, or report it and drop nothing.",
+      "ipLimitSharedBan": "Ban",
+      "ipLimitSharedSkip": "Report only",
+      "ipLimitBans": "Active bans",
+      "ipLimitBansDesc": "Every device-cap ban this panel decided, here or on a node, until its deadline. Ban an address by hand to drop it on every inbound.",
+      "ipLimitBansNone": "No address is banned right now.",
+      "ipLimitBanAddress": "Ban",
+      "ipLimitBanSource": "Source",
+      "ipLimitBanWhere": "Where",
+      "ipLimitBanHere": "this host",
+      "ipLimitBanPorts": "Ports",
+      "ipLimitBanAllPorts": "all inbounds",
+      "ipLimitBanReason": "Reason",
+      "ipLimitBanReasonOverCap": "over cap",
+      "ipLimitBanReasonOperator": "by operator",
+      "ipLimitBanReasonReported": "reported, not banned",
+      "ipLimitBanUntil": "Until",
+      "ipLimitRelease": "Release",
+      "ipLimitReleaseAll": "Release all",
+      "ipLimitReleaseAllConfirm": "Release every ban now?"
     },
     "xray": {
       "save": "Save",
@@ -2396,7 +2423,15 @@
       "memoryThreshold": "Memory Load {{ .Percent }}% exceeds the threshold of {{ .Threshold }}%",
       "eventCoreCrash": "{{ .Core }} CRASHED",
       "eventCoreUp": "{{ .Core }} is UP again",
-      "resetAllSummary": "🔚 Traffic reset finished: {{ .Count }} of {{ .Total }} clients."
+      "resetAllSummary": "🔚 Traffic reset finished: {{ .Count }} of {{ .Total }} clients.",
+      "eventDeviceLimit": "Device limit: {{ .Email }} has {{ .Devices }} devices, cap {{ .Limit }}",
+      "eventDeviceLimitOnNode": " on node {{ .Node }}",
+      "eventDeviceLimitCut": "{{ .IP }} was disconnected by its core{{ .Where }}",
+      "eventDeviceLimitBan": "{{ .IP }} is dropped{{ .Where }} until {{ .Until }}",
+      "eventDeviceLimitReported": "{{ .IP }} is shared with another client and was reported, not dropped",
+      "deviceLimitClient": "⚠️ Your device limit of {{ .Limit }} is reached. Disconnect another device to reconnect.",
+      "deviceLimitClientCut": "Your connection from {{ .IP }} was disconnected.",
+      "deviceLimitClientBan": "Your connection from {{ .IP }} is blocked until {{ .Until }}."
     },
     "buttons": {
       "closeKeyboard": "❌ Close Keyboard",
@@ -2483,7 +2518,12 @@
     "statusSuccess": "SUCCESS",
     "statusFailed": "FAILED",
     "statusDown": "DOWN",
-    "statusUp": "UP"
+    "statusUp": "UP",
+    "labelAction": "Action",
+    "labelUntil": "Until",
+    "deviceLimitCut": "Disconnected by its core",
+    "deviceLimitBan": "Dropped on the firewall",
+    "deviceLimitReported": "Reported, not dropped (shared address)"
   },
   "protocols": {
     "groups": {

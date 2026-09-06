@@ -16,7 +16,7 @@ const meta = {
   },
   argTypes: {
     value: { description: 'Stored value; `0` means unlimited.' },
-    disabled: { description: 'True when this host cannot enforce an IP limit (no Fail2ban).' },
+    disabled: { description: 'True when this host cannot enforce an IP limit (its firewall cannot be written).' },
     notice: { description: 'Why the cap cannot be enforced. Shown only when disabled.' },
     addon: { description: 'Rendered beside the number, for the IP-log button.' },
   },

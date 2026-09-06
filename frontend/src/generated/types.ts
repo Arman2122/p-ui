@@ -251,6 +251,18 @@ export interface ApiTokenView {
   token?: string;
 }
 
+export interface BanView {
+  clientEmail: string;
+  createdAt: number;
+  id: number;
+  node: string;
+  origin: string;
+  ports: string;
+  reason: string;
+  source: string;
+  until: number;
+}
+
 export interface Capabilities {
   onlineUsers?: boolean | null;
   perUserStats?: boolean | null;
@@ -287,6 +299,18 @@ export interface Client {
   totalGB: number;
   updated_at?: number;
   username?: string;
+}
+
+export interface ClientBan {
+  clientEmail: string;
+  createdAt: number;
+  id: number;
+  nodeGuid: string;
+  origin: string;
+  ports: string;
+  reason: string;
+  source: string;
+  until: number;
 }
 
 export interface ClientConfigFile {
@@ -600,6 +624,12 @@ export interface InstanceStatusView {
   since?: number;
   state: string;
   tag: string;
+}
+
+export interface IpLimitStatus {
+  enabled: boolean;
+  enforceable: boolean;
+  reason: string;
 }
 
 export interface Msg {

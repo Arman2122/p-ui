@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"strconv"
 	"time"
 
@@ -40,6 +41,67 @@ func (a *PolicyController) initRouter(g *gin.RouterGroup) {
 	g.POST("/assign", a.assign)
 	g.POST("/pushAssignments", a.pushAssignments)
 	g.POST("/pushBans", a.pushBans)
+
+	g.GET("/bans", a.bans)
+	g.POST("/bans/release", a.releaseBan)
+	g.POST("/bans/releaseAll", a.releaseAllBans)
+	g.POST("/bans/add", a.banAddress)
+}
+
+// bans lists every device-cap ban this panel decided, held here or on a node.
+func (a *PolicyController) bans(c *gin.Context) {
+	rows, err := a.policyService.ActiveBanViews(c.Request.Context())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	jsonObj(c, rows, nil)
+}
+
+// releaseBan frees one (client, source) wherever this panel banned it, now.
+func (a *PolicyController) releaseBan(c *gin.Context) {
+	var req struct {
+		Email  string `json:"email"`
+		Source string `json:"source"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Source == "" {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), errors.New("a source address is required"))
+		return
+	}
+	released, err := a.policyService.ReleaseBan(c.Request.Context(), req.Email, req.Source, time.Now())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, map[string]int{"released": released}, nil)
+}
+
+func (a *PolicyController) releaseAllBans(c *gin.Context) {
+	released, err := a.policyService.ReleaseAllBans(c.Request.Context(), time.Now())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, map[string]int{"released": released}, nil)
+}
+
+// banAddress is an operator's own ban: every local inbound port, for the given
+// minutes or the operator's default.
+func (a *PolicyController) banAddress(c *gin.Context) {
+	var req struct {
+		Source  string `json:"source"`
+		Minutes int    `json:"minutes"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	row, err := a.policyService.BanAddress(c.Request.Context(), req.Source, req.Minutes, time.Now())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, row, nil)
 }
 
 func (a *PolicyController) list(c *gin.Context) {

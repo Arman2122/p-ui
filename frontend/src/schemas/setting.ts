@@ -94,6 +94,8 @@ export const AllSettingSchema = z.object({
   ldapDefaultTotalGB: nonNegativeInt.optional(),
   ldapDefaultExpiryDays: nonNegativeInt.optional(),
   ldapDefaultLimitIP: nonNegativeInt.optional(),
+  ipLimitBanMinutes: nonNegativeInt.optional(),
+  ipLimitSharedAddressAction: z.enum(['ban', 'skip']).optional(),
   hasTgBotToken: z.boolean().optional(),
   hasTwoFactorToken: z.boolean().optional(),
   hasLdapPassword: z.boolean().optional(),

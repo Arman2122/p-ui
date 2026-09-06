@@ -40,7 +40,23 @@ const (
 	// EventCoreAuthFailure is a core refusing a client login (SSH); kept apart
 	// from login.attempt, which is the panel's own admin login and locks accounts.
 	EventCoreAuthFailure EventType = "core.auth.failure"
+
+	// EventClientDeviceLimit is a device over a client's cap and what was done
+	// about it: cut by its core, dropped on a firewall, or reported alone.
+	EventClientDeviceLimit EventType = "client.device_limit"
 )
+
+// ClientDeviceLimitData carries one device over its cap. Action is "cut", "ban"
+// or "reported"; Where is "" for this host or the name of the node it was dropped on.
+type ClientDeviceLimitData struct {
+	Email   string
+	IP      string
+	Limit   int
+	Devices int
+	Action  string
+	Where   string
+	Until   int64
+}
 
 // Event is the unit of information flowing through the bus.
 type Event struct {

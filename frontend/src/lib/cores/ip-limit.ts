@@ -35,7 +35,8 @@ export function kindsWithoutIpLimit(cores: CoreView[] | undefined, kinds: string
 /*
 How a device over its cap is dealt with, per kind, as each core declares it:
 "login" is refused at the core's own login and cut, and needs no firewall;
-"cut" is cut by the core and held away by Fail2ban; "firewall" is Fail2ban alone.
+"cut" is cut by the core and dropped on the host firewall; "firewall" is the
+host firewall alone, on the inbound's port.
 */
 export type IpLimitEnforcement = 'login' | 'cut' | 'firewall';
 
@@ -69,16 +70,16 @@ type Translate = (key: string, options?: Record<string, string>) => string;
 Whether the cap can be set for this client, and what to tell the operator.
 
 Three reasons a cap may not bite, and they are not the same thing: the client
-sits on an inbound whose core cannot report sessions; the host has no Fail2ban
-and every attached kind relies on it; or only some of the attached kinds do.
-Only the first two disable the field — a kind enforced at its own login holds a
-cap on a host with no Fail2ban at all, so the field stays open and the notice
-says which kinds the firewall would have to cover.
+sits on an inbound whose core cannot report sessions; this host cannot write
+its firewall and every attached kind relies on it; or only some of the attached
+kinds do. Only the first two disable the field — a kind enforced at its own
+login holds a cap on a host with no firewall at all, so the field stays open
+and the notice says which kinds the firewall would have to cover.
 */
 export function ipLimitFieldState(
   cores: CoreView[] | undefined,
   kinds: string[],
-  fail2banUsable: boolean,
+  firewallUsable: boolean,
   hostNotice: string,
   t: Translate,
 ): IpLimitFieldState {
@@ -88,7 +89,7 @@ export function ipLimitFieldState(
   }
   const { login, cut, firewall } = ipLimitEnforcementOf(cores, kinds);
   const needsFirewall = [...cut, ...firewall];
-  if (login.length === 0 && !fail2banUsable) {
+  if (login.length === 0 && !firewallUsable) {
     return { disabled: true, notice: hostNotice };
   }
   const parts: string[] = [];
@@ -98,8 +99,8 @@ export function ipLimitFieldState(
   if (login.length > 0) {
     parts.push(t('pages.clients.limitIpEnforcedAtLogin', { kinds: login.join(', ') }));
   }
-  if (needsFirewall.length > 0 && !fail2banUsable) {
-    parts.push(`${t('pages.clients.limitIpNeedsFail2ban', { kinds: needsFirewall.join(', ') })} ${hostNotice}`.trim());
+  if (needsFirewall.length > 0 && !firewallUsable) {
+    parts.push(`${t('pages.clients.limitIpEnforcedByFirewall', { kinds: needsFirewall.join(', ') })} ${hostNotice}`.trim());
   }
   return { disabled: false, notice: parts.join(' ') };
 }

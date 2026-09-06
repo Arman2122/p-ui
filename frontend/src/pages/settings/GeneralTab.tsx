@@ -15,6 +15,7 @@ import {
   GlobalOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import type { AllSetting } from '@/models/setting';
 import { HttpUtil, LanguageManager } from '@/utils';
@@ -24,6 +25,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { catTabLabel } from './catTabLabel';
 import { sanitizePath } from './uriPath';
 import SecretInput from './SecretInput';
+import DeviceBansPanel from './DeviceBansPanel';
 
 interface ApiMsg<T = unknown> {
   success?: boolean;
@@ -407,6 +409,30 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
               <InputNumber value={allSetting.ldapDefaultLimitIP} min={0} style={{ width: '100%' }}
                 onChange={onNumber((v) => updateSetting({ ldapDefaultLimitIP: v }))} />
             </SettingListItem>
+          </>
+        ),
+      },
+      {
+        key: '7',
+        label: catTabLabel(<StopOutlined />, t('pages.settings.ipLimit'), isMobile),
+        children: (
+          <>
+            <SettingListItem paddings="small" title={t('pages.settings.ipLimitBanMinutes')} description={t('pages.settings.ipLimitBanMinutesDesc')} badge={<DefaultSettingTag settingKey="ipLimitBanMinutes" value={allSetting.ipLimitBanMinutes} />}>
+              <InputNumber value={allSetting.ipLimitBanMinutes} min={1} style={{ width: '100%' }}
+                onChange={onNumber((v) => updateSetting({ ipLimitBanMinutes: v }))} />
+            </SettingListItem>
+            <SettingListItem paddings="small" title={t('pages.settings.ipLimitSharedAddressAction')} description={t('pages.settings.ipLimitSharedAddressActionDesc')}>
+              <Select
+                value={allSetting.ipLimitSharedAddressAction || 'ban'}
+                onChange={(v) => updateSetting({ ipLimitSharedAddressAction: v as 'ban' | 'skip' })}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'ban', label: t('pages.settings.ipLimitSharedBan') },
+                  { value: 'skip', label: t('pages.settings.ipLimitSharedSkip') },
+                ]}
+              />
+            </SettingListItem>
+            <DeviceBansPanel datepicker={allSetting.datepicker} />
           </>
         ),
       },

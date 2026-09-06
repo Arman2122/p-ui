@@ -260,6 +260,19 @@ export const ApiTokenViewSchema = z.object({
 });
 export type ApiTokenView = z.infer<typeof ApiTokenViewSchema>;
 
+export const BanViewSchema = z.object({
+  clientEmail: z.string(),
+  createdAt: z.number().int(),
+  id: z.number().int(),
+  node: z.string(),
+  origin: z.string(),
+  ports: z.string(),
+  reason: z.string(),
+  source: z.string(),
+  until: z.number().int(),
+});
+export type BanView = z.infer<typeof BanViewSchema>;
+
 export const CapabilitiesSchema = z.object({
   onlineUsers: z.boolean().nullable().optional(),
   perUserStats: z.boolean().nullable().optional(),
@@ -299,6 +312,19 @@ export const ClientSchema = z.object({
   username: z.string().optional(),
 });
 export type Client = z.infer<typeof ClientSchema>;
+
+export const ClientBanSchema = z.object({
+  clientEmail: z.string(),
+  createdAt: z.number().int(),
+  id: z.number().int(),
+  nodeGuid: z.string(),
+  origin: z.string(),
+  ports: z.string(),
+  reason: z.string(),
+  source: z.string(),
+  until: z.number().int(),
+});
+export type ClientBan = z.infer<typeof ClientBanSchema>;
 
 export const ClientConfigFileSchema = z.object({
   body: z.string(),
@@ -634,6 +660,13 @@ export const InstanceStatusViewSchema = z.object({
   tag: z.string(),
 });
 export type InstanceStatusView = z.infer<typeof InstanceStatusViewSchema>;
+
+export const IpLimitStatusSchema = z.object({
+  enabled: z.boolean(),
+  enforceable: z.boolean(),
+  reason: z.string(),
+});
+export type IpLimitStatus = z.infer<typeof IpLimitStatusSchema>;
 
 export const MsgSchema = z.object({
   msg: z.string(),

@@ -94,6 +94,8 @@ export class AllSetting {
   ldapDefaultTotalGB = 0;
   ldapDefaultExpiryDays = 0;
   ldapDefaultLimitIP = 0;
+  ipLimitBanMinutes = 30;
+  ipLimitSharedAddressAction: 'ban' | 'skip' = 'ban';
   tgEnabledEvents = 'login.attempt,cpu.high';
   smtpEnable = false;
   smtpHost = '';

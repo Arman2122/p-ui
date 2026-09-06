@@ -41,7 +41,7 @@ import { IpLimitControl } from '@/components/clients/IpLimitControl';
 import ClientPlanPanel, { POLICY_NONE, POLICY_UNLOADED } from './ClientPlanPanel';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
-import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
+import { useIpLimitStatusQuery, getLimitIpNotice } from '@/api/queries/useIpLimitStatusQuery';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { ClientFormSchema, ClientCreateFormSchema, type ClientFormValues } from '@/schemas/client';
 
@@ -233,7 +233,7 @@ export default function ClientFormModal({
   const [ipsLoading, setIpsLoading] = useState(false);
   const [ipsClearing, setIpsClearing] = useState(false);
   const [ipsModalOpen, setIpsModalOpen] = useState(false);
-  const fail2ban = useFail2banStatusQuery();
+  const ipLimit = useIpLimitStatusQuery();
   const coresQuery = useCoresQuery();
   /* An empty list is not a usable manifest — every build registers at least one
      core — so treat it as still missing rather than guessing every kind's fields. */
@@ -347,12 +347,12 @@ export default function ClientFormModal({
 
   /* Three reasons a cap may not bite, and they are not the same thing: the
      client sits on an inbound whose core cannot report sessions, the host has no
-     Fail2ban and every attached kind relies on it, or only some do. A kind that
-     refuses at its own login needs no Fail2ban, so the field stays open and the
+     the host firewall and every attached kind relies on it, or only some do. A kind
+     that refuses at its own login needs no firewall, so the field stays open and the
      notice says which kinds the firewall would have to cover. F120 / F302. */
   const { disabled: limitIpDisabled, notice: limitIpNotice } = useMemo(
-    () => ipLimitFieldState(cores, attachedKinds, fail2ban.usable, getLimitIpNotice(fail2ban, t), t),
-    [cores, attachedKinds, fail2ban, t],
+    () => ipLimitFieldState(cores, attachedKinds, ipLimit.enabled && ipLimit.enforceable, getLimitIpNotice(ipLimit, t), t),
+    [cores, attachedKinds, ipLimit, t],
   );
 
   const mtprotoDomain = useMemo(() => {

@@ -4,7 +4,7 @@ import { ipLimitEnforcementOf, ipLimitFieldState } from '@/lib/cores/ip-limit';
 import type { CoreView } from '@/generated/zod';
 
 /*
-The cap field used to be disabled whenever Fail2ban was unusable, for every
+The cap field used to be disabled whenever the firewall was unusable, for every
 client alike — while a client on SSH, OpenVPN or OpenConnect has its cap refused
 at the core's own login and needs no firewall at all. Each core now declares,
 per kind, how a device over the cap is dealt with, and the form gates on that.
@@ -73,18 +73,18 @@ describe('how each kind enforces the cap', () => {
 });
 
 describe('whether the cap field is open', () => {
-  it('a client on SSH alone keeps the field open on a host with no Fail2ban', () => {
+  it('a client on SSH alone keeps the field open on a host with no firewall', () => {
     expect(ipLimitFieldState(cores, ['ssh'], false, HOST, t)).toEqual({
       disabled: false,
       notice: 'limitIpEnforcedAtLogin(ssh)',
     });
   });
 
-  it('a client on Xray alone is disabled by the host notice when Fail2ban is unusable', () => {
+  it('a client on Xray alone is disabled by the host notice when the firewall is unusable', () => {
     expect(ipLimitFieldState(cores, ['vless'], false, HOST, t)).toEqual({ disabled: true, notice: HOST });
   });
 
-  it('a client on Xray alone with Fail2ban usable says nothing', () => {
+  it('a client on Xray alone with the firewall usable says nothing', () => {
     expect(ipLimitFieldState(cores, ['vless'], true, HOST, t)).toEqual({ disabled: false, notice: '' });
   });
 
@@ -93,13 +93,13 @@ describe('whether the cap field is open', () => {
   it('a client on SSH and Xray stays open and names the half the firewall must cover', () => {
     expect(ipLimitFieldState(cores, ['ssh', 'vless'], false, HOST, t)).toEqual({
       disabled: false,
-      notice: `limitIpEnforcedAtLogin(ssh) limitIpNeedsFail2ban(vless) ${HOST}`,
+      notice: `limitIpEnforcedAtLogin(ssh) limitIpEnforcedByFirewall(vless) ${HOST}`,
     });
   });
 
   it('a cut-only kind is counted with the firewall, since its cut needs the ban behind it', () => {
     expect(ipLimitFieldState(cores, ['tuic'], false, HOST, t)).toEqual({ disabled: true, notice: HOST });
-    expect(ipLimitFieldState(cores, ['ssh', 'tuic'], false, HOST, t).notice).toContain('limitIpNeedsFail2ban(tuic)');
+    expect(ipLimitFieldState(cores, ['ssh', 'tuic'], false, HOST, t).notice).toContain('limitIpEnforcedByFirewall(tuic)');
   });
 
   it('a client only on a kind that reports no sessions is disabled with that reason', () => {

@@ -15,7 +15,7 @@ import { DateTimePicker, SelectAllClearButtons } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
 import { IpLimitControl } from '@/components/clients/IpLimitControl';
 import { useClients, type InboundOption } from '@/hooks/useClients';
-import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
+import { useIpLimitStatusQuery, getLimitIpNotice } from '@/api/queries/useIpLimitStatusQuery';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { ipLimitFieldState } from '@/lib/cores/ip-limit';
 import { ClientBulkAddFormSchema, type ClientBulkAddFormValues } from '@/schemas/client';
@@ -69,7 +69,7 @@ export default function ClientBulkAddModal({
   const limitIp = useWatch({ control: methods.control, name: 'limitIp' });
   const [delayedStart, setDelayedStart] = useState(false);
   const [saving, setSaving] = useState(false);
-  const fail2ban = useFail2banStatusQuery();
+  const ipLimit = useIpLimitStatusQuery();
   const coresQuery = useCoresQuery();
   const cores = coresQuery.data?.length ? coresQuery.data : undefined;
   /* The same two reasons the single-client form knows: no actuator on the
@@ -83,8 +83,8 @@ export default function ClientBulkAddModal({
     return kinds;
   }, [inboundIds, inbounds]);
   const { disabled: limitIpDisabled, notice: limitIpNotice } = useMemo(
-    () => ipLimitFieldState(cores, attachedKinds, fail2ban.usable, getLimitIpNotice(fail2ban, t), t),
-    [cores, attachedKinds, fail2ban, t],
+    () => ipLimitFieldState(cores, attachedKinds, ipLimit.enabled && ipLimit.enforceable, getLimitIpNotice(ipLimit, t), t),
+    [cores, attachedKinds, ipLimit, t],
   );
 
   useEffect(() => {

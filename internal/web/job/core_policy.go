@@ -7,6 +7,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/banset"
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/shaping"
 	"github.com/Arman2122/p-ui/internal/web/service"
@@ -107,7 +108,9 @@ is the memory that the pair is banned, so it is not written again; and the
 converge prunes what the kernel has already let lapse.
 */
 func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.IPLimitVerdict, now time.Time) {
+	byEmail := make(map[string]service.IPLimitVerdict, len(verdicts))
 	for _, verdict := range verdicts {
+		byEmail[verdict.Email] = verdict
 		for _, cut := range verdict.Cuts {
 			n, err := j.policyService.CutOverLimit(ctx, cut, verdict.Email)
 			if err != nil {
@@ -116,13 +119,32 @@ func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.
 			}
 			if n > 0 {
 				logger.Infof("[LIMIT_IP] cut %d session(s) of %s from %s over its cap", n, verdict.Email, cut.Source)
+				j.publishDeviceLimit(verdict, cut.Source, "cut", "", 0, now)
 			}
 		}
 	}
 
 	if config.IPLimitBansEnabled() {
-		if _, err := j.policyService.RecordBans(ctx, verdicts, now); err != nil {
+		created, err := j.policyService.RecordBans(ctx, verdicts, now)
+		if err != nil {
 			logger.Warning("[LIMIT_IP] recording bans failed:", err)
+		}
+		var nodeNames map[string]string
+		for _, row := range created {
+			where := ""
+			if row.NodeGuid != "" {
+				if nodeNames == nil {
+					nodeNames, _ = j.policyService.NodeNames(ctx)
+				}
+				if where = nodeNames[row.NodeGuid]; where == "" {
+					where = row.NodeGuid
+				}
+			}
+			action := "ban"
+			if row.Reason == service.BanReasonSharedSkipped {
+				action = "reported"
+			}
+			j.publishDeviceLimit(byEmail[row.ClientEmail], row.Source, action, where, row.Until, now)
 		}
 	} else if held := countBans(verdicts); held > 0 {
 		logger.Debugf("[LIMIT_IP] %d address(es) the firewall would drop, held (banning is off)", held)
@@ -136,6 +158,24 @@ func (j *CorePolicyJob) reportOverLimit(ctx context.Context, verdicts []service.
 	default:
 		logger.Warning("ban convergence failed:", err)
 	}
+}
+
+// publishDeviceLimit is one event per act, not per pass: a cut that ended
+// something, or a ban row that was created, which the row's existence makes once.
+func (j *CorePolicyJob) publishDeviceLimit(verdict service.IPLimitVerdict, source, action, where string, until int64, now time.Time) {
+	if EventBus == nil {
+		return
+	}
+	EventBus.Publish(eventbus.Event{
+		Type:      eventbus.EventClientDeviceLimit,
+		Source:    verdict.Email,
+		Timestamp: now,
+		Data: &eventbus.ClientDeviceLimitData{
+			Email: verdict.Email, IP: source, Limit: verdict.Limit,
+			Devices: len(verdict.Keep) + len(verdict.Over),
+			Action:  action, Where: where, Until: until,
+		},
+	})
 }
 
 func countBans(verdicts []service.IPLimitVerdict) int {

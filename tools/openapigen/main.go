@@ -43,6 +43,7 @@ func run(root, outDir string) error {
 				"Policy",
 				"ClientPolicy",
 				"RoutingRule",
+				"ClientBan",
 			),
 			AliasAllow: setOf("Protocol"),
 			Overrides: map[string][]walkOverride{
@@ -105,6 +106,8 @@ func run(root, outDir string) error {
 				"CoreStatusView",
 				"CoreVersionsView",
 				"CoreView",
+				"IpLimitStatus",
+				"BanView",
 				"InstanceStatusView",
 				"EnforcedLimits",
 				"InboundOption",

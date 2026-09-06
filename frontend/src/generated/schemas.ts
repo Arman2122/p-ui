@@ -1076,6 +1076,59 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "BanView": {
+    "description": "BanView is a ban as the panel lists it: the row, and the name of the node it\nis held on, \"\" for this host.",
+    "properties": {
+      "clientEmail": {
+        "example": "alice",
+        "type": "string"
+      },
+      "createdAt": {
+        "example": 1788700000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "id": {
+        "example": 7,
+        "type": "integer"
+      },
+      "node": {
+        "type": "string"
+      },
+      "origin": {
+        "type": "string"
+      },
+      "ports": {
+        "example": "443,8443",
+        "type": "string"
+      },
+      "reason": {
+        "example": "over-cap",
+        "type": "string"
+      },
+      "source": {
+        "example": "203.0.113.7",
+        "type": "string"
+      },
+      "until": {
+        "example": 1788701800,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "clientEmail",
+      "createdAt",
+      "id",
+      "node",
+      "origin",
+      "ports",
+      "reason",
+      "source",
+      "until"
+    ],
+    "type": "object"
+  },
   "Capabilities": {
     "description": "Capabilities is what a core claims it can do. Every field is a *bool because\nnil means UNKNOWN, which is a normal state: a master talking to a node one\nrelease behind cannot distinguish \"cannot\" from \"was never asked\".",
     "properties": {
@@ -1235,6 +1288,54 @@ export const SCHEMAS: Record<string, unknown> = {
       "subId",
       "tgId",
       "totalGB"
+    ],
+    "type": "object"
+  },
+  "ClientBan": {
+    "description": "/*\nClientBan is one device over its cap, dropped on the firewall of the host that\nserves the client until Until. Active rows only: the row is the memory that the\npair is banned and the source the firewall set is projected from, and it leaves\nwhen its deadline passes or an operator releases it.\n\nNodeGuid is \"\" for a ban this host holds itself. Ports is the CSV of local\ninbound ports the ban covers, or \"*\" for every local inbound port, resolved\neach pass, which is what an operator's own ban of an address means.\n*/",
+    "properties": {
+      "clientEmail": {
+        "type": "string"
+      },
+      "createdAt": {
+        "description": "Unix seconds, the unit every synced timestamp in this panel carries.",
+        "format": "int64",
+        "type": "integer"
+      },
+      "id": {
+        "type": "integer"
+      },
+      "nodeGuid": {
+        "type": "string"
+      },
+      "origin": {
+        "description": "Origin is \"\" for a ban this panel decided, or the guid of the master\nthat pushed it, which is the only one whose push may end it.",
+        "type": "string"
+      },
+      "ports": {
+        "type": "string"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "source": {
+        "type": "string"
+      },
+      "until": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "clientEmail",
+      "createdAt",
+      "id",
+      "nodeGuid",
+      "origin",
+      "ports",
+      "reason",
+      "source",
+      "until"
     ],
     "type": "object"
   },
@@ -2725,6 +2826,28 @@ export const SCHEMAS: Record<string, unknown> = {
       "ready",
       "state",
       "tag"
+    ],
+    "type": "object"
+  },
+  "IpLimitStatus": {
+    "description": "/*\nIpLimitStatus tells the frontend whether a device over its cap can be dropped on\nthis host: Enforceable is whether the panel's own ban table can be written,\nReason why not, and Enabled whether banning is turned on here at all.\n*/",
+    "properties": {
+      "enabled": {
+        "example": true,
+        "type": "boolean"
+      },
+      "enforceable": {
+        "example": true,
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "enforceable",
+      "reason"
     ],
     "type": "object"
   },

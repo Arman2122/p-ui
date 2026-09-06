@@ -176,6 +176,45 @@ func (s *PolicyService) ConvergeBans(ctx context.Context, now time.Time) error {
 	return bansManager.Converge(ctx, now, entries)
 }
 
+// BanView is a ban as the panel lists it: the row, and the name of the node it
+// is held on, "" for this host.
+type BanView struct {
+	Id          int    `json:"id" example:"7"`
+	ClientEmail string `json:"clientEmail" example:"alice"`
+	Source      string `json:"source" example:"203.0.113.7"`
+	Ports       string `json:"ports" example:"443,8443"`
+	Reason      string `json:"reason" example:"over-cap"`
+	Node        string `json:"node" example:""`
+	Origin      string `json:"origin" example:""`
+	CreatedAt   int64  `json:"createdAt" example:"1788700000"`
+	Until       int64  `json:"until" example:"1788701800"`
+}
+
+func (s *PolicyService) ActiveBanViews(ctx context.Context) ([]BanView, error) {
+	rows, err := s.ActiveBans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names, err := s.NodeNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]BanView, 0, len(rows))
+	for _, row := range rows {
+		node := ""
+		if row.NodeGuid != "" {
+			if node = names[row.NodeGuid]; node == "" {
+				node = row.NodeGuid
+			}
+		}
+		views = append(views, BanView{
+			Id: row.Id, ClientEmail: row.ClientEmail, Source: row.Source, Ports: row.Ports, Reason: row.Reason,
+			Node: node, Origin: row.Origin, CreatedAt: row.CreatedAt, Until: row.Until,
+		})
+	}
+	return views, nil
+}
+
 // ActiveBans is every ban this panel decided, its own and its nodes', soonest
 // to lapse first.
 func (s *PolicyService) ActiveBans(ctx context.Context) ([]model.ClientBan, error) {
@@ -196,6 +235,17 @@ func (s *PolicyService) ReleaseBan(ctx context.Context, email, source string, no
 	return released, s.ConvergeBans(ctx, now)
 }
 
+// ReleaseSource frees one address for every client it was banned for, and the
+// operator's own ban of it, wherever this panel holds them.
+func (s *PolicyService) ReleaseSource(ctx context.Context, source string, now time.Time) (int, error) {
+	db := database.GetDB().WithContext(ctx)
+	released, err := s.releaseCounted(ctx, db.Where("source = ?", source), "operator")
+	if err != nil {
+		return 0, err
+	}
+	return released, s.ConvergeBans(ctx, now)
+}
+
 // ReleaseAllBans frees every ban this panel decided, now.
 func (s *PolicyService) ReleaseAllBans(ctx context.Context, now time.Time) (int, error) {
 	db := database.GetDB().WithContext(ctx)
@@ -204,6 +254,20 @@ func (s *PolicyService) ReleaseAllBans(ctx context.Context, now time.Time) (int,
 		return 0, err
 	}
 	return released, s.ConvergeBans(ctx, now)
+}
+
+// NodeNames maps each node's attribution key to its name, so a ban held for a
+// node can be reported by the name the operator knows it by.
+func (s *PolicyService) NodeNames(ctx context.Context) (map[string]string, error) {
+	var nodes []model.Node
+	if err := database.GetDB().WithContext(ctx).Find(&nodes).Error; err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(nodes))
+	for i := range nodes {
+		names[effectiveNodeKey(&nodes[i])] = nodes[i].Name
+	}
+	return names, nil
 }
 
 // BansForNode is every live ban this panel holds for one node: the whole set,

@@ -6,6 +6,7 @@ import { CopyOutlined, DownloadOutlined, EyeOutlined, QrcodeOutlined, ReloadOutl
 import { ClipboardManager, FileManager, HttpUtil, IntlUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
+import { ClientBansBlock } from '@/components/clients/ClientBansBlock';
 import type { ClientLocalAddress } from '@/generated/types';
 import { formatIpLimit } from '@/lib/policies/labels';
 import { useDatepicker } from '@/hooks/useDatepicker';
@@ -599,6 +600,7 @@ export default function ClientInfoModal({
             <div style={{ opacity: 0.65 }}>{t('pages.clients.tunnelAddressNone')}</div>
           )}
         </div>
+        <ClientBansBlock email={client?.email} open={ipsModalOpen} />
         <Divider style={{ margin: '8px 0' }} />
         {clientIps.length > 0 ? (
           <div style={{ maxHeight: 360, overflowY: 'auto' }}>

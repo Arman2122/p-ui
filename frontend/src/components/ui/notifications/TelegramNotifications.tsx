@@ -1,5 +1,5 @@
 import { InputNumber } from 'antd';
-import { CloudServerOutlined, ThunderboltOutlined, DesktopOutlined, DashboardOutlined, SafetyOutlined } from '@ant-design/icons';
+import { CloudServerOutlined, ThunderboltOutlined, DesktopOutlined, DashboardOutlined, SafetyOutlined, TeamOutlined } from '@ant-design/icons';
 import type { AllSetting } from '@/models/setting';
 import { NotificationLayout } from './NotificationLayout';
 import { NotificationGroup } from './NotificationGroup';
@@ -34,6 +34,13 @@ const GROUPS: NotificationGroupConfig[] = [
     events: [
       { key: 'core.crash', label: 'eventCoreCrash', settingKey: '' },
       { key: 'core.up', label: 'eventCoreUp', settingKey: '' },
+    ],
+  },
+  {
+    icon: <TeamOutlined />,
+    title: 'eventGroupClients',
+    events: [
+      { key: 'client.device_limit', label: 'eventClientDeviceLimit', settingKey: '' },
     ],
   },
   {

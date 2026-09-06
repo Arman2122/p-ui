@@ -561,6 +561,8 @@ nothing local can cut it or a cut alone would flap.
 */
 type IPLimitVerdict struct {
 	Email string
+	// Limit is the cap the client was decided against; 0 is uncapped.
+	Limit int
 	Keep  []policy.Observation
 	Over  []policy.Observation
 	Cuts  []IPLimitCut
@@ -699,6 +701,7 @@ func (s *PolicyService) EvaluateIPLimits(scan SessionScan) ([]IPLimitVerdict, er
 		cuts, ban, nodeBans := s.enforcementFor(hosted, scan, nodeObservers, email, verdict.Over)
 		verdicts = append(verdicts, IPLimitVerdict{
 			Email:    email,
+			Limit:    limit,
 			Keep:     verdict.Keep,
 			Over:     verdict.Over,
 			Cuts:     cuts,

@@ -245,6 +245,17 @@ export const EXAMPLES: Record<string, unknown> = {
     "scope": "admin",
     "token": "new-token-string"
   },
+  "BanView": {
+    "clientEmail": "alice",
+    "createdAt": 1788700000,
+    "id": 7,
+    "node": "",
+    "origin": "",
+    "ports": "443,8443",
+    "reason": "over-cap",
+    "source": "203.0.113.7",
+    "until": 1788701800
+  },
   "Capabilities": {
     "onlineUsers": null,
     "perUserStats": null,
@@ -282,6 +293,17 @@ export const EXAMPLES: Record<string, unknown> = {
     "totalGB": 0,
     "updated_at": 0,
     "username": ""
+  },
+  "ClientBan": {
+    "clientEmail": "",
+    "createdAt": 0,
+    "id": 0,
+    "nodeGuid": "",
+    "origin": "",
+    "ports": "",
+    "reason": "",
+    "source": "",
+    "until": 0
   },
   "ClientConfigFile": {
     "body": "[Interface]\nPrivateKey = ...",
@@ -664,6 +686,11 @@ export const EXAMPLES: Record<string, unknown> = {
     "since": 1725000000000,
     "state": "running",
     "tag": "ocs-4"
+  },
+  "IpLimitStatus": {
+    "enabled": true,
+    "enforceable": true,
+    "reason": ""
   },
   "Msg": {
     "msg": "",

@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Arman2122/p-ui/internal/banset"
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -178,16 +177,14 @@ func (s *ServerService) LastStatus() *Status {
 }
 
 /*
-Fail2banStatus tells the frontend whether a device over its cap can be dropped
-on this host. The names are the jail's until the endpoint is renamed: Installed
-is nft on the host, JailActive is whether the panel's own ban table can be
-written, and Usable is that with banning turned on.
+IpLimitStatus tells the frontend whether a device over its cap can be dropped on
+this host: Enforceable is whether the panel's own ban table can be written,
+Reason why not, and Enabled whether banning is turned on here at all.
 */
-type Fail2banStatus struct {
-	Enabled    bool `json:"enabled" example:"true"`
-	Installed  bool `json:"installed" example:"true"`
-	JailActive bool `json:"jailActive" example:"true"`
-	Usable     bool `json:"usable" example:"true"`
+type IpLimitStatus struct {
+	Enabled     bool   `json:"enabled" example:"true"`
+	Enforceable bool   `json:"enforceable" example:"true"`
+	Reason      string `json:"reason" example:""`
 }
 
 const ipLimitProbeCacheTTL = 30 * time.Second
@@ -213,16 +210,14 @@ func IPLimitBansEnforceable() error {
 	return banProbe.err
 }
 
-func (s *ServerService) GetFail2banStatus() Fail2banStatus {
-	enabled := config.IPLimitBansEnabled()
-	err := IPLimitBansEnforceable()
-	installed := !errors.Is(err, banset.ErrNoNft) && !errors.Is(err, banset.ErrPlatformUnsupported)
-	return Fail2banStatus{
-		Enabled:    enabled,
-		Installed:  installed,
-		JailActive: err == nil,
-		Usable:     enabled && err == nil,
+func (s *ServerService) GetIpLimitStatus() IpLimitStatus {
+	status := IpLimitStatus{Enabled: config.IPLimitBansEnabled()}
+	if err := IPLimitBansEnforceable(); err != nil {
+		status.Reason = err.Error()
+	} else {
+		status.Enforceable = true
 	}
+	return status
 }
 
 // RefreshStatus collects a new system snapshot, stores it as LastStatus, and

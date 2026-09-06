@@ -40,6 +40,49 @@ func (t *Tgbot) HandleEvent(e eventbus.Event) {
 	if msg != "" {
 		t.SendMsgToTgbotAdmins(msg)
 	}
+	if data, ok := e.Data.(*eventbus.ClientDeviceLimitData); ok && e.Type == eventbus.EventClientDeviceLimit {
+		t.tellClientDeviceLimit(data)
+	}
+}
+
+// tellClientDeviceLimit tells the client themselves, when the panel knows their
+// Telegram id: a blocked device that looks like a network outage is a support ticket.
+func (t *Tgbot) tellClientDeviceLimit(data *eventbus.ClientDeviceLimitData) {
+	if data.Action == "reported" {
+		return
+	}
+	_, client, err := t.inboundService.GetClientByEmail(data.Email)
+	if err != nil || client == nil || client.TgID == 0 {
+		return
+	}
+	msg := t.I18nBot("tgbot.messages.deviceLimitClient", "Limit=="+strconv.Itoa(data.Limit))
+	switch data.Action {
+	case "cut":
+		msg += "\n" + t.I18nBot("tgbot.messages.deviceLimitClientCut", "IP=="+data.IP)
+	case "ban":
+		msg += "\n" + t.I18nBot("tgbot.messages.deviceLimitClientBan", "IP=="+data.IP, "Until=="+untilText(data.Until))
+	}
+	t.SendMsgToTgbot(client.TgID, msg)
+}
+
+func untilText(until int64) string {
+	return time.Unix(until, 0).Format("2006-01-02 15:04:05")
+}
+
+// deviceLimitOutcome says what became of the device.
+func (t *Tgbot) deviceLimitOutcome(data *eventbus.ClientDeviceLimitData) string {
+	where := ""
+	if data.Where != "" {
+		where = t.I18nBot("tgbot.messages.eventDeviceLimitOnNode", "Node=="+data.Where)
+	}
+	switch data.Action {
+	case "cut":
+		return t.I18nBot("tgbot.messages.eventDeviceLimitCut", "IP=="+data.IP, "Where=="+where)
+	case "ban":
+		return t.I18nBot("tgbot.messages.eventDeviceLimitBan", "IP=="+data.IP, "Where=="+where, "Until=="+untilText(data.Until))
+	default:
+		return t.I18nBot("tgbot.messages.eventDeviceLimitReported", "IP=="+data.IP)
+	}
 }
 
 func (t *Tgbot) isEventEnabled(eventType eventbus.EventType) bool {
@@ -83,6 +126,15 @@ func (t *Tgbot) formatEventMessage(e eventbus.Event) string {
 				"Delay=="+fmt.Sprintf("%d", data.Delay))
 		}
 		return msg
+
+	case eventbus.EventClientDeviceLimit:
+		data, ok := e.Data.(*eventbus.ClientDeviceLimitData)
+		if !ok {
+			return ""
+		}
+		msg := header + "🚫 " + t.I18nBot("tgbot.messages.eventDeviceLimit",
+			"Email=="+data.Email, "Devices=="+strconv.Itoa(data.Devices), "Limit=="+strconv.Itoa(data.Limit))
+		return msg + "\n" + t.deviceLimitOutcome(data)
 
 	case eventbus.EventCoreCrash:
 		msg := header + "🔥 " + t.I18nBot("tgbot.messages.eventCoreCrash", "Core=="+coreCrashName(e))
