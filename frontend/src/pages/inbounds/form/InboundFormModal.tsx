@@ -26,7 +26,7 @@ import {
   formValuesToWirePayload,
 } from '@/lib/xray/inbound-form-adapter';
 import { awgObfuscationChanged } from '@/lib/inbounds/awg-diff';
-import { createDefaultInboundSettings } from '@/lib/xray/inbound-defaults';
+import { createDefaultInboundSettings } from '@/lib/cores/kinds';
 import { composeInboundTag, isAutoInboundTag, type InboundTagInput } from '@/lib/xray/inbound-tag';
 import {
   canEnableReality,

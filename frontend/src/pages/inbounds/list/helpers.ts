@@ -1,3 +1,4 @@
+import { isMultiUserKind } from '@/lib/cores/kinds';
 import { isSSMultiUser } from '@/lib/xray/protocol-capabilities';
 import { coerceInboundJsonField } from '@/models/dbinbound';
 
@@ -67,26 +68,7 @@ export function readSettings(settings: unknown): { method?: string; network?: st
 }
 
 export function isInboundMultiUser(record: { protocol: string; settings: unknown }): boolean {
-  switch (record.protocol) {
-    case 'vmess':
-    case 'vless':
-    case 'trojan':
-    case 'hysteria':
-    case 'mtproto':
-    case 'ssh':
-    case 'tuic':
-    case 'anytls':
-    case 'openvpn':
-    case 'ocserv':
-    case 'wireguard':
-    case 'wgkernel':
-    case 'awgkernel':
-      return true;
-    case 'shadowsocks':
-      return isSSMultiUser({ protocol: 'shadowsocks', settings: readSettings(record.settings) });
-    default:
-      return false;
-  }
+  return isMultiUserKind(record.protocol, readSettings(record.settings));
 }
 
 export function showQrCodeMenu(dbInbound: DBInboundRecord): boolean {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { InboundSettingsSchema } from '@/schemas/protocols/inbound';
 import { isKernelWireguard, isWireguardLike } from '@/lib/xray/kernel-wireguard';
-import { createDefaultInboundSettings } from '@/lib/xray/inbound-defaults';
+import { createDefaultInboundSettings } from '@/lib/cores/kinds';
 
 /*
 Creating an AmneziaWG inbound must be possible at all.

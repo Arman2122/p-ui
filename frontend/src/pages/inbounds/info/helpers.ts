@@ -1,6 +1,5 @@
 import { getMessage } from '@/utils/messageBus';
 import { ColorUtils, ClipboardManager, FileManager } from '@/utils';
-import { Protocols } from '@/schemas/primitives';
 import { coerceInboundJsonField } from '@/models/dbinbound';
 import {
   canEnableTlsFlow,
@@ -10,18 +9,7 @@ import {
 
 import type { ClientSetting, ClientStats, DBInboundLike, InboundInfo } from './types';
 
-const LINK_PROTOCOLS: ReadonlySet<string> = new Set([
-  Protocols.VMESS,
-  Protocols.VLESS,
-  Protocols.TROJAN,
-  Protocols.SHADOWSOCKS,
-  Protocols.HYSTERIA,
-  Protocols.MTPROTO,
-]);
-
-export function hasShareLink(protocol: string): boolean {
-  return LINK_PROTOCOLS.has(protocol);
-}
+export { hasShareLink } from '@/lib/cores/kinds';
 
 function readHeader(headers: unknown, name: string): string {
   const needle = name.toLowerCase();

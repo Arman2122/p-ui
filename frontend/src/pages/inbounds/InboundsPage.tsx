@@ -23,7 +23,7 @@ import {
 } from '@ant-design/icons';
 
 import { HttpUtil, SizeFormatter, RandomUtil } from '@/utils';
-import { createDefaultInboundSettings } from '@/lib/xray/inbound-defaults';
+import { createDefaultInboundSettings } from '@/lib/cores/kinds';
 import { genInboundLinks, genWireguardLinks, preferPublicHost } from '@/lib/xray/inbound-link';
 import { fetchInboundLinks } from '@/lib/xray/server-links';
 import { inboundFromDb } from '@/lib/xray/inbound-from-db';

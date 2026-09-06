@@ -1,22 +1,8 @@
 import type { InboundFormValues, ShareAddrStrategy, TrafficReset } from '@/schemas/forms/inbound-form';
 import type { InboundSettings } from '@/schemas/protocols/inbound';
-import {
-  HysteriaClientSchema,
-  MtprotoClientSchema,
-  SshClientSchema,
-  TuicClientSchema,
-  AnytlsClientSchema,
-  OcservClientSchema,
-  OpenvpnClientSchema,
-  ShadowsocksClientSchema,
-  TrojanClientSchema,
-  VlessClientSchema,
-  VmessClientSchema,
-  WireguardClientSchema,
-} from '@/schemas/protocols/inbound';
 import type { StreamSettings } from '@/schemas/api/inbound';
 import type { Sniffing } from '@/schemas/primitives';
-import type { z } from 'zod';
+import { clientSchemaFor } from '@/lib/cores/kinds';
 import { normalizeStreamSettingsForWire } from '@/lib/xray/stream-wire-normalize';
 import { canEnableSniffing } from '@/lib/xray/protocol-capabilities';
 import { SockoptStreamSettingsSchema } from '@/schemas/protocols/stream/sockopt';
@@ -257,28 +243,8 @@ export function pruneEmpty(value: unknown): unknown {
 // those inside a vless inbound's settings.clients is confusing and rides
 // dead weight in the wire payload. Parsing through the protocol's schema
 // gives us the canonical projection.
-function clientSchemaForProtocol(protocol: string): z.ZodType | null {
-  switch (protocol) {
-    case 'vless': return VlessClientSchema;
-    case 'vmess': return VmessClientSchema;
-    case 'trojan': return TrojanClientSchema;
-    case 'shadowsocks': return ShadowsocksClientSchema;
-    case 'hysteria': return HysteriaClientSchema;
-    case 'wireguard': return WireguardClientSchema;
-    case 'wgkernel':
-    case 'awgkernel': return WireguardClientSchema;
-    case 'mtproto': return MtprotoClientSchema;
-    case 'ssh': return SshClientSchema;
-    case 'tuic': return TuicClientSchema;
-    case 'anytls': return AnytlsClientSchema;
-    case 'openvpn': return OpenvpnClientSchema;
-    case 'ocserv': return OcservClientSchema;
-    default: return null;
-  }
-}
-
 export function normalizeClients(protocol: string, clients: unknown): unknown {
-  const schema = clientSchemaForProtocol(protocol);
+  const schema = clientSchemaFor(protocol);
   if (!schema || !Array.isArray(clients)) return clients;
   return clients.map((c) => {
     const parsed = schema.safeParse(c);

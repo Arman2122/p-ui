@@ -1,48 +1,10 @@
-// Client-side mirror of the backend inbound-tag derivation
-import { isWireguardLike } from '@/lib/xray/kernel-wireguard';
-// (web/service/port_conflict.go). Keep in sync; inbound-tag.test.ts guards parity.
+import { kindTransports, NONE, TCP, type TransportBits, UDP } from '@/lib/cores/kinds';
 
-type TransportBits = number;
-const TCP: TransportBits = 1;
-const UDP: TransportBits = 2;
-/* Only a kind that declares it binds nothing reaches zero bits. */
-const NONE: TransportBits = 0;
+/* Client-side mirror of the backend inbound-tag derivation
+   (web/service/port_conflict.go). Keep in sync; inbound-tag.test.ts guards parity. */
 
 function asString(v: unknown): string {
   return typeof v === 'string' ? v : '';
-}
-
-/*
-What each core answers for its own kinds, which is what the Go side asks the
-registry for rather than deriving. Only the kinds Xray serves read the stream
-settings below, so every other kind is answered here or its tag is wrong.
-A protocol missing from this switch falls through to Xray's rules, and
-inbound-tag.test.ts fails on any protocol nobody covers.
-*/
-function coreTransports(
-  protocol: string,
-  settings: Record<string, unknown> | undefined,
-): TransportBits | undefined {
-  switch (protocol) {
-    case 'hysteria':
-      return UDP;
-    case 'tun':
-      /* A kernel interface binds no port: the stored one is a form field. */
-      return NONE;
-    case 'tuic':
-      return UDP;
-    case 'anytls':
-    case 'ssh':
-    case 'mtproto':
-      return TCP;
-    case 'ocserv':
-      /* One port carries both: TLS for the session, DTLS for the data channel. */
-      return TCP | UDP;
-    case 'openvpn':
-      return asString(settings?.proto) === 'tcp' ? TCP : UDP;
-    default:
-      return isWireguardLike(protocol) ? UDP : undefined;
-  }
 }
 
 function inboundTransports(
@@ -50,7 +12,9 @@ function inboundTransports(
   streamSettings: Record<string, unknown> | undefined,
   settings: Record<string, unknown> | undefined,
 ): TransportBits {
-  const declared = coreTransports(protocol, settings);
+  /* Only the kinds Xray serves read the stream settings below; every other
+     kind answers through its module, or its tag is wrong. */
+  const declared = kindTransports(protocol, settings);
   if (declared !== undefined) return declared;
 
   let bits: TransportBits = 0;

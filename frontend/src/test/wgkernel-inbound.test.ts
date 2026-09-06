@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { genInboundLinks, genWireguardConfigs, genWireguardLinks } from '@/lib/xray/inbound-link';
-import { createDefaultInboundSettings } from '@/lib/xray/inbound-defaults';
+import { createDefaultInboundSettings } from '@/lib/cores/kinds';
 import { InboundSchema } from '@/schemas/api/inbound';
 import { InboundSettingsSchema } from '@/schemas/protocols/inbound';
 import { WgkernelInboundSettingsSchema } from '@/schemas/protocols/inbound/wgkernel';

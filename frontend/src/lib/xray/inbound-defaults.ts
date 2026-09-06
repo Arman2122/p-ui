@@ -309,11 +309,7 @@ export function createDefaultWgkernelInboundSettings(): WgkernelInboundSettings 
   };
 }
 
-// Protocol-aware dispatch over every inbound-settings factory. Mirrors
-// the legacy `Inbound.Settings.getSettings(protocol)` dispatcher, but
-// returns a plain Zod-parsable object instead of a class instance.
-// Callers swapping off the class hierarchy use this in place of
-// `getSettings(p)` + `.toJson()`.
+/* The union of every kind's settings; the kind registry dispatches over it. */
 export type AnyInboundSettings =
   | VlessInboundSettings
   | VmessInboundSettings
@@ -332,27 +328,3 @@ export type AnyInboundSettings =
   | AnytlsInboundSettings
   | OpenvpnInboundSettings
   | OcservInboundSettings;
-
-export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
-  switch (protocol) {
-    case 'vless':       return createDefaultVlessInboundSettings();
-    case 'vmess':       return createDefaultVmessInboundSettings();
-    case 'trojan':      return createDefaultTrojanInboundSettings();
-    case 'shadowsocks': return createDefaultShadowsocksInboundSettings();
-    case 'hysteria':    return createDefaultHysteriaInboundSettings();
-    case 'http':        return createDefaultHttpInboundSettings();
-    case 'mixed':       return createDefaultMixedInboundSettings();
-    case 'tunnel':      return createDefaultTunnelInboundSettings();
-    case 'tun':         return createDefaultTunInboundSettings();
-    case 'wireguard':   return createDefaultWireguardInboundSettings();
-    case 'wgkernel':
-    case 'awgkernel':   return createDefaultWgkernelInboundSettings();
-    case 'mtproto':     return createDefaultMtprotoInboundSettings();
-    case 'ssh':         return createDefaultSshInboundSettings();
-    case 'tuic':        return createDefaultTuicInboundSettings();
-    case 'anytls':      return createDefaultAnytlsInboundSettings();
-    case 'openvpn':     return createDefaultOpenvpnInboundSettings();
-    case 'ocserv':      return createDefaultOcservInboundSettings();
-    default:            return null;
-  }
-}
