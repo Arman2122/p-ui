@@ -341,7 +341,11 @@ func (c *Core) Transports(kind core.Kind, _, _ string) core.Transports {
 
 func (c *Core) ProvisionsUsers(kind core.Kind) bool { return kind == Kind }
 
-func (c *Core) DeviceNamespace() string { return DevicePrefix }
+// DeviceNamespace: one device per session, named by the daemon from the
+// inbound's prefix, so the family is what the shaping plane owns.
+func (c *Core) DeviceNamespace() core.DeviceNamespace {
+	return core.DeviceNamespace{Prefix: DevicePrefix, PerSession: true}
+}
 
 // devicePrefixFor is what the daemon is given; it appends a session number,
 // so the trailing separator is what keeps two inbounds' devices apart.

@@ -208,10 +208,18 @@ type InstanceMinter interface {
 	MintInstance(kind Kind, settings, previous string) (string, error)
 }
 
-// DeviceNamespacer names the device prefix a core's kernel interfaces use, so
-// the shaping plane can own trees on them; letters only, see shaping.Register.
+// DeviceNamespace is the name space a core's kernel interfaces are drawn from,
+// so the shaping plane can own trees on them. Prefix is letters only (shaping.Register).
+type DeviceNamespace struct {
+	Prefix string
+	// PerSession: devices are <Prefix><inbound id>-<n>, one per live session, all
+	// shaped as that inbound's — OpenConnect's shape, and PPP's.
+	PerSession bool
+}
+
+// DeviceNamespacer names the device namespace a core's kernel interfaces use.
 type DeviceNamespacer interface {
-	DeviceNamespace() string
+	DeviceNamespace() DeviceNamespace
 }
 
 /*

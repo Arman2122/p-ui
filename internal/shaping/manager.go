@@ -139,11 +139,11 @@ func (m *Manager) planDevice(w DeviceWant) (devicePlan, error) {
 	if !m.ns.Owns(w.Device) {
 		return devicePlan{}, fmt.Errorf("%w: %q", ErrNotOwned, w.Device)
 	}
-	id, mine := m.ns.DeviceID(w.Device)
+	mirror, mine := m.ns.MirrorOf(w.Device)
 	if !mine {
-		return devicePlan{}, fmt.Errorf("%w: %q carries no inbound id", ErrNotOwned, w.Device)
+		return devicePlan{}, fmt.Errorf("%w: %q is not a device this panel shapes", ErrNotOwned, w.Device)
 	}
-	plan := devicePlan{device: w.Device, mirror: IFBDevice(id)}
+	plan := devicePlan{device: w.Device, mirror: mirror}
 
 	var failures []error
 	owner := map[netip.Prefix]string{}
@@ -491,11 +491,11 @@ func (m *Manager) collectMirrors(ctx context.Context, wanted map[string]bool) er
 	}
 	var failures []error
 	for _, name := range links {
-		id, mine := ownedIFBID(name)
+		suffix, mine := ownedMirror(name)
 		if !mine || wanted[name] {
 			continue
 		}
-		pinned, err := m.stillRedirectedInto(ctx, id, name, links)
+		pinned, err := m.stillRedirectedInto(ctx, suffix, name, links)
 		if err != nil {
 			failures = append(failures, err)
 			continue
@@ -521,9 +521,8 @@ disconnects them outright, which inverts the rule that shaping fails open. A
 device merely missing from this pass's want is not evidence that nothing feeds
 its mirror: only the parent's own tree is.
 */
-func (m *Manager) stillRedirectedInto(ctx context.Context, id int, mirror string, links []string) (string, error) {
-	for _, prefix := range m.ns.Shapeable() {
-		parent := parentOf(prefix, id)
+func (m *Manager) stillRedirectedInto(ctx context.Context, suffix, mirror string, links []string) (string, error) {
+	for _, parent := range m.ns.parentsOf(suffix) {
 		if !slices.Contains(links, parent) {
 			continue
 		}

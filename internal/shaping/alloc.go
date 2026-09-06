@@ -36,13 +36,57 @@ const (
 	maxDeviceName = 15
 )
 
-// IFBDevice is the upload mirror for one inbound. A pure function of the id, so
-// nothing derived is stored and the GC can decide ownership from the name alone.
-func IFBDevice(id int) string { return ifbPrefix + strconv.Itoa(id) }
+// IFBDevice is the upload mirror for one per-inbound device. A pure function of
+// the id, so nothing derived is stored and the GC decides ownership by name alone.
+func IFBDevice(id int) string { return mirrorDevice(strconv.Itoa(id)) }
 
-// ownedIFBID reads the id back out of a mirror device name. It round-trips
-// through IFBDevice, so a near miss like pifb007 or pifb0 is somebody else's.
-func ownedIFBID(name string) (int, bool) { return ownedID(name, ifbPrefix) }
+// mirrorDevice names the mirror for a device suffix: "7" mirrors as pifb7 and a
+// session's "2-3" as pifb2-3, so no two shaped devices ever derive one mirror.
+func mirrorDevice(suffix string) string { return ifbPrefix + suffix }
+
+// ownedMirror reads the suffix back out of a mirror name, accepting only what a
+// device this panel derives could carry: pifb007 and pifb2-03 are somebody else's.
+func ownedMirror(name string) (string, bool) {
+	rest, ok := strings.CutPrefix(name, ifbPrefix)
+	if !ok {
+		return "", false
+	}
+	if _, mine := ownedID(name, ifbPrefix); mine {
+		return rest, true
+	}
+	if _, mine := ownedFamilyID(name, ifbPrefix); mine {
+		return rest, true
+	}
+	return "", false
+}
+
+// familyDevice names one session's device: the inbound id, then the index the
+// daemon counts its sessions with, from zero.
+func familyDevice(prefix string, id, n int) string {
+	return prefix + strconv.Itoa(id) + "-" + strconv.Itoa(n)
+}
+
+// ownedFamilyID reads the inbound id out of a per-session device name. Both
+// numbers must rebuild the name exactly, so poc02-3 and poc2-03 are foreign.
+func ownedFamilyID(name, prefix string) (int, bool) {
+	rest, ok := strings.CutPrefix(name, prefix)
+	if !ok || len(name) > maxDeviceName {
+		return 0, false
+	}
+	idPart, nPart, found := strings.Cut(rest, "-")
+	if !found {
+		return 0, false
+	}
+	id, err := strconv.Atoi(idPart)
+	if err != nil || id < MinID {
+		return 0, false
+	}
+	n, err := strconv.Atoi(nPart)
+	if err != nil || n < 0 || familyDevice(prefix, id, n) != name {
+		return 0, false
+	}
+	return id, true
+}
 
 // ownedID is the shared round trip: the name must rebuild itself exactly from the
 // id it claims, which is what rejects a leading zero and a trailing letter alike.

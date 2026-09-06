@@ -968,3 +968,70 @@ func TestTheLeafIsNotCodel(t *testing.T) {
 			leaves, strings.Join(kernel.Tree(), "\n"))
 	}
 }
+
+// familyManager owns a per-session family beside the defaults, on a host that
+// has the named links.
+func familyManager(t *testing.T, links ...string) (*shaping.Manager, *shapetest.Kernel) {
+	t.Helper()
+	ns := shaping.DefaultNamespaces()
+	if err := ns.RegisterFamily("poc"); err != nil {
+		t.Fatalf("RegisterFamily: %v", err)
+	}
+	kernel := shapetest.New()
+	kernel.AddLink(links...)
+	return shaping.NewManager(kernel, ns), kernel
+}
+
+// Two sessions of one inbound are two devices with two mirrors: a mirror named
+// from the inbound id alone would be claimed twice and one session refused.
+func TestEachSessionDeviceDerivesItsOwnMirror(t *testing.T) {
+	m, kernel := familyManager(t, "poc2-0", "poc2-1")
+	converge(t, m, []shaping.DeviceWant{
+		{Device: "poc2-0", Subjects: []shaping.Subject{subject("alice", 0, 10_000_000, alice4)}},
+		{Device: "poc2-1", Subjects: []shaping.Subject{subject("bob", 0, 10_000_000, bob4)}},
+	})
+	for _, mirror := range []string{"pifb2-0", "pifb2-1"} {
+		if !slices.Contains(kernel.Devices(), mirror) {
+			t.Errorf("mirror %s was not created: %v", mirror, kernel.Devices())
+		}
+	}
+	if !slices.Contains(kernel.Ops(), "filter+ filter poc2-1 parent ffff:fff2 prio 100 src_ip 10.8.0.5/32 redirect pifb2-1") {
+		t.Errorf("the second session's upload is not redirected into its own mirror:\n%s", strings.Join(kernel.Ops(), "\n"))
+	}
+}
+
+// A session's mirror outlives the session device exactly as an inbound's does,
+// and is collected once nothing feeds it — by its suffix, not by an inbound id.
+func TestAStrandedSessionMirrorIsCollected(t *testing.T) {
+	m, kernel := familyManager(t, "poc2-0")
+	converge(t, m, []shaping.DeviceWant{
+		{Device: "poc2-0", Subjects: []shaping.Subject{subject("alice", 0, 10_000_000, alice4)}},
+	})
+	kernel.DelLink("poc2-0")
+	if !slices.Contains(kernel.Devices(), "pifb2-0") {
+		t.Fatalf("the fake let the mirror die with its parent: %v", kernel.Devices())
+	}
+	converge(t, m, nil)
+	if slices.Contains(kernel.Devices(), "pifb2-0") {
+		t.Fatalf("a stranded session mirror was not collected: %v", kernel.Devices())
+	}
+}
+
+// The liveness check finds a session parent by the mirror's whole suffix: while
+// poc2-0 still redirects into pifb2-0, a pass that no longer wants it must not
+// collect the mirror out from under the filter.
+func TestASessionMirrorStaysWhileItsParentRedirects(t *testing.T) {
+	m, kernel := familyManager(t, "poc2-0")
+	converge(t, m, []shaping.DeviceWant{
+		{Device: "poc2-0", Subjects: []shaping.Subject{subject("alice", 0, 10_000_000, alice4)}},
+	})
+	kernel.ResetOps()
+	// Nothing wanted on poc2-0 this pass, but nobody tore its tree down either:
+	// the device was simply left out, which is not evidence its filter is gone.
+	converge(t, m, []shaping.DeviceWant{})
+	for _, op := range kernel.Ops() {
+		if strings.HasPrefix(op, "ifb-") {
+			t.Fatalf("a mirror still fed by its session device was collected: %v", kernel.Ops())
+		}
+	}
+}

@@ -279,6 +279,8 @@ func (c *Core) Transports(kind core.Kind, settings, _ string) core.Transports {
 
 func (c *Core) ProvisionsUsers(kind core.Kind) bool { return kind == Kind }
 
-func (c *Core) DeviceNamespace() string { return DevicePrefix }
+func (c *Core) DeviceNamespace() core.DeviceNamespace {
+	return core.DeviceNamespace{Prefix: DevicePrefix}
+}
 
 func deviceName(id int) string { return fmt.Sprintf("%s%d", DevicePrefix, id) }

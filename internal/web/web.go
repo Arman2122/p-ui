@@ -664,8 +664,8 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	if err != nil {
 		return err
 	}
-	for _, prefix := range cores.DeviceNamespaces() {
-		if err := service.RegisterShapingNamespace(prefix); err != nil {
+	for _, ns := range cores.DeviceNamespaces() {
+		if err := service.RegisterShapingNamespace(ns); err != nil {
 			return err
 		}
 	}

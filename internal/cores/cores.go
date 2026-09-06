@@ -164,14 +164,14 @@ func InstanceMinterFor(kind core.Kind) (core.InstanceMinter, bool) {
 	return bound.Mint, true
 }
 
-// DeviceNamespaces lists every device prefix a registered core claims, for the
-// shaping plane to own at wiring time.
-func DeviceNamespaces() []string {
-	var out []string
+// DeviceNamespaces lists every device namespace a registered core claims, for
+// the shaping plane to own at wiring time.
+func DeviceNamespaces() []core.DeviceNamespace {
+	var out []core.DeviceNamespace
 	for _, bound := range kindOwners().Cores() {
 		if bound.Devices != nil {
-			if p := bound.Devices.DeviceNamespace(); p != "" {
-				out = append(out, p)
+			if ns := bound.Devices.DeviceNamespace(); ns.Prefix != "" {
+				out = append(out, ns)
 			}
 		}
 	}

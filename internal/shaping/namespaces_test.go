@@ -95,3 +95,37 @@ func TestTheMirrorBandIsOwnedWithoutRegistration(t *testing.T) {
 		t.Error("the mirror band must not be shapeable: nothing builds a tree on a mirror's mirror")
 	}
 }
+
+// A family is refused on exactly the grounds a plain namespace is: the split at
+// one place is what lets poc2-3 name its inbound and nothing else.
+func TestRegisterFamilyRefusesWhatRegisterRefuses(t *testing.T) {
+	for _, prefix := range []string{"", "pawg1", "12", "PAWG", "p-awg", strings.Repeat("a", maxDeviceName)} {
+		if err := DefaultNamespaces().RegisterFamily(prefix); err == nil {
+			t.Errorf("RegisterFamily(%q) was accepted", prefix)
+		}
+	}
+}
+
+// One prefix is one kind: claimed as both, the same device name would be read two
+// ways, and the second reading would install a tree the first never collects.
+func TestAPrefixIsOneKindOfNamespace(t *testing.T) {
+	ns := DefaultNamespaces()
+	if err := ns.RegisterFamily("poc"); err != nil {
+		t.Fatalf("RegisterFamily: %v", err)
+	}
+	if err := ns.Register("poc"); !errors.Is(err, ErrDuplicateNamespace) {
+		t.Fatalf("Register after RegisterFamily = %v, want %v", err, ErrDuplicateNamespace)
+	}
+	if err := ns.RegisterFamily("poc"); !errors.Is(err, ErrDuplicateNamespace) {
+		t.Fatalf("second RegisterFamily = %v, want %v", err, ErrDuplicateNamespace)
+	}
+	if err := ns.RegisterFamily(wireguardPrefix); !errors.Is(err, ErrDuplicateNamespace) {
+		t.Fatalf("RegisterFamily on a built-in = %v, want %v", err, ErrDuplicateNamespace)
+	}
+	if got := ns.Families(); !slices.Equal(got, []string{"poc"}) {
+		t.Errorf("Families() = %v, want [poc]", got)
+	}
+	if slices.Contains(ns.Shapeable(), "poc") {
+		t.Error("a family is listed among the per-inbound namespaces")
+	}
+}
