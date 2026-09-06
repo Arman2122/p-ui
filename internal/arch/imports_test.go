@@ -108,6 +108,39 @@ func TestCoreEnginesDoNotImportTheWebLayer(t *testing.T) {
 }
 
 /*
+TestTheWebLayerReachesPortedEnginesThroughTheRegistry keeps a ported engine
+behind its adapter. Concrete cores live under internal/cores/internal so the
+compiler stops the service layer importing one; the engine a core wraps is an
+ordinary package, and this does for it what the directory does for the core.
+*/
+func TestTheWebLayerReachesPortedEnginesThroughTheRegistry(t *testing.T) {
+	root := repoRoot(t)
+	ported := []string{modulePrefix + "/internal/mtproto"}
+	var violations []string
+	checked := 0
+	for _, src := range parseNonTestGo(t, root) {
+		if !strings.HasPrefix(src.Rel, "internal/web/") && !strings.HasPrefix(src.Rel, "internal/sub/") {
+			continue
+		}
+		checked++
+		for _, path := range importPaths(src.File) {
+			for _, engine := range ported {
+				if path == engine || strings.HasPrefix(path, engine+"/") {
+					violations = append(violations, src.Rel+" imports "+path)
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("checked no files under internal/web or internal/sub; the fence is vacuous")
+	}
+	sort.Strings(violations)
+	for _, v := range violations {
+		t.Errorf("%s — a ported engine is reached through its core and the registry (cores.*), never imported by the panel", v)
+	}
+}
+
+/*
 TestCoresDoNotImportPolicy is the reverse fence, and the central invariant of the
 policy layer expressed as a compile-time fact rather than a review convention.
 

@@ -2451,7 +2451,7 @@ UDP silences a loopback echo, the same rule to freedom makes it answer).
 
 The consequence for the allocator: a UDP-only neighbour on the bridge's port
 is a real conflict now, and the three places that ignored it (the injector's
-two passes, the port claim check) count it, while `FreeLocalPort` probes both
+two passes, the port claim check) count it, while `sys.FreeLoopbackPort` probes both
 transports before handing a port out.
 
 UDPGW itself lives in the SSH core (`udpgw.go`), in-process, because that is

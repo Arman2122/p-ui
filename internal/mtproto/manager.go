@@ -24,6 +24,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/supervisor"
+	"github.com/Arman2122/p-ui/internal/util/sys"
 )
 
 // SecretEntry is one named FakeTLS secret served by an mtg-proxy process. Name is
@@ -184,8 +185,8 @@ type Manager struct {
 	// swept records that the one-time startup cleanup of orphaned mtg
 	// processes (survivors of a previous p-ui run) has already run.
 	swept bool
-	// drawPort supplies the api-bind-to port. Nil means FreeLocalPort; a test
-	// substitutes a deterministic draw.
+	// drawPort supplies the api-bind-to port. Nil means sys.FreeLoopbackPort; a
+	// test substitutes a deterministic draw.
 	drawPort func() (int, error)
 }
 
@@ -198,7 +199,7 @@ const apiPortDrawAttempts = 8
 func (m *Manager) drawAPIPort(avoid int) (int, error) {
 	draw := m.drawPort
 	if draw == nil {
-		draw = FreeLocalPort
+		draw = sys.FreeLoopbackPort
 	}
 	for range apiPortDrawAttempts {
 		port, err := draw()
@@ -685,28 +686,6 @@ func resetQuota(port int, token, email string) error {
 		return nil
 	}
 	return fmt.Errorf("mtproto: reset-quota for %q returned %s", email, resp.Status)
-}
-
-// FreeLocalPort asks the OS for a loopback port free on TCP and UDP alike: the
-// Xray bridge allocated from it binds both, and mtg's /stats endpoint one.
-func FreeLocalPort() (int, error) {
-	var lastErr error
-	for range 8 {
-		l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-		if err != nil {
-			return 0, err
-		}
-		port := l.Addr().(*net.TCPAddr).Port
-		pc, err := (&net.ListenConfig{}).ListenPacket(context.Background(), "udp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
-		_ = l.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		_ = pc.Close()
-		return port, nil
-	}
-	return 0, fmt.Errorf("mtproto: no loopback port free on both transports: %w", lastErr)
 }
 
 // renderConfig builds the mtg-proxy TOML for an instance. Top-level keys must

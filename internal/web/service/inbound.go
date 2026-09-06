@@ -21,9 +21,9 @@ import (
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
-	"github.com/Arman2122/p-ui/internal/mtproto"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/netsafe"
+	"github.com/Arman2122/p-ui/internal/util/sys"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 
 	"gorm.io/gorm"
@@ -824,27 +824,29 @@ func parseRouteXrayPort(settings string) int {
 	return parseSettingsPort(settings, "routeXrayPort")
 }
 
-// normalizeXrayBridgePort guarantees a routed inbound Xray does not serve carries
-// a stable loopback egress port in its settings, so the generated Xray SOCKS
-// bridge and the core behind it agree on where that core dials out. mtproto's
-// sidecar was the first such core and SSH's in-process server is the second.
-// The port is backend-owned: it is
-// allocated once when routing is first enabled and preserved across edits
-// (carried over from oldSettings, which wins over any value the client echoed
-// back). When routing is off it — together with the now-inert outbound
-// selection — is stripped so a disabled bridge leaves nothing stale behind.
-//
-// It returns an error when an egress port cannot be allocated or persisted, so
-// the caller refuses the save rather than storing a routed-but-portless inbound,
-// which would otherwise route no traffic and have its mtg metrics skipped (see
-// the mtproto core's tag rollup) — silently losing its accounting.
+/*
+normalizeXrayBridgePort guarantees a routed inbound Xray does not serve carries
+a stable loopback egress port in its settings, so the generated Xray SOCKS
+bridge and the core behind it agree on where that core dials out — mtproto's
+sidecar was the first such core, SSH's in-process server the second. The port
+is backend-owned: allocated once when routing is first enabled and preserved
+across edits (carried over from oldSettings, which wins over any value the
+client echoed back). When routing is off it is stripped, together with the
+now-inert outbound selection, so a disabled bridge leaves nothing stale behind.
+
+It returns an error when an egress port cannot be allocated or persisted, so
+the caller refuses the save rather than storing a routed-but-portless inbound,
+which would route no traffic and have its metrics skipped by the core's tag
+rollup — silently losing its accounting.
+*/
+
 // The bridge is a loopback listener, so a handful of tries is generous: it only
 // re-rolls when the OS hands back a port the panel is already generating.
-const mtprotoPortAllocationAttempts = 8
+const bridgePortAllocationAttempts = 8
 
 /*
 loopbackPortIsClaimed reports whether another inbound would bind this port on
-127.0.0.1, which is where the mtproto bridge listens.
+127.0.0.1, which is where the bridge listens.
 
 Listen overlap and the local panel only, on either transport, because the
 bridge binds TCP and UDP on loopback. A node's inbounds are excluded: they run
@@ -885,7 +887,7 @@ func (s *InboundService) loopbackPortIsClaimed(port, ignoreID int) bool {
 			"free" leaves exactly the behaviour that shipped before this check,
 			and injectXrayBridge still catches the collision at generation time.
 		*/
-		logger.Warning("mtproto: cannot check whether the bridge port is claimed, allowing it:", err)
+		logger.Warning("bridge: cannot check whether the port is claimed, allowing it:", err)
 		return false
 	}
 	for _, row := range rows {
@@ -921,7 +923,7 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 		if bs, err := json.MarshalIndent(parsed, "", "  "); err == nil {
 			inbound.Settings = string(bs)
 		} else {
-			logger.Warning("mtproto: failed to marshal settings after disabling routing:", err)
+			logger.Warning("bridge: failed to marshal settings after disabling routing:", err)
 		}
 		return nil
 	}
@@ -931,7 +933,7 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 		client sent, then allocate a fresh one -- and check every one of them
 		against the ports this panel already claims.
 
-		None of the three was checked. FreeLocalPort binds 127.0.0.1:0 and closes
+		None of the three was checked. FreeLoopbackPort binds 127.0.0.1:0 and closes
 		it, which says the OS had that port free for an instant and nothing about
 		what the panel is about to generate; an API caller could send any number
 		at all. The bridge then landed on a port a real inbound holds, and
@@ -945,7 +947,7 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 	*/
 	port := parseRouteXrayPort(oldSettings)
 	if port > 0 && s.loopbackPortIsClaimed(port, inbound.Id) {
-		logger.Warning("mtproto: the stored Xray bridge port", port, "for inbound [", inbound.Tag,
+		logger.Warning("bridge: the stored Xray bridge port", port, "for inbound [", inbound.Tag,
 			"] is now claimed by another inbound; allocating a new one")
 		port = 0
 	}
@@ -954,21 +956,21 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 			port = sent
 		}
 	}
-	for range mtprotoPortAllocationAttempts {
+	for range bridgePortAllocationAttempts {
 		if port > 0 {
 			break
 		}
-		allocated, err := mtproto.FreeLocalPort()
+		allocated, err := sys.FreeLoopbackPort()
 		if err != nil {
-			return common.NewError("mtproto: could not allocate an Xray egress port:", err)
+			return common.NewError("bridge: could not allocate an Xray egress port:", err)
 		}
 		if !s.loopbackPortIsClaimed(allocated, inbound.Id) {
 			port = allocated
 		}
 	}
 	if port <= 0 {
-		return common.NewError("mtproto: could not find a free Xray egress port after",
-			mtprotoPortAllocationAttempts, "attempts")
+		return common.NewError("bridge: could not find a free Xray egress port after",
+			bridgePortAllocationAttempts, "attempts")
 	}
 	if settingsRouteXrayPort(parsed) == port {
 		return nil
@@ -976,7 +978,7 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 	parsed["routeXrayPort"] = port
 	bs, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
-		return common.NewError("mtproto: could not persist the Xray egress port:", err)
+		return common.NewError("bridge: could not persist the Xray egress port:", err)
 	}
 	inbound.Settings = string(bs)
 	return nil
@@ -1000,7 +1002,7 @@ func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSett
 		if bs, err := json.MarshalIndent(parsed, "", "  "); err == nil {
 			inbound.Settings = string(bs)
 		} else {
-			logger.Warning("mtproto: failed to marshal settings after disabling the WEB backend:", err)
+			logger.Warning("web backend: failed to marshal settings after disabling it:", err)
 		}
 		return nil
 	}
@@ -1013,7 +1015,7 @@ func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSett
 	}
 	port := parseSettingsPort(oldSettings, "webBackendPort")
 	if port > 0 && claimed(port) {
-		logger.Warning("mtproto: the stored WEB backend port", port, "for inbound [", inbound.Tag,
+		logger.Warning("web backend: the stored port", port, "for inbound [", inbound.Tag,
 			"] is now claimed; allocating a new one")
 		port = 0
 	}
@@ -1022,21 +1024,21 @@ func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSett
 			port = sent
 		}
 	}
-	for range mtprotoPortAllocationAttempts {
+	for range bridgePortAllocationAttempts {
 		if port > 0 {
 			break
 		}
-		allocated, err := mtproto.FreeLocalPort()
+		allocated, err := sys.FreeLoopbackPort()
 		if err != nil {
-			return common.NewError("mtproto: could not allocate a WEB backend port:", err)
+			return common.NewError("web backend: could not allocate a port:", err)
 		}
 		if !claimed(allocated) {
 			port = allocated
 		}
 	}
 	if port <= 0 {
-		return common.NewError("mtproto: could not find a free WEB backend port after",
-			mtprotoPortAllocationAttempts, "attempts")
+		return common.NewError("web backend: could not find a free port after",
+			bridgePortAllocationAttempts, "attempts")
 	}
 	if settingsPort(parsed, "webBackendPort") == port {
 		return nil
@@ -1044,7 +1046,7 @@ func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSett
 	parsed["webBackendPort"] = port
 	bs, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
-		return common.NewError("mtproto: could not persist the WEB backend port:", err)
+		return common.NewError("web backend: could not persist the port:", err)
 	}
 	inbound.Settings = string(bs)
 	return nil
