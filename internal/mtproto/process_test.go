@@ -22,9 +22,9 @@ func TestCheckVersionRefusesAnOldRelease(t *testing.T) {
 		{"9.9.9", true},
 		{"", true},
 	} {
-		err := checkVersion(tc.version)
+		err := CheckVersion(tc.version)
 		if (err == nil) != tc.ok {
-			t.Fatalf("checkVersion(%q) = %v, want ok=%v", tc.version, err, tc.ok)
+			t.Fatalf("CheckVersion(%q) = %v, want ok=%v", tc.version, err, tc.ok)
 		}
 		if err != nil && (!strings.Contains(err.Error(), tc.version) || !strings.Contains(err.Error(), MinimumVersion)) {
 			t.Fatalf("the refusal must name both versions, got %v", err)

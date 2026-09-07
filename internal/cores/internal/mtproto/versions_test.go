@@ -47,13 +47,17 @@ func mtgTarball(t *testing.T, pkg, payload string) (archive []byte, sum string) 
 
 // channel serves one release the way GitHub does: the list, the tarball and the
 // checksums file; sum is what the checksums file claims for the tarball.
-func channel(t *testing.T, tag string, archive []byte, sum string) *Core {
+func channel(t *testing.T, tag string, archive []byte, sum string, olderTags ...string) *Core {
 	t.Helper()
 	bare := strings.TrimPrefix(tag, "v")
+	listed := fmt.Sprintf(`{"tag_name":%q},{"tag_name":"v0.0.1-rc1","prerelease":true}`, tag)
+	for _, older := range olderTags {
+		listed += fmt.Sprintf(`,{"tag_name":%q}`, older)
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/releases":
-			_, _ = fmt.Fprintf(w, `[{"tag_name":%q},{"tag_name":"v0.0.1-rc1","prerelease":true}]`, tag)
+			_, _ = fmt.Fprintf(w, "[%s]", listed)
 		case strings.HasSuffix(r.URL.Path, "-checksums.txt"):
 			_, _ = fmt.Fprintf(w, "%s  mtg-proxy-%s-linux-amd64.tar.gz\n%s  mtg-proxy-%s-sbom.spdx.json\n", sum, bare, strings.Repeat("1", 64), bare)
 		case strings.HasSuffix(r.URL.Path, ".tar.gz"):
@@ -191,5 +195,37 @@ func TestInstallFromTheRealChannel(t *testing.T) {
 	got, err := c.Installed(ctx)
 	if err != nil || "v"+got != versions[0] {
 		t.Fatalf("Installed = %q, %v; want the %s just installed", got, err, versions[0])
+	}
+}
+
+// A release the panel refuses at boot is neither offered nor installed: the
+// list drops it, and a tarball whose binary reports such a version is refused
+// with the installed one left alone.
+func TestTheInstallerRefusesAReleaseThePanelRefusesAtBoot(t *testing.T) {
+	binDir := t.TempDir()
+	t.Setenv("PUI_BIN_FOLDER", binDir)
+	c := channel(t, "v9.9.9", nil, "", "v1.3.0", "v1.8.0")
+	got, err := c.Available(context.Background())
+	if err != nil || strings.Join(got, ",") != "v9.9.9" {
+		t.Fatalf("Available = %v, %v; want the releases older than %s dropped", got, err, engine.MinimumVersion)
+	}
+	if err := c.Install(context.Background(), "v1.3.0"); !errors.Is(err, core.ErrUnknownVersion) {
+		t.Fatalf("Install(v1.3.0) = %v, want ErrUnknownVersion", err)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	installed := engine.GetBinaryPath()
+	if err := os.WriteFile(installed, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	archive, sum := mtgTarball(t, "mtg-proxy-9.9.9-linux-amd64", "#!/bin/sh\necho \"1.3.0 (go1.26 fake)\"\n")
+	c = channel(t, "v9.9.9", archive, sum)
+	err = c.Install(context.Background(), "v9.9.9")
+	if err == nil || !strings.Contains(err.Error(), "refuses at boot") || !strings.Contains(err.Error(), "older than "+engine.MinimumVersion) {
+		t.Fatalf("Install of a binary reporting 1.3.0 = %v; want the boot refusal named", err)
+	}
+	if got, _ := os.ReadFile(installed); string(got) != "old" {
+		t.Fatalf("a refused install replaced the binary with %q", got)
 	}
 }

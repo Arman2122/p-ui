@@ -85,7 +85,9 @@ func (c *Core) Available(ctx context.Context) ([]string, error) {
 	}
 	tags := make([]string, 0, len(releases))
 	for _, r := range releases {
-		if r.TagName != "" && !r.Prerelease {
+		// A release the panel refuses at boot is not offered: installing it
+		// would take every MTProto inbound offline at the next restart.
+		if r.TagName != "" && !r.Prerelease && engine.CheckVersion(r.TagName) == nil {
 			tags = append(tags, r.TagName)
 		}
 	}
@@ -122,8 +124,12 @@ func (c *Core) Install(ctx context.Context, version string) error {
 		return err
 	}
 	defer func() { _ = os.Remove(staged) }()
-	if _, err := engine.BinaryVersion(ctx, staged); err != nil {
+	reported, err := engine.BinaryVersion(ctx, staged)
+	if err != nil {
 		return fmt.Errorf("mtproto: the downloaded %s does not run here, so it was not installed: %w", pkg, err)
+	}
+	if err := engine.CheckVersion(reported); err != nil {
+		return fmt.Errorf("mtproto: the downloaded %s reports a version the panel refuses at boot, so it was not installed: %w", pkg, err)
 	}
 	return os.Rename(staged, engine.GetBinaryPath())
 }

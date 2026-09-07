@@ -56,18 +56,18 @@ func CheckBinary() error {
 	if err != nil {
 		return err
 	}
-	return checkVersion(version)
+	return CheckVersion(version)
 }
 
 // MinimumVersion is the first mtg-proxy that answers everything the panel
 // drives: per-direction speed, per-address activity and the kick.
 const MinimumVersion = "1.9.0"
 
-// checkVersion refuses a release older than MinimumVersion. A version that is
+// CheckVersion refuses a release older than MinimumVersion. A version that is
 // not a release number (a source build says "dev") is let through: it is newer
 // than any release by construction, and refusing it would make every VM run
 // impossible.
-func checkVersion(version string) error {
+func CheckVersion(version string) error {
 	have, ok := parseRelease(version)
 	if !ok {
 		return nil
