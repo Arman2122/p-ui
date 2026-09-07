@@ -110,6 +110,20 @@ briefly holds a handle on the output dir. It is transient — **just re-run the 
 it has succeeded on the retry every time. Do not go hunting for a culprit process;
 the user's own Chrome windows are not it.
 
+## Two Claude Design projects exist — do not mix them up
+
+This repo syncs to **"Penhoon Panel Components"**
+(`7a3bfc6f-febf-4c36-908a-ad2db06cc8d0`, pinned as `projectId` in config.json).
+
+There is a **separate** project called **"Penhoon Admin UI"**
+(`8f316a2e-8037-46dc-a6b2-751a0df663e0`) holding a different, larger design
+system: ~130 shadcn/Radix-style components, four canvas templates
+(dashboard, page-detail, page-queue, component-gallery), an `explorations/`
+folder, JetBrains Mono + Vazirmatn fonts and a `HANDOFF-v3.md`. It is **not**
+produced by this repo and nothing here should ever write to it — a sync there
+would delete all of it. If a future run finds no `projectId` in config.json,
+create a new project rather than adopting that one.
+
 ## Re-sync risks
 
 - **Stale declarations.** `dist-types/` is generated and gitignored; a re-sync
