@@ -142,6 +142,7 @@ export default function MtprotoFields() {
                 ? t('pages.inbounds.form.mtgWebFront', { port: webBindPort })
                 : t('pages.inbounds.form.mtgWebFrontPending')
             }
+            description={t('pages.inbounds.form.mtgWebFrontXray')}
           />
         </>
       )}

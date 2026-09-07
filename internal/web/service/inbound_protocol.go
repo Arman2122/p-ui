@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/Arman2122/p-ui/internal/core"
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/common"
 )
@@ -48,8 +49,11 @@ Refused rather than dropped: the rows stay attached, the child inbounds keep
 listening, and nothing anywhere says why they stopped receiving traffic.
 */
 func (s *InboundService) checkFallbacksSurviveEdit(inbound *model.Inbound) error {
-	if inbound == nil || inbound.Id == 0 || inboundCanHostFallbacks(inbound) {
+	if inbound == nil || inbound.Id == 0 {
 		return nil
+	}
+	if inboundCanHostFallbacks(inbound) {
+		return s.checkWebRelayFrontSurvivesEdit(inbound)
 	}
 	rows, err := s.fallbackService.GetByMaster(inbound.Id)
 	if err != nil {
@@ -60,4 +64,18 @@ func (s *InboundService) checkFallbacksSurviveEdit(inbound *model.Inbound) error
 	}
 	return common.NewError("this inbound has", len(rows), "fallback(s):", errFallbackHostShape+
 		". Remove them before making this change")
+}
+
+// checkWebRelayFrontSurvivesEdit refuses a master edit that leaves the WEB relay
+// children it fronts unreachable: off TLS, or an ALPN a client may take as h2.
+func (s *InboundService) checkWebRelayFrontSurvivesEdit(inbound *model.Inbound) error {
+	children, err := s.fallbackService.webRelayChildren(database.GetDB(), inbound.Id)
+	if err != nil || len(children) == 0 {
+		return err
+	}
+	if err := checkWebRelayFront(inbound); err != nil {
+		return common.NewError("this inbound fronts the WEB proxy of ", len(children), " inbound(s): ", err.Error(),
+			". Detach them before making this change")
+	}
+	return nil
 }

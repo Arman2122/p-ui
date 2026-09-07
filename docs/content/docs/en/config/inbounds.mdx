@@ -517,7 +517,7 @@ so three things are yours:
 The fork's own documented front is Caddy. With Caddy owning port 443 for the
 hostname:
 
-```caddyfile
+```text
 web.example.com {
 	log {
 		output discard
@@ -534,18 +534,43 @@ web.example.com {
 
 Replace `RELAY_PORT` with the port the form shows. `log { output discard }` is
 not optional: the bearer for a live session travels in a header, so an access
-log on this hostname writes live credentials to disk. If Xray already owns port
-443 on the same address, put an SNI router in front or give the relay's
-hostname its own address; a REALITY inbound cannot front it.
+log on this hostname writes live credentials to disk.
+
+### Fronting it with Xray instead
+
+If Xray already owns port 443, it can be the front itself: a **VLESS or Trojan
+inbound on raw TCP with TLS** whose certificate covers the WEB hostname, with
+the MTProto inbound attached as a **fallback child** on the Fallbacks card of
+that inbound's form. Pick the MTProto inbound in the picker (it is offered only
+with the WEB proxy on, named by its hostname) and the row fills itself in: SNI
+= the hostname, ALPN = `http/1.1`, `xver` = 2, Dest left empty. The panel points
+the fallback at the relay's loopback port and Xray terminates TLS, matches the
+hostname and hands the stream to the relay with a PROXY v2 header. No Caddy, no
+second certificate, and the inbound's other clients are unaffected.
+
+Two rules, both measured against a real Xray and a real relay, and both refused
+at save with the rule named rather than stored and left broken:
+
+- **The fronting inbound's ALPN must be `http/1.1` alone** (Security tab). A
+  client that negotiates h2 with the master reaches the relay as HTTP/2 and gets
+  nothing, and a Telegram Desktop WebView takes h2 when it is offered.
+- **REALITY cannot front it.** The client validates a real certificate.
+
+An edit that would break the front afterwards is refused the same way: moving
+the master off TLS or off `http/1.1` alone while a WEB child is attached, or
+turning the WEB proxy off on the child while a fallback still points at it.
+Detach the fallback first. Changing the hostname on the child needs the
+fallback row's SNI updated by hand. A master behind an SNI router on 443 rather
+than on 443 itself is fine; the router just has to pass the hostname to it.
 
 ### Links
 
 An MTProto client of an inbound with the relay on gets two links: the usual
 `tg://proxy` one and a `tg://webproxy?server=<hostname>&secret=dd…` one carrying
-the same key in the `dd` spelling and no port. The WEB link's parameter names
-mirror `tg://proxy` and have not been confirmed against a real client; if the
-link does not take, the hostname and the `dd` secret are exactly what the
-client's own two fields ask for.
+the same key in the `dd` spelling and no port. The WEB link opens Telegram
+Desktop's WEB proxy form filled in; confirmed against a real client. An
+MTProto inbound fronted by Xray keeps both links as they are: the WEB link
+carries no port, and the FakeTLS one is not the master's to front.
 
 ### Checking it without a client
 

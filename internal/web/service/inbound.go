@@ -293,6 +293,11 @@ func (s *InboundService) annotateFallbackParents(db *gorm.DB, inbounds []*model.
 		}
 	}
 	for _, ib := range inbounds {
+		// A WEB relay child keeps its own links: the WEB one carries no port and
+		// the FakeTLS one is not the master's to front.
+		if _, relay := webRelayOf(ib.Settings); relay {
+			continue
+		}
 		if r, ok := first[ib.Id]; ok {
 			ib.FallbackParent = &model.FallbackParentInfo{
 				MasterId: r.MasterId,
@@ -1772,6 +1777,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		return inbound, false, "", err
 	}
 	if err := s.checkFallbacksSurviveEdit(inbound); err != nil {
+		return inbound, false, "", err
+	}
+	if err := s.fallbackService.CheckChildEdit(inbound.Id, oldInbound.Settings, inbound.Settings); err != nil {
 		return inbound, false, "", err
 	}
 

@@ -555,6 +555,7 @@
         "mtgWebCoverUpstream": "بالادست سایت پوششی",
         "mtgWebCoverHint": "هر کسی که کلاینت تلگرام نباشد این سایت را می‌بیند. دقیقاً یکی را پر کنید: پوشه‌ای از فایل‌ها، یا یک بالادست http:// برای reverse-proxy.",
         "mtgWebFront": "پروکسی جلویی خود را با PROXY protocol v2 و برای کل دامنه به 127.0.0.1:{port} بفرستید. شمارنده‌های خود رله تنها روی loopback پاسخ می‌دهند.",
+        "mtgWebFrontXray": "یا این ورودی را به‌عنوان fallback یک ورودی VLESS یا Trojan با TLS روی پورت ۴۴۳ که ALPN آن فقط http/1.1 است متصل کنید: در این صورت خود Xray مسیر TLS را خاتمه می‌دهد و جلوی رله می‌ایستد، بدون پروکسی جلویی دیگری.",
         "mtgWebFrontPending": "یک بار ذخیره کنید تا پورت loopback رله تخصیص یابد، سپس پروکسی جلویی را به آن بفرستید.",
         "visionTestseed": "Vision testseed",
         "version": "نسخه",

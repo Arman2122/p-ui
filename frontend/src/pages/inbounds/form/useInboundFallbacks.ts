@@ -20,7 +20,34 @@ refusal fails the WHOLE config. ws / httpupgrade / xhttp store their path with
 the slash already on it; a gRPC serviceName does not, and this used to hand the
 bare name straight to the form. F326.
 */
+interface WebRelay {
+  host: string;
+}
+
+/* An MTProto inbound running the WEB relay: Xray fronts it through the relay's
+   port with a PROXY header, on its hostname, over http/1.1 alone (measured
+   against Xray 26.7.28 and the real relay). Without the relay it cannot be a
+   child at all: FakeTLS is not TLS, so Xray cannot terminate it. */
+function webRelayOf(ib: DBInbound): WebRelay | null {
+  if (ib.protocol !== 'mtproto') return null;
+  const settings = coerceInboundJsonField(ib.settings);
+  if (settings.webEnable !== true) return null;
+  return { host: typeof settings.webHost === 'string' ? settings.webHost : '' };
+}
+
+export function fallbackChildOption(ib: DBInbound): { label: string; value: number } | null {
+  const relay = webRelayOf(ib);
+  if (ib.protocol === 'mtproto' && !relay) return null;
+  const name = ib.remark || `#${ib.id}`;
+  return {
+    label: relay ? `${name} · WEB proxy ${relay.host}` : `${name} · ${ib.protocol}:${ib.port}`,
+    value: ib.id,
+  };
+}
+
 export function fallbackDefaultsFromChild(child: DBInbound): Partial<FallbackRow> {
+  const relay = webRelayOf(child);
+  if (relay) return { name: relay.host, alpn: 'http/1.1', path: '', xver: 2 };
   const stream = coerceInboundJsonField(child.streamSettings);
   const tls = (stream.tlsSettings as Record<string, unknown> | undefined) ?? {};
   const network = typeof stream.network === 'string' ? stream.network : '';
@@ -62,10 +89,8 @@ export function useInboundFallbacks(dbInbound: DBInbound | null, dbInbounds: DBI
 
   const fallbackChildOptions = (dbInbounds || [])
     .filter((ib) => ib.id !== dbInbound?.id)
-    .map((ib) => ({
-      label: `${ib.remark || `#${ib.id}`} · ${ib.protocol}:${ib.port}`,
-      value: ib.id,
-    }));
+    .map(fallbackChildOption)
+    .filter((opt): opt is { label: string; value: number } => opt !== null);
 
   const loadFallbacks = async (masterId: number | null) => {
     if (!masterId) {

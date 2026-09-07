@@ -555,6 +555,7 @@
         "mtgWebCoverUpstream": "Cover site upstream",
         "mtgWebCoverHint": "Everyone who is not a Telegram client sees this site. Fill exactly one: a directory of files to serve, or an http:// upstream to reverse-proxy.",
         "mtgWebFront": "Point your front proxy at 127.0.0.1:{port} with PROXY protocol v2, for the whole hostname. The relay's own counters answer on loopback only.",
+        "mtgWebFrontXray": "Or attach this inbound as a fallback of a VLESS or Trojan inbound with TLS on port 443 whose ALPN is http/1.1 alone: Xray then terminates TLS and fronts the relay itself, with no other front proxy.",
         "mtgWebFrontPending": "Save once to allocate the relay's loopback port, then point your front proxy at it.",
         "visionTestseed": "Vision testseed",
         "version": "Version",

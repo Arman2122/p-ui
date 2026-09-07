@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 )
 
@@ -47,5 +48,33 @@ func TestGenMtprotoLinkAddsTheWebLink(t *testing.T) {
 		if got := s.genMtprotoLink(plain, "user"); strings.Contains(got, "webproxy") || strings.Count(got, "\n") != 0 {
 			t.Fatalf("%s: want the tg://proxy link alone, got %q", name, got)
 		}
+	}
+}
+
+// A relay inbound on a loopback listen behind a fallback master keeps its own
+// links: the WEB one carries no port, and the FakeTLS one is not the master's
+// to front, so the projection every other child gets must not touch it.
+func TestAWebRelayInboundIsNotProjectedThroughItsMaster(t *testing.T) {
+	initSubDB(t)
+	db := database.GetDB()
+	master := &model.Inbound{
+		Tag: "fbw-sub-master", Listen: "0.0.0.0", Port: 24871, Protocol: model.VLESS, Enable: true,
+		Settings: `{"clients":[],"decryption":"none"}`, StreamSettings: `{"network":"tcp","security":"tls","tlsSettings":{"alpn":["http/1.1"]}}`,
+	}
+	child := &model.Inbound{
+		Tag: "fbw-sub-child", Listen: "127.0.0.1", Port: 24872, Protocol: model.MTProto, Enable: true,
+		Settings: `{"webEnable":true,"webHost":"web.example.com","webBindPort":8099,"clients":[]}`, StreamSettings: `{"network":"tcp","security":"none"}`,
+	}
+	for _, row := range []*model.Inbound{master, child} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Create(&model.InboundFallback{MasterId: master.Id, ChildId: child.Id, Name: "web.example.com", Alpn: "http/1.1", Xver: 2}).Error; err != nil {
+		t.Fatal(err)
+	}
+	s := NewSubService("")
+	if s.projectThroughFallbackMaster(child) || child.Port != 24872 || child.Listen != "127.0.0.1" {
+		t.Fatalf("the relay inbound was projected through its master: %s:%d", child.Listen, child.Port)
 	}
 }

@@ -80,3 +80,40 @@ describe('the path a fallback row is filled in with', () => {
     expect(got.xver).toBe(0);
   });
 });
+
+/*
+An MTProto inbound running the WEB relay is fronted through its relay port with
+a PROXY header, on its hostname, over http/1.1 alone: measured on the VM against
+Xray 26.7.28 and the real relay. The row is filled in with exactly that, and an
+MTProto inbound without the relay is not offered, since FakeTLS is not TLS and
+Xray cannot terminate it.
+*/
+import { fallbackChildOption } from '@/pages/inbounds/form/useInboundFallbacks';
+
+function mtproto(settings: Record<string, unknown>): DBInbound {
+  return {
+    id: 9,
+    protocol: 'mtproto',
+    port: 8443,
+    listen: '',
+    remark: 'tg',
+    settings: JSON.stringify(settings),
+    streamSettings: '{"network":"tcp","security":"none"}',
+    sniffing: '{}',
+  } as unknown as DBInbound;
+}
+
+describe('an MTProto inbound as a fallback child', () => {
+  it('fills the row in for the WEB relay', () => {
+    const got = fallbackDefaultsFromChild(mtproto({ webEnable: true, webHost: 'web.example.com', webBindPort: 8099 }));
+    expect(got).toEqual({ name: 'web.example.com', alpn: 'http/1.1', path: '', xver: 2 });
+  });
+
+  it('is offered only with the relay on, named by its hostname', () => {
+    expect(fallbackChildOption(mtproto({ webEnable: false }))).toBeNull();
+    expect(fallbackChildOption(mtproto({ webEnable: true, webHost: 'web.example.com', webBindPort: 8099 }))).toEqual({
+      label: 'tg · WEB proxy web.example.com',
+      value: 9,
+    });
+  });
+});

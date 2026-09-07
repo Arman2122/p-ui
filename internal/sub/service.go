@@ -585,7 +585,7 @@ func (s *SubService) projectThroughFallbackMaster(inbound *model.Inbound) bool {
 	if inbound == nil {
 		return false
 	}
-	if !listenIsInternalOnly(inbound.Listen) {
+	if !listenIsInternalOnly(inbound.Listen) || webRelayFronted(inbound.Settings) {
 		return false
 	}
 	db := database.GetDB()
@@ -863,11 +863,19 @@ func (s *SubService) genMtprotoLink(inbound *model.Inbound, email string) string
 	return strings.Join(links, "\n")
 }
 
+// webRelayFronted is an inbound running the WEB relay. Its links are its own: the
+// WEB one carries no port, and a fallback master cannot front the FakeTLS one.
+func webRelayFronted(settings string) bool {
+	var s struct {
+		WebEnable bool `json:"webEnable"`
+	}
+	return json.Unmarshal([]byte(settings), &s) == nil && s.WebEnable
+}
+
 // mtprotoWebLink is the WEB proxy deep link for an inbound running the relay:
 // tg://webproxy, the hostname alone since the client fixes https and 443, and
-// the same key as dd, the only form a WEB client holds. Its parameter names
-// mirror tg://proxy and are the fork's own reading, unconfirmed against a real
-// client; the hostname and the dd secret are what the client's two fields take.
+// the same key as dd, the only form a WEB client holds. Confirmed against a
+// real Telegram Desktop on 2026-09-07.
 func mtprotoWebLink(inbound *model.Inbound, secret string) string {
 	var settings struct {
 		WebEnable bool   `json:"webEnable"`

@@ -2935,10 +2935,29 @@ page served to a request with no credential and byte-identical to one with a wro
 rate round trip through the real daemon, a kick of zero, and a client added reaching the relay's
 profile set without a restart.
 
-**Still open.** An Xray-fronted deployment (a real-cert VLESS or Trojan inbound's fallback with
-`xver: 2`) could replace the operator's Caddy for the common case where Xray already owns 443; it
-hinges on pinning the inbound's ALPN to HTTP/1.1, and a Reality inbound cannot front it at all.
-The `tg://webproxy` parameter names are the fork's reading and unconfirmed against a real client;
-the form hands out the hostname and the dd secret for the client's own two fields. The
-`MinimumVersion` pin assumes the fork's next tag is v1.9.0. The GitHub account's anonymous 404
-blocks every download path the panel has, releases or not.
+**Xray as the front (`internal/web/service/fallback.go`).** The existing fallback subsystem is the
+seam: an inbound whose settings carry `webEnable` is a WEB relay child, and its row renders as
+`{name: host, alpn: "http/1.1", dest: "127.0.0.1:<webBindPort>", xver: 2}` on the master, the
+relay's loopback port in place of the child's listen. Measured on the VM against Xray 26.7.28
+and the real relay before a line was written: the entry serves the cover page through Xray; a
+master offering h2 gives a client that negotiates it nothing (Xray: `failed to find the default
+"alpn" config`; with a catch-all entry the relay reads an HTTP/2 preface and closes); PROXY v1 and
+v2 both pass the relay's REQUIRE policy and no header is refused; a lone named entry answers no
+other SNI. So `SetByMaster` refuses, with the rule named: xver other than 1 or 2, a typed Dest, a
+master off TLS (REALITY cannot front a client that validates a real certificate), and a master
+ALPN other than `["http/1.1"]` alone. The same rules hold across edits: a master edit that moves
+off them with a relay child attached is refused through `checkFallbacksSurviveEdit`, and turning
+the WEB proxy off on a child a fallback points at is refused through `CheckChildEdit`, since the
+row would otherwise fall back to the FakeTLS port with a PROXY header the proxy does not expect.
+A relay child is skipped by `annotateFallbackParents` and by the subscription's projection: the
+WEB link carries no port and the FakeTLS link is not the master's to front. Detection is by
+settings shape, not by protocol, which is how the service layer stays inside the dispatch
+ratchet. `TestXrayFrontsTheRelay` (gated on `XRAY_E2E_BINARY` and `MTG_E2E_BINARY`) re-measures
+all four claims on every VM run. The `tg://webproxy` link is confirmed against a real Telegram
+Desktop (2026-09-07).
+
+**Still open.** The `MinimumVersion` pin and `release.yml` both name v1.9.0, the fork's next tag,
+which must be released before the panel is. The GitHub account's anonymous 404 blocks every
+download path the panel has, releases or not. The external-ips union (Unit 5) is not built; the
+panel's cross-node decision engine covers the cap, and the union would add a capability seam and
+node-sync wiring to globalise the sidecar's own second layer.

@@ -4,17 +4,29 @@ package mtproto
 
 import (
 	"bufio"
+	"bytes"
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/binary"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,43 +43,10 @@ the contract reads back from the daemon, and the kick answers. Nothing here can
 prove a Telegram client connects; that stays with the operator.
 */
 func TestRealSidecarEndToEnd(t *testing.T) {
-	binary := os.Getenv("MTG_E2E_BINARY")
-	if binary == "" {
+	if os.Getenv("MTG_E2E_BINARY") == "" {
 		t.Skip("MTG_E2E_BINARY not set")
 	}
-	binDir := t.TempDir()
-	payload, err := os.ReadFile(binary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(binDir, engine.GetBinaryName()), payload, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cover := t.TempDir()
-	if err := os.WriteFile(filepath.Join(cover, "index.html"), []byte("<html><body>a site someone would run</body></html>\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PUI_BIN_FOLDER", binDir)
-	t.Cleanup(func() { engine.GetManager().StopAll() })
-
-	c := New(Deps{})
-	if err := c.Preflight(t.Context()); err != nil {
-		t.Fatalf("preflight against the real binary: %v", err)
-	}
-	const secret = "ee8196fe6ed8b637d001f91d6952cfcdf07777772e636c6f7564666c6172652e636f6d"
-	inst := core.Instance{
-		ID: 9, Kind: Kind, Tag: "inbound-9", Listen: "127.0.0.1", Port: 24710, Enable: true,
-		Settings: `{"webEnable":true,"webHost":"web.example.com","webCoverDir":"` + cover + `",` +
-			`"webBackendPort":24711,"webBindPort":24712,"webStatsPort":24713}`,
-		Users: []core.User{{Email: "alice", Enable: true, LimitIP: 2, Credentials: map[string]any{CredSecret: secret}}},
-	}
-	if err := c.Reconcile(t.Context(), []core.Instance{inst}); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	waitFor(t, "the proxy and the relay to answer", func() bool {
-		h, err := c.Health(t.Context())
-		return err == nil && len(h.Instances) == 1 && h.Instances[0].Ready
-	})
+	c, inst := startRealWebInbound(t, 9, 24710)
 
 	// The rendered file is one the real binary accepts whole: no unknown key.
 	h, _ := c.Health(t.Context())
@@ -182,4 +161,204 @@ func relayProfilesErr(port int) ([]string, error) {
 		return nil, err
 	}
 	return stats.Profiles, nil
+}
+
+// startRealWebInbound brings the proxy and the relay up off one rendered file
+// for inbound id on ports base..base+3 (listen, backend, relay, stats).
+func startRealWebInbound(t *testing.T, id, base int) (*Core, core.Instance) {
+	t.Helper()
+	binDir := t.TempDir()
+	payload, err := os.ReadFile(os.Getenv("MTG_E2E_BINARY"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, engine.GetBinaryName()), payload, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cover := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cover, "index.html"), []byte(coverPage), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PUI_BIN_FOLDER", binDir)
+	t.Cleanup(func() { engine.GetManager().StopAll() })
+
+	c := New(Deps{})
+	if err := c.Preflight(t.Context()); err != nil {
+		t.Fatalf("preflight against the real binary: %v", err)
+	}
+	const secret = "ee8196fe6ed8b637d001f91d6952cfcdf07777772e636c6f7564666c6172652e636f6d"
+	inst := core.Instance{
+		ID: id, Kind: Kind, Tag: fmt.Sprintf("inbound-%d", id), Listen: "127.0.0.1", Port: base, Enable: true,
+		Settings: fmt.Sprintf(`{"webEnable":true,"webHost":"web.example.com","webCoverDir":%q,"webBackendPort":%d,"webBindPort":%d,"webStatsPort":%d}`,
+			cover, base+1, base+2, base+3),
+		Users: []core.User{{Email: "alice", Enable: true, LimitIP: 2, Credentials: map[string]any{CredSecret: secret}}},
+	}
+	if err := c.Reconcile(t.Context(), []core.Instance{inst}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	waitFor(t, "the proxy and the relay to answer", func() bool {
+		h, err := c.Health(t.Context())
+		return err == nil && len(h.Instances) == 1 && h.Instances[0].Ready
+	})
+	return c, inst
+}
+
+const coverPage = "<html><body>a site someone would run</body></html>\n"
+
+/*
+Xray in front of the relay, the way the panel renders a fallback for a WEB
+relay child: the relay's hostname, http/1.1, its loopback port, a PROXY v2
+header. Set XRAY_E2E_BINARY beside MTG_E2E_BINARY. What the rules in the
+fallback service refuse is measured here, not assumed: the cover page comes
+back through Xray; a master that offers h2 gives a client that takes it
+nothing; a stream without the PROXY header is refused by the relay; another
+SNI gets nothing.
+*/
+func TestXrayFrontsTheRelay(t *testing.T) {
+	xray := os.Getenv("XRAY_E2E_BINARY")
+	if xray == "" || os.Getenv("MTG_E2E_BINARY") == "" {
+		t.Skip("XRAY_E2E_BINARY and MTG_E2E_BINARY not both set")
+	}
+	_, _ = startRealWebInbound(t, 10, 24730)
+	const relayPort, frontPort = 24732, 24734
+	certFile, keyFile := selfSignedCert(t, "web.example.com")
+	entry := func(xver int) map[string]any {
+		return map[string]any{"name": "web.example.com", "alpn": "http/1.1", "dest": fmt.Sprintf("127.0.0.1:%d", relayPort), "xver": xver}
+	}
+	pinned := []string{"http/1.1"}
+
+	stop := runXray(t, xray, xrayFront(frontPort, pinned, entry(2), certFile, keyFile))
+	status, body, err := frontGet(frontPort, "web.example.com", pinned, "/")
+	if err != nil || status != http.StatusOK || body != coverPage {
+		t.Fatalf("through Xray: %d %q, %v; want the cover page", status, body, err)
+	}
+	if s2, b2, err := frontGet(frontPort, "web.example.com", pinned, "/?bridge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"); err != nil || s2 != status || b2 != body {
+		t.Fatalf("a wrong bridge through Xray must be byte-identical to the cover: %d %q, %v", s2, b2, err)
+	}
+	if _, _, err := frontGet(frontPort, "other.example.com", pinned, "/"); err == nil {
+		t.Fatal("a fallback named for the relay's hostname answered another SNI")
+	}
+	stop()
+
+	stop = runXray(t, xray, xrayFront(frontPort, []string{"h2", "http/1.1"}, entry(2), certFile, keyFile))
+	if _, _, err := frontGet(frontPort, "web.example.com", []string{"h2", "http/1.1"}, "/"); err == nil {
+		t.Fatal("a client that negotiated h2 with the master was served: the ALPN rule would be needless")
+	}
+	if status, body, err := frontGet(frontPort, "web.example.com", pinned, "/"); err != nil || status != http.StatusOK || body != coverPage {
+		t.Fatalf("the same master over http/1.1: %d %q, %v; want the cover page", status, body, err)
+	}
+	stop()
+
+	stop = runXray(t, xray, xrayFront(frontPort, pinned, entry(0), certFile, keyFile))
+	if _, _, err := frontGet(frontPort, "web.example.com", pinned, "/"); err == nil {
+		t.Fatal("the relay served a stream that carried no PROXY header")
+	}
+	stop()
+}
+
+func xrayFront(port int, alpn []string, fallback map[string]any, certFile, keyFile string) map[string]any {
+	return map[string]any{
+		"log": map[string]any{"loglevel": "warning"},
+		"inbounds": []any{map[string]any{
+			"listen": "127.0.0.1", "port": port, "protocol": "vless",
+			"settings": map[string]any{
+				"clients":    []any{map[string]any{"id": "9d2a2a0e-1e7f-4f0b-9f0e-5c5e0d2d1c11"}},
+				"decryption": "none",
+				"fallbacks":  []any{fallback},
+			},
+			"streamSettings": map[string]any{
+				"network": "tcp", "security": "tls",
+				"tlsSettings": map[string]any{"alpn": alpn, "certificates": []any{map[string]any{"certificateFile": certFile, "keyFile": keyFile}}},
+			},
+		}},
+		"outbounds": []any{map[string]any{"protocol": "freedom"}},
+	}
+}
+
+// runXray starts the binary on the config and returns a stop that is safe to
+// call more than once; the port is awaited before returning.
+func runXray(t *testing.T, binary string, cfg map[string]any) func() {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "xray.json")
+	body, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-c", path)
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start xray: %v", err)
+	}
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		})
+	}
+	t.Cleanup(stop)
+	port := cfg["inbounds"].([]any)[0].(map[string]any)["port"].(int)
+	waitFor(t, "xray to listen", func() bool {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	})
+	return stop
+}
+
+// frontGet is a browser's request through the front: TLS to the port with the
+// SNI and ALPN offer given, then GET path on whatever was negotiated.
+func frontGet(port int, sni string, protos []string, path string) (int, string, error) {
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true, ServerName: sni, NextProtos: protos}, //nolint:gosec // a self-signed test certificate
+		ForceAttemptHTTP2: slices.Contains(protos, "h2"),
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		},
+	}
+	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("https://%s:%d%s", sni, port, path))
+	if err != nil {
+		return 0, "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body), err
+}
+
+func selfSignedCert(t *testing.T, host string) (certFile, keyFile string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: host}, DNSNames: []string{host},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	certFile, keyFile = filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return certFile, keyFile
 }

@@ -842,9 +842,8 @@ export interface GenMtprotoWebLinkInput {
 }
 
 /* The WEB proxy deep link: the hostname alone, since the client fixes https and
-   port 443, and the dd secret. The parameter names mirror tg://proxy and are
-   unconfirmed against a real client; the host and the dd secret are what the
-   client's own two fields take. */
+   port 443, and the dd secret. Confirmed against a real Telegram Desktop on
+   2026-09-07. */
 export function genMtprotoWebLink(input: GenMtprotoWebLinkInput): string {
   const dd = mtprotoDDSecret(input.clientSecret);
   if (input.host.length === 0 || dd.length === 0) return '';
