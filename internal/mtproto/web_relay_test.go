@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/Arman2122/p-ui/internal/logger"
 )
 
 func relayInstance() Instance {
@@ -172,5 +174,29 @@ func TestValidateWebRelaySettings(t *testing.T) {
 				t.Fatalf("want an error naming %q, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+// A relay that cannot start is retried by every supervise pass. The reason is
+// said once and then carried by the Cores page, not by a warning every pass.
+func TestARelayRefusalIsLoggedOncePerReason(t *testing.T) {
+	t.Setenv("PUI_BIN_FOLDER", t.TempDir())
+	inst := relayInstance()
+	inst.Id = 7331
+	m, cur := &Manager{}, &managed{}
+	for range 3 {
+		m.ensureRelayLocked(cur, inst)
+	}
+	if cur.relayCheck == "" {
+		t.Fatal("with no binary to run the relay's check, the relay must be recorded as refused")
+	}
+	seen := 0
+	for _, line := range logger.GetLogs(1000, "warning") {
+		if strings.Contains(line, "WEB relay for inbound 7331") {
+			seen++
+		}
+	}
+	if seen != 1 {
+		t.Fatalf("one refusal, repeated by three passes, was logged %d times; want once", seen)
 	}
 }

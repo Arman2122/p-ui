@@ -80,24 +80,30 @@ func (m *Manager) ensureRelayLocked(cur *managed, inst Instance) {
 	}
 	cfgPath := configPathForID(inst.Id)
 	if err := ensureWebKey(inst.Id); err != nil {
-		cur.relayCheck = err.Error()
-		logger.Warningf("mtproto: WEB relay for inbound %d has no signing key: %v", inst.Id, err)
+		cur.refuseRelay(inst.Id, "has no signing key", err)
 		return
 	}
 	if err := webRelayCheck(cfgPath); err != nil {
-		cur.relayCheck = err.Error()
-		logger.Warningf("mtproto: WEB relay for inbound %d refused its config: %v", inst.Id, err)
+		cur.refuseRelay(inst.Id, "refused its config", err)
 		return
 	}
 	relay := newRelayProcess(cfgPath, fmt.Sprintf("web relay for inbound %d", inst.Id), inst.Id)
 	relay.keepLines(cur.ring)
 	if err := relay.Start(); err != nil {
-		cur.relayCheck = err.Error()
-		logger.Warningf("mtproto: WEB relay for inbound %d did not start: %v", inst.Id, err)
+		cur.refuseRelay(inst.Id, "did not start", err)
 		return
 	}
 	cur.relay, cur.relayStats, cur.relayCheck = relay, inst.WebStatsPort, ""
 	logger.Infof("mtproto: started the WEB relay for inbound %d on 127.0.0.1:%d for %s", inst.Id, inst.WebBindPort, inst.WebHost)
+}
+
+// refuseRelay records why the relay is down and says so once per reason: every
+// supervise pass retries, and the Cores page carries the standing reason.
+func (cur *managed) refuseRelay(id int, what string, err error) {
+	if reason := err.Error(); reason != cur.relayCheck {
+		cur.relayCheck = reason
+		logger.Warningf("mtproto: WEB relay for inbound %d %s: %v", id, what, err)
+	}
 }
 
 // stopRelay ends the relay if one runs; it is safe on a record without one.
