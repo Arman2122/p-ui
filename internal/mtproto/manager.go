@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -38,6 +40,12 @@ type SecretEntry struct {
 	AdTag       string
 	QuotaBytes  int64
 	ExpiresUnix int64
+	// SpeedUpBytesPerSecond and SpeedDownBytesPerSecond are in the sidecar's
+	// unit, bytes per second from the client's side; IPLimit is how many places
+	// the client may hold at once. Zero is unlimited for each.
+	SpeedUpBytesPerSecond   int64
+	SpeedDownBytesPerSecond int64
+	IPLimit                 int
 }
 
 // Instance is the desired runtime configuration of one mtproto inbound. A single
@@ -121,12 +129,13 @@ func (inst Instance) StructuralFingerprint() string {
 // SecretsFingerprint identifies the reloadable secret config regardless of
 // client order, so a reordered clients array in the stored settings does not
 // read as a change. It moves whenever a client is added, removed, disabled,
-// re-keyed, re-tagged, or re-limited (quota/expiry) — all of which mtg applies
-// in place without dropping connections.
+// re-keyed, re-tagged, or re-limited (quota, expiry, speed, address limit) —
+// all of which mtg applies in place without dropping connections.
 func (inst Instance) SecretsFingerprint() string {
 	pairs := make([]string, 0, len(inst.Secrets))
 	for _, e := range inst.Secrets {
-		pairs = append(pairs, fmt.Sprintf("%s=%s;tag=%s;q=%d;exp=%d", e.Name, e.Secret, e.AdTag, e.QuotaBytes, e.ExpiresUnix))
+		pairs = append(pairs, fmt.Sprintf("%s=%s;tag=%s;q=%d;exp=%d;up=%d;down=%d;ipl=%d",
+			e.Name, e.Secret, e.AdTag, e.QuotaBytes, e.ExpiresUnix, e.SpeedUpBytesPerSecond, e.SpeedDownBytesPerSecond, e.IPLimit))
 	}
 	slices.Sort(pairs)
 	return strings.Join(pairs, "|")
@@ -188,6 +197,9 @@ type Manager struct {
 	// drawPort supplies the api-bind-to port. Nil means sys.FreeLoopbackPort; a
 	// test substitutes a deterministic draw.
 	drawPort func() (int, error)
+	// rates is the panel's evaluated ladder per inbound, in the contract's bits
+	// per second, folded into every render so the three writers agree (Q8).
+	rates map[int]map[string]core.RateLimit
 }
 
 // apiPortDrawAttempts bounds the re-rolls when the OS keeps handing back the one
@@ -400,7 +412,70 @@ func ensureActionFor(running bool, curStructFP, curSecretsFP, newStructFP, newSe
 	return ensureNoop
 }
 
+// SetRates stores the ladder for an inbound and reports whether it moved. The
+// caller pushes only on a change: a whole-set PUT per pass would hand every
+// client a fresh bucket every ten seconds.
+func (m *Manager) SetRates(id int, limits map[string]core.RateLimit) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.rates == nil {
+		m.rates = map[int]map[string]core.RateLimit{}
+	}
+	if len(limits) == 0 {
+		_, had := m.rates[id]
+		delete(m.rates, id)
+		return had
+	}
+	cur := m.rates[id]
+	if len(cur) == len(limits) {
+		same := true
+		for email, l := range limits {
+			if cur[email] != l {
+				same = false
+				break
+			}
+		}
+		if same {
+			return false
+		}
+	}
+	m.rates[id] = maps.Clone(limits)
+	return true
+}
+
+// minSpeedBytesPerSecond restates mtglib.MinSpeedBytesPerSecond: the sidecar is
+// a binary, not a dependency, and it refuses anything under 64 kbit/s.
+const minSpeedBytesPerSecond = 8000
+
+// sidecarRate converts the contract's bits per second into the sidecar's bytes,
+// raised to the floor rather than refused: a refused PUT restarts the process.
+func sidecarRate(bitsPerSecond int64) int64 {
+	if bitsPerSecond <= 0 {
+		return 0
+	}
+	return max(bitsPerSecond/8, minSpeedBytesPerSecond)
+}
+
+// withRatesLocked overlays the stored ladder onto a copy of the instance's
+// secrets, so the render and the fingerprint see one value whichever pass built
+// the instance: the supervise pass, a client edit, or the rate pass.
+func (m *Manager) withRatesLocked(inst Instance) Instance {
+	limits := m.rates[inst.Id]
+	if len(limits) == 0 {
+		return inst
+	}
+	secrets := slices.Clone(inst.Secrets)
+	for i := range secrets {
+		l := limits[secrets[i].Name]
+		secrets[i].SpeedUpBytesPerSecond = sidecarRate(l.UpBps)
+		secrets[i].SpeedDownBytesPerSecond = sidecarRate(l.DownBps)
+	}
+	inst.Secrets = secrets
+	return inst
+}
+
 func (m *Manager) ensureLocked(inst Instance) error {
+	inst = m.withRatesLocked(inst)
 	structFP := inst.StructuralFingerprint()
 	secFP := inst.SecretsFingerprint()
 	counter := core.NewCounter()
@@ -481,6 +556,7 @@ func (m *Manager) Remove(id int) {
 		_ = os.Remove(configPathForID(id))
 		logger.Infof("mtproto: stopped mtg for inbound %d", id)
 	}
+	delete(m.rates, id)
 }
 
 // Reconcile drives the running set toward the desired instances, at boot and
@@ -506,6 +582,7 @@ func (m *Manager) Reconcile(desired []Instance, keep ...int) error {
 			m.billFinalLocked(cur)
 			_ = cur.proc.Stop()
 			delete(m.procs, id)
+			delete(m.rates, id)
 			_ = os.Remove(configPathForID(id))
 		}
 	}
@@ -572,6 +649,9 @@ func (m *Manager) CollectTraffic() (out []Traffic, online []string, failed []str
 		// Only while this is still the same process: a restart in between would
 		// otherwise stamp the old binary's capabilities onto the new one.
 		if m.procs[s.id] == s.mg {
+			if len(s.mg.features) == 0 && len(stats.Features) > 0 {
+				warnMissingFeatures(s.id, stats.Features)
+			}
 			s.mg.features = stats.Features
 		}
 		m.mu.Unlock()
@@ -583,6 +663,155 @@ func (m *Manager) CollectTraffic() (out []Traffic, online []string, failed []str
 		out = append(out, billReadings(s.tag, s.counter, stats)...)
 	}
 	return out, online, failed
+}
+
+// requiredFeatures is what the panel drives on every sidecar: without them a
+// speed, a cut or a device's recency is written and silently does nothing.
+var requiredFeatures = []string{"speed-directions", "kick", "client-ip-activity"}
+
+// warnMissingFeatures names, once per process life, what this binary lacks.
+func warnMissingFeatures(id int, features []string) {
+	var missing []string
+	for _, want := range requiredFeatures {
+		if !slices.Contains(features, want) {
+			missing = append(missing, want)
+		}
+	}
+	if len(missing) > 0 {
+		logger.Warningf("mtproto: the sidecar for inbound %d lacks %s; speed and device limits will not apply until mtg-proxy is upgraded",
+			id, strings.Join(missing, ", "))
+	}
+}
+
+// Sessions is every connected address the running sidecars report right now,
+// one per client and place, with the second that place last moved a byte. Read
+// now rather than replayed from the traffic pass, so a cut a moment ago is gone.
+func (m *Manager) Sessions() []core.Session {
+	var out []core.Session
+	for _, t := range m.runningTargets() {
+		stats, ok := scrapeStats(t.port, t.token)
+		if !ok {
+			continue
+		}
+		for email, u := range stats.Users {
+			for _, text := range u.ConnectedIPs {
+				source, err := netip.ParseAddr(text)
+				if err != nil {
+					continue
+				}
+				s := core.Session{Email: email, Source: source}
+				if at, ok := u.ConnectedIPsLastSeen[text]; ok && !at.IsZero() {
+					s.LastSeenUnixMilli = at.UnixMilli()
+				}
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+// EnforcedRates reads back what the sidecar for an inbound holds each client
+// to, in the contract's bits per second: a limit the process never took must
+// not read as enforced, so this is the daemon's answer and not the table's.
+func (m *Manager) EnforcedRates(id int) (map[string]core.RateLimit, error) {
+	m.mu.Lock()
+	cur, ok := m.procs[id]
+	var port int
+	var token string
+	if ok {
+		port, token = cur.apiPort, cur.apiToken
+	}
+	m.mu.Unlock()
+	if !ok {
+		return map[string]core.RateLimit{}, nil
+	}
+	stats, scraped := scrapeStats(port, token)
+	if !scraped {
+		return nil, fmt.Errorf("mtproto: the sidecar for inbound %d does not answer", id)
+	}
+	out := make(map[string]core.RateLimit, len(stats.Users))
+	for email, u := range stats.Users {
+		if u.SpeedLimitUp > 0 || u.SpeedLimitDown > 0 {
+			out[email] = core.RateLimit{UpBps: u.SpeedLimitUp * 8, DownBps: u.SpeedLimitDown * 8}
+		}
+	}
+	return out, nil
+}
+
+// Kick ends a client's streams from one place on every running sidecar and
+// reports how many ended. A sidecar that does not know the client is nothing
+// to end there, not an error: the panel kicks by email without knowing which
+// inbound holds it.
+func (m *Manager) Kick(email string, source netip.Addr) (int, error) {
+	var (
+		closed   int
+		failures []error
+	)
+	for _, t := range m.runningTargets() {
+		n, err := kick(t.port, t.token, email, source)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		closed += n
+	}
+	return closed, errors.Join(failures...)
+}
+
+type apiTarget struct {
+	id    int
+	port  int
+	token string
+}
+
+// runningTargets snapshots the API address of every live sidecar under m.mu,
+// so the HTTP round trips that follow hold no lock.
+func (m *Manager) runningTargets() []apiTarget {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	targets := make([]apiTarget, 0, len(m.procs))
+	for id, cur := range m.procs {
+		if cur.proc != nil && cur.proc.IsRunning() {
+			targets = append(targets, apiTarget{id: id, port: cur.apiPort, token: cur.apiToken})
+		}
+	}
+	slices.SortFunc(targets, func(a, b apiTarget) int { return a.id - b.id })
+	return targets
+}
+
+func kick(port int, token, email string, source netip.Addr) (int, error) {
+	body, err := json.Marshal(struct {
+		IPs []string `json:"ips"`
+	}{IPs: []string{source.Unmap().WithZone("").String()}})
+	if err != nil {
+		return 0, err
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/secrets/%s/kick", port, url.PathEscape(email))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	authorize(req, token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return 0, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("mtproto: kick %q from %s returned %s", email, source, resp.Status)
+	}
+	var result struct {
+		Closed int `json:"closed"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+	return result.Closed, nil
 }
 
 // billReadings turns one /stats reading into per-client deltas through the
@@ -711,6 +940,9 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 	if apiToken != "" {
 		fmt.Fprintf(&b, "api-token = %q\n", apiToken)
 	}
+	// Always on: the device cap observes addresses for every core alike, and
+	// without it the sidecar reports counts with no address to decide on.
+	b.WriteString("track-client-ips = true\n")
 	if inst.PublicIPv4 != "" {
 		fmt.Fprintf(&b, "public-ipv4 = %q\n", inst.PublicIPv4)
 	}
@@ -759,7 +991,7 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 		fmt.Fprintf(&b, "%q = %q\n", e.Name, e.AdTag)
 	}
 	for _, e := range secrets {
-		if e.QuotaBytes <= 0 && e.ExpiresUnix <= 0 {
+		if !e.limited() {
 			continue
 		}
 		fmt.Fprintf(&b, "\n[secret-limits.%q]\n", e.Name)
@@ -769,12 +1001,26 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 		if e.ExpiresUnix > 0 {
 			fmt.Fprintf(&b, "expires = %q\n", expiresString(e.ExpiresUnix))
 		}
+		if e.SpeedUpBytesPerSecond > 0 {
+			fmt.Fprintf(&b, "speed-up = %q\n", strconv.FormatInt(e.SpeedUpBytesPerSecond, 10))
+		}
+		if e.SpeedDownBytesPerSecond > 0 {
+			fmt.Fprintf(&b, "speed-down = %q\n", strconv.FormatInt(e.SpeedDownBytesPerSecond, 10))
+		}
+		if e.IPLimit > 0 {
+			fmt.Fprintf(&b, "ip-limit = %d\n", e.IPLimit)
+		}
 	}
 	b.WriteString("\n[secrets]\n")
 	for _, e := range secrets {
 		fmt.Fprintf(&b, "%q = %q\n", e.Name, e.Secret)
 	}
 	return b.String()
+}
+
+// limited says whether the client needs a [secret-limits] table at all.
+func (e SecretEntry) limited() bool {
+	return e.QuotaBytes > 0 || e.ExpiresUnix > 0 || e.SpeedUpBytesPerSecond > 0 || e.SpeedDownBytesPerSecond > 0 || e.IPLimit > 0
 }
 
 // dedupSecrets collapses entries sharing a name, the last winning, which is what
@@ -809,6 +1055,12 @@ type statsUser struct {
 	Connections int64 `json:"connections"`
 	BytesIn     int64 `json:"bytes_in"`
 	BytesOut    int64 `json:"bytes_out"`
+	// The addresses behind the connections and when each last moved a byte,
+	// present only with track-client-ips; the caps the sidecar holds, bytes/s.
+	ConnectedIPs         []string             `json:"connected_ips"`
+	ConnectedIPsLastSeen map[string]time.Time `json:"connected_ips_last_seen"`
+	SpeedLimitUp         int64                `json:"speed_limit_up"`
+	SpeedLimitDown       int64                `json:"speed_limit_down"`
 }
 
 // mtgStats is the /stats payload. StartedAt names the process incarnation, so a
@@ -822,10 +1074,13 @@ type mtgStats struct {
 }
 
 type secretPutEntry struct {
-	Secret  string `json:"secret"`
-	AdTag   string `json:"ad_tag,omitempty"`
-	Quota   string `json:"quota,omitempty"`
-	Expires string `json:"expires,omitempty"`
+	Secret    string `json:"secret"`
+	AdTag     string `json:"ad_tag,omitempty"`
+	Quota     string `json:"quota,omitempty"`
+	Expires   string `json:"expires,omitempty"`
+	SpeedUp   string `json:"speed_up,omitempty"`
+	SpeedDown string `json:"speed_down,omitempty"`
+	IPLimit   int    `json:"ip_limit,omitempty"`
 }
 
 type secretsPutBody struct {
@@ -842,6 +1097,13 @@ func secretsPayload(inst Instance) secretsPutBody {
 		if e.ExpiresUnix > 0 {
 			entry.Expires = expiresString(e.ExpiresUnix)
 		}
+		if e.SpeedUpBytesPerSecond > 0 {
+			entry.SpeedUp = strconv.FormatInt(e.SpeedUpBytesPerSecond, 10)
+		}
+		if e.SpeedDownBytesPerSecond > 0 {
+			entry.SpeedDown = strconv.FormatInt(e.SpeedDownBytesPerSecond, 10)
+		}
+		entry.IPLimit = e.IPLimit
 		secrets[e.Name] = entry
 	}
 	return secretsPutBody{Secrets: secrets}

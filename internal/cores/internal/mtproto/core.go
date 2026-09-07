@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -294,6 +295,37 @@ func (c *Core) OnlineEmails(_ context.Context) ([]string, error) {
 
 func (c *Core) ResetQuota(_ context.Context, email string) error {
 	return c.mgr.ResetQuota(email)
+}
+
+// EnforcesRates: the sidecar holds each client to a rate on buckets of its own.
+func (c *Core) EnforcesRates(kind core.Kind) bool { return kind == Kind }
+
+// EnforceRates hands the ladder to the engine, which folds it into every render;
+// the push happens only when the ladder moved, since a whole-set PUT per pass
+// would hand every client a fresh bucket every ten seconds.
+func (c *Core) EnforceRates(_ context.Context, inst core.Instance, limits map[string]core.RateLimit) error {
+	if !c.mgr.SetRates(inst.ID, limits) {
+		return nil
+	}
+	return c.apply(inst)
+}
+
+// EnforcedRates is the daemon's own answer, read now: a rate the process never
+// took must not read as enforced.
+func (c *Core) EnforcedRates(_ context.Context, inst core.Instance) (map[string]core.RateLimit, error) {
+	return c.mgr.EnforcedRates(inst.ID)
+}
+
+// Sessions is every connected address every sidecar reports, with the second
+// that place last moved a byte; Local stays empty, the honest L7 answer.
+func (c *Core) Sessions(_ context.Context) ([]core.Session, error) {
+	return c.mgr.Sessions(), nil
+}
+
+// CutSessions ends a client's streams from one place through the sidecar's own
+// kick, matched at the /64 the sidecar counts an IPv6 place at.
+func (c *Core) CutSessions(_ context.Context, email string, source netip.Addr) (int, error) {
+	return c.mgr.Kick(email, source)
 }
 
 // IngressSelector: the sidecar terminates MTProto and hands the plaintext to

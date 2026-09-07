@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -53,21 +52,7 @@ func (c *Core) Installed(ctx context.Context) (string, error) {
 	if _, err := os.Stat(engine.GetBinaryPath()); err != nil {
 		return "", core.ErrNotInstalled
 	}
-	return binaryVersion(ctx, engine.GetBinaryPath())
-}
-
-func binaryVersion(ctx context.Context, path string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "--version").Output()
-	if err != nil {
-		return "", fmt.Errorf("mtproto: %s --version: %w", filepath.Base(path), err)
-	}
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return "", errors.New("mtproto: --version answered nothing")
-	}
-	return fields[0], nil
+	return engine.BinaryVersion(ctx, engine.GetBinaryPath())
 }
 
 // Available lists the channel's release tags, newest first, pre-releases left out.
@@ -137,7 +122,7 @@ func (c *Core) Install(ctx context.Context, version string) error {
 		return err
 	}
 	defer func() { _ = os.Remove(staged) }()
-	if _, err := binaryVersion(ctx, staged); err != nil {
+	if _, err := engine.BinaryVersion(ctx, staged); err != nil {
 		return fmt.Errorf("mtproto: the downloaded %s does not run here, so it was not installed: %w", pkg, err)
 	}
 	return os.Rename(staged, engine.GetBinaryPath())

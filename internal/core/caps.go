@@ -433,8 +433,8 @@ type Session struct {
 SessionReporter names each live connection together with the source it came from.
 
 Separate from OnlineReporter because the two answer different questions and not
-every core can answer this one: mtg reports a secret in use and no address at
-all, and widening OnlineReporter would force it to invent one.
+every core can answer this one: a core that reports a user in use and no address
+(mtg, before it tracked addresses) would have had to invent one.
 
 A snapshot of now: no history, no closed sessions, no aggregation. Deduplication,
 recency and the cap itself are the panel's rules and never travel here.

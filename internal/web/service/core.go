@@ -35,8 +35,8 @@ type CoreView struct {
 
 		A kind absent here cannot have a cap enforced however the form is filled
 		in: EvaluateIPLimits only ever sees clients a core reported a session for,
-		and mtg, for one, reports a secret in use and no address at all. The form
-		says so instead of accepting a number that does nothing. F120 / F302.
+		and a core that reports a user in use and no address cannot report one.
+		The form says so instead of accepting a number that does nothing. F120 / F302.
 	*/
 	SessionKinds []string `json:"sessionKinds" example:"[\"vless\",\"wgkernel\"]"`
 	/*

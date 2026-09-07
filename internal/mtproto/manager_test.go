@@ -201,16 +201,22 @@ func TestRenderConfigSecretLimits(t *testing.T) {
 			{Name: "alice", Secret: "ee11", QuotaBytes: 1073741824, ExpiresUnix: 1893456000},
 			{Name: "bob", Secret: "ee22", QuotaBytes: 500},
 			{Name: "carol", Secret: "ee33"},
+			{Name: "dave", Secret: "ee44", SpeedUpBytesPerSecond: 125000, SpeedDownBytesPerSecond: 250000, IPLimit: 3},
 		},
 		Listen: "0.0.0.0", Port: 443,
 	}, 6000, "")
 
 	for _, want := range []string{
+		"track-client-ips = true\n",
 		"[secret-limits.\"alice\"]",
 		`quota = "1073741824B"`,
 		`expires = "2030-01-01T00:00:00Z"`,
 		"[secret-limits.\"bob\"]",
 		`quota = "500B"`,
+		"[secret-limits.\"dave\"]",
+		`speed-up = "125000"`,
+		`speed-down = "250000"`,
+		"ip-limit = 3\n",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("limits config missing %q:\n%s", want, cfg)
@@ -229,7 +235,7 @@ func TestRenderConfigSecretLimits(t *testing.T) {
 
 func TestSecretsPayloadLimits(t *testing.T) {
 	body := secretsPayload(Instance{Secrets: []SecretEntry{
-		{Name: "alice", Secret: "ee11", QuotaBytes: 1073741824, ExpiresUnix: 1893456000},
+		{Name: "alice", Secret: "ee11", QuotaBytes: 1073741824, ExpiresUnix: 1893456000, SpeedUpBytesPerSecond: 125000, SpeedDownBytesPerSecond: 250000, IPLimit: 3},
 		{Name: "bob", Secret: "ee22"},
 	}})
 	if got := body.Secrets["alice"].Quota; got != "1073741824B" {
@@ -238,8 +244,11 @@ func TestSecretsPayloadLimits(t *testing.T) {
 	if got := body.Secrets["alice"].Expires; got != "2030-01-01T00:00:00Z" {
 		t.Fatalf("expiry must be sent as RFC3339, got %q", got)
 	}
-	if body.Secrets["bob"].Quota != "" || body.Secrets["bob"].Expires != "" {
-		t.Fatalf("an unlimited client must carry no quota/expiry: %+v", body.Secrets["bob"])
+	if a := body.Secrets["alice"]; a.SpeedUp != "125000" || a.SpeedDown != "250000" || a.IPLimit != 3 {
+		t.Fatalf("speeds go as bare byte counts and the address limit as a number, got %+v", a)
+	}
+	if b := body.Secrets["bob"]; b.Quota != "" || b.Expires != "" || b.SpeedUp != "" || b.SpeedDown != "" || b.IPLimit != 0 {
+		t.Fatalf("an unlimited client must carry no limit at all: %+v", b)
 	}
 }
 
@@ -283,8 +292,13 @@ func TestFingerprintSplit(t *testing.T) {
 		"clientAdTag": func(i *Instance) {
 			i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", AdTag: "0123456789abcdef0123456789abcdef"}}
 		},
-		"quota":  func(i *Instance) { i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", QuotaBytes: 1 << 30}} },
-		"expiry": func(i *Instance) { i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", ExpiresUnix: 1893456000}} },
+		"quota":   func(i *Instance) { i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", QuotaBytes: 1 << 30}} },
+		"expiry":  func(i *Instance) { i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", ExpiresUnix: 1893456000}} },
+		"speedUp": func(i *Instance) { i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", SpeedUpBytesPerSecond: 125000}} },
+		"speedDown": func(i *Instance) {
+			i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", SpeedDownBytesPerSecond: 250000}}
+		},
+		"ipLimit": func(i *Instance) { i.Secrets = []SecretEntry{{Name: "a", Secret: "ee", IPLimit: 2}} },
 	} {
 		t.Run("secrets/"+name, func(t *testing.T) {
 			changed := base
@@ -302,7 +316,7 @@ func TestFingerprintSplit(t *testing.T) {
 	t.Run("orderInsensitive", func(t *testing.T) {
 		forward := Instance{Secrets: []SecretEntry{{Name: "alice", Secret: "ee11"}, {Name: "bob", Secret: "ee22"}}}
 		reversed := Instance{Secrets: []SecretEntry{{Name: "bob", Secret: "ee22"}, {Name: "alice", Secret: "ee11"}}}
-		if got, want := forward.SecretsFingerprint(), "alice=ee11;tag=;q=0;exp=0|bob=ee22;tag=;q=0;exp=0"; got != want {
+		if got, want := forward.SecretsFingerprint(), "alice=ee11;tag=;q=0;exp=0;up=0;down=0;ipl=0|bob=ee22;tag=;q=0;exp=0;up=0;down=0;ipl=0"; got != want {
 			t.Fatalf("secrets fingerprint must join sorted pairs: got %q, want %q", got, want)
 		}
 		if forward.SecretsFingerprint() != reversed.SecretsFingerprint() {

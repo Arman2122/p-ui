@@ -8,10 +8,11 @@ An IP limit on a protocol that cannot report where a connection came from does
 nothing, and the form accepted one anyway.
 
 The cap is decided from live sessions: EvaluateIPLimits iterates only the
-clients a core reported a session for, with the source address. mtg reports a
-secret in use and no address at all, so its core implements no SessionReporter,
-bind leaves Bound.Sessions nil, and an MTProto client never enters that set. The
-number was stored, shown, and enforced on nobody.
+clients a core reported a session for, with the source address. A core whose
+daemon reports a user in use and no address (mtg did, before it tracked
+addresses) implements no SessionReporter, bind leaves Bound.Sessions nil, and
+its clients never enter that set. The number was stored, shown, and enforced on
+nobody. The fixture below keeps that shape under the mtproto id, as a literal.
 
 Asked of each core's own sessionKinds rather than a protocol list here, so a
 core added later declares for itself. F120 / F302.

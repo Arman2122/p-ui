@@ -42,9 +42,10 @@ func toEngine(inst core.Instance) (out engine.Instance, serve bool, err error) {
 			continue
 		}
 		entry := engine.SecretEntry{
-			Name:   u.Email,
-			Secret: secret,
-			AdTag:  engine.UsableAdTag(core.CredString(u.Credentials, CredAdTag)),
+			Name:    u.Email,
+			Secret:  secret,
+			AdTag:   engine.UsableAdTag(core.CredString(u.Credentials, CredAdTag)),
+			IPLimit: u.LimitIP,
 		}
 		if u.QuotaBytes > 0 {
 			entry.QuotaBytes = u.QuotaBytes

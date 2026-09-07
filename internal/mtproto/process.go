@@ -13,7 +13,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,8 +39,10 @@ func GetBinaryPath() string {
 	return config.GetBinFolderPath() + "/" + GetBinaryName()
 }
 
-// CheckBinary reports whether the mtg binary is present and executable. A miss
-// disables the core at preflight instead of failing each inbound every reconcile.
+// CheckBinary reports whether the mtg binary is present, executable and new
+// enough. A miss disables the core at preflight instead of failing each inbound
+// every reconcile; an old binary would take every limit the panel writes
+// silently, so it is refused by name.
 func CheckBinary() error {
 	path := GetBinaryPath()
 	info, err := os.Stat(path)
@@ -47,7 +52,64 @@ func CheckBinary() error {
 	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
 		return fmt.Errorf("mtproto: %s is not an executable file", path)
 	}
+	version, err := BinaryVersion(context.Background(), path)
+	if err != nil {
+		return err
+	}
+	return checkVersion(version)
+}
+
+// MinimumVersion is the first mtg-proxy that answers everything the panel
+// drives: per-direction speed, per-address activity and the kick.
+const MinimumVersion = "1.9.0"
+
+// checkVersion refuses a release older than MinimumVersion. A version that is
+// not a release number (a source build says "dev") is let through: it is newer
+// than any release by construction, and refusing it would make every VM run
+// impossible.
+func checkVersion(version string) error {
+	have, ok := parseRelease(version)
+	if !ok {
+		return nil
+	}
+	want, _ := parseRelease(MinimumVersion)
+	if slices.Compare(have[:], want[:]) < 0 {
+		return fmt.Errorf("mtproto: mtg-proxy %s is older than %s, which the panel's speed and device limits need; install a newer release", version, MinimumVersion)
+	}
 	return nil
+}
+
+// parseRelease reads "1.9.0" or "v1.9.0"; anything else is not a release.
+func parseRelease(version string) ([3]int, bool) {
+	var out [3]int
+	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(version), "v"), ".")
+	if len(parts) != 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// BinaryVersion is what the binary says of itself: "1.3.0" from
+// "1.3.0 (go1.26.6: …)", or "dev" for a source build.
+func BinaryVersion(ctx context.Context, path string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--version").Output()
+	if err != nil {
+		return "", fmt.Errorf("mtproto: %s --version: %w", filepath.Base(path), err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return "", errors.New("mtproto: --version answered nothing")
+	}
+	return fields[0], nil
 }
 
 func configDir() string {

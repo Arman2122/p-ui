@@ -27,10 +27,11 @@ The conformance rig for mtproto.
 
 The stand-in mtg is the test binary re-executed, and it serves the real
 management API off the config the manager generated for it — the same /stats
-the accounting reads and the same PUT /secrets a hot apply uses. Faking the
-manager's internals instead would have proven only that the fake agrees with
-itself: the api port, the bearer token and the counter epoch all have to survive
-a round trip through the generated TOML to mean anything.
+the accounting reads, the same PUT /secrets a hot apply uses, and the same kick
+a cut uses. Faking the manager's internals instead would have proven only that
+the fake agrees with itself: the api port, the bearer token and the counter
+epoch all have to survive a round trip through the generated TOML to mean
+anything.
 */
 
 func TestMain(m *testing.M) {
@@ -43,8 +44,24 @@ func TestMain(m *testing.M) {
 
 var tomlValue = regexp.MustCompile(`(?m)^(\S+)\s*=\s*"([^"]*)"`)
 
+// fakeStats is the file the rig writes and the stand-in answers /stats from.
+// Generation moves on every feed, and a new generation forgets every kick: a
+// fed session is a fresh connection, the way a client that reconnects is.
+type fakeStats struct {
+	StartedAt  string               `json:"started_at"`
+	Generation int                  `json:"generation"`
+	Features   []string             `json:"features"`
+	Users      map[string]*fakeUser `json:"users"`
+}
+
+// fakeLimits is what the last PUT /secrets set for one user, bytes per second.
+type fakeLimits struct {
+	up, down int64
+}
+
 // serveFakeMtg impersonates mtg-proxy: it binds the api address from its own
-// generated config and answers /stats from a file the test rewrites.
+// generated config, answers /stats from a file the test rewrites, reflects the
+// speeds the last PUT pushed, and ends kicked places until the next feed.
 func serveFakeMtg() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println("9.9.9 (go1.26 fake)")
@@ -68,37 +85,113 @@ func serveFakeMtg() {
 	}
 	token := keys["api-token"]
 	statsFile := os.Getenv("MTG_FAKE_STATS")
-	recordServed(secretNamesFromTOML(string(cfg)))
+	served := secretNamesFromTOML(string(cfg))
+	recordServed(served)
+
+	var (
+		mu         sync.Mutex
+		limits     = map[string]fakeLimits{}
+		kicked     = map[string]map[string]bool{}
+		generation = -1
+	)
+	current := func() fakeStats {
+		var stats fakeStats
+		if body, err := os.ReadFile(statsFile); err != nil || json.Unmarshal(body, &stats) != nil {
+			stats = fakeStats{Users: map[string]*fakeUser{}}
+		}
+		if stats.Generation != generation {
+			generation = stats.Generation
+			kicked = map[string]map[string]bool{}
+		}
+		// Every served secret is a user, as PreRegister makes it in the real daemon.
+		for _, name := range served {
+			if stats.Users[name] == nil {
+				stats.Users[name] = &fakeUser{}
+			}
+		}
+		for email, u := range stats.Users {
+			if l, ok := limits[email]; ok {
+				u.SpeedLimitUp, u.SpeedLimitDown = l.up, l.down
+			}
+			gone := kicked[email]
+			u.ConnectedIPs = slices.DeleteFunc(u.ConnectedIPs, func(ip string) bool { return gone[ip] })
+			for ip := range u.ConnectedIPsLastSeen {
+				if gone[ip] {
+					delete(u.ConnectedIPsLastSeen, ip)
+				}
+			}
+		}
+		return stats
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if token != "" && r.Header.Get("Authorization") != "Bearer "+token {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		if r.Method == http.MethodPut && r.URL.Path == "/secrets" {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/secrets":
 			var body struct {
-				Secrets map[string]json.RawMessage `json:"secrets"`
+				Secrets map[string]struct {
+					SpeedUp   string `json:"speed_up"`
+					SpeedDown string `json:"speed_down"`
+				} `json:"secrets"`
 			}
 			if json.NewDecoder(r.Body).Decode(&body) == nil {
 				names := make([]string, 0, len(body.Secrets))
-				for name := range body.Secrets {
+				for name, entry := range body.Secrets {
 					names = append(names, name)
+					up, _ := strconv.ParseInt(entry.SpeedUp, 10, 64)
+					down, _ := strconv.ParseInt(entry.SpeedDown, 10, 64)
+					limits[name] = fakeLimits{up: up, down: down}
 				}
+				served = names
 				recordServed(names)
 			}
+			if puts := os.Getenv("MTG_FAKE_PUTS"); puts != "" {
+				if f, err := os.OpenFile(puts, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+					_, _ = f.WriteString("put\n")
+					_ = f.Close()
+				}
+			}
 			w.WriteHeader(http.StatusOK)
-			return
-		}
-		if r.Method == http.MethodGet && r.URL.Path == "/stats" {
-			body, err := os.ReadFile(statsFile)
-			if err != nil {
-				body = []byte(`{"users":{}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/stats":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(current())
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/kick"):
+			name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/secrets/"), "/kick")
+			if !slices.Contains(served, name) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			var body struct {
+				IPs []string `json:"ips"`
+			}
+			if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.IPs) == 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			stats := current()
+			closed := 0
+			if u := stats.Users[name]; u != nil {
+				for _, ip := range body.IPs {
+					if slices.Contains(u.ConnectedIPs, ip) {
+						if kicked[name] == nil {
+							kicked[name] = map[string]bool{}
+						}
+						kicked[name][ip] = true
+						closed++
+					}
+				}
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write(body)
-			return
+			fmt.Fprintf(w, `{"closed":%d}`, closed)
+		default:
+			w.WriteHeader(http.StatusOK)
 		}
-		w.WriteHeader(http.StatusOK)
 	})
 	if ready := os.Getenv("MTG_FAKE_READY"); ready != "" {
 		_ = os.WriteFile(ready, []byte(keys["api-bind-to"]), 0o600)
@@ -130,10 +223,22 @@ func recordServed(names []string) {
 	_ = os.WriteFile(path, []byte(strings.Join(names, "\n")), 0o600)
 }
 
+// fakeUser is one /stats user as the real payload shapes it: the counters, the
+// addresses with their activity, and the caps the sidecar holds.
 type fakeUser struct {
-	Connections int64 `json:"connections"`
-	BytesIn     int64 `json:"bytes_in"`
-	BytesOut    int64 `json:"bytes_out"`
+	Connections          int64             `json:"connections"`
+	BytesIn              int64             `json:"bytes_in"`
+	BytesOut             int64             `json:"bytes_out"`
+	ConnectedIPs         []string          `json:"connected_ips,omitempty"`
+	ConnectedIPsLastSeen map[string]string `json:"connected_ips_last_seen,omitempty"`
+	SpeedLimitUp         int64             `json:"speed_limit_up,omitempty"`
+	SpeedLimitDown       int64             `json:"speed_limit_down,omitempty"`
+}
+
+// fakeFeatures is what the stand-in advertises: everything the panel drives.
+var fakeFeatures = []string{
+	"client-ip-activity", "client-ips", "faketls", "ip-limits", "kick", "listeners", "quota-ceiling",
+	"quota-reset", "secret-modes", "secret-read", "secrets-api", "speed-directions", "speed-limits",
 }
 
 type rig struct {
@@ -142,10 +247,12 @@ type rig struct {
 	ready   string
 	stats   string
 	servedF string
+	putsF   string
 
-	mu        sync.Mutex
-	startedAt string
-	users     map[string]*fakeUser
+	mu         sync.Mutex
+	startedAt  string
+	generation int
+	users      map[string]*fakeUser
 }
 
 func newRig(t *testing.T) *rig {
@@ -168,6 +275,7 @@ func newRig(t *testing.T) *rig {
 		ready:     filepath.Join(binDir, "mtg-ready.txt"),
 		stats:     filepath.Join(binDir, "mtg-stats.json"),
 		servedF:   filepath.Join(binDir, "mtg-served.txt"),
+		putsF:     filepath.Join(binDir, "mtg-puts.txt"),
 		startedAt: "2026-01-01T00:00:00Z",
 		users:     map[string]*fakeUser{},
 	}
@@ -178,16 +286,14 @@ func newRig(t *testing.T) *rig {
 	t.Setenv("MTG_FAKE_READY", r.ready)
 	t.Setenv("MTG_FAKE_STATS", r.stats)
 	t.Setenv("MTG_FAKE_SERVED", r.servedF)
+	t.Setenv("MTG_FAKE_PUTS", r.putsF)
 	t.Cleanup(func() { engine.GetManager().StopAll() })
 	return r
 }
 
 func (r *rig) writeStats() {
 	r.t.Helper()
-	body, err := json.Marshal(struct {
-		StartedAt string               `json:"started_at"`
-		Users     map[string]*fakeUser `json:"users"`
-	}{StartedAt: r.startedAt, Users: r.users})
+	body, err := json.Marshal(fakeStats{StartedAt: r.startedAt, Generation: r.generation, Features: fakeFeatures, Users: r.users})
 	if err != nil {
 		r.t.Fatalf("encode stats: %v", err)
 	}
@@ -212,10 +318,38 @@ func (r *rig) waitReady() {
 
 func (r *rig) feed(email string, up, down int64) {
 	r.mu.Lock()
-	r.users[email] = &fakeUser{Connections: 1, BytesIn: up, BytesOut: down}
+	u := r.userLocked(email)
+	u.BytesIn, u.BytesOut = up, down
 	r.mu.Unlock()
 	r.writeStats()
 	r.waitReady()
+}
+
+// feedSession is one connected place for a client, seen at the given instant:
+// a new generation, so a kick from before it is forgotten the way a reconnect is.
+func (r *rig) feedSession(email, source string, lastSeenUnixMilli int64) {
+	r.mu.Lock()
+	u := r.userLocked(email)
+	if !slices.Contains(u.ConnectedIPs, source) {
+		u.ConnectedIPs = append(u.ConnectedIPs, source)
+	}
+	if u.ConnectedIPsLastSeen == nil {
+		u.ConnectedIPsLastSeen = map[string]string{}
+	}
+	u.ConnectedIPsLastSeen[source] = time.UnixMilli(lastSeenUnixMilli).UTC().Format(time.RFC3339)
+	r.generation++
+	r.mu.Unlock()
+	r.writeStats()
+	r.waitReady()
+}
+
+func (r *rig) userLocked(email string) *fakeUser {
+	u := r.users[email]
+	if u == nil {
+		u = &fakeUser{Connections: 1}
+		r.users[email] = u
+	}
+	return u
 }
 
 // restart models mtg being replaced under the manager: a new incarnation, with
@@ -242,6 +376,20 @@ func (r *rig) served() []string {
 		r.t.Fatalf("read served file: %v", err)
 	}
 	return strings.Fields(string(data))
+}
+
+// puts counts the PUT /secrets the stand-in has taken: the churn a rate pass
+// must not add.
+func (r *rig) puts() int {
+	r.t.Helper()
+	data, err := os.ReadFile(r.putsF)
+	if os.IsNotExist(err) {
+		return 0
+	}
+	if err != nil {
+		r.t.Fatalf("read puts file: %v", err)
+	}
+	return len(strings.Fields(string(data)))
 }
 
 func (r *rig) spawns() int {
@@ -294,6 +442,7 @@ func (r *rig) asRig() coretest.Rig {
 		Starts:        r.starts,
 		Alive:         r.alive,
 		FeedTraffic:   r.feed,
+		FeedSession:   r.feedSession,
 		RestartSource: r.restart,
 		ServedUsers:   r.served,
 	}
@@ -349,6 +498,48 @@ func TestAddUserIsAppliedWithoutRestarting(t *testing.T) {
 	}
 }
 
+/*
+The rate pass runs every ten seconds with the same ladder. A push per pass would
+be a whole-set PUT per pass, which hands every client a fresh bucket each time
+(Q8 of the brief); only a ladder that moved may reach the daemon, and what the
+daemon then holds is read back from the daemon, in the contract's bits per second.
+*/
+func TestUnchangedRatesAreNotPushedAgain(t *testing.T) {
+	requirePosixHost(t)
+	r := newRig(t)
+	c := New(Deps{})
+	inst := r.instance(1)
+	if err := c.Reconcile(t.Context(), []core.Instance{inst}); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	r.waitReady()
+	before := r.puts()
+
+	want := map[string]core.RateLimit{inst.Users[0].Email: {UpBps: 1_000_000, DownBps: 2_000_000}}
+	if err := c.EnforceRates(t.Context(), inst, want); err != nil {
+		t.Fatalf("EnforceRates: %v", err)
+	}
+	if got := r.puts(); got != before+1 {
+		t.Fatalf("a changed ladder must reach the daemon in one PUT, got %d (was %d)", got, before)
+	}
+	if got := r.starts(); got != 1 {
+		t.Fatalf("a rate is a secrets-only change and must not restart the daemon (%d spawns)", got)
+	}
+	if err := c.EnforceRates(t.Context(), inst, want); err != nil {
+		t.Fatalf("EnforceRates again: %v", err)
+	}
+	if got := r.puts(); got != before+1 {
+		t.Fatalf("an unchanged ladder must not be pushed again, got %d PUTs", got)
+	}
+	held, err := c.EnforcedRates(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("EnforcedRates: %v", err)
+	}
+	if held[inst.Users[0].Email] != want[inst.Users[0].Email] {
+		t.Fatalf("the daemon holds %+v, want %+v: bytes must come back as the bits they were pushed as", held, want)
+	}
+}
+
 // TestUsersComeFromTheContractNotTheSettingsBlob pins where a client lives: the
 // settings JSON still has a clients array, and reading it resurrects dead users.
 func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
@@ -365,6 +556,33 @@ func TestUsersComeFromTheContractNotTheSettingsBlob(t *testing.T) {
 	}
 	if len(got.Secrets) != 1 || got.Secrets[0].Name != "real@example.com" {
 		t.Fatalf("secrets must come from Users alone, got %+v", got.Secrets)
+	}
+}
+
+// The limit mapping had shipped for months with no test naming it. The address
+// limit joins quota and expiry on the way to the engine, and a client without
+// one carries zero, which the render reads as no key.
+func TestLimitsReachTheEngine(t *testing.T) {
+	inst := core.Instance{
+		ID: 1, Tag: "in-1", Port: 443, Enable: true,
+		Users: []core.User{
+			{
+				Email: "capped@example.com", Enable: true, QuotaBytes: 1 << 30, ExpiryUnixMilli: 1_893_456_000_000, LimitIP: 3,
+				Credentials: map[string]any{CredSecret: "ee01"},
+			},
+			{Email: "free@example.com", Enable: true, Credentials: map[string]any{CredSecret: "ee02"}},
+		},
+	}
+	got, ok, err := toEngine(inst)
+	if err != nil || !ok {
+		t.Fatalf("toEngine: ok=%v err=%v", ok, err)
+	}
+	capped, free := got.Secrets[0], got.Secrets[1]
+	if capped.QuotaBytes != 1<<30 || capped.ExpiresUnix != 1_893_456_000 || capped.IPLimit != 3 {
+		t.Fatalf("the capped client lost a limit on the way: %+v", capped)
+	}
+	if free.QuotaBytes != 0 || free.ExpiresUnix != 0 || free.IPLimit != 0 {
+		t.Fatalf("the free client gained a limit it never had: %+v", free)
 	}
 }
 
