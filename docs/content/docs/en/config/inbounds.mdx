@@ -71,7 +71,7 @@ The inbound editor accepts these protocols:
 | **HTTP**               | HTTP proxy.                                                             |
 | **Mixed (SOCKS/HTTP)** | A combined SOCKS + HTTP listener.                                        |
 | **Dokodemo-door / Tunnel** | Port forwarding / traffic redirect.                                 |
-| **MTProto**            | Telegram MTProto proxy, served by a bundled `mtg` process (not Xray).    |
+| **MTProto**            | Telegram MTProto proxy, served by a bundled `mtg-proxy` process (not Xray). Clients get the speed plan and the device cap through the sidecar itself; the inbound can also run the fork's WEB proxy relay for Telegram Desktop, see [MTProto: the WEB proxy](#mtproto-the-web-proxy). |
 | **SSH**                | An SSH server built into the panel (not sshd): TCP, WebSocket or WebSocket over TLS. See below. |
 | **Kernel WireGuard**   | Selected as `wgkernel`. Served by the host kernel over netlink, not Xray. Needs host setup — see below. |
 
@@ -476,6 +476,89 @@ Fallbacks are available only when the master inbound is:
 Each fallback rule targets a child inbound and can match on `path`, `alpn`, and
 `dest`. Client share links for a fallback child are automatically rewritten to
 advertise the master's address, port, and TLS.
+
+
+## MTProto: the WEB proxy
+
+Telegram Desktop 7.1 added a **WEB proxy** connection type: the client loads a
+page from your hostname inside its own WebView over real HTTPS, and that page
+carries the MTProto stream inside a WebSocket. To the network it is a browser
+visiting a website. Only Telegram Desktop offers this type; phones and the web
+clients keep using the FakeTLS link.
+
+The bundled `mtg-proxy` serves it as a **second process** beside the proxy,
+reading the same generated config. Turn it on in the MTProto inbound's form:
+
+| Field | Meaning |
+|---|---|
+| **WEB proxy** | Runs the relay for this inbound. Off by default. |
+| **Hostname** | The bare name clients type, for example `web.example.com`. It must carry a browser-trusted certificate on port 443; changing it invalidates every WEB link ever issued. |
+| **Cover site directory** or **upstream** | What everyone who is not a Telegram client sees. Exactly one: a directory of files to serve, or an `http://` upstream to reverse-proxy. Nothing ships as a default, on purpose: a default page every operator installs is a fingerprint. |
+
+The panel owns the rest: the relay's signing key, its two loopback ports, its
+lifetime (started with the proxy, restarted within ten seconds if it dies,
+stopped when you turn it off), its logs on the Cores page under the inbound,
+and its health. An inbound whose relay is down shows as **degraded** with the
+reason.
+
+### What you provide
+
+The client fixes the port to 443 and validates the certificate like a browser,
+so three things are yours:
+
+1. **A real certificate for the hostname on port 443.** The panel has no ACME.
+2. **A front proxy** on 443 that terminates TLS and forwards the **whole
+   hostname** to the relay's loopback port with **PROXY protocol v2**. The form
+   shows the port after the first save. Without the PROXY header the relay
+   refuses every stream, deliberately: behind a front proxy every connection
+   would otherwise look like `127.0.0.1`, and the device cap would count nothing.
+3. **The cover site** from the table above.
+
+The fork's own documented front is Caddy. With Caddy owning port 443 for the
+hostname:
+
+```caddyfile
+web.example.com {
+	log {
+		output discard
+	}
+	reverse_proxy 127.0.0.1:RELAY_PORT {
+		transport http {
+			proxy_protocol v2
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+```
+
+Replace `RELAY_PORT` with the port the form shows. `log { output discard }` is
+not optional: the bearer for a live session travels in a header, so an access
+log on this hostname writes live credentials to disk. If Xray already owns port
+443 on the same address, put an SNI router in front or give the relay's
+hostname its own address; a REALITY inbound cannot front it.
+
+### Links
+
+An MTProto client of an inbound with the relay on gets two links: the usual
+`tg://proxy` one and a `tg://webproxy?server=<hostname>&secret=dd…` one carrying
+the same key in the `dd` spelling and no port. The WEB link's parameter names
+mirror `tg://proxy` and have not been confirmed against a real client; if the
+link does not take, the hostname and the `dd` secret are exactly what the
+client's own two fields ask for.
+
+### Checking it without a client
+
+From a shell you can confirm the relay serves the cover site to everyone
+without a credential, and answers a wrong one with the same bytes:
+
+```bash
+diff <(curl -sS https://web.example.com/) <(curl -sS 'https://web.example.com/?bridge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+```
+
+No output means the two are identical. Whether a real Telegram Desktop
+connects, loads media and survives an idle period is something only the client
+can tell you; the panel cannot prove it.
 
 ## Not sure which to pick?
 

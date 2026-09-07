@@ -518,6 +518,8 @@ for AutoMigrate in `internal/database/db.go`.
 | Xray auto-restart on **dead tunnel** | `internal/tunnelmonitor/` | `PUI_TUNNEL_HEALTH_*` in `internal/config/` |
 | **WARP / Nord** outbound integration | `service/integration/warp.go` / `nord.go` | `service/outbound_subscription.go` |
 | **MTProto** proxy issues | `internal/mtproto/manager.go`, `mtproto/process*.go` | `job/core_supervise.go` |
+| An MTProto client's speed or IP limit does not apply | `internal/mtproto/manager.go` (`withRatesLocked`, `renderConfig`, `secretsPayload`), `internal/cores/internal/mtproto/core.go` (`EnforceRates`, `Sessions`, `CutSessions`) | `internal/mtproto/process.go` (`CheckBinary`, `MinimumVersion`); the sidecar's `features` in `/stats` |
+| The MTProto WEB relay does not start, or shows degraded | `internal/mtproto/web_relay.go` (`ensureRelayLocked`, `webRelayCheck`, `ValidateWebRelaySettings`) | the inbound's `Detail` on the Cores page; `web-relay --check <toml>` by hand |
 | A core shows **failed / not answering** on the Cores page | `internal/web/service/core_status.go`, the core's `Health` in `internal/cores/internal/<core>/core.go`, `cores/internal/unithealth/` | `GET /panel/api/cores/:id/logs` → `internal/supervisor` `Logs` |
 | A core's **version / install** is wrong | `internal/cores/internal/xray/versions.go`, `internal/cores/internal/mtproto/versions.go`, `internal/web/service/core_versions.go` | `cores.Deps.HTTPClient` (the egress proxy is hosted by xray) |
 | **DB migration** / new column | `internal/database/db.go` (AutoMigrate list + hand-written migrations) | `model/model.go` |

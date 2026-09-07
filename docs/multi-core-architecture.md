@@ -2884,3 +2884,61 @@ it was decided. The master lists node bans; a node's own panel lists only its ow
 gate for the concatenated timeout set is documentation, not a measurement. A shared address
 offers ban or report, not a shorter ban. MTProto is the user's fork's to do, both the speed cap
 and the device cap.
+
+### 12.5p MTProto joins the limits, and runs the WEB relay (2026-09-07)
+
+The user's mtg-proxy fork reached v1.8.0 with per-user speed and address limits, a quota
+ceiling and an expiry sweep; the panel used two of its four axes. The analysis
+(`docs/mtproto-limits-integration.md`, written first and kept as the record) found the panel
+could not honestly use the rest without three things the fork lacked, and the user opened the
+fork to change. So the fork gained them (`e6fe1e0` there): `speed-up`/`speed-down` as two
+independent buckets beside the combined `speed`, `connected_ips_last_seen` beside
+`connected_ips`, and `POST /secrets/{name}/kick`, plus feature strings for each and for the
+v1.8.0 ceiling and `GET /secrets/{name}`; its contract test now pins the whole file the panel
+renders, WEB table included (`c5e20f8`).
+
+**The decisions the brief left open, as taken.** Q1: the core declares `SessionReporter` and
+`SessionCutter`, so the panel classifies it `cut` and its device cap is decided here like every
+other core's, ended through the kick, the ban set behind it; the sidecar's own `ip-limit` is
+pushed too, so a new place is refused at admission before the next pass sees it, and the
+sidecar's /64 unit for IPv6 only ever makes it looser than the panel, never stricter. Q2/Q6/Q10:
+Unit 5, the external-ips union, is not built — the panel's decision engine is the cross-node
+truth for every core. Q3 collapsed once only the new binary counts: preflight refuses a release
+older than `MinimumVersion` (1.9.0, the next tag) by name, a source build ("dev") passes, and both
+the file and the PUT always carry the fields; a scrape that shows the binary lacking a required
+feature is warned about once. Q4: the true up/down pair, ÷8 on the way in and ×8 back, the
+64 kbit/s floor met by raising inside the core. Q5: total. Q7: `track-client-ips` always on — the
+panel already holds every other core's client addresses, and the cap cannot count without them.
+Q8: one ladder table on the manager, folded into the instance in `ensureLocked` before the
+fingerprints, so the supervise pass, a client edit and the rate pass render one file; the rate
+pass pushes only when the ladder moved (proven: an unchanged ladder is zero PUTs). Q9: per-address
+activity from the fork, so `LastSeenUnixMilli` is honest and the suite's byte-exact round trip
+holds without a lie. The i18n keys that said "kernel" were already wrong for SSH and got their
+own commit first.
+
+**The WEB relay (`internal/mtproto/web_relay.go`).** Telegram Desktop 7.1's WEB proxy is a page
+over real HTTPS carrying MTProto in a WebSocket; the fork serves it as a second process off the
+same file. The panel owns what it can: the `[web]` table rendered after the backend listener it
+dials (which gains `proxy-protocol = true`, or every WEB user is 127.0.0.1 to the proxy and the
+cap counts nothing), the 32-byte signing key written once and never rotated (a rotation logs out
+every live session), the relay's loopback bind and stats ports allocated like the backend's and
+dodged by the api port, the relay's `--check` as a pre-flight before a start, its stderr in the
+inbound's ring under a prefix, its state folded into the inbound's health as `degraded` with the
+reason, a SIGHUP after every hot-apply so a new client reaches it now rather than on the
+watcher's next look, and a `tg://webproxy` link with the `dd` spelling of the same key. What the
+panel cannot own, and says so in the form: the hostname's browser-trusted certificate on 443, the
+front that terminates TLS and speaks PROXY v2 to the relay (the fork's documented path is Caddy),
+and a cover site. A save that the relay would refuse is refused at save through
+`ValidateInstance`, with the rule named. Verified against the real fork build on the VM
+(`TestRealSidecarEndToEnd`, gated on `MTG_E2E_BINARY`): both processes up off one file, the cover
+page served to a request with no credential and byte-identical to one with a wrong bridge, the
+rate round trip through the real daemon, a kick of zero, and a client added reaching the relay's
+profile set without a restart.
+
+**Still open.** An Xray-fronted deployment (a real-cert VLESS or Trojan inbound's fallback with
+`xver: 2`) could replace the operator's Caddy for the common case where Xray already owns 443; it
+hinges on pinning the inbound's ALPN to HTTP/1.1, and a Reality inbound cannot front it at all.
+The `tg://webproxy` parameter names are the fork's reading and unconfirmed against a real client;
+the form hands out the hostname and the dd secret for the client's own two fields. The
+`MinimumVersion` pin assumes the fork's next tag is v1.9.0. The GitHub account's anonymous 404
+blocks every download path the panel has, releases or not.

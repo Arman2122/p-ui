@@ -20,13 +20,18 @@ file locations when it can answer in one hop.
   panel-side code in `internal/mtproto/`) — outside Xray, one process per inbound
   serving each
   client's FakeTLS secret via the fork's `[secrets]` section (plus per-client
-  ad-tags via `[secret-ad-tags]` and per-client data quota / expiry via
-  `[secret-limits]`, mapped from the client's `totalGB`/`expiryTime`). Client,
-  ad-tag and quota/expiry edits are hot-applied through the fork's management API
-  (`PUT /secrets`, bearer-token guarded) so connections survive; the manager
-  falls back to a process restart on older binaries. A client's panel-side
-  traffic reset also calls `POST /secrets/{name}/reset-quota` so a renewed client
-  is not re-blocked by the sidecar's quota counter.
+  ad-tags via `[secret-ad-tags]` and per-client quota / expiry / `speed-up` /
+  `speed-down` / `ip-limit` via `[secret-limits]`; the speeds come from the
+  panel's plan ladder through `RateEnforcer`, in bits per second, and are
+  divided by 8 for the sidecar). Client and limit edits are hot-applied through
+  the fork's management API (`PUT /secrets`, bearer-token guarded) so connections
+  survive. The core reports sessions from `connected_ips` (+ per-address
+  activity), cuts through `POST /secrets/{name}/kick`, and reads rates back from
+  the daemon. `mtg-proxy` **1.9.0+** is required (preflight refuses older; the
+  contract test for the rendered file is `internal/config/panel_contract_test.go`
+  in the fork). An inbound may also run the fork's WEB relay (Telegram Desktop's
+  WEB proxy) as a second managed process off the same file (`internal/mtproto/web_relay.go`).
+  A client's panel-side traffic reset also calls `POST /secrets/{name}/reset-quota`.
 - Platform: Linux only — systemd + iptables. Ubuntu 22.04/24.04/26.04 and
   Debian 12+ are the VERIFIED targets: `install.sh` and `update.sh` are apt-only,
   and that is what CI and the test VM exercise. No Windows, no Docker.
