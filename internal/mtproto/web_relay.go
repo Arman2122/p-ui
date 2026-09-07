@@ -78,6 +78,7 @@ func (m *Manager) ensureRelayLocked(cur *managed, inst Instance) {
 	if cur.relay != nil && cur.relay.IsRunning() {
 		return
 	}
+	cur.noteRelayDeath()
 	cfgPath := configPathForID(inst.Id)
 	if err := ensureWebKey(inst.Id); err != nil {
 		cur.refuseRelay(inst.Id, "has no signing key", err)

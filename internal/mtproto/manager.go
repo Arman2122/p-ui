@@ -207,6 +207,18 @@ type managed struct {
 	relay      *Process
 	relayStats int
 	relayCheck string
+	// relayDeaths counts relay processes seen dead, once each, reported as
+	// Restarts: the supervise job turns a grown count into a crash event.
+	relayDeaths   uint32
+	relayDeadSeen *Process
+}
+
+// noteRelayDeath counts a dead relay once, whoever notices it first: Health
+// before the pass's reconcile, or the reconcile that replaces it.
+func (cur *managed) noteRelayDeath() {
+	if cur.relay != nil && !cur.relay.IsRunning() && cur.relayDeadSeen != cur.relay {
+		cur.relayDeadSeen, cur.relayDeaths = cur.relay, cur.relayDeaths+1
+	}
 }
 
 // Manager owns the set of running mtg processes keyed by inbound id.
@@ -1348,20 +1360,22 @@ func (m *Manager) Health() []core.InstanceHealth {
 		relay      *Process
 		relayStats int
 		relayCheck string
+		restarts   uint32
 	}
 	m.mu.Lock()
 	probes := make([]probe, 0, len(m.procs))
 	for id, cur := range m.procs {
+		cur.noteRelayDeath()
 		probes = append(probes, probe{
 			id: id, tag: cur.tag, proc: cur.proc, port: cur.apiPort, token: cur.apiToken,
-			relay: cur.relay, relayStats: cur.relayStats, relayCheck: cur.relayCheck,
+			relay: cur.relay, relayStats: cur.relayStats, relayCheck: cur.relayCheck, restarts: cur.relayDeaths,
 		})
 	}
 	m.mu.Unlock()
 	slices.SortFunc(probes, func(a, b probe) int { return a.id - b.id })
 	out := make([]core.InstanceHealth, 0, len(probes))
 	for _, p := range probes {
-		h := core.InstanceHealth{InstanceID: p.id, Tag: p.tag}
+		h := core.InstanceHealth{InstanceID: p.id, Tag: p.tag, Restarts: p.restarts}
 		if p.proc == nil {
 			h.State, h.Detail = core.HealthStopped, "never started"
 			out = append(out, h)

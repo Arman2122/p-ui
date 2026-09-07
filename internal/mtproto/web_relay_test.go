@@ -5,7 +5,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/logger"
 )
 
@@ -198,5 +200,54 @@ func TestARelayRefusalIsLoggedOncePerReason(t *testing.T) {
 	}
 	if seen != 1 {
 		t.Fatalf("one refusal, repeated by three passes, was logged %d times; want once", seen)
+	}
+}
+
+// A relay that dies is counted once, however many passes see it dead, and the
+// count is reported as Restarts: the supervise job publishes a crash when it
+// grows, with the Detail of that pass naming the relay and its last words.
+func TestARelayDeathIsCountedOnceAsARestart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("runs a shell script as the sidecar")
+	}
+	binDir := t.TempDir()
+	t.Setenv("PUI_BIN_FOLDER", binDir)
+	script := "#!/bin/sh\ncase \"$1\" in\n  run) exec sleep 30 ;;\n  web-relay) [ \"$2\" = \"--check\" ] && exit 0; echo \"relay: boom\" >&2; exit 3 ;;\nesac\n"
+	if err := os.WriteFile(GetBinaryPath(), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inst := relayInstance()
+	inst.Id = 7332
+	proc := newProcess(configPathForID(inst.Id), "proxy", inst.Id)
+	if err := proc.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = proc.Stop() })
+	cur := &managed{proc: proc, tag: "in-7332"}
+	m := &Manager{procs: map[int]*managed{inst.Id: cur}}
+	t.Cleanup(cur.stopRelay)
+
+	m.ensureRelayLocked(cur, inst)
+	if cur.relay == nil {
+		t.Fatalf("the relay was not started: %s", cur.relayCheck)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for cur.relay.IsRunning() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	for pass := 1; pass <= 2; pass++ {
+		h := m.Health()
+		if len(h) != 1 || h[0].Restarts != 1 || h[0].State != core.HealthDegraded || !strings.Contains(h[0].Detail, "WEB relay: exited") {
+			t.Fatalf("pass %d: health = %+v; want the one death counted once, degraded, naming the relay", pass, h[0])
+		}
+	}
+	// The reconcile replaces the dead relay; its death is the second.
+	m.ensureRelayLocked(cur, inst)
+	deadline = time.Now().Add(5 * time.Second)
+	for cur.relay.IsRunning() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if h := m.Health(); h[0].Restarts != 2 {
+		t.Fatalf("after a restart that died again, Restarts = %d, want 2", h[0].Restarts)
 	}
 }
