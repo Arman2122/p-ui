@@ -121,6 +121,15 @@ func (c *Core) ValidateClient(kind core.Kind, _, _ string, have map[string]strin
 // set, never by the secret itself.
 func (c *Core) ClientIdentity(core.Kind) string { return "email" }
 
+// ValidateInstance refuses a WEB relay the relay itself would refuse to start,
+// with the rule named, instead of a saved inbound whose relay never comes up.
+func (c *Core) ValidateInstance(kind core.Kind, settings string) error {
+	if kind != Kind {
+		return nil
+	}
+	return engine.ValidateWebRelaySettings(settings)
+}
+
 func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	want := make([]engine.Instance, 0, len(desired))
 	var keep []int

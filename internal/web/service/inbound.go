@@ -984,8 +984,13 @@ func (s *InboundService) normalizeXrayBridgePort(inbound *model.Inbound, oldSett
 	return nil
 }
 
-// normalizeWebBackendPort owns the sidecar's optional WEB backend port on the
-// bridge port's terms: allocated on enable, stable across edits, dropped on disable.
+// webPortKeys are the loopback ports the sidecar's WEB side owns: the dd/plain
+// backend listener, and with the relay on, its bind and stats sockets.
+var webPortKeys = []string{"webBackendPort", "webBindPort", "webStatsPort"}
+
+// normalizeWebBackendPort owns the sidecar's WEB ports on the bridge port's
+// terms: allocated on enable, stable across edits, dropped on disable. The relay
+// dials the backend, so webEnable implies it, and each port dodges the others.
 func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSettings string) error {
 	if inbound == nil || cores.ServedByXray(core.Kind(inbound.Protocol)) {
 		return nil
@@ -994,59 +999,74 @@ func (s *InboundService) normalizeWebBackendPort(inbound *model.Inbound, oldSett
 	if err := json.Unmarshal([]byte(inbound.Settings), &parsed); err != nil || parsed == nil {
 		return nil
 	}
-	if enabled, _ := parsed["webBackendEnable"].(bool); !enabled {
-		if _, hadPort := parsed["webBackendPort"]; !hadPort {
-			return nil
-		}
-		delete(parsed, "webBackendPort")
-		if bs, err := json.MarshalIndent(parsed, "", "  "); err == nil {
-			inbound.Settings = string(bs)
-		} else {
-			logger.Warning("web backend: failed to marshal settings after disabling it:", err)
-		}
-		return nil
+	webEnabled, _ := parsed["webEnable"].(bool)
+	backendEnabled, _ := parsed["webBackendEnable"].(bool)
+	wanted := map[string]bool{
+		"webBackendPort": backendEnabled || webEnabled,
+		"webBindPort":    webEnabled,
+		"webStatsPort":   webEnabled,
 	}
-
 	// The bridge port lives in settings, not in the inbound row, so
 	// loopbackPortIsClaimed cannot see this inbound's own. It runs first.
 	bridge := settingsRouteXrayPort(parsed)
-	claimed := func(port int) bool {
-		return port == bridge || s.loopbackPortIsClaimed(port, inbound.Id)
-	}
-	port := parseSettingsPort(oldSettings, "webBackendPort")
-	if port > 0 && claimed(port) {
-		logger.Warning("web backend: the stored port", port, "for inbound [", inbound.Tag,
-			"] is now claimed; allocating a new one")
-		port = 0
-	}
-	if port <= 0 {
-		if sent := settingsPort(parsed, "webBackendPort"); sent > 0 && !claimed(sent) {
-			port = sent
+	changed := false
+	for _, key := range webPortKeys {
+		if !wanted[key] {
+			if _, had := parsed[key]; had {
+				delete(parsed, key)
+				changed = true
+			}
+			continue
+		}
+		claimed := func(port int) bool {
+			if port == bridge || s.loopbackPortIsClaimed(port, inbound.Id) {
+				return true
+			}
+			for _, other := range webPortKeys {
+				if other != key && settingsPort(parsed, other) == port {
+					return true
+				}
+			}
+			return false
+		}
+		port := parseSettingsPort(oldSettings, key)
+		if port > 0 && claimed(port) {
+			logger.Warning("web ports: the stored", key, port, "for inbound [", inbound.Tag,
+				"] is now claimed; allocating a new one")
+			port = 0
+		}
+		if port <= 0 {
+			if sent := settingsPort(parsed, key); sent > 0 && !claimed(sent) {
+				port = sent
+			}
+		}
+		for range bridgePortAllocationAttempts {
+			if port > 0 {
+				break
+			}
+			allocated, err := sys.FreeLoopbackPort()
+			if err != nil {
+				return common.NewError("web ports: could not allocate", key+":", err)
+			}
+			if !claimed(allocated) {
+				port = allocated
+			}
+		}
+		if port <= 0 {
+			return common.NewError("web ports: could not find a free", key, "after",
+				bridgePortAllocationAttempts, "attempts")
+		}
+		if settingsPort(parsed, key) != port {
+			parsed[key] = port
+			changed = true
 		}
 	}
-	for range bridgePortAllocationAttempts {
-		if port > 0 {
-			break
-		}
-		allocated, err := sys.FreeLoopbackPort()
-		if err != nil {
-			return common.NewError("web backend: could not allocate a port:", err)
-		}
-		if !claimed(allocated) {
-			port = allocated
-		}
-	}
-	if port <= 0 {
-		return common.NewError("web backend: could not find a free port after",
-			bridgePortAllocationAttempts, "attempts")
-	}
-	if settingsPort(parsed, "webBackendPort") == port {
+	if !changed {
 		return nil
 	}
-	parsed["webBackendPort"] = port
 	bs, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
-		return common.NewError("web backend: could not persist the port:", err)
+		return common.NewError("web ports: could not persist the ports:", err)
 	}
 	inbound.Settings = string(bs)
 	return nil

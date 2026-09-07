@@ -838,9 +838,9 @@ func (s *SubService) genMtprotoLink(inbound *model.Inbound, email string) string
 	if !ok || resolved.Secret == "" {
 		return ""
 	}
+	var links []string
 	// One link per Host row, same reason as the WireGuard generator above.
 	if endpoints := externalProxyEndpoints(unmarshalStreamSettings(inbound.StreamSettings)); len(endpoints) > 0 {
-		links := make([]string, 0, len(endpoints))
 		for _, ep := range endpoints {
 			dest, _ := ep["dest"].(string)
 			port, _ := ep["port"].(float64)
@@ -850,15 +850,37 @@ func (s *SubService) genMtprotoLink(inbound *model.Inbound, email string) string
 				"secret": resolved.Secret,
 			}, ""))
 		}
-		return strings.Join(links, "\n")
+	} else {
+		links = append(links, buildLinkWithParams("tg://proxy", map[string]string{
+			"server": s.resolveInboundAddress(inbound),
+			"port":   fmt.Sprintf("%d", inbound.Port),
+			"secret": resolved.Secret,
+		}, ""))
 	}
+	if web := mtprotoWebLink(inbound, resolved.Secret); web != "" {
+		links = append(links, web)
+	}
+	return strings.Join(links, "\n")
+}
 
-	params := map[string]string{
-		"server": s.resolveInboundAddress(inbound),
-		"port":   fmt.Sprintf("%d", inbound.Port),
-		"secret": resolved.Secret,
+// mtprotoWebLink is the WEB proxy deep link for an inbound running the relay:
+// tg://webproxy, the hostname alone since the client fixes https and 443, and
+// the same key as dd, the only form a WEB client holds. Its parameter names
+// mirror tg://proxy and are the fork's own reading, unconfirmed against a real
+// client; the hostname and the dd secret are what the client's two fields take.
+func mtprotoWebLink(inbound *model.Inbound, secret string) string {
+	var settings struct {
+		WebEnable bool   `json:"webEnable"`
+		WebHost   string `json:"webHost"`
 	}
-	return buildLinkWithParams("tg://proxy", params, "")
+	if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil || !settings.WebEnable || settings.WebHost == "" {
+		return ""
+	}
+	dd := model.MtprotoDDSecret(secret)
+	if dd == "" {
+		return ""
+	}
+	return buildLinkWithParams("tg://webproxy", map[string]string{"server": settings.WebHost, "secret": dd}, "")
 }
 
 // Protocol link generators are intentionally ordered as:

@@ -89,6 +89,24 @@ type Instance struct {
 	// WebBackendPort is backend-owned, allocated and persisted on save by
 	// normalizeWebBackendPort; zero means none, so no listener is emitted.
 	WebBackendPort int
+
+	// WebEnable runs mtg's WEB relay as a second process off the same file, for
+	// Telegram Desktop's WEB proxy. WebHost is the name clients type; exactly one
+	// of WebCoverDir and WebCoverUpstream is the site everyone else sees; the two
+	// ports are loopback and backend-owned like WebBackendPort.
+	WebEnable        bool
+	WebHost          string
+	WebCoverDir      string
+	WebCoverUpstream string
+	WebBindPort      int
+	WebStatsPort     int
+}
+
+// webRelayConfigured says whether the relay has everything it refuses to start
+// without; a half-filled form renders no [web] table and starts no relay.
+func (inst Instance) webRelayConfigured() bool {
+	return inst.WebEnable && inst.WebHost != "" && inst.WebBindPort > 0 && inst.WebBackendPort > 0 &&
+		(inst.WebCoverDir != "") != (inst.WebCoverUpstream != "")
 }
 
 // bindTo renders the listen address mtg parses. JoinHostPort, not a bare colon:
@@ -122,6 +140,12 @@ func (inst Instance) StructuralFingerprint() string {
 		inst.PublicIPv6,
 		strconv.FormatBool(inst.WebBackendEnable),
 		strconv.Itoa(inst.WebBackendPort),
+		strconv.FormatBool(inst.WebEnable),
+		inst.WebHost,
+		inst.WebCoverDir,
+		inst.WebCoverUpstream,
+		strconv.Itoa(inst.WebBindPort),
+		strconv.Itoa(inst.WebStatsPort),
 	}
 	return strings.Join(parts, "|")
 }
@@ -178,6 +202,11 @@ type managed struct {
 	// ring outlives it for the same reason: the lines a sidecar printed on its
 	// way down are read after the restart that replaced it.
 	ring *supervisor.LineRing
+	// relay is the WEB relay beside this proxy, nil while the inbound wants
+	// none; relayCheck is why the last start was refused, for Health to say.
+	relay      *Process
+	relayStats int
+	relayCheck string
 }
 
 // Manager owns the set of running mtg processes keyed by inbound id.
@@ -206,9 +235,9 @@ type Manager struct {
 // loopback port this instance may not have.
 const apiPortDrawAttempts = 8
 
-// drawAPIPort picks the sidecar's api-bind-to port, never avoid — the WEB backend
-// port of the same mtg, whose losing bind would be silent because it is non-fatal.
-func (m *Manager) drawAPIPort(avoid int) (int, error) {
+// drawAPIPort picks the sidecar's api-bind-to port, never one of avoid — the WEB
+// ports of the same mtg, whose losing bind would be silent because it is non-fatal.
+func (m *Manager) drawAPIPort(avoid ...int) (int, error) {
 	draw := m.drawPort
 	if draw == nil {
 		draw = sys.FreeLoopbackPort
@@ -218,11 +247,28 @@ func (m *Manager) drawAPIPort(avoid int) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if port != avoid {
+		if !slices.Contains(avoid, port) {
 			return port, nil
 		}
 	}
-	return 0, fmt.Errorf("mtproto: no api port clear of the WEB backend port %d after %d attempts", avoid, apiPortDrawAttempts)
+	names := make([]string, 0, len(avoid))
+	for _, port := range avoid {
+		names = append(names, strconv.Itoa(port))
+	}
+	return 0, fmt.Errorf("mtproto: no api port clear of the WEB port %s after %d attempts", strings.Join(names, ", "), apiPortDrawAttempts)
+}
+
+// webPorts are the loopback ports this instance will bind beside the api port:
+// only those it actually wants, since a stored port of a disabled feature binds nothing.
+func (inst Instance) webPorts() []int {
+	var ports []int
+	if inst.WebBackendEnable && inst.WebBackendPort > 0 {
+		ports = append(ports, inst.WebBackendPort)
+	}
+	if inst.webRelayConfigured() {
+		ports = append(ports, inst.WebBindPort, inst.WebStatsPort)
+	}
+	return ports
 }
 
 var (
@@ -289,6 +335,12 @@ type instanceSettings struct {
 	RouteXrayPort          int    `json:"routeXrayPort"`
 	WebBackendEnable       bool   `json:"webBackendEnable"`
 	WebBackendPort         int    `json:"webBackendPort"`
+	WebEnable              bool   `json:"webEnable"`
+	WebHost                string `json:"webHost"`
+	WebCoverDir            string `json:"webCoverDir"`
+	WebCoverUpstream       string `json:"webCoverUpstream"`
+	WebBindPort            int    `json:"webBindPort"`
+	WebStatsPort           int    `json:"webStatsPort"`
 	PublicIPv4             string `json:"publicIpv4"`
 	PublicIPv6             string `json:"publicIpv6"`
 	Clients                []struct {
@@ -313,8 +365,15 @@ func (s instanceSettings) applyTo(inst *Instance) {
 	inst.XrayRoutePort = s.RouteXrayPort
 	inst.PublicIPv4 = strings.TrimSpace(s.PublicIPv4)
 	inst.PublicIPv6 = strings.TrimSpace(s.PublicIPv6)
-	inst.WebBackendEnable = s.WebBackendEnable
+	// The relay dials the backend listener, so wanting the relay wants that too.
+	inst.WebBackendEnable = s.WebBackendEnable || s.WebEnable
 	inst.WebBackendPort = s.WebBackendPort
+	inst.WebEnable = s.WebEnable
+	inst.WebHost = strings.TrimSpace(s.WebHost)
+	inst.WebCoverDir = strings.TrimSpace(s.WebCoverDir)
+	inst.WebCoverUpstream = strings.TrimSpace(s.WebCoverUpstream)
+	inst.WebBindPort = s.WebBindPort
+	inst.WebStatsPort = s.WebStatsPort
 }
 
 // ApplySettings fills the non-secret half of an Instance. Both ingest paths share
@@ -485,6 +544,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		case ensureNoop:
 			cur.tag = inst.Tag
 			cur.routed = inst.RouteThroughXray
+			m.ensureRelayLocked(cur, inst)
 			return nil
 		case ensureReload:
 			if err := writeConfig(configPathForID(inst.Id), inst, cur.apiPort, cur.apiToken); err != nil {
@@ -494,6 +554,10 @@ func (m *Manager) ensureLocked(inst Instance) error {
 				cur.tag = inst.Tag
 				cur.secretsFP = secFP
 				logger.Infof("mtproto: applied secret update to inbound %d in place", inst.Id)
+				// The relay reads the file and follows it by itself; the signal
+				// makes it look now rather than on its next glance.
+				cur.reloadRelay()
+				m.ensureRelayLocked(cur, inst)
 				return nil
 			}
 			logger.Warningf("mtproto: live secret update unavailable for inbound %d, restarting", inst.Id)
@@ -501,17 +565,14 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		case ensureRestart:
 			counter, ring = cur.counter, cur.ring
 			m.billFinalLocked(cur)
+			cur.stopRelay()
 			_ = cur.proc.Stop()
 			delete(m.procs, inst.Id)
 		}
 	}
 	// The api port is drawn here and stored only in memory, so the panel-side
-	// claim check cannot see it; the WEB backend port is the one it must dodge.
-	avoid := 0
-	if inst.WebBackendEnable {
-		avoid = inst.WebBackendPort
-	}
-	apiPort, err := m.drawAPIPort(avoid)
+	// claim check cannot see it; the WEB ports are the ones it must dodge.
+	apiPort, err := m.drawAPIPort(inst.webPorts()...)
 	if err != nil {
 		return err
 	}
@@ -528,7 +589,7 @@ func (m *Manager) ensureLocked(inst Instance) error {
 	if err := proc.Start(); err != nil {
 		return err
 	}
-	m.procs[inst.Id] = &managed{
+	started := &managed{
 		proc:         proc,
 		tag:          inst.Tag,
 		structuralFP: structFP,
@@ -539,7 +600,9 @@ func (m *Manager) ensureLocked(inst Instance) error {
 		counter:      counter,
 		ring:         ring,
 	}
+	m.procs[inst.Id] = started
 	logger.Infof("mtproto: started mtg for inbound %d on %s", inst.Id, inst.bindTo())
+	m.ensureRelayLocked(started, inst)
 	return nil
 }
 
@@ -551,6 +614,7 @@ func (m *Manager) Remove(id int) {
 	defer m.mu.Unlock()
 	if cur, ok := m.procs[id]; ok {
 		m.billFinalLocked(cur)
+		cur.stopRelay()
 		_ = cur.proc.Stop()
 		delete(m.procs, id)
 		_ = os.Remove(configPathForID(id))
@@ -580,6 +644,7 @@ func (m *Manager) Reconcile(desired []Instance, keep ...int) error {
 	for id, cur := range m.procs {
 		if _, ok := want[id]; !ok {
 			m.billFinalLocked(cur)
+			cur.stopRelay()
 			_ = cur.proc.Stop()
 			delete(m.procs, id)
 			delete(m.rates, id)
@@ -605,6 +670,7 @@ func (m *Manager) StopAll() {
 	defer m.mu.Unlock()
 	for id, cur := range m.procs {
 		m.billFinalLocked(cur)
+		cur.stopRelay()
 		_ = cur.proc.Stop()
 		_ = os.Remove(configPathForID(id))
 		delete(m.procs, id)
@@ -921,9 +987,9 @@ func resetQuota(port int, token, email string) error {
 // precede any [section] header in TOML, and [secrets] must be the final section
 // so trailing keys are not swallowed by another table. The layout is therefore:
 // top-level scalars (incl. api-bind-to and api-token), then [domain-fronting],
-// [network], [throttle] and any [[listener]], then [secret-ad-tags] for clients
-// overriding the global advertising tag, and finally [secrets] with one named
-// secret per active client.
+// [network], [throttle], any [[listener]] and the relay's [web], then
+// [secret-ad-tags] for clients overriding the global advertising tag, and
+// finally [secrets] with one named secret per active client.
 func renderConfig(inst Instance, apiPort int, apiToken string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "bind-to = %q\n", inst.bindTo())
@@ -974,6 +1040,23 @@ func renderConfig(inst Instance, apiPort int, apiToken string) string {
 	// mtg-proxy ignores unknown TOML, so the block needs no capability gate.
 	if inst.WebBackendEnable && inst.WebBackendPort > 0 {
 		fmt.Fprintf(&b, "\n[[listener]]\nbind-to = \"127.0.0.1:%d\"\naccept = [\"dd\", \"plain\"]\n", inst.WebBackendPort)
+		// The relay hands the browser's address over PROXY v2; without this the
+		// proxy sees every WEB user as 127.0.0.1 and the device cap counts nothing.
+		if inst.webRelayConfigured() {
+			b.WriteString("proxy-protocol = true\n")
+		}
+	}
+	if inst.webRelayConfigured() {
+		fmt.Fprintf(&b, "\n[web]\nenabled = true\nhost = %q\nbind-to = \"127.0.0.1:%d\"\nbackend = \"127.0.0.1:%d\"\ntoken-key = %q\n",
+			inst.WebHost, inst.WebBindPort, inst.WebBackendPort, webKeyPath(inst.Id))
+		if inst.WebCoverDir != "" {
+			fmt.Fprintf(&b, "cover-dir = %q\n", inst.WebCoverDir)
+		} else {
+			fmt.Fprintf(&b, "cover-upstream = %q\n", inst.WebCoverUpstream)
+		}
+		if inst.WebStatsPort > 0 {
+			fmt.Fprintf(&b, "stats-bind-to = \"127.0.0.1:%d\"\n", inst.WebStatsPort)
+		}
 	}
 	// Only clients present in [secrets] may appear here: mtg rejects a config
 	// whose [secret-ad-tags] names an unknown secret, so a disabled client's
@@ -1253,18 +1336,26 @@ func (m *Manager) removeStaleConfigsLocked(want map[int]struct{}) {
 
 // Health is each sidecar as the manager sees it, ready when its stats API
 // answers; a dead one carries its last line, since that is where mtg says why.
+// An inbound with a relay is one instance still: a relay that is down or not
+// answering makes it degraded, and Detail says which of the two it is.
 func (m *Manager) Health() []core.InstanceHealth {
 	type probe struct {
-		id    int
-		tag   string
-		proc  *Process
-		port  int
-		token string
+		id         int
+		tag        string
+		proc       *Process
+		port       int
+		token      string
+		relay      *Process
+		relayStats int
+		relayCheck string
 	}
 	m.mu.Lock()
 	probes := make([]probe, 0, len(m.procs))
 	for id, cur := range m.procs {
-		probes = append(probes, probe{id: id, tag: cur.tag, proc: cur.proc, port: cur.apiPort, token: cur.apiToken})
+		probes = append(probes, probe{
+			id: id, tag: cur.tag, proc: cur.proc, port: cur.apiPort, token: cur.apiToken,
+			relay: cur.relay, relayStats: cur.relayStats, relayCheck: cur.relayCheck,
+		})
 	}
 	m.mu.Unlock()
 	slices.SortFunc(probes, func(a, b probe) int { return a.id - b.id })
@@ -1292,6 +1383,13 @@ func (m *Manager) Health() []core.InstanceHealth {
 			h.State, h.Detail = core.HealthFailed, p.proc.GetResult()
 		default:
 			h.State, h.Detail = core.HealthStopped, p.proc.GetResult()
+		}
+		if h.State == core.HealthRunning && p.relayCheck != "" {
+			h.State, h.Ready, h.Detail = core.HealthDegraded, false, "WEB relay refused to start: "+p.relayCheck
+		} else if h.State == core.HealthRunning && p.relay != nil {
+			if reason := relayHealth(p.relay, p.relayStats); reason != "" {
+				h.State, h.Ready, h.Detail = core.HealthDegraded, false, "WEB relay: "+reason
+			}
 		}
 		out = append(out, h)
 	}

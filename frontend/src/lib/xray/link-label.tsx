@@ -106,7 +106,7 @@ export function parseLinkParts(link: string): LinkParts | null {
       const hash = url.hash.replace(/^#/, '');
       try { remark = decodeURIComponent(hash); } catch { remark = hash; }
     } catch { /* not URL-shaped, fall back to protocol only */ }
-    if (scheme === 'tg') security = 'FakeTLS';
+    if (scheme === 'tg') security = trimmed.startsWith('tg://webproxy') ? 'WEB' : 'FakeTLS';
   }
   if (security === 'none') security = '';
   return {

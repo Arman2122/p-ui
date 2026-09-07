@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -65,6 +66,10 @@ type fakeLimits struct {
 func serveFakeMtg() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println("9.9.9 (go1.26 fake)")
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "web-relay" {
+		serveFakeRelay()
 		return
 	}
 	if f, err := os.OpenFile(os.Getenv("MTG_FAKE_PIDFILE"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
@@ -200,6 +205,43 @@ func serveFakeMtg() {
 	os.Exit(0)
 }
 
+// serveFakeRelay is the WEB relay as the manager drives it: --check validates
+// and exits, a run binds the stats socket the config names and answers /stats,
+// and its pid goes to its own file so a test can tell the two processes apart.
+func serveFakeRelay() {
+	if slices.Contains(os.Args, "--check") {
+		fmt.Println("web-relay: configuration is valid")
+		return
+	}
+	// The real relay re-reads its file on SIGHUP; the stand-in has nothing to
+	// re-read, and must not die of the signal the manager sends after an edit.
+	signal.Ignore(syscall.SIGHUP)
+	if f, err := os.OpenFile(os.Getenv("MTG_FAKE_RELAY_PIDFILE"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+		fmt.Fprintf(f, "%d\n", os.Getpid())
+		_ = f.Close()
+	}
+	cfg, err := os.ReadFile(os.Args[len(os.Args)-1])
+	if err != nil {
+		os.Exit(1)
+	}
+	keys := map[string]string{}
+	for _, m := range tomlValue.FindAllStringSubmatch(string(cfg), -1) {
+		keys[m[1]] = m[2]
+	}
+	ln, err := net.Listen("tcp", keys["stats-bind-to"])
+	if err != nil {
+		os.Exit(1)
+	}
+	profiles := secretNamesFromTOML(string(cfg))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stats", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"profiles": profiles, "sessions": map[string]int{"active": 0}})
+	})
+	_ = http.Serve(ln, mux)
+	os.Exit(0)
+}
+
 var tomlSecret = regexp.MustCompile(`(?m)^"([^"]+)"\s*=\s*"ee`)
 
 // secretNamesFromTOML reads the generated [secrets] section. Only secret values
@@ -242,12 +284,13 @@ var fakeFeatures = []string{
 }
 
 type rig struct {
-	t       *testing.T
-	pidFile string
-	ready   string
-	stats   string
-	servedF string
-	putsF   string
+	t         *testing.T
+	pidFile   string
+	ready     string
+	stats     string
+	servedF   string
+	putsF     string
+	relayPids string
 
 	mu         sync.Mutex
 	startedAt  string
@@ -276,6 +319,7 @@ func newRig(t *testing.T) *rig {
 		stats:     filepath.Join(binDir, "mtg-stats.json"),
 		servedF:   filepath.Join(binDir, "mtg-served.txt"),
 		putsF:     filepath.Join(binDir, "mtg-puts.txt"),
+		relayPids: filepath.Join(binDir, "mtg-relay-pids.txt"),
 		startedAt: "2026-01-01T00:00:00Z",
 		users:     map[string]*fakeUser{},
 	}
@@ -287,6 +331,7 @@ func newRig(t *testing.T) *rig {
 	t.Setenv("MTG_FAKE_STATS", r.stats)
 	t.Setenv("MTG_FAKE_SERVED", r.servedF)
 	t.Setenv("MTG_FAKE_PUTS", r.putsF)
+	t.Setenv("MTG_FAKE_RELAY_PIDFILE", r.relayPids)
 	t.Cleanup(func() { engine.GetManager().StopAll() })
 	return r
 }

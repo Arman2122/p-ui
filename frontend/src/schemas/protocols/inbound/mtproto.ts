@@ -62,6 +62,15 @@ export const MtprotoInboundSettingsSchema = z.object({
      routeXrayPort, and declared only so a save does not strip it. */
   webBackendEnable: z.boolean().optional(),
   webBackendPort: z.number().int().min(0).max(65535).optional(),
+  /* mtg's WEB relay, run by the panel as a second process off the same config,
+     for Telegram Desktop's WEB proxy. The host is the name clients type; exactly
+     one of the two covers is what everyone else sees; the ports are backend-owned. */
+  webEnable: z.boolean().optional(),
+  webHost: z.string().optional(),
+  webCoverDir: z.string().optional(),
+  webCoverUpstream: z.string().optional(),
+  webBindPort: z.number().int().min(0).max(65535).optional(),
+  webStatsPort: z.number().int().min(0).max(65535).optional(),
   // publicIpv4/publicIpv6 pin this server's reachable address the Telegram
   // middle proxy needs when clients carry ad-tags; blank = mtg auto-detects.
   publicIpv4: z.string().optional(),

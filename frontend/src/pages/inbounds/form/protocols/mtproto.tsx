@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Input, InputNumber, Select, Switch } from 'antd';
+import { Alert, Input, InputNumber, Select, Switch } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { FormField } from '@/components/form/rhf';
@@ -9,6 +9,8 @@ export default function MtprotoFields() {
   const { t } = useTranslation();
   const { control } = useFormContext();
   const routeThroughXray = useWatch({ control, name: 'settings.routeThroughXray' }) as boolean | undefined;
+  const webEnable = useWatch({ control, name: 'settings.webEnable' }) as boolean | undefined;
+  const webBindPort = useWatch({ control, name: 'settings.webBindPort' }) as number | undefined;
   const { data: outboundTags } = useOutboundTags();
   return (
     <>
@@ -101,6 +103,48 @@ export default function MtprotoFields() {
       >
         <Input allowClear placeholder="2001:db8::1" />
       </FormField>
+      <FormField
+        name={['settings', 'webEnable']}
+        label={t('pages.inbounds.form.mtgWebEnable')}
+        tooltip={t('pages.inbounds.form.mtgWebEnableHint')}
+        valueProp="checked"
+      >
+        <Switch />
+      </FormField>
+      {webEnable && (
+        <>
+          <FormField
+            name={['settings', 'webHost']}
+            label={t('pages.inbounds.form.mtgWebHost')}
+            tooltip={t('pages.inbounds.form.mtgWebHostHint')}
+          >
+            <Input placeholder="web.example.com" />
+          </FormField>
+          <FormField
+            name={['settings', 'webCoverDir']}
+            label={t('pages.inbounds.form.mtgWebCoverDir')}
+            tooltip={t('pages.inbounds.form.mtgWebCoverHint')}
+          >
+            <Input allowClear placeholder="/srv/site" />
+          </FormField>
+          <FormField
+            name={['settings', 'webCoverUpstream']}
+            label={t('pages.inbounds.form.mtgWebCoverUpstream')}
+            tooltip={t('pages.inbounds.form.mtgWebCoverHint')}
+          >
+            <Input allowClear placeholder="http://127.0.0.1:8080" />
+          </FormField>
+          <Alert
+            type="info"
+            showIcon
+            message={
+              webBindPort
+                ? t('pages.inbounds.form.mtgWebFront', { port: webBindPort })
+                : t('pages.inbounds.form.mtgWebFrontPending')
+            }
+          />
+        </>
+      )}
     </>
   );
 }

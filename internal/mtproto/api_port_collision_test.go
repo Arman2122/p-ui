@@ -71,7 +71,7 @@ func TestAPIPortDrawGivesUpWithTheCollidingPortNamed(t *testing.T) {
 	mgr, inst := webBackendManaged(t, scriptedDraw(2398))
 
 	err := mgr.ensureLocked(inst)
-	want := fmt.Sprintf("mtproto: no api port clear of the WEB backend port 2398 after %d attempts", apiPortDrawAttempts)
+	want := fmt.Sprintf("mtproto: no api port clear of the WEB port 2398 after %d attempts", apiPortDrawAttempts)
 	if err == nil || err.Error() != want {
 		t.Fatalf("want error %q, got %v", want, err)
 	}

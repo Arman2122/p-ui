@@ -822,6 +822,38 @@ export function genMtprotoLink(input: GenMtprotoLinkInput): string {
   return url.toString();
 }
 
+/* The dd spelling a WEB client holds: the same sixteen key bytes as the ee
+   secret, 0xdd in front, no domain. Empty when the secret is not an ee one. */
+export function mtprotoDDSecret(secret: string): string {
+  const hex = /^ee[0-9a-fA-F]{32}/.exec(secret);
+  if (hex) return 'dd' + hex[0].slice(2).toLowerCase();
+  try {
+    const bytes = atob(secret.replace(/-/g, '+').replace(/_/g, '/'));
+    if (bytes.length < 17 || bytes.charCodeAt(0) !== 0xee) return '';
+    return 'dd' + Array.from(bytes.slice(1, 17), (c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
+  }
+}
+
+export interface GenMtprotoWebLinkInput {
+  host: string;
+  clientSecret: string;
+}
+
+/* The WEB proxy deep link: the hostname alone, since the client fixes https and
+   port 443, and the dd secret. The parameter names mirror tg://proxy and are
+   unconfirmed against a real client; the host and the dd secret are what the
+   client's own two fields take. */
+export function genMtprotoWebLink(input: GenMtprotoWebLinkInput): string {
+  const dd = mtprotoDDSecret(input.clientSecret);
+  if (input.host.length === 0 || dd.length === 0) return '';
+  const url = new URL('tg://webproxy');
+  url.searchParams.set('server', input.host);
+  url.searchParams.set('secret', dd);
+  return url.toString();
+}
+
 export interface GenWireguardLinkInput {
   settings: WireguardInboundSettings;
   address: string;

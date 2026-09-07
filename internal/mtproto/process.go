@@ -137,6 +137,8 @@ type procLogWriter struct {
 	// ring keeps the last lines for TailLog; the manager hands one in that
 	// outlives this process, so a crash's last words survive the restart.
 	ring *supervisor.LineRing
+	// ringPrefix marks the lines of a second process sharing the ring.
+	ringPrefix string
 }
 
 func (w *procLogWriter) Write(p []byte) (int, error) {
@@ -174,7 +176,7 @@ func (w *procLogWriter) emitLocked(line string) {
 	}
 	w.lastLine = trimmed
 	if w.ring != nil {
-		_, _ = w.ring.Write([]byte(trimmed + "\n"))
+		_, _ = w.ring.Write([]byte(w.ringPrefix + trimmed + "\n"))
 	}
 	logger.Infof("mtproto: mtg %s | %s", w.label, trimmed)
 }
@@ -196,6 +198,9 @@ type Process struct {
 	started         time.Time
 	inboundID       int
 	intentionalStop atomic.Bool
+	// args is the subcommand and its arguments: "run" for the proxy, "web-relay"
+	// for the relay beside it, both reading the same file.
+	args []string
 }
 
 func newProcess(configPath, label string, inboundID int) *Process {
@@ -203,6 +208,18 @@ func newProcess(configPath, label string, inboundID int) *Process {
 		configPath: configPath,
 		logWriter:  &procLogWriter{label: label},
 		inboundID:  inboundID,
+		args:       []string{"run", configPath},
+	}
+}
+
+// newRelayProcess is the WEB relay for the same file; its lines carry a prefix
+// in the shared ring so an operator can tell the two processes apart.
+func newRelayProcess(configPath, label string, inboundID int) *Process {
+	return &Process{
+		configPath: configPath,
+		logWriter:  &procLogWriter{label: label, ringPrefix: "web-relay | "},
+		inboundID:  inboundID,
+		args:       []string{"web-relay", configPath},
 	}
 }
 
@@ -243,7 +260,7 @@ func (p *Process) Start() error {
 	if p.IsRunning() {
 		return errors.New("mtg is already running")
 	}
-	cmd := exec.CommandContext(context.Background(), GetBinaryPath(), "run", p.configPath)
+	cmd := exec.CommandContext(context.Background(), GetBinaryPath(), p.args...)
 	cmd.Stdout = p.logWriter
 	cmd.Stderr = p.logWriter
 	done := make(chan struct{})
@@ -300,6 +317,17 @@ func (p *Process) Stop() error {
 
 // keepLines routes the process's output into a ring the caller owns.
 func (p *Process) keepLines(ring *supervisor.LineRing) { p.logWriter.ring = ring }
+
+// Signal delivers sig to the running process; nothing to a stopped one.
+func (p *Process) Signal(sig os.Signal) error {
+	p.mu.RLock()
+	cmd := p.cmd
+	p.mu.RUnlock()
+	if cmd == nil || cmd.Process == nil || !p.IsRunning() {
+		return nil
+	}
+	return cmd.Process.Signal(sig)
+}
 
 // PID is the child's, or 0 while none runs.
 func (p *Process) PID() int {
