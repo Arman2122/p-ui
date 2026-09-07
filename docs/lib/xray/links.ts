@@ -1,26 +1,33 @@
-// Pure parsing/building of Xray share links (vless / vmess / trojan / ss).
+// Pure parsing/building of share links (vless / vmess / trojan / ss, and the
+// MTProto tg://proxy and tg://webproxy links the panel hands out).
 // No React/DOM — runs in the browser and in vitest (Node) alike.
 
-import { base64ToText, textToBase64 } from './base64';
+import { base64ToBytes, base64ToText, textToBase64 } from './base64';
 
-export type Protocol = 'vless' | 'vmess' | 'trojan' | 'ss';
+export type Protocol = 'vless' | 'vmess' | 'trojan' | 'ss' | 'mtproto';
 
 export interface ParsedLink {
   protocol: Protocol;
   /** Remark / fragment label. */
   name: string;
   address: string;
+  /** 0 for a tg://webproxy link: the client fixes https and 443. */
   port: number;
-  /** UUID (vless/vmess), password (trojan), or `method:password` (ss). */
+  /** UUID (vless/vmess), password (trojan), `method:password` (ss), or the MTProto secret. */
   credential: string;
   /** All remaining parameters, for display. */
   params: Record<string, string>;
 }
 
 export function detectProtocol(link: string): Protocol | null {
-  const scheme = link.trim().slice(0, link.indexOf('://')).toLowerCase();
+  const trimmed = link.trim();
+  const scheme = trimmed.slice(0, trimmed.indexOf('://')).toLowerCase();
   if (scheme === 'vless' || scheme === 'vmess' || scheme === 'trojan' || scheme === 'ss') {
     return scheme;
+  }
+  if (scheme === 'tg') {
+    const host = trimmed.slice('tg://'.length).split(/[?/#]/, 1)[0].toLowerCase();
+    if (host === 'proxy' || host === 'webproxy') return 'mtproto';
   }
   return null;
 }
@@ -36,11 +43,36 @@ export function parseLink(link: string): ParsedLink {
       return parseVmess(trimmed);
     case 'ss':
       return parseShadowsocks(trimmed);
+    case 'mtproto':
+      return parseMtproto(trimmed);
     default:
       throw new Error(
-        `Unsupported or invalid link. Expected vless://, vmess://, trojan://, or ss://`,
+        `Unsupported or invalid link. Expected vless://, vmess://, trojan://, ss://, tg://proxy or tg://webproxy`,
       );
   }
+}
+
+// tg://proxy?server=&port=&secret= and tg://webproxy?server=&secret= share the
+// query shape; the WEB one has no port and its secret is the dd spelling.
+function parseMtproto(link: string): ParsedLink {
+  const url = new URL(link);
+  const kind = url.hostname.toLowerCase() === 'webproxy' ? 'web' : 'faketls';
+  const params: Record<string, string> = { kind };
+  url.searchParams.forEach((value, key) => {
+    if (key !== 'server' && key !== 'port' && key !== 'secret') params[key] = value;
+  });
+  const secret = url.searchParams.get('secret') ?? '';
+  if (!url.searchParams.get('server') || !secret) {
+    throw new Error('Invalid tg link: server and secret are required.');
+  }
+  return {
+    protocol: 'mtproto',
+    name: '',
+    address: url.searchParams.get('server') ?? '',
+    port: kind === 'web' ? 0 : Number(url.searchParams.get('port')) || 0,
+    credential: secret,
+    params,
+  };
 }
 
 // vless:// and trojan:// share the `cred@host:port?params#name` structure.
@@ -176,6 +208,53 @@ export function buildShadowsocks(input: ShadowsocksInput): string {
   const host = input.address.includes(':') ? `[${input.address}]` : input.address;
   const fragment = input.name ? `#${encodeURIComponent(input.name)}` : '';
   return `ss://${userinfo}@${host}:${input.port}${fragment}`;
+}
+
+export interface MtprotoInput {
+  server: string;
+  port: number;
+  /** The client's secret as the panel stores it: ee… hex, or raw-URL base64 of the same bytes. */
+  secret: string;
+}
+
+// The FakeTLS link: what the panel and mtg-proxy access print for a client.
+export function buildMtproto(input: MtprotoInput): string {
+  const url = new URL('tg://proxy');
+  url.searchParams.set('server', input.server);
+  url.searchParams.set('port', String(input.port));
+  url.searchParams.set('secret', input.secret);
+  return url.toString();
+}
+
+export interface MtprotoWebInput {
+  /** The WEB relay's hostname; the client fixes https and port 443. */
+  host: string;
+  secret: string;
+}
+
+// The WEB proxy link: the hostname alone and the same key in its dd spelling,
+// the only form a WEB-capable client holds. Empty when the secret is not ee.
+export function buildMtprotoWeb(input: MtprotoWebInput): string {
+  const dd = mtprotoDDSecret(input.secret);
+  if (!input.host || !dd) return '';
+  const url = new URL('tg://webproxy');
+  url.searchParams.set('server', input.host);
+  url.searchParams.set('secret', dd);
+  return url.toString();
+}
+
+// The dd spelling: the same sixteen key bytes as the ee secret, 0xdd in front,
+// no fronting domain. Mirrors internal/database/model.MtprotoDDSecret.
+export function mtprotoDDSecret(secret: string): string {
+  const hex = /^ee[0-9a-fA-F]{32}/.exec(secret);
+  if (hex) return `dd${hex[0].slice(2).toLowerCase()}`;
+  try {
+    const bytes = base64ToBytes(secret.replace(/-/g, '+').replace(/_/g, '/'));
+    if (bytes.length < 17 || bytes[0] !== 0xee) return '';
+    return `dd${Array.from(bytes.slice(1, 17), (b) => b.toString(16).padStart(2, '0')).join('')}`;
+  } catch {
+    return '';
+  }
 }
 
 // ---- helpers --------------------------------------------------------------

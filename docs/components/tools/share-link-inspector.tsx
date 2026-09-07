@@ -23,7 +23,7 @@ export function ShareLinkInspector() {
   return (
     <ToolFrame
       title="Share-link inspector"
-      description="Paste a vless / vmess / trojan / ss link to decode every parameter. It is parsed entirely in your browser — nothing is sent over the network."
+      description="Paste a vless / vmess / trojan / ss link, or an MTProto tg://proxy or tg://webproxy one, to decode every parameter. It is parsed entirely in your browser — nothing is sent over the network."
       onReset={input ? () => setInput('') : undefined}
     >
       <textarea
@@ -53,8 +53,8 @@ function ResultTable({ data }: { data: ParsedLink }) {
     ['Protocol', data.protocol],
     ['Name', data.name],
     ['Address', data.address],
-    ['Port', String(data.port)],
-    [data.protocol === 'trojan' ? 'Password' : 'ID / credential', data.credential],
+    ['Port', data.port ? String(data.port) : ''],
+    [credentialLabel(data.protocol), data.credential],
     ...Object.entries(data.params),
   ];
 
@@ -79,4 +79,15 @@ function ResultTable({ data }: { data: ParsedLink }) {
       </table>
     </div>
   );
+}
+
+function credentialLabel(protocol: ParsedLink['protocol']): string {
+  switch (protocol) {
+    case 'trojan':
+      return 'Password';
+    case 'mtproto':
+      return 'Secret';
+    default:
+      return 'ID / credential';
+  }
 }

@@ -6,6 +6,8 @@ import {
   buildVmess,
   buildTrojan,
   buildShadowsocks,
+  buildMtproto,
+  buildMtprotoWeb,
 } from './links';
 
 describe('detectProtocol', () => {
@@ -160,5 +162,51 @@ describe('parseLink — XHTTP with a split download endpoint', () => {
     };
     expect(decoded.downloadSettings?.address).toBe('download.example.com');
     expect(decoded.downloadSettings?.port).toBe(443);
+  });
+});
+
+describe('MTProto links', () => {
+  const ee = 'ee8196fe6ed8b637d001f91d6952cfcdf07777772e636c6f7564666c6172652e636f6d';
+
+  it('detects tg://proxy and tg://webproxy as mtproto', () => {
+    expect(detectProtocol('tg://proxy?server=a&port=443&secret=ee')).toBe('mtproto');
+    expect(detectProtocol('tg://webproxy?server=web.example.com&secret=dd')).toBe('mtproto');
+    expect(detectProtocol('tg://resolve?domain=x')).toBeNull();
+  });
+
+  it('parses the FakeTLS link', () => {
+    const r = parseLink(`tg://proxy?server=203.0.113.7&port=8443&secret=${ee}`);
+    expect(r.protocol).toBe('mtproto');
+    expect(r.address).toBe('203.0.113.7');
+    expect(r.port).toBe(8443);
+    expect(r.credential).toBe(ee);
+    expect(r.params).toEqual({ kind: 'faketls' });
+  });
+
+  it('parses the WEB link with no port', () => {
+    const r = parseLink('tg://webproxy?server=web.example.com&secret=dd8196fe6ed8b637d001f91d6952cfcdf0');
+    expect(r.address).toBe('web.example.com');
+    expect(r.port).toBe(0);
+    expect(r.credential).toBe('dd8196fe6ed8b637d001f91d6952cfcdf0');
+    expect(r.params).toEqual({ kind: 'web' });
+  });
+
+  it('refuses a tg link without server or secret', () => {
+    expect(() => parseLink('tg://proxy?server=a&port=1')).toThrow(/server and secret/);
+  });
+
+  it('builds the FakeTLS link the panel prints', () => {
+    expect(buildMtproto({ server: '203.0.113.7', port: 8443, secret: ee })).toBe(
+      `tg://proxy?server=203.0.113.7&port=8443&secret=${ee}`,
+    );
+  });
+
+  it('builds the WEB link with the dd spelling of the same key, from hex or base64', () => {
+    const want = 'tg://webproxy?server=web.example.com&secret=dd8196fe6ed8b637d001f91d6952cfcdf0';
+    expect(buildMtprotoWeb({ host: 'web.example.com', secret: ee })).toBe(want);
+    const base64 = Buffer.from(ee, 'hex').toString('base64url');
+    expect(buildMtprotoWeb({ host: 'web.example.com', secret: base64 })).toBe(want);
+    expect(buildMtprotoWeb({ host: 'web.example.com', secret: 'dd8196fe6ed8b637d001f91d6952cfcdf0' })).toBe('');
+    expect(buildMtprotoWeb({ host: '', secret: ee })).toBe('');
   });
 });
