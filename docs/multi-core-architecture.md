@@ -2946,9 +2946,10 @@ v2 both pass the relay's REQUIRE policy and no header is refused; a lone named e
 other SNI. So `SetByMaster` refuses, with the rule named: xver other than 1 or 2, a typed Dest, a
 master off TLS (REALITY cannot front a client that validates a real certificate), and a master
 ALPN other than `["http/1.1"]` alone. The same rules hold across edits: a master edit that moves
-off them with a relay child attached is refused through `checkFallbacksSurviveEdit`, and turning
-the WEB proxy off on a child a fallback points at is refused through `CheckChildEdit`, since the
-row would otherwise fall back to the FakeTLS port with a PROXY header the proxy does not expect.
+off them with a relay child attached is refused through `checkFallbacksSurviveEdit`, and
+`CheckChildEdit` refuses turning the WEB proxy off on a child a fallback points at (the row would
+fall back to the FakeTLS port with a PROXY header the proxy does not expect) and renaming its
+host while the row is still named for the old one (the new hostname would match nothing).
 A relay child is skipped by `annotateFallbackParents` and by the subscription's projection: the
 WEB link carries no port and the FakeTLS link is not the master's to front. Detection is by
 settings shape, not by protocol, which is how the service layer stays inside the dispatch

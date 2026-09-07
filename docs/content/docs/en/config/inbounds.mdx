@@ -557,10 +557,11 @@ at save with the rule named rather than stored and left broken:
 - **REALITY cannot front it.** The client validates a real certificate.
 
 An edit that would break the front afterwards is refused the same way: moving
-the master off TLS or off `http/1.1` alone while a WEB child is attached, or
-turning the WEB proxy off on the child while a fallback still points at it.
-Detach the fallback first. Changing the hostname on the child needs the
-fallback row's SNI updated by hand. A master behind an SNI router on 443 rather
+the master off TLS or off `http/1.1` alone while a WEB child is attached,
+turning the WEB proxy off on the child while a fallback still points at it, or
+changing the child's hostname while the fallback is still named for the old
+one. Detach the fallback first, or for a rename, update the fallback's SNI to
+the new hostname and then rename. A master behind an SNI router on 443 rather
 than on 443 itself is fine; the router just has to pass the hostname to it.
 
 ### Links

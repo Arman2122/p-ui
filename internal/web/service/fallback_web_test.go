@@ -135,6 +135,20 @@ func TestAnEditThatStrandsAWebRelayFallbackIsRefused(t *testing.T) {
 	if err := svc.CheckChildEdit(child.Id, webRelayChildSettings, webRelayChildSettings); err != nil {
 		t.Fatalf("an edit that keeps the relay was refused: %v", err)
 	}
+
+	// A new hostname under a row named for the old one would match nothing;
+	// once the row follows, the rename is allowed.
+	renamed := strings.Replace(webRelayChildSettings, "web.example.com", "other.example.com", 1)
+	if err := svc.CheckChildEdit(child.Id, webRelayChildSettings, renamed); err == nil || !strings.Contains(err.Error(), "update that fallback's SNI") {
+		t.Fatalf("renaming the host under a fallback named for the old one was allowed: %v", err)
+	}
+	if err := svc.SetByMaster(master.Id, []FallbackInput{{ChildId: child.Id, Name: "other.example.com", Alpn: "http/1.1", Xver: 2}}); err != nil {
+		t.Fatalf("SetByMaster: %v", err)
+	}
+	if err := svc.CheckChildEdit(child.Id, webRelayChildSettings, renamed); err != nil {
+		t.Fatalf("with the fallback renamed first the host may follow: %v", err)
+	}
+
 	if err := svc.SetByMaster(master.Id, nil); err != nil {
 		t.Fatal(err)
 	}

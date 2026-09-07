@@ -77,20 +77,30 @@ func (s *FallbackService) webRelayChildren(db *gorm.DB, masterId int) ([]model.I
 	return out, nil
 }
 
-// CheckChildEdit refuses turning the WEB proxy off on an inbound a fallback
-// fronts: the row would then point a PROXY-headed stream at the FakeTLS port.
+// CheckChildEdit refuses an edit that strands the fallback fronting this WEB
+// proxy: turning it off points a PROXY-headed stream at the FakeTLS port, and
+// a new hostname under a row named for the old one matches nothing.
 func (s *FallbackService) CheckChildEdit(childId int, oldSettings, newSettings string) error {
-	if _, was := webRelayOf(oldSettings); !was {
+	was, had := webRelayOf(oldSettings)
+	if !had {
 		return nil
 	}
-	if _, still := webRelayOf(newSettings); still {
+	now, still := webRelayOf(newSettings)
+	if still && now.WebHost == was.WebHost {
 		return nil
 	}
 	parent, err := s.GetParentForChild(childId)
 	if err != nil || parent == nil {
 		return err
 	}
-	return common.NewError("inbound #", parent.MasterId, " fronts this inbound's WEB proxy through a fallback; detach it before turning the WEB proxy off")
+	if !still {
+		return common.NewError("inbound #", parent.MasterId, " fronts this inbound's WEB proxy through a fallback; detach it before turning the WEB proxy off")
+	}
+	if parent.Name == was.WebHost {
+		return common.NewError("inbound #", parent.MasterId, " fronts this inbound's WEB proxy through a fallback named for ", was.WebHost,
+			"; update that fallback's SNI to the new hostname first, or detach it")
+	}
+	return nil
 }
 
 // errFallbackHostShape is the one wording for the shape fallbacks need, said
