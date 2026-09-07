@@ -4,6 +4,7 @@
   "version": "0.6.0",
   "type": "module",
   "description": "Penhoon UI panel frontend (React 19 + Ant Design 6 + Vite 8).",
+  "types": "dist-types/ds-entry.d.ts",
   "engines": {
     "node": ">=24.0.0",
     "npm": ">=10.0.0"

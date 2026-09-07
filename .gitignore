@@ -93,3 +93,12 @@ desktop.ini
 # it before the fix ships.
 AUDIT-*.md
 audit-appendix/
+
+# design-sync: build artifacts, staged scripts, verification working state
+.design-sync/sb-reference/
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules
+.ds-sync/
+ds-bundle/
+frontend/dist-types/

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationDir": "dist-types",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "files": [
+    "ds-entry.tsx",
+    "src/env.d.ts"
+  ],
+  "include": []
+}

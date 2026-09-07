@@ -1,0 +1,48 @@
+{
+  "pkg": "p-ui-frontend",
+  "globalName": "Penhoon",
+  "shape": "storybook",
+  "entry": "frontend/ds-entry.tsx",
+  "tsconfig": "tsconfig.json",
+  "storybookConfigDir": "frontend/.storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "buildCmd": "cd frontend && npx storybook build -c .storybook -o ../.design-sync/sb-reference",
+  "provider": {
+    "component": "PanelProvider"
+  },
+  "storyImports": {
+    "shim": [
+      "hooks/useTheme",
+      "rhf/useZodForm",
+      "react-hook-form",
+      "node_modules/antd/es/index.js",
+      "hooks/useDatepicker"
+    ]
+  },
+  "overrides": {
+    "Sparkline": {
+      "cardMode": "column"
+    },
+    "DateTimePicker": {
+      "cardMode": "single",
+      "primaryStory": "ClientExpiry"
+    },
+    "TextModal": {
+      "cardMode": "single",
+      "primaryStory": "PlainText"
+    }
+  },
+  "dtsPropsFor": {
+    "BansTable": "bans: { id: number; clientEmail: string; source: string; origin: string; node: string; ports: string; reason: string; createdAt: number; until: number }[];\nloading?: boolean;\nonRelease?: (email: string, source: string) => void;\nonReleaseAll?: () => void;\nreleasing?: boolean;\ndatepicker?: \"gregorian\" | \"jalalian\";",
+    "ClientSpeedTag": "speed: { up: number; down: number };\ntableCell?: boolean;",
+    "TextModal": "open: boolean;\nonClose: () => void;\ntitle: string;\ncontent: string;\nfileName?: string;\njson?: boolean;\ntabs?: { key: string; label: string; content: string }[];",
+    "EmailNotifications": "/** The panel AllSetting model; pass the whole settings object through. */\nallSetting: Record<string, unknown>;\nupdateSetting: (patch: Record<string, unknown>) => void;",
+    "TelegramNotifications": "/** The panel AllSetting model; pass the whole settings object through. */\nallSetting: Record<string, unknown>;\nupdateSetting: (patch: Record<string, unknown>) => void;",
+    "NotificationGroup": "config: { icon: React.ReactNode; title: string; events: { key: string; label: string; settingKey: string; extra?: (props: { value: number; onChange: (v: number | null) => void; ariaLabel: string }) => React.ReactNode }[] };\nselected: string[];\nonToggle: (key: string) => void;\nonToggleAll: (keys: string[]) => void;\nallSetting: Record<string, unknown>;\nupdateSetting: (patch: Record<string, unknown>) => void;",
+    "Sparkline": "data: number[];\ndata2?: number[];\ndata3?: number[];\nstroke2?: string;\nstroke3?: string;\nname1?: string;\nname2?: string;\nname3?: string;\nlabels?: (string | number)[];\nheight?: number;\nstroke?: string;\nstrokeWidth?: number;\nmaxPoints?: number;\nshowGrid?: boolean;\nfillOpacity?: number;\nshowMarker?: boolean;\nmarkerRadius?: number;\nshowAxes?: boolean;\nyTickStep?: number;\ntickCountX?: number;\nshowTooltip?: boolean;\nshowLegend?: boolean;\nvalueMin?: number;\nvalueMax?: number | null;\nyFormatter?: (v: number) => string;\ntooltipFormatter?: ((v: number) => string) | null;\ntooltipLabelFormatter?: ((label: string) => string) | null;\nreferenceLines?: { y: number; label?: string; color?: string; dash?: string }[];\nextrema?: { show?: boolean; formatter?: (v: number) => string; minColor?: string; maxColor?: string };",
+    "FormField": "name: string | readonly (string | number)[];\n/** react-hook-form Control; omit to use the surrounding FormProvider. */\ncontrol?: unknown;\nlabel?: React.ReactNode;\ntooltip?: React.ReactNode;\nextra?: React.ReactNode;\nvalueProp?: \"value\" | \"checked\";\ntransform?: { input?: (value: unknown) => unknown; output?: (eventValue: unknown) => unknown };\nonAfterChange?: (value: unknown) => void;\n/** react-hook-form RegisterOptions (without disabled / valueAs*). */\nrules?: Record<string, unknown>;\nrequired?: boolean;\nnoStyle?: boolean;\nclassName?: string;\nstyle?: React.CSSProperties;\nchildren: React.ReactElement;",
+    "DateTimePicker": "/** A dayjs object (the panel passes dayjs values straight through). */\nvalue: import(\"dayjs\").Dayjs | null;\nonChange: (next: import(\"dayjs\").Dayjs | null) => void;\nshowTime?: boolean;\nformat?: string;\nplaceholder?: string;\ndisabled?: boolean;",
+    "InputAddon": "children: React.ReactNode;\nclassName?: string;\nstyle?: React.CSSProperties;\nonClick?: () => void;\nariaLabel?: string;"
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}
