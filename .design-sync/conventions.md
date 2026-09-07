@@ -83,6 +83,10 @@ components call `useTheme` and require a provider above them), and `setDatepicke
 / `useDatepicker`, which switch date rendering between `'gregorian'` and
 `'jalalian'`. `setDatepicker` is module-level state: call it once, above the tree.
 
+`dayjs` is on the global too. `DateTimePicker` and antd's own `DatePicker` take
+dayjs values, so build them with `dayjs('2026-12-31 23:59:59')` rather than a
+native `Date`.
+
 ## Where the truth lives
 
 Read `components/<group>/<Name>/<Name>.prompt.md` before using a component — it

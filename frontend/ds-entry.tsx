@@ -28,6 +28,10 @@ export { useZodForm } from './src/components/form/rhf/useZodForm';
 
 // Module-level calendar registry: the story's setDatepicker call must reach the
 // same copy the picker subscribes to, or it fetches (404s) and stays gregorian.
+// DateTimePicker and antd's own pickers take dayjs values; without this the
+// design agent has no way to construct one.
+export { default as dayjs } from 'dayjs';
+
 export { setDatepicker, useDatepicker } from './src/hooks/useDatepicker';
 
 export { BansTable } from './src/components/clients/BansTable';
