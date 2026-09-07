@@ -1,6 +1,7 @@
 {
   "pkg": "p-ui-frontend",
   "globalName": "Penhoon",
+  "projectId": "7a3bfc6f-febf-4c36-908a-ad2db06cc8d0",
   "shape": "storybook",
   "entry": "frontend/ds-entry.tsx",
   "tsconfig": "tsconfig.json",
