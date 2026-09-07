@@ -164,18 +164,18 @@ jobs:
           mv xray xray-linux-${{ matrix.platform }}
           # mtg-proxy (MTProto sidecar) ships prebuilt release binaries whose
           # platform labels match our matrix, so download and unpack the matching
-          # archive. Only the platforms it publishes are packaged — the tag
-          # lookup lives inside that branch so unpackaged platforms (s390x) never
-          # depend on it. The tag comes from the release-page redirect on
-          # github.com — the host the downloads need anyway — because api.github.com
-          # has 503'd whole release runs while asset downloads kept working.
-          # The binary keeps the name `mtg-linux-<platform>` on our side:
-          # internal/mtproto resolves it by that name and renaming it here would
-          # be a second change for no gain.
+          # archive. Only the platforms it publishes are packaged, so unpackaged
+          # platforms (s390x) never depend on it. The tag is pinned, not
+          # "latest": the panel refuses a sidecar older than internal/mtproto's
+          # MinimumVersion at preflight, so shipping whatever is newest could
+          # bundle one its own boot rejects and take every MTProto inbound
+          # offline on update. internal/arch/mtg_pin_test.go keeps the pin from
+          # falling behind that minimum. The binary keeps the name
+          # `mtg-linux-<platform>` on our side: internal/mtproto resolves it by
+          # that name and renaming it here would be a second change for no gain.
           case "${{ matrix.platform }}" in
             amd64|arm64|armv7|armv6|386)
-              MTG_VER=$(curl -sf $CURL_RETRY -o /dev/null -w '%{redirect_url}' "https://github.com/Arman2122/mtg-proxy/releases/latest" | sed -n 's#.*/releases/tag/##p')
-              if [ -z "$MTG_VER" ]; then echo "could not resolve the latest mtg-proxy release tag"; exit 1; fi
+              MTG_VER="v1.9.0"
               MTG_PKG="mtg-proxy-${MTG_VER#v}-linux-${{ matrix.platform }}"
               curl -sfLRO $CURL_RETRY "https://github.com/Arman2122/mtg-proxy/releases/download/${MTG_VER}/${MTG_PKG}.tar.gz"
               tar -xzf "${MTG_PKG}.tar.gz"
