@@ -1950,7 +1950,18 @@
       "ipLimitBanUntil": "Until",
       "ipLimitRelease": "Release",
       "ipLimitReleaseAll": "Release all",
-      "ipLimitReleaseAllConfirm": "Release every ban now?"
+      "ipLimitReleaseAllConfirm": "Release every ban now?",
+        "sectionDesc_general": "Listener, session and pagination behaviour",
+        "sectionDesc_security": "Credentials, two-factor and access control",
+        "sectionDesc_telegram": "Bot token, chat and which events it forwards",
+        "sectionDesc_email": "SMTP delivery of expiry and depletion notices",
+        "sectionDesc_subscription": "The subscription server and the links it serves",
+        "sectionDesc_subscription_formats": "JSON and Clash output the subscription serves",
+        "findSetting": "Find a setting",
+        "noSettingMatch": "No setting matches “{q}”.",
+        "unsaved": "Unsaved changes",
+        "allSaved": "All changes saved",
+        "subtitle": "Panel-level configuration; core behaviour lives under Core Configs"
     },
     "xray": {
       "save": "Save",

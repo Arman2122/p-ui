@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
   Alert,
   Button,
-  Card,
-  Col,
   ConfigProvider,
   FloatButton,
   Layout,
   Modal,
-  Row,
   Space,
   Spin,
   message,
@@ -19,11 +16,12 @@ import {
 import { HttpUtil, PromiseUtil } from '@/utils';
 import { setMessageInstance } from '@/utils/messageBus';
 import { useTheme } from '@/hooks/useTheme';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useAllSettings } from '@/api/queries/useAllSettings';
 import { RESTART_FIELD_LABELS } from '@/lib/settings/restartKeys';
 import { AllSettingSchema } from '@/schemas/setting';
 import GeneralTab from './GeneralTab';
+import SettingsRail, { type SettingsSection } from './SettingsRail';
+import { PageHeader } from '@/components/ui/panel';
 import SecurityTab from './SecurityTab';
 import TelegramTab from './TelegramTab';
 import EmailTab from './EmailTab';
@@ -60,7 +58,6 @@ function scrollTarget() {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
-  const { isMobile } = useMediaQuery();
   const [modal, modalContextHolder] = Modal.useModal();
   const [messageApi, messageContextHolder] = message.useMessage();
 
@@ -95,6 +92,7 @@ export default function SettingsPage() {
 
   const [alertVisible, setAlertVisible] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
   const slug = location.hash.replace(/^#/, '');
   const activeSlug = tabSlugs.includes(slug) ? slug : 'general';
 
@@ -196,6 +194,22 @@ export default function SettingsPage() {
     return classes.join(' ');
   }, [isDark, isUltra]);
 
+  const sections = useMemo<SettingsSection[]>(() => {
+    const list: SettingsSection[] = [
+      { slug: 'general', labelKey: 'pages.settings.panelSettings', icon: 'settings' },
+      { slug: 'security', labelKey: 'pages.settings.securitySettings', icon: 'shield' },
+      { slug: 'telegram', labelKey: 'pages.settings.TGBotSettings', icon: 'link' },
+      { slug: 'email', labelKey: 'pages.settings.emailSettings', icon: 'mail' },
+      { slug: 'subscription', labelKey: 'pages.settings.subSettings', icon: 'hosts' },
+    ];
+    if (allSetting.subJsonEnable || allSetting.subClashEnable) {
+      list.push({ slug: 'subscription-formats', labelKey: 'pages.settings.subFormats', icon: 'config' });
+    }
+    return list;
+  }, [allSetting.subJsonEnable, allSetting.subClashEnable]);
+
+  const activeSection = sections.find((x) => x.slug === activeSlug) ?? sections[0];
+
   const categoryBody = useMemo(() => {
     switch (activeSlug) {
       case 'security': return <SecurityTab allSetting={allSetting} updateSetting={updateSetting} saveSetting={savePayload} />;
@@ -238,42 +252,51 @@ export default function SettingsPage() {
                     />
                   )}
 
-                  <Row gutter={[isMobile ? 8 : 16, isMobile ? 0 : 12]}>
-                    <Col span={24}>
-                      <Card hoverable>
-                        <Row className="header-row">
-                          <Col xs={24} sm={10} className="header-actions">
-                            <Space>
-                              <Button type="primary" disabled={saveDisabled} onClick={onSave}>
-                                {t('pages.settings.save')}
-                              </Button>
-                              <Button type="primary" danger disabled={!saveDisabled} onClick={restartPanel}>
-                                {t('pages.settings.restartPanel')}
-                              </Button>
-                            </Space>
-                          </Col>
-                          <Col xs={24} sm={14} className="header-info">
-                            <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
-                            {restartPendingKeys.length > 0 && (
-                              <Alert
-                                type="warning"
-                                showIcon
-                                title={t('pages.settings.restartPendingFor', {
-                                  fields: restartPendingKeys.map((key) => t(RESTART_FIELD_LABELS[key] ?? key)).join(', '),
-                                })}
-                              />
-                            )}
-                          </Col>
-                        </Row>
-                      </Card>
-                    </Col>
+                  <PageHeader title={t('menu.settings')} sub={t('pages.settings.subtitle')} />
 
-                    <Col span={24}>
-                      <Card hoverable>
-                        {categoryBody}
-                      </Card>
-                    </Col>
-                  </Row>
+                  <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
+
+                  {restartPendingKeys.length > 0 && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      title={t('pages.settings.restartPendingFor', {
+                        fields: restartPendingKeys.map((key) => t(RESTART_FIELD_LABELS[key] ?? key)).join(', '),
+                      })}
+                    />
+                  )}
+
+                  <div className="p-settings">
+                    <SettingsRail
+                      sections={sections}
+                      active={activeSlug}
+                      onPick={(slug) => navigate(`/settings#${slug}`)}
+                    />
+                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 650, color: 'var(--p-text)' }}>
+                            {t(activeSection.labelKey)}
+                          </div>
+                          <div className="p-sub" style={{ marginTop: 2 }}>
+                            {t(`pages.settings.sectionDesc_${activeSlug.replace(/-/g, '_')}`)}
+                          </div>
+                        </div>
+                        <Space size={8}>
+                          <span className="p-sub">
+                            {saveDisabled ? t('pages.settings.allSaved') : t('pages.settings.unsaved')}
+                          </span>
+                          <Button type="primary" danger disabled={!saveDisabled} onClick={restartPanel}>
+                            {t('pages.settings.restartPanel')}
+                          </Button>
+                          <Button type="primary" disabled={saveDisabled} onClick={onSave}>
+                            {t('pages.settings.save')}
+                          </Button>
+                        </Space>
+                      </div>
+                      {categoryBody}
+                    </div>
+                  </div>
                 </>
               )}
             </Spin>

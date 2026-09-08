@@ -1824,7 +1824,18 @@
       "ipLimitBanUntil": "تا",
       "ipLimitRelease": "آزادسازی",
       "ipLimitReleaseAll": "آزادسازی همه",
-      "ipLimitReleaseAllConfirm": "همه مسدودسازی‌ها همین حالا آزاد شوند؟"
+      "ipLimitReleaseAllConfirm": "همه مسدودسازی‌ها همین حالا آزاد شوند؟",
+        "sectionDesc_general": "رفتار شنود، نشست و صفحه‌بندی",
+        "sectionDesc_security": "اعتبارنامه، احراز دومرحله‌ای و کنترل دسترسی",
+        "sectionDesc_telegram": "توکن ربات، چت و رویدادهایی که منتقل می‌کند",
+        "sectionDesc_email": "ارسال SMTP اطلاعیه‌های انقضا و پایان حجم",
+        "sectionDesc_subscription": "سرور اشتراک و لینک‌هایی که ارائه می‌دهد",
+        "sectionDesc_subscription_formats": "خروجی JSON و Clash که اشتراک ارائه می‌دهد",
+        "findSetting": "جستجوی تنظیم",
+        "noSettingMatch": "تنظیمی مطابق “{q}” پیدا نشد.",
+        "unsaved": "تغییرات ذخیره‌نشده",
+        "allSaved": "همه تغییرات ذخیره شد",
+        "subtitle": "پیکربندی در سطح پنل؛ رفتار هسته‌ها در پیکربندی هسته‌هاست"
     },
     "xray": {
       "save": "ذخیره",
