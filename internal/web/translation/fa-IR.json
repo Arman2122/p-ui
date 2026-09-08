@@ -286,7 +286,21 @@
       "healthCritical": "{list} — بحرانی",
       "panel": "پنل",
       "threads": "نخ‌ها",
-      "uptime": "مدت کارکرد"
+      "uptime": "مدت کارکرد",
+      "loadAverage": "بار ۱ / ۵ / ۱۵ دقیقه",
+      "threadsLogical": "پردازنده‌های منطقی",
+      "panelRss": "پروسه پنل",
+      "swapOff": "پیکربندی نشده",
+      "swapOffHint": "این میزبان سواپ ندارد",
+      "size": "اندازه",
+      "used": "استفاده‌شده",
+      "rootFs": "/ (سیستم فایل ریشه)",
+      "mount": "محل اتصال",
+      "showHistory": "نمایش تاریخچه {metric}",
+      "lastSamples": "{metric} · نمونه‌های اخیر",
+      "coresRunning": "{running} از {total} هسته در حال اجرا",
+      "coresStopped": "{names} در حال اجرا نیست",
+      "coresAllAnswering": "همه موتورها پاسخگو هستند"
     },
     "inbounds": {
       "totalDownUp": "دریافت/ارسال کل",
