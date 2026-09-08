@@ -916,6 +916,7 @@
       "installed": "Installed. Restart the core to run the new build.",
       "logsUnavailable": "The core's log could not be read",
       "title": "Protocol cores",
+        "subtitle": "Every proxy engine the panel supervises on this host",
       "summary": {
         "total": "Cores",
         "healthy": "Healthy",
@@ -1275,7 +1276,8 @@
       "removeFromGroup": "Remove clients…",
       "removeFromGroupTitle": "Remove clients from group \"{name}\"",
       "removeFromGroupDesc": "Select members to remove from this group. Clients themselves are kept (use \"Delete clients in group\" to remove them entirely).",
-      "removeFromGroupResult": "Removed {count} client(s) from {name}."
+      "removeFromGroupResult": "Removed {count} client(s) from {name}.",
+        "subtitle": "Shared inbound sets and pooled quota for a set of clients"
     },
     "policies": {
       "title": "Speed Plans",

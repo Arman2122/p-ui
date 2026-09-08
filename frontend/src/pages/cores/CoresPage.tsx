@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Card, Col, ConfigProvider, Layout, Modal, Result, Row, Space, Spin, Statistic, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { Button, Col, ConfigProvider, Layout, Modal, Result, Row, Space, Spin, Table, Tag, Tooltip, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CheckCircleOutlined, DeploymentUnitOutlined, FileTextOutlined, ReloadOutlined, StopOutlined, TagsOutlined, WarningOutlined } from '@ant-design/icons';
+import { FileTextOutlined, ReloadOutlined, StopOutlined, TagsOutlined, WarningOutlined } from '@ant-design/icons';
 
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -11,6 +11,8 @@ import { setMessageInstance } from '@/utils/messageBus';
 import { HttpUtil } from '@/utils';
 import { CoreStateBadge } from '@/components/cores/CoreStateBadge';
 import { summarizeCores } from '@/lib/cores/status';
+import { StatStrip } from '@/components/ui';
+import { PageHeader, PanelCard } from '@/components/ui/panel';
 import type { CoreStatusView, InstanceStatusView } from '@/generated/zod';
 import CoreVersionsModal from './CoreVersionsModal';
 import CoreLogsDrawer from './CoreLogsDrawer';
@@ -153,30 +155,27 @@ export default function CoresPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
                   <Col span={24}>
-                    <Card size="small" hoverable className="summary-card">
-                      <Row gutter={[16, 12]}>
-                        <Col xs={12} sm={6}>
-                          <Statistic title={t('pages.cores.summary.total')} value={String(summary.total)} prefix={<DeploymentUnitOutlined />} />
-                        </Col>
-                        <Col xs={12} sm={6}>
-                          <Statistic title={t('pages.cores.summary.healthy')} value={String(summary.healthy)} prefix={<CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />} />
-                        </Col>
-                        <Col xs={12} sm={6}>
-                          <Statistic title={t('pages.cores.summary.attention')} value={String(summary.attention)} prefix={<WarningOutlined style={{ color: summary.attention ? 'var(--ant-color-warning)' : undefined }} />} />
-                        </Col>
-                        <Col xs={12} sm={6}>
-                          <Statistic title={t('pages.cores.summary.unavailable')} value={String(summary.unavailable)} prefix={<StopOutlined />} />
-                        </Col>
-                      </Row>
-                    </Card>
+                    <PageHeader
+                      title={t('pages.cores.title')}
+                      sub={t('pages.cores.subtitle')}
+                      actions={<Button icon={<ReloadOutlined />} loading={loading} onClick={() => refetch()}>{t('refresh')}</Button>}
+                    />
+                  </Col>
+
+                  <Col span={24}>
+                    <StatStrip
+                      items={[
+                        { key: 'total', label: t('pages.cores.summary.total'), value: summary.total },
+                        { key: 'healthy', label: t('pages.cores.summary.healthy'), value: summary.healthy, color: 'var(--p-success)', pulse: summary.healthy > 0 },
+                        { key: 'attention', label: t('pages.cores.summary.attention'), value: summary.attention, color: summary.attention ? 'var(--p-warning)' : undefined },
+                        { key: 'unavailable', label: t('pages.cores.summary.unavailable'), value: summary.unavailable, color: '#8b8d94' },
+                      ]}
+                    />
                   </Col>
                   <Col span={24}>
-                    <Card
-                      size="small"
-                      title={t('pages.cores.title')}
-                      extra={<Button icon={<ReloadOutlined />} loading={loading} onClick={() => refetch()}>{t('refresh')}</Button>}
-                    >
+                    <PanelCard pad={0}>
                       <Table<CoreStatusView>
+                        className="p-table"
                         rowKey="id"
                         size="small"
                         columns={columns}
@@ -190,7 +189,7 @@ export default function CoresPage() {
                           ),
                         }}
                       />
-                    </Card>
+                    </PanelCard>
                   </Col>
                 </Row>
               )}

@@ -2,7 +2,6 @@ import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  Card,
   Col,
   ConfigProvider,
   Dropdown,
@@ -14,7 +13,6 @@ import {
   Row,
   Space,
   Spin,
-  Statistic,
   Table,
   Tag,
   Tooltip,
@@ -22,18 +20,14 @@ import {
 } from 'antd';
 import type { MenuProps, TableColumnsType } from 'antd';
 import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   LinkOutlined,
   MoreOutlined,
-  PieChartOutlined,
   PlusOutlined,
   RetweetOutlined,
   TagsOutlined,
-  TeamOutlined,
   UsergroupAddOutlined,
   UsergroupDeleteOutlined,
 } from '@ant-design/icons';
@@ -45,6 +39,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useClients } from '@/hooks/useClients';
 import { HttpUtil, SizeFormatter } from '@/utils';
+import { StatStrip } from '@/components/ui';
+import { PageHeader, PanelCard } from '@/components/ui/panel';
 import { setMessageInstance } from '@/utils/messageBus';
 import { LazyMount } from '@/components/utility';
 import { keys } from '@/api/queryKeys';
@@ -474,59 +470,32 @@ export default function GroupsPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
                   <Col span={24}>
-                    <Card size="small" hoverable className="summary-card">
-                      <Row gutter={[16, isMobile ? 16 : 12]}>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.groups.totalGroups')}
-                            value={String(totalGroups)}
-                            prefix={<TagsOutlined />}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.groups.totalGroupedClients')}
-                            value={String(totalClients)}
-                            prefix={<TeamOutlined />}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.groups.totalUpDown')}
-                            value={0}
-                            formatter={() => (
-                              <span>
-                                <ArrowUpOutlined /> {SizeFormatter.sizeFormat(totalUpload)}
-                                {' / '}
-                                <ArrowDownOutlined /> {SizeFormatter.sizeFormat(totalDownload)}
-                              </span>
-                            )}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.groups.totalTraffic')}
-                            value={SizeFormatter.sizeFormat(totalTraffic)}
-                            prefix={<PieChartOutlined />}
-                          />
-                        </Col>
-                      </Row>
-                    </Card>
+                    <PageHeader
+                      title={t('menu.groups')}
+                      sub={t('pages.groups.subtitle')}
+                      actions={
+                        <Button aria-label={t('pages.groups.addGroup')} type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                          {t('pages.groups.addGroup')}
+                        </Button>
+                      }
+                    />
                   </Col>
 
                   <Col span={24}>
-                    <Card
-                      size="small"
-                      hoverable
-                      title={
-                        <div className="card-toolbar">
-                          <Button aria-label={t('pages.groups.addGroup')} type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                            {!isMobile && t('pages.groups.addGroup')}
-                          </Button>
-                        </div>
-                      }
-                    >
+                    <StatStrip
+                      items={[
+                        { key: 'groups', label: t('pages.groups.totalGroups'), value: totalGroups },
+                        { key: 'clients', label: t('pages.groups.totalGroupedClients'), value: totalClients, color: 'var(--p-primary)' },
+                        { key: 'updown', label: t('pages.groups.totalUpDown'), value: `↑ ${SizeFormatter.sizeFormat(totalUpload)} / ↓ ${SizeFormatter.sizeFormat(totalDownload)}` },
+                        { key: 'traffic', label: t('pages.groups.totalTraffic'), value: SizeFormatter.sizeFormat(totalTraffic) },
+                      ]}
+                    />
+                  </Col>
+
+                  <Col span={24}>
+                    <PanelCard pad={0}>
                       <Table<GroupSummary>
+                        className="p-table"
                         dataSource={groups}
                         columns={columns}
                         rowKey="name"
@@ -542,7 +511,7 @@ export default function GroupsPage() {
                           ),
                         }}
                       />
-                    </Card>
+                    </PanelCard>
                   </Col>
                 </Row>
               )}
