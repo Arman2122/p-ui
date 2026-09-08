@@ -141,6 +141,12 @@
     "lightTheme": "Light theme",
     "darkTheme": "Dark theme"
   },
+  "panel": {
+    "onlineNow": "online now",
+    "live": "Live",
+    "noCap": "no cap",
+    "of": "of"
+  },
   "pages": {
     "login": {
       "hello": "Hello",

@@ -22,9 +22,10 @@ function iconOf(core: CoreStatusView): IconName {
   return 'restart';
 }
 
+/* `since` is a millisecond epoch, the same value the Cores page formats. */
 function uptimeOf(core: CoreStatusView, since?: number): string {
   if (!isHealthy(core) || !since) return '';
-  const minutes = Math.floor((Date.now() - since * 1000) / 60_000);
+  const minutes = Math.floor((Date.now() - since) / 60_000);
   if (minutes < 60) return `${Math.max(minutes, 0)}m`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ${minutes % 60}m`;

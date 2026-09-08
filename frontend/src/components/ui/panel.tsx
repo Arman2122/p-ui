@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
 
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -44,12 +45,13 @@ export function StatusPip({ status, online, note, size = 9 }: {
   note?: ReactNode;
   size?: number;
 }) {
+  const { t } = useTranslation();
   const kind = status.key === 'ended' ? 'error'
     : status.key === 'depleting' || status.key === 'expiring' ? 'warn'
       : status.key === 'disabled' ? 'off' : 'ok';
   const title = (
     <span style={{ display: 'block', lineHeight: 1.5 }}>
-      <b>{status.label}</b>{online ? ' · online now' : ''}
+      <b>{status.label}</b>{online ? ` · ${t('panel.onlineNow')}` : ''}
       {note ? <><br /><span style={{ opacity: 0.75 }}>{note}</span></> : null}
     </span>
   );
@@ -76,11 +78,12 @@ export function LiveDot({ tone = 'var(--p-success)', size = 7 }: { tone?: string
   );
 }
 
-export function LiveBadge({ label = 'Live', tone = 'var(--p-success)', title }: {
+export function LiveBadge({ label, tone = 'var(--p-success)', title }: {
   label?: ReactNode;
   tone?: string;
   title?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <span
       className="p-live"
@@ -92,7 +95,7 @@ export function LiveBadge({ label = 'Live', tone = 'var(--p-success)', title }: 
       title={title}
     >
       <span className="p-live-dot" style={{ background: tone }}><i style={{ background: tone }} /></span>
-      {label}
+      {label ?? t('panel.live')}
     </span>
   );
 }
@@ -283,6 +286,7 @@ export function ShareRow({ label, tag, value, pct, tone, sub, capped = true, cap
   capped?: boolean;
   cap?: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="p-share">
       <div className="p-share-h">
@@ -290,7 +294,7 @@ export function ShareRow({ label, tag, value, pct, tone, sub, capped = true, cap
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flex: '0 0 auto' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--p-text)' }}>{value}</span>
           <span className="p-sub" style={{ minWidth: 34, textAlign: 'right' }}>
-            {capped ? (cap ? <>of {cap}</> : `${Math.round(pct)}%`) : 'no cap'}
+            {capped ? (cap ? <>{t('panel.of')} {cap}</> : `${Math.round(pct)}%`) : t('panel.noCap')}
           </span>
         </div>
       </div>

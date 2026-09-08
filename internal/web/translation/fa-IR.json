@@ -141,6 +141,12 @@
     "lightTheme": "پوسته روشن",
     "darkTheme": "پوسته تیره"
   },
+  "panel": {
+    "onlineNow": "هم‌اکنون آنلاین",
+    "live": "زنده",
+    "noCap": "بدون سقف",
+    "of": "از"
+  },
   "pages": {
     "login": {
       "hello": "سلام",
