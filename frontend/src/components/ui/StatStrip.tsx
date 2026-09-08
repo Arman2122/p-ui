@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
+import { Popover } from 'antd';
 
 import { Kicker, StatusDot } from '@/components/ui/panel';
 
@@ -9,6 +10,9 @@ export interface StatStripItem {
   /** A dot before the number; use it for the buckets that mean something is wrong. */
   color?: string;
   pulse?: boolean;
+  /** Shown on hover. A count is far more useful when it can say which rows it counted. */
+  detail?: ReactNode;
+  detailTitle?: ReactNode;
 }
 
 /*
@@ -35,17 +39,23 @@ export default function StatStrip({ items, active, onPick }: {
             </div>
           </>
         );
-        if (!onPick) return <div key={item.key} className="p-strip-c">{body}</div>;
+        const cell = !onPick
+          ? <div className="p-strip-c">{body}</div>
+          : (
+            <button
+              type="button"
+              className={`p-strip-c is-clickable${active === item.key ? ' is-on' : ''}`}
+              aria-pressed={active === item.key}
+              onClick={() => onPick(item.key)}
+            >
+              {body}
+            </button>
+          );
+        if (!item.detail) return <Fragment key={item.key}>{cell}</Fragment>;
         return (
-          <button
-            type="button"
-            key={item.key}
-            className={`p-strip-c is-clickable${active === item.key ? ' is-on' : ''}`}
-            aria-pressed={active === item.key}
-            onClick={() => onPick(item.key)}
-          >
-            {body}
-          </button>
+          <Popover key={item.key} title={item.detailTitle ?? item.label} content={item.detail}>
+            {cell}
+          </Popover>
         );
       })}
     </section>

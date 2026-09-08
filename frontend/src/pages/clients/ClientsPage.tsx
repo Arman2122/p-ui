@@ -13,13 +13,11 @@ import {
   Layout,
   Modal,
   Pagination,
-  Popover,
   Result,
   Row,
   Select,
   Space,
   Spin,
-  Statistic,
   Switch,
   Table,
   Tag,
@@ -71,6 +69,8 @@ import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } fro
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import ClientSpeedTag, { isActiveSpeed } from '@/components/clients/ClientSpeedTag';
 import ClientCardComment from '@/components/clients/ClientCardComment';
+import { StatStrip } from '@/components/ui';
+import { PageHeader } from '@/components/ui/panel';
 import { IntlUtil, SizeFormatter } from '@/utils';
 import { setMessageInstance } from '@/utils/messageBus';
 import { LazyMount } from '@/components/utility';
@@ -1181,52 +1181,38 @@ export default function ClientsPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
                   <Col span={24}>
-                    <Card size="small" hoverable className="summary-card">
-                      <Row gutter={[16, 12]}>
-                        <Col xs={12} sm={8} md={4}>
-                          <Statistic title={t('clients')} value={String(summary.total)} prefix={<TeamOutlined />} />
-                        </Col>
-                        <Col xs={12} sm={8} md={4}>
-                          <Popover
-                            title={t('online')}
-                            open={summary.onlineCount ? undefined : false}
-                            content={<ClientEmailList emails={summary.online} total={summary.onlineCount} />}
-                          >
-                            <Statistic title={t('online')} value={String(summary.onlineCount)} prefix={<span className="dot dot-blue" />} />
-                          </Popover>
-                        </Col>
-                        <Col xs={12} sm={8} md={4}>
-                          <Popover
-                            title={t('depleted')}
-                            open={summary.depletedCount ? undefined : false}
-                            content={<ClientEmailList emails={summary.depleted} total={summary.depletedCount} />}
-                          >
-                            <Statistic title={t('depleted')} value={String(summary.depletedCount)} prefix={<span className="dot dot-red" />} />
-                          </Popover>
-                        </Col>
-                        <Col xs={12} sm={8} md={4}>
-                          <Popover
-                            title={t('depletingSoon')}
-                            open={summary.expiringCount ? undefined : false}
-                            content={<ClientEmailList emails={summary.expiring} total={summary.expiringCount} />}
-                          >
-                            <Statistic title={t('depletingSoon')} value={String(summary.expiringCount)} prefix={<span className="dot dot-orange" />} />
-                          </Popover>
-                        </Col>
-                        <Col xs={12} sm={8} md={4}>
-                          <Popover
-                            title={t('disabled')}
-                            open={summary.deactiveCount ? undefined : false}
-                            content={<ClientEmailList emails={summary.deactive} total={summary.deactiveCount} />}
-                          >
-                            <Statistic title={t('disabled')} value={String(summary.deactiveCount)} prefix={<span className="dot dot-gray" />} />
-                          </Popover>
-                        </Col>
-                        <Col xs={12} sm={8} md={4}>
-                          <Statistic title={t('subscription.active')} value={String(summary.active)} prefix={<span className="dot dot-green" />} />
-                        </Col>
-                      </Row>
-                    </Card>
+                    <PageHeader
+                      title={t('clients')}
+                      sub={`${summary.total} ${t('clients')} · ${summary.onlineCount} ${t('online')}`}
+                    />
+                  </Col>
+
+                  <Col span={24}>
+                    <StatStrip
+                      active={filters.buckets.length ? filters.buckets[0] : 'all'}
+                      onPick={(key) => setFilters({ ...filters, buckets: key === 'all' ? [] : [key] })}
+                      items={[
+                        { key: 'all', label: t('clients'), value: summary.total },
+                        {
+                          key: 'online', label: t('online'), value: summary.onlineCount,
+                          color: 'var(--p-primary)', pulse: true,
+                          detail: summary.onlineCount ? <ClientEmailList emails={summary.online} total={summary.onlineCount} /> : undefined,
+                        },
+                        { key: 'active', label: t('subscription.active'), value: summary.active, color: 'var(--p-success)' },
+                        {
+                          key: 'expiring', label: t('depletingSoon'), value: summary.expiringCount, color: 'var(--p-warning)',
+                          detail: summary.expiringCount ? <ClientEmailList emails={summary.expiring} total={summary.expiringCount} /> : undefined,
+                        },
+                        {
+                          key: 'depleted', label: t('depleted'), value: summary.depletedCount, color: 'var(--p-error)',
+                          detail: summary.depletedCount ? <ClientEmailList emails={summary.depleted} total={summary.depletedCount} /> : undefined,
+                        },
+                        {
+                          key: 'deactive', label: t('disabled'), value: summary.deactiveCount, color: '#8b8d94',
+                          detail: summary.deactiveCount ? <ClientEmailList emails={summary.deactive} total={summary.deactiveCount} /> : undefined,
+                        },
+                      ]}
+                    />
                   </Col>
 
                   <Col span={24}>
