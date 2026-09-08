@@ -5,7 +5,9 @@ import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import { buildAntdThemeConfig } from '@/hooks/useTheme';
+import { applyPanelTokens } from '@/hooks/useTokenBridge';
 import enUS from '../../internal/web/translation/en-US.json';
+import '@/styles/panel.css';
 
 if (!i18next.isInitialized) {
   void i18next.use(initReactI18next).init({
@@ -19,13 +21,16 @@ if (!i18next.isInitialized) {
 
 export const withTheme: Decorator = (Story, context) => {
   const dark = context.globals.theme === 'dark';
+  const themeConfig = buildAntdThemeConfig(dark, false);
   useLayoutEffect(() => {
     document.body.classList.remove('dark', 'light');
     document.body.classList.add(dark ? 'dark' : 'light');
     document.documentElement.removeAttribute('data-theme');
-  }, [dark]);
+    applyPanelTokens(document.documentElement, themeConfig, dark, false);
+    document.body.style.background = 'var(--p-bg)';
+  }, [dark, themeConfig]);
   return (
-    <ConfigProvider theme={buildAntdThemeConfig(dark, false)}>
+    <ConfigProvider theme={themeConfig}>
       <div style={{ padding: 24, minWidth: 320 }}>
         <Story />
       </div>

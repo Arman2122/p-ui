@@ -105,6 +105,11 @@ func serveDistPage(c *gin.Context, name string) {
 	if name != "login.html" {
 		escapedVer := jsStringEscape(config.GetPanelVersion())
 		script += `;window.PUI_CUR_VER="` + escapedVer + `"`
+		// The shell's account menu needs the signed-in name on first paint; the
+		// session already holds it, so no round trip earns its place here.
+		if user := session.GetLoginUser(c); user != nil {
+			script += `;window.PUI_USER="` + jsStringEscape(user.Username) + `"`
+		}
 	}
 	script += `;</script>`
 	inject := []byte(script)

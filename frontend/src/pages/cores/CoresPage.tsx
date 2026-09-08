@@ -7,7 +7,6 @@ import { CheckCircleOutlined, DeploymentUnitOutlined, FileTextOutlined, ReloadOu
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useCoresStatusQuery } from '@/api/queries/useCoresStatusQuery';
-import AppSidebar from '@/layouts/AppSidebar';
 import { setMessageInstance } from '@/utils/messageBus';
 import { HttpUtil } from '@/utils';
 import { CoreStateBadge } from '@/components/cores/CoreStateBadge';
@@ -139,7 +138,6 @@ export default function CoresPage() {
       {messageContextHolder}
       {modalContextHolder}
       <Layout className={pageClass}>
-        <AppSidebar />
         <Layout className="content-shell">
           <Layout.Content id="content-layout" className="content-area">
             <Spin spinning={!fetched} delay={200} size="large">

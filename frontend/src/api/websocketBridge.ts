@@ -5,6 +5,7 @@ import { notification } from 'antd';
 import { getSharedWebSocketClient } from '@/api/websocket';
 import { keys } from '@/api/queryKeys';
 import { isRecentLocalInvalidate } from '@/api/invalidationTracker';
+import { pushNotification, type FeedLevel } from '@/api/notificationFeed';
 import { Status } from '@/models/status';
 import { StatusSchema } from '@/schemas/status';
 
@@ -62,11 +63,13 @@ export function useWebSocketBridge() {
       const p = payload as { title?: unknown; message?: unknown; level?: unknown } | undefined;
       if (!p || typeof p.title !== 'string') return;
       const level = typeof p.level === 'string' && NOTIFICATION_LEVELS.has(p.level) ? p.level : 'info';
+      const message = typeof p.message === 'string' ? p.message : undefined;
       notification.open({
-        type: level as 'success' | 'info' | 'warning' | 'error',
+        type: level as FeedLevel,
         message: p.title,
-        description: typeof p.message === 'string' ? p.message : undefined,
+        description: message,
       });
+      pushNotification({ level: level as FeedLevel, title: p.title, message });
     };
 
     const onXrayState: Handler = (payload) => {
@@ -75,6 +78,7 @@ export function useWebSocketBridge() {
       queryClient.invalidateQueries({ queryKey: keys.server.status() });
       if (p.state === 'error' && typeof p.errorMsg === 'string' && p.errorMsg !== '') {
         notification.open({ type: 'error', message: 'Xray', description: p.errorMsg });
+        pushNotification({ level: 'error', title: 'Xray', message: p.errorMsg });
       }
     };
 
