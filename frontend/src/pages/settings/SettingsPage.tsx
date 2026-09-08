@@ -20,7 +20,8 @@ import { useAllSettings } from '@/api/queries/useAllSettings';
 import { RESTART_FIELD_LABELS } from '@/lib/settings/restartKeys';
 import { AllSettingSchema } from '@/schemas/setting';
 import GeneralTab from './GeneralTab';
-import SettingsRail, { type SettingsSection } from './SettingsRail';
+import SectionRail from '@/components/ui/SectionRail';
+import type { IconName } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/panel';
 import SecurityTab from './SecurityTab';
 import TelegramTab from './TelegramTab';
@@ -194,8 +195,8 @@ export default function SettingsPage() {
     return classes.join(' ');
   }, [isDark, isUltra]);
 
-  const sections = useMemo<SettingsSection[]>(() => {
-    const list: SettingsSection[] = [
+  const sections = useMemo<{ slug: string; labelKey: string; icon: IconName }[]>(() => {
+    const list: { slug: string; labelKey: string; icon: IconName }[] = [
       { slug: 'general', labelKey: 'pages.settings.panelSettings', icon: 'settings' },
       { slug: 'security', labelKey: 'pages.settings.securitySettings', icon: 'shield' },
       { slug: 'telegram', labelKey: 'pages.settings.TGBotSettings', icon: 'link' },
@@ -267,8 +268,13 @@ export default function SettingsPage() {
                   )}
 
                   <div className="p-settings">
-                    <SettingsRail
-                      sections={sections}
+                    <SectionRail
+                      items={sections.map((x) => ({
+                        key: x.slug,
+                        label: t(x.labelKey),
+                        desc: t(`pages.settings.sectionDesc_${x.slug.replace(/-/g, '_')}`),
+                        icon: x.icon,
+                      }))}
                       active={activeSlug}
                       onPick={(slug) => navigate(`/settings#${slug}`)}
                     />

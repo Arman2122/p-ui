@@ -4,20 +4,20 @@ import { useLocation, useNavigate } from 'react-router';
 import {
   Alert,
   Button,
-  Card,
-  Col,
   ConfigProvider,
   FloatButton,
   Layout,
   message,
   Radio,
   Result,
-  Row,
   Space,
   Spin,
 } from 'antd';
 
 import { useTheme } from '@/hooks/useTheme';
+import SectionRail from '@/components/ui/SectionRail';
+import { PageHeader } from '@/components/ui/panel';
+import type { IconName } from '@/components/ui/Icon';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useXraySetting } from '@/hooks/useXraySetting';
 import type { XraySettingsValue } from '@/hooks/useXraySetting';
@@ -37,6 +37,15 @@ import './XrayPage.css';
 import { isExitKey } from '@/schemas/api/egress';
 
 const SECTION_SLUGS = ['basic', 'routing', 'outbound', 'balancer', 'dns', 'advanced'];
+
+const XRAY_SECTIONS: { slug: string; labelKey: string; icon: IconName }[] = [
+  { slug: 'basic', labelKey: 'pages.xray.basicTemplate', icon: 'config' },
+  { slug: 'routing', labelKey: 'menu.routing', icon: 'routing' },
+  { slug: 'outbound', labelKey: 'menu.outbounds', icon: 'outbounds' },
+  { slug: 'balancer', labelKey: 'pages.xray.Balancers', icon: 'nodes' },
+  { slug: 'dns', labelKey: 'pages.xray.dns', icon: 'hosts' },
+  { slug: 'advanced', labelKey: 'pages.xray.advancedTemplate', icon: 'xray' },
+];
 
 type AdvKey = 'xraySetting' | 'inboundSettings' | 'outboundSettings' | 'routingRuleSettings';
 
@@ -341,31 +350,44 @@ export default function XrayPage() {
                   extra={<Button type="primary" onClick={fetchAll}>{t('check')}</Button>}
                 />
               ) : (
-                <Row gutter={[isMobile ? 8 : 16, isMobile ? 0 : 12]}>
-                  <Col span={24}>
-                    <Card hoverable>
-                      <Row className="header-row">
-                        <Col xs={24} sm={14} className="header-actions">
-                          <Space>
-                            <Button type="primary" disabled={saveDisabled} onClick={onSaveAll}>
-                              {t('pages.xray.save')}
-                            </Button>
-                          </Space>
-                        </Col>
-                        <Col xs={24} sm={10} className="header-info">
-                          <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
-                          <Alert type="warning" showIcon title={t('pages.settings.infoDesc')} />
-                        </Col>
-                      </Row>
-                    </Card>
-                  </Col>
+                <>
+                  <PageHeader title={t('menu.xray')} sub={t('pages.xray.subtitle')} />
 
-                  <Col span={24}>
-                    <Card hoverable>
+                  <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
+                  <Alert type="warning" showIcon title={t('pages.settings.infoDesc')} />
+
+                  <div className="p-settings">
+                    <SectionRail
+                      items={XRAY_SECTIONS.map((x) => ({
+                        key: x.slug,
+                        label: t(x.labelKey),
+                        desc: t(`pages.xray.sectionDesc_${x.slug}`),
+                        icon: x.icon,
+                      }))}
+                      active={activeSection}
+                      onPick={(slug) => navigate(slug === 'routing' || slug === 'outbound' ? `/${slug}` : `/xray#${slug}`)}
+                    />
+                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 650, color: 'var(--p-text)' }}>
+                            {t(XRAY_SECTIONS.find((x) => x.slug === activeSection)?.labelKey ?? 'menu.xray')}
+                          </div>
+                          <div className="p-sub" style={{ marginTop: 2 }}>{t(`pages.xray.sectionDesc_${activeSection}`)}</div>
+                        </div>
+                        <Space size={8}>
+                          <span className="p-sub">
+                            {saveDisabled ? t('pages.settings.allSaved') : t('pages.settings.unsaved')}
+                          </span>
+                          <Button type="primary" disabled={saveDisabled} onClick={onSaveAll}>
+                            {t('pages.xray.save')}
+                          </Button>
+                        </Space>
+                      </div>
                       {sectionBody}
-                    </Card>
-                  </Col>
-                </Row>
+                    </div>
+                  </div>
+                </>
               )}
             </Spin>
           </Layout.Content>

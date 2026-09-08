@@ -2426,6 +2426,13 @@
       },
       "defaultOutbound": "Default Outbound",
       "defaultOutboundDesc": "Traffic that does not match any routing rule uses this outbound (Xray uses the first outbound in the list).",
+        "sectionDesc_basic": "The template every generated config starts from",
+        "sectionDesc_routing": "Which traffic leaves through which outbound",
+        "sectionDesc_outbound": "Upstream exits and the probes that watch them",
+        "sectionDesc_balancer": "Groups of outbounds picked by strategy",
+        "sectionDesc_dns": "Resolvers and per-domain overrides",
+        "sectionDesc_advanced": "Raw JSON for anything the forms do not cover",
+        "subtitle": "Each core keeps its own document; the panel merges inbounds and routing into it",
       "subjects": {
         "neverMatches": "Never matches",
         "neverMatchesTip": "This rule names an inbound the router cannot see. Pick a routable inbound or delete the rule.",
