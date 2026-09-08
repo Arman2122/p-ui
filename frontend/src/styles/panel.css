@@ -570,6 +570,10 @@
   .p-table .ant-table-tbody .ant-table-selection-column .ant-checkbox-wrapper{opacity:1}
 }
 
+/* Reveal-on-demand for anything sensitive on screen. Unscoped on purpose: the
+   dashboard is not the only place that will need it. */
+.ip-hidden{filter:blur(6px);user-select:none}
+
 /* ==========================================================================
    Bridge for pages not yet restyled onto this shell. Each page used to own a
    full-height background and its own sider; inside .p-page it must not.

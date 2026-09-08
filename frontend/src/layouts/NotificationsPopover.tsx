@@ -5,6 +5,7 @@ import { Badge, Button, Popover, Segmented } from 'antd';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { isAlert, markAllRead, markRead, useNotificationFeed, type FeedItem } from '@/api/notificationFeed';
 import { translateEvent } from '@/api/eventText';
+import { useRelativeTime } from '@/hooks/useRelativeTime';
 
 const DAY_MS = 86_400_000;
 
@@ -20,21 +21,6 @@ function iconOf(item: FeedItem): IconName {
   if (item.level === 'warning') return 'clock';
   if (item.level === 'success') return 'check';
   return 'bell';
-}
-
-function useRelativeTime() {
-  const { i18n } = useTranslation();
-  return useMemo(() => {
-    const rtf = new Intl.RelativeTimeFormat(i18n.language || 'en', { numeric: 'auto' });
-    return (at: number) => {
-      const seconds = Math.round((at - Date.now()) / 1000);
-      const abs = Math.abs(seconds);
-      if (abs < 60) return rtf.format(Math.trunc(seconds), 'second');
-      if (abs < 3600) return rtf.format(Math.trunc(seconds / 60), 'minute');
-      if (abs < 86400) return rtf.format(Math.trunc(seconds / 3600), 'hour');
-      return rtf.format(Math.trunc(seconds / 86400), 'day');
-    };
-  }, [i18n.language]);
 }
 
 function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void }) {

@@ -12,13 +12,14 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { LazyMount } from '@/components/utility';
 import { PanelCard } from '@/components/ui/panel';
 import { useCoresStatusQuery } from '@/api/queries/useCoresStatusQuery';
+import { useNodesQuery } from '@/api/queries/useNodesQuery';
+import { useAllSettings } from '@/api/queries/useAllSettings';
+import { useRelativeTime } from '@/hooks/useRelativeTime';
 import { setMessageInstance } from '@/utils/messageBus';
 import OverviewActionBar from './OverviewActionBar';
 import VitalsBand, { type VitalKey } from './VitalsBand';
 import DashboardCores, { CoreSummaryStrip } from './DashboardCores';
-import ThroughputCard from './ThroughputCard';
-import ConnectionsCard from './ConnectionsCard';
-import SystemStrip from './SystemStrip';
+import { ActivityPanel, PanelHostPanel, SessionsPanel, ThroughputPanel } from './DashboardPanels';
 import { useOverviewHistory } from './useOverviewHistory';
 import type { PanelUpdateInfo } from './PanelUpdateModal';
 const JsonEditor = lazy(() => import('@/components/form/JsonEditor'));
@@ -65,6 +66,9 @@ export default function IndexPage() {
   const navigate = useNavigate();
   const goToCores = useCallback(() => navigate('/cores'), [navigate]);
   const [openVital, setOpenVital] = useState<VitalKey | null>(null);
+  const { totals: nodeTotals } = useNodesQuery();
+  const { allSetting } = useAllSettings();
+  const relative = useRelativeTime();
 
   useEffect(() => {
     HttpUtil.post<{ accessLogEnable?: boolean; devChannelEnable?: boolean }>(
@@ -218,28 +222,23 @@ export default function IndexPage() {
                     <DashboardCores cores={cores} onOpen={goToCores} />
                   </PanelCard>
 
-                  <div className="ov-mid">
-                    <ThroughputCard
-                      status={status}
-                      up={history.series.netUp}
-                      down={history.series.netDown}
-                      labels={history.labels}
-                      isMobile={isMobile}
-                    />
-                    <ConnectionsCard
-                      status={status}
-                      tcp={history.series.tcpCount}
-                      udp={history.series.udpCount}
-                      labels={history.labels}
-                      isMobile={isMobile}
-                    />
+                  <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
+                    <ThroughputPanel status={status} history={history} />
+                    <SessionsPanel status={status} history={history} />
                   </div>
 
-                  <SystemStrip
-                    status={status}
-                    showIp={showIp}
-                    onToggleIp={() => setShowIp((v) => !v)}
-                  />
+                  <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
+                    <ActivityPanel relative={relative} />
+                    <PanelHostPanel
+                      status={status}
+                      nodeCount={nodeTotals.total}
+                      webPort={allSetting.webPort}
+                      basePath={window.PUI_BASE_PATH || allSetting.webBasePath}
+                      sessionMinutes={allSetting.sessionMaxAge}
+                      showIp={showIp}
+                      onToggleIp={() => setShowIp((v) => !v)}
+                    />
+                  </div>
                 </div>
               )}
             </Spin>
