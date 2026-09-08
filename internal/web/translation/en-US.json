@@ -910,7 +910,8 @@
         "peerNumber": "Peer {n}",
         "peerNumberConfig": "Peer {n} config"
       },
-      "sniffingDestOverride": "Destination override"
+      "sniffingDestOverride": "Destination override",
+        "subtitle": "Listeners the panel manages, and the clients attached to each"
     },
     "cores": {
       "installed": "Installed. Restart the core to run the new build.",
@@ -1342,6 +1343,7 @@
       "bulkDelete": "Delete",
       "bulkDeleteConfirm": "Delete {count} selected host(s)?",
       "deleteConfirmTitle": "Delete host \"{name}\"?",
+        "subtitle": "Addresses clients connect to, and the inbound each one fronts",
       "sections": {
         "basic": "Basic",
         "security": "Security",
@@ -1559,7 +1561,8 @@
       "pinnedCertPlaceholder": "base64 or hex SHA-256",
       "fetchPin": "Fetch",
       "pinFetched": "Fetched the node's current certificate",
-      "pinFetchFailed": "Could not fetch the certificate"
+      "pinFetchFailed": "Could not fetch the certificate",
+        "subtitle": "Panel hosts and edge nodes this panel syncs clients to"
     },
     "settings": {
       "defaultTag": "Default",

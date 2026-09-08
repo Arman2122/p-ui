@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Checkbox, Col, ConfigProvider, Input, Layout, Modal, Result, Row, Spin, Statistic, Typography, message } from 'antd';
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  CloudServerOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons';
-
+import { Alert, Button, Checkbox, Col, ConfigProvider, Input, Layout, Modal, Result, Row, Spin, Typography, message } from 'antd';
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
+import { StatStrip } from '@/components/ui';
+import { PageHeader } from '@/components/ui/panel';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { useNodeMutations } from '@/api/queries/useNodeMutations';
 import NodeList from './NodeList';
@@ -240,38 +235,18 @@ export default function NodesPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
                   <Col span={24}>
-                    <Card size="small" hoverable className="summary-card">
-                      <Row gutter={[16, isMobile ? 16 : 12]}>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.nodes.totalNodes')}
-                            value={String(totals.total)}
-                            prefix={<CloudServerOutlined />}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.nodes.onlineNodes')}
-                            value={String(totals.online)}
-                            prefix={<CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.nodes.offlineNodes')}
-                            value={String(totals.offline)}
-                            prefix={<CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={6}>
-                          <Statistic
-                            title={t('pages.nodes.avgLatency')}
-                            value={totals.avgLatency > 0 ? `${totals.avgLatency} ms` : '-'}
-                            prefix={<ThunderboltOutlined />}
-                          />
-                        </Col>
-                      </Row>
-                    </Card>
+                    <PageHeader title={t('menu.nodes')} sub={t('pages.nodes.subtitle')} />
+                  </Col>
+
+                  <Col span={24}>
+                    <StatStrip
+                      items={[
+                        { key: 'total', label: t('pages.nodes.totalNodes'), value: totals.total },
+                        { key: 'online', label: t('pages.nodes.onlineNodes'), value: totals.online, color: 'var(--p-success)', pulse: totals.online > 0 },
+                        { key: 'offline', label: t('pages.nodes.offlineNodes'), value: totals.offline, color: totals.offline ? 'var(--p-error)' : '#8b8d94' },
+                        { key: 'latency', label: t('pages.nodes.avgLatency'), value: totals.avgLatency > 0 ? `${totals.avgLatency} ms` : '—' },
+                      ]}
+                    />
                   </Col>
 
                   <Col span={24}>

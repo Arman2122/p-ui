@@ -910,7 +910,8 @@
         "peerNumber": "Peer {n}",
         "peerNumberConfig": "پیکربندی Peer {n}"
       },
-      "sniffingDestOverride": "بازنویسی مقصد"
+      "sniffingDestOverride": "بازنویسی مقصد",
+        "subtitle": "شنونده‌هایی که پنل مدیریت می‌کند و کلاینت‌های متصل به هر کدام"
     },
     "cores": {
       "installed": "نصب شد. برای اجرای نسخهٴ جدید، هسته را ری‌استارت کنید.",
@@ -1434,7 +1435,8 @@
       "pinnedCertPlaceholder": "SHA-256 به‌صورت base64 یا hex",
       "fetchPin": "دریافت",
       "pinFetched": "گواهیِ فعلیِ نود دریافت شد",
-      "pinFetchFailed": "دریافت گواهی ممکن نشد"
+      "pinFetchFailed": "دریافت گواهی ممکن نشد",
+        "subtitle": "میزبان‌ها و نودهای لبه که پنل کلاینت‌ها را با آن‌ها همگام می‌کند"
     },
     "settings": {
       "defaultTag": "پیش‌فرض",
@@ -2317,6 +2319,7 @@
       "bulkDelete": "حذف",
       "bulkDeleteConfirm": "{count} میزبان انتخاب‌شده حذف شود؟",
       "deleteConfirmTitle": "میزبان «{name}» حذف شود؟",
+        "subtitle": "آدرس‌هایی که کلاینت‌ها به آن وصل می‌شوند و ورودی پشت هر کدام",
       "sections": {
         "basic": "پایه",
         "security": "امنیت",

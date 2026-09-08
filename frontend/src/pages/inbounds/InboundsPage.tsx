@@ -2,7 +2,6 @@ import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  Card,
   Col,
   ConfigProvider,
   Layout,
@@ -10,19 +9,13 @@ import {
   Result,
   Row,
   Spin,
-  Statistic,
   message,
 } from 'antd';
 
 import { setMessageInstance } from '@/utils/messageBus';
-import {
-  ArrowUpOutlined,
-  ArrowDownOutlined,
-  PieChartOutlined,
-  BarsOutlined,
-} from '@ant-design/icons';
-
 import { HttpUtil, SizeFormatter, RandomUtil } from '@/utils';
+import { StatStrip } from '@/components/ui';
+import { PageHeader } from '@/components/ui/panel';
 import { createDefaultInboundSettings } from '@/lib/cores/kinds';
 import { genInboundLinks, genWireguardLinks, preferPublicHost } from '@/lib/xray/inbound-link';
 import { fetchInboundLinks } from '@/lib/xray/server-links';
@@ -601,37 +594,17 @@ export default function InboundsPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, 12]}>
                   <Col span={24}>
-                    <Card size="small" hoverable className="summary-card">
-                      <Row gutter={[16, 12]}>
-                        <Col xs={12} sm={12} md={8}>
-                          <Statistic
-                            title={t('pages.inbounds.totalDownUp')}
-                            value={0}
-                            formatter={() => (
-                              <span>
-                                <ArrowUpOutlined /> {SizeFormatter.sizeFormat(totals.up)}
-                                {' / '}
-                                <ArrowDownOutlined /> {SizeFormatter.sizeFormat(totals.down)}
-                              </span>
-                            )}
-                          />
-                        </Col>
-                        <Col xs={12} sm={12} md={8}>
-                          <Statistic
-                            title={t('pages.inbounds.totalUsage')}
-                            value={SizeFormatter.sizeFormat(totals.up + totals.down)}
-                            prefix={<PieChartOutlined />}
-                          />
-                        </Col>
-                        <Col xs={24} sm={24} md={8}>
-                          <Statistic
-                            title={t('pages.inbounds.inboundCount')}
-                            value={String(dbInbounds.length)}
-                            prefix={<BarsOutlined />}
-                          />
-                        </Col>
-                      </Row>
-                    </Card>
+                    <PageHeader title={t('menu.inbounds')} sub={t('pages.inbounds.subtitle')} />
+                  </Col>
+
+                  <Col span={24}>
+                    <StatStrip
+                      items={[
+                        { key: 'count', label: t('pages.inbounds.inboundCount'), value: dbInbounds.length },
+                        { key: 'updown', label: t('pages.inbounds.totalDownUp'), value: `↑ ${SizeFormatter.sizeFormat(totals.up)} / ↓ ${SizeFormatter.sizeFormat(totals.down)}` },
+                        { key: 'usage', label: t('pages.inbounds.totalUsage'), value: SizeFormatter.sizeFormat(totals.up + totals.down), color: 'var(--p-primary)' },
+                      ]}
+                    />
                   </Col>
 
                   <Col span={24}>

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Card, Col, ConfigProvider, Layout, Modal, Result, Row, Spin, Statistic, message } from 'antd';
-import { CheckCircleOutlined, GlobalOutlined, StopOutlined } from '@ant-design/icons';
+import { Button, Col, ConfigProvider, Layout, Modal, Result, Row, Spin, message } from 'antd';
 
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHostsQuery, type HostRecord } from '@/api/queries/useHostsQuery';
+import { StatStrip } from '@/components/ui';
+import { PageHeader } from '@/components/ui/panel';
 import { useHostMutations } from '@/api/queries/useHostMutations';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import { setMessageInstance } from '@/utils/messageBus';
@@ -132,31 +133,17 @@ export default function HostsPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
                   <Col span={24}>
-                    <Card size="small" hoverable className="summary-card">
-                      <Row gutter={[16, 12]}>
-                        <Col xs={8} sm={8} md={8}>
-                          <Statistic
-                            title={t('pages.hosts.summary.total')}
-                            value={String(summary.total)}
-                            prefix={<GlobalOutlined />}
-                          />
-                        </Col>
-                        <Col xs={8} sm={8} md={8}>
-                          <Statistic
-                            title={t('pages.hosts.summary.enabled')}
-                            value={String(summary.enabled)}
-                            prefix={<CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />}
-                          />
-                        </Col>
-                        <Col xs={8} sm={8} md={8}>
-                          <Statistic
-                            title={t('pages.hosts.summary.disabled')}
-                            value={String(summary.disabled)}
-                            prefix={<StopOutlined style={{ color: 'var(--ant-color-text-quaternary)' }} />}
-                          />
-                        </Col>
-                      </Row>
-                    </Card>
+                    <PageHeader title={t('menu.hosts')} sub={t('pages.hosts.subtitle')} />
+                  </Col>
+
+                  <Col span={24}>
+                    <StatStrip
+                      items={[
+                        { key: 'total', label: t('pages.hosts.summary.total'), value: summary.total },
+                        { key: 'enabled', label: t('pages.hosts.summary.enabled'), value: summary.enabled, color: 'var(--p-success)' },
+                        { key: 'disabled', label: t('pages.hosts.summary.disabled'), value: summary.disabled, color: '#8b8d94' },
+                      ]}
+                    />
                   </Col>
 
                   <Col span={24}>
