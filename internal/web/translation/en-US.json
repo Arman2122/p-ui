@@ -147,6 +147,56 @@
     "noCap": "no cap",
     "of": "of"
   },
+  "events": {
+    "outboundDown": {
+      "title": "Outbound down",
+      "body": "{tag} is not answering. {error}"
+    },
+    "outboundUp": {
+      "title": "Outbound recovered",
+      "body": "{tag} is answering again ({delay} ms)"
+    },
+    "coreCrash": {
+      "title": "Core stopped",
+      "body": "{core} died. {error}"
+    },
+    "coreUp": {
+      "title": "Core recovered",
+      "body": "{core} is running again"
+    },
+    "xrayCrash": {
+      "title": "Xray crashed",
+      "body": "{error}"
+    },
+    "nodeDown": {
+      "title": "Node offline",
+      "body": "{node} stopped answering"
+    },
+    "nodeUp": {
+      "title": "Node back online",
+      "body": "{node} is answering again ({latency} ms)"
+    },
+    "loginSuccess": {
+      "title": "Signed in",
+      "body": "{user} signed in from {ip}"
+    },
+    "loginFail": {
+      "title": "Failed sign-in",
+      "body": "Failed sign-in for {user} from {ip}"
+    },
+    "coreAuthFailure": {
+      "title": "Login refused",
+      "body": "{core} refused {user} from {ip}"
+    },
+    "deviceLimit": {
+      "title": "Device limit passed",
+      "body": "{email} used {devices} devices against a limit of {limit}"
+    },
+    "clientsDisabled": {
+      "title": "Clients disabled",
+      "body": "{count} disabled on depletion or expiry: {clients}"
+    }
+  },
   "pages": {
     "login": {
       "hello": "Hello",

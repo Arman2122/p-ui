@@ -110,3 +110,24 @@ func BroadcastInvalidate(dataType MessageType) {
 		hub.broadcastInvalidate(dataType)
 	}
 }
+
+/*
+BroadcastEvent pushes a localisable notification: the browser holds both locales,
+so the wire carries i18n keys and their parameters rather than a rendered
+sentence. title/message stay in the payload as an English fallback for a client
+that does not know the key.
+*/
+func BroadcastEvent(level, titleKey, messageKey string, params map[string]string) {
+	hub := GetHub()
+	if hub == nil {
+		return
+	}
+	hub.Broadcast(MessageTypeNotification, map[string]any{
+		"level":      level,
+		"titleKey":   titleKey,
+		"messageKey": messageKey,
+		"params":     params,
+		"title":      titleKey,
+		"message":    "",
+	})
+}

@@ -4,6 +4,7 @@ import { Badge, Button, Popover, Segmented } from 'antd';
 
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { isAlert, markAllRead, markRead, useNotificationFeed, type FeedItem } from '@/api/notificationFeed';
+import { translateEvent } from '@/api/eventText';
 
 const DAY_MS = 86_400_000;
 
@@ -78,6 +79,7 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
       <div className="p-pop-b">
         {items.map((item) => {
           const tone = toneOf(item);
+          const body = item.messageKey ? translateEvent(item.messageKey, item.params) : item.message;
           return (
             <button
               type="button"
@@ -91,11 +93,11 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
                   <span style={{ fontSize: 12.5, fontWeight: item.read ? 500 : 650, color: 'var(--p-text)', whiteSpace: 'normal' }}>
-                    {item.title}
+                    {item.titleKey ? translateEvent(item.titleKey, item.params) : item.title}
                   </span>
                 </span>
                 <span className="p-sub" style={{ display: 'block', marginTop: 2, whiteSpace: 'normal' }}>
-                  {item.message ? `${item.message} · ` : ''}{relative(item.at)}
+                  {body ? `${body} · ` : ''}{relative(item.at)}
                 </span>
               </span>
               {!item.read && <span className="p-unread" />}

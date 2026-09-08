@@ -147,6 +147,56 @@
     "noCap": "بدون سقف",
     "of": "از"
   },
+  "events": {
+    "outboundDown": {
+      "title": "خروجی از دسترس خارج شد",
+      "body": "{tag} پاسخ نمی‌دهد. {error}"
+    },
+    "outboundUp": {
+      "title": "خروجی بازگشت",
+      "body": "{tag} دوباره پاسخ می‌دهد ({delay} ms)"
+    },
+    "coreCrash": {
+      "title": "هسته متوقف شد",
+      "body": "{core} از کار افتاد. {error}"
+    },
+    "coreUp": {
+      "title": "هسته بازگشت",
+      "body": "{core} دوباره در حال اجراست"
+    },
+    "xrayCrash": {
+      "title": "Xray از کار افتاد",
+      "body": "{error}"
+    },
+    "nodeDown": {
+      "title": "نود آفلاین شد",
+      "body": "{node} پاسخ نمی‌دهد"
+    },
+    "nodeUp": {
+      "title": "نود بازگشت",
+      "body": "{node} دوباره پاسخ می‌دهد ({latency} ms)"
+    },
+    "loginSuccess": {
+      "title": "ورود موفق",
+      "body": "{user} از {ip} وارد شد"
+    },
+    "loginFail": {
+      "title": "ورود ناموفق",
+      "body": "تلاش ناموفق برای ورود {user} از {ip}"
+    },
+    "coreAuthFailure": {
+      "title": "احراز هویت رد شد",
+      "body": "{core} ورود {user} از {ip} را رد کرد"
+    },
+    "deviceLimit": {
+      "title": "سقف دستگاه رد شد",
+      "body": "{email} با {devices} دستگاه از سقف {limit} عبور کرد"
+    },
+    "clientsDisabled": {
+      "title": "کلاینت‌ها غیرفعال شدند",
+      "body": "{count} مورد به دلیل پایان حجم یا انقضا غیرفعال شد: {clients}"
+    }
+  },
   "pages": {
     "login": {
       "hello": "سلام",

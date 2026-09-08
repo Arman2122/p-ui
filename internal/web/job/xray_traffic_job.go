@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -120,6 +122,15 @@ func (j *XrayTrafficJob) Run() {
 			}
 		}
 		websocket.BroadcastInvalidate(websocket.MessageTypeInbounds)
+		// The panel disabled these itself; say so, rather than leaving an operator
+		// to notice a client went quiet.
+		if len(disabledEmails) > 0 {
+			websocket.BroadcastEvent("warning", "events.clientsDisabled.title", "events.clientsDisabled.body",
+				map[string]string{
+					"count":   strconv.Itoa(len(disabledEmails)),
+					"clients": strings.Join(disabledEmails, ", "),
+				})
+		}
 	}
 	if ExternalTrafficInformEnable, err := j.settingService.GetExternalTrafficInformEnable(); ExternalTrafficInformEnable {
 		j.informTrafficToExternalAPI(traffics, clientTraffics)

@@ -9,6 +9,11 @@ export type FeedItem = {
   message: string;
   at: number;
   read: boolean;
+  /* Server-sent events name an i18n key and its parameters so the browser, which
+     is the side that knows the locale, renders them. Absent for local pushes. */
+  titleKey?: string;
+  messageKey?: string;
+  params?: Record<string, string>;
 };
 
 /* A warning or an error is something to act on; the rest is history. The bell's
@@ -38,7 +43,14 @@ function snapshot() {
   return items;
 }
 
-export function pushNotification(input: { level: FeedLevel; title: string; message?: string }): void {
+export function pushNotification(input: {
+  level: FeedLevel;
+  title: string;
+  message?: string;
+  titleKey?: string;
+  messageKey?: string;
+  params?: Record<string, string>;
+}): void {
   seq += 1;
   const item: FeedItem = {
     id: `n${seq}`,
@@ -47,6 +59,9 @@ export function pushNotification(input: { level: FeedLevel; title: string; messa
     message: input.message ?? '',
     at: Date.now(),
     read: false,
+    titleKey: input.titleKey,
+    messageKey: input.messageKey,
+    params: input.params,
   };
   items = [item, ...items].slice(0, MAX_ITEMS);
   emit();

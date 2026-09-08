@@ -6,12 +6,17 @@ import { getSharedWebSocketClient } from '@/api/websocket';
 import { keys } from '@/api/queryKeys';
 import { isRecentLocalInvalidate } from '@/api/invalidationTracker';
 import { pushNotification, type FeedLevel } from '@/api/notificationFeed';
+import { translateEvent } from '@/api/eventText';
 import { Status } from '@/models/status';
 import { StatusSchema } from '@/schemas/status';
 
 type Handler = (payload: unknown) => void;
 
 const NOTIFICATION_LEVELS = new Set(['success', 'info', 'warning', 'error']);
+
+function isParams(value: unknown): value is Record<string, string> {
+  return !!value && typeof value === 'object' && Object.values(value).every((v) => typeof v === 'string');
+}
 
 let invalidateTimer: number | null = null;
 
@@ -60,16 +65,24 @@ export function useWebSocketBridge() {
     };
 
     const onNotification: Handler = (payload) => {
-      const p = payload as { title?: unknown; message?: unknown; level?: unknown } | undefined;
+      const p = payload as {
+        title?: unknown; message?: unknown; level?: unknown;
+        titleKey?: unknown; messageKey?: unknown; params?: unknown;
+      } | undefined;
       if (!p || typeof p.title !== 'string') return;
       const level = typeof p.level === 'string' && NOTIFICATION_LEVELS.has(p.level) ? p.level : 'info';
       const message = typeof p.message === 'string' ? p.message : undefined;
+      const titleKey = typeof p.titleKey === 'string' ? p.titleKey : undefined;
+      const messageKey = typeof p.messageKey === 'string' ? p.messageKey : undefined;
+      const params = isParams(p.params) ? p.params : undefined;
+      /* The toast renders now, so it resolves the key here; the feed keeps the key
+         so a language change re-renders the history correctly. */
       notification.open({
         type: level as FeedLevel,
-        message: p.title,
-        description: message,
+        message: titleKey ? translateEvent(titleKey, params) : p.title,
+        description: messageKey ? translateEvent(messageKey, params) : message,
       });
-      pushNotification({ level: level as FeedLevel, title: p.title, message });
+      pushNotification({ level: level as FeedLevel, title: p.title, message, titleKey, messageKey, params });
     };
 
     const onXrayState: Handler = (payload) => {

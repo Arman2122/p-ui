@@ -36,6 +36,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/web/runtime"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/email"
+	"github.com/Arman2122/p-ui/internal/web/service/wsnotify"
 	"github.com/Arman2122/p-ui/internal/web/service/panel"
 	"github.com/Arman2122/p-ui/internal/web/service/tgbot"
 	"github.com/Arman2122/p-ui/internal/web/websocket"
@@ -786,8 +787,13 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 				Data: err.Error(),
 			})
 		}
+		// The bus reaches email and Telegram; this is what reaches an open panel.
+		websocket.BroadcastXrayState("error", err.Error())
 	}
 	// Every other core's death is the supervise pass's to report (job.CoreSuperviseJob).
+
+	// Forward events to open browsers. Without this the bus is invisible to the panel.
+	s.bus.Subscribe("ws-notifier", wsnotify.New().HandleEvent)
 
 	// Register email subscriber (always — it checks smtpEnable at runtime)
 	emailService := email.NewEmailService(s.settingService)
