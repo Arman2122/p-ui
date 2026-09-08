@@ -54,7 +54,8 @@ The `@` import alias maps to `src/`.
 ## Adding a panel route
 1. `src/pages/<page>/<Page>.tsx` (kebab folder, PascalCase component).
 2. Register in `src/routes.tsx` under `/panel` (lazy import).
-3. Add a sidebar link in `src/layouts/AppSidebar.tsx` if it needs nav.
+3. Add a nav entry in `src/layouts/nav.ts` if it needs one. The shell lives in
+   `src/layouts/PanelLayout.tsx` (sidebar + top bar); pages render only their body.
 Only standalone bundles (login/subpage) need a new `.html` + `src/entries/*` +
 `rollupOptions.input` (in `vite.config.js`) + a Go controller route.
 

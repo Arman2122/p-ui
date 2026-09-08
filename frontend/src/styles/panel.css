@@ -2,6 +2,8 @@
    Every colour is a --p-* token published by useTokenBridge from the antd theme. */
 
 .p-root { min-height: 100vh; }
+/* The login bundle mounts .p-auth directly, with no shell behind it. */
+body:has(.p-auth){background:var(--p-bg);margin:0}
 
 /* ---------- shell ---------- */
 .p-shell{display:grid;grid-template-columns:var(--rail) 1fr;min-height:100vh;background:var(--p-bg)}
@@ -450,7 +452,7 @@
 /* two-state theme pill: the choice is visible, not hidden behind one icon */
 .p-themepill{position:relative;display:inline-flex;padding:3px;border-radius:99px;
   border:1px solid var(--p-border);background:color-mix(in srgb, var(--p-surface) 70%, transparent);backdrop-filter:blur(8px)}
-.p-themepill-knob{position:absolute;top:3px;left:3px;width:calc(50% - 3px);height:26px;border-radius:99px;
+.p-themepill-knob{position:absolute;top:3px;left:3px;width:calc((100% - 6px) / var(--p-themepill-n, 2));height:26px;border-radius:99px;
   background:var(--p-fill);transition:transform .22s cubic-bezier(.4,0,.2,1);pointer-events:none}
 .p-themepill-b{position:relative;width:70px;height:26px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:99px;
   background:transparent;color:var(--p-text-3);cursor:pointer;font:inherit;font-size:12px;font-weight:600;transition:color .15s;padding:0}

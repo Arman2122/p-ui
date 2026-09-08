@@ -1,40 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Button,
-  ConfigProvider,
-  Form,
-  Input,
-  Layout,
-  Menu,
-  Popover,
-  Space,
-  Spin,
-  message,
-} from 'antd';
-import {
-  KeyOutlined,
-  LockOutlined,
-  MoonFilled,
-  MoonOutlined,
-  SunOutlined,
-  TranslationOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
+import { Button, ConfigProvider, Form, Input, Menu, Popover, Space, Spin, message } from 'antd';
+import { TranslationOutlined } from '@ant-design/icons';
 
 import { FormProvider, useForm } from 'react-hook-form';
 import { HttpUtil, LanguageManager } from '@/utils';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
+import { Icon } from '@/components/ui/Icon';
 import { setMessageInstance } from '@/utils/messageBus';
-import { pauseAnimationsUntilLeave, useTheme } from '@/hooks/useTheme';
+import { useTheme } from '@/hooks/useTheme';
+import { applyPanelTokens } from '@/hooks/useTokenBridge';
 import { LoginFormSchema, TwoFactorCodeSchema, type LoginFormValues } from '@/schemas/login';
-import './LoginPage.css';
-
-const HEADLINE_INTERVAL_MS = 2000;
+import '@/styles/panel.css';
 
 type LoginForm = LoginFormValues;
 
 const basePath = window.PUI_BASE_PATH || '';
+
+type ThemeChoice = 'light' | 'dark' | 'ultra';
+
+/* The design's pill carries two states; the panel has three themes and the
+   sidebar cycles all of them, so dropping ultra here would lose a real setting. */
+const THEME_CHOICES: { key: ThemeChoice; labelKey: string; icon: 'sun' | 'moon' }[] = [
+  { key: 'light', labelKey: 'pages.login.light', icon: 'sun' },
+  { key: 'dark', labelKey: 'pages.login.dark', icon: 'moon' },
+  { key: 'ultra', labelKey: 'pages.login.ultra', icon: 'moon' },
+];
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -45,24 +36,16 @@ export default function LoginPage() {
     setMessageInstance(messageApi);
   }, [messageApi]);
 
+  /* The login bundle has no PanelLayout, so it publishes the skin's tokens itself. */
+  useEffect(() => {
+    applyPanelTokens(document.documentElement, antdThemeConfig, isDark, isUltra);
+  }, [antdThemeConfig, isDark, isUltra]);
+
   const [fetched, setFetched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [twoFactorEnable, setTwoFactorEnable] = useState(false);
-  const [headlineIndex, setHeadlineIndex] = useState(0);
   const methods = useForm<LoginForm>({ defaultValues: { username: '', password: '', twoFactorCode: '' } });
   const [lang, setLang] = useState<string>(() => LanguageManager.getLanguage());
-
-  const headlineWords = useMemo(
-    () => [t('pages.login.hello'), t('pages.login.title')],
-    [t],
-  );
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setHeadlineIndex((i) => (i + 1) % headlineWords.length);
-    }, HEADLINE_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [headlineWords.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +62,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const msg = await HttpUtil.post('/login', values);
-      if (msg.success) window.location.href = basePath + 'panel/';
+      if (msg.success) window.location.href = `${basePath}panel/`;
     } finally {
       setSubmitting(false);
     }
@@ -90,164 +73,141 @@ export default function LoginPage() {
     LanguageManager.setLanguage(next);
   }, []);
 
-  const cycleTheme = useCallback(() => {
-    pauseAnimationsUntilLeave('login-theme-cycle');
-    if (!isDark) {
-      toggleTheme();
-      if (isUltra) toggleUltra();
-    } else if (!isUltra) {
-      toggleUltra();
-    } else {
-      toggleUltra();
-      toggleTheme();
-    }
-  }, [isDark, isUltra, toggleTheme, toggleUltra]);
+  const current: ThemeChoice = !isDark ? 'light' : isUltra ? 'ultra' : 'dark';
 
-  const pageClass = useMemo(() => {
-    const classes = ['login-app'];
-    if (isDark) classes.push('is-dark');
-    if (isUltra) classes.push('is-ultra');
-    return classes.join(' ');
-  }, [isDark, isUltra]);
+  const chooseTheme = useCallback((next: ThemeChoice) => {
+    if (next === 'light') {
+      if (isUltra) toggleUltra();
+      if (isDark) toggleTheme();
+      return;
+    }
+    if (!isDark) toggleTheme();
+    if (next === 'ultra' ? !isUltra : isUltra) toggleUltra();
+  }, [isDark, isUltra, toggleTheme, toggleUltra]);
 
   const langMenuItems = useMemo(
     () => (LanguageManager.supportedLanguages as { value: string; name: string; icon: string }[]).map((l) => ({
       key: l.value,
-      label: (
-        <Space size={8}>
-          <span aria-hidden="true">{l.icon}</span>
-          <span>{l.name}</span>
-        </Space>
-      ),
+      label: <Space size={8}><span aria-hidden="true">{l.icon}</span><span>{l.name}</span></Space>,
     })),
     [],
   );
 
-  const themeIcon = !isDark ? <SunOutlined /> : !isUltra ? <MoonOutlined /> : <MoonFilled />;
+  const knobIndex = THEME_CHOICES.findIndex((c) => c.key === current);
 
   return (
     <ConfigProvider theme={antdThemeConfig}>
       {messageContextHolder}
-      <Layout className={pageClass}>
-        <Layout.Content className="login-content">
-          <div className="login-toolbar">
-            <Button
-              id="login-theme-cycle"
-              shape="circle"
-              size="large"
-              className="toolbar-btn"
-              aria-label={t('menu.theme')}
-              title={t('menu.theme')}
-              icon={themeIcon}
-              onClick={cycleTheme}
-            />
-            <Popover
-              rootClassName={isDark ? 'dark' : 'light'}
-              placement="bottomRight"
-              trigger="click"
-              styles={{ content: { padding: 4 } }}
-              content={
-                <Menu
-                  mode="vertical"
-                  selectable
-                  selectedKeys={[lang]}
-                  items={langMenuItems}
-                  onClick={({ key }) => onLangChange(key)}
-                  style={{ border: 'none', minWidth: 160 }}
-                />
-              }
-            >
-              <Button
-                shape="circle"
-                size="large"
-                className="toolbar-btn"
-                aria-label={t('pages.settings.language')}
-                icon={<TranslationOutlined />}
-              />
-            </Popover>
-          </div>
+      <div className="p-root p-auth">
+        <div className="p-auth-bg" aria-hidden="true" />
 
-          <div className="login-wrapper">
-            {!fetched ? (
-              <div className="login-loading">
-                <Spin size="large" />
-              </div>
-            ) : (
-              <div className="login-card">
-                <div className="brand">
-                  <span className="brand-name">P-UI</span>
-                  <span className="brand-accent" aria-hidden="true" />
-                </div>
-                <h2 className="welcome">
-                  <b key={headlineIndex}>{headlineWords[headlineIndex]}</b>
-                </h2>
+        {!fetched ? (
+          <Spin size="large" />
+        ) : (
+          <section className="p-auth-card">
+            <span className="p-brand-mark p-auth-mark">P</span>
+            <h1 className="p-auth-h1">{t('pages.login.signInTitle')}</h1>
+            <p className="p-auth-sub">{t('pages.login.subtitle')}</p>
 
-                <FormProvider {...methods}>
-                  <Form
-                    layout="vertical"
-                    className="login-form"
-                    onFinish={methods.handleSubmit(onSubmit)}
+            <FormProvider {...methods}>
+              <Form layout="vertical" requiredMark={false} onFinish={methods.handleSubmit(onSubmit)}>
+                <FormField
+                  name="username"
+                  label={t('username')}
+                  rules={{ validate: rhfZodValidate(LoginFormSchema.shape.username) }}
+                >
+                  <Input
+                    size="large"
+                    autoComplete="username"
+                    placeholder={t('username')}
+                    autoFocus
+                    prefix={<Icon name="user" size={15} style={{ color: 'var(--p-text-3)' }} />}
+                  />
+                </FormField>
+
+                <FormField
+                  name="password"
+                  label={t('password')}
+                  rules={{ validate: rhfZodValidate(LoginFormSchema.shape.password) }}
+                >
+                  <Input.Password
+                    size="large"
+                    autoComplete="current-password"
+                    placeholder={t('password')}
+                    prefix={<Icon name="lock" size={15} style={{ color: 'var(--p-text-3)' }} />}
+                  />
+                </FormField>
+
+                {twoFactorEnable && (
+                  <FormField
+                    name="twoFactorCode"
+                    label={t('twoFactorCode')}
+                    rules={{ validate: rhfZodValidate(TwoFactorCodeSchema) }}
                   >
-                    <FormField
-                      name="username"
-                      label={t('username')}
-                      rules={{ validate: rhfZodValidate(LoginFormSchema.shape.username) }}
-                    >
-                      <Input
-                        prefix={<UserOutlined />}
-                        autoComplete="username"
-                        size="large"
-                        placeholder={t('username')}
-                        autoFocus
-                      />
-                    </FormField>
+                    <Input
+                      size="large"
+                      autoComplete="one-time-code"
+                      placeholder={t('twoFactorCode')}
+                      prefix={<Icon name="shield" size={15} style={{ color: 'var(--p-text-3)' }} />}
+                    />
+                  </FormField>
+                )}
 
-                    <FormField
-                      name="password"
-                      label={t('password')}
-                      rules={{ validate: rhfZodValidate(LoginFormSchema.shape.password) }}
-                    >
-                      <Input.Password
-                        prefix={<LockOutlined />}
-                        autoComplete="current-password"
-                        size="large"
-                        placeholder={t('password')}
-                      />
-                    </FormField>
+                <Form.Item style={{ marginBottom: 0, marginTop: 22 }}>
+                  <Button type="primary" htmlType="submit" size="large" block loading={submitting}>
+                    {t('login')}
+                  </Button>
+                </Form.Item>
+              </Form>
+            </FormProvider>
+          </section>
+        )}
 
-                    {twoFactorEnable && (
-                      <FormField
-                        name="twoFactorCode"
-                        label={t('twoFactorCode')}
-                        rules={{ validate: rhfZodValidate(TwoFactorCodeSchema) }}
-                      >
-                        <Input
-                          prefix={<KeyOutlined />}
-                          autoComplete="one-time-code"
-                          size="large"
-                          placeholder={t('twoFactorCode')}
-                        />
-                      </FormField>
-                    )}
-
-                    <Form.Item className="submit-row">
-                      <Button
-                        type="primary"
-                        htmlType="submit"
-                        loading={submitting}
-                        size="large"
-                        block
-                      >
-                        {t('login')}
-                      </Button>
-                    </Form.Item>
-                  </Form>
-                </FormProvider>
-              </div>
-            )}
+        <div className="p-auth-foot">
+          <span className="p-sub">{t('pages.login.appearance')}</span>
+          <div
+            className="p-themepill"
+            role="group"
+            aria-label={t('menu.theme')}
+            style={{ '--p-themepill-n': THEME_CHOICES.length } as CSSProperties}
+          >
+            <span
+              className="p-themepill-knob"
+              style={{ transform: `translateX(${knobIndex * 100}%)` }}
+            />
+            {THEME_CHOICES.map((choice) => (
+              <button
+                type="button"
+                key={choice.key}
+                className={`p-themepill-b${current === choice.key ? ' is-on' : ''}`}
+                aria-pressed={current === choice.key}
+                onClick={() => chooseTheme(choice.key)}
+              >
+                <Icon name={choice.icon} size={14} />
+                <span>{t(choice.labelKey)}</span>
+              </button>
+            ))}
           </div>
-        </Layout.Content>
-      </Layout>
+          <Popover
+            rootClassName={isDark ? 'dark' : 'light'}
+            placement="topRight"
+            trigger="click"
+            styles={{ content: { padding: 4 } }}
+            content={
+              <Menu
+                mode="vertical"
+                selectable
+                selectedKeys={[lang]}
+                items={langMenuItems}
+                onClick={({ key }) => onLangChange(key)}
+                style={{ border: 'none', minWidth: 160 }}
+              />
+            }
+          >
+            <Button shape="circle" aria-label={t('pages.settings.language')} icon={<TranslationOutlined />} />
+          </Popover>
+        </div>
+      </div>
     </ConfigProvider>
   );
 }

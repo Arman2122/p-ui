@@ -200,9 +200,13 @@
   },
   "pages": {
     "login": {
-      "hello": "Hello",
-      "title": "Welcome",
       "loginAgain": "Your session has expired, please log in again",
+        "signInTitle": "Sign in to Penhoon",
+        "subtitle": "Use your panel credentials to continue.",
+        "appearance": "Appearance",
+        "light": "Light",
+        "dark": "Dark",
+        "ultra": "Ultra",
       "toasts": {
         "invalidFormData": "The input data format is invalid.",
         "emptyUsername": "Username is required",
