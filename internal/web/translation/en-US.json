@@ -49,6 +49,7 @@
   "info": "More Information",
   "edit": "Edit",
   "delete": "Delete",
+  "typeToConfirm": "Type {text} to confirm",
   "reset": "Reset",
   "noData": "Nothing here yet",
   "copySuccess": "Copied successfully",

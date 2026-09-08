@@ -5,3 +5,4 @@ export { default as DefaultSettingTag } from './DefaultSettingTag';
 export { default as RestartTag } from './RestartTag';
 export { Icon, iconNames, type IconName } from './Icon';
 export * from './panel';
+export { default as StatStrip, type StatStripItem } from './StatStrip';
