@@ -332,7 +332,8 @@ func newRig(t *testing.T) *rig {
 	t.Setenv("MTG_FAKE_SERVED", r.servedF)
 	t.Setenv("MTG_FAKE_PUTS", r.putsF)
 	t.Setenv("MTG_FAKE_RELAY_PIDFILE", r.relayPids)
-	t.Cleanup(func() { engine.GetManager().StopAll() })
+	// Drop the fixture's rate cache too; StopAll only stops its processes.
+	t.Cleanup(func() { engine.GetManager().Remove(r.instance(0).ID) })
 	return r
 }
 
