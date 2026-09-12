@@ -14,6 +14,7 @@ import (
 func setupClientIpTestDB(t *testing.T) {
 	t.Helper()
 	initTestDB(t)
+	t.Cleanup(nodeSightings.Reset)
 }
 
 func marshalIps(t *testing.T, entries ...clientIpEntry) string {
