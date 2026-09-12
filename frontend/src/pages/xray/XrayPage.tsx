@@ -416,7 +416,6 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
                 <div className="p-network-page">
                   <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
                   {pathSection ? sectionBody : <>
-                  <PageHeader title={t('menu.xray')} sub={t('pages.xray.subtitle')} />
                   <div className="p-settings">
                     <SectionRail
                       items={XRAY_SECTIONS.map((x) => ({

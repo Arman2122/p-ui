@@ -9,6 +9,7 @@ import VitalsBand, { type VitalKey } from './VitalsBand';
 import DashboardCores, { CoreSummaryStrip } from './DashboardCores';
 import type { OverviewHistory } from './useOverviewHistory';
 import '@/styles/panel.css';
+import './IndexPage.css';
 
 const GiB = 1024 ** 3;
 
@@ -38,6 +39,7 @@ const status = new Status({
 });
 
 const history: OverviewHistory = {
+  times: Array.from({ length: 60 }, (_, i) => Date.UTC(2026, 8, 13, 12) / 1000 + i * 60),
   labels: Array.from({ length: 60 }, (_, i) => `12:${String(i).padStart(2, '0')}:00`),
   series: {
     cpu: wave(60, 2.4, 2.2, 7),
@@ -101,7 +103,7 @@ type Story = StoryObj<typeof meta>;
 function Band({ initial }: { initial: VitalKey | null }) {
   const [open, setOpen] = useState<VitalKey | null>(initial);
   return (
-    <div className="p-root" style={{ padding: 20, background: 'var(--p-bg)' }}>
+    <div className="p-root index-page ov-page" style={{ padding: 20, background: 'var(--p-bg)', containerType: 'inline-size', containerName: 'main' }}>
       <VitalsBand
         status={status}
         history={history}

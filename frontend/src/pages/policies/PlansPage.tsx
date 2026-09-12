@@ -6,12 +6,39 @@ import { usePlanInboundOptions, usePlanMembersQuery, usePlanSummaryQuery, usePol
 import { usePolicyMutations } from '@/api/queries/usePolicyMutations';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { shapeableKinds } from '@/lib/cores/client-shaping';
-import { describeTier } from '@/lib/policies/labels';
+import { describeTier, formatRate } from '@/lib/policies/labels';
+import { coreColor, coreIcon } from '@/lib/cores/display';
+import { Icon } from '@/components/ui/Icon';
+import type { CoreView } from '@/generated/zod';
+import type { InboundOption } from '@/schemas/client';
 import { parseTiers, PlanReapplySchema, type PolicyRecord } from '@/schemas/api/policy';
 import { PageHeader, PanelCard, Field, Meter, StatusChip } from '@/components/ui/panel';
 import { ConfirmDelete } from '@/components/feedback';
 import { SizeFormatter } from '@/utils';
 import PolicyFormModal from './PolicyFormModal';
+
+function IncludedInbounds({ ids, inbounds, cores = [] }: { ids: number[]; inbounds: InboundOption[]; cores?: CoreView[] }) {
+  const { t } = useTranslation();
+  const groups = new Map<string, { label: string; core?: string; names: string[] }>();
+  for (const id of ids) {
+    const inbound = inbounds.find(row => row.id === id);
+    const core = cores.find(row => row.kinds.includes(inbound?.protocol || ''));
+    const key = core?.id || inbound?.protocol || 'unknown';
+    const group = groups.get(key) || { label: core ? t(core.titleKey) : inbound?.protocol || t('plansFidelity.otherInbounds'), core: core?.id, names: [] };
+    group.names.push(inbound?.remark || inbound?.tag || `#${id}`); groups.set(key, group);
+  }
+  return <div style={{ display: 'grid', gap: 11 }}>{[...groups].map(([key, group]) => <div key={key}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+      {group.core && <span style={{ color: coreColor(group.core) }}><Icon name={coreIcon(group.core)} size={13} /></span>}
+      <span className="p-kicker">{group.label}</span>
+    </div><Space wrap size={4}>{group.names.map(name => <Tag key={name} style={{ marginInlineEnd: 0 }}>{name}</Tag>)}</Space>
+  </div>)}</div>;
+}
+
+function AdminIncludedInbounds(props: { ids: number[]; inbounds: InboundOption[] }) {
+  const cores = useCoresQuery();
+  return <IncludedInbounds {...props} cores={cores.data} />;
+}
 
 function RateAvailability() {
   const { t } = useTranslation();
@@ -48,6 +75,7 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
   const selected = visible.find((p) => p.id === selectedId) ?? visible[0];
   const members = usePlanMembersQuery(selected?.id, page, reseller);
   const tiers = selected ? parseTiers(selected.tiers) : [];
+  const initialTier = tiers.find(tier => tier.fromBytes === 0);
   const highest = Math.max(1, ...tiers.map((tier) => tier.fromBytes));
   function openForm(policy: PolicyRecord | null) { setEditing(policy); setFormOpen(true); }
   const limit = (value: number | null | undefined, format: (n: number) => string = String) =>
@@ -60,7 +88,7 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
   }
 
   return <>
-    <PageHeader title={t('pages.policies.title')} sub={t('pages.policies.desc')} actions={<Space>
+    <PageHeader title={t('pages.policies.title')} sub={t('pages.policies.desc')} actions={<Space wrap>
       <Button icon={<ReloadOutlined />} loading={query.isFetching} onClick={() => { void query.refetch(); }}>{t('refresh')}</Button>
       <Button icon={<DownloadOutlined />} disabled={!rows.length} onClick={exportPlans}>{t('plans.export')}</Button>
       <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm(null)}>{t('pages.policies.add')}</Button>
@@ -100,15 +128,33 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
           <div className="p-planspec">
             <div className="p-planspec-c"><Field label={t('pages.clients.traffic')} value={limit(selected.quotaBytes, SizeFormatter.sizeFormat)} /></div>
             <div className="p-planspec-c"><Field label={t('pages.clients.duration')} value={limit(selected.durationDays, (n) => t('design.days', { count: n }))} /></div>
+            <div className="p-planspec-c"><Field label={t('plansFidelity.speed')} value={initialTier?.downBps ? `${formatRate(initialTier.downBps, t)} ↓` : t('plansFidelity.unshaped')} /></div>
             <div className="p-planspec-c"><Field label={t('design.devices')} value={limit(selected.limitIp)} /></div>
           </div>
         </PanelCard>
-        <PanelCard title={t('plans.inbounds')}>
-          <Space wrap>{(selected.inboundIds ?? []).map((id) => <Tag key={id}>{inbounds.data?.find((i) => i.id === id)?.remark || `#${id}`}</Tag>)}</Space>
-          {!selected.inboundIds?.length && <p className="p-sub">{t('plans.inboundsHint')}</p>}
-          <p className="p-sub">{selected.startOnFirstUse ? t('plans.firstUse') : t('plans.startsNow')} · {t('plans.autoRenew')}: {selected.autoRenewDays || 0} · {t('plans.resetCycle')}: {t(`plans.${selected.resetCycle === 'none' ? 'never' : selected.resetCycle || 'never'}`)}</p>
-          {inbounds.isError && <Alert type="error" title={t('somethingWentWrong')} description={inbounds.error.message} />}
-        </PanelCard>
+        <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,280px),1fr))' }}>
+          <PanelCard kicker={t('plansFidelity.includedInbounds')} icon="inbounds" pad={14} extra={<span className="p-sub">{selected.inboundIds.length} / {inbounds.data?.length ?? '—'}</span>}>
+            {reseller ? <IncludedInbounds ids={selected.inboundIds} inbounds={inbounds.data ?? []} /> : <AdminIncludedInbounds ids={selected.inboundIds} inbounds={inbounds.data ?? []} />}
+            {!selected.inboundIds.length && <p className="p-sub">{t('plans.inboundsHint')}</p>}
+            {inbounds.isError && <Alert type="error" title={t('somethingWentWrong')} description={inbounds.error.message} />}
+          </PanelCard>
+          <PanelCard kicker={t('plansFidelity.lifecycle')} icon="clock" pad={14}>
+            {[
+              [t('plansFidelity.windowStarts'), selected.startOnFirstUse ? t('plans.firstUse') : t('plans.startsNow')],
+              [t('plansFidelity.autoRenew'), selected.autoRenewDays ? t('design.days', { count: selected.autoRenewDays }) : t('plansFidelity.off')],
+              [t('plans.resetCycle'), t(`plans.${selected.resetCycle === 'none' ? 'never' : selected.resetCycle}`)],
+              [t('plansFidelity.depletion'), t(`plans.${selected.onDepletion}`)],
+              [t('plansFidelity.uploadCap'), initialTier?.upBps ? formatRate(initialTier.upBps, t) : t('plansFidelity.unshaped')],
+              [t('plansFidelity.created'), selected.createdAt ? new Date(selected.createdAt).toLocaleDateString() : '—'],
+            ].map(([label, value]) => <div className="p-kv" key={label}><span className="p-kv-k">{label}</span><span className="p-kv-v">{value}</span></div>)}
+          </PanelCard>
+          <PanelCard kicker={t('plansFidelity.adoption')} icon="chart" pad={14}>
+            <span className="p-stat">{selected.assignedClients}</span><span className="p-stat-u">{t('menu.clients')}</span>
+            <div className="p-sub" style={{ marginTop: 8 }}>{t('plans.used')}: {SizeFormatter.sizeFormat(selected.usedBytes)}</div>
+            <div className="p-sub" style={{ marginTop: 4 }}>{t('plans.committed')}: {SizeFormatter.sizeFormat(selected.committedBytes)}</div>
+            {!!selected.committedBytes && <div style={{ marginTop: 12 }}><Meter pct={Math.min(100, selected.usedBytes / selected.committedBytes * 100)} tone="var(--p-primary)" height={4} /></div>}
+          </PanelCard>
+        </div>
         <PanelCard title={t('pages.policies.ladder')} icon="speed" pad={14}>
           {!tiers.length ? <p className="p-sub">{t('pages.policies.noTiersHint')}</p> : <>
             {tiers[0].fromBytes > 0 && <p className="p-sub">{t('pages.policies.belowFirstHint')}</p>}

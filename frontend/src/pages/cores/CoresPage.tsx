@@ -1,150 +1,137 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Col, ConfigProvider, Layout, Modal, Result, Row, Space, Spin, Tooltip, Input, message } from 'antd';
-import { FileTextOutlined, ReloadOutlined, TagsOutlined } from '@ant-design/icons';
-
+import { Alert, Button, ConfigProvider, Modal, Result, Segmented, Spin, message } from 'antd';
 import { useTheme } from '@/hooks/useTheme';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { orderCores } from '@/lib/cores/display';
+import { useLiveTrafficHistory } from '@/hooks/useLiveTrafficHistory';
 import { useCoresStatusQuery } from '@/api/queries/useCoresStatusQuery';
 import { setMessageInstance } from '@/utils/messageBus';
-import { HttpUtil } from '@/utils';
-import { CoreStateBadge } from '@/components/cores/CoreStateBadge';
-import { summarizeCores } from '@/lib/cores/status';
-import { coreColor, coreIcon, coreInstanceSummary, coreMaintenanceKey, coreRestarts, coreState, coreStateTone, coreVersionLabel } from '@/lib/cores/display';
+import { FileManager, HttpUtil } from '@/utils';
 import { StatStrip } from '@/components/ui';
-import { PageHeader, PanelCard, Field } from '@/components/ui/panel';
-import type { CoreStatusView } from '@/generated/zod';
-import CoreVersionsModal from './CoreVersionsModal';
-import CoreLogsDrawer from './CoreLogsDrawer';
-import CoreDetailModal from './CoreDetailModal';
+import { PageHeader, Toolbar } from '@/components/ui/panel';
+import { CoreVersionsViewSchema, type CoreStatusView, type CoreVersionsView } from '@/generated/zod';
 import { Icon } from '@/components/ui/Icon';
+import CoreDetailModal from './CoreDetailModal';
+import { CoreCard, CoreRow, coreBytes, type CoreTab } from './CorePresentation';
+import { coreInstalled, coreMetrics, newerCoreVersion, useCoreInventory } from './useCoreInventory';
 import './CoresPage.css';
 
 export default function CoresPage() {
   const { t } = useTranslation();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
-  const { isMobile } = useMediaQuery();
   const [modal, modalContextHolder] = Modal.useModal();
   const [messageApi, messageContextHolder] = message.useMessage();
   useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
+  const { cores: reportedCores, loading, fetched, fetchError, refetch } = useCoresStatusQuery();
+  const cores = orderCores(reportedCores);
+  const inventory = useCoreInventory();
+  const [view, setView] = useState('rows');
+  const [detail, setDetail] = useState<{ id: string; tab: CoreTab } | null>(null);
+  const [restarting, setRestarting] = useState<string[]>([]);
+  const [checking, setChecking] = useState(false);
+  const [versions, setVersions] = useState<Record<string, CoreVersionsView>>({});
+  const [actionErrors, setActionErrors] = useState<string[]>([]);
+  const selected = cores.find((core) => core.id === detail?.id);
+  const rows = cores.map((core) => {
+    const descriptor = inventory.descriptors?.find((item) => item.id === core.id);
+    return { core, descriptor, metrics: coreMetrics(descriptor, inventory.inbounds), update: newerCoreVersion(core, versions[core.id]) };
+  });
+  const trafficHistory = useLiveTrafficHistory({
+    sampleAt: inventory.observedAt,
+    samples: rows.filter((row) => row.core.available && !row.core.trafficError && row.metrics.inbounds?.length && row.metrics.traffic !== undefined).map((row) => ({
+      key: row.core.id, scopeKey: row.descriptor?.kinds.join(','),
+      counters: Object.fromEntries(row.metrics.inbounds!.flatMap((inbound) => [[`${inbound.id}:up`, inbound.up], [`${inbound.id}:down`, inbound.down]])),
+    })),
+  });
+  const updates = rows.every((row) => row.update !== undefined) ? rows.filter((row) => row.update).length : undefined;
+  const traffic = rows.length && rows.every((row) => row.metrics.traffic !== undefined) ? rows.reduce((sum, row) => sum + row.metrics.traffic!, 0) : undefined;
+  const running = cores.filter((core) => core.available && core.ready && core.state === 'running').length;
+  const stopped = cores.filter((core) => core.available && (core.state === 'stopped' || core.state === 'idle')).length;
 
-  const { cores, loading, fetched, fetchError, refetch } = useCoresStatusQuery();
-  const [versionsFor, setVersionsFor] = useState<CoreStatusView | null>(null);
-  const [logsFor, setLogsFor] = useState<CoreStatusView | null>(null);
-  const [restarting, setRestarting] = useState('');
-  const [query, setQuery] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = cores.find((c) => c.id === selectedId);
-  const visibleCores = cores.filter((c) => `${t(c.titleKey)} ${c.id} ${t(coreStateTone(c).labelKey)}`.toLowerCase().includes(query.toLowerCase()));
-
-  const restart = useCallback((core: CoreStatusView) => {
+  const restart = useCallback((targets: CoreStatusView[], all = false) => {
+    const eligible = targets.filter((core) => core.available);
+    if (!eligible.length) return;
     modal.confirm({
-      title: t('pages.cores.restartConfirm', { core: t(core.titleKey) }),
-      content: t('pages.cores.restartNote'),
-      okText: t('pages.cores.restart'),
-      cancelText: t('cancel'),
+      title: all ? t('pages.cores.fidelity.restartAllConfirm') : t('pages.cores.restartConfirm', { core: t(eligible[0].titleKey) }),
+      content: <><p>{t('pages.cores.restartNote')}</p>{all && <p>{eligible.map((core) => t(core.titleKey)).join(', ')}</p>}</>,
+      okText: all ? t('pages.cores.fidelity.restartAll') : t('pages.cores.restart'), cancelText: t('cancel'),
       onOk: async () => {
-        setRestarting(core.id);
+        const failed: string[] = [];
+        setActionErrors([]);
+        setRestarting(eligible.map((core) => core.id));
         try {
-          const result = await HttpUtil.post(`/panel/api/cores/${core.id}/restart`);
-          if (!result?.success) throw new Error(result?.msg || t('somethingWentWrong'));
+          for (const core of eligible) {
+            try {
+              const msg = await HttpUtil.post(`/panel/api/cores/${core.id}/restart`, undefined, { silentSuccess: true });
+              if (!msg?.success) throw new Error(msg?.msg || t('somethingWentWrong'));
+            } catch (error) { failed.push(`${t(core.titleKey)}: ${error instanceof Error ? error.message : t('somethingWentWrong')}`); }
+          }
+          setActionErrors(failed);
           await refetch();
-        } finally {
-          setRestarting('');
-        }
+        } finally { setRestarting([]); }
       },
     });
   }, [modal, t, refetch]);
 
-  const summary = useMemo(() => summarizeCores(cores), [cores]);
+  async function checkVersions() {
+    setChecking(true);
+    setActionErrors([]);
+    const results: Record<string, CoreVersionsView> = {};
+    const failed: string[] = [];
+    try {
+      await Promise.all(cores.filter((core) => core.version.manageable).map(async (core) => {
+        try {
+          const msg = await HttpUtil.get(`/panel/api/cores/${core.id}/versions`, undefined, { silentSuccess: true });
+          if (!msg?.success) throw new Error(msg?.msg || t('somethingWentWrong'));
+          const result = CoreVersionsViewSchema.parse(msg.obj);
+          results[core.id] = result;
+          if (result.error) failed.push(`${t(core.titleKey)}: ${result.error}`);
+        } catch (error) { failed.push(`${t(core.titleKey)}: ${error instanceof Error ? error.message : t('somethingWentWrong')}`); }
+      }));
+      setVersions(results);
+      setActionErrors(failed);
+      await refetch();
+    } finally { setChecking(false); }
+  }
 
-  const pageClass = useMemo(() => {
-    const classes = ['cores-page'];
-    if (isDark) classes.push('is-dark');
-    if (isUltra) classes.push('is-ultra');
-    return classes.join(' ');
-  }, [isDark, isUltra]);
+  function exportStatus() {
+    const snapshot = { capturedAt: new Date().toISOString(), cores: rows.map(({ core, metrics, update }) => ({
+      ...core, inboundCount: metrics.inbounds?.length ?? null, clientCount: metrics.clients ?? null,
+      trafficBytes: metrics.traffic ?? null, liveClients: null,
+      trafficHistory: trafficHistory[core.id]?.points.length ? trafficHistory[core.id].points : null, updateVersion: update ?? null,
+      versionChecked: !!versions[core.id],
+    })) };
+    FileManager.downloadTextFile(JSON.stringify(snapshot, null, 2), 'cores-status.json', { type: 'application/json' });
+  }
 
-  return (
-    <ConfigProvider theme={antdThemeConfig}>
-      {messageContextHolder}
-      {modalContextHolder}
-      <Layout className={pageClass}>
-        <Layout className="content-shell">
-          <section id="content-layout" className="content-area" aria-label={t('pages.cores.title')}>
-            <Spin spinning={!fetched} delay={200} size="large">
-              {!fetched ? (
-                <div className="loading-spacer" />
-              ) : fetchError ? (
-                <Result
-                  status="error"
-                  title={t('somethingWentWrong')}
-                  subTitle={fetchError}
-                  extra={<Button type="primary" loading={loading} onClick={() => refetch()}>{t('refresh')}</Button>}
-                />
-              ) : (
-                <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
-                  <Col span={24}>
-                    <PageHeader
-                      title={t('pages.cores.title')}
-                      sub={t('pages.cores.subtitle')}
-                      actions={<Button icon={<ReloadOutlined />} loading={loading} onClick={() => refetch()}>{t('refresh')}</Button>}
-                    />
-                  </Col>
-
-                  <Col span={24}>
-                    <StatStrip
-                      items={[
-                        { key: 'total', label: t('pages.cores.summary.total'), value: summary.total },
-                        { key: 'healthy', label: t('pages.cores.summary.healthy'), value: summary.healthy, color: 'var(--p-success)', pulse: summary.healthy > 0 },
-                        { key: 'attention', label: t('pages.cores.summary.attention'), value: summary.attention, color: summary.attention ? 'var(--p-warning)' : undefined },
-                        { key: 'unavailable', label: t('pages.cores.summary.unavailable'), value: summary.unavailable, color: '#8b8d94' },
-                      ]}
-                    />
-                  </Col>
-                  <Col span={24}>
-                    <PanelCard pad={0} className="p-core-list">
-                      <div style={{ padding: 12 }}><Input.Search value={query} onChange={(e) => setQuery(e.target.value)}
-                        allowClear aria-label={t('menu.cores')} placeholder={t('menu.cores')} /></div>
-                      {visibleCores.map((c) => {
-                        const version = coreVersionLabel(c);
-                        const instance = coreInstanceSummary(c);
-                        return <div className="p-corerow" key={c.id} data-core-id={c.id}>
-                        <span className="p-alert-i" style={{ color: coreColor(c.id), background: `color-mix(in srgb, ${coreColor(c.id)} 15%, transparent)` }}><Icon name={coreIcon(c.id)} /></span>
-                        <div className="p-corerow-id">
-                          <Space wrap size={8}>
-                            <button type="button" className="p-text-action p-name" onClick={() => setSelectedId(c.id)}>{t(c.titleKey)}</button>
-                            <CoreStateBadge state={coreState(c)} ready={c.ready} detail={c.unavailable || c.healthError || c.detail} />
-                          </Space>
-                          <div className="p-sub core-version">{c.id} · <Tooltip title={<>{t(coreMaintenanceKey(c))}{c.version.error && <div>{c.version.error}</div>}</>}>
-                            <span className="p-mono">{version.text ?? t(version.key!)}</span>
-                          </Tooltip></div>
-                          {(c.healthError || c.unavailable) && <div className="p-sub core-unavailable">{c.unavailable || c.healthError}</div>}
-                          {c.trafficError && <div className="p-sub">{t('pages.cores.trafficError')}: {c.trafficError}</div>}
-                        </div>
-                        <div className="p-corerow-stats">
-                          <Field label={t(instance.labelKey)} value={instance.valueKey ? t(instance.valueKey) : instance.value} />
-                          <Field label={t('pages.cores.columns.restarts')} value={coreRestarts(c) ?? '—'} />
-                        </div>
-                        <div className="p-core-row-actions" role="group" aria-label={t('pages.cores.columns.actions')}>
-                          <Button size="small" onClick={() => setSelectedId(c.id)}>{t('pages.cores.columns.detail')}</Button>
-                          <Tooltip title={!c.available ? c.unavailable : undefined}><span><Button size="small" aria-label={t('pages.cores.restart')} icon={<ReloadOutlined aria-hidden />} disabled={!c.available} loading={restarting === c.id} onClick={() => restart(c)}>{t('pages.cores.restart')}</Button></span></Tooltip>
-                          {c.logs && <Button size="small" aria-label={t('pages.cores.logs')} icon={<FileTextOutlined aria-hidden />} onClick={() => setLogsFor(c)}>{t('pages.cores.logs')}</Button>}
-                          {c.version.manageable && <Button size="small" aria-label={t('pages.cores.versions')} icon={<TagsOutlined aria-hidden />} onClick={() => setVersionsFor(c)}>{t('pages.cores.versions')}</Button>}
-                        </div>
-                      </div>; })}
-                      {!visibleCores.length && <div className="p-plan-empty">{t('noData')}</div>}
-                    </PanelCard>
-                  </Col>
-                </Row>
-              )}
-            </Spin>
-          </section>
-        </Layout>
-      </Layout>
-      {selected && <CoreDetailModal key={selected.id} core={selected} onClose={() => setSelectedId(null)} onRestart={() => restart(selected)} restarting={restarting === selected.id} onInstalled={() => void refetch()} />}
-      <CoreVersionsModal core={versionsFor} onClose={() => setVersionsFor(null)} onInstalled={() => refetch()} />
-      <CoreLogsDrawer core={logsFor} onClose={() => setLogsFor(null)} />
-    </ConfigProvider>
-  );
+  return <ConfigProvider theme={antdThemeConfig}>
+    {messageContextHolder}{modalContextHolder}
+    <section className={`cores-page${isDark ? ' is-dark' : ''}${isUltra ? ' is-ultra' : ''}`} aria-label={t('pages.cores.title')}>
+      <Spin spinning={!fetched} delay={200}>
+        {!fetched ? <div className="loading-spacer" /> : fetchError ? <Result status="error" title={t('somethingWentWrong')} subTitle={fetchError}
+          extra={<Button loading={loading} onClick={() => void refetch()}>{t('refresh')}</Button>} /> : <div className="cores-content">
+          <PageHeader title={t('menu.cores')} sub={t('pages.cores.fidelity.subtitle')} actions={<>
+            <Segmented size="small" value={view} onChange={setView} options={[{ value: 'cards', label: t('pages.cores.fidelity.cards') }, { value: 'rows', label: t('pages.cores.fidelity.rows') }]} />
+            <Button icon={<Icon name="refresh" size={15} />} loading={checking} onClick={() => void checkVersions()}>{t('pages.cores.fidelity.checkVersions')}</Button>
+            <Button icon={<Icon name="restart" size={15} />} loading={restarting.length > 0} disabled={!cores.some((core) => core.available)} onClick={() => restart(cores, true)}>{t('pages.cores.fidelity.restartAll')}</Button>
+          </>} />
+          <StatStrip items={[
+            { key: 'installed', label: t('pages.cores.fidelity.installed'), value: cores.filter(coreInstalled).length },
+            { key: 'running', label: t('pages.cores.state.running'), value: running, color: 'var(--p-success)', pulse: running > 0 },
+            { key: 'stopped', label: t('pages.cores.state.stopped'), value: stopped, color: '#8b8d94', detail: t('pages.cores.fidelity.stoppedHelp') },
+            { key: 'updates', label: t('pages.cores.fidelity.updates'), value: updates ?? '—', color: updates ? 'var(--p-warning)' : undefined, detail: t('pages.cores.fidelity.updatesHelp') },
+            { key: 'traffic', label: t('pages.cores.fidelity.trafficServed'), value: coreBytes(traffic) },
+          ]} />
+          {(inventory.error || actionErrors.length > 0) && <Alert type="warning" showIcon title={t('somethingWentWrong')} description={<>{inventory.error}{actionErrors.map((error) => <div key={error}>{error}</div>)}</>} />}
+          {view === 'cards' ? <div className="p-grid core-card-grid">{rows.map((row) => <CoreCard key={row.core.id} {...row} series={trafficHistory[row.core.id]} restarting={restarting.includes(row.core.id)} onRestart={() => restart([row.core])} onOpen={(tab) => setDetail({ id: row.core.id, tab })} />)}</div>
+            : <section className="p-card core-row-list"><Toolbar left={<span className="p-sub">{t(updates === undefined ? 'pages.cores.fidelity.countOnly' : 'pages.cores.fidelity.rowSummary', { count: cores.length, updates })}</span>}
+              right={<Button size="small" icon={<Icon name="backup" size={14} />} onClick={exportStatus}>{t('pages.cores.fidelity.exportStatus')}</Button>} />
+              {rows.map((row) => <CoreRow key={row.core.id} {...row} series={trafficHistory[row.core.id]} restarting={restarting.includes(row.core.id)} onRestart={() => restart([row.core])} onOpen={(tab) => setDetail({ id: row.core.id, tab })} />)}
+            </section>}
+        </div>}
+      </Spin>
+    </section>
+    {selected && detail && <CoreDetailModal key={`${selected.id}:${detail.tab}`} core={selected} metrics={rows.find((row) => row.core.id === selected.id)?.metrics} series={trafficHistory[selected.id]} initialTab={detail.tab} onClose={() => setDetail(null)}
+      onRestart={() => restart([selected])} restarting={restarting.includes(selected.id)} onInstalled={() => { setVersions({}); void refetch(); }} />}
+  </ConfigProvider>;
 }

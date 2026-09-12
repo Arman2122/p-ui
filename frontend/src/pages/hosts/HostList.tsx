@@ -188,6 +188,13 @@ export default function HostList(props: HostListProps) {
       },
     },
     {
+      title: t('pages.hosts.fields.sni'),
+      dataIndex: 'sni',
+      key: 'sni',
+      width: 190,
+      render: (sni: string) => <span className="p-mono">{sni || '—'}</span>,
+    },
+    {
       title: t('pages.hosts.fields.security'),
       dataIndex: 'security',
       key: 'security',

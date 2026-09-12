@@ -1,7 +1,7 @@
 import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { Button, ConfigProvider, Layout, Modal, Result, Spin, message } from 'antd';
+import { Button, ConfigProvider, Layout, Modal, Result, Space, Spin, message } from 'antd';
 import { CopyOutlined, CloudDownloadOutlined } from '@ant-design/icons';
 
 import { HttpUtil, ClipboardManager, FileManager } from '@/utils';
@@ -15,6 +15,7 @@ import { useCoresStatusQuery } from '@/api/queries/useCoresStatusQuery';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
 import { useAllSettings } from '@/api/queries/useAllSettings';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
+import { summarizeCores } from '@/lib/cores/status';
 import { setMessageInstance } from '@/utils/messageBus';
 import OverviewActionBar from './OverviewActionBar';
 import VitalsBand, { type VitalKey } from './VitalsBand';
@@ -65,6 +66,7 @@ export default function IndexPage() {
   const [historyBucket, setHistoryBucket] = useState(60);
   const history = useOverviewHistory(status, fetched && !fetchError, historyBucket);
   const { cores } = useCoresStatusQuery();
+  const coreSummary = summarizeCores(cores);
   const navigate = useNavigate();
   const goToCores = useCallback(() => navigate('/cores'), [navigate]);
   const [openVital, setOpenVital] = useState<VitalKey | null>(null);
@@ -161,7 +163,7 @@ export default function IndexPage() {
       <Layout className={pageClass}>
 
         <Layout className="content-shell">
-          <Layout.Content className="content-area">
+          <div className="ant-layout-content content-area">
             <Spin
               spinning={loading || !fetched}
               delay={200}
@@ -220,17 +222,19 @@ export default function IndexPage() {
                     kicker={t('menu.cores')}
                     icon="xray"
                     pad={12}
-                    extra={<Button type="text" size="small" onClick={goToCores}>{t('menu.manageCores')}</Button>}
+                    className="ov-cores-panel"
+                    extra={<Space size={8}><span className="p-sub">{t('pages.index.coresRunning', { running: coreSummary.healthy, total: coreSummary.total })}</span>
+                      <Button type="text" size="small" onClick={goToCores}>{t('menu.manageCores')}</Button></Space>}
                   >
                     <DashboardCores cores={cores} onOpen={goToCores} />
                   </PanelCard>
 
-                  <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
+                  <div className="ov-telemetry-grid">
                     <ThroughputPanel status={status} history={history} />
                     <SessionsPanel status={status} history={history} />
                   </div>
 
-                  <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
+                  <div className="ov-bottom-grid">
                     <ActivityPanel relative={relative} />
                     <PanelHostPanel
                       status={status}
@@ -245,7 +249,7 @@ export default function IndexPage() {
                 </div>
               )}
             </Spin>
-          </Layout.Content>
+          </div>
         </Layout>
 
         <LazyMount when={panelUpdateOpen}>

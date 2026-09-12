@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Dropdown, Tag, Tooltip } from 'antd';
+import { Button, Dropdown, Tag } from 'antd';
 import {
   ArrowUpOutlined,
   AreaChartOutlined,
@@ -9,6 +9,7 @@ import {
   CloudServerOutlined,
   ControlOutlined,
   FileTextOutlined,
+  MoreOutlined,
   PoweroffOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
@@ -46,12 +47,6 @@ interface BarAction {
   primary?: boolean;
 }
 
-const XRAY_STATE_KEYS: Record<string, string> = {
-  running: 'pages.index.xrayStatusRunning',
-  stop: 'pages.index.xrayStatusStop',
-  error: 'pages.index.xrayStatusError',
-};
-
 export default function OverviewActionBar({
   historyControl,
   status,
@@ -73,8 +68,6 @@ export default function OverviewActionBar({
   onOpenVersionSwitch,
 }: OverviewActionBarProps) {
   const { t } = useTranslation();
-  const stateText = t(XRAY_STATE_KEYS[status.xray.state] ?? 'pages.index.xrayStatusUnknown');
-  const hasVersion = !!status.xray.version && status.xray.version !== 'Unknown';
   const size = isMobile ? ('small' as const) : ('middle' as const);
 
   const actionGroups: BarAction[][] = [
@@ -93,28 +86,11 @@ export default function OverviewActionBar({
     [
       { key: 'history', icon: <AreaChartOutlined />, text: t('pages.index.systemHistoryTitle'), onClick: onOpenSystemHistory },
       { key: 'metrics', icon: <ArrowUpOutlined />, text: t('pages.index.xrayMetricsTitle'), onClick: onOpenXrayMetrics },
+      { key: 'version', icon: <ControlOutlined />, text: `${t('pages.index.xraySwitch')} · ${status.xray.version || '—'}`, onClick: onOpenVersionSwitch },
     ],
   ];
 
-  const statePill = (
-    <span className="ov-state" data-state={status.xray.state}>
-      <span className="ov-state-dot" style={{ color: status.xray.color }} />
-      <span>{`${t('pages.index.xrayStatus')} · ${stateText}`}</span>
-      {hasVersion && (
-        <Tooltip title={t('pages.index.xraySwitch')}>
-          <button
-            type="button"
-            className="ov-state-version"
-            onClick={onOpenVersionSwitch}
-          >
-            {`v${status.xray.version}`}
-          </button>
-        </Tooltip>
-      )}
-    </span>
-  );
-
-  return <PageHeader title={t('menu.dashboard')} sub={statePill} actions={<>
+  return <PageHeader title={t('menu.dashboard')} sub={`${window.location.hostname} · ${t('dashboardRepair.subtitle')}`} actions={<>
     {historyControl}
     {updateAvailable && <Tag color="warning" icon={<CloudDownloadOutlined />} onClick={onOpenPanelUpdate}>
       {`${t('update')} ${formatPanelVersion(latestVersion)}`}
@@ -122,7 +98,7 @@ export default function OverviewActionBar({
     <Dropdown trigger={['click']} menu={{ items: [
       ...actionGroups.flat().map((action) => ({ key: action.key, icon: action.icon, label: action.text, onClick: action.onClick })),
       { key: 'panelUpdate', label: `${t('pages.index.updatePanel')} · ${formatPanelVersion(panelVersion)}`, onClick: onOpenPanelUpdate },
-    ] }}><Button size={size}>{t('more')}</Button></Dropdown>
+    ] }}><Button size={size} type="text" icon={<MoreOutlined />} aria-label={t('dashboardRepair.panelActions')} /></Dropdown>
     <Button size={size} icon={<ReloadOutlined />} onClick={onRefresh}>{t('refresh')}</Button>
   </>} />;
 }

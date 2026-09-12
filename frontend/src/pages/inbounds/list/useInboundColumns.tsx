@@ -6,6 +6,8 @@ import { TeamOutlined } from '@ant-design/icons';
 import { SizeFormatter, IntlUtil, ColorUtils } from '@/utils';
 import { InfinityIcon } from '@/components/ui';
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
+import LiveTrafficTrend from '@/components/viz/LiveTrafficTrend';
+import type { LiveTrafficSeries } from '@/hooks/useLiveTrafficHistory';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { coerceInboundJsonField } from '@/models/dbinbound';
@@ -31,6 +33,7 @@ interface UseInboundColumnsParams {
   nodesById: Map<number, NodeRecord>;
   clientCount: Record<number, ClientCountEntry>;
   inboundSpeed: Record<number, InboundSpeedEntry>;
+  inboundTrends?: Record<string, LiveTrafficSeries>;
   subEnable: boolean;
   expireDiff: number;
   trafficDiff: number;
@@ -45,6 +48,7 @@ export function useInboundColumns({
   nodesById,
   clientCount,
   inboundSpeed,
+  inboundTrends,
   subEnable,
   expireDiff,
   trafficDiff,
@@ -326,6 +330,12 @@ export function useInboundColumns({
         ),
       },
       {
+        title: t('liveTraffic.trend'),
+        key: 'trend',
+        width: 104,
+        render: (_, record) => <LiveTrafficTrend series={inboundTrends?.[String(record.id)]} width={88} height={28} />,
+      },
+      {
         title: t('pages.inbounds.speed'),
         key: 'speed',
         align: 'center',
@@ -374,8 +384,8 @@ export function useInboundColumns({
       traffic.align = 'start';
       traffic.render = (_, record) => <ClientTrafficCell up={record.up} down={record.down} total={record.total} enabled={record.enable} trafficDiff={trafficDiff} />;
     }
-    const ordered = ['enable', 'identity', 'protocol', 'clients', 'traffic', 'speed', 'expiryTime', 'node', 'subSortIndex', 'action'];
+    const ordered = ['enable', 'identity', 'protocol', 'clients', 'traffic', 'trend', 'speed', 'expiryTime', 'node', 'subSortIndex', 'action'];
     return [...cols.filter((c) => !['id', 'remark', 'port'].includes(String(c.key))), identity]
       .sort((a, b) => ordered.indexOf(String(a.key)) - ordered.indexOf(String(b.key)));
-  }, [t, hasAnyRemark, hasAnySubSortIndex, hasActiveNode, nodesById, clientCount, inboundSpeed, subEnable, expireDiff, trafficDiff, datepicker, onRowAction, onSwitchEnable]);
+  }, [t, hasAnyRemark, hasAnySubSortIndex, hasActiveNode, nodesById, clientCount, inboundSpeed, inboundTrends, subEnable, expireDiff, trafficDiff, datepicker, onRowAction, onSwitchEnable]);
 }

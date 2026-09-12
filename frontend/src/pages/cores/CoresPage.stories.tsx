@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, spyOn, waitFor } from 'storybook/test';
+import { expect, spyOn, waitFor, userEvent, within } from 'storybook/test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { keys } from '@/api/queryKeys';
@@ -8,7 +8,7 @@ import { ThemeProvider, useTheme } from '@/hooks/useTheme';
 import { useTokenBridge } from '@/hooks/useTokenBridge';
 import { HttpUtil, Msg } from '@/utils';
 import CoresPage from './CoresPage';
-import { corePageFixtures, coreDescriptorFixtures, CORE_INBOUND_FIXTURES } from './CoresPage.fixtures';
+import { corePageFixtures, coreDescriptorFixtures, CORE_INBOUND_FIXTURES, CORE_TRAFFIC_FIXTURES } from './CoresPage.fixtures';
 
 function CoreStorySurface({ dark }: { dark: boolean }) {
   const { isDark, toggleTheme } = useTheme();
@@ -23,6 +23,7 @@ function FullCoresPage({ dark = false }: { dark?: boolean }) {
     cache.setQueryData(keys.cores.status(), corePageFixtures());
     cache.setQueryData(keys.cores.list(), coreDescriptorFixtures());
     cache.setQueryData(keys.inbounds.options(), CORE_INBOUND_FIXTURES);
+    cache.setQueryData(keys.inbounds.slim(), CORE_TRAFFIC_FIXTURES);
     return cache;
   });
   return <MemoryRouter><QueryClientProvider client={client}><ThemeProvider><CoreStorySurface dark={dark} /></ThemeProvider></QueryClientProvider></MemoryRouter>;
@@ -46,6 +47,7 @@ const meta = {
       if (url === '/panel/api/cores/status') obj = corePageFixtures();
       else if (url === '/panel/api/cores') obj = coreDescriptorFixtures();
       else if (url === '/panel/api/inbounds/options') obj = CORE_INBOUND_FIXTURES;
+      else if (url === '/panel/api/inbounds/list/slim') obj = CORE_TRAFFIC_FIXTURES;
       else if (url.endsWith('/logs')) obj = ['Listener configured', 'Control channel is ready'];
       else if (url.endsWith('/versions')) obj = { manageable: true, installed: url.includes('/mtproto/') ? '1.0.1' : '26.7.28', available: url.includes('/mtproto/') ? [] : ['v26.7.28'] };
       return new Msg(true, '', obj as T);
@@ -58,3 +60,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const EightCores: Story = {};
 export const EightCoresDark: Story = { globals: { theme: 'dark' } };
+export const Cards: Story = { play: async (context) => {
+  await meta.play(context);
+  await userEvent.click(within(context.canvasElement).getByText('Cards', { selector: '.ant-segmented-item-label' }));
+  await waitFor(() => expect(context.canvasElement.querySelectorAll('.core-card')).toHaveLength(8));
+} };
+export const CardsDark: Story = { ...Cards, globals: { theme: 'dark' } };

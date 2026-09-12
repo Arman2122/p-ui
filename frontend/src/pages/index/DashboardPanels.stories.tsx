@@ -5,6 +5,7 @@ import { clearNotifications, pushNotification } from '@/api/notificationFeed';
 import { ActivityPanel, PanelHostPanel, SessionsPanel, ThroughputPanel } from './DashboardPanels';
 import type { OverviewHistory } from './useOverviewHistory';
 import '@/styles/panel.css';
+import './IndexPage.css';
 
 const GiB = 1024 ** 3;
 
@@ -31,6 +32,7 @@ const status = new Status({
 });
 
 const history: OverviewHistory = {
+  times: Array.from({ length: 60 }, (_, i) => Date.UTC(2026, 8, 13, 12) / 1000 + i * 60),
   labels: Array.from({ length: 60 }, (_, i) => `12:${String(i).padStart(2, '0')}:00`),
   series: {
     cpu: wave(60, 2.4, 2.2, 7),
@@ -79,12 +81,12 @@ export const Everything: Story = {
   render: () => {
     seedFeed();
     return (
-      <div className="p-root" style={frame}>
-        <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
+      <div className="p-root index-page ov-page" style={{ ...frame, containerType: 'inline-size', containerName: 'main' }}>
+        <div className="ov-telemetry-grid">
           <ThroughputPanel status={status} history={history} />
           <SessionsPanel status={status} history={history} />
         </div>
-        <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
+        <div className="ov-bottom-grid">
           <ActivityPanel relative={(at) => `${Math.max(1, Math.round((Date.now() - at) / 1000))}s ago`} />
           <PanelHostPanel
             status={status}

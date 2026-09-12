@@ -11,6 +11,7 @@ export type ParamType =
   | 'string'
   | 'integer'
   | 'integer[]'
+  | 'string[]'
   | 'number'
   | 'boolean'
   | 'object'
@@ -40,8 +41,13 @@ export interface Endpoint {
   errorStatus?: number;
   responseSchema?: string;
   responseSchemaArray?: boolean;
+  responseContent?: Record<string, { schema: Record<string, unknown> }>;
+  responseErrorEnvelope?: boolean;
   requestSchema?: string;
   requestSchemaArray?: boolean;
+  requestBodyRequired?: boolean;
+  requestRequired?: string[];
+  requestProperties?: Record<string, Record<string, unknown>>;
 }
 
 export interface SubscriptionHeader {
@@ -57,6 +63,19 @@ export interface Section {
   endpoints: Endpoint[];
 }
 
+const clientCreateRequestProperties: Record<string, Record<string, unknown>> = {
+  client: { $ref: '#/components/schemas/Client', required: ['email'], properties: { totalGB: { description: 'Total traffic quota in bytes; 0 is unlimited.' } } },
+  inboundIds: { type: 'array', items: { type: 'integer' }, description: 'Inbound IDs; a plan or group can supply them when omitted.' },
+  policyId: { type: 'integer', nullable: true },
+  planOverrides: { allOf: [{ $ref: '#/components/schemas/PlanOverrides' }], nullable: true },
+  externalLinks: { type: 'array', items: { $ref: '#/components/schemas/ExternalLinkInput', required: [] } },
+};
+
+const bulkSelectionProperties: Record<string, Record<string, unknown>> = {
+  emails: { type: 'array', items: { type: 'string' }, description: 'Explicit selection; a nonempty list takes precedence over filter.' },
+  filter: { type: 'object', additionalProperties: true, description: 'ClientPageParams fields from list/paged. Matching selection is capped at 20000; explicit email lists are not truncated.' },
+};
+
 export const sections: readonly Section[] = [
   {
     id: 'authentication',
@@ -67,12 +86,11 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/login',
+        errorStatus: 200,
         summary: 'Authenticate with username + password and receive a session cookie. Required before any cookie-based API call.',
-        params: [
-          { name: 'username', in: 'body', type: 'string', desc: 'Panel admin username.' },
-          { name: 'password', in: 'body', type: 'string', desc: 'Panel admin password.' },
-          { name: 'twoFactorCode', in: 'body', type: 'string', desc: 'OTP code when 2FA is enabled. Omit otherwise.' },
-        ],
+        params: [ { name: 'username', in: 'body', type: 'string', desc: 'Panel admin username.' },
+  { name: 'password', in: 'body', type: 'string', desc: 'Panel admin password.' },
+  { name: 'twoFactorCode', in: 'body', type: 'string', desc: 'OTP code when 2FA is enabled. Omit otherwise.', optional: true } ],
         body: '{\n  "username": "admin",\n  "password": "admin",\n  "twoFactorCode": "123456"\n}',
         response:
           '{\n  "success": true,\n  "msg": "Logged in successfully"\n}',
@@ -188,6 +206,9 @@ export const sections: readonly Section[] = [
         response: '{\n  "success": true,\n  "obj": {\n    "changed": 2,\n    "skipped": [\n      { "id": 3, "reason": "already disabled" }\n    ]\n  }\n}',
       },
       {
+  requestSchema: 'Inbound',
+  requestRequired: [],
+
         method: 'POST',
         path: '/panel/api/inbounds/update/:id',
         summary: 'Replace an inbound’s configuration. Body shape mirrors /add. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.',
@@ -279,6 +300,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/openapi.json',
         summary: 'Serve this API description as an OpenAPI 3 document — the same file that powers the API Docs page. Requires a session or Bearer token like the rest of /panel/api. Useful for generating clients or importing into API tooling.',
+        responseContent: { 'application/json': { schema: { type: 'object', additionalProperties: true } } },
       },
       {
         method: 'GET',
@@ -412,6 +434,8 @@ responseSchema: 'Status',
         method: 'GET',
         path: '/panel/api/server/getDb',
         summary: 'Stream a full database backup as an attachment — a pg_dump custom-format archive (.dump). Use as a manual backup.',
+        responseContent: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
+        responseErrorEnvelope: true,
       },
       {
         method: 'GET',
@@ -510,12 +534,14 @@ responseSchema: 'Status',
         ],
       },
       {
+  requestBodyRequired: false,
+
         method: 'POST',
         path: '/panel/api/server/logs/:count',
         summary: 'Return the last N lines of the panel\u2019s own log.',
-        params: [
-          { name: 'count', in: 'path', type: 'number', desc: 'Number of trailing log lines.' },
-        ],
+        params: [ { name: 'count', in: 'path', type: 'number', desc: 'Number of trailing log lines.' },
+  { name: 'level', in: 'body (form)', type: 'string', optional: true, desc: 'Log level filter.' },
+  { name: 'syslog', in: 'body (form)', type: 'boolean', optional: true, desc: 'Read system journal when true.' } ],
         body: '{\n  "level": "info",\n  "syslog": false\n}',
         response: '{\n  "success": true,\n  "obj": "2025/01/01 12:00:00 [INFO] Server started\\n2025/01/01 12:00:01 [INFO] Xray is running"\n}',
       },
@@ -675,66 +701,42 @@ responseSchema: 'ClientPageResponse',
           '{\n  "success": true,\n  "obj": [\n    {\n      "client": { "id": 1, "email": "alice@example.com", ... },\n      "credentials": { "secret": "ee...", "adTag": "0123..." },\n      "inboundIds": [3, 5],\n      "externalLinks": [],\n      "usedTraffic": 1048576\n    }\n  ]\n}',
       },
       {
+  requestBodyRequired: true,
+  requestProperties: clientCreateRequestProperties,
+  requestRequired: [ 'client' ],
+
 method: 'POST',
 path: '/panel/api/clients/add',
 summary: 'Create a new client and attach it to one or more inbounds in a single call. Body is JSON. Per-protocol secrets (UUID for VLESS/VMess, password for Trojan/Shadowsocks, auth for Hysteria) are generated server-side when omitted, so callers can send only the universal fields.',
-params: [
-  {
-    name: 'client',
-    in: 'body (json)',
-    type: 'object',
-    desc: 'Client fields: email, subId, id (uuid), password, auth, flow, totalGB, expiryTime, limitIp, tgId (numeric Telegram user ID, 0 = none), comment, enable.'
-  },
-  {
-    name: 'inboundIds',
-    in: 'body (json)',
-    type: 'integer[]',
-    desc: 'Inbound IDs to attach the client to. At least one required.'
-  },
-  {
-    name: 'policyId',
-    in: 'body',
-    type: 'integer',
-    optional: true,
-    desc: 'Explicit plan assignment; zero unassigns, absence preserves existing behavior.'
-  },
-  {
-    name: 'planOverrides',
-    in: 'body',
-    type: 'object',
-    optional: true,
-    desc: 'Explicit quota, expiry, limitIp and inbounds override flags; omitted flags are preserved.'
-  }
-],
+params: [],
 body: '{\n  "client": {\n    "email": "alice@example.com",\n    "totalGB": 53687091200,\n    "expiryTime": 1735689600000,\n    "tgId": 0,\n    "limitIp": 0,\n    "enable": true\n  },\n  "inboundIds": [3, 5]\n}',
 response: '{\n  "success": true,\n  "msg": "Client added"\n}',
 },
       {
+  requestSchema: 'Client',
+  requestProperties: { totalGB: { description: 'Total traffic quota in bytes; 0 is unlimited.' },  policyId: { type: 'integer', nullable: true },
+  planOverrides: { allOf: [ { '$ref': '#/components/schemas/PlanOverrides' } ], nullable: true },
+  inboundIds: { type: 'array', items: { type: 'integer' }, nullable: true } },
+
 method: 'POST',
 path: '/panel/api/clients/update/:email',
 summary: 'Update an existing client by email. Changes propagate to every attached inbound. Body is the JSON client payload — supply the full set of fields you want to keep (the server replaces the row, it does not patch).',
-params: [
-  {
-    name: 'email',
-    in: 'path',
-    type: 'string',
-    desc: 'Current client email (unique identifier).'
-  },
-  {
-    name: 'policyId',
+params: [ { name: 'email', in: 'path', type: 'string', desc: 'Current client email (unique identifier).' },
+  { name: 'policyId',
     in: 'body',
     type: 'integer',
     optional: true,
-    desc: 'Explicit plan assignment; zero unassigns, absence preserves existing behavior.'
-  },
-  {
-    name: 'planOverrides',
+    desc: 'Explicit plan assignment; zero unassigns, absence preserves existing behavior.' },
+  { name: 'planOverrides',
     in: 'body',
     type: 'object',
     optional: true,
-    desc: 'Explicit quota, expiry, limitIp and inbounds override flags; omitted flags are preserved.'
-  }
-],
+    desc: 'Explicit quota, expiry, limitIp and inbounds override flags; omitted flags are preserved.' },
+  { name: 'inboundIds',
+    in: 'query',
+    type: 'string',
+    optional: true,
+    desc: 'Optional comma-separated inbound IDs restricting where the client update is applied; distinct from body inboundIds plan override.' } ],
 body: '{\n  "email": "alice@example.com",\n  "totalGB": 107374182400,\n  "expiryTime": 1767225600000,\n  "tgId": 123456789,\n  "enable": true\n}',
 response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
 },
@@ -742,10 +744,8 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         method: 'POST',
         path: '/panel/api/clients/del/:email',
         summary: 'Delete a client by email. Removes it from every attached inbound and drops its traffic record unless keepTraffic=1 is passed.',
-        params: [
-          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
-          { name: 'keepTraffic', in: 'query', type: 'integer', desc: 'Pass 1 to retain the xray_client_traffic row after deletion.' },
-        ],
+        params: [ { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+  { name: 'keepTraffic', in: 'query', type: 'integer', desc: 'Pass 1 to retain the xray_client_traffic row after deletion.', optional: true } ],
         response: '{\n  "success": true,\n  "msg": "Client deleted"\n}',
       },
       {
@@ -813,6 +813,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "created": 2,\n    "skipped": [\n      { "email": "alice@example.com", "reason": "email already in use: alice@example.com" }\n    ]\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties, addDays: { type: 'integer', description: 'Signed days to add, or days from now in set mode; zero leaves unchanged.' }, addBytes: { type: 'integer', format: 'int64', description: 'Signed bytes to add, or quota bytes in set mode; zero leaves unchanged.' }, flow: { type: 'string' }, mode: { type: 'string', enum: [ 'add', 'set' ], default: 'add' } },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkAdjust',
         summary: 'Shift expiry and/or traffic quota for many clients in one call. addDays/addBytes may be negative. Clients with unlimited expiry (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the corresponding field in the default ADD mode; mode="set" makes a value exactly this, and 0 still leaves a field alone. A client that was auto-disabled solely because it was depleted (expired or over quota) is automatically re-enabled — locally and on its node — when the adjustment lifts it out of depletion; a manually-disabled or still-depleted client is left disabled. The optional flow directive sets the XTLS flow on every client: "none" clears it, "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where the inbound supports it (omit or "" to leave it unchanged). Returns the adjusted count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -820,6 +825,15 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "adjusted": 2,\n    "skipped": [\n      { "email": "carol", "reason": "unlimited expiry" }\n    ],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties, limitIp: { type: 'integer', nullable: true, minimum: 0, description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' }, comment: { type: 'string', nullable: true, description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' }, tgId: { type: 'integer',
+  nullable: true,
+  minimum: 0,
+  format: 'int64',
+  description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' }, reset: { type: 'integer', nullable: true, minimum: 0, description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' }, totalGB: { type: 'integer', nullable: true, minimum: 0, format: 'int64', description: 'Quota in bytes; 0 is unlimited. Omitted/null leaves unchanged.' }, expiryTime: { type: 'integer', nullable: true, minimum: 0, format: 'int64', description: 'Unix milliseconds; 0 clears expiry. Omitted/null leaves unchanged.' }, flow: { type: 'string', nullable: true, description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' }, group: { type: 'string', nullable: true, description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' }, policyId: { type: 'integer', nullable: true, minimum: 0, description: 'Omitted/null leaves unchanged; explicit zero or empty string clears.' } },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkSet',
         summary: 'Set fields to exact values on many clients in one call. Only the fields present in the body change; a present zero value clears a field (0 = unlimited totalGB or expiryTime, "" = no flow or group, policyId 0 = no speed plan). limitIp, comment, tgId, reset, flow, totalGB and expiryTime are applied with one read-modify-write per inbound; group and policyId are applied per client. Clients with a delayed-start expiry are skipped for expiryTime. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -827,6 +841,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "updated": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [ 'fromInboundIds', 'toInboundIds' ],
+  requestProperties: { ...bulkSelectionProperties, fromInboundIds: { type: 'array', items: { type: 'integer' }, minItems: 1 }, toInboundIds: { type: 'array', items: { type: 'integer' }, minItems: 1 } },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkMove',
         summary: 'Move many clients between inbounds in one call: each client is attached to every target inbound first and only then detached from the source inbounds, so no client is left without an inbound mid-way. An inbound cannot be both a source and a target. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons, prefixed attach: or detach:.',
@@ -834,6 +853,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "moved": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkClearIps',
         summary: 'Forget the recorded source IPs of many clients in one call, the same as the per-client clear: their IP-limit history restarts from zero and a client blocked by the limit is unblocked at the next check. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -841,6 +865,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "cleared": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkExport',
         summary: 'Export a selection of clients in the same portable shape GET /clients/export uses for every client, ready for /clients/import on another panel. Instead of emails, pass filter (the same query object /list/paged takes) to export every matching client, capped at 20000.',
@@ -848,6 +877,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": [\n    { "client": { "email": "alice", "id": "0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c", "enable": true }, "inboundIds": [1, 2], "externalLinks": [{ "kind": "subscription", "value": "https://mirror.example.com/sub/abc", "remark": "mirror" }] }\n  ]\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkLinks',
         summary: 'Render the share links of many clients in one call, one row per client with every link across its inbounds; a client that could not be rendered carries an error instead. Instead of emails, pass filter (the same query object /list/paged takes) to render every matching client, capped at 20000.',
@@ -855,6 +889,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": [\n    { "email": "alice", "links": ["vless://0c9b6e2a-1f4e-4c2b-9b7e-6c1c1c1c1c1c@example.com:443?type=tcp&security=reality#alice"] },\n    { "email": "ghost", "links": [], "error": "client not found" }\n  ]\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties, credentials: { type: 'boolean', default: false }, subId: { type: 'boolean', default: false } },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkRotate',
         summary: 'Rotate many clients at once: credentials mints a fresh UUID, password, key or secret for every kind the client is attached to (a kind whose credential the panel cannot mint, such as a WireGuard keypair, is skipped with a reason), subId gives the client a new subscription id. Every share link and subscription URL of the selection stops working; handing out the new ones is the operator\'s job. Applied with one read-modify-write per inbound; a local Xray inbound is flagged for restart, a local MTProto sidecar is hot-applied, a node is reconciled. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -862,6 +901,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "rotated": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [{ "email": "wg-user", "reason": "no credential to mint for wireguard" }], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkEnable',
         summary: 'Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -869,6 +913,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "changed": 2,\n    "skipped": [\n      { "email": "carol", "reason": "client not found" }\n    ],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkDisable',
         summary: 'Disable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to remove each user. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -876,6 +925,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "changed": 2,\n    "skipped": [\n      { "email": "carol", "reason": "client not found" }\n    ],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties, keepTraffic: { type: 'boolean', default: false } },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkDel',
         summary: 'Delete many clients in one call. The server processes the list sequentially so each delete sees the committed state of the previous one — avoids the race the per-email fan-out had on the panel side. Pass keepTraffic=true to retain the xray_client_traffic rows after deletion. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -883,6 +937,12 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "deleted": 2,\n    "skipped": [\n      { "email": "carol", "reason": "client not found" }\n    ],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestProperties: clientCreateRequestProperties,
+  requestRequired: [ 'client' ],
+  requestSchemaArray: true,
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkCreate',
         summary: 'Create many clients in one call. Body is a JSON array of {client, inboundIds} payloads — the same shape /add accepts. Items are processed sequentially; per-email skip reasons are returned for items that fail (e.g., duplicate email). Triggers a single Xray restart at the end if any inbound was running. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -890,6 +950,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "created": 2,\n    "skipped": [\n      { "email": "alice@example.com", "reason": "email already in use" }\n    ],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [ 'group' ],
+  requestProperties: { ...bulkSelectionProperties, group: { type: 'string' } },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/groups/bulkAdd',
         summary: 'Add many clients to a group in one call. Updates clients.group_name and patches the matching client entry inside every owning inbound\'s settings JSON in a single transaction. If the group name does not yet exist (in client_groups or as a derived label), it is auto-created as a persistent group. To clear the group label, use /groups/bulkRemove instead. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -897,6 +962,11 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "affected": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/groups/bulkRemove',
         summary: 'Clear the group label on many clients in one call. Inverse of /groups/bulkAdd. Clients themselves are kept — only the group label is cleared from clients.group_name and from each owning inbound\'s settings JSON. Groups become empty if all their members are removed. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -904,28 +974,35 @@ response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "affected": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties, inboundIds: { type: 'array', items: { type: 'integer' } } },
+
         method: 'POST',
         path: '/panel/api/clients/bulkAttach',
         summary: 'Attach many existing clients to many inbounds in one call. Each client keeps its identity (email/UUID/password/subId) and a shared traffic row; all clients are added to a target inbound in a single AddInboundClient call. Clients already present on a target are reported under skipped. Returns per-email attached/skipped/errors lists and triggers a single Xray restart if any target inbound was running. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
-        params: [
-          { name: 'emails', in: 'body (json)', type: 'array', desc: 'Emails of existing clients to attach.' },
-          { name: 'inboundIds', in: 'body (json)', type: 'integer[]', desc: 'Target inbound IDs to attach every client to.' },
-        ],
+        params: [],
         body: '{\n  "emails": ["alice", "bob"],\n  "inboundIds": [7, 9]\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "attached": ["alice", "bob"],\n    "skipped": ["bob"],\n    "errors": [],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties, inboundIds: { type: 'array', items: { type: 'integer' } } },
+
         method: 'POST',
         path: '/panel/api/clients/bulkDetach',
         summary: 'Mirror of bulkAttach: detach many existing clients from many inbounds in one call. For each email, intersects the client\'s current inbounds with the requested set and detaches from those only; (email, inbound) pairs where the client is not currently attached are silently no-ops. Emails not attached to any of the requested inbounds are reported under skipped. Client records are kept even if they become orphaned — use bulkDel for full removal. Returns per-email detached/skipped/errors lists and triggers a single Xray restart if any target inbound was running. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
-        params: [
-          { name: 'emails', in: 'body (json)', type: 'array', desc: 'Emails of existing clients to detach.' },
-          { name: 'inboundIds', in: 'body (json)', type: 'integer[]', desc: 'Inbound IDs to detach the clients from.' },
-        ],
+        params: [],
         body: '{\n  "emails": ["alice", "bob"],\n  "inboundIds": [7, 9]\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "detached": ["alice", "bob"],\n    "skipped": [],\n    "errors": [],\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
+  requestBodyRequired: true,
+  requestRequired: [],
+  requestProperties: { ...bulkSelectionProperties,  },
+  params: [],
+
         method: 'POST',
         path: '/panel/api/clients/bulkResetTraffic',
         summary: 'Zero up/down counters for many clients in one call. One batched update over the selection; a client the reset brings back under its quota is re-enabled across its inbounds and pushed to the core, and daemon-side counters (MTProto) are cleared. affected is the number of traffic rows zeroed. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.',
@@ -1164,6 +1241,9 @@ responseSchemaArray: true,
         response: '{\n  "success": true,\n  "obj": {\n    "webCertFile": "/root/cert/example.com/fullchain.pem",\n    "webKeyFile": "/root/cert/example.com/privkey.pem"\n  }\n}',
       },
       {
+  requestSchema: 'NodeMutationRequest',
+  requestRequired: [ 'name', 'address', 'port' ],
+
         method: 'POST',
         path: '/panel/api/nodes/add',
         summary: 'Register a new remote node. Provide its URL, write-only apiToken, and optional remark / allowPrivateAddress flag. Responses expose hasApiToken only.',
@@ -1172,6 +1252,9 @@ responseSchemaArray: true,
         responseSchema: 'NodeView',
       },
       {
+  requestSchema: 'NodeMutationRequest',
+  requestRequired: [ 'name', 'address', 'port' ],
+
         method: 'POST',
         path: '/panel/api/nodes/update/:id',
         summary: 'Replace a node\u2019s connection details. apiToken is write-only: omit it or send an empty string to keep the stored token; set clearApiToken=true to clear it.',
@@ -1198,20 +1281,29 @@ responseSchemaArray: true,
         body: '{\n  "enable": true\n}',
       },
       {
+  requestSchema: 'NodeMutationRequest',
+  requestRequired: [ 'name', 'address', 'port' ],
+
         method: 'POST',
         path: '/panel/api/nodes/test',
         summary: 'Probe a node without saving it. Uses the body as connection details and returns the same heartbeat snapshot a registered node would have.',
-        body: '{\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "apiToken": "abcdef..."\n}',
+        body: '{\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "apiToken": "abcdef...",\n  "name": "de-fra-1"\n}',
         responseSchema: 'ProbeResultUI',
       },
       {
+  requestSchema: 'NodeMutationRequest',
+  requestRequired: [ 'name', 'address', 'port' ],
+
         method: 'POST',
         path: '/panel/api/nodes/certFingerprint',
         summary: "Connect to the node over HTTPS without verifying its certificate and return the leaf certificate's SHA-256 (base64). Used by the Add/Edit Node dialog to fetch and pin a self-signed certificate. Uses the same body as /test.",
-        body: '{\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/"\n}',
+        body: '{\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "name": "de-fra-1"\n}',
         response: '{\n  "success": true,\n  "obj": "k3b1...base64-sha256...="\n}',
       },
       {
+  requestSchema: 'NodeMutationRequest',
+  requestRequired: [ 'name', 'address', 'port' ],
+
         method: 'POST',
         path: '/panel/api/nodes/inbounds',
         summary: 'Use unsaved node connection details to list the remote inbounds available for selective import.',
@@ -1276,6 +1368,11 @@ responseSchemaArray: true,
         responseSchemaArray: true,
       },
       {
+  requestSchema: 'RoutingRule',
+  requestRequired: [ 'destKind' ],
+  requestProperties: { ingressIds: { type: 'string', description: 'JSON-encoded inbound ID array; used with selected scope.' },
+  criteria: { type: 'string', description: 'JSON-encoded criteria object.' } },
+
         method: 'POST',
         path: '/panel/api/routing/rules',
         summary:
@@ -1283,12 +1380,20 @@ responseSchemaArray: true,
         responseSchema: 'RoutingRule',
       },
       {
+  requestBodyRequired: true,
+  params: [ { name: 'ids', in: 'body', type: 'integer[]', optional: true, desc: 'Whole rule ID list in desired order.' } ],
+
         method: 'POST',
         path: '/panel/api/routing/rules/order',
         summary:
           'Set the whole first-match order in one write. The body is the complete id list; a partial application would silently change which rule wins.',
       },
       {
+  requestSchema: 'RoutingRule',
+  requestRequired: [ 'destKind' ],
+  requestProperties: { ingressIds: { type: 'string', description: 'JSON-encoded inbound ID array; used with selected scope.' },
+  criteria: { type: 'string', description: 'JSON-encoded criteria object.' } },
+
         method: 'POST',
         path: '/panel/api/routing/rules/:id',
         summary:
@@ -1406,6 +1511,15 @@ responseSchemaArray: true,
         responseSchema: 'EnforcedLimits',
       },
       {
+  requestSchema: 'Policy',
+  requestRequired: [ 'name' ],
+  requestProperties: { tiers:
+   { type: 'array',
+     items:
+      { type: 'object',
+        properties:
+         { fromBytes: { type: 'integer', format: 'int64' }, upBps: { type: 'integer', format: 'int64' }, downBps: { type: 'integer', format: 'int64' } } } } },
+
 method: 'POST',
 path: '/panel/api/policies/add',
 summary:
@@ -1473,6 +1587,15 @@ params: [
 ],
 },
       {
+  requestSchema: 'Policy',
+  requestRequired: [],
+  requestProperties: { tiers:
+   { type: 'array',
+     items:
+      { type: 'object',
+        properties:
+         { fromBytes: { type: 'integer', format: 'int64' }, upBps: { type: 'integer', format: 'int64' }, downBps: { type: 'integer', format: 'int64' } } } } },
+
 method: 'POST',
 path: '/panel/api/policies/update/:id',
 summary:
@@ -1592,10 +1715,8 @@ responseSchema: 'Policy',
         method: 'POST',
         path: '/panel/api/policies/bans/release',
         summary: 'Release one (client, source) wherever this panel banned it: on this host at once, on a node with the next sync push. Answers how many rows were released.',
-        params: [
-          { name: 'email', in: 'body (json)', type: 'string', desc: 'The client the ban was recorded for; empty for an operator ban.' },
-          { name: 'source', in: 'body (json)', type: 'string', desc: 'The banned source address.' },
-        ],
+        params: [ { name: 'email', in: 'body (json)', type: 'string', desc: 'The client the ban was recorded for; empty for an operator ban.', optional: true },
+  { name: 'source', in: 'body (json)', type: 'string', desc: 'The banned source address.' } ],
         body: '{\n  "email": "alice",\n  "source": "203.0.113.7"\n}',
         response: '{\n  "success": true,\n  "obj": { "released": 1 }\n}',
       },
@@ -1609,10 +1730,8 @@ responseSchema: 'Policy',
         method: 'POST',
         path: '/panel/api/policies/bans/add',
         summary: 'Ban an address by hand: dropped on every local inbound port, resolved each pass so an inbound added later is inside it, for the given minutes or the operator\'s default ban duration.',
-        params: [
-          { name: 'source', in: 'body (json)', type: 'string', desc: 'The address to drop.' },
-          { name: 'minutes', in: 'body (json)', type: 'number', desc: 'How long; 0 or absent uses the ban duration setting.' },
-        ],
+        params: [ { name: 'source', in: 'body (json)', type: 'string', desc: 'The address to drop.' },
+  { name: 'minutes', in: 'body (json)', type: 'number', desc: 'How long; 0 or absent uses the ban duration setting.', optional: true } ],
         body: '{\n  "source": "203.0.113.7",\n  "minutes": 60\n}',
         responseSchema: 'ClientBan',
       },
@@ -1718,6 +1837,8 @@ responseSchema: 'Policy',
   responseSchemaArray: false
 },
 {
+  requestBodyRequired: true,
+
   method: 'POST',
   path: '/panel/api/policies/reapply/:id',
   summary: "Plan reapply within the authenticated owner's scope.",
@@ -1936,6 +2057,8 @@ responseSchema: 'Policy',
   method: 'GET',
   path: '/panel/api/backups/:id/download',
   summary: 'Download stored bytes unchanged: .dump.pui ciphertext when encrypted=true, or a plain .dump. No passphrase appears in a URL or download request.',
+  responseContent: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
+  responseErrorEnvelope: true,
   params: [
     {
       name: 'id',
@@ -2101,33 +2224,22 @@ responseSchemaArray: true,
 method: 'POST',
 path: '/panel/api/setting/apiTokens/create',
 summary: 'Mint a new API token. Name must be unique and 1-64 characters; the token string is server-generated and returned only in this response — it is stored hashed and cannot be retrieved later.',
-params: [
-  {
-    name: 'name',
+params: [ { name: 'name', in: 'body', type: 'string', desc: 'Human-readable label, e.g. "central-panel-a".' },
+  { name: 'scope',
     in: 'body',
     type: 'string',
-    desc: 'Human-readable label, e.g. "central-panel-a".'
-  },
-  {
-    name: 'scope',
-    in: 'body',
-    type: 'string',
-    desc: '"admin" (the default) or "read": a read token may call GET endpoints and nothing else.'
-  },
-  {
-    name: 'expiresAt',
+    desc: '"admin" (the default) or "read": a read token may call GET endpoints and nothing else.',
+    optional: true },
+  { name: 'expiresAt',
     in: 'body',
     type: 'number',
-    desc: 'Unix time in seconds after which the token stops authenticating; 0 or absent = never.'
-  },
-  {
-    name: 'allowedIPs',
+    desc: 'Unix time in seconds after which the token stops authenticating; 0 or absent = never.',
+    optional: true },
+  { name: 'allowedIPs',
     in: 'body',
     type: 'string',
     optional: true,
-    desc: 'Comma-separated source IP/CIDR allowlist, maximum 64 networks. Empty permits any source.'
-  }
-],
+    desc: 'Comma-separated source IP/CIDR allowlist, maximum 64 networks. Empty permits any source.' } ],
 body: '{\n  "name": "central-panel-a",\n  "scope": "read",\n  "expiresAt": 1798761600\n}',
 responseSchema: 'SettingsAPITokenView',
 errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already exists"\n}',
@@ -2298,12 +2410,20 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
         ],
       },
       {
+  requestBodyRequired: true,
+
         method: 'POST',
         path: '/panel/api/xray/outbound-subs/:id',
         summary: 'Update an existing outbound subscription by id. Accepts the same form fields as create.',
-        params: [
-          { name: 'id', in: 'path', type: 'integer', desc: 'Subscription id.' },
-        ],
+        params: [ { name: 'id', in: 'path', type: 'integer' },
+  { name: 'remark', in: 'body (form)', type: 'string', optional: true },
+  { name: 'url', in: 'body (form)', type: 'string' },
+  { name: 'tagPrefix', in: 'body (form)', type: 'string', optional: true },
+  { name: 'enabled', in: 'body (form)', type: 'boolean', optional: true },
+  { name: 'allowPrivate', in: 'body (form)', type: 'boolean', optional: true },
+  { name: 'allowInsecure', in: 'body (form)', type: 'boolean', optional: true },
+  { name: 'prepend', in: 'body (form)', type: 'boolean', optional: true },
+  { name: 'updateInterval', in: 'body (form)', type: 'integer', optional: true, desc: 'Refresh interval in seconds; defaults to 600.' } ],
       },
       {
         method: 'DELETE',
@@ -2353,7 +2473,7 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
     id: 'subscription',
     title: 'Subscription Server',
     description:
-      'A separate HTTP/HTTPS server that serves proxy subscription links (standard, JSON, and Clash) to clients. The server listens on its own port (default 10882) and is configured in Settings → Subscription. Paths are configurable; defaults are shown below. All subscription endpoints set response headers for client apps to read traffic/expiry info.',
+      'A separate HTTP/HTTPS server that serves proxy subscription links (standard, JSON, and Clash) to clients. The server listens on its own port (default 2096) and is configured in Settings → Subscription. Paths are configurable; defaults are shown below. Subscription responses include traffic/expiry headers; individual configuration-file downloads carry an attachment filename.',
     subHeader: [
       { name: 'Subscription-Userinfo', desc: 'Traffic and expiry: <code>upload=N; download=N; total=N; expire=TS</code>' },
       { name: 'Profile-Title', desc: 'Base64-encoded subscription display name' },
@@ -2368,7 +2488,13 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       {
         method: 'GET',
         path: '/{subPath}:subid',
-        summary: 'Return base64-encoded subscription links for every client matching the subscription ID on an enabled inbound. A disabled client is still listed — its credential is stripped from the running core, so the link cannot connect; use the {{STATUS}} remark token to label it. When the request has an Accept: text/html header or ?html=1, renders a styled info page instead. With ?format=info, returns the page view-model as JSON (traffic, expiry, online status; no links) for live polling. Default path: /sub/:subid.',
+        summary: 'Return subscription links, base64-encoded when enabled in settings, for every client matching the subscription ID on an enabled inbound. A disabled client is still listed — its credential is stripped from the running core, so the link cannot connect; use the {{STATUS}} remark token to label it. Accept: text/html or ?html=1 selects the info page; ?format=info returns its JSON view-model without links. Configured user-agent detection can select JSON or Clash YAML. Served by the separate subscription listener; default path: /sub/:subid.',
+        responseContent: {
+          'text/plain': { schema: { type: 'string' } },
+          'text/html': { schema: { type: 'string' } },
+          'application/json': { schema: { oneOf: [{ type: 'object', additionalProperties: true }, { type: 'array', items: { type: 'object', additionalProperties: true } }] } },
+          'application/yaml': { schema: { type: 'string' } },
+        },
         params: [
           { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
           { name: 'format', in: 'query', type: 'string', optional: true, desc: 'Set to "info" to get the subscription status view-model as JSON instead of the links.' },
@@ -2379,6 +2505,7 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
         path: '/{subPath}:subid/file/:inboundId',
         summary:
           'Download the configuration file for one inbound of the subscription, as an attachment — the .conf a kernel WireGuard or AmneziaWG client imports. The subscription ID is the only credential. Anything that is not file-shaped, or that the ID does not own, answers 404 with no body, indistinguishable from a subscription that does not exist, so a guessed ID confirms nothing. Default path: /sub/:subid/file/:inboundId.',
+        responseContent: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
         params: [
           { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
           { name: 'inboundId', in: 'path', type: 'number', desc: 'The inbound whose client file to download; it must hand out a file-shaped config.' },
@@ -2387,17 +2514,28 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       {
         method: 'GET',
         path: '/{jsonPath}:subid',
-        summary: 'Return subscription as a JSON array of proxy configs, one per client on an enabled inbound (a disabled client is still listed, but cannot connect). Only when JSON subscription is enabled in settings. Default path: /json/:subid.',
+        summary: 'Return JSON proxy configuration as an object or array according to subscription settings. Default media type is text/plain; ?view=raw downloads application/json, and browser HTML requests select the info page. Disabled clients may be listed but cannot connect. Requires JSON subscription enabled on the separate subscription listener. Default path: /json/:subid.',
+        responseContent: {
+          'text/plain': { schema: { type: 'string' } },
+          'application/json': { schema: { oneOf: [{ type: 'object', additionalProperties: true }, { type: 'array', items: { type: 'object', additionalProperties: true } }] } },
+          'text/html': { schema: { type: 'string' } },
+        },
         params: [
           { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
+          { name: 'view', in: 'query', type: 'string', optional: true, desc: 'Set to raw to download the JSON document with application/json media type.' },
         ],
       },
       {
         method: 'GET',
         path: '/{clashPath}:subid',
-        summary: 'Return subscription as a Clash/Mihomo-compatible YAML config, including configured global Clash routing rules. Only when Clash subscription is enabled in settings. Default path: /clash/:subid.',
+        summary: 'Return a Clash/Mihomo-compatible YAML config, including configured global Clash routing rules. Browser HTML requests select the info page; ?view=raw downloads YAML directly. Requires Clash subscription enabled on the separate subscription listener. Default path: /clash/:subid.',
+        responseContent: {
+          'application/yaml': { schema: { type: 'string' } },
+          'text/html': { schema: { type: 'string' } },
+        },
         params: [
           { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
+          { name: 'view', in: 'query', type: 'string', optional: true, desc: 'Set to raw to download YAML directly instead of the browser info page.' },
         ],
       },
     ],
@@ -2501,6 +2639,8 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       ]
     },
     {
+  requestRequired: [ 'name', 'username', 'password', 'inboundIds' ],
+
       method: 'POST',
       path: '/panel/api/resellers',
       summary: 'Create reseller credentials, budget and inbound grants',
@@ -2510,6 +2650,8 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       params: []
     },
     {
+  requestRequired: [ 'name', 'username', 'inboundIds' ],
+
       method: 'POST',
       path: '/panel/api/resellers/:id/update',
       summary: 'Update reseller credentials, permissions and grants',
@@ -2526,6 +2668,9 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       ]
     },
     {
+  requestRequired: [ 'suspended' ],
+  requestProperties: { suspended: { nullable: false } },
+
       method: 'POST',
       path: '/panel/api/resellers/:id/suspend',
       summary: 'Suspend or reactivate a reseller and its previously enabled clients',
@@ -2540,6 +2685,10 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       ]
     },
     {
+  requestRequired: [],
+  description: 'At least one of traffic, days, or clients must be positive. Other fields may be omitted. Unlimited budget axes cannot be topped up.',
+  requestProperties: { traffic: { minimum: 0 }, days: { minimum: 0, maximum: 36500 }, clients: { minimum: 0 } },
+
       method: 'POST',
       path: '/panel/api/resellers/:id/top-up',
       summary: 'Add traffic capacity, account days or client slots',
@@ -2737,6 +2886,15 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       responseSchemaArray: false
     },
     {
+  requestSchema: 'Policy',
+  requestRequired: [ 'name' ],
+  requestProperties: { tiers:
+   { type: 'array',
+     items:
+      { type: 'object',
+        properties:
+         { fromBytes: { type: 'integer', format: 'int64' }, upBps: { type: 'integer', format: 'int64' }, downBps: { type: 'integer', format: 'int64' } } } } },
+
       method: 'POST',
       path: '/panel/api/reseller/plans/add',
       summary: "Plan add within the authenticated owner's scope.",
@@ -2803,6 +2961,15 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       responseSchemaArray: false
     },
     {
+  requestSchema: 'Policy',
+  requestRequired: [],
+  requestProperties: { tiers:
+   { type: 'array',
+     items:
+      { type: 'object',
+        properties:
+         { fromBytes: { type: 'integer', format: 'int64' }, upBps: { type: 'integer', format: 'int64' }, downBps: { type: 'integer', format: 'int64' } } } } },
+
       method: 'POST',
       path: '/panel/api/reseller/plans/update/:id',
       summary: "Plan update within the authenticated owner's scope.",

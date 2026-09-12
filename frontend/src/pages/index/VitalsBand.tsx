@@ -72,7 +72,7 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
       },
       {
         key: 'mem',
-        label: t('pages.index.memory'),
+        label: t('dashboardRepair.memory'),
         value: status.mem.percent,
         detail: `${SizeFormatter.sizeFormat(status.mem.current)} / ${SizeFormatter.sizeFormat(status.mem.total)}`,
         foot: `${t('pages.index.avg')} ${memAvg} · ${SizeFormatter.sizeFormat(memFree)} ${t('pages.index.free')}`,
@@ -99,7 +99,7 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
       },
       {
         key: 'diskUsage',
-        label: t('pages.index.storage'),
+        label: t('dashboardRepair.disk'),
         value: status.disk.percent,
         detail: `${SizeFormatter.sizeFormat(status.disk.current)} / ${SizeFormatter.sizeFormat(status.disk.total)}`,
         foot: `${SizeFormatter.sizeFormat(diskFree)} ${t('pages.index.free')}`,
@@ -117,7 +117,7 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
 
   return (
     <section className="p-card">
-      <div className="p-vitals">
+      <div className={`p-vitals${lead ? '' : ' ov-vitals-only'}`}>
         {lead}
         {vitals.map((v) => (
           <button
@@ -133,7 +133,7 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
             <span className="p-vital-t">
               <span className="p-vital-l">{v.label}</span>
               <span className="p-vital-d">{status.unavailable.includes(v.key) ? t('telemetry.noReadings') : v.detail}</span>
-              <span className="p-vital-f">{v.foot}</span>
+              <span className="p-vital-f">{status.unavailable.includes(v.key) ? '—' : v.foot}</span>
             </span>
           </button>
         ))}
@@ -145,7 +145,7 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
               <Kicker>{t('pages.index.lastSamples', { metric: current.label })}</Kicker>
               <Button type="text" size="small" onClick={() => onOpen(null)} aria-label={t('close')} icon={<Icon name="close" size={14} />} />
             </div>
-            <HistoryChart times={history.times ?? []} height={160} format={pct}
+            <HistoryChart dashboard times={history.times ?? []} height={136} format={pct}
               series={[{ name: current.label, values: history.series[current.key] ?? [], color: TONE[current.key] }]} />
           </div>
           <div style={{ flex: '0 1 220px', minWidth: 180 }}>

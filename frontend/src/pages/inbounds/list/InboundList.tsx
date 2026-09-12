@@ -37,6 +37,7 @@ import { useInboundColumns } from './useInboundColumns';
 import InboundStatsModal from './InboundStatsModal';
 import type { DBInboundRecord, GeneralAction, InboundListProps, RowAction } from './types';
 import { PanelCard } from '@/components/ui/panel';
+import LiveTrafficTrend from '@/components/viz/LiveTrafficTrend';
 import './InboundList.css';
 
 export default function InboundList({
@@ -44,6 +45,7 @@ export default function InboundList({
   clientCount,
   lastOnlineMap: _lastOnlineMap,
   inboundSpeed,
+  inboundTrends,
   expireDiff,
   trafficDiff,
   pageSize,
@@ -146,6 +148,7 @@ export default function InboundList({
     nodesById,
     clientCount,
     inboundSpeed,
+    inboundTrends,
     subEnable,
     expireDiff,
     trafficDiff,
@@ -286,6 +289,7 @@ export default function InboundList({
                       </Dropdown>
                     </div>
                   </div>
+                  <LiveTrafficTrend series={inboundTrends?.[String(record.id)]} height={28} showCaption />
                 </div>
               ))}
               </>

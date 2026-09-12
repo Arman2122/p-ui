@@ -46,7 +46,6 @@
     "react-hook-form": "^7.83.0",
     "react-i18next": "^17.0.11",
     "react-router": "^8.3.0",
-    "swagger-ui-react": "^5.32.11",
     "uplot": "^1.6.32",
     "zod": "^4.4.3"
   },
@@ -60,7 +59,6 @@
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@types/swagger-ui-react": "^5.18.0",
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/browser-playwright": "4.1.10",
     "@vitest/coverage-v8": "^4.1.10",
@@ -88,10 +86,6 @@
     "react-inspector": "^9.0.0",
     "react-debounce-input": {
       "react": "^19.0.0"
-    },
-    "swagger-ui-react": {
-      "js-yaml": "^4.3.1",
-      "brace-expansion": "^5.0.9"
     },
     "@typeschema/valibot": {
       "valibot": "^1.1.0"

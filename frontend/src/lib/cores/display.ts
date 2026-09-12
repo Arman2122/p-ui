@@ -49,3 +49,9 @@ export function coreRestarts(core: CoreStatusView): number | undefined {
   if (!core.instances.some((instance) => instance.restarts !== undefined)) return undefined;
   return core.instances.reduce((n, instance) => n + (instance.restarts ?? 0), 0);
 }
+
+const CORE_ORDER = ['xray', 'singbox', 'wgkernel', 'awgkernel', 'ssh', 'mtproto', 'openvpn', 'ocserv'];
+export function orderCores<T extends { id: string }>(cores: readonly T[]): T[] {
+  const rank = (id: string) => CORE_ORDER.includes(id) ? CORE_ORDER.indexOf(id) : CORE_ORDER.length;
+  return [...cores].sort((a, b) => rank(a.id) - rank(b.id));
+}

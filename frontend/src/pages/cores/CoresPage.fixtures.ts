@@ -30,3 +30,10 @@ export const CORE_INBOUND_FIXTURES = [
   { id: 14, remark: 'Home VPN', protocol: 'openvpn', port: 1194 },
   { id: 15, remark: 'Office Connect', protocol: 'ocserv', port: 4443 },
 ];
+
+export const CORE_TRAFFIC_FIXTURES = [
+  ...CORE_INBOUND_FIXTURES.map((row, i) => ({ ...row, nodeId: null, up: 1048576 * (i + 1), down: 1073741824 * (i + 1),
+    settings: { clients: [{ email: `customer-${i}` }, { email: 'shared-customer' }] } })),
+  { id: 16, remark: 'Second VLESS', protocol: 'vless', port: 4433, nodeId: null, up: 1048576, down: 1073741824, settings: { clients: [{ email: 'shared-customer' }, { email: 'second-customer' }] } },
+  { id: 17, remark: 'Remote VLESS', protocol: 'vless', port: 443, nodeId: 42, up: 1099511627776, down: 1099511627776, settings: { clients: [{ email: 'remote-only' }] } },
+];

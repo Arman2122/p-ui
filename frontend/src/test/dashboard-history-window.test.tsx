@@ -6,7 +6,7 @@ import { useOverviewHistory } from '@/pages/index/useOverviewHistory';
 import { Status } from '@/models/status';
 import { HttpUtil, Msg } from '@/utils';
 import { renderWithProviders } from './test-utils';
-import enUS from '../../../internal/web/translation/en-US.json';
+import i18next from 'i18next';
 
 function HistoryHarness() {
   const [bucket, setBucket] = useState(60);
@@ -26,7 +26,7 @@ it('requests fifteen-second buckets for the fifteen-minute dashboard window', as
   })));
   renderWithProviders(<HistoryHarness />);
   await waitFor(() => expect(get).toHaveBeenCalledWith('/panel/api/server/historyWindow/60', undefined, { silent: true }));
-  fireEvent.click(screen.getByText(enUS.pages.index.minutesShort.replace('{count}', '15')));
+  fireEvent.click(screen.getByRole('radio', { name: i18next.t('dashboardRepair.window15m') }));
   await waitFor(() => expect(get).toHaveBeenCalledWith('/panel/api/server/historyWindow/15', undefined, { silent: true }));
   await waitFor(() => expect(screen.getByLabelText('window seconds').textContent).toBe('900'));
 });

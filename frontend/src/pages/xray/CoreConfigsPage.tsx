@@ -61,10 +61,10 @@ function ManagedCoreConfig({ id }: { id: string }) {
   }, null, 2) : '';
   return <div className="p-network-page">
     {modalContext}
-    <PageHeader title={t('menu.xray')} sub={query.data ? t(query.data.titleKey) : id} actions={<Button danger loading={restart.isPending} onClick={() => modal.confirm({
+    <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Button danger loading={restart.isPending} onClick={() => modal.confirm({
       title: t('settingsOps.core.restart', { core: id }), content: t('settingsOps.core.restartHelp'),
       onOk: () => restart.mutateAsync(), okButtonProps: { danger: true },
-    })}>{t('settingsOps.core.restart', { core: id })}</Button>} />
+    })}>{t('settingsOps.core.restart', { core: id })}</Button></div>
     <Alert type="info" showIcon title={t('settingsOps.core.managed')} description={t('settingsOps.core.managedHelp')} />
     {(query.error || edit.error || restart.error) && <Alert type="error" title={(query.error || edit.error || restart.error)?.message} action={<Button onClick={() => void query.refetch()}>{t('refresh')}</Button>} />}
     <Spin spinning={query.isPending}>
@@ -96,7 +96,8 @@ export default function CoreConfigsPage({ xray }: { xray: ReactNode }) {
   const cores = useCoresQuery();
   const options = cores.data?.map((row) => ({ value: row.id, label: t(row.titleKey) })) ?? [{ value: 'xray', label: 'Xray' }];
   return <>
-    <div className="p-card" style={{ margin: '0 0 12px', padding: 12 }}>
+    <PageHeader title={t('menu.xray')} sub={t('pages.xray.subtitle')} />
+    <div className="p-card" style={{ padding: 12 }}>
       <Space wrap><span>{t('settingsOps.core.select')}</span><Select aria-label={t('settingsOps.core.select')} value={id} options={options}
         onChange={(core) => setParams((previous) => { previous.set('core', core); return previous; })} style={{ minWidth: 200 }} /></Space>
       {cores.isError && <Alert type="error" title={cores.error.message} />}

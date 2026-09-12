@@ -1,4 +1,5 @@
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
+import type { LiveTrafficSeries } from '@/hooks/useLiveTrafficHistory';
 
 export interface StreamHints {
   network: string;
@@ -69,6 +70,7 @@ export interface InboundListProps {
   onlineClients: string[];
   lastOnlineMap: Record<string, number>;
   inboundSpeed: Record<number, InboundSpeedEntry>;
+  inboundTrends?: Record<string, LiveTrafficSeries>;
   expireDiff: number;
   trafficDiff: number;
   pageSize: number;

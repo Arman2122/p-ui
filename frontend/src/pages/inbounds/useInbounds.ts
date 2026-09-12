@@ -14,6 +14,7 @@ import { DefaultsPayloadSchema, type DefaultsPayload } from '@/schemas/defaults'
 
 import type { InboundSpeedEntry } from './list/types';
 import { TRAFFIC_POLL_INTERVAL_S } from '@/lib/traffic/poll-interval';
+import { useLiveTrafficHistory } from '@/hooks/useLiveTrafficHistory';
 
 export interface SubSettings {
   enable: boolean;
@@ -132,7 +133,16 @@ export function useInbounds() {
     queryKey: keys.inbounds.slim(),
     queryFn: fetchSlimInbounds,
     staleTime: Infinity,
+    refetchInterval: 10_000,
   });
+
+  const trafficSamples = useMemo(() => (slimQuery.data ?? []).map((row) => {
+    const value = row as { id: number; up?: unknown; down?: unknown; nodeId?: number; protocol?: string };
+    return { key: String(value.id), scopeKey: `${value.nodeId ?? 'local'}:${value.protocol ?? ''}`,
+      counters: { up: typeof value.up === 'number' ? value.up : undefined, down: typeof value.down === 'number' ? value.down : undefined } };
+  }), [slimQuery.data]);
+  const trafficSampleAt = slimQuery.isSuccess ? slimQuery.dataUpdatedAt : 0;
+  const inboundTrends = useLiveTrafficHistory({ samples: trafficSamples, sampleAt: trafficSampleAt });
 
   const onlinesQuery = useQuery({
     queryKey: keys.clients.onlines(),
@@ -545,6 +555,8 @@ export function useInbounds() {
 
   return {
     fetched,
+    trafficSampleAt,
+    inboundTrends,
     fetchError,
     dbInbounds,
     clientCount,

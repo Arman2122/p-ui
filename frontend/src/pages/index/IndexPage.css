@@ -1,13 +1,11 @@
-/* Overview page — trend-first layout. Every colour comes from the AntD theme
-   tokens so light / dark / ultra-dark keep working and the sidebar is untouched.
-   Set --ov-accent once here if you want a fixed accent instead of the primary. */
+/* Dashboard layout follows the exported overview; overrides stay page-scoped. */
 
 .index-page {
   --ov-accent: var(--ant-color-primary);
   --ov-line: var(--ant-color-border);
   --ov-label: var(--ant-color-text-secondary);
   --ov-faint: var(--ant-color-text-tertiary);
-  --ov-gap: 12px;
+  --ov-gap: 16px;
   --ov-pad: 20px;
 }
 
@@ -27,7 +25,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--ov-gap);
+  --dashboard-muted: color-mix(in srgb, var(--p-text-3) 88%, var(--p-text));
 }
+.ov-page .p-kicker, .ov-page .p-vital-f, .ov-page .p-coretile-m, .ov-page .p-stat-u { color: var(--dashboard-muted); }
+.ov-page .p-pagehead-a > .ant-dropdown-trigger { flex: 0 0 auto; }
 
 /* — action bar — */
 
@@ -467,4 +468,75 @@
 
 .index-page .ip-hidden {
   filter: blur(6px);
+}
+
+.ov-page .p-vitals {
+  grid-template-columns: minmax(290px, 1.25fr) repeat(4, minmax(0, 1fr));
+  min-height: 105px;
+}
+.ov-page .p-vitals-core { padding: 11px 14px; }
+.ov-page .p-vitals.ov-vitals-only { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ov-page .p-vital { padding: 14px; gap: 12px; border-left: 0; border-inline-start: 1px solid var(--p-border); text-align: start; }
+.ov-page .p-vital-t { text-align: start; }
+.ov-page .p-gauge { flex-shrink: 0; }
+.ov-core-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ov-core-summary-count { font-size: 14px; font-weight: 650; line-height: 18px; color: var(--p-text); }
+.ov-core-summary-state { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 15px; margin-top: 2px; }
+.ov-core-summary-chips { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.ov-page .p-corechip { font-size: 10.5px; line-height: 14px; padding: 1px 7px; }
+.ov-page .p-coregrid { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+.ov-page .p-coretile { min-height: 70px; justify-content: space-between; }
+.ov-telemetry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ov-throughput-panel { grid-column: span 2; }
+.ov-bottom-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ov-throughput-panel, .ov-sessions-panel { display: flex; flex-direction: column; overflow: hidden; }
+.ov-throughput-panel > div:last-child, .ov-sessions-panel > div:last-child { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ov-throughput-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.ov-throughput-chart { padding: 10px 6px 0; flex: 1; }
+.ov-chart-empty { min-height: 176px; display: grid; place-items: center; font-size: 12px; color: var(--p-text-3); }
+.ov-throughput-footer, .ov-session-footer { display: grid; border-top: 1px solid var(--p-border); margin-top: auto; }
+.ov-throughput-footer { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ov-session-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ov-throughput-footer > *, .ov-session-footer > * { padding: 11px 14px; min-width: 0; }
+.ov-throughput-footer > * + *, .ov-session-footer > * + * { border-inline-start: 1px solid var(--p-border); }
+.ov-throughput-footer .p-sub, .ov-session-footer .p-sub { font-size: 11px; }
+.ov-session-current { padding: 14px 14px 0; }
+.ov-session-current .p-stat { font-size: 26px; }
+.ov-session-meter { display: flex; height: 6px; margin-top: 14px; border-radius: 99px; overflow: hidden; background: var(--p-fill); }
+.ov-session-legend { display: flex; gap: 16px; margin-top: 8px; }
+.ov-session-chart { padding-top: 12px; margin-top: auto; }
+.ov-history-chart .uplot { font-family: inherit; }
+.ov-history-chart .u-cursor-x, .ov-history-chart .u-cursor-y { border-color: var(--p-border-strong); }
+.ov-activity-panel, .ov-host-panel { min-height: 360px; overflow: hidden; }
+.ov-activity-feed { padding: 14px; }
+.ov-activity-feed .p-event > div:last-child > div:first-child { flex-wrap: wrap; row-gap: 2px !important; }
+.ov-host-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ov-host-cell { padding: 11px 14px; min-width: 0; }
+.ov-host-cell:nth-child(even) { border-inline-start: 1px solid var(--p-border); }
+.ov-host-cell:nth-child(n + 3) { border-top: 1px solid var(--p-border); }
+.ov-host-addresses { border-top: 1px solid var(--p-border); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.ov-host-addresses .p-mono { overflow-wrap: anywhere; }
+.ov-host-runtime { font-size: 11px; }
+@container main (max-width: 1200px) {
+  .ov-page .p-vitals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ov-page .p-vitals-core { grid-column: 1 / -1; border-bottom: 1px solid var(--p-border); }
+  .ov-core-summary-chips { flex-wrap: wrap; margin-top: 8px; }
+  .ov-page .p-vital:nth-child(2) { border-inline-start: 0; }
+}
+@container main (max-width: 900px) {
+  .ov-telemetry-grid, .ov-bottom-grid { grid-template-columns: minmax(0, 1fr); }
+  .ov-throughput-panel { grid-column: auto; }
+  .ov-activity-panel, .ov-host-panel { min-height: 0; }
+}
+@container main (max-width: 620px) {
+  .ov-page .p-vitals, .ov-page .p-vitals.ov-vitals-only { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-page .p-vital { border-right: 0; padding: 12px; gap: 10px; }
+  .ov-page .p-vital:nth-child(even) { border-inline-start: 0; }
+  .ov-page .p-vital:nth-child(odd) { border-inline-start: 1px solid var(--p-border); }
+  .ov-page .p-vital-f { display: block; }
+  .ov-page .p-coregrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-throughput-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-throughput-footer > :nth-child(3) { border-inline-start: 0; }
+  .ov-throughput-footer > :nth-child(n + 3) { border-top: 1px solid var(--p-border); }
+  .ov-throughput-legend { gap: 8px; }
 }

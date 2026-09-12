@@ -5,7 +5,7 @@ import type { CoreStatusView } from '@/generated/zod';
 import { Icon } from '@/components/ui/Icon';
 import { StatusDot } from '@/components/ui/panel';
 import { summarizeCores } from '@/lib/cores/status';
-import { coreIcon, coreColor, coreStateTone, coreVersionLabel } from '@/lib/cores/display';
+import { coreIcon, coreColor, coreStateTone, coreVersionLabel, orderCores } from '@/lib/cores/display';
 import { TimeFormatter } from '@/utils';
 
 const TONE_COLOR: Record<string, string> = {
@@ -37,12 +37,12 @@ export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; o
   const stopped = cores.filter((c) => !c.available || c.state !== 'running' || !c.ready);
   return (
     <div className="p-vitals-core">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <div className="ov-core-summary-heading">
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 650, color: 'var(--p-text)' }}>
+          <div className="ov-core-summary-count">
             {t('pages.index.coresRunning', { running: summary.healthy, total: summary.total })}
           </div>
-          <div className="p-sub" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          <div className="p-sub ov-core-summary-state" title={stopped.map((c) => `${t(c.titleKey)} · ${t(coreStateTone(c).labelKey)}`).join(' · ')}>
             {stopped.length
               ? stopped.map((c) => `${t(c.titleKey)} · ${t(coreStateTone(c).labelKey)}`).join(' · ')
               : cores.length ? t('pages.index.coresAllAnswering') : t('telemetry.noReadings')}
@@ -50,8 +50,8 @@ export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; o
         </div>
         <Button size="small" type="text" onClick={onOpen} aria-label={t('menu.manageCores')} icon={<Icon name="chevron" size={14} />} />
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 11, flexWrap: 'wrap' }}>
-        {cores.map((c) => {
+      <div className="ov-core-summary-chips">
+        {orderCores(cores).map((c) => {
           const tone = coreStateTone(c);
           return (
             <Tooltip key={c.id} title={`${t(c.titleKey)} · ${t(tone.labelKey)}`}>
@@ -71,7 +71,7 @@ export default function DashboardCores({ cores, onOpen }: { cores: CoreStatusVie
   const { t } = useTranslation();
   return (
     <div className="p-coregrid">
-      {cores.map((c) => {
+      {orderCores(cores).map((c) => {
         const tone = coreStateTone(c);
         const uptime = c.available && c.state === 'running' && c.ready ? uptimeOf(c) : '';
         return (

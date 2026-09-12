@@ -2,24 +2,25 @@
 title: Subscription Server
 description: A separate HTTP/HTTPS server that serves proxy subscription links
   (standard, JSON, and Clash) to clients. The server listens on its own port
-  (default 10882) and is configured in Settings → Subscription. Paths are
-  configurable; defaults are shown below. All subscription endpoints set
-  response headers for client apps to read traffic/expiry info.
+  (default 2096) and is configured in Settings → Subscription. Paths are
+  configurable; defaults are shown below. Subscription responses include
+  traffic/expiry headers; individual configuration-file downloads carry an
+  attachment filename.
 full: true
 _openapi:
   preload:
     - ./public/openapi.json
   toc:
     - depth: 2
-      title: 'Return base64-encoded subscription links for every client matching the
-        subscription ID on an enabled inbound. A disabled client is still listed
-        — its credential is stripped from the running core, so the link cannot
-        connect; use the {{STATUS}} remark token to label it. When the request
-        has an Accept: text/html header or ?html=1, renders a styled info page
-        instead. With ?format=info, returns the page view-model as JSON
-        (traffic, expiry, online status; no links) for live polling. Default
-        path: /sub/:subid.'
-      url: '#return-base64-encoded-subscription-links-for-every-client-matching-the-subscription-id-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it-when-the-request-has-an-accept-texthtml-header-or-html1-renders-a-styled-info-page-instead-with-formatinfo-returns-the-page-view-model-as-json-traffic-expiry-online-status-no-links-for-live-polling-default-path-subsubid'
+      title: 'Return subscription links, base64-encoded when enabled in settings, for
+        every client matching the subscription ID on an enabled inbound. A
+        disabled client is still listed — its credential is stripped from the
+        running core, so the link cannot connect; use the {{STATUS}} remark
+        token to label it. Accept: text/html or ?html=1 selects the info page;
+        ?format=info returns its JSON view-model without links. Configured
+        user-agent detection can select JSON or Clash YAML. Served by the
+        separate subscription listener; default path: /sub/:subid.'
+      url: '#return-subscription-links-base64-encoded-when-enabled-in-settings-for-every-client-matching-the-subscription-id-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it-accept-texthtml-or-html1-selects-the-info-page-formatinfo-returns-its-json-view-model-without-links-configured-user-agent-detection-can-select-json-or-clash-yaml-served-by-the-separate-subscription-listener-default-path-subsubid'
     - depth: 2
       title: 'Download the configuration file for one inbound of the subscription, as
         an attachment — the .conf a kernel WireGuard or AmneziaWG client
@@ -29,27 +30,30 @@ _openapi:
         ID confirms nothing. Default path: /sub/:subid/file/:inboundId.'
       url: '#download-the-configuration-file-for-one-inbound-of-the-subscription-as-an-attachment--the-conf-a-kernel-wireguard-or-amneziawg-client-imports-the-subscription-id-is-the-only-credential-anything-that-is-not-file-shaped-or-that-the-id-does-not-own-answers-404-with-no-body-indistinguishable-from-a-subscription-that-does-not-exist-so-a-guessed-id-confirms-nothing-default-path-subsubidfileinboundid'
     - depth: 2
-      title: 'Return subscription as a JSON array of proxy configs, one per client on
-        an enabled inbound (a disabled client is still listed, but cannot
-        connect). Only when JSON subscription is enabled in settings. Default
+      title: 'Return JSON proxy configuration as an object or array according to
+        subscription settings. Default media type is text/plain; ?view=raw
+        downloads application/json, and browser HTML requests select the info
+        page. Disabled clients may be listed but cannot connect. Requires JSON
+        subscription enabled on the separate subscription listener. Default
         path: /json/:subid.'
-      url: '#return-subscription-as-a-json-array-of-proxy-configs-one-per-client-on-an-enabled-inbound-a-disabled-client-is-still-listed-but-cannot-connect-only-when-json-subscription-is-enabled-in-settings-default-path-jsonsubid'
+      url: '#return-json-proxy-configuration-as-an-object-or-array-according-to-subscription-settings-default-media-type-is-textplain-viewraw-downloads-applicationjson-and-browser-html-requests-select-the-info-page-disabled-clients-may-be-listed-but-cannot-connect-requires-json-subscription-enabled-on-the-separate-subscription-listener-default-path-jsonsubid'
     - depth: 2
-      title: 'Return subscription as a Clash/Mihomo-compatible YAML config, including
-        configured global Clash routing rules. Only when Clash subscription is
-        enabled in settings. Default path: /clash/:subid.'
-      url: '#return-subscription-as-a-clashmihomo-compatible-yaml-config-including-configured-global-clash-routing-rules-only-when-clash-subscription-is-enabled-in-settings-default-path-clashsubid'
+      title: 'Return a Clash/Mihomo-compatible YAML config, including configured
+        global Clash routing rules. Browser HTML requests select the info page;
+        ?view=raw downloads YAML directly. Requires Clash subscription enabled
+        on the separate subscription listener. Default path: /clash/:subid.'
+      url: '#return-a-clashmihomo-compatible-yaml-config-including-configured-global-clash-routing-rules-browser-html-requests-select-the-info-page-viewraw-downloads-yaml-directly-requires-clash-subscription-enabled-on-the-separate-subscription-listener-default-path-clashsubid'
   structuredData:
     headings:
-      - content: 'Return base64-encoded subscription links for every client matching the
-          subscription ID on an enabled inbound. A disabled client is still
-          listed — its credential is stripped from the running core, so the link
-          cannot connect; use the {{STATUS}} remark token to label it. When the
-          request has an Accept: text/html header or ?html=1, renders a styled
-          info page instead. With ?format=info, returns the page view-model as
-          JSON (traffic, expiry, online status; no links) for live polling.
-          Default path: /sub/:subid.'
-        id: return-base64-encoded-subscription-links-for-every-client-matching-the-subscription-id-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it-when-the-request-has-an-accept-texthtml-header-or-html1-renders-a-styled-info-page-instead-with-formatinfo-returns-the-page-view-model-as-json-traffic-expiry-online-status-no-links-for-live-polling-default-path-subsubid
+      - content: 'Return subscription links, base64-encoded when enabled in settings,
+          for every client matching the subscription ID on an enabled inbound. A
+          disabled client is still listed — its credential is stripped from the
+          running core, so the link cannot connect; use the {{STATUS}} remark
+          token to label it. Accept: text/html or ?html=1 selects the info page;
+          ?format=info returns its JSON view-model without links. Configured
+          user-agent detection can select JSON or Clash YAML. Served by the
+          separate subscription listener; default path: /sub/:subid.'
+        id: return-subscription-links-base64-encoded-when-enabled-in-settings-for-every-client-matching-the-subscription-id-on-an-enabled-inbound-a-disabled-client-is-still-listed--its-credential-is-stripped-from-the-running-core-so-the-link-cannot-connect-use-the-status-remark-token-to-label-it-accept-texthtml-or-html1-selects-the-info-page-formatinfo-returns-its-json-view-model-without-links-configured-user-agent-detection-can-select-json-or-clash-yaml-served-by-the-separate-subscription-listener-default-path-subsubid
       - content: 'Download the configuration file for one inbound of the subscription,
           as an attachment — the .conf a kernel WireGuard or AmneziaWG client
           imports. The subscription ID is the only credential. Anything that is
@@ -58,15 +62,19 @@ _openapi:
           guessed ID confirms nothing. Default path:
           /sub/:subid/file/:inboundId.'
         id: download-the-configuration-file-for-one-inbound-of-the-subscription-as-an-attachment--the-conf-a-kernel-wireguard-or-amneziawg-client-imports-the-subscription-id-is-the-only-credential-anything-that-is-not-file-shaped-or-that-the-id-does-not-own-answers-404-with-no-body-indistinguishable-from-a-subscription-that-does-not-exist-so-a-guessed-id-confirms-nothing-default-path-subsubidfileinboundid
-      - content: 'Return subscription as a JSON array of proxy configs, one per client
-          on an enabled inbound (a disabled client is still listed, but cannot
-          connect). Only when JSON subscription is enabled in settings. Default
+      - content: 'Return JSON proxy configuration as an object or array according to
+          subscription settings. Default media type is text/plain; ?view=raw
+          downloads application/json, and browser HTML requests select the info
+          page. Disabled clients may be listed but cannot connect. Requires JSON
+          subscription enabled on the separate subscription listener. Default
           path: /json/:subid.'
-        id: return-subscription-as-a-json-array-of-proxy-configs-one-per-client-on-an-enabled-inbound-a-disabled-client-is-still-listed-but-cannot-connect-only-when-json-subscription-is-enabled-in-settings-default-path-jsonsubid
-      - content: 'Return subscription as a Clash/Mihomo-compatible YAML config,
-          including configured global Clash routing rules. Only when Clash
-          subscription is enabled in settings. Default path: /clash/:subid.'
-        id: return-subscription-as-a-clashmihomo-compatible-yaml-config-including-configured-global-clash-routing-rules-only-when-clash-subscription-is-enabled-in-settings-default-path-clashsubid
+        id: return-json-proxy-configuration-as-an-object-or-array-according-to-subscription-settings-default-media-type-is-textplain-viewraw-downloads-applicationjson-and-browser-html-requests-select-the-info-page-disabled-clients-may-be-listed-but-cannot-connect-requires-json-subscription-enabled-on-the-separate-subscription-listener-default-path-jsonsubid
+      - content: 'Return a Clash/Mihomo-compatible YAML config, including configured
+          global Clash routing rules. Browser HTML requests select the info
+          page; ?view=raw downloads YAML directly. Requires Clash subscription
+          enabled on the separate subscription listener. Default path:
+          /clash/:subid.'
+        id: return-a-clashmihomo-compatible-yaml-config-including-configured-global-clash-routing-rules-browser-html-requests-select-the-info-page-viewraw-downloads-yaml-directly-requires-clash-subscription-enabled-on-the-separate-subscription-listener-default-path-clashsubid
     contents: []
 ---
 

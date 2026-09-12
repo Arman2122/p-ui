@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { sections } from '../src/pages/api-docs/endpoints.ts';
@@ -72,7 +72,30 @@ function paramToOpenApi(p) {
 function fieldSchema(type) {
   if (type === 'file') return { type: 'string', format: 'binary' };
   if (type.endsWith('[]')) return { type: 'array', items: { type: mapType(type.slice(0, -2)) } };
+  if (type === 'array') return { type: 'array', items: {} };
   return { type: mapType(type) };
+}
+
+function requestProperty(property) {
+  let schema = structuredClone(property);
+  if (schema.$ref && Object.keys(schema).length > 1) {
+    const { $ref, ...overrides } = schema;
+    const name = $ref.replace('#/components/schemas/', '');
+    if (!SCHEMAS[name]) throw new Error(`Unknown request property schema: ${$ref}`);
+    const base = structuredClone(SCHEMAS[name]);
+    schema = { ...base, ...overrides };
+    if (overrides.properties) {
+      schema.properties = { ...base.properties };
+      for (const [key, value] of Object.entries(overrides.properties)) {
+        schema.properties[key] = { ...schema.properties[key], ...value };
+      }
+    }
+  }
+  if (schema.items) schema.items = requestProperty(schema.items);
+  if (schema.properties) {
+    schema.properties = Object.fromEntries(Object.entries(schema.properties).map(([name, value]) => [name, requestProperty(value)]));
+  }
+  return schema;
 }
 
 function buildOperation(ep, tag) {
@@ -83,6 +106,18 @@ function buildOperation(ep, tag) {
   };
   if (ep.description) op.description = ep.description;
   if (ep.deprecated) op.deprecated = true;
+
+  const subscription = ep.path.startsWith('/{');
+  const publicAuth = ['/login', '/csrf-token', '/getTwoFactorEnable'].includes(ep.path);
+  if (subscription || publicAuth) op.security = [];
+  if (ep.path === '/logout' || ep.path === '/ws') op.security = [{ cookieAuth: [] }];
+  if (subscription) {
+    op.servers = [{
+      url: '{subscriptionServer}',
+      description: 'Separate subscription listener. Set its configured origin before sending a request.',
+      variables: { subscriptionServer: { default: 'http://localhost:2096', description: 'Subscription origin, without the panel base path.' } },
+    }];
+  }
 
   const params = [];
   const bodyParams = [];
@@ -107,9 +142,16 @@ function buildOperation(ep, tag) {
     });
   }
 
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(ep.method)) {
+    params.push({
+      name: 'X-CSRF-Token', in: 'header', required: !ep.path.startsWith('/panel/api/'),
+      description: 'Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.',
+      schema: { type: 'string' },
+    });
+  }
   if (params.length > 0) op.parameters = params;
 
-  if (ep.body || ep.requestSchema || bodyParams.length > 0) {
+  if (ep.body || ep.requestSchema || ep.requestProperties || bodyParams.length > 0) {
     let example = tryParseJson(ep.body);
     const properties = {};
     const required = [];
@@ -129,15 +171,34 @@ function buildOperation(ep, tag) {
       if (!SCHEMAS[ep.requestSchema] || EXAMPLES[ep.requestSchema] === undefined) {
         throw new Error(`${ep.method} ${ep.path}: missing generated request schema ${ep.requestSchema}`);
       }
-      const ref = { $ref: `#/components/schemas/${ep.requestSchema}` };
-      schema = ep.requestSchemaArray ? { type: 'array', items: ref } : ref;
-      example ??= ep.requestSchemaArray ? [EXAMPLES[ep.requestSchema]] : EXAMPLES[ep.requestSchema];
+      schema = bodyParams.length || ep.requestRequired || ep.requestProperties
+        ? structuredClone(SCHEMAS[ep.requestSchema]) : { $ref: `#/components/schemas/${ep.requestSchema}` };
+      example ??= structuredClone(EXAMPLES[ep.requestSchema]);
+    }
+    const overrides = { ...properties, ...ep.requestProperties };
+    if (Object.keys(overrides).length) {
+      schema.properties = { ...schema.properties };
+      for (const [name, property] of Object.entries(overrides)) {
+        schema.properties[name] = requestProperty({ ...schema.properties[name], ...property });
+        if (property.type === 'string') {
+          // Some Go string fields store JSON; their request examples must stay strings.
+          for (const obj of [schema.properties[name], example]) {
+            const key = obj === example ? name : 'example';
+            if (obj?.[key] !== null && typeof obj?.[key] === 'object') obj[key] = JSON.stringify(obj[key]);
+          }
+        }
+      }
+    }
+    if (ep.requestRequired) schema.required = ep.requestRequired;
+    if (ep.requestSchemaArray) {
+      schema = { type: 'array', items: schema };
+      if (!Array.isArray(example)) example = [example];
     }
     const mediaType = bodyParams.some((p) => p.in === 'body (multipart)') ? 'multipart/form-data'
       : bodyParams.some((p) => p.in === 'body (form)') ? 'application/x-www-form-urlencoded' : 'application/json';
 
     op.requestBody = {
-      required: required.length > 0 || bodyParams.length === 0,
+      required: ep.requestBodyRequired ?? (!!ep.requestSchema || required.length > 0 || bodyParams.length === 0),
       content: {
         [mediaType]: {
           schema,
@@ -181,9 +242,42 @@ function buildOperation(ep, tag) {
     },
   };
 
+  if (ep.responseContent) {
+    responses['200'].description = 'Response body without a panel envelope.';
+    responses['200'].content = { ...ep.responseContent };
+    if (ep.responseErrorEnvelope) {
+      responses['200'].description = 'Binary attachment on success; JSON error envelope on failure.';
+      responses['200'].content['application/json'] = {
+        schema: {
+          type: 'object',
+          properties: { success: { type: 'boolean', enum: [false] }, msg: { type: 'string' } },
+        },
+      };
+    }
+    if (ep.responseContent['application/octet-stream']) {
+      responses['200'].headers = {
+        'Content-Disposition': { description: 'Attachment filename.', schema: { type: 'string' } },
+      };
+    }
+  }
+
+  if (ep.path === '/ws') {
+    delete responses['200'];
+    responses['101'] = { description: 'Switching Protocols. An administrator session cookie is required; the server pushes the documented WebSocket messages.' };
+  }
+
   const errExample = tryParseJson(ep.errorResponse);
   if (errExample !== undefined || ep.errorStatus) {
     const code = String(ep.errorStatus || 400);
+    if (code === '200' && responses[code]?.content?.['application/json']) {
+      const content = responses[code].content['application/json'];
+      responses[code].description = 'Application result; inspect success for the outcome.';
+      content.examples = {
+        ...(successExample !== undefined ? { success: { value: successExample } } : {}),
+        ...(errExample !== undefined ? { failure: { value: errExample } } : {}),
+      };
+      delete content.example;
+    } else {
     responses[code] = {
       description: 'Error response',
       content: {
@@ -199,13 +293,14 @@ function buildOperation(ep, tag) {
         },
       },
     };
+    }
   }
 
   op.responses = responses;
   return op;
 }
 
-function buildSpec() {
+export function buildSpec() {
   const paths = {};
   // The WebSocket message shapes are documented as pseudo-endpoints with a
   // `WS` method and a `→ type: …` path. Folded into the Paths Object they made
@@ -253,13 +348,13 @@ function buildSpec() {
   };
 }
 
-const spec = buildSpec();
-writeFileSync(outPath, JSON.stringify(spec, null, 2) + '\n');
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const spec = buildSpec();
+  writeFileSync(outPath, JSON.stringify(spec, null, 2) + '\n');
 
-const pathCount = Object.keys(spec.paths).length;
-let opCount = 0;
-for (const ops of Object.values(spec.paths)) opCount += Object.keys(ops).length;
-console.log(`[openapi] wrote ${outPath}`);
-console.log(`[openapi] paths: ${pathCount}, operations: ${opCount}, tags: ${spec.tags.length}`);
-
-void pathToFileURL;
+  const pathCount = Object.keys(spec.paths).length;
+  let opCount = 0;
+  for (const ops of Object.values(spec.paths)) opCount += Object.keys(ops).length;
+  console.log(`[openapi] wrote ${outPath}`);
+  console.log(`[openapi] paths: ${pathCount}, operations: ${opCount}, tags: ${spec.tags.length}`);
+}
