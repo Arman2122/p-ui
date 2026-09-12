@@ -110,11 +110,11 @@ describe('Cores page metadata', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('/panel/api/cores/xray/restart', undefined, expect.anything()));
   });
 
-  it('keeps real PID and kernel interface details behind the compact configuration action', async () => {
+  it('opens the selected cores configuration from the compact Config action', () => {
     const { container } = renderCores();
     fireEvent.click(within(container.querySelector('[data-core-id="xray"]')! as HTMLElement).getByRole('button', { name: i18next.t('pages.cores.fidelity.config') }));
-    expect(within(screen.getByRole('dialog')).getByText('4501')).toBeTruthy();
-    expect(within(screen.getByRole('dialog')).getByText(i18next.t('pages.cores.noInstanceRecords'))).toBeTruthy();
+    expect(screen.getByTestId('core-location').textContent).toBe('/xray?core=xray');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('switches all eight cores between cards and rows and exports only real status and aggregate data', () => {

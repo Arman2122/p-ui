@@ -1,5 +1,6 @@
 import { Button, Dropdown, Tag, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 import type { CoreStatusView, CoreView } from '@/generated/zod';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Field, Kicker, PanelCard, StatusChip } from '@/components/ui/panel';
@@ -31,21 +32,23 @@ interface CorePresentationProps {
 
 function CoreActions({ core, restarting, onRestart, onOpen, card = false }: CorePresentationProps & { card?: boolean }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const openConfig = () => navigate(`/xray?core=${encodeURIComponent(core.id)}`);
   const action = (icon: IconName, title: string, onClick: () => void, disabled = false, loading = false) =>
     <Tooltip title={disabled ? core.unavailable || title : title}><Button type={card ? 'default' : 'text'} size="small" aria-label={title} disabled={disabled} loading={loading}
       icon={<Icon name={icon} size={15} />} onClick={onClick}>{card ? title : null}</Button></Tooltip>;
   return <div className={card ? 'core-card-actions' : 'p-acts core-row-actions'} role="group" aria-label={t('pages.cores.columns.actions')}>
     {action('restart', t('pages.cores.restart'), onRestart, !core.available, restarting)}
-    {card ? action('logs', t('pages.cores.logs'), () => onOpen('logging'), !core.logs)
-      : action('inbounds', t('menu.inbounds'), () => onOpen('inbounds'))}
-    {!card && action('config', t('pages.cores.fidelity.config'), () => onOpen('runtime'))}
+    {action('logs', t('pages.cores.logs'), () => onOpen('logging'), !core.logs)}
+    {!card && action('config', t('pages.cores.fidelity.config'), openConfig)}
     <Tooltip title={t('pages.cores.fidelity.more')}><Dropdown trigger={['click']} menu={{ items: [
       { key: 'status', label: t('pages.cores.columns.state'), icon: <Icon name="gauge" size={14} /> },
       { key: 'logging', label: t('pages.cores.logs'), icon: <Icon name="logs" size={14} />, disabled: !core.logs },
-      { key: 'runtime', label: t('pages.cores.fidelity.config'), icon: <Icon name="config" size={14} /> },
+      { key: 'config', label: t('pages.cores.fidelity.config'), icon: <Icon name="config" size={14} /> },
+      { key: 'runtime', label: t('pages.cores.runtime'), icon: <Icon name="gauge" size={14} /> },
       { key: 'inbounds', label: t('menu.inbounds'), icon: <Icon name="inbounds" size={14} /> },
       { key: 'version', label: t('pages.cores.versions'), icon: <Icon name="up" size={14} /> },
-    ], onClick: ({ key }) => onOpen(key as CoreTab) }}>
+    ], onClick: ({ key }) => key === 'config' ? openConfig() : onOpen(key as CoreTab) }}>
       <Button type="text" size="small" aria-label={t('pages.cores.fidelity.more')} icon={<Icon name="more" size={15} />} />
     </Dropdown></Tooltip>
   </div>;
