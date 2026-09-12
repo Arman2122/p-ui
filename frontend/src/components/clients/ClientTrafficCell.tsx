@@ -9,6 +9,7 @@ import { SizeFormatter } from '@/utils';
 import './ClientTrafficCell.css';
 
 export interface ClientTrafficCellProps {
+  usedTotal?: number;
   up?: number;
   down?: number;
   total?: number;
@@ -22,6 +23,7 @@ export interface ClientTrafficCellProps {
 // pushes. Each skipped instance is one antd Popover (rc-trigger), one Progress,
 // a useTranslation subscription and a theme context read, times up to 200 rows.
 const ClientTrafficCell = memo(function ClientTrafficCell({
+  usedTotal,
   up = 0,
   down = 0,
   total = 0,
@@ -33,22 +35,25 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
   const { isDark } = useTheme();
 
   const display = useMemo(
-    () => computeTrafficDisplay({ up, down, total, enabled, trafficDiff }, isDark),
-    [up, down, total, enabled, trafficDiff, isDark],
+    () => computeTrafficDisplay({ up: usedTotal ?? up, down: usedTotal === undefined ? down : 0, total, enabled, trafficDiff }, isDark),
+    [up, down, usedTotal, total, enabled, trafficDiff, isDark],
   );
 
   const popover = (
     <table className="client-traffic-popover">
       <tbody>
-        <tr>
+        {usedTotal === undefined ? <tr>
           <td>↑</td>
           <td>{SizeFormatter.sizeFormat(up)}</td>
           <td>↓</td>
           <td>{SizeFormatter.sizeFormat(down)}</td>
-        </tr>
+        </tr> : <tr>
+          <td colSpan={2}>{t('pages.clients.traffic')}</td>
+          <td colSpan={2}>{SizeFormatter.sizeFormat(display.used)}</td>
+        </tr>}
         {!display.isUnlimited && (
           <tr>
-            <td colSpan={2}>{t('remained')}</td>
+            <td colSpan={2}>{t('pages.clients.remaining')}</td>
             <td colSpan={2}>{SizeFormatter.sizeFormat(display.remaining)}</td>
           </tr>
         )}

@@ -1,5 +1,7 @@
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
+import type { ClientPlanOverrides } from '@/schemas/client';
 import {
   Alert,
   Badge,
@@ -62,7 +64,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useClients } from '@/hooks/useClients';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
-import { usePolicyMutations } from '@/api/queries/usePolicyMutations';
 import { usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
@@ -90,6 +91,7 @@ const BulkDetachInboundsModal = lazy(() => import('./BulkDetachInboundsModal'));
 const TextModal = lazy(() => import('@/components/feedback/TextModal'));
 const PromptModal = lazy(() => import('@/components/feedback/PromptModal'));
 import { ClientInboundChips, ClientRowActions } from './RowCells';
+import { ClientPlanCell, ClientTrendCell } from './ClientMetadataCells';
 import { emptyFilters, activeFilterCount } from './filters';
 import type { ClientFilters } from './filters';
 import BulkResultDrawer from './BulkResultDrawer';
@@ -246,14 +248,14 @@ export default function ClientsPage() {
     setQuery,
     inbounds, onlines, transitioning, fetched, fetchError, subSettings,
     tgBotEnable, expireDiff, trafficDiff, pageSize, settingsReady,
-    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkClearIps, bulkExport, bulkLinks, bulkRotate, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, attach, setExternalLinks, bulkAttach, detach, bulkDetach,
+    create, update, remove, bulkDelete, bulkAdjust, bulkSet, bulkMove, bulkClearIps, bulkExport, bulkLinks, bulkRotate, bulkEnable, bulkDisable, bulkResetTraffic, bulkAddToGroup, bulkRemoveFromGroup, setExternalLinks, bulkAttach, bulkDetach,
     resetTraffic, resetAllTraffics, delDepleted, delOrphans, exportClients, importClients, setEnable,
     clientSpeed,
     applyTrafficEvent, applyClientStatsEvent,
     refresh,
     hydrate,
   } = useClients();
-  const { assign } = usePolicyMutations();
+
 
   useWebSocket({
     traffic: applyTrafficEvent,
@@ -266,7 +268,19 @@ export default function ClientsPage() {
 
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [initialPolicyId, setInitialPolicyId] = useState(0);
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') return;
+    const planId = Number(searchParams.get('planId'));
+    setInitialPolicyId(Number.isInteger(planId) && planId > 0 ? planId : 0);
+    setFormMode('add');
+    setFormOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('create'); next.delete('planId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [editingClient, setEditingClient] = useState<ClientRecord | null>(null);
   const [editingAttachedIds, setEditingAttachedIds] = useState<number[]>([]);
   const [editingExternalLinks, setEditingExternalLinks] = useState<ExternalLink[]>([]);
@@ -470,24 +484,6 @@ export default function ClientsPage() {
   // order, so we just hand it through.
   const sortedClients = filteredClients;
 
-  function remainingLabel(row: ClientRecord) {
-    const total = row.totalGB || 0;
-    if (total <= 0) return '∞';
-    const used = (row.traffic?.up || 0) + (row.traffic?.down || 0);
-    const r = total - used;
-    return r > 0 ? SizeFormatter.sizeFormat(r) : '0';
-  }
-
-  function remainingColor(row: ClientRecord): string {
-    const total = row.totalGB || 0;
-    if (total <= 0) return 'purple';
-    const used = (row.traffic?.up || 0) + (row.traffic?.down || 0);
-    const ratio = used / total;
-    if (ratio >= 1) return 'red';
-    if (ratio >= 0.85) return 'orange';
-    return 'green';
-  }
-
   function expiryLabel(row: ClientRecord) {
     if (!row.expiryTime) return '∞';
     if (row.expiryTime < 0) {
@@ -531,6 +527,7 @@ export default function ClientsPage() {
   }
 
   function onAdd() {
+    setInitialPolicyId(0);
     setFormMode('add');
     setEditingClient(null);
     setEditingAttachedIds([]);
@@ -886,44 +883,27 @@ export default function ClientsPage() {
   const onSave = useCallback(async (
     payload: Record<string, unknown> | { client: Record<string, unknown>; inboundIds: number[] },
     meta:
-      | { isEdit: false; email: string; externalLinks: ExternalLinkInput[]; policyId?: number }
-      | { isEdit: true; email: string; attach: number[]; detach: number[]; externalLinks: ExternalLinkInput[]; policyId?: number },
+      | { isEdit: false; email: string; externalLinks: ExternalLinkInput[]; policyId?: number; planOverrides?: ClientPlanOverrides }
+      | { isEdit: true; email: string; attach: number[]; detach: number[]; externalLinks: ExternalLinkInput[]; policyId?: number; planOverrides?: ClientPlanOverrides },
   ) => {
     if (!meta.isEdit) {
-      const createMsg = await create(payload);
+      const createMsg = await create({ ...payload, policyId: meta.policyId, planOverrides: meta.planOverrides, externalLinks: meta.externalLinks });
       if (!createMsg?.success) return createMsg;
-      if (meta.email && meta.externalLinks.length > 0) {
+      if (!meta.policyId && meta.email && meta.externalLinks.length > 0) {
         const r = await setExternalLinks(meta.email, meta.externalLinks);
-        if (!r?.success) return r;
-      }
-      /* After the create, because assign refuses an email no client owns. */
-      if (meta.policyId != null && meta.email) {
-        const r = await assign(meta.email, meta.policyId);
         if (!r?.success) return r;
       }
       return createMsg;
     }
-    const updateMsg = await update(meta.email, payload);
+    const updateMsg = await update(meta.email, { ...payload, policyId: meta.policyId, planOverrides: meta.planOverrides });
     if (!updateMsg?.success) return updateMsg;
     const rawEmail = (payload as { email?: unknown }).email;
     const emailKey = typeof rawEmail === 'string' && rawEmail.trim() ? rawEmail.trim() : meta.email;
-    if (Array.isArray(meta.attach) && meta.attach.length > 0) {
-      const r = await attach(emailKey, meta.attach);
-      if (!r?.success) return r;
-    }
-    if (Array.isArray(meta.detach) && meta.detach.length > 0) {
-      const r = await detach(emailKey, meta.detach);
-      if (!r?.success) return r;
-    }
-    if (meta.policyId != null) {
-      const r = await assign(emailKey, meta.policyId);
-      if (!r?.success) return r;
-    }
     // Always replace the client's external links (an empty set clears them).
     const r = await setExternalLinks(emailKey, meta.externalLinks);
     if (!r?.success) return r;
     return updateMsg;
-  }, [create, update, attach, detach, setExternalLinks, assign]);
+  }, [create, update, setExternalLinks]);
 
   const pageClass = useMemo(() => {
     const classes = ['clients-page'];
@@ -939,7 +919,7 @@ export default function ClientsPage() {
 
   const columns: ColumnsType<ClientRecord> = [
     {
-      title: t('pages.clients.client'), key: 'email', width: 340,
+      title: t('pages.clients.client'), key: 'email', width: 250,
       render: (_v, record) => {
         const bucket = clientBucket(record);
         const key = bucket === 'depleted' ? 'ended' : !record.enable ? 'disabled' : bucket === 'expiring' ? 'expiring' : 'active';
@@ -949,7 +929,7 @@ export default function ClientsPage() {
         return (
           <div className="p-client-identity">
             <div className="p-client-name">
-              <button className="p-text-action p-name" onClick={() => onShowInfo(record.email)}>{record.email}</button>
+              <button className="p-text-action p-name" title={record.email} onClick={() => onShowInfo(record.email)}>{record.email}</button>
               <StatusPip status={{ key, label, color }} online={!!record.enable && isOnline(record.email)}
                 note={`${reason ? `${reason} · ` : ''}${t('lastOnline')}: ${record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—'}`} />
               <Switch checked={!!record.enable} size="small" loading={togglingEmail === record.email}
@@ -957,40 +937,49 @@ export default function ClientsPage() {
             </div>
             <div className="p-client-context">
               <ClientCardComment comment={record.comment} className="p-desc" />
-              <ClientInboundChips ids={record.inboundIds || EMPTY_INBOUND_IDS} inboundsById={inboundsById}
-                protocolColors={INBOUND_PROTOCOL_COLORS} chipLimit={INBOUND_CHIP_LIMIT} />
-              {record.group && <button className="p-text-action p-sub" onClick={() => setFilters({ ...filters, groups: [record.group!] })}>{record.group}</button>}
+              <span className="p-client-inbounds"><ClientInboundChips ids={record.inboundIds || EMPTY_INBOUND_IDS} inboundsById={inboundsById}
+                protocolColors={INBOUND_PROTOCOL_COLORS} chipLimit={INBOUND_CHIP_LIMIT} /></span>
+              {record.group && <button className="p-text-action p-sub" title={record.group} onClick={() => setFilters({ ...filters, groups: [record.group!] })}>{record.group}</button>}
             </div>
-            {record.subId && <span className="p-sub p-mono" title={record.subId}>{record.subId}</span>}
           </div>
         );
       },
     },
     {
-      title: t('pages.clients.traffic'), key: 'traffic', width: 250,
-      render: (_v, record) => <>
-        <ClientTrafficCell up={record.traffic?.up} down={record.traffic?.down} total={record.totalGB}
-          enabled={record.enable} trafficDiff={trafficDiff} />
-        <span className="p-sub" style={{ color: `color-mix(in srgb, ${remainingColor(record)} 58%, var(--p-ink))` }}>{t('pages.clients.remaining')}: {remainingLabel(record)}</span>
-      </>,
+      title: t('telemetry.plan'), key: 'plan', width: 100,
+      render: (_v, record) => <div className="p-client-plan" title={[
+        record.plan?.name,
+        record.plan?.pending ? t('telemetry.planPending') : '',
+        record.plan?.overridden ? t('telemetry.planOverride') : '',
+      ].filter(Boolean).join(' · ')}><ClientPlanCell client={record} /></div>,
     },
     {
-      title: t('pages.clients.speed'), key: 'speed', width: 155, align: 'end',
+      title: t('pages.clients.traffic'), key: 'traffic', width: 145,
+      render: (_v, record) => <ClientTrafficCell compact up={record.traffic?.up} down={record.traffic?.down} total={record.totalGB}
+        enabled={record.enable} trafficDiff={trafficDiff} />,
+    },
+    {
+      title: t('telemetry.trend14d'), key: 'history', width: 100,
+      render: (_v, record) => <ClientTrendCell compact client={record} />,
+    },
+    {
+      title: t('pages.clients.speed'), key: 'speed', width: 110, align: 'end',
       render: (_v, record) => {
         const speed = clientSpeed[record.email];
-        return isActiveSpeed(speed) ? <ClientSpeedTag speed={speed} tableCell /> :
-          <div className="p-sub">{t('pages.clients.offline')}<div>{record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—'}</div></div>;
+        const seen = record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—';
+        return isActiveSpeed(speed) ? <div className="p-client-speed"><div>↓ {SizeFormatter.speedFormat(speed.down)}</div><div className="p-sub">↑ {SizeFormatter.speedFormat(speed.up)}</div></div> :
+          <div className="p-client-speed p-sub">{t('pages.clients.offline')}<div title={seen}>{seen}</div></div>;
       },
     },
     {
-      title: t('pages.clients.duration'), key: 'expiryTime', width: 145, align: 'end',
-      render: (_v, record) => <div>
+      title: t('pages.clients.duration'), key: 'expiryTime', width: 110, align: 'end',
+      render: (_v, record) => <div className="p-client-expiry" title={expiryLabel(record)}>
         <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 58%, var(--p-ink))` }}>{record.expiryTime ? expiryRelative(record) : '∞'}</span>
         <div className="p-sub">{expiryLabel(record)}</div>
       </div>,
     },
     {
-      title: t('pages.clients.actions'), key: 'actions', width: 176, align: 'end',
+      title: t('pages.clients.actions'), key: 'actions', width: 150, align: 'end',
       render: (_v, record) => <ClientRowActions email={record.email} onShowQr={onShowQr} onShowInfo={onShowInfo}
         onResetTraffic={onResetTraffic} onEdit={onEdit} onDelete={onDelete} />,
     },
@@ -1007,6 +996,7 @@ export default function ClientsPage() {
   };
 
   const rowSelection = {
+    columnWidth: 30,
     selectedRowKeys,
     onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
   };
@@ -1082,43 +1072,8 @@ export default function ClientsPage() {
                     <PageHeader
                       title={t('clients')}
                       sub={`${summary.total} ${t('clients')} · ${summary.onlineCount} ${t('online')}`}
-                    />
-                  </Col>
-
-                  <Col span={24}>
-                    <StatStrip
-                      active={filters.buckets.length === 1 ? filters.buckets[0] : filters.buckets.length === 0 ? 'all' : undefined}
-                      onPick={(key) => setFilters({ ...filters, buckets: key === 'all' ? [] : [key] })}
-                      items={[
-                        { key: 'all', label: t('clients'), value: summary.total },
-                        {
-                          key: 'online', label: t('online'), value: summary.onlineCount,
-                          color: 'var(--p-primary)', pulse: true,
-                          detail: summary.onlineCount ? <ClientEmailList emails={summary.online} total={summary.onlineCount} /> : undefined,
-                        },
-                        { key: 'active', label: t('subscription.active'), value: summary.active, color: 'var(--p-success)' },
-                        {
-                          key: 'expiring', label: t('depletingSoon'), value: summary.expiringCount, color: 'var(--p-warning)',
-                          detail: summary.expiringCount ? <ClientEmailList emails={summary.expiring} total={summary.expiringCount} /> : undefined,
-                        },
-                        {
-                          key: 'depleted', label: t('depleted'), value: summary.depletedCount, color: 'var(--p-error)',
-                          detail: summary.depletedCount ? <ClientEmailList emails={summary.depleted} total={summary.depletedCount} /> : undefined,
-                        },
-                        {
-                          key: 'deactive', label: t('disabled'), value: summary.deactiveCount, color: '#8b8d94',
-                          detail: summary.deactiveCount ? <ClientEmailList emails={summary.deactive} total={summary.deactiveCount} /> : undefined,
-                        },
-                      ]}
-                    />
-                  </Col>
-
-                  <Col span={24}>
-                    <Card
-                      size="small"
-                      hoverable
-                      title={
-                        <div className="card-toolbar">
+                      actions={
+                        <div className="clients-page-actions">
                           {selectionCount === 0 ? (
                             <Button type="primary" icon={<PlusOutlined />} onClick={onAdd} aria-label={t('pages.clients.addClients')}>
                               {!isMobile && t('pages.clients.addClients')}
@@ -1295,6 +1250,42 @@ export default function ClientsPage() {
                           )}
                         </div>
                       }
+                    />
+                  </Col>
+
+                  <Col span={24}>
+                    <StatStrip
+                      active={filters.buckets.length === 1 ? filters.buckets[0] : filters.buckets.length === 0 ? 'all' : undefined}
+                      onPick={(key) => setFilters({ ...filters, buckets: key === 'all' ? [] : [key] })}
+                      items={[
+                        { key: 'all', label: t('clients'), value: summary.total },
+                        {
+                          key: 'online', label: t('online'), value: summary.onlineCount,
+                          color: 'var(--p-primary)', pulse: true,
+                          detail: summary.onlineCount ? <ClientEmailList emails={summary.online} total={summary.onlineCount} /> : undefined,
+                        },
+                        { key: 'active', label: t('subscription.active'), value: summary.active, color: 'var(--p-success)' },
+                        {
+                          key: 'expiring', label: t('depletingSoon'), value: summary.expiringCount, color: 'var(--p-warning)',
+                          detail: summary.expiringCount ? <ClientEmailList emails={summary.expiring} total={summary.expiringCount} /> : undefined,
+                        },
+                        {
+                          key: 'depleted', label: t('depleted'), value: summary.depletedCount, color: 'var(--p-error)',
+                          detail: summary.depletedCount ? <ClientEmailList emails={summary.depleted} total={summary.depletedCount} /> : undefined,
+                        },
+                        {
+                          key: 'deactive', label: t('disabled'), value: summary.deactiveCount, color: '#8b8d94',
+                          detail: summary.deactiveCount ? <ClientEmailList emails={summary.deactive} total={summary.deactiveCount} /> : undefined,
+                        },
+                      ]}
+                    />
+                  </Col>
+
+                  <Col span={24}>
+                    <Card
+                      className="clients-table-card"
+                      size="small"
+                      hoverable
                     >
                       <div className={isMobile ? 'filter-bar mobile' : 'filter-bar'}>
                         <Input
@@ -1447,7 +1438,8 @@ export default function ClientsPage() {
                           rowSelection={rowSelection}
                           pagination={tablePagination}
                           size="small"
-                          scroll={{ x: 1200 }}
+                          tableLayout="fixed"
+                          scroll={{ x: 995 }}
                           onChange={onTableChange}
                           locale={{
                             emptyText: (
@@ -1565,6 +1557,8 @@ export default function ClientsPage() {
                                     </div>
                                   </div>
                                   <ClientCardComment comment={row.comment} />
+                                  <ClientPlanCell client={row} />
+                                  <ClientTrendCell client={row} />
                                   <ClientTrafficCell
                                     compact
                                     up={row.traffic?.up}
@@ -1598,6 +1592,7 @@ export default function ClientsPage() {
 
         <LazyMount when={formOpen}>
           <ClientFormModal
+            initialPolicyId={initialPolicyId}
             open={formOpen}
             mode={formMode}
             client={editingClient}

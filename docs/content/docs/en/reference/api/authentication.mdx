@@ -1,9 +1,10 @@
 ---
 title: Authentication
-description: Two authentication modes are supported. UI sessions use a cookie
-  set by the login endpoint. Programmatic clients (bots, scripts, remote panels)
-  authenticate with a Bearer token taken from Settings → Security → API Token.
-  Both work for every endpoint under /panel/api/*.
+description: UI sessions use a cookie set by the login endpoint. Programmatic
+  clients authenticate with a Bearer token from Panel Settings → API Token or
+  their reseller account. Each operation enforces the authenticated role, token
+  scope and ownership. The global WebSocket requires an administrator session
+  cookie.
 full: true
 _openapi:
   preload:

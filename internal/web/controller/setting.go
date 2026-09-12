@@ -263,9 +263,10 @@ func (a *SettingController) getDefaultXrayConfig(c *gin.Context) {
 }
 
 type apiTokenCreateForm struct {
-	Name      string `json:"name" form:"name"`
-	Scope     string `json:"scope" form:"scope"`
-	ExpiresAt int64  `json:"expiresAt" form:"expiresAt"`
+	Name       string `json:"name" form:"name"`
+	Scope      string `json:"scope" form:"scope"`
+	ExpiresAt  int64  `json:"expiresAt" form:"expiresAt"`
+	AllowedIPs string `json:"allowedIPs" form:"allowedIPs"`
 }
 
 type apiTokenEnabledForm struct {
@@ -273,7 +274,7 @@ type apiTokenEnabledForm struct {
 }
 
 func (a *SettingController) listApiTokens(c *gin.Context) {
-	rows, err := a.apiTokenService.List()
+	rows, err := a.apiTokenService.ListRestricted()
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.getSettings"), err)
 		return
@@ -287,7 +288,7 @@ func (a *SettingController) createApiToken(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 		return
 	}
-	row, err := a.apiTokenService.Create(form.Name, form.Scope, form.ExpiresAt)
+	row, err := a.apiTokenService.CreateRestricted(form.Name, form.Scope, form.ExpiresAt, form.AllowedIPs)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 		return
@@ -301,7 +302,7 @@ func (a *SettingController) deleteApiToken(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 		return
 	}
-	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), a.apiTokenService.Delete(id))
+	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), a.apiTokenService.DeleteRestricted(id))
 }
 
 func (a *SettingController) setApiTokenEnabled(c *gin.Context) {

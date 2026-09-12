@@ -1,12 +1,23 @@
 import { z } from 'zod';
 
 import { EnforcedLimitsSchema, PolicySchema } from '@/generated/zod';
-import type { EnforcedLimits, Policy } from '@/generated/zod';
+import type { EnforcedLimits } from '@/generated/zod';
 
-export type PolicyRecord = Policy;
+export const PlanRecordSchema = PolicySchema.extend({
+  ownerUserId: z.number().int().nullable().default(null),
+  description: z.string().default(''), archived: z.boolean().default(false),
+  startOnFirstUse: z.boolean().default(false), autoRenewDays: z.number().int().nonnegative().default(0),
+  resetCycle: z.enum(['none', 'weekly', 'monthly']).default('none'),
+  onDepletion: z.enum(['disable', 'throttle', 'notify']).default('disable'), burst: z.boolean().default(false),
+  inboundIds: z.array(z.number().int()).nullable().transform((ids) => ids ?? []).default([]),
+  assignedClients: z.number().default(0), pendingClients: z.number().default(0),
+  usedBytes: z.number().default(0), committedBytes: z.number().default(0),
+});
+export type PolicyRecord = z.infer<typeof PlanRecordSchema>;
+export type PolicyInput = z.input<typeof PlanRecordSchema>;
 export type EnforcedRecord = EnforcedLimits;
 
-export const PolicyListSchema = z.array(PolicySchema);
+export const PolicyListSchema = z.array(PlanRecordSchema);
 export { EnforcedLimitsSchema };
 
 /* One rung of the ladder. fromBytes is binary bytes, like every quota in the
@@ -97,13 +108,30 @@ export const TierRowSchema = z.object({
 });
 export type TierRow = z.infer<typeof TierRowSchema>;
 
-export const PolicyFormSchema = z
+const PolicyFormBase = z
   .object({
     id: z.number().int(),
     name: z.string().trim().min(1, 'pages.policies.nameRequired').max(128),
     tiers: z.array(TierRowSchema),
-  })
-  .superRefine((form, ctx) => {
+    description: z.string().max(2000).default(''),
+    quotaBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().default(null),
+    durationDays: z.number().int().min(0).max(36500).nullable().default(null),
+    limitIp: z.number().int().min(0).max(1000000).nullable().default(null),
+    inboundIds: z.array(z.number().int().positive()).max(500).default([]),
+    startOnFirstUse: z.boolean().default(false),
+    autoRenewDays: z.number().int().min(0).max(36500).default(0),
+    resetCycle: z.enum(['none', 'weekly', 'monthly']).default('none'),
+    onDepletion: z.enum(['disable', 'throttle', 'notify']).default('disable'),
+    archived: z.boolean().default(false),
+    burst: z.literal(false).default(false),
+  });
+export const PolicyFormSchema = PolicyFormBase.superRefine((form, ctx) => {
+    if ((form.startOnFirstUse || form.autoRenewDays > 0) && !form.durationDays) {
+      ctx.addIssue({ code: 'custom', path: ['durationDays'], message: 'plans.finiteDurationRequired' });
+    }
+    if (form.onDepletion !== 'disable' && (!form.quotaBytes || form.inboundIds.length === 0)) {
+      ctx.addIssue({ code: 'custom', path: ['onDepletion'], message: 'plans.continuationRequiresQuota' });
+    }
     const seen = new Set<number>();
     form.tiers.forEach((tier, index) => {
       const bytes = gbToBytes(tier.fromGB);
@@ -165,7 +193,22 @@ export function tierRowsToWire(rows: TierRow[]): PolicyTier[] {
 
 /* Everything the operator owns. The timestamps are the database's, so a write
    that carried them back would be claiming to set them. */
-export interface PolicyPayload {
-  name: string;
-  tiers: PolicyTier[];
+export const PolicyPayloadSchema = PolicyFormBase.omit({ id: true, tiers: true }).extend({ tiers: z.array(PolicyTierSchema) });
+export type PolicyPayload = z.infer<typeof PolicyPayloadSchema>;
+
+export const PlanMemberSchema = z.object({
+  email: z.string(), group: z.string(), enable: z.boolean(), usedBytes: z.number(), quotaBytes: z.number(),
+  expiryTime: z.number(), appliedRev: z.number(), pending: z.boolean(), overrideQuota: z.boolean(),
+  overrideExpiry: z.boolean(), overrideLimitIp: z.boolean(), overrideInbounds: z.boolean(),
+});
+export const PlanMemberPageSchema = z.object({ items: z.array(PlanMemberSchema), total: z.number() });
+export const PlanSummarySchema = z.object({ withoutPlan: z.number() });
+export const PlanReapplySchema = z.object({ applied: z.number(), needRestart: z.boolean(), failures: z.array(z.object({ email: z.string(), reason: z.string() })) });
+export type PlanMemberPage = z.infer<typeof PlanMemberPageSchema>;
+
+export function planFormValues(plan?: PolicyInput | null): PolicyFormValues {
+  return PolicyFormBase.extend({ name: z.string() }).parse(plan ? { ...plan, tiers: tierRowsFromWire(parseTiers(plan.tiers)), burst: false } : {
+    id: 0, name: '', tiers: [emptyTierRow()], description: '', quotaBytes: 100 * ONE_GB_BYTES,
+    durationDays: 30, limitIp: 2, inboundIds: [], startOnFirstUse: true,
+  });
 }

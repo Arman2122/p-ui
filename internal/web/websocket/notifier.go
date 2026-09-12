@@ -131,3 +131,9 @@ func BroadcastEvent(level, titleKey, messageKey string, params map[string]string
 		"message":    "",
 	})
 }
+
+func BroadcastActivity(activity any) {
+	if hub := GetHub(); hub != nil {
+		hub.Broadcast(MessageTypeNotification, activity)
+	}
+}

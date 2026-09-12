@@ -65,7 +65,7 @@ function uptimeOf(core: CoreStatusView): string {
 export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; onOpen: () => void }) {
   const { t } = useTranslation();
   const summary = summarizeCores(cores);
-  const stopped = cores.filter((c) => c.available && c.state !== 'running');
+  const stopped = cores.filter((c) => c.state !== 'idle' && (c.state !== 'running' || !c.ready));
   return (
     <div className="p-vitals-core">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -73,10 +73,10 @@ export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; o
           <div style={{ fontSize: 14, fontWeight: 650, color: 'var(--p-text)' }}>
             {t('pages.index.coresRunning', { running: summary.healthy, total: summary.total })}
           </div>
-          <div className="p-sub">
+          <div className="p-sub" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {stopped.length
               ? t('pages.index.coresStopped', { names: stopped.map((c) => t(c.titleKey)).join(', ') })
-              : t('pages.index.coresAllAnswering')}
+              : cores.length ? t('pages.index.coresAllAnswering') : t('telemetry.noReadings')}
           </div>
         </div>
         <Button size="small" type="text" onClick={onOpen} aria-label={t('menu.manageCores')} icon={<Icon name="chevron" size={14} />} />
@@ -104,7 +104,7 @@ export default function DashboardCores({ cores, onOpen }: { cores: CoreStatusVie
     <div className="p-coregrid">
       {cores.map((c) => {
         const tone = stateTone(c.state, c.ready);
-        const uptime = uptimeOf(c);
+        const uptime = c.state === 'running' && c.ready ? uptimeOf(c) : '';
         return (
           <button type="button" key={c.id} className="p-coretile" onClick={onOpen}>
             <span className="p-coretile-h">

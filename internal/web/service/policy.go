@@ -150,12 +150,15 @@ func factsFor(db *gorm.DB, emails []string, plans map[int]policy.Plan) (map[stri
 			// told from no assignment at all once the FK has nulled its plan.
 			Assigned *string
 			// Resolved is a ladder the master pushed to this node, evaluated as-is.
-			Resolved *string
+			Resolved      *string
+			OnDepletion   string
+			Quota         int64
+			ContinueQuota bool
 		}
 		err := db.Table("client_traffics").
 			Select("client_traffics.email AS email, "+used+" AS used_bytes, "+
 				"client_policies.policy_id AS policy_id, client_policies.email AS assigned, "+
-				"client_policies.resolved_tiers AS resolved", usedArgs...).
+				"client_policies.resolved_tiers AS resolved, client_policies.applied_on_depletion AS on_depletion, client_traffics.total AS quota, NOT client_policies.override_quota AS continue_quota", usedArgs...).
 			Joins("LEFT JOIN client_policies ON client_policies.email = client_traffics.email").
 			Where("client_traffics.email IN ?", batch).
 			Scan(&rows).Error
@@ -168,6 +171,9 @@ func factsFor(db *gorm.DB, emails []string, plans map[int]policy.Plan) (map[stri
 			case row.PolicyId != nil:
 				plan, known := plans[*row.PolicyId]
 				facts.plan, facts.unresolved = plan, !known
+				if row.ContinueQuota && row.OnDepletion == "throttle" {
+					facts.plan = policy.DepletionLadder(facts.plan, row.Quota)
+				}
 			case row.Resolved != nil:
 				// A node: the master that owns this client resolved the plan and
 				// pushed the ladder itself, so there is no id to look up here.
@@ -1080,17 +1086,11 @@ var (
 )
 
 func (s *PolicyService) GetAll() ([]*model.Policy, error) {
-	var rows []*model.Policy
-	err := database.GetDB().Model(&model.Policy{}).Order("id").Find(&rows).Error
-	return rows, err
+	return s.ListPlans(PlanScope{})
 }
 
 func (s *PolicyService) Get(id int) (*model.Policy, error) {
-	var row model.Policy
-	if err := database.GetDB().Where("id = ?", id).First(&row).Error; err != nil {
-		return nil, fmt.Errorf("%w: %d", ErrPolicyUnknown, id)
-	}
-	return &row, nil
+	return s.GetPlan(PlanScope{}, id)
 }
 
 // canonicalTiers sorts and de-duplicates on write, so every pass reads a ladder
@@ -1105,51 +1105,28 @@ func canonicalTiers(row *model.Policy) error {
 		return fmt.Errorf("%w: %w", ErrPolicyBadLadder, err)
 	}
 	row.Tiers = string(blob)
+	if row.Tiers == "null" {
+		row.Tiers = "[]"
+	}
 	return nil
 }
 
 func (s *PolicyService) Add(row *model.Policy) (*model.Policy, error) {
-	if err := canonicalTiers(row); err != nil {
-		return nil, err
-	}
 	row.Id = 0
-	if err := database.GetDB().Create(row).Error; err != nil {
-		return nil, fmt.Errorf("%w: %q", ErrPolicyNameTaken, row.Name)
-	}
-	return row, nil
+	return s.SavePlan(PlanScope{}, row)
 }
 
 // Update replaces the editable half. Nothing here touches a core's config, so a
 // plan edit provably cannot restart a daemon or drop a connection.
 func (s *PolicyService) Update(row *model.Policy) (*model.Policy, error) {
-	if _, err := s.Get(row.Id); err != nil {
-		return nil, err
-	}
-	if err := canonicalTiers(row); err != nil {
-		return nil, err
-	}
-	err := database.GetDB().Model(&model.Policy{}).Where("id = ?", row.Id).
-		Updates(map[string]any{"name": row.Name, "tiers": row.Tiers}).Error
-	if err != nil {
-		return nil, fmt.Errorf("%w: %q", ErrPolicyNameTaken, row.Name)
-	}
-	return s.Get(row.Id)
+	return s.SavePlan(PlanScope{}, row)
 }
 
 func (s *PolicyService) Del(id int) error {
-	if _, err := s.Get(id); err != nil {
-		return err
-	}
-	return database.GetDB().Delete(&model.Policy{}, id).Error
+	return s.DeletePlan(PlanScope{}, id)
 }
 
-/*
-Assign puts one client on a plan; a policyId of 0 takes them off it.
-
-Keyed by email like the client's quota, and deliberately not by client id: a
-deleted-and-resynced client keeps the same email and a new id, so an id-keyed
-assignment would vanish and drop a paying customer back to no plan.
-*/
+// Assign retains the legacy bulk API while applying the complete template.
 func (s *PolicyService) Assign(email string, policyID int) error {
 	db := database.GetDB()
 	var clients int64
@@ -1159,17 +1136,11 @@ func (s *PolicyService) Assign(email string, policyID int) error {
 	if clients == 0 {
 		return fmt.Errorf("%w: %q", ErrPolicyNoSuchUser, email)
 	}
-	if policyID == 0 {
-		return db.Where("email = ?", email).Delete(&model.ClientPolicy{}).Error
+	result, err := s.ApplyPlan(context.Background(), PlanScope{}, email, policyID, false)
+	if result.NeedRestart {
+		(&XrayService{}).SetToNeedRestart()
 	}
-	if _, err := s.Get(policyID); err != nil {
-		return err
-	}
-	row := model.ClientPolicy{Email: email, PolicyId: &policyID}
-	return db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "email"}},
-		DoUpdates: clause.AssignmentColumns([]string{"policy_id", "updated_at"}),
-	}).Create(&row).Error
+	return err
 }
 
 /*

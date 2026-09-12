@@ -15,8 +15,26 @@ import (
 // MetricSample is one point of any time-series we keep in memory.
 // The frontend deserializes both keys, so they must stay short.
 type MetricSample struct {
-	T int64   `json:"t"`
-	V float64 `json:"v"`
+	T int64   `json:"t" example:"1789227000"`
+	V float64 `json:"v" example:"23.5"`
+}
+
+type MetricHistoryWindow struct {
+	Bucket int                       `json:"bucket" example:"60"`
+	End    int64                     `json:"end" example:"1789227000"`
+	Series map[string][]MetricSample `json:"series" example:"{\"cpu\":[{\"t\":1789227000,\"v\":23.5}]}"`
+}
+
+func (s *ServerService) SystemHistoryWindow(bucket int) MetricHistoryWindow {
+	window := MetricHistoryWindow{Bucket: bucket, End: time.Now().Unix() / int64(bucket) * int64(bucket), Series: map[string][]MetricSample{}}
+	for _, key := range SystemMetricKeys {
+		points := []MetricSample{}
+		for _, p := range systemMetrics.aggregate(key, bucket, 60) {
+			points = append(points, MetricSample{T: p["t"].(int64), V: p["v"].(float64)})
+		}
+		window.Series[key] = points
+	}
+	return window
 }
 
 // tierSpec defines one resolution layer of the rollup ladder: a fixed bucket

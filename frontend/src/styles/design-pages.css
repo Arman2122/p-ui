@@ -22,6 +22,8 @@
 .p-pagehead-a{flex:0 0 auto}
 .p-plan-empty{padding:32px;text-align:center;color:var(--p-text-2)}
 .p-network-page{display:flex;flex-direction:column;gap:16px;min-width:0}
+.p-activity-entry{padding:12px 0;border-bottom:1px solid var(--p-border)}
+.p-activity-entry:last-child{border-bottom:0}
 .p-api-rail .p-endpoint-list{max-height:calc(100vh - 210px);overflow:auto;padding:6px}
 .p-api-rail .p-eprow{display:flex;gap:6px;align-items:center;width:100%;text-align:start;padding:8px;border:0;background:transparent;color:var(--p-text-2);cursor:pointer}
 .p-api-rail .p-eprow.is-active{background:var(--p-primary-bg);color:var(--p-text)}

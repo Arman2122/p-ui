@@ -1,0 +1,140 @@
+.reseller-clients-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.reseller-clients-page .p-reseller-clients-table .ant-table-cell {
+  padding: 8px 6px;
+}
+
+.reseller-clients-page .p-client-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.reseller-clients-page .p-client-name,
+.reseller-clients-page .p-client-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.reseller-clients-page .p-client-name > .p-name,
+.reseller-clients-page .p-client-context > .p-desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reseller-clients-page .p-client-name > .p-pip,
+.reseller-clients-page .p-client-name > .ant-switch {
+  flex-shrink: 0;
+}
+
+.reseller-clients-page .p-desc {
+  color: var(--p-text-3);
+  font-size: 11px;
+}
+
+.reseller-clients-page .p-client-inbounds {
+  display: flex;
+  min-width: 0;
+  max-width: 130px;
+  gap: 2px;
+}
+
+.reseller-clients-page .p-client-inbounds .ant-tag {
+  min-width: 0;
+  max-width: 90px;
+  margin: 0 !important;
+  padding-inline: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reseller-clients-page .p-client-inbounds .ant-tag:last-child {
+  flex-shrink: 0;
+}
+
+.reseller-clients-page .p-client-plan .ant-tag,
+.reseller-clients-page .p-client-plan .p-sub,
+.reseller-clients-page .p-client-presence > *,
+.reseller-clients-page .p-client-expiry > * {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reseller-clients-page .p-client-plan .ant-tag {
+  margin-inline: 0;
+  font-size: 11px;
+}
+
+.reseller-clients-page .p-client-plan .p-sub {
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.reseller-clients-page .p-client-presence,
+.reseller-clients-page .p-client-expiry {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.reseller-clients-page .client-traffic-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 4px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.reseller-clients-page .client-traffic-cell-used,
+.reseller-clients-page .client-traffic-cell-limit {
+  min-width: 0;
+  font-size: 11px;
+}
+
+.reseller-clients-page .client-traffic-cell-used {
+  text-align: start;
+}
+
+.reseller-clients-page .client-traffic-cell-limit {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: end;
+}
+
+.reseller-clients-page .client-traffic-cell-bar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.reseller-clients-page .p-reseller-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.reseller-clients-page .p-reseller-row-actions .ant-btn {
+  width: 28px;
+  padding-inline: 4px;
+}

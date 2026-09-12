@@ -19,6 +19,7 @@ export const NAV: NavGroup[] = [
       { key: '/clients', labelKey: 'menu.clients', icon: 'users' },
       { key: '/plans', labelKey: 'menu.policies', icon: 'speed', count: 'plans' },
       { key: '/groups', labelKey: 'menu.groups', icon: 'groups' },
+      { key: '/resellers', labelKey: 'resellers.title', icon: 'users' },
     ],
   },
   {

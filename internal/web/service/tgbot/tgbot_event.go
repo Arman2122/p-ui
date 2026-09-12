@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/eventbus"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 var cachedHostname string
@@ -33,13 +34,14 @@ func (t *Tgbot) HandleEvent(e eventbus.Event) {
 	if !t.isEventEnabled(e.Type) {
 		return
 	}
+	msg := t.formatEventMessage(e)
+	if msg == "" {
+		return
+	}
 	if !tgEventLimiter.Allow(e.Type, eventbus.LimiterKey(e)) {
 		return
 	}
-	msg := t.formatEventMessage(e)
-	if msg != "" {
-		t.SendMsgToTgbotAdmins(msg)
-	}
+	t.SendMsgToTgbotAdmins(msg)
 	if data, ok := e.Data.(*eventbus.ClientDeviceLimitData); ok && e.Type == eventbus.EventClientDeviceLimit {
 		t.tellClientDeviceLimit(data)
 	}
@@ -103,6 +105,16 @@ func (t *Tgbot) formatEventMessage(e eventbus.Event) string {
 	header := fmt.Sprintf("<b>📡 %s</b>\n", host)
 
 	switch e.Type {
+	case eventbus.EventClientPlanDepleted:
+		data, ok := e.Data.(service.PlanDepletionNotice)
+		if !ok || data.Email == "" || data.QuotaBytes <= 0 {
+			return ""
+		}
+		return header + t.I18nBot("tgbot.messages.eventPlanDepletedTitle") + "\n" +
+			t.I18nBot("tgbot.messages.eventPlanDepletedBody",
+				"Email=="+data.Email, "Plan=="+data.PlanName,
+				"Used=="+strconv.FormatInt(data.UsedBytes, 10), "Quota=="+strconv.FormatInt(data.QuotaBytes, 10))
+
 	case eventbus.EventOutboundDown:
 		msg := header + t.I18nBot("tgbot.messages.eventOutboundDown",
 			"Tag=="+e.Source)

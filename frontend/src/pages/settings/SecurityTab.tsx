@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InputNumber, Select, Tag,
+  Alert,
   Button,
   Empty,
   Form,
@@ -21,20 +22,12 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { catTabLabel } from './catTabLabel';
 import TwoFactorModal from './TwoFactorModal';
 import './SecurityTab.css';
+import { SettingsAPITokenListSchema, type SettingsAPIToken as ApiTokenRow } from '@/schemas/settings-operations';
 
 interface ApiMsg<T = unknown> {
   success?: boolean;
   msg?: string;
   obj?: T;
-}
-
-interface ApiTokenRow {
-  id: number;
-  name: string;
-  enabled: boolean;
-  createdAt: number;
-  scope?: string;
-  expiresAt?: number;
 }
 
 interface SecurityTabProps {
@@ -87,9 +80,11 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
 
   const [apiTokens, setApiTokens] = useState<ApiTokenRow[]>([]);
   const [apiTokensLoading, setApiTokensLoading] = useState(false);
+  const [apiTokensError, setApiTokensError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
-  const [createScope, setCreateScope] = useState<'admin' | 'read'>('admin');
+  const [createScope, setCreateScope] = useState<'admin' | 'read'>('read');
+  const [createAllowedIPs, setCreateAllowedIPs] = useState('');
   const [createDays, setCreateDays] = useState<number>(0);
   const [creating, setCreating] = useState(false);
   const [createdToken, setCreatedToken] = useState<{ name: string; token: string } | null>(null);
@@ -138,13 +133,17 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
 
   const loadApiTokens = useCallback(async () => {
     setApiTokensLoading(true);
+    setApiTokensError('');
     try {
       const msg = await HttpUtil.get('/panel/api/setting/apiTokens') as ApiMsg<ApiTokenRow[]>;
-      if (msg?.success) setApiTokens(Array.isArray(msg.obj) ? msg.obj : []);
+      if (!msg?.success) throw new Error(msg?.msg || t('somethingWentWrong'));
+      setApiTokens(SettingsAPITokenListSchema.parse(msg.obj));
+    } catch (error) {
+      setApiTokensError(error instanceof Error ? error.message : String(error));
     } finally {
       setApiTokensLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
      
@@ -160,7 +159,8 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
 
   function openCreateModal() {
     setCreateName('');
-    setCreateScope('admin');
+    setCreateScope('read');
+    setCreateAllowedIPs('');
     setCreateDays(0);
     setCreateOpen(true);
   }
@@ -173,13 +173,13 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
     }
     setCreating(true);
     try {
-      const msg = await HttpUtil.post('/panel/api/setting/apiTokens/create', { name, scope: createScope, expiresAt: createDays > 0 ? Math.floor(Date.now() / 1000) + createDays * 86400 : 0 }) as ApiMsg<{ token?: string }>;
+      const msg = await HttpUtil.post('/panel/api/setting/apiTokens/create', { name, scope: createScope, allowedIPs: createAllowedIPs, expiresAt: createDays > 0 ? Math.floor(Date.now() / 1000) + createDays * 86400 : 0 }) as ApiMsg<{ token?: string }>;
       if (msg?.success) {
         setCreateOpen(false);
-        await loadApiTokens();
         if (msg.obj?.token) {
           setCreatedToken({ name, token: msg.obj.token });
         }
+        await loadApiTokens();
       }
     } finally {
       setCreating(false);
@@ -309,6 +309,7 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
           label: catTabLabel(<ApiOutlined />, t('pages.nodes.apiToken'), isMobile),
           children: (
             <div className="api-token-section">
+              {apiTokensError && <Alert type="error" title={apiTokensError} action={<Button onClick={() => void loadApiTokens()}>{t('refresh')}</Button>} />}
               <div className="api-token-header">
                 <p className="api-token-hint">{t('pages.nodes.apiTokenHint')}</p>
                 <Button type="primary" size="small" onClick={openCreateModal}>
@@ -325,6 +326,7 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
                       <div className="api-token-name-wrap">
                         <span className="api-token-name">{row.name}</span>
                         <span className="api-token-created">{formatTokenDate(row.createdAt)}</span>
+                        {row.allowedIPs && <code dir="ltr">{row.allowedIPs}</code>}
                         <Tag color={row.scope === 'read' ? 'blue' : 'gold'}>
                           {t(row.scope === 'read' ? 'pages.settings.security.apiTokenScopeRead' : 'pages.settings.security.apiTokenScopeAdmin')}
                         </Tag>
@@ -382,6 +384,9 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
           </Form.Item>
           <Form.Item label={t('pages.settings.security.apiTokenExpiresIn')} extra={t('pages.settings.security.apiTokenExpiresInHint')}>
             <InputNumber min={0} max={3650} precision={0} value={createDays} onChange={onNumber(setCreateDays)} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label={t('settingsOps.tokens.allowedIPs')} extra={t('settingsOps.tokens.allowedIPsHelp')}>
+            <Input.TextArea value={createAllowedIPs} maxLength={4096} onChange={(event) => setCreateAllowedIPs(event.target.value)} placeholder="192.0.2.10, 2001:db8::/32" dir="ltr" />
           </Form.Item>
         </Form>
       </Modal>

@@ -3,8 +3,11 @@ import i18next from 'i18next';
 /* A core arrives as its id ("xray"), which is also the stem of its display key.
    Resolving it here keeps the server from having to guess the reader's locale. */
 function humanize(name: string, value: string): string {
-  if (name !== 'core' || !value) return value;
-  const key = `cores.${value}.title`;
+  if (!value) return value;
+  const key = name === 'core' ? `cores.${value}.title`
+    : name === 'operation' ? `activity.operations.${value}`
+      : name === 'resource' ? `activity.resources.${value}` : '';
+  if (!key) return value;
   const translated = i18next.t(key);
   return translated === key ? value : translated;
 }

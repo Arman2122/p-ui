@@ -29,7 +29,6 @@ type APIController struct {
 	settingController     *SettingController
 	xraySettingController *XraySettingController
 	userService           panel.UserService
-	apiTokenService       panel.ApiTokenService
 	Tgbot                 tgbot.Tgbot
 }
 
@@ -45,9 +44,12 @@ func (a *APIController) checkAPIAuth(c *gin.Context) {
 	// the caller, equivalent to a valid bearer token. api_authed must be set so
 	// the CSRF middleware lets cert-authed mutations through.
 	if c.Request.TLS != nil && len(c.Request.TLS.VerifiedChains) > 0 {
-		if u, err := a.userService.GetFirstUser(); err == nil {
-			session.SetAPIAuthUser(c, u)
+		u, err := a.userService.GetFirstUser()
+		if err != nil || !session.IsAdminUser(u) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, entity.Msg{Success: false, Msg: http.StatusText(http.StatusUnauthorized)})
+			return
 		}
+		session.SetAPIAuthUser(c, u)
 		c.Set("api_authed", true)
 		c.Next()
 		return
@@ -55,19 +57,25 @@ func (a *APIController) checkAPIAuth(c *gin.Context) {
 	auth := c.GetHeader("Authorization")
 	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
 		tok := after
-		if scope, ok := a.apiTokenService.Match(tok); ok {
+		if u, err := (&service.ResellerService{}).MatchToken(tok); err == nil {
+			session.SetAPIAuthUser(c, u)
+			c.Set("api_authed", true)
+			c.Next()
+			return
+		}
+		if u, scope, err := service.LegacyTokenUser(tok, c.ClientIP()); err == nil {
 			if scope == model.ApiTokenScopeRead && !readOnlyMethod(c.Request.Method) {
 				c.AbortWithStatusJSON(http.StatusForbidden, entity.Msg{Success: false, Msg: "this API token is read-only"})
 				return
 			}
-			if u, err := a.userService.GetFirstUser(); err == nil {
-				session.SetAPIAuthUser(c, u)
-			}
+			session.SetAPIAuthUser(c, u)
 			c.Set("api_authed", true)
 			c.Set("api_scope", scope)
 			c.Next()
 			return
 		}
+		c.AbortWithStatusJSON(http.StatusUnauthorized, entity.Msg{Success: false, Msg: http.StatusText(http.StatusUnauthorized)})
+		return
 	}
 	if !session.IsLogin(c) {
 		if c.GetHeader("X-Requested-With") == "XMLHttpRequest" {
@@ -76,6 +84,12 @@ func (a *APIController) checkAPIAuth(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 		}
 		return
+	}
+	if !session.IsAdmin(c) {
+		if err := (&service.ResellerService{}).CheckAccess(session.GetLoginUser(c)); err != nil {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
 	}
 	c.Next()
 }
@@ -89,8 +103,15 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// advertise support, before CSRF/handlers read the body.
 	api.Use(middleware.ConfigEnvelopeMiddleware())
 	api.Use(middleware.CSRFMiddleware())
-
+	api.Use(ActivityAuditMiddleware())
+	NewActivityController(api)
+	NewResellerController(api)
+	NewResellerPlanController(api.Group("/reseller/plans"))
 	api.GET("/openapi.json", ServeOpenAPISpec)
+	api.Use(requireAdmin)
+	NewBackupController(api)
+	NewCoreConfigController(api)
+
 	api.GET("/cores", a.getCores)
 	api.GET("/cores/status", a.getCoresStatus)
 	api.POST("/cores/:id/restart", a.restartCore)

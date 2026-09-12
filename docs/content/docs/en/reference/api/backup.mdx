@@ -1,6 +1,9 @@
 ---
 title: Backup
-description: Operations that interact with the configured Telegram bot.
+description: PostgreSQL snapshots, retention, scheduled backups, authenticated
+  encryption for manual archives, restore operations and optional delivery to
+  configured administrator Telegram chats. Backups and protected configuration
+  require administrator write access.
 full: true
 _openapi:
   preload:
@@ -10,11 +13,59 @@ _openapi:
       title: Send a fresh DB backup to every Telegram chat configured as an admin
         recipient. No body, no params.
       url: '#send-a-fresh-db-backup-to-every-telegram-chat-configured-as-an-admin-recipient-no-body-no-params'
+    - depth: 2
+      title: List persisted backup and restore operations, archive availability and
+        the UTC schedule.
+      url: '#list-persisted-backup-and-restore-operations-archive-availability-and-the-utc-schedule'
+    - depth: 2
+      title: Persist automatic backup settings.
+      url: '#persist-automatic-backup-settings'
+    - depth: 2
+      title: Create a complete PostgreSQL archive, optionally encrypted with
+        AES-256-GCM using a request-only passphrase.
+      url: '#create-a-complete-postgresql-archive-optionally-encrypted-with-aes-256-gcm-using-a-request-only-passphrase'
+    - depth: 2
+      title: 'Download stored bytes unchanged: .dump.pui ciphertext when
+        encrypted=true, or a plain .dump. No passphrase appears in a URL or
+        download request.'
+      url: '#download-stored-bytes-unchanged-dumppui-ciphertext-when-encryptedtrue-or-a-plain-dump-no-passphrase-appears-in-a-url-or-download-request'
+    - depth: 2
+      title: Restore a stored PostgreSQL archive after making a safety dump.
+      url: '#restore-a-stored-postgresql-archive-after-making-a-safety-dump'
+    - depth: 2
+      title: Restore .dump or encrypted .dump.pui archive. Authenticate the entire
+        encrypted stream before any PostgreSQL action.
+      url: '#restore-dump-or-encrypted-dumppui-archive-authenticate-the-entire-encrypted-stream-before-any-postgresql-action'
+    - depth: 2
+      title: Send this exact stored archive to the bot's configured administrator
+        chats and persist delivery outcome. Administrator write access required.
+      url: '#send-this-exact-stored-archive-to-the-bots-configured-administrator-chats-and-persist-delivery-outcome-administrator-write-access-required'
   structuredData:
     headings:
       - content: Send a fresh DB backup to every Telegram chat configured as an admin
           recipient. No body, no params.
         id: send-a-fresh-db-backup-to-every-telegram-chat-configured-as-an-admin-recipient-no-body-no-params
+      - content: List persisted backup and restore operations, archive availability and
+          the UTC schedule.
+        id: list-persisted-backup-and-restore-operations-archive-availability-and-the-utc-schedule
+      - content: Persist automatic backup settings.
+        id: persist-automatic-backup-settings
+      - content: Create a complete PostgreSQL archive, optionally encrypted with
+          AES-256-GCM using a request-only passphrase.
+        id: create-a-complete-postgresql-archive-optionally-encrypted-with-aes-256-gcm-using-a-request-only-passphrase
+      - content: 'Download stored bytes unchanged: .dump.pui ciphertext when
+          encrypted=true, or a plain .dump. No passphrase appears in a URL or
+          download request.'
+        id: download-stored-bytes-unchanged-dumppui-ciphertext-when-encryptedtrue-or-a-plain-dump-no-passphrase-appears-in-a-url-or-download-request
+      - content: Restore a stored PostgreSQL archive after making a safety dump.
+        id: restore-a-stored-postgresql-archive-after-making-a-safety-dump
+      - content: Restore .dump or encrypted .dump.pui archive. Authenticate the entire
+          encrypted stream before any PostgreSQL action.
+        id: restore-dump-or-encrypted-dumppui-archive-authenticate-the-entire-encrypted-stream-before-any-postgresql-action
+      - content: Send this exact stored archive to the bot's configured administrator
+          chats and persist delivery outcome. Administrator write access
+          required.
+        id: send-this-exact-stored-archive-to-the-bots-configured-administrator-chats-and-persist-delivery-outcome-administrator-write-access-required
     contents: []
 ---
 
@@ -27,7 +78,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/backuptotgbot","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/backuptotgbot","method":"post"},{"path":"/panel/api/backups","method":"get"},{"path":"/panel/api/backups/schedule","method":"post"},{"path":"/panel/api/backups/create","method":"post"},{"path":"/panel/api/backups/{id}/download","method":"get"},{"path":"/panel/api/backups/{id}/restore","method":"post"},{"path":"/panel/api/backups/upload","method":"post"},{"path":"/panel/api/backups/{id}/telegram","method":"post"}]} showTitle />
     </>
   );
 }

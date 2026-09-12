@@ -18,6 +18,7 @@ import { formatPanelVersion } from '@/lib/panel-version';
 import type { Status } from '@/models/status';
 
 interface OverviewActionBarProps {
+  historyControl?: ReactNode;
   status: Status;
   isMobile: boolean;
   accessLogEnable: boolean;
@@ -52,6 +53,7 @@ const XRAY_STATE_KEYS: Record<string, string> = {
 };
 
 export default function OverviewActionBar({
+  historyControl,
   status,
   isMobile,
   accessLogEnable,
@@ -113,6 +115,7 @@ export default function OverviewActionBar({
   );
 
   return <PageHeader title={t('menu.dashboard')} sub={statePill} actions={<>
+    {historyControl}
     {updateAvailable && <Tag color="warning" icon={<CloudDownloadOutlined />} onClick={onOpenPanelUpdate}>
       {`${t('update')} ${formatPanelVersion(latestVersion)}`}
     </Tag>}

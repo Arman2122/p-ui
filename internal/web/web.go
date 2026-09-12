@@ -36,9 +36,9 @@ import (
 	"github.com/Arman2122/p-ui/internal/web/runtime"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/service/email"
-	"github.com/Arman2122/p-ui/internal/web/service/wsnotify"
 	"github.com/Arman2122/p-ui/internal/web/service/panel"
 	"github.com/Arman2122/p-ui/internal/web/service/tgbot"
+	"github.com/Arman2122/p-ui/internal/web/service/wsnotify"
 	"github.com/Arman2122/p-ui/internal/web/websocket"
 	"github.com/Arman2122/p-ui/internal/xray"
 
@@ -205,7 +205,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	// large backups and streams them to disk, so only its exact route suffix is
 	// exempt. Follow-up: make the limit a setting.
 	const maxRequestBodyBytes = 10 << 20 // 10 MiB
-	engine.Use(middleware.MaxBodyBytes(maxRequestBodyBytes, "/panel/api/server/importDB"))
+	engine.Use(middleware.MaxBodyBytes(maxRequestBodyBytes, "/panel/api/server/importDB", "/panel/api/backups/upload"))
 
 	webDomain, err := s.settingService.GetWebDomain()
 	if err != nil {
@@ -415,6 +415,10 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 
 	// check client ips from log file every day
 	_, _ = s.cron.AddJob("@daily", job.NewClearLogsJob())
+	_, _ = s.cron.AddJob("@hourly", &job.ActivityPruneJob{})
+	_, _ = s.cron.AddJob("@every 5m", job.NewClientHistoryJob())
+	_, _ = s.cron.AddJob("@every 1m", job.NewGroupMembershipJob())
+	_, _ = s.cron.AddJob("@every 1m", job.NewBackupJob())
 	_, _ = s.cron.AddJob(cadenceXrayLogPrune, job.NewPruneXrayLogsJob())
 	_, _ = s.cron.AddJob("@hourly", job.NewWarpIpJob())
 
@@ -778,6 +782,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	service.SetEventBus(s.bus)
 	job.EventBus = s.bus
 	tgbot.EventBus = s.bus
+	service.SetBackupArchiveSender(tgbot.SendBackupArchive)
 
 	// Wire xray crash callback BEFORE startTask so it's ready
 	xray.OnCrash = func(err error) {

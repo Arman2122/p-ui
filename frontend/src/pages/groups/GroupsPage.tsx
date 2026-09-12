@@ -9,10 +9,12 @@ import {
   Input,
   Layout,
   Modal,
+  Progress,
   Result,
   Row,
   Space,
   Spin,
+  Tag,
   message,
 } from 'antd';
 import type { MenuProps } from 'antd';
@@ -34,7 +36,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useClients } from '@/hooks/useClients';
-import { HttpUtil, SizeFormatter } from '@/utils';
+import { HttpUtil, SizeFormatter, FileManager } from '@/utils';
+import GroupQuotaModal from './GroupQuotaModal';
+import { ClientTrendCell } from '../clients/ClientMetadataCells';
 import { StatStrip } from '@/components/ui';
 import { PageHeader, PanelCard, Field } from '@/components/ui/panel';
 import { setMessageInstance } from '@/utils/messageBus';
@@ -84,7 +88,7 @@ export default function GroupsPage() {
   useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
   const queryClient = useQueryClient();
 
-  const { subSettings, bulkAdjust, bulkAddToGroup, bulkRemoveFromGroup, bulkDelete } = useClients({ list: false });
+  const { subSettings, inbounds, bulkAdjust, bulkAddToGroup, bulkRemoveFromGroup, bulkDelete } = useClients({ list: false });
 
   const groupsQuery = useQuery({
     queryKey: keys.clients.groups(),
@@ -124,6 +128,7 @@ export default function GroupsPage() {
   });
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [quotaGroup, setQuotaGroup] = useState<GroupSummary | null>(null);
   const [createName, setCreateName] = useState('');
 
   const [renameOpen, setRenameOpen] = useState(false);
@@ -327,6 +332,7 @@ export default function GroupsPage() {
 
   function rowActions(row: GroupSummary): MenuProps['items'] {
     return [
+      { key: 'quota', label: t('telemetry.groupQuota'), onClick: () => setQuotaGroup(row) },
       {
         key: 'subLinks',
         icon: <LinkOutlined />,
@@ -418,9 +424,10 @@ export default function GroupsPage() {
                       title={t('menu.groups')}
                       sub={t('pages.groups.subtitle')}
                       actions={
+                        <Space><Button onClick={() => FileManager.downloadTextFile(JSON.stringify(groups, null, 2), 'group-usage.json')}>{t('telemetry.exportUsage')}</Button>
                         <Button aria-label={t('pages.groups.addGroup')} type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                           {t('pages.groups.addGroup')}
-                        </Button>
+                        </Button></Space>
                       }
                     />
                   </Col>
@@ -446,14 +453,19 @@ export default function GroupsPage() {
                           </Dropdown>
                         </Space>}>
                         <div className="p-groupbody">
-                          <div><span className="p-stat">{SizeFormatter.sizeFormat(g.trafficUsed)}</span><span className="p-stat-u"> {t('pages.groups.trafficUsed')}</span></div>
+                          <div><div className="p-sub">{t('pages.groups.trafficUsed')}</div><span className="p-stat">{SizeFormatter.sizeFormat(g.trafficUsed)}</span><span className="p-stat-u"> / {g.quotaBytes ? SizeFormatter.sizeFormat(g.quotaBytes) : '∞'}</span></div>
+                          <Progress percent={g.quotaBytes ? Math.min(100, g.trafficUsed / g.quotaBytes * 100) : 0}
+                            showInfo={false} status={g.quotaBytes && g.trafficUsed >= g.quotaBytes ? 'exception' : 'normal'} />
+                          <ClientTrendCell wide client={{ email: g.name, history: g.history }} hint={t('telemetry.currentMemberHistory')} />
+                          <Space wrap size={4}>{(g.inboundIds ?? []).map((id) => <Tag key={id}>{inbounds.find((ib) => ib.id === id)?.remark || `#${id}`}</Tag>)}</Space>
                           <div className="p-detail-grid">
                             <Field label={t('pages.groups.upload')} value={`↑ ${SizeFormatter.sizeFormat(g.up)}`} />
                             <Field label={t('pages.groups.download')} value={`↓ ${SizeFormatter.sizeFormat(g.down)}`} />
                           </div>
                         </div>
                         <div className="p-card-body" style={{ borderTop: '1px solid var(--p-border)', padding: 14 }}>
-                          <div className="p-kv"><span className="p-kv-k">{t('pages.groups.clientCount')}</span><span className="p-kv-v">{g.clientCount}</span></div>
+                          <div className="p-kv"><span className="p-kv-k">{t('pages.groups.clientCount')}</span><span className="p-kv-v">{g.clientCount} · {g.onlineCount ?? '—'} {t('online')}</span></div>
+                          <div className="p-kv"><span className="p-kv-k">{t('depletingSoon')}</span><span className="p-kv-v">{g.expiringCount ?? '—'}</span></div>
                           <Button size="small" icon={<UsergroupAddOutlined />} onClick={() => openAddClientsFor(g)}>{t('pages.groups.addToGroup')}</Button>
                         </div>
                       </PanelCard>)}
@@ -466,6 +478,7 @@ export default function GroupsPage() {
           </Layout.Content>
         </Layout>
 
+        {quotaGroup && <GroupQuotaModal group={quotaGroup} inbounds={inbounds} onClose={() => setQuotaGroup(null)} onSaved={invalidate} />}
         <Modal
           open={createOpen}
           title={t('pages.groups.addGroup')}

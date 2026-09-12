@@ -33,6 +33,7 @@ interface Window {
   PUI_BASE_PATH?: string;
   PUI_CUR_VER?: string;
   PUI_USER?: string;
+  PUI_ROLE?: 'admin' | 'reseller';
   __SUB_PAGE_DATA__?: SubPageData;
 }
 

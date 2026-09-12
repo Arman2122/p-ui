@@ -17,6 +17,7 @@ import { IpLimitControl } from '@/components/clients/IpLimitControl';
 import { useClients, type InboundOption } from '@/hooks/useClients';
 import { useIpLimitStatusQuery, getLimitIpNotice } from '@/api/queries/useIpLimitStatusQuery';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
 import { ipLimitFieldState } from '@/lib/cores/ip-limit';
 import { ClientBulkAddFormSchema, type ClientBulkAddFormValues } from '@/schemas/client';
 
@@ -58,6 +59,14 @@ export default function ClientBulkAddModal({
   const { t } = useTranslation();
   const [messageApi, messageContextHolder] = message.useMessage();
   const { bulkCreate } = useClients({ list: false });
+  const plans = usePoliciesQuery({ enabled: open });
+  const [policyId, setPolicyId] = useState(0);
+  const [overridePlan, setOverridePlan] = useState(false);
+  const selectedPlan = plans.data?.find((plan) => plan.id === policyId);
+  const quotaManaged = policyId > 0 && selectedPlan?.quotaBytes != null && !overridePlan;
+  const expiryManaged = policyId > 0 && selectedPlan?.durationDays != null && !overridePlan;
+  const ipManaged = policyId > 0 && selectedPlan?.limitIp != null && !overridePlan;
+  const inboundsManaged = policyId > 0 && !!selectedPlan?.inboundIds?.length && !overridePlan;
 
   const methods = useForm<ClientBulkAddFormValues>({ defaultValues: EMPTY });
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
@@ -91,6 +100,8 @@ export default function ClientBulkAddModal({
     if (!open) return;
 
     methods.reset(EMPTY);
+    setPolicyId(0);
+    setOverridePlan(false);
     setDelayedStart(false);
 
   }, [open, methods]);
@@ -170,6 +181,10 @@ export default function ClientBulkAddModal({
   }
 
   async function submit() {
+    if (policyId > 0 && (!selectedPlan || selectedPlan.archived)) {
+      messageApi.error(t('telemetry.planUnavailable'));
+      return;
+    }
     const current = methods.getValues();
     const validated = ClientBulkAddFormSchema.safeParse(current);
     if (!validated.success) {
@@ -187,6 +202,7 @@ export default function ClientBulkAddModal({
     setSaving(true);
     try {
       const payloads = emails.map((email) => ({
+        ...(policyId > 0 ? { policyId, ...(overridePlan ? { planOverrides: { quota: true, expiry: true, limitIp: true, inbounds: true } } : {}) } : {}),
         client: {
           email,
           subId: bulkClientSubId(current.subId, emails.length),
@@ -241,13 +257,30 @@ export default function ClientBulkAddModal({
       >
         <FormProvider {...methods}>
           <Form colon={false} labelCol={{ sm: { span: 8 } }} wrapperCol={{ sm: { span: 14 } }}>
+            <Form.Item label={t('telemetry.usePlan')}>
+              <Select value={policyId} loading={plans.isPending} onChange={(id) => {
+                setPolicyId(id); setOverridePlan(false);
+                const plan = plans.data?.find((p) => p.id === id);
+                if (!plan) return;
+                if (plan.quotaBytes != null) methods.setValue('totalGB', plan.quotaBytes / 1073741824);
+                if (plan.limitIp != null) methods.setValue('limitIp', plan.limitIp);
+                if (plan.inboundIds?.length) methods.setValue('inboundIds', plan.inboundIds);
+                if (plan.durationDays != null) {
+                  setDelayedStart(plan.startOnFirstUse && plan.durationDays > 0);
+                  methods.setValue('expiryTime', !plan.durationDays ? 0 : plan.startOnFirstUse ? -plan.durationDays * 86400000 : Date.now() + plan.durationDays * 86400000);
+                  methods.setValue('reset', plan.autoRenewDays);
+                }
+              }} options={[{ value: 0, label: t('telemetry.customPlan') }, ...(plans.data ?? []).filter((p) => !p.archived).map((p) => ({ value: p.id, label: p.name }))]} />
+            </Form.Item>
+            {policyId > 0 && <Form.Item label={t('telemetry.bulkOverride')}><Switch checked={overridePlan} onChange={setOverridePlan} /></Form.Item>}
             <Form.Item label={t('pages.clients.attachedInbounds')} required>
-              <SelectAllClearButtons
+              {!inboundsManaged && <SelectAllClearButtons
                 options={inboundOptions}
                 value={inboundIds}
                 onChange={(v) => methods.setValue('inboundIds', v)}
-              />
+              />}
               <Select
+                disabled={inboundsManaged}
                 mode="multiple"
                 value={inboundIds}
                 onChange={(v) => methods.setValue('inboundIds', v)}
@@ -344,18 +377,19 @@ export default function ClientBulkAddModal({
             <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')}>
               <IpLimitControl
                 value={limitIp}
-                disabled={limitIpDisabled}
+                disabled={limitIpDisabled || ipManaged}
                 notice={limitIpNotice || undefined}
                 onChange={(v) => methods.setValue('limitIp', v)}
               />
             </Form.Item>
 
             <FormField name="totalGB" label={t('pages.clients.totalGB')} transform={{ output: (v) => Number(v) || 0 }}>
-              <InputNumber min={0} step={1} />
+              <InputNumber disabled={quotaManaged} min={0} step={1} />
             </FormField>
 
             <Form.Item label={t('pages.clients.delayedStart')}>
               <Switch
+                disabled={expiryManaged}
                 checked={delayedStart}
                 onClick={() => { setDelayedStart(!delayedStart); methods.setValue('expiryTime', 0); }}
               />
@@ -364,6 +398,7 @@ export default function ClientBulkAddModal({
             {delayedStart ? (
               <Form.Item label={t('pages.clients.expireDays')}>
                 <InputNumber
+                  disabled={expiryManaged}
                   value={delayedExpireDays}
                   min={0}
                   onChange={(v) => methods.setValue('expiryTime', -86400000 * (Number(v) || 0))}
@@ -372,6 +407,7 @@ export default function ClientBulkAddModal({
             ) : (
               <Form.Item label={t('pages.inbounds.expireDate')}>
                 <DateTimePicker
+                  disabled={expiryManaged}
                   value={expiryDate}
                   onChange={(next) => methods.setValue('expiryTime', next ? next.valueOf() : 0)}
                 />
@@ -385,7 +421,7 @@ export default function ClientBulkAddModal({
               extra={renewWithoutExpiry ? t('pages.clients.renewNeedsExpiry') : undefined}
               transform={{ output: (v) => Number(v) || 0 }}
             >
-              <InputNumber min={0} />
+              <InputNumber disabled={expiryManaged} min={0} />
             </FormField>
           </Form>
         </FormProvider>

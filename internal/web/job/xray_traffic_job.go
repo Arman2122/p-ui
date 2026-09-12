@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/netsafe"
 	"github.com/Arman2122/p-ui/internal/web/service"
@@ -98,6 +99,7 @@ func (j *XrayTrafficJob) Run() {
 	if err != nil {
 		logger.Warning("add inbound traffic failed:", err)
 	}
+	enforceProductQuotas(context.Background())
 	err, needRestart1 := j.outboundService.AddTraffic(traffics, clientTraffics)
 	if err != nil {
 		logger.Warning("add outbound traffic failed:", err)
@@ -125,11 +127,16 @@ func (j *XrayTrafficJob) Run() {
 		// The panel disabled these itself; say so, rather than leaving an operator
 		// to notice a client went quiet.
 		if len(disabledEmails) > 0 {
-			websocket.BroadcastEvent("warning", "events.clientsDisabled.title", "events.clientsDisabled.body",
+			if _, err := (service.ActivityService{}).Record(context.Background(), model.ActivityEvent{
+				AudienceUserID: 0, Kind: "client.auto_disabled", Level: "warning",
+				TitleKey: "events.clientsDisabled.title", MessageKey: "events.clientsDisabled.body",
+			},
 				map[string]string{
 					"count":   strconv.Itoa(len(disabledEmails)),
 					"clients": strings.Join(disabledEmails, ", "),
-				})
+				}); err != nil {
+				logger.Warning("persist disabled clients notice failed:", err)
+			}
 		}
 	}
 	if ExternalTrafficInformEnable, err := j.settingService.GetExternalTrafficInformEnable(); ExternalTrafficInformEnable {

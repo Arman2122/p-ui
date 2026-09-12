@@ -34,6 +34,9 @@ export const XrayInfoSchema = z.object({
 }).partial();
 
 export const StatusSchema = z.object({
+  observedAt: z.number().optional(),
+  listenPort: z.number().int().min(1).max(65535).optional(),
+  unavailable: z.array(z.string()).optional(),
   cpu: z.number().optional(),
   cpuCores: z.number().optional(),
   logicalPro: z.number().optional(),

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
 export const NodeRecordSchema = z.object({
+  metricsAvailable: z.boolean().optional(),
+  netUp: z.number().optional(),
+  netDown: z.number().optional(),
+  configDirty: z.boolean().optional(),
+  configDirtyAt: z.number().optional(),
+  servedInbounds: z.array(z.object({ id: z.number(), tag: z.string(), protocol: z.string(), up: z.number(), down: z.number() })).nullish(),
   id: z.number(),
   name: z.string().optional(),
   remark: z.string().optional(),

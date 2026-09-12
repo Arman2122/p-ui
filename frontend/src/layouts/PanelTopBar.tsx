@@ -7,10 +7,12 @@ import { Icon } from '@/components/ui/Icon';
 import { navItemOf, sectionKeyOf } from '@/layouts/nav';
 import CoreStatusPopover from '@/layouts/CoreStatusPopover';
 import NotificationsPopover from '@/layouts/NotificationsPopover';
+import type { SignedInUser } from '@/pages/resellers/schema';
 
-export default function PanelTopBar({ route, isDark, onToggleSidebar, onToggleTheme, onNavigate, onLogout }: {
+export default function PanelTopBar({ route, isDark, user, onToggleSidebar, onToggleTheme, onNavigate, onLogout }: {
   route: string;
   isDark: boolean;
+  user: SignedInUser;
   onToggleSidebar: () => void;
   onToggleTheme: () => void;
   onNavigate: (key: string) => void;
@@ -18,9 +20,10 @@ export default function PanelTopBar({ route, isDark, onToggleSidebar, onToggleTh
 }) {
   const { t } = useTranslation();
   const item = navItemOf(route);
-  const label = item ? t(item.labelKey) : t('menu.dashboard');
+  const label = route === '/reseller/account' ? t('resellers.account') : item ? t(item.labelKey) : t('menu.dashboard');
   const sectionKey = sectionKeyOf(route);
-  const username = window.PUI_USER || '';
+  const username = user.username;
+  const admin = user.role === 'admin';
   const initial = (username.trim()[0] || 'A').toUpperCase();
 
   const menu: MenuProps = {
@@ -31,12 +34,13 @@ export default function PanelTopBar({ route, isDark, onToggleSidebar, onToggleTh
         label: (
           <span style={{ display: 'block', padding: '2px 0', minWidth: 208 }}>
             <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--p-text)' }}>{username || t('menu.account')}</span>
-            <span className="p-sub" style={{ display: 'block', marginTop: 1 }}>{t('menu.administrator')}</span>
+            <span className="p-sub" style={{ display: 'block', marginTop: 1 }}>{t(admin ? 'menu.administrator' : 'resellers.role')}</span>
           </span>
         ),
       },
       { type: 'divider' },
-      { key: '/settings#security', label: t('menu.accountSettings'), icon: <Icon name="user" size={14} /> },
+      { key: admin ? '/settings#security' : '/reseller/account', label: t('menu.accountSettings'), icon: <Icon name="user" size={14} /> },
+      { key: '/activity', label: t('activity.history'), icon: <Icon name="bell" size={14} /> },
       { type: 'divider' },
       { key: '__logout__', danger: true, label: t('logout'), icon: <Icon name="logout" size={14} /> },
     ],
@@ -47,7 +51,7 @@ export default function PanelTopBar({ route, isDark, onToggleSidebar, onToggleTh
   };
 
   const goToCores = useCallback(() => onNavigate('/cores'), [onNavigate]);
-  const goToDashboard = useCallback(() => onNavigate('/'), [onNavigate]);
+  const goToDashboard = useCallback(() => onNavigate(user.home), [onNavigate, user.home]);
 
   return (
     <header className="p-top">
@@ -59,10 +63,10 @@ export default function PanelTopBar({ route, isDark, onToggleSidebar, onToggleTh
         <span style={{ color: 'var(--p-text)', fontWeight: 600 }}>{label}</span>
       </div>
       <div style={{ flex: 1 }} />
-      <div className="p-only-wide">
+      {admin && <div className="p-only-wide">
         <CoreStatusPopover onManage={goToCores} />
         <div className="p-vsep" style={{ height: 22, alignSelf: 'center' }} />
-      </div>
+      </div>}
       <Dropdown trigger={['click']} placement="bottomRight" menu={menu}>
         <button type="button" className="p-account">
           <span className="p-account-av">{initial}</span>

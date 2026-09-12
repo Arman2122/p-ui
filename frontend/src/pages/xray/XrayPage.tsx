@@ -35,6 +35,8 @@ import { DnsTab } from './dns';
 import { WarpModal, NordModal } from './overrides';
 import './XrayPage.css';
 import { isExitKey } from '@/schemas/api/egress';
+import CoreConfigsPage, { downloadConfig } from './CoreConfigsPage';
+import { HttpUtil } from '@/utils';
 
 const SECTION_SLUGS = ['basic', 'routing', 'outbound', 'balancer', 'dns', 'advanced'];
 
@@ -43,13 +45,17 @@ const XRAY_SECTIONS: { slug: string; labelKey: string; icon: IconName }[] = [
   { slug: 'routing', labelKey: 'menu.routing', icon: 'routing' },
   { slug: 'outbound', labelKey: 'menu.outbounds', icon: 'outbounds' },
   { slug: 'balancer', labelKey: 'pages.xray.Balancers', icon: 'nodes' },
-  { slug: 'dns', labelKey: 'pages.xray.dns', icon: 'hosts' },
+  { slug: 'dns', labelKey: 'pages.inbounds.info.dns', icon: 'hosts' },
   { slug: 'advanced', labelKey: 'pages.xray.advancedTemplate', icon: 'xray' },
 ];
 
 type AdvKey = 'xraySetting' | 'inboundSettings' | 'outboundSettings' | 'routingRuleSettings';
 
 export default function XrayPage({ section }: { section?: 'routing' | 'outbound' } = {}) {
+  return section ? <XrayTemplatePage section={section} /> : <CoreConfigsPage xray={<XrayTemplatePage />} />;
+}
+
+function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}) {
   const { t } = useTranslation();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
   const { isMobile } = useMediaQuery();
@@ -89,6 +95,9 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
   const [warpOpen, setWarpOpen] = useState(false);
   const [nordOpen, setNordOpen] = useState(false);
   const [advSettings, setAdvSettings] = useState<AdvKey>('xraySetting');
+  const [invalidSlices, setInvalidSlices] = useState<Partial<Record<AdvKey, string>>>({});
+  const [testingConfig, setTestingConfig] = useState(false);
+  const [configValidation, setConfigValidation] = useState<{ text: string; error: boolean; document: string } | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const pathSection = section || (location.pathname === '/outbound' || location.pathname === '/outbounds' ? 'outbound' : location.pathname === '/routing' ? 'routing' : '');
@@ -108,8 +117,6 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
   );
 
   async function onTestOutbound(idx: number, mode: string) {
-    // The table hands back a row key, and an exit's lives above every outbound
-    // index because it is not in the xray config at all.
     if (isExitKey(idx)) {
       await testExit(idx, mode);
       return;
@@ -159,6 +166,7 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
   }
 
   const advancedText = useMemo(() => {
+    if (invalidSlices[advSettings] !== undefined) return invalidSlices[advSettings]!;
     if (advSettings === 'xraySetting') return xraySetting;
     const tpl = templateSettings;
     if (!tpl) return '';
@@ -172,7 +180,7 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
     } catch {
       return '';
     }
-  }, [advSettings, xraySetting, templateSettings]);
+  }, [advSettings, xraySetting, templateSettings, invalidSlices]);
 
   function onAdvancedTextChange(next: string) {
     if (advSettings === 'xraySetting') {
@@ -182,9 +190,12 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
     let parsed;
     try {
       parsed = JSON.parse(next);
+      if (!Array.isArray(parsed)) throw new Error('expected array');
     } catch {
+      setInvalidSlices((previous) => ({ ...previous, [advSettings]: next }));
       return;
     }
+    setInvalidSlices((previous) => { const result = { ...previous }; delete result[advSettings]; return result; });
     mutate((tt) => {
       switch (advSettings) {
         case 'inboundSettings':
@@ -202,6 +213,11 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
   }
 
   async function onSaveAll() {
+    if (Object.keys(invalidSlices).length) {
+      messageApi.error(t('settingsOps.core.invalidJSON'));
+      navigate('/xray#advanced');
+      return;
+    }
     try {
       JSON.parse(xraySetting);
     } catch (e) {
@@ -229,10 +245,26 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
     await saveAll();
   }
 
+  async function testConfig() {
+    if (Object.keys(invalidSlices).length) {
+      messageApi.error(t('settingsOps.core.invalidJSON'));
+      return;
+    }
+    setTestingConfig(true);
+    try {
+      const result = await HttpUtil.post('/panel/api/core-config/xray/validate', { document: xraySetting }, { timeout: 40_000, silentSuccess: true });
+      setConfigValidation({ text: result.success ? t('settingsOps.core.templateValidated') : result.msg, error: !result.success, document: xraySetting });
+    } catch (error) {
+      setConfigValidation({ text: error instanceof Error ? error.message : String(error), error: true, document: xraySetting });
+    } finally {
+      setTestingConfig(false);
+    }
+  }
+
   /* Routing rules are drafted like the template, so Save has to see them too;
      without this the button stays dark while unsaved rules sit on screen. */
   const routing = useRoutingDraft();
-  const saveDisabled = templateSaveDisabled && !routing.dirty;
+  const saveDisabled = templateSaveDisabled && !routing.dirty && !Object.keys(invalidSlices).length;
 
   const scrollTarget = () => document.getElementById('content-layout') || window;
 
@@ -382,8 +414,11 @@ export default function XrayPage({ section }: { section?: 'routing' | 'outbound'
                           <Button type="primary" disabled={saveDisabled} onClick={onSaveAll}>
                             {t('pages.xray.save')}
                           </Button>
+                          <Button loading={testingConfig} onClick={testConfig}>{t('settingsOps.core.validate')}</Button>
+                          <Button onClick={() => downloadConfig('xray-template.json', xraySetting)}>{t('download')}</Button>
                         </Space>
                       </div>
+                      {configValidation?.document === xraySetting && <Alert type={configValidation.error ? 'error' : 'success'} title={configValidation.text} showIcon />}
                       {sectionBody}
                     </div>
                   </div>

@@ -23,17 +23,19 @@ type ClientSlim struct {
 	SubID  string `json:"subId"`
 	Enable bool   `json:"enable"`
 	// DisabledReason is "quota", "expiry" or "manual" while Enable is false.
-	DisabledReason string              `json:"disabledReason,omitempty"`
-	TotalGB        int64               `json:"totalGB"`
-	ExpiryTime     int64               `json:"expiryTime"`
-	LimitIP        int                 `json:"limitIp"`
-	Reset          int                 `json:"reset"`
-	Group          string              `json:"group,omitempty"`
-	Comment        string              `json:"comment,omitempty"`
-	InboundIds     []int               `json:"inboundIds"`
-	Traffic        *xray.ClientTraffic `json:"traffic,omitempty"`
-	CreatedAt      int64               `json:"createdAt"`
-	UpdatedAt      int64               `json:"updatedAt"`
+	DisabledReason string               `json:"disabledReason,omitempty"`
+	TotalGB        int64                `json:"totalGB"`
+	ExpiryTime     int64                `json:"expiryTime"`
+	LimitIP        int                  `json:"limitIp"`
+	Reset          int                  `json:"reset"`
+	Group          string               `json:"group,omitempty"`
+	Comment        string               `json:"comment,omitempty"`
+	InboundIds     []int                `json:"inboundIds"`
+	Traffic        *xray.ClientTraffic  `json:"traffic,omitempty"`
+	CreatedAt      int64                `json:"createdAt"`
+	UpdatedAt      int64                `json:"updatedAt"`
+	Plan           *ClientPlanMetadata  `json:"plan,omitempty"`
+	History        []ClientHistoryPoint `json:"history"`
 }
 
 // ClientPageParams are the query params accepted by /panel/api/clients/list/paged.
@@ -153,15 +155,14 @@ func newClientQuery(db *gorm.DB, nowMs, expireDiffMs, trafficDiffBytes int64) cl
 		return q
 	}
 	freshSince := globalTrafficFreshSince()
-	// A master still pushes cross-panel usage here, so the predicates have to
-	// see the same raised counters overlayGlobalTraffic applies on read.
+	// One master's combined total matches UsedBytesExpr; mixing directions from
+	// distinct snapshots invents usage no source reported.
 	q.joins = append(q.joins, clientQueryJoin{
-		sql: "LEFT JOIN (SELECT email, MAX(up) AS up, MAX(down) AS down FROM client_global_traffics" +
+		sql: "LEFT JOIN (SELECT email, MAX(up + down) AS used FROM client_global_traffics" +
 			" WHERE updated_at >= ? GROUP BY email) g ON g.email = c.email",
 		args: []any{freshSince},
 	})
-	q.usedExpr = "(CASE WHEN COALESCE(g.up, 0) > COALESCE(ct.up, 0) THEN COALESCE(g.up, 0) ELSE COALESCE(ct.up, 0) END" +
-		" + CASE WHEN COALESCE(g.down, 0) > COALESCE(ct.down, 0) THEN COALESCE(g.down, 0) ELSE COALESCE(ct.down, 0) END)"
+	q.usedExpr = "GREATEST(" + q.usedExpr + ", COALESCE(g.used, 0))"
 	return q
 }
 
@@ -467,6 +468,14 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 		}
 	}
 
+	plans, err := readClientPlans(q.db, emails)
+	if err != nil {
+		return nil, err
+	}
+	histories, err := readClientHistories(q.db, emails, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	nowMs := time.Now().UnixMilli()
 	items := make([]ClientSlim, 0, len(ids))
 	for _, id := range ids {
@@ -474,7 +483,13 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 		if rec == nil {
 			continue
 		}
+		history := histories[rec.Email]
+		if history == nil {
+			history = []ClientHistoryPoint{}
+		}
 		items = append(items, ClientSlim{
+			Plan:           plans[rec.Email],
+			History:        history,
 			Email:          rec.Email,
 			SubID:          rec.SubID,
 			Enable:         rec.Enable,

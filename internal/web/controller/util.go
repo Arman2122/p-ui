@@ -193,10 +193,12 @@ converges directly there is no later restart that repairs it, so silence would
 leave the operator with a green panel and a dead inbound.
 */
 func jsonMsgObjWarn(c *gin.Context, msg string, obj any, warning string) {
+	c.Set(activitySuccessKey, true)
 	c.JSON(http.StatusOK, entity.Msg{Success: true, Msg: msg, Obj: obj, Warning: warning})
 }
 
 func jsonMsgObj(c *gin.Context, msg string, obj any, err error) {
+	c.Set(activitySuccessKey, err == nil)
 	m := entity.Msg{
 		Obj: obj,
 	}
@@ -251,6 +253,7 @@ func applyDelayWarning(c *gin.Context, seconds int) string {
 
 // pureJsonMsg sends a pure JSON message response with custom status code.
 func pureJsonMsg(c *gin.Context, statusCode int, success bool, msg string) {
+	c.Set(activitySuccessKey, success && statusCode < 400)
 	c.JSON(statusCode, entity.Msg{
 		Success: success,
 		Msg:     msg,

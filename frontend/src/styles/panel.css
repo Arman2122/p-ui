@@ -594,3 +594,7 @@ body:has(.p-auth){background:var(--p-bg);margin:0}
 .p-page > .hosts-page,
 .p-page > .policies-page{min-height:0;background:transparent}
 .p-page .content-shell,.p-page .content-area{background:transparent}
+.p-root .p-page .content-area{padding:0}
+.p-section-items{max-height:calc(100dvh - 170px);overflow-y:auto}
+@media(max-width:900px){.p-section-items{max-height:210px}}
+@container main (max-width:900px){.p-section-items{max-height:210px}}

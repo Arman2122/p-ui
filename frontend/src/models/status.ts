@@ -62,6 +62,9 @@ export interface XrayInfo {
 }
 
 interface StatusInput {
+  observedAt?: number;
+  listenPort?: number;
+  unavailable?: string[];
   cpu?: number;
   cpuCores?: number;
   logicalPro?: number;
@@ -82,6 +85,9 @@ interface StatusInput {
 }
 
 export class Status {
+  observedAt = 0;
+  listenPort?: number;
+  unavailable: string[] = [];
   cpu: CurTotal = new CurTotal(0, 0);
   cpuCores = 0;
   logicalPro = 0;
@@ -102,6 +108,10 @@ export class Status {
 
   constructor(data?: StatusInput | null) {
     if (data == null) return;
+
+    this.observedAt = data.observedAt ?? 0;
+    this.listenPort = data.listenPort;
+    this.unavailable = data.unavailable ?? [];
 
     this.cpu = new CurTotal(data.cpu ?? 0, 100);
     this.cpuCores = data.cpuCores ?? 0;

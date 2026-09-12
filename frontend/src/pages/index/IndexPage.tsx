@@ -19,7 +19,8 @@ import { setMessageInstance } from '@/utils/messageBus';
 import OverviewActionBar from './OverviewActionBar';
 import VitalsBand, { type VitalKey } from './VitalsBand';
 import DashboardCores, { CoreSummaryStrip } from './DashboardCores';
-import { ActivityPanel, PanelHostPanel, SessionsPanel, ThroughputPanel } from './DashboardPanels';
+import { ActivityPanel, PanelHostPanel } from './DashboardPanels';
+import { HistoryWindowControl, SessionsPanel, ThroughputPanel } from './DashboardTelemetry';
 import { useOverviewHistory } from './useOverviewHistory';
 import type { PanelUpdateInfo } from './PanelUpdateModal';
 const JsonEditor = lazy(() => import('@/components/form/JsonEditor'));
@@ -61,7 +62,8 @@ export default function IndexPage() {
   const [loading, setLoading] = useState(false);
   const [loadingTip, setLoadingTip] = useState(t('loading'));
 
-  const history = useOverviewHistory(status, fetched && !fetchError);
+  const [historyBucket, setHistoryBucket] = useState(60);
+  const history = useOverviewHistory(status, fetched && !fetchError, historyBucket);
   const { cores } = useCoresStatusQuery();
   const navigate = useNavigate();
   const goToCores = useCallback(() => navigate('/cores'), [navigate]);
@@ -178,6 +180,7 @@ export default function IndexPage() {
               ) : (
                 <div className="ov-page">
                   <OverviewActionBar
+                    historyControl={<HistoryWindowControl value={historyBucket} onChange={setHistoryBucket} />}
                     onRefresh={refresh}
                     status={status}
                     isMobile={isMobile}

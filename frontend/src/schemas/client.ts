@@ -12,7 +12,19 @@ export const ClientTrafficSchema = z.object({
   lastOnline: z.number().optional(),
 });
 
+export const ClientPlanMetadataSchema = z.object({
+  policyId: z.number().nullable(), name: z.string(), unresolved: z.boolean(), pending: z.boolean(), overridden: z.boolean(),
+  overrideQuota: z.boolean().optional(), overrideExpiry: z.boolean().optional(), overrideLimitIp: z.boolean().optional(), overrideInbounds: z.boolean().optional(),
+});
+
+export const ClientPlanOverridesSchema = z.object({ quota: z.boolean().optional(), expiry: z.boolean().optional(), limitIp: z.boolean().optional(), inbounds: z.boolean().optional() });
+export type ClientPlanOverrides = z.infer<typeof ClientPlanOverridesSchema>;
+
+export const ClientHistoryPointSchema = z.object({ t: z.number(), up: z.number(), down: z.number() });
+
 export const ClientRecordSchema = z.object({
+  plan: ClientPlanMetadataSchema.nullish(),
+  history: z.array(ClientHistoryPointSchema).nullish(),
   id: z.number().optional(),
   email: z.string(),
   subId: z.string().optional(),
@@ -200,6 +212,12 @@ export const ActiveInboundsByNodeSchema = z
   .transform((v) => v ?? {});
 
 export const GroupSummarySchema = z.object({
+  sharedInboundIds: z.array(z.number()).nullish(),
+  quotaBytes: z.number().optional(),
+  onlineCount: z.number().optional(),
+  expiringCount: z.number().optional(),
+  inboundIds: z.array(z.number()).nullish(),
+  history: z.array(ClientHistoryPointSchema).nullish(),
   name: z.string(),
   clientCount: z.number(),
   trafficUsed: z.number().nullable().transform((v) => v ?? 0),
@@ -362,3 +380,12 @@ export const BulkRotateResultSchema = z.object({
   outcome: BulkOutcomeSchema.optional(),
 });
 export type BulkRotateResult = z.infer<typeof BulkRotateResultSchema>;
+
+export const ClientCreateRequestSchema = z.object({
+  client: z.record(z.string(), z.unknown()),
+  inboundIds: z.array(z.number().int()),
+  policyId: z.number().int().nonnegative().optional(),
+  planOverrides: ClientPlanOverridesSchema.optional(),
+  externalLinks: z.array(ExternalLinkSchema).optional(),
+});
+export type ClientCreateRequest = z.infer<typeof ClientCreateRequestSchema>;

@@ -62,8 +62,26 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		records = append(records, rec)
 	}
 	recordEmails := make([]string, 0, len(records))
+	invalid, err := validateAttachmentBatch(records, inboundIds)
+	if err != nil {
+		return result, false, err
+	}
+	valid := records[:0]
+	for _, rec := range records {
+		if err := invalid[rec.Email]; err != nil {
+			recordErr("%s: %v", rec.Email, err)
+			result.Outcome.fail(rec.Email, err.Error())
+			continue
+		}
+		valid = append(valid, rec)
+	}
+	records = valid
 	for _, rec := range records {
 		recordEmails = append(recordEmails, rec.Email)
+	}
+	if len(records) == 0 {
+		result.Outcome.finalize()
+		return result, false, nil
 	}
 
 	emailSubIDs, sidErr := inboundSvc.getAllEmailSubIDs()
@@ -1296,6 +1314,10 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 	if len(payloads) == 0 {
 		return result, false, nil
 	}
+	invalidBindings, bindingErr := validateCreatePayloadBindings(payloads)
+	if bindingErr != nil {
+		return result, false, bindingErr
+	}
 
 	skip := func(email, reason string) {
 		if strings.TrimSpace(email) == "" {
@@ -1324,6 +1346,10 @@ func (s *ClientService) BulkCreate(inboundSvc *InboundService, payloads []Client
 	for i := range payloads {
 		client := payloads[i].Client
 		email := strings.TrimSpace(client.Email)
+		if err := invalidBindings[email]; err != nil {
+			skip(email, err.Error())
+			continue
+		}
 		if email == "" {
 			skip("", "client email is required")
 			continue

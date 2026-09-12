@@ -31,6 +31,7 @@ func NewPolicyController(g *gin.RouterGroup) *PolicyController {
 }
 
 func (a *PolicyController) initRouter(g *gin.RouterGroup) {
+	RegisterPlanRoutes(g)
 	g.GET("/list", a.list)
 	g.GET("/get/:id", a.get)
 	g.GET("/enforced/:email", a.enforced)
@@ -157,7 +158,11 @@ func (a *PolicyController) update(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	row := &model.Policy{Id: id}
+	row, err := a.policyService.Get(id)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
 	if !middleware.BindAndValidateInto(c, row) {
 		return
 	}
@@ -196,10 +201,15 @@ func (a *PolicyController) assign(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	if err := a.policyService.Assign(req.Email, req.PolicyId); err != nil {
+	result, err := a.policyService.ApplyPlan(c.Request.Context(), service.PlanScope{}, req.Email, req.PolicyId, false)
+	if result.NeedRestart {
+		(&service.XrayService{}).SetToNeedRestart()
+	}
+	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
+	notifyClientsChanged()
 	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientUpdateSuccess"), nil)
 }
 

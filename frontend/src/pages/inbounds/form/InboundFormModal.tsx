@@ -11,6 +11,8 @@ import {
   Radio,
   Select,
   Switch,
+  Space,
+  Tag,
   Tabs,
   Tooltip,
   Typography,
@@ -44,7 +46,8 @@ import {
 } from '@/schemas/forms/inbound-form';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import SectionRail from '@/components/ui/SectionRail';
+import type { IconName } from '@/components/ui/Icon';
 import { useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
 import { wireguardPoolUsage, type WireguardPoolClient } from '@/lib/xray/wireguard-pool';
 import { unavailableKinds } from '@/lib/cores/core-availability';
@@ -204,7 +207,8 @@ export default function InboundFormModal({
   availableNodesFetched = true,
 }: InboundFormModalProps) {
   const { t } = useTranslation();
-  const { isMobile } = useMediaQuery();
+  const [activeSection, setActiveSection] = useState('basic');
+  const [invalidEditors, setInvalidEditors] = useState<Record<string, boolean>>({});
   const [messageApi, messageContextHolder] = message.useMessage();
   const methods = useForm<InboundFormValues>({ defaultValues: buildAddModeValues() });
   const setV = methods.setValue as unknown as (name: string, value: unknown) => void;
@@ -415,6 +419,8 @@ export default function InboundFormModal({
       ? rawInboundToFormValues(dbInbound)
       : buildAddModeValues();
     methods.reset(initial);
+    setInvalidEditors({});
+    setActiveSection('basic');
     setScanResult(null);
     const initialTag = (initial.tag ?? '') as string;
     autoTagRef.current = isAutoInboundTag(initialTag, {
@@ -524,7 +530,19 @@ export default function InboundFormModal({
   }, [mode, methods]);
 
   const submit = async () => {
-    if (!(await methods.trigger())) return;
+    if (Object.values(invalidEditors).some(Boolean)) {
+      setActiveSection('advanced');
+      messageApi.error(t('settingsOps.core.invalidJSON'));
+      return;
+    }
+    if (!(await methods.trigger())) {
+      const section = methods.getFieldState('settings').invalid ? 'protocol'
+        : methods.getFieldState('streamSettings').invalid ? 'stream'
+        : methods.getFieldState('sniffing').invalid ? 'sniffing' : 'basic';
+      setActiveSection(section);
+      messageApi.error(t('settingsOps.form.fixErrors'));
+      return;
+    }
     /*
      * getValues() returns the entire form store, including settings.clients and
      * settings.fallbacks which have no bound field (clients are managed via the
@@ -983,7 +1001,7 @@ export default function InboundFormModal({
                   <div className="advanced-editor-meta">
                     {t('pages.inbounds.advanced.allHelp')}
                   </div>
-                  <AdvancedAllEditor streamEnabled={streamEnabled} sniffingEnabled={sniffingSupported} />
+                  <AdvancedAllEditor streamEnabled={streamEnabled} sniffingEnabled={sniffingSupported} onValidityChange={(valid) => setInvalidEditors((previous) => ({ ...previous, all: !valid }))} />
                 </>
               ),
             },
@@ -998,6 +1016,7 @@ export default function InboundFormModal({
                   </div>
                   <AdvancedSliceEditor
                     path="settings"
+                    onValidityChange={(valid) => setInvalidEditors((previous) => ({ ...previous, settings: !valid }))}
                     wrapKey="settings"
                     minHeight="320px"
                     maxHeight="540px"
@@ -1017,6 +1036,7 @@ export default function InboundFormModal({
                     </div>
                     <AdvancedSliceEditor
                       path="streamSettings"
+                      onValidityChange={(valid) => setInvalidEditors((previous) => ({ ...previous, stream: !valid }))}
                       wrapKey="streamSettings"
                       minHeight="320px"
                       maxHeight="540px"
@@ -1037,6 +1057,7 @@ export default function InboundFormModal({
                     </div>
                     <AdvancedSliceEditor
                       path="sniffing"
+                      onValidityChange={(valid) => setInvalidEditors((previous) => ({ ...previous, sniffing: !valid }))}
                       wrapKey="sniffing"
                       minHeight="240px"
                       maxHeight="420px"
@@ -1053,6 +1074,18 @@ export default function InboundFormModal({
 
   const sniffingTab = <SniffingTab />;
 
+  const formSections = [
+    { key: 'basic', label: t('pages.xray.basicTemplate'), icon: 'settings', children: basicTab },
+    ...((kind?.settingsTab ?? true) || isFallbackHost ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), icon: 'config', children: protocolTab }] : []),
+    ...(streamEnabled ? [
+      { key: 'stream', label: t('pages.inbounds.streamTab'), icon: 'outbounds', children: streamTab },
+      ...(streamMode !== 'none' ? [{ key: 'security', label: t('pages.inbounds.securityTab'), icon: 'shield', children: securityTab }] : []),
+    ] : []),
+    ...(sniffingSupported ? [{ key: 'sniffing', label: t('pages.inbounds.sniffingTab'), icon: 'search', children: sniffingTab }] : []),
+    { key: 'advanced', label: t('pages.xray.advancedTemplate'), icon: 'logs', children: advancedTab },
+  ];
+  const shownSection = formSections.some((item) => item.key === activeSection) ? activeSection : 'basic';
+
   return (
     <>
       {messageContextHolder}
@@ -1063,7 +1096,7 @@ export default function InboundFormModal({
         cancelText={t('close')}
         confirmLoading={saving}
         mask={{ closable: false }}
-        width={960}
+        width={1080}
         onOk={submit}
         onCancel={onClose}
         destroyOnHidden
@@ -1071,28 +1104,23 @@ export default function InboundFormModal({
         <FormProvider {...methods}>
           <Form
             colon={false}
-            labelCol={{ sm: { span: 8 } }}
-            wrapperCol={{ sm: { span: 14 } }}
+            layout="vertical"
             labelWrap
+            className="p-inbound-form"
           >
-            <Tabs className="p-inbound-form-tabs" tabPlacement={isMobile ? 'top' : 'start'} items={[
-              { key: 'basic', label: t('pages.xray.basicTemplate'), children: basicTab, forceRender: true },
-              ...((kind?.settingsTab ?? true) || isFallbackHost
-                ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]
-                : []),
-              ...(streamEnabled
-                ? [
-                  { key: 'stream', label: t('pages.inbounds.streamTab'), children: streamTab, forceRender: true },
-                  ...(streamMode !== 'none'
-                    ? [{ key: 'security', label: t('pages.inbounds.securityTab'), children: securityTab, forceRender: true }]
-                    : []),
-                ]
-                : []),
-              ...(sniffingSupported
-                ? [{ key: 'sniffing', label: t('pages.inbounds.sniffingTab'), children: sniffingTab, forceRender: true }]
-                : []),
-              { key: 'advanced', label: t('pages.xray.advancedTemplate'), children: advancedTab, forceRender: true },
-            ]} />
+            <Space wrap className="p-inbound-summary">
+              <Tag>{kindLabel(t, protocol)}</Tag><code dir="ltr">{wListen || '0.0.0.0'}:{wPort}</code>
+              {streamEnabled && <Tag>{network} · {security}</Tag>}
+              <code dir="ltr">{wTag}</code>
+            </Space>
+            <div className="p-inbound-sections">
+              <SectionRail searchable={false} active={shownSection} onPick={setActiveSection} items={formSections.map((item) => ({
+                key: item.key, label: item.label, icon: item.icon as IconName, desc: t(`settingsOps.form.${item.key}`),
+              }))} />
+              <div className="p-inbound-fields">
+                {formSections.map((item) => <section key={item.key} hidden={item.key !== shownSection} aria-label={item.label}>{item.children}</section>)}
+              </div>
+            </div>
           </Form>
         </FormProvider>
       </Modal>

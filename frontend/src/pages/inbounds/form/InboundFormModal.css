@@ -13,6 +13,17 @@
   gap: 12px;
 }
 
+.p-inbound-summary { margin-block: 8px 16px; }
+.p-inbound-sections { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; align-items: start; }
+.p-inbound-fields { min-width: 0; }
+.p-inbound-form .ant-form-item { margin-bottom: 16px; }
+.p-inbound-form .ant-form-item-label { padding-bottom: 5px; }
+.p-inbound-form .ant-input-number { width: 100%; }
+@media (max-width: 700px) {
+  .p-inbound-sections { grid-template-columns: minmax(0, 1fr); }
+  .p-inbound-sections .p-settings-rail { position: static; }
+}
+
 .advanced-panel {
   padding: 14px;
   border: 1px solid var(--ant-color-border-secondary);

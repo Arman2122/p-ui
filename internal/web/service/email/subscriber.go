@@ -104,6 +104,18 @@ func (s *Subscriber) formatMessage(e eventbus.Event) (subject, body string) {
 	}
 
 	switch e.Type {
+	case eventbus.EventClientPlanDepleted:
+		data, ok := e.Data.(service.PlanDepletionNotice)
+		if !ok || data.Email == "" || data.QuotaBytes <= 0 {
+			return "", ""
+		}
+		title := i18n("tgbot.messages.eventPlanDepletedTitle")
+		message := i18n("tgbot.messages.eventPlanDepletedBody",
+			"Email=="+data.Email, "Plan=="+data.PlanName,
+			"Used=="+strconv.FormatInt(data.UsedBytes, 10), "Quota=="+strconv.FormatInt(data.QuotaBytes, 10))
+		subject = host + " " + title
+		body = wrap(title, "<p>"+html.EscapeString(message)+"</p>")
+
 	case eventbus.EventOutboundDown:
 		subject = host + " " + i18n("tgbot.messages.eventOutboundDown", "Tag=="+e.Source)
 		content := kvRaw(i18n("email.labelStatus"), `<span style="color:red">`+i18n("email.statusDown")+`</span>`)

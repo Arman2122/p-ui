@@ -16,7 +16,7 @@ const SECURITY_SCHEMES = {
   bearerAuth: {
     type: 'http',
     scheme: 'bearer',
-    description: 'API token from Settings → Security → API Token. Send as `Authorization: Bearer <token>`.',
+    description: 'API token from Panel Settings → API Token or a reseller account. Send as `Authorization: Bearer <token>`. Role, scope, expiry and source-address restrictions apply.',
   },
   cookieAuth: {
     type: 'apiKey',
@@ -63,10 +63,16 @@ function paramToOpenApi(p) {
     in: p.in,
     required: p.in === 'path' ? true : !p.optional,
     description: p.desc || '',
-    schema: { type: mapType(p.type) },
+    schema: fieldSchema(p.type),
   };
   if (p.defaultValue !== undefined) out.schema.default = p.defaultValue;
   return out;
+}
+
+function fieldSchema(type) {
+  if (type === 'file') return { type: 'string', format: 'binary' };
+  if (type.endsWith('[]')) return { type: 'array', items: { type: mapType(type.slice(0, -2)) } };
+  return { type: mapType(type) };
 }
 
 function buildOperation(ep, tag) {
@@ -81,7 +87,7 @@ function buildOperation(ep, tag) {
   const params = [];
   const bodyParams = [];
   for (const p of ep.params || []) {
-    if (p.in === 'body') {
+    if (p.in.startsWith('body')) {
       bodyParams.push(p);
     } else if (p.in === 'path' || p.in === 'query' || p.in === 'header') {
       params.push(paramToOpenApi(p));
@@ -103,25 +109,37 @@ function buildOperation(ep, tag) {
 
   if (params.length > 0) op.parameters = params;
 
-  if (ep.body || bodyParams.length > 0) {
-    const example = tryParseJson(ep.body);
+  if (ep.body || ep.requestSchema || bodyParams.length > 0) {
+    let example = tryParseJson(ep.body);
     const properties = {};
     const required = [];
     for (const bp of bodyParams) {
       properties[bp.name] = {
-        type: mapType(bp.type),
+        ...fieldSchema(bp.type),
         description: bp.desc || '',
+        ...(bp.defaultValue !== undefined ? { default: bp.defaultValue } : {}),
       };
       if (!bp.optional) required.push(bp.name);
     }
-    const schema = bodyParams.length > 0
+    let schema = bodyParams.length > 0
       ? { type: 'object', properties, ...(required.length > 0 ? { required } : {}) }
       : { type: 'object' };
+
+    if (ep.requestSchema) {
+      if (!SCHEMAS[ep.requestSchema] || EXAMPLES[ep.requestSchema] === undefined) {
+        throw new Error(`${ep.method} ${ep.path}: missing generated request schema ${ep.requestSchema}`);
+      }
+      const ref = { $ref: `#/components/schemas/${ep.requestSchema}` };
+      schema = ep.requestSchemaArray ? { type: 'array', items: ref } : ref;
+      example ??= ep.requestSchemaArray ? [EXAMPLES[ep.requestSchema]] : EXAMPLES[ep.requestSchema];
+    }
+    const mediaType = bodyParams.some((p) => p.in === 'body (multipart)') ? 'multipart/form-data'
+      : bodyParams.some((p) => p.in === 'body (form)') ? 'application/x-www-form-urlencoded' : 'application/json';
 
     op.requestBody = {
       required: required.length > 0 || bodyParams.length === 0,
       content: {
-        'application/json': {
+        [mediaType]: {
           schema,
           ...(example !== undefined ? { example } : {}),
         },
@@ -220,7 +238,7 @@ function buildSpec() {
       title: 'P-UI Panel API',
       version: PANEL_VERSION,
       description:
-        'Programmatic interface to a Penhoon UI (P-UI) panel. Authenticate either by logging in (cookie) or with an API token from Settings → Security → API Token (Bearer). All endpoints under /panel/api/* honour both modes — an API token is a full-admin credential, so treat it like the panel password.',
+        'Programmatic interface to a Penhoon UI (P-UI) panel. Authenticate with a session cookie or Bearer token. Administrator operations require administrator access; read-only tokens cannot mutate state or export protected configuration. Reseller tokens are restricted to their own account, clients, granted inbounds and permitted private plans. Token expiry and source-address restrictions also apply.',
     },
     servers: [
       { url: '/', description: 'Current panel (basePath aware)' },

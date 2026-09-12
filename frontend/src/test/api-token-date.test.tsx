@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AllSetting } from '@/models/setting';
+import type { SettingsAPIToken } from '@/schemas/settings-operations';
 import SecurityTab from '@/pages/settings/SecurityTab';
 import { HttpUtil } from '@/utils';
 
@@ -17,14 +18,20 @@ describe('API token creation date', () => {
           name: 'seconds-token',
           enabled: true,
           createdAt: 1782485394,
+          scope: 'read',
+          expiresAt: 0,
+          allowedIPs: '',
         },
         {
           id: 3,
           name: 'legacy-milliseconds-token',
           enabled: true,
           createdAt: 1782485394270,
+          scope: 'admin',
+          expiresAt: 0,
+          allowedIPs: '',
         },
-      ],
+      ] satisfies SettingsAPIToken[],
     });
 
     render(<SecurityTab allSetting={{} as AllSetting} updateSetting={vi.fn()} saveSetting={vi.fn()} />);

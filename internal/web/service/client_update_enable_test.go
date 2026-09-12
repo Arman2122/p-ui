@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -149,5 +150,52 @@ func TestResetTrafficByEmail_NoInbound_LeavesRecordEnableTrue(t *testing.T) {
 
 	if got := recordEnableOf(t, svc, email); !got {
 		t.Fatalf("%s: client_records.enable = false, want true (no-inbound reset re-enable gap)", email)
+	}
+}
+
+func TestResetTrafficByEmail_NoInbound_RespectsEligibility(t *testing.T) {
+	setupBulkDB(t)
+	db := database.GetDB()
+	svc, inboundSvc := &ClientService{}, &InboundService{}
+	past := time.Now().Add(-time.Hour).UnixMilli()
+	for _, tc := range []struct {
+		name    string
+		owner   *model.ResellerAccount
+		expiry  int64
+		enabled bool
+	}{
+		{"healthy-owner", &model.ResellerAccount{TrafficLimit: 100}, 0, true},
+		{"suspended-owner", &model.ResellerAccount{Suspended: true}, 0, false},
+		{"blocked-owner", &model.ResellerAccount{BudgetBlocked: true}, 0, false},
+		{"depleted-owner", &model.ResellerAccount{TrafficLimit: 100, TrafficUsed: 100}, 0, false},
+		{"expired-owner", &model.ResellerAccount{ExpiresAt: past}, 0, false},
+		{"expired-client", nil, past, false},
+		{"pending-first-use", nil, -86400000, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			email := "detached-" + tc.name
+			rec := model.ClientRecord{Email: email, SubID: email, ExpiryTime: tc.expiry}
+			if tc.owner != nil {
+				owner := model.User{Username: email, Role: "reseller"}
+				if err := db.Create(&owner).Error; err != nil {
+					t.Fatal(err)
+				}
+				tc.owner.UserID = owner.Id
+				if err := db.Create(tc.owner).Error; err != nil {
+					t.Fatal(err)
+				}
+				rec.OwnerUserID = &owner.Id
+			}
+			if err := db.Create(&rec).Error; err != nil {
+				t.Fatal(err)
+			}
+			forceRecordDisabled(t, svc, email)
+			if _, err := svc.ResetTrafficByEmail(inboundSvc, email); err != nil {
+				t.Fatalf("reset detached client: %v", err)
+			}
+			if got := recordEnableOf(t, svc, email); got != tc.enabled {
+				t.Fatalf("enabled=%v, want %v", got, tc.enabled)
+			}
+		})
 	}
 }

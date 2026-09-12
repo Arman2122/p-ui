@@ -10,11 +10,14 @@ locale to draw.
 package wsnotify
 
 import (
+	"context"
 	"strconv"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/eventbus"
-	"github.com/Arman2122/p-ui/internal/web/websocket"
+	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 // One notification per event kind per source per minute. The watchdogs and the
@@ -38,10 +41,6 @@ type notice struct {
 }
 
 func (s *Subscriber) HandleEvent(e eventbus.Event) {
-	// Serialising an event nobody will receive is pure waste.
-	if !websocket.HasClients() {
-		return
-	}
 	n, ok := describe(e)
 	if !ok {
 		return
@@ -49,7 +48,19 @@ func (s *Subscriber) HandleEvent(e eventbus.Event) {
 	if !s.limiter.Allow(e.Type, eventbus.LimiterKey(e)) {
 		return
 	}
-	websocket.BroadcastEvent(n.level, n.titleKey, n.bodyKey, n.params)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var at int64
+	if !e.Timestamp.IsZero() {
+		at = e.Timestamp.UnixMilli()
+	}
+	_, err := (service.ActivityService{}).Record(ctx, model.ActivityEvent{
+		Kind: string(e.Type), Level: n.level,
+		TitleKey: n.titleKey, MessageKey: n.bodyKey, CreatedAt: at,
+	}, n.params)
+	if err != nil {
+		logger.Warning("persist notification:", err)
+	}
 }
 
 /*
@@ -65,16 +76,20 @@ func describe(e eventbus.Event) (notice, bool) {
 		if d, ok := e.Data.(*eventbus.OutboundHealthData); ok {
 			msg = d.Error
 		}
-		return notice{"error", "events.outboundDown.title", "events.outboundDown.body",
-			map[string]string{"tag": e.Source, "error": msg}}, true
+		return notice{
+			"error", "events.outboundDown.title", "events.outboundDown.body",
+			map[string]string{"tag": e.Source, "error": msg},
+		}, true
 
 	case eventbus.EventOutboundUp:
 		delay := ""
 		if d, ok := e.Data.(*eventbus.OutboundHealthData); ok && d.Delay > 0 {
 			delay = strconv.FormatInt(d.Delay, 10)
 		}
-		return notice{"success", "events.outboundUp.title", "events.outboundUp.body",
-			map[string]string{"tag": e.Source, "delay": delay}}, true
+		return notice{
+			"success", "events.outboundUp.title", "events.outboundUp.body",
+			map[string]string{"tag": e.Source, "delay": delay},
+		}, true
 
 	case eventbus.EventCoreCrash:
 		core, msg := e.Source, ""
@@ -84,33 +99,43 @@ func describe(e eventbus.Event) (notice, bool) {
 			}
 			msg = d.Err
 		}
-		return notice{"error", "events.coreCrash.title", "events.coreCrash.body",
-			map[string]string{"core": core, "error": msg}}, true
+		return notice{
+			"error", "events.coreCrash.title", "events.coreCrash.body",
+			map[string]string{"core": core, "error": msg},
+		}, true
 
 	case eventbus.EventCoreUp:
 		core := e.Source
 		if d, ok := e.Data.(*eventbus.CoreCrashData); ok && d.CoreID != "" {
 			core = d.CoreID
 		}
-		return notice{"success", "events.coreUp.title", "events.coreUp.body",
-			map[string]string{"core": core}}, true
+		return notice{
+			"success", "events.coreUp.title", "events.coreUp.body",
+			map[string]string{"core": core},
+		}, true
 
 	case eventbus.EventXrayCrash:
 		msg, _ := e.Data.(string)
-		return notice{"error", "events.xrayCrash.title", "events.xrayCrash.body",
-			map[string]string{"error": msg}}, true
+		return notice{
+			"error", "events.xrayCrash.title", "events.xrayCrash.body",
+			map[string]string{"error": msg},
+		}, true
 
 	case eventbus.EventNodeDown:
-		return notice{"error", "events.nodeDown.title", "events.nodeDown.body",
-			map[string]string{"node": e.Source}}, true
+		return notice{
+			"error", "events.nodeDown.title", "events.nodeDown.body",
+			map[string]string{"node": e.Source},
+		}, true
 
 	case eventbus.EventNodeUp:
 		latency := ""
 		if d, ok := e.Data.(*eventbus.NodeHealthData); ok && d.LatencyMs > 0 {
 			latency = strconv.Itoa(d.LatencyMs)
 		}
-		return notice{"success", "events.nodeUp.title", "events.nodeUp.body",
-			map[string]string{"node": e.Source, "latency": latency}}, true
+		return notice{
+			"success", "events.nodeUp.title", "events.nodeUp.body",
+			map[string]string{"node": e.Source, "latency": latency},
+		}, true
 
 	case eventbus.EventLoginAttempt:
 		d, ok := e.Data.(*eventbus.LoginEventData)
@@ -128,21 +153,25 @@ func describe(e eventbus.Event) (notice, bool) {
 		if !ok {
 			return notice{}, false
 		}
-		return notice{"warning", "events.coreAuthFailure.title", "events.coreAuthFailure.body",
-			map[string]string{"core": d.CoreID, "user": d.Username, "ip": d.IP}}, true
+		return notice{
+			"warning", "events.coreAuthFailure.title", "events.coreAuthFailure.body",
+			map[string]string{"core": d.CoreID, "user": d.Username, "ip": d.IP},
+		}, true
 
 	case eventbus.EventClientDeviceLimit:
 		d, ok := e.Data.(*eventbus.ClientDeviceLimitData)
 		if !ok {
 			return notice{}, false
 		}
-		return notice{"warning", "events.deviceLimit.title", "events.deviceLimit.body",
+		return notice{
+			"warning", "events.deviceLimit.title", "events.deviceLimit.body",
 			map[string]string{
 				"email":   d.Email,
 				"devices": strconv.Itoa(d.Devices),
 				"limit":   strconv.Itoa(d.Limit),
 				"ip":      d.IP,
-			}}, true
+			},
+		}, true
 	}
 	return notice{}, false
 }

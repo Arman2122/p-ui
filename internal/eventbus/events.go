@@ -43,7 +43,8 @@ const (
 
 	// EventClientDeviceLimit is a device over a client's cap and what was done
 	// about it: cut by its core, dropped on a firewall, or reported alone.
-	EventClientDeviceLimit EventType = "client.device_limit"
+	EventClientDeviceLimit  EventType = "client.device_limit"
+	EventClientPlanDepleted EventType = "client.plan_depleted"
 )
 
 // ClientDeviceLimitData carries one device over its cap. Action is "cut", "ban"

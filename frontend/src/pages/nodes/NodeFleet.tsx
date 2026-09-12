@@ -4,7 +4,8 @@ import { Button, Checkbox, Input, Modal, Segmented, Space, Switch, Tag } from 'a
 import { useNavigate } from 'react-router';
 import { PageHeader, PanelCard, Ring, Field, StatusChip } from '@/components/ui/panel';
 import { Icon } from '@/components/ui/Icon';
-import { TimeFormatter } from '@/utils';
+import { TimeFormatter, SizeFormatter } from '@/utils';
+import { nodeHasReadings, nodeTraffic } from './telemetry';
 import NodeList, { type NodeListProps } from './NodeList';
 import NodeHistoryPanel from './NodeHistoryPanel';
 
@@ -39,15 +40,20 @@ export default function NodeFleet(props: NodeListProps) {
         <button className="p-text-action p-name" onClick={() => setDetailKey(keyOf(n))}>{n.name || n.remark}</button>
       </Space>} extra={<StatusChip status={health(n)} />}>
         <div className="p-noderings">
-          {n.cpuPct == null ? <Field label={t('pages.index.cpu')} value="—" /> : <Ring value={n.cpuPct} label={t('pages.index.cpu')} tone="#4c8dff" size={52} thick={4} />}
-          {n.memPct == null ? <Field label={t('pages.index.memory')} value="—" /> : <Ring value={n.memPct} label={t('pages.index.memory')} tone="#5ac8b0" size={52} thick={4} />}
+          {!nodeHasReadings(n) || n.cpuPct == null ? <Field label={t('pages.index.cpu')} value="—" /> : <Ring value={n.cpuPct} label={t('pages.index.cpu')} tone="#4c8dff" size={52} thick={4} />}
+          {!nodeHasReadings(n) || n.memPct == null ? <Field label={t('pages.index.memory')} value="—" /> : <Ring value={n.memPct} label={t('pages.index.memory')} tone="#5ac8b0" size={52} thick={4} />}
         </div>
         <div className="p-groupbody">
-          <div className="p-detail-grid"><Field label={t('pages.nodes.avgLatency')} value={n.latencyMs == null ? '—' : `${n.latencyMs} ms`} />
+          <div className="p-detail-grid"><Field label={t('pages.nodes.avgLatency')} value={!nodeHasReadings(n) || n.latencyMs == null ? '—' : `${n.latencyMs} ms`} />
             <Field label={t('clients')} value={n.clientCount ?? '—'} /><Field label={t('menu.inbounds')} value={n.inboundCount ?? '—'} /></div>
+          <div className="p-detail-grid"><Field label={t('online')} value={n.onlineCount ?? '—'} />
+            <Field label={t('telemetry.inboundTraffic')} value={nodeTraffic(n) == null ? '—' : SizeFormatter.sizeFormat(nodeTraffic(n)!)} /></div>
+          <Field label={t('pages.index.overallSpeed')} value={nodeHasReadings(n) && n.netUp != null && n.netDown != null
+            ? `↑ ${SizeFormatter.speedFormat(n.netUp)} · ↓ ${SizeFormatter.speedFormat(n.netDown)}` : '—'} />
+          {n.configDirty && <Tag color="warning">{t('telemetry.pendingSync')}</Tag>}
           <span className="p-sub p-mono">{n.xrayVersion || '—'} · {n.uptimeSecs ? TimeFormatter.formatSecond(n.uptimeSecs) : '—'}</span>
           {(n.lastError || n.xrayError) && <span className="p-sub">{n.lastError || n.xrayError}</span>}
-          <Space size={4} wrap>{(n.inboundTags ?? []).map((tag) => <Tag key={tag}>{tag}</Tag>)}</Space>
+          <Space size={4} wrap>{(n.servedInbounds ?? []).map((ib) => <Tag key={ib.id}>{ib.tag} · {ib.protocol}</Tag>)}</Space>
         </div>
         <div className="p-nodefoot" style={{ padding: 12, borderTop: '1px solid var(--p-border)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <Button size="small" onClick={() => setDetailKey(keyOf(n))}>{t('pages.cores.columns.detail')}</Button>

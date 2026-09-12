@@ -3,10 +3,12 @@ package job
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/banset"
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/shaping"
@@ -33,9 +35,39 @@ func NewCorePolicyJob() *CorePolicyJob { return &CorePolicyJob{} }
 
 func (j *CorePolicyJob) Run() {
 	ctx := context.Background()
+	j.convergePlans(ctx, time.Now())
+	enforceProductQuotas(ctx)
 	j.convergeShaping(ctx)
 	j.convergeRates(ctx)
 	j.enforceIPLimits(ctx)
+}
+
+func (j *CorePolicyJob) convergePlans(ctx context.Context, now time.Time) {
+	result, err := j.policyService.ConvergePlanCycles(ctx, now)
+	if err != nil {
+		logger.Warning("plan cycle convergence failed:", err)
+	}
+	if result.NeedRestart {
+		(&service.XrayService{}).SetToNeedRestart()
+	}
+	for _, notice := range result.Notices {
+		audience := 0
+		if notice.OwnerUserID != nil {
+			audience = *notice.OwnerUserID
+		}
+		if _, err := (service.ActivityService{}).Record(ctx, model.ActivityEvent{
+			AudienceUserID: audience, Kind: "client.plan_depleted", Level: "warning",
+			TitleKey: "events.planDepleted.title", MessageKey: "events.planDepleted.body", CreatedAt: now.UnixMilli(),
+		}, map[string]string{
+			"email": notice.Email, "plan": notice.PlanName,
+			"used": strconv.FormatInt(notice.UsedBytes, 10), "quota": strconv.FormatInt(notice.QuotaBytes, 10),
+		}); err != nil {
+			logger.Warning("persist plan depletion notice failed:", err)
+		}
+		if EventBus != nil {
+			EventBus.Publish(eventbus.Event{Type: eventbus.EventClientPlanDepleted, Source: notice.Email, Timestamp: now, Data: notice})
+		}
+	}
 }
 
 // convergeShaping brings the kernel to the rate each ladder entitles a client to.

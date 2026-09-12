@@ -41,6 +41,7 @@ const GROUPS: NotificationGroupConfig[] = [
     title: 'eventGroupClients',
     events: [
       { key: 'client.device_limit', label: 'eventClientDeviceLimit', settingKey: '' },
+      { key: 'client.plan_depleted', label: 'eventClientPlanDepleted', settingKey: '' },
     ],
   },
   {

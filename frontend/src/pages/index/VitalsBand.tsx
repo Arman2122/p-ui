@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from 'antd';
 
-import { Sparkline } from '@/components/viz';
+import HistoryChart from './HistoryChart';
 import { Icon } from '@/components/ui/Icon';
 import { Gauge, Kicker } from '@/components/ui/panel';
 import { CPUFormatter, SizeFormatter } from '@/utils';
@@ -31,7 +31,7 @@ type Vital = {
 };
 
 function pct(value: number): string {
-  return `${value.toFixed(1)}%`;
+  return Number.isFinite(value) ? `${value.toFixed(1)}%` : '—';
 }
 
 export default function VitalsBand({ status, history, open, onOpen, lead }: {
@@ -128,10 +128,11 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
             aria-expanded={open === v.key}
             title={t('pages.index.showHistory', { metric: v.label })}
           >
-            <Gauge value={v.value} unit="%" tone={TONE[v.key]} muted={v.muted} size={56} thick={4.5} />
+            {status.unavailable.includes(v.key) ? <span className="p-stat" style={{ width: 56 }}>—</span> :
+              <Gauge value={v.value} unit="%" tone={TONE[v.key]} muted={v.muted} size={56} thick={4.5} />}
             <span className="p-vital-t">
               <span className="p-vital-l">{v.label}</span>
-              <span className="p-vital-d">{v.detail}</span>
+              <span className="p-vital-d">{status.unavailable.includes(v.key) ? t('telemetry.noReadings') : v.detail}</span>
               <span className="p-vital-f">{v.foot}</span>
             </span>
           </button>
@@ -144,19 +145,8 @@ export default function VitalsBand({ status, history, open, onOpen, lead }: {
               <Kicker>{t('pages.index.lastSamples', { metric: current.label })}</Kicker>
               <Button type="text" size="small" onClick={() => onOpen(null)} aria-label={t('close')} icon={<Icon name="close" size={14} />} />
             </div>
-            <Sparkline
-              data={history.series[current.key] ?? []}
-              labels={history.labels}
-              height={116}
-              stroke={TONE[current.key]}
-              strokeWidth={1.6}
-              fillOpacity={0.12}
-              showAxes
-              showGrid
-              name1={current.label}
-              valueMax={null}
-              yFormatter={(v) => `${v.toFixed(1)}%`}
-            />
+            <HistoryChart times={history.times ?? []} height={160} format={pct}
+              series={[{ name: current.label, values: history.series[current.key] ?? [], color: TONE[current.key] }]} />
           </div>
           <div style={{ flex: '0 1 220px', minWidth: 180 }}>
             {current.rows.map(([key, value]) => (

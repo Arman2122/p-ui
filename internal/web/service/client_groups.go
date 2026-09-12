@@ -13,11 +13,11 @@ import (
 )
 
 type GroupSummary struct {
-	Name        string `json:"name"`
-	ClientCount int    `json:"clientCount"`
-	TrafficUsed int64  `json:"trafficUsed"`
-	Up          int64  `json:"up"`
-	Down        int64  `json:"down"`
+	Name        string `json:"name" example:"Family"`
+	ClientCount int    `json:"clientCount" example:"3"`
+	TrafficUsed int64  `json:"trafficUsed" example:"10485760"`
+	Up          int64  `json:"up" example:"1048576"`
+	Down        int64  `json:"down" example:"9437184"`
 }
 
 func (s *ClientService) ListGroups() ([]GroupSummary, error) {
@@ -212,6 +212,17 @@ func (s *ClientService) AddToGroup(emails []string, group string) (int, error) {
 		return 0, nil
 	}
 	db := database.GetDB()
+	if group != "" {
+		for _, batch := range chunkStrings(emails, sqlInChunk) {
+			var owned int64
+			if err := db.Model(&model.ClientRecord{}).Where("email IN ? AND owner_user_id IS NOT NULL", batch).Count(&owned).Error; err != nil {
+				return 0, err
+			}
+			if owned > 0 {
+				return 0, ErrResellerForbidden
+			}
+		}
+	}
 
 	if group != "" {
 		var exists int64
@@ -248,6 +259,10 @@ func (s *ClientService) AddToGroup(emails []string, group string) (int, error) {
 	}
 
 	tx := db.Begin()
+	if err := preserveGroupTransfer(tx, affectedEmails, group); err != nil {
+		tx.Rollback()
+		return 0, err
+	}
 	for _, batch := range chunkStrings(affectedEmails, sqlInChunk) {
 		if err := tx.Model(&model.ClientRecord{}).
 			Where("email IN ?", batch).

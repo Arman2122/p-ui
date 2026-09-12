@@ -3,6 +3,8 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/gin-contrib/sessions"
@@ -28,7 +30,7 @@ func TestLogoutRevokesACookieAlreadyCaptured(t *testing.T) {
 	initTestDB(t)
 	gin.SetMode(gin.TestMode)
 
-	admin := &model.User{Username: "admin", Password: "x"}
+	admin := &model.User{Username: "logout-epoch-admin", Password: "x"}
 	if err := database.GetDB().Create(admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
@@ -130,21 +132,22 @@ func TestLogoutStillClearsTheBrowserWhenRevocationFails(t *testing.T) {
 	}
 }
 
-/*
-The panic the shuffle found.
-
-The test above closes the database, but CloseDB shuts the pool and leaves the
-global handle in place — so it only ever produced the error it was written for
-when some earlier test in this package had opened one. Run first, the handle is
-nil, BumpLoginEpoch dereferences it, and logout panics instead of logging and
-clearing the cookie. That is precisely the outcome its own doc comment forbids,
-and no ordering makes it not a bug.
-*/
+// A fresh test process exercises the nil-handle branch regardless of suite order.
 func TestRevokingSessionsWithNoDatabaseIsAnErrorNotAPanic(t *testing.T) {
-	if database.GetDB() != nil {
-		t.Skip("another test opened a database; this one is about there being none")
+	const childKey = "PUI_TEST_EMPTY_SESSION_DB"
+	if os.Getenv(childKey) == "1" {
+		if database.GetDB() != nil {
+			t.Fatal("fresh process unexpectedly opened a database")
+		}
+		const want = "panel: no database connection to revoke sessions with"
+		if err := (&panelservice.UserService{}).BumpLoginEpoch(); err == nil || err.Error() != want {
+			t.Fatalf("revoke error=%v want%q", err, want)
+		}
+		return
 	}
-	if err := (&panelservice.UserService{}).BumpLoginEpoch(); err == nil {
-		t.Fatal("revoking sessions with no database reported success")
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRevokingSessionsWithNoDatabaseIsAnErrorNotAPanic$")
+	cmd.Env = append(os.Environ(), childKey+"=1")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("nil-database child: %v\n%s", err, output)
 	}
 }

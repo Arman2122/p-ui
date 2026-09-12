@@ -40,6 +40,8 @@ export interface Endpoint {
   errorStatus?: number;
   responseSchema?: string;
   responseSchemaArray?: boolean;
+  requestSchema?: string;
+  requestSchemaArray?: boolean;
 }
 
 export interface SubscriptionHeader {
@@ -60,7 +62,7 @@ export const sections: readonly Section[] = [
     id: 'authentication',
     title: 'Authentication',
     description:
-      'Two authentication modes are supported. UI sessions use a cookie set by the login endpoint. Programmatic clients (bots, scripts, remote panels) authenticate with a Bearer token taken from Settings → Security → API Token. Both work for every endpoint under /panel/api/*.',
+      'UI sessions use a cookie set by the login endpoint. Programmatic clients authenticate with a Bearer token from Panel Settings → API Token or their reseller account. Each operation enforces the authenticated role, token scope and ownership. The global WebSocket requires an administrator session cookie.',
     endpoints: [
       {
         method: 'POST',
@@ -326,11 +328,11 @@ export const sections: readonly Section[] = [
         response: '{\n  "success": true,\n  "obj": [\n    "2026-09-05T18:33:49+0000 ocserv[2044848]: listening (TCP) on 127.0.0.1:8443..."\n  ]\n}',
       },
       {
-        method: 'GET',
-        path: '/panel/api/server/status',
-        summary: 'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load averages, open connections, Xray state. Cached and refreshed every 2 seconds in the background.',
-        response: '{\n  "success": true,\n  "obj": {\n    "cpu": 12.5,\n    "mem": { "current": 2147483648, "total": 8589934592 },\n    "swap": { "current": 0, "total": 4294967296 },\n    "disk": { "current": 53687091200, "total": 268435456000 },\n    "netIO": { "up": 1073741824, "down": 2147483648 },\n    "xray": { "state": "running", "version": "v25.10.31" },\n    "tcpCount": 42,\n    "load": { "load1": 0.5, "load5": 0.3, "load15": 0.2 }\n  }\n}',
-      },
+method: 'GET',
+path: '/panel/api/server/status',
+summary: 'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load averages, open connections, Xray state. Cached and refreshed every 2 seconds in the background.',
+responseSchema: 'Status',
+},
       {
         method: 'GET',
         path: '/panel/api/server/ipLimitStatus',
@@ -342,7 +344,7 @@ export const sections: readonly Section[] = [
         path: '/panel/api/server/cpuHistory/:bucket',
         summary: 'Legacy: aggregated CPU history. Use /history/cpu/:bucket instead — same data with a uniform {t, v} shape.',
         params: [
-          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.' },
+          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080.' },
         ],
       },
       {
@@ -351,7 +353,7 @@ export const sections: readonly Section[] = [
         summary: 'Aggregated time-series for one metric. Returns an array of {t, v} samples covering the last ~6 hours.',
         params: [
           { name: 'metric', in: 'path', type: 'string', desc: 'cpu | mem | netUp | netDown | online | load1 | load5 | load15.' },
-          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.' },
+          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080.' },
         ],
         response: '{\n  "success": true,\n  "obj": [\n    { "t": 1700000000, "v": 12.5 },\n    { "t": 1700000002, "v": 13.1 }\n  ]\n}',
       },
@@ -366,7 +368,7 @@ export const sections: readonly Section[] = [
         summary: 'Time-series history for one Xray runtime metric over the last ~6 hours. Same {t, v} shape as /history/:metric/:bucket.',
         params: [
           { name: 'metric', in: 'path', type: 'string', desc: 'xrAlloc | xrSys | xrHeapObjects | xrNumGC | xrPauseNs.' },
-          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.' },
+          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080.' },
         ],
       },
       {
@@ -380,7 +382,7 @@ export const sections: readonly Section[] = [
         summary: 'Time-series of observatory probe results for one outbound tag. Same {t, v} shape as the other history endpoints.',
         params: [
           { name: 'tag', in: 'path', type: 'string', desc: 'Outbound tag from the observatory config.' },
-          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.' },
+          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080.' },
         ],
       },
       {
@@ -606,7 +608,22 @@ export const sections: readonly Section[] = [
           { name: 'ips', in: 'body (json)', type: 'object[]', desc: 'Array of InboundClientIps to merge.' },
         ],
       },
-    ],
+
+{
+  method: 'GET',
+  path: '/panel/api/server/historyWindow/:bucket',
+  summary: 'Batch host history with a shared epoch-second axis and up to 60 buckets; 15-second buckets cover 15 minutes.',
+  responseSchema: 'MetricHistoryWindow',
+  params: [
+    {
+      name: 'bucket',
+      in: 'path',
+      type: 'integer',
+      desc: 'Bucket size in seconds. Allowed: 2, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080.'
+    }
+  ]
+},
+],
   },
 
   {
@@ -623,10 +640,10 @@ export const sections: readonly Section[] = [
           '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "email": "alice@example.com",\n      "subId": "abcd1234",\n      "uuid": "...",\n      "totalGB": 53687091200,\n      "expiryTime": 1735689600000,\n      "enable": true,\n      "reverse": null,\n      "inboundIds": [3, 5],\n      "traffic": { "up": 1024, "down": 4096, "enable": true }\n    }\n  ]\n}',
       },
       {
-        method: 'GET',
-        path: '/panel/api/clients/list/paged',
-        summary: 'Filter, sort, and paginate clients on the server. Each item is a slim row (no uuid/password/auth/flow/security/reverse/tgId) so the clients page can ship 25-ish rows in a few KB instead of the full table. The response also includes a summary computed across the full DB row set so dashboard counters stay stable as the user paginates or filters: the *Count fields are exact, while the email arrays beside them stop at 200 entries so the payload does not grow with the panel. Page size capped at 200; fetch /get/:email to obtain the full per-client payload for an edit/info modal.',
-        params: [
+method: 'GET',
+path: '/panel/api/clients/list/paged',
+summary: 'Filter, sort, and paginate clients on the server. Each item is a slim row (no uuid/password/auth/flow/security/reverse/tgId) so the clients page can ship 25-ish rows in a few KB instead of the full table. The response also includes a summary computed across the full DB row set so dashboard counters stay stable as the user paginates or filters: the *Count fields are exact, while the email arrays beside them stop at 200 entries so the payload does not grow with the panel. Page size capped at 200; fetch /get/:email to obtain the full per-client payload for an edit/info modal.',
+params: [
           { name: 'page', in: 'query', type: 'number', desc: '1-indexed page number. Defaults to 1.' },
           { name: 'pageSize', in: 'query', type: 'number', desc: 'Rows per page. Defaults to 25, capped at 200.' },
           { name: 'search', in: 'query', type: 'string', desc: 'Case-insensitive substring match on email / subId / comment.' },
@@ -635,9 +652,8 @@ export const sections: readonly Section[] = [
           { name: 'sort', in: 'query', type: 'string', desc: 'Sort key: enable | email | inboundIds | traffic | remaining | expiryTime.' },
           { name: 'order', in: 'query', type: 'string', desc: 'ascend or descend.' },
         ],
-        response:
-          '{\n  "success": true,\n  "obj": {\n    "items": [\n      {\n        "email": "alice@example.com",\n        "subId": "abcd1234",\n        "enable": true,\n        "totalGB": 53687091200,\n        "expiryTime": 1735689600000,\n        "limitIp": 0,\n        "reset": 0,\n        "inboundIds": [3, 5],\n        "traffic": { "up": 1024, "down": 4096, "enable": true },\n        "createdAt": 1735000000000,\n        "updatedAt": 1735100000000\n      }\n    ],\n    "total": 2000,\n    "filtered": 47,\n    "page": 1,\n    "pageSize": 25,\n    "summary": {\n      "total": 2000,\n      "active": 1850,\n      "onlineCount": 1,\n      "depletedCount": 0,\n      "expiringCount": 0,\n      "deactiveCount": 150,\n      "online": ["alice@example.com"],\n      "depleted": [],\n      "expiring": [],\n      "deactive": ["bob@example.com"]\n    }\n  }\n}',
-      },
+responseSchema: 'ClientPageResponse',
+},
       {
         method: 'GET',
         path: '/panel/api/clients/get/:email',
@@ -659,26 +675,69 @@ export const sections: readonly Section[] = [
           '{\n  "success": true,\n  "obj": [\n    {\n      "client": { "id": 1, "email": "alice@example.com", ... },\n      "credentials": { "secret": "ee...", "adTag": "0123..." },\n      "inboundIds": [3, 5],\n      "externalLinks": [],\n      "usedTraffic": 1048576\n    }\n  ]\n}',
       },
       {
-        method: 'POST',
-        path: '/panel/api/clients/add',
-        summary: 'Create a new client and attach it to one or more inbounds in a single call. Body is JSON. Per-protocol secrets (UUID for VLESS/VMess, password for Trojan/Shadowsocks, auth for Hysteria) are generated server-side when omitted, so callers can send only the universal fields.',
-        params: [
-          { name: 'client', in: 'body (json)', type: 'object', desc: 'Client fields: email, subId, id (uuid), password, auth, flow, totalGB, expiryTime, limitIp, tgId (numeric Telegram user ID, 0 = none), comment, enable.' },
-          { name: 'inboundIds', in: 'body (json)', type: 'integer[]', desc: 'Inbound IDs to attach the client to. At least one required.' },
-        ],
-        body: '{\n  "client": {\n    "email": "alice@example.com",\n    "totalGB": 53687091200,\n    "expiryTime": 1735689600000,\n    "tgId": 0,\n    "limitIp": 0,\n    "enable": true\n  },\n  "inboundIds": [3, 5]\n}',
-        response: '{\n  "success": true,\n  "msg": "Client added"\n}',
-      },
+method: 'POST',
+path: '/panel/api/clients/add',
+summary: 'Create a new client and attach it to one or more inbounds in a single call. Body is JSON. Per-protocol secrets (UUID for VLESS/VMess, password for Trojan/Shadowsocks, auth for Hysteria) are generated server-side when omitted, so callers can send only the universal fields.',
+params: [
+  {
+    name: 'client',
+    in: 'body (json)',
+    type: 'object',
+    desc: 'Client fields: email, subId, id (uuid), password, auth, flow, totalGB, expiryTime, limitIp, tgId (numeric Telegram user ID, 0 = none), comment, enable.'
+  },
+  {
+    name: 'inboundIds',
+    in: 'body (json)',
+    type: 'integer[]',
+    desc: 'Inbound IDs to attach the client to. At least one required.'
+  },
+  {
+    name: 'policyId',
+    in: 'body',
+    type: 'integer',
+    optional: true,
+    desc: 'Explicit plan assignment; zero unassigns, absence preserves existing behavior.'
+  },
+  {
+    name: 'planOverrides',
+    in: 'body',
+    type: 'object',
+    optional: true,
+    desc: 'Explicit quota, expiry, limitIp and inbounds override flags; omitted flags are preserved.'
+  }
+],
+body: '{\n  "client": {\n    "email": "alice@example.com",\n    "totalGB": 53687091200,\n    "expiryTime": 1735689600000,\n    "tgId": 0,\n    "limitIp": 0,\n    "enable": true\n  },\n  "inboundIds": [3, 5]\n}',
+response: '{\n  "success": true,\n  "msg": "Client added"\n}',
+},
       {
-        method: 'POST',
-        path: '/panel/api/clients/update/:email',
-        summary: 'Update an existing client by email. Changes propagate to every attached inbound. Body is the JSON client payload — supply the full set of fields you want to keep (the server replaces the row, it does not patch).',
-        params: [
-          { name: 'email', in: 'path', type: 'string', desc: 'Current client email (unique identifier).' },
-        ],
-        body: '{\n  "email": "alice@example.com",\n  "totalGB": 107374182400,\n  "expiryTime": 1767225600000,\n  "tgId": 123456789,\n  "enable": true\n}',
-        response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
-      },
+method: 'POST',
+path: '/panel/api/clients/update/:email',
+summary: 'Update an existing client by email. Changes propagate to every attached inbound. Body is the JSON client payload — supply the full set of fields you want to keep (the server replaces the row, it does not patch).',
+params: [
+  {
+    name: 'email',
+    in: 'path',
+    type: 'string',
+    desc: 'Current client email (unique identifier).'
+  },
+  {
+    name: 'policyId',
+    in: 'body',
+    type: 'integer',
+    optional: true,
+    desc: 'Explicit plan assignment; zero unassigns, absence preserves existing behavior.'
+  },
+  {
+    name: 'planOverrides',
+    in: 'body',
+    type: 'object',
+    optional: true,
+    desc: 'Explicit quota, expiry, limitIp and inbounds override flags; omitted flags are preserved.'
+  }
+],
+body: '{\n  "email": "alice@example.com",\n  "totalGB": 107374182400,\n  "expiryTime": 1767225600000,\n  "tgId": 123456789,\n  "enable": true\n}',
+response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
+},
       {
         method: 'POST',
         path: '/panel/api/clients/del/:email',
@@ -874,11 +933,12 @@ export const sections: readonly Section[] = [
         response: '{\n  "success": true,\n  "obj": {\n    "affected": 2,\n    "outcome": { "ok": ["alice", "bob"], "skipped": [], "failed": [] }\n  }\n}',
       },
       {
-        method: 'GET',
-        path: '/panel/api/clients/groups',
-        summary: 'List all client groups with their member counts. Merges persisted groups (rows in client_groups, including empty placeholders) with the distinct group_name values currently set on clients. Sorted alphabetically (case-insensitive).',
-        response: '{\n  "success": true,\n  "obj": [\n    { "name": "customer-a", "clientCount": 5 },\n    { "name": "internal", "clientCount": 0 }\n  ]\n}',
-      },
+method: 'GET',
+path: '/panel/api/clients/groups',
+summary: 'List all client groups with their member counts. Merges persisted groups (rows in client_groups, including empty placeholders) with the distinct group_name values currently set on clients. Sorted alphabetically (case-insensitive).',
+responseSchema: 'GroupDetails',
+responseSchemaArray: true,
+},
       {
         method: 'GET',
         path: '/panel/api/clients/groups/:name/emails',
@@ -1032,7 +1092,32 @@ export const sections: readonly Section[] = [
         response:
           '{\n  "success": true,\n  "obj": [\n    "vless://uuid@host:443?...#user1"\n  ]\n}',
       },
-    ],
+
+{
+  method: 'POST',
+  path: '/panel/api/clients/groups/quota',
+  summary: 'Admin global group pooled quota and optional shared inbound replacement; absent inboundIds preserves set, [] clears managed set.',
+  responseSchema: 'GroupQuotaRequest',
+  params: [
+    {
+      name: 'name',
+      in: 'body',
+      type: 'string'
+    },
+    {
+      name: 'quotaBytes',
+      in: 'body',
+      type: 'integer'
+    },
+    {
+      name: 'inboundIds',
+      in: 'body',
+      type: 'integer[]',
+      optional: true
+    }
+  ]
+},
+],
   },
 
   {
@@ -1042,12 +1127,12 @@ export const sections: readonly Section[] = [
       'Manage remote Penhoon UI panels acting as nodes for a central panel. All endpoints under /panel/api/nodes.',
     endpoints: [
       {
-        method: 'GET',
-        path: '/panel/api/nodes/list',
-        summary: 'List every configured node with its connection details, health, and last heartbeat patch.',
-        responseSchema: 'NodeView',
-        responseSchemaArray: true,
-      },
+method: 'GET',
+path: '/panel/api/nodes/list',
+summary: 'List every configured node with its connection details, health, and last heartbeat patch.',
+responseSchema: 'NodeView',
+responseSchemaArray: true,
+},
       {
         method: 'POST',
         path: '/panel/api/nodes/mtls/ca',
@@ -1155,7 +1240,7 @@ export const sections: readonly Section[] = [
         params: [
           { name: 'id', in: 'path', type: 'number', desc: 'Node ID.' },
           { name: 'metric', in: 'path', type: 'string', desc: 'cpu | mem.' },
-          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.' },
+          { name: 'bucket', in: 'path', type: 'number', desc: 'Bucket size in seconds. Allowed: 2, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080.' },
         ],
       },
     ],
@@ -1294,7 +1379,7 @@ export const sections: readonly Section[] = [
     id: 'policies',
     title: 'Policies',
     description:
-      'A speed ladder and who is on it. A plan is a list of tiers, each naming the usage at which it starts and the rate it grants from there; the panel evaluates the last tier a client has reached against the same usage figure their quota is enforced against, so a client cannot be over quota by one number and under a threshold by another. A plain speed limit is a one-tier plan starting at zero, so there is no separate concept. Zero bits per second means unlimited in that direction, never blocked, and an empty or unreadable ladder leaves the client unlimited — a malformed plan must never throttle. Assignment is keyed by client email, so it survives a client being deleted and re-synced under a new id. Rate limits are enforced in the kernel and only for protocols whose core can give each client a distinguishable kernel identity; GET /panel/api/cores reports which those are, and a client on any other protocol keeps quota, expiry and IP limits in full. Nothing here touches a core’s configuration, so a plan edit cannot restart a daemon or drop a connection. All endpoints under /panel/api/policies.',
+      'Reusable client plans combine traffic quotas, duration, device limits, inbound assignments and speed tiers. Template changes are tracked separately from applied client settings; reapply updates members while preserving explicit overrides unless requested otherwise. Quota continuation, renewal and rate shaping are validated against each core capability. Zero bits per second means unlimited in that direction. Administrator plans use /panel/api/policies; permitted resellers manage their own plans under /panel/api/reseller/plans.',
     endpoints: [
       {
         method: 'GET',
@@ -1319,22 +1404,145 @@ export const sections: readonly Section[] = [
         responseSchema: 'EnforcedLimits',
       },
       {
-        method: 'POST',
-        path: '/panel/api/policies/add',
-        summary:
+method: 'POST',
+path: '/panel/api/policies/add',
+summary:
           'Create a plan. tiers is sorted by fromBytes and de-duplicated on write, so the stored ladder is canonical; two tiers starting at the same usage keep the first. upBps and downBps are bits per second from the client’s point of view.',
-        body: '{\n  "name": "fair use",\n  "tiers": [\n    { "fromBytes": 0, "upBps": 0, "downBps": 0 },\n    { "fromBytes": 53687091200, "upBps": 10000000, "downBps": 10000000 },\n    { "fromBytes": 107374182400, "upBps": 2000000, "downBps": 2000000 }\n  ]\n}',
-        responseSchema: 'Policy',
-      },
+body: '{\n  "name": "fair use",\n  "tiers": [\n    { "fromBytes": 0, "upBps": 0, "downBps": 0 },\n    { "fromBytes": 53687091200, "upBps": 10000000, "downBps": 10000000 },\n    { "fromBytes": 107374182400, "upBps": 2000000, "downBps": 2000000 }\n  ]\n}',
+responseSchema: 'Policy',
+params: [
+  {
+    name: 'description',
+    in: 'body',
+    type: 'string',
+    optional: true
+  },
+  {
+    name: 'quotaBytes',
+    in: 'body',
+    type: 'integer',
+    optional: true,
+    desc: 'Null is unmanaged; zero is unlimited.'
+  },
+  {
+    name: 'durationDays',
+    in: 'body',
+    type: 'integer',
+    optional: true
+  },
+  {
+    name: 'limitIp',
+    in: 'body',
+    type: 'integer',
+    optional: true
+  },
+  {
+    name: 'inboundIds',
+    in: 'body',
+    type: 'integer[]',
+    optional: true
+  },
+  {
+    name: 'startOnFirstUse',
+    in: 'body',
+    type: 'boolean',
+    optional: true
+  },
+  {
+    name: 'autoRenewDays',
+    in: 'body',
+    type: 'integer',
+    optional: true
+  },
+  {
+    name: 'resetCycle',
+    in: 'body',
+    type: 'string',
+    optional: true,
+    desc: 'none, weekly or monthly'
+  },
+  {
+    name: 'onDepletion',
+    in: 'body',
+    type: 'string',
+    optional: true,
+    desc: 'disable, throttle or notify; runtime capability restrictions are enforced.'
+  }
+],
+},
       {
-        method: 'POST',
-        path: '/panel/api/policies/update/:id',
-        summary:
+method: 'POST',
+path: '/panel/api/policies/update/:id',
+summary:
           'Replace a plan’s name and ladder. Every client on it moves to their new tier on the next pass, which costs one kernel class change per direction and drops nothing.',
-        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Policy ID.' }],
-        body: '{\n  "name": "fair use",\n  "tiers": [\n    { "fromBytes": 0, "upBps": 0, "downBps": 0 },\n    { "fromBytes": 53687091200, "upBps": 10000000, "downBps": 10000000 }\n  ]\n}',
-        responseSchema: 'Policy',
-      },
+params: [
+  {
+    name: 'id',
+    in: 'path',
+    type: 'number',
+    desc: 'Policy ID.'
+  },
+  {
+    name: 'description',
+    in: 'body',
+    type: 'string',
+    optional: true
+  },
+  {
+    name: 'quotaBytes',
+    in: 'body',
+    type: 'integer',
+    optional: true,
+    desc: 'Null is unmanaged; zero is unlimited.'
+  },
+  {
+    name: 'durationDays',
+    in: 'body',
+    type: 'integer',
+    optional: true
+  },
+  {
+    name: 'limitIp',
+    in: 'body',
+    type: 'integer',
+    optional: true
+  },
+  {
+    name: 'inboundIds',
+    in: 'body',
+    type: 'integer[]',
+    optional: true
+  },
+  {
+    name: 'startOnFirstUse',
+    in: 'body',
+    type: 'boolean',
+    optional: true
+  },
+  {
+    name: 'autoRenewDays',
+    in: 'body',
+    type: 'integer',
+    optional: true
+  },
+  {
+    name: 'resetCycle',
+    in: 'body',
+    type: 'string',
+    optional: true,
+    desc: 'none, weekly or monthly'
+  },
+  {
+    name: 'onDepletion',
+    in: 'body',
+    type: 'string',
+    optional: true,
+    desc: 'disable, throttle or notify; runtime capability restrictions are enforced.'
+  }
+],
+body: '{\n  "name": "fair use",\n  "tiers": [\n    { "fromBytes": 0, "upBps": 0, "downBps": 0 },\n    { "fromBytes": 53687091200, "upBps": 10000000, "downBps": 10000000 }\n  ]\n}',
+responseSchema: 'Policy',
+},
       {
         method: 'POST',
         path: '/panel/api/policies/del/:id',
@@ -1406,7 +1614,129 @@ export const sections: readonly Section[] = [
         body: '{\n  "source": "203.0.113.7",\n  "minutes": 60\n}',
         responseSchema: 'ClientBan',
       },
-    ],
+
+{
+  method: 'GET',
+  path: '/panel/api/policies/summary',
+  summary: "Plan summary within the authenticated owner's scope.",
+  params: [],
+  responseSchema: 'PlanSummary',
+  responseSchemaArray: false
+},
+{
+  method: 'GET',
+  path: '/panel/api/policies/members/:id',
+  summary: "Plan members within the authenticated owner's scope.",
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'integer'
+    },
+    {
+      name: 'page',
+      in: 'query',
+      type: 'integer',
+      optional: true,
+      defaultValue: 1
+    },
+    {
+      name: 'pageSize',
+      in: 'query',
+      type: 'integer',
+      optional: true,
+      defaultValue: 20
+    }
+  ],
+  responseSchema: 'PlanMemberPage',
+  responseSchemaArray: false
+},
+{
+  method: 'POST',
+  path: '/panel/api/policies/archive/:id',
+  summary: "Plan archive within the authenticated owner's scope.",
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'integer'
+    },
+    {
+      name: 'archived',
+      in: 'body',
+      type: 'boolean'
+    }
+  ],
+  responseSchema: 'Policy',
+  responseSchemaArray: false
+},
+{
+  method: 'POST',
+  path: '/panel/api/policies/duplicate/:id',
+  summary: "Plan duplicate within the authenticated owner's scope.",
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'integer'
+    },
+    {
+      name: 'name',
+      in: 'body',
+      type: 'string'
+    }
+  ],
+  responseSchema: 'Policy',
+  responseSchemaArray: false
+},
+{
+  method: 'POST',
+  path: '/panel/api/policies/apply',
+  summary: "Plan apply within the authenticated owner's scope.",
+  params: [
+    {
+      name: 'email',
+      in: 'body',
+      type: 'string'
+    },
+    {
+      name: 'policyId',
+      in: 'body',
+      type: 'integer'
+    },
+    {
+      name: 'clearOverrides',
+      in: 'body',
+      type: 'boolean',
+      optional: true,
+      defaultValue: false
+    }
+  ],
+  responseSchema: 'PlanApplyResult',
+  responseSchemaArray: false
+},
+{
+  method: 'POST',
+  path: '/panel/api/policies/reapply/:id',
+  summary: "Plan reapply within the authenticated owner's scope.",
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'integer'
+    },
+    {
+      name: 'clearOverrides',
+      in: 'body',
+      type: 'boolean',
+      optional: true,
+      defaultValue: false
+    }
+  ],
+  responseSchema: 'PlanReapplyResult',
+  responseSchemaArray: false
+},
+],
   },
 
   {
@@ -1515,14 +1845,169 @@ export const sections: readonly Section[] = [
   {
     id: 'backup',
     title: 'Backup',
-    description: 'Operations that interact with the configured Telegram bot.',
+    description: 'PostgreSQL snapshots, retention, scheduled backups, authenticated encryption for manual archives, restore operations and optional delivery to configured administrator Telegram chats. Backups and protected configuration require administrator write access.',
     endpoints: [
       {
         method: 'POST',
         path: '/panel/api/backuptotgbot',
         summary: 'Send a fresh DB backup to every Telegram chat configured as an admin recipient. No body, no params.',
       },
-    ],
+
+{
+  method: 'GET',
+  path: '/panel/api/backups',
+  summary: 'List persisted backup and restore operations, archive availability and the UTC schedule.',
+  responseSchema: 'BackupStatusView',
+  params: []
+},
+{
+  method: 'POST',
+  path: '/panel/api/backups/schedule',
+  summary: 'Persist automatic backup settings.',
+  params: [
+    {
+      name: 'enabled',
+      in: 'body',
+      type: 'boolean'
+    },
+    {
+      name: 'cadence',
+      in: 'body',
+      type: 'string',
+      desc: 'hourly, daily (03:00 UTC), weekly (Sunday 03:00 UTC)'
+    },
+    {
+      name: 'keep',
+      in: 'body',
+      type: 'integer',
+      desc: '1–365 snapshots'
+    },
+    {
+      name: 'encrypt',
+      in: 'body',
+      type: 'boolean',
+      optional: true,
+      defaultValue: false,
+      desc: 'Must be false. Unattended encryption is rejected because no external key provider is configured; no passphrase is persisted.'
+    },
+    {
+      name: 'sendToTelegram',
+      in: 'body',
+      type: 'boolean',
+      optional: true,
+      defaultValue: false,
+      desc: 'Automatic snapshots are unencrypted. Send them only to configured administrator chats.'
+    }
+  ]
+},
+{
+  method: 'POST',
+  path: '/panel/api/backups/create',
+  summary: 'Create a complete PostgreSQL archive, optionally encrypted with AES-256-GCM using a request-only passphrase.',
+  responseSchema: 'BackupRecordView',
+  params: [
+    {
+      name: 'encrypt',
+      in: 'body',
+      type: 'boolean',
+      optional: true,
+      defaultValue: false
+    },
+    {
+      name: 'passphrase',
+      in: 'body',
+      type: 'string',
+      optional: true,
+      desc: 'Required only when encrypt=true; 12–1024 bytes. Never persisted. No passphrase is accepted for an unencrypted archive.'
+    },
+    {
+      name: 'sendToTelegram',
+      in: 'body',
+      type: 'boolean',
+      optional: true,
+      defaultValue: false,
+      desc: 'Send the exact archive to configured administrator chats; delivery failure preserves the local snapshot.'
+    }
+  ]
+},
+{
+  method: 'GET',
+  path: '/panel/api/backups/:id/download',
+  summary: 'Download stored bytes unchanged: .dump.pui ciphertext when encrypted=true, or a plain .dump. No passphrase appears in a URL or download request.',
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'string'
+    }
+  ]
+},
+{
+  method: 'POST',
+  path: '/panel/api/backups/:id/restore',
+  summary: 'Restore a stored PostgreSQL archive after making a safety dump.',
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'string'
+    },
+    {
+      name: 'confirm',
+      in: 'body (form)',
+      type: 'string',
+      desc: 'Must be RESTORE'
+    },
+    {
+      name: 'passphrase',
+      in: 'body (form)',
+      type: 'string',
+      optional: true,
+      desc: 'Original request-only archive passphrase for encrypted snapshots. Leave blank for plain snapshots.'
+    }
+  ],
+  responseSchema: 'BackupRecordView'
+},
+{
+  method: 'POST',
+  path: '/panel/api/backups/upload',
+  summary: 'Restore .dump or encrypted .dump.pui archive. Authenticate the entire encrypted stream before any PostgreSQL action.',
+  params: [
+    {
+      name: 'file',
+      in: 'body (multipart)',
+      type: 'file'
+    },
+    {
+      name: 'confirm',
+      in: 'body (multipart)',
+      type: 'string',
+      desc: 'Must be RESTORE'
+    },
+    {
+      name: 'passphrase',
+      in: 'body (multipart)',
+      type: 'string',
+      optional: true,
+      desc: 'Original passphrase, never persisted or logged. Leave blank for a plain PostgreSQL custom-format dump.'
+    }
+  ],
+  responseSchema: 'BackupRecordView'
+},
+{
+  method: 'POST',
+  path: '/panel/api/backups/:id/telegram',
+  summary: "Send this exact stored archive to the bot's configured administrator chats and persist delivery outcome. Administrator write access required.",
+  params: [
+    {
+      name: 'id',
+      in: 'path',
+      type: 'string'
+    }
+  ],
+  responseSchema: 'BackupRecordView'
+},
+],
   },
 
   {
@@ -1601,27 +2086,50 @@ export const sections: readonly Section[] = [
     id: 'api-tokens',
     title: 'API Tokens',
     description:
-      'Manage Bearer tokens used for programmatic auth (bots, central panels acting on this node, CI). Each token has a unique name and an enabled flag — disable to revoke without deleting, delete to revoke permanently. Tokens are stored as SHA-256 hashes and the plaintext is returned only once, in the create response — it cannot be retrieved afterwards, so copy it then. Send one as <code>Authorization: Bearer &lt;token&gt;</code> on any /panel/api/* request — the token is a full-admin credential.',
+      'Manage administrator Bearer tokens for automation. Tokens have a name, enabled flag, scope, expiry and optional source-IP/CIDR restrictions. Disabling or deleting a token revokes it. Tokens are stored as SHA-256 hashes; plaintext is returned only at creation. Send one as <code>Authorization: Bearer &lt;token&gt;</code>. Read-only tokens cannot change state or export protected configuration. Reseller tokens are managed separately and retain their account ownership and permissions.',
     endpoints: [
       {
-        method: 'GET',
-        path: '/panel/api/setting/apiTokens',
-        summary: 'List every API token, enabled or not. The token value is never returned — only metadata.',
-        response: '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "name": "default",\n      "enabled": true,\n      "createdAt": 1736000000\n      "scope": "admin",\n      "expiresAt": 0\n    }\n  ]\n}',
-      },
+method: 'GET',
+path: '/panel/api/setting/apiTokens',
+summary: 'List every API token, enabled or not. The token value is never returned — only metadata.',
+responseSchema: 'SettingsAPITokenView',
+responseSchemaArray: true,
+},
       {
-        method: 'POST',
-        path: '/panel/api/setting/apiTokens/create',
-        summary: 'Mint a new API token. Name must be unique and 1-64 characters; the token string is server-generated and returned only in this response — it is stored hashed and cannot be retrieved later.',
-        params: [
-          { name: 'name', in: 'body', type: 'string', desc: 'Human-readable label, e.g. "central-panel-a".' },
-          { name: 'scope', in: 'body', type: 'string', desc: '"admin" (the default) or "read": a read token may call GET endpoints and nothing else.' },
-          { name: 'expiresAt', in: 'body', type: 'number', desc: 'Unix time in seconds after which the token stops authenticating; 0 or absent = never.' },
-        ],
-        body: '{\n  "name": "central-panel-a",\n  "scope": "read",\n  "expiresAt": 1798761600\n}',
-        responseSchema: 'ApiTokenView',
-        errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already exists"\n}',
-      },
+method: 'POST',
+path: '/panel/api/setting/apiTokens/create',
+summary: 'Mint a new API token. Name must be unique and 1-64 characters; the token string is server-generated and returned only in this response — it is stored hashed and cannot be retrieved later.',
+params: [
+  {
+    name: 'name',
+    in: 'body',
+    type: 'string',
+    desc: 'Human-readable label, e.g. "central-panel-a".'
+  },
+  {
+    name: 'scope',
+    in: 'body',
+    type: 'string',
+    desc: '"admin" (the default) or "read": a read token may call GET endpoints and nothing else.'
+  },
+  {
+    name: 'expiresAt',
+    in: 'body',
+    type: 'number',
+    desc: 'Unix time in seconds after which the token stops authenticating; 0 or absent = never.'
+  },
+  {
+    name: 'allowedIPs',
+    in: 'body',
+    type: 'string',
+    optional: true,
+    desc: 'Comma-separated source IP/CIDR allowlist, maximum 64 networks. Empty permits any source.'
+  }
+],
+body: '{\n  "name": "central-panel-a",\n  "scope": "read",\n  "expiresAt": 1798761600\n}',
+responseSchema: 'SettingsAPITokenView',
+errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already exists"\n}',
+},
       {
         method: 'POST',
         path: '/panel/api/setting/apiTokens/delete/:id',
@@ -1930,4 +2438,591 @@ export const sections: readonly Section[] = [
       },
     ],
   },
+
+
+
+
+
+
+
+
+
+{
+  id: 'resellers',
+  title: 'Resellers',
+  description: 'Administrator account management and owner-scoped reseller clients, inbound grants, budgets, private plans and tokens.',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/panel/api/me',
+      summary: 'Read the authenticated identity, role, permissions and home route',
+      responseSchema: 'SignedInUser',
+      responseSchemaArray: false,
+      params: []
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/resellers',
+      summary: 'List reseller accounts and actual usage budgets',
+      responseSchema: 'ResellerView',
+      responseSchemaArray: true,
+      params: []
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/resellers/:id',
+      summary: 'Read one reseller account',
+      responseSchema: 'ResellerView',
+      responseSchemaArray: false,
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/resellers/:id/clients',
+      summary: 'List clients owned by one reseller',
+      responseSchema: 'ResellerClientPage',
+      responseSchemaArray: false,
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/resellers',
+      summary: 'Create reseller credentials, budget and inbound grants',
+      responseSchema: 'ResellerView',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerInput',
+      params: []
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/update',
+      summary: 'Update reseller credentials, permissions and grants',
+      responseSchema: 'ResellerView',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerInput',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/suspend',
+      summary: 'Suspend or reactivate a reseller and its previously enabled clients',
+      requestSchema: 'ResellerSuspendRequest',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/top-up',
+      summary: 'Add traffic capacity, account days or client slots',
+      requestSchema: 'ResellerTopUpRequest',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/dashboard',
+      summary: 'Read owned account usage, client attention, grants and quota allocation history',
+      responseSchema: 'ResellerDashboardView',
+      responseSchemaArray: false,
+      params: []
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/inbounds',
+      summary: 'Read granted inbound labels and owned counts without configuration or keys',
+      responseSchema: 'ResellerInboundView',
+      responseSchemaArray: true,
+      params: []
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/clients',
+      summary: 'Page through owned clients',
+      responseSchema: 'ResellerClientPage',
+      responseSchemaArray: false,
+      params: []
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/clients',
+      summary: 'Provision an owned client within the reseller account constraints',
+      responseSchema: 'ResellerMutationResult',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerClientInput',
+      params: []
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/clients/:id/update',
+      summary: 'Edit an owned client with extension, top-up and suspension permissions',
+      responseSchema: 'ResellerMutationResult',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerClientInput',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/clients/:id/delete',
+      summary: 'Delete an owned client without refunding account usage',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/clients/:id/reset',
+      summary: "Reset an owned client's traffic counter without refunding account usage",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/clients/:id/links',
+      summary: 'Read connection links for one owned client',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/tokens',
+      summary: "List the caller's reseller token metadata",
+      responseSchema: 'ResellerTokenView',
+      responseSchemaArray: true,
+      params: []
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/tokens',
+      summary: 'Create a token bound to the caller and current login epoch',
+      responseSchema: 'ResellerTokenView',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerTokenRequest',
+      params: []
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/tokens/:id/delete',
+      summary: 'Revoke one token owned by the caller',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/password',
+      summary: "Change the caller's password and invalidate its sessions and tokens",
+      requestSchema: 'ResellerPasswordRequest',
+      params: []
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/plans/list',
+      summary: "Plan list within the authenticated owner's scope.",
+      params: [],
+      responseSchema: 'Policy',
+      responseSchemaArray: true
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/plans/summary',
+      summary: "Plan summary within the authenticated owner's scope.",
+      params: [],
+      responseSchema: 'PlanSummary',
+      responseSchemaArray: false
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/plans/get/:id',
+      summary: "Plan get within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer'
+        }
+      ],
+      responseSchema: 'Policy',
+      responseSchemaArray: false
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/reseller/plans/members/:id',
+      summary: "Plan members within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer'
+        },
+        {
+          name: 'page',
+          in: 'query',
+          type: 'integer',
+          optional: true,
+          defaultValue: 1
+        },
+        {
+          name: 'pageSize',
+          in: 'query',
+          type: 'integer',
+          optional: true,
+          defaultValue: 20
+        }
+      ],
+      responseSchema: 'PlanMemberPage',
+      responseSchemaArray: false
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/plans/add',
+      summary: "Plan add within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'description',
+          in: 'body',
+          type: 'string',
+          optional: true
+        },
+        {
+          name: 'quotaBytes',
+          in: 'body',
+          type: 'integer',
+          optional: true,
+          desc: 'Null is unmanaged; zero is unlimited.'
+        },
+        {
+          name: 'durationDays',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'limitIp',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'inboundIds',
+          in: 'body',
+          type: 'integer[]',
+          optional: true
+        },
+        {
+          name: 'startOnFirstUse',
+          in: 'body',
+          type: 'boolean',
+          optional: true
+        },
+        {
+          name: 'autoRenewDays',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'resetCycle',
+          in: 'body',
+          type: 'string',
+          optional: true,
+          desc: 'none, weekly or monthly'
+        },
+        {
+          name: 'onDepletion',
+          in: 'body',
+          type: 'string',
+          optional: true,
+          desc: 'disable, throttle or notify; runtime capability restrictions are enforced.'
+        }
+      ],
+      responseSchema: 'Policy',
+      responseSchemaArray: false
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/plans/update/:id',
+      summary: "Plan update within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer'
+        },
+        {
+          name: 'description',
+          in: 'body',
+          type: 'string',
+          optional: true
+        },
+        {
+          name: 'quotaBytes',
+          in: 'body',
+          type: 'integer',
+          optional: true,
+          desc: 'Null is unmanaged; zero is unlimited.'
+        },
+        {
+          name: 'durationDays',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'limitIp',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'inboundIds',
+          in: 'body',
+          type: 'integer[]',
+          optional: true
+        },
+        {
+          name: 'startOnFirstUse',
+          in: 'body',
+          type: 'boolean',
+          optional: true
+        },
+        {
+          name: 'autoRenewDays',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'resetCycle',
+          in: 'body',
+          type: 'string',
+          optional: true,
+          desc: 'none, weekly or monthly'
+        },
+        {
+          name: 'onDepletion',
+          in: 'body',
+          type: 'string',
+          optional: true,
+          desc: 'disable, throttle or notify; runtime capability restrictions are enforced.'
+        }
+      ],
+      responseSchema: 'Policy',
+      responseSchemaArray: false
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/plans/archive/:id',
+      summary: "Plan archive within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer'
+        },
+        {
+          name: 'archived',
+          in: 'body',
+          type: 'boolean'
+        }
+      ],
+      responseSchema: 'Policy',
+      responseSchemaArray: false
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/plans/duplicate/:id',
+      summary: "Plan duplicate within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer'
+        },
+        {
+          name: 'name',
+          in: 'body',
+          type: 'string'
+        }
+      ],
+      responseSchema: 'Policy',
+      responseSchemaArray: false
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/reseller/plans/del/:id',
+      summary: "Plan del within the authenticated owner's scope.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer'
+        }
+      ]
+    }
+  ]
+},
+{
+  id: 'core-configs',
+  title: 'Core Configurations',
+  description: 'Read persisted per-core inbound configuration and validate supported documents with the installed core. Administrator write access is required.',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/panel/api/core-config/:id',
+      summary: "Read this host's actual persisted configuration for a registered core.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'string'
+        }
+      ],
+      responseSchema: 'CoreConfigView'
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/core-config/:id/validate',
+      summary: "Test an Xray template with its installed binary or validate a protocol's settings with the owning adapter.",
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'string'
+        },
+        {
+          name: 'kind',
+          in: 'body',
+          type: 'string',
+          optional: true,
+          desc: 'Protocol kind; omit only for Xray template testing.'
+        },
+        {
+          name: 'document',
+          in: 'body',
+          type: 'string',
+          desc: 'JSON object encoded as a string'
+        }
+      ]
+    }
+  ]
+},
+{
+  id: 'activity',
+  title: 'Activity',
+  description: 'Retained account-visible activity, per-user read state and current alerts. History is limited to 30 days and 10,000 events.',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/panel/api/activity',
+      summary: 'Read retained events visible to this account, with per-user read state and cursor pagination.',
+      responseSchema: 'ActivityPage',
+      params: [
+        {
+          name: 'before',
+          in: 'query',
+          type: 'integer',
+          optional: true,
+          defaultValue: 0
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          type: 'integer',
+          optional: true,
+          defaultValue: 100
+        }
+      ]
+    },
+    {
+      method: 'GET',
+      path: '/panel/api/activity/alerts',
+      summary: 'Compute current alerts for this account; administrator health data is never returned to a reseller.',
+      responseSchema: 'ActivityView',
+      responseSchemaArray: true,
+      params: []
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/activity/read',
+      summary: 'Mark an event or visible events through an id as read for the authenticated user only.',
+      params: [
+        {
+          name: 'id',
+          in: 'body',
+          type: 'integer',
+          optional: true
+        },
+        {
+          name: 'throughId',
+          in: 'body',
+          type: 'integer',
+          optional: true,
+          desc: 'Use exactly one of id or throughId; newly arriving events remain unread.'
+        }
+      ]
+    }
+  ]
+},
 ];

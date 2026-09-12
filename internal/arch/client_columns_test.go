@@ -39,6 +39,8 @@ var frozenClientRecordFields = []string{
 	// A lifecycle marker, not a credential: who created this client, read only
 	// by the LDAP sweep. The freeze is here to stop per-core CREDENTIALS.
 	"Origin",
+	// Ownership is an authorization boundary, not a protocol credential.
+	"OwnerUserID",
 	"Password",
 	"PreSharedKey",
 	"PrivateKey",

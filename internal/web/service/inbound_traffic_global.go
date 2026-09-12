@@ -99,12 +99,10 @@ func chunkGlobalRows(rows []model.ClientGlobalTraffic, size int) [][]model.Clien
 	return out
 }
 
-// overlayGlobalTraffic raises Up/Down on the given rows to the largest global
-// value any master still pushing for that email reported. Read-path only —
-// callers hand it rows about to be serialized for display; the stored counters
-// are untouched. Rows older than globalTrafficFreshWindow are ignored: they
-// come from a master that stopped pushing, and folding their frozen counters
-// in would keep showing usage the client no longer has (#6113).
+const globalTrafficSourceOrder = "email, (up + down) DESC, updated_at DESC, master_guid ASC"
+
+// Overlay both directions from one greatest-total fresh source; local counters win ties.
+// This changes display rows only, never locally measured counters or history.
 func overlayGlobalTraffic(db *gorm.DB, rows []*xray.ClientTraffic) {
 	if len(rows) == 0 {
 		return
@@ -124,7 +122,7 @@ func overlayGlobalTraffic(db *gorm.DB, rows []*xray.ClientTraffic) {
 		if r == nil || r.Email == "" {
 			continue
 		}
-		key := strings.ToLower(r.Email)
+		key := r.Email
 		if _, ok := byEmail[key]; !ok {
 			emails = append(emails, r.Email)
 		}
@@ -132,17 +130,16 @@ func overlayGlobalTraffic(db *gorm.DB, rows []*xray.ClientTraffic) {
 	}
 	for _, batch := range chunkStrings(emails, sqlInChunk) {
 		var globals []model.ClientGlobalTraffic
-		if err := db.Where("email IN ? AND updated_at >= ?", batch, freshSince).Find(&globals).Error; err != nil {
+		if err := db.Select("DISTINCT ON (email) email, up, down").
+			Where("email IN ? AND updated_at >= ?", batch, freshSince).
+			Order(globalTrafficSourceOrder).Find(&globals).Error; err != nil {
 			logger.Warning("overlayGlobalTraffic:", err)
 			return
 		}
 		for i := range globals {
-			for _, r := range byEmail[strings.ToLower(globals[i].Email)] {
-				if globals[i].Up > r.Up {
-					r.Up = globals[i].Up
-				}
-				if globals[i].Down > r.Down {
-					r.Down = globals[i].Down
+			for _, r := range byEmail[globals[i].Email] {
+				if globals[i].Up+globals[i].Down > r.Up+r.Down {
+					r.Up, r.Down = globals[i].Up, globals[i].Down
 				}
 			}
 		}

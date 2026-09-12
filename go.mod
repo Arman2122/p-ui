@@ -43,6 +43,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
+	github.com/minio/sio v0.5.1 // indirect
 )
 
 require (

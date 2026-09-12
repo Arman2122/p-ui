@@ -1,6 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { expect, test, vi } from 'vitest';
+import i18next from 'i18next';
 
 import PanelSidebar from '@/layouts/PanelSidebar';
 import { renderWithProviders } from './test-utils';
@@ -14,6 +15,7 @@ function renderSidebar(props: Partial<Parameters<typeof PanelSidebar>[0]> = {}) 
         collapsed={false}
         open={false}
         counts={{}}
+        user={{ id: 1, username: 'admin', role: 'admin', home: '/', permissions: { plans: false, reset: false, extend: false, suspend: false, topUp: false } }}
         onNavigate={onNavigate}
         {...props}
       />
@@ -31,11 +33,19 @@ test('groups every nav destination under its section heading', () => {
   const labels = Array.from(container.querySelectorAll('.p-navitem-label')).map((el) => el.textContent);
   expect(labels).toEqual([
     'Dashboard',
-    'Inbounds', 'Clients', 'Plans', 'Groups',
+    'Inbounds', 'Clients', 'Plans', 'Groups', i18next.t('resellers.title'),
     'Nodes', 'Hosts', 'Outbounds', 'Routing',
     'Cores', 'Core Configs', 'Panel Settings',
     'API Docs',
   ]);
+});
+
+test('reseller navigation exposes only owned clients, grants and permitted plans', () => {
+  const { container } = renderSidebar({ user: { id: 2, username: 'sina', role: 'reseller', home: '/reseller', permissions: { plans: false, reset: false, extend: false, suspend: true, topUp: true } } });
+  const labels = Array.from(container.querySelectorAll('.p-navitem-label')).map((el) => el.textContent);
+  expect(labels).toEqual(['Dashboard', 'Inbounds', 'Clients', 'API Docs']);
+  expect(screen.queryByText('Nodes')).toBeNull();
+  expect(screen.queryByText('Panel Settings')).toBeNull();
 });
 
 test('marks the current route and reports a click on another one', () => {
@@ -63,6 +73,6 @@ test('drops labels when collapsed but keeps every destination reachable', () => 
   expect(container.querySelectorAll('.p-navitem-label')).toHaveLength(0);
   expect(container.querySelectorAll('.p-navbadge')).toHaveLength(0);
   expect(container.querySelectorAll('.p-navgroup')).toHaveLength(0);
-  expect(container.querySelectorAll('nav .p-navitem')).toHaveLength(13);
+  expect(container.querySelectorAll('nav .p-navitem')).toHaveLength(14);
   expect(container.querySelector('.p-rail')?.classList.contains('is-collapsed')).toBe(true);
 });

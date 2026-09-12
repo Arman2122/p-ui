@@ -33,6 +33,8 @@ import {
 } from '@ant-design/icons';
 
 import NodeHistoryPanel from './NodeHistoryPanel';
+import { nodeHasReadings, nodeTraffic } from './telemetry';
+import { SizeFormatter } from '@/utils';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { isPanelUpdateAvailable } from '@/lib/panel-version';
 import { activateOnKey } from '@/utils/a11y';
@@ -341,14 +343,14 @@ export default function NodeList({
       dataIndex: 'cpuPct',
       align: 'center',
       width: 90,
-      render: (_value, record) => formatPct(record.cpuPct),
+      render: (_value, record) => nodeHasReadings(record) ? formatPct(record.cpuPct) : '—',
     },
     {
       title: t('pages.nodes.mem'),
       dataIndex: 'memPct',
       align: 'center',
       width: 90,
-      render: (_value, record) => formatPct(record.memPct),
+      render: (_value, record) => nodeHasReadings(record) ? formatPct(record.memPct) : '—',
     },
     {
       title: t('pages.nodes.xrayVersion'),
@@ -414,12 +416,21 @@ export default function NodeList({
       ),
     },
     {
+      title: t('telemetry.inboundTraffic'), width: 140,
+      render: (_value, record) => nodeTraffic(record) == null ? '—' : SizeFormatter.sizeFormat(nodeTraffic(record)!),
+    },
+    {
+      title: t('pages.index.overallSpeed'), width: 170,
+      render: (_value, record) => nodeHasReadings(record) && record.netUp != null && record.netDown != null
+        ? `↑ ${SizeFormatter.speedFormat(record.netUp)} · ↓ ${SizeFormatter.speedFormat(record.netDown)}` : '—',
+    },
+    {
       title: t('pages.nodes.latency'),
       dataIndex: 'latencyMs',
       align: 'center',
       width: 100,
       render: (_value, record) =>
-        record.latencyMs && record.latencyMs > 0 ? `${record.latencyMs} ms` : '-',
+        nodeHasReadings(record) && record.latencyMs != null ? `${record.latencyMs} ms` : '—',
     },
     {
       title: t('pages.nodes.lastHeartbeat'),

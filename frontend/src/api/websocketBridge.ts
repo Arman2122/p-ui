@@ -5,7 +5,8 @@ import { notification } from 'antd';
 import { getSharedWebSocketClient } from '@/api/websocket';
 import { keys } from '@/api/queryKeys';
 import { isRecentLocalInvalidate } from '@/api/invalidationTracker';
-import { pushNotification, type FeedLevel } from '@/api/notificationFeed';
+import { pushNotification, useActivityBridge, type FeedLevel } from '@/api/notificationFeed';
+import { activityKeys } from '@/api/activity';
 import { translateEvent } from '@/api/eventText';
 import { Status } from '@/models/status';
 import { StatusSchema } from '@/schemas/status';
@@ -20,10 +21,12 @@ function isParams(value: unknown): value is Record<string, string> {
 
 let invalidateTimer: number | null = null;
 
-export function useWebSocketBridge() {
+export function useWebSocketBridge(enabled = true, userID?: number) {
   const queryClient = useQueryClient();
+  useActivityBridge(`${userID ?? 'session'}:${enabled ? 'admin' : 'reseller'}`);
 
   useEffect(() => {
+    if (!enabled) return;
     const client = getSharedWebSocketClient();
 
     const onInvalidate: Handler = (payload) => {
@@ -68,6 +71,7 @@ export function useWebSocketBridge() {
       const p = payload as {
         title?: unknown; message?: unknown; level?: unknown;
         titleKey?: unknown; messageKey?: unknown; params?: unknown;
+        id?: unknown;
       } | undefined;
       if (!p || typeof p.title !== 'string') return;
       const level = typeof p.level === 'string' && NOTIFICATION_LEVELS.has(p.level) ? p.level : 'info';
@@ -82,17 +86,18 @@ export function useWebSocketBridge() {
         message: titleKey ? translateEvent(titleKey, params) : p.title,
         description: messageKey ? translateEvent(messageKey, params) : message,
       });
-      pushNotification({ level: level as FeedLevel, title: p.title, message, titleKey, messageKey, params });
+      if (typeof p.id === 'string' && /^\d+$/.test(p.id)) {
+        void queryClient.invalidateQueries({ queryKey: activityKeys.root });
+      } else {
+        pushNotification({ level: level as FeedLevel, title: p.title, message, titleKey, messageKey, params });
+      }
     };
 
     const onXrayState: Handler = (payload) => {
       const p = payload as { state?: unknown; errorMsg?: unknown } | undefined;
       if (!p || typeof p.state !== 'string') return;
       queryClient.invalidateQueries({ queryKey: keys.server.status() });
-      if (p.state === 'error' && typeof p.errorMsg === 'string' && p.errorMsg !== '') {
-        notification.open({ type: 'error', message: 'Xray', description: p.errorMsg });
-        pushNotification({ level: 'error', title: 'Xray', message: p.errorMsg });
-      }
+      void queryClient.invalidateQueries({ queryKey: activityKeys.alerts });
     };
 
     client.on('invalidate', onInvalidate);
@@ -117,5 +122,5 @@ export function useWebSocketBridge() {
         invalidateTimer = null;
       }
     };
-  }, [queryClient]);
+  }, [queryClient, enabled]);
 }

@@ -23,6 +23,7 @@ export function AdvancedSliceEditor({
   wrapKey,
   minHeight,
   maxHeight,
+  onValidityChange,
 }: {
   path: string;
   /*
@@ -34,6 +35,7 @@ export function AdvancedSliceEditor({
   wrapKey?: string;
   minHeight?: string;
   maxHeight?: string;
+  onValidityChange?: (valid: boolean) => void;
 }) {
   const { control, getValues, setValue } = useFormContext();
 
@@ -55,6 +57,7 @@ export function AdvancedSliceEditor({
     if (formStr === lastEmitRef.current) return;
     setText(formStr);
     lastEmitRef.current = formStr;
+    onValidityChange?.(true);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [watched, wrapKey]);
 
@@ -67,12 +70,22 @@ export function AdvancedSliceEditor({
         setText(next);
         try {
           const parsed = JSON.parse(next);
+          if (wrapKey && (!parsed || typeof parsed !== 'object' || !(wrapKey in parsed))) {
+            onValidityChange?.(false);
+            return;
+          }
           const toWrite = wrapKey && parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-            ? (parsed as Record<string, unknown>)[wrapKey] ?? {}
+            ? (parsed as Record<string, unknown>)[wrapKey]
             : parsed;
+          if (!toWrite || typeof toWrite !== 'object' || Array.isArray(toWrite)) {
+            onValidityChange?.(false);
+            return;
+          }
+          onValidityChange?.(true);
           setValue(path, toWrite);
           lastEmitRef.current = JSON.stringify(wrapKey ? { [wrapKey]: toWrite } : toWrite, null, 2);
         } catch {
+          onValidityChange?.(false);
           /* invalid JSON; keep buffer, don't push to form */
         }
       }}
@@ -91,9 +104,11 @@ export function AdvancedSliceEditor({
 export function AdvancedAllEditor({
   streamEnabled,
   sniffingEnabled,
+  onValidityChange,
 }: {
   streamEnabled: boolean;
   sniffingEnabled: boolean;
+  onValidityChange?: (valid: boolean) => void;
 }) {
   const { control, setValue } = useFormContext();
   const wListen = useWatch({ control, name: 'listen' });
@@ -145,6 +160,7 @@ export function AdvancedAllEditor({
     if (formStr === lastEmitRef.current) return;
     setText(formStr);
     lastEmitRef.current = formStr;
+    onValidityChange?.(true);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [wListen, wPort, wProtocol, wTag, wSettings, wSniffing, wStream, streamEnabled, sniffingEnabled]);
 
@@ -159,9 +175,16 @@ export function AdvancedAllEditor({
         try {
           parsed = JSON.parse(next) as Record<string, unknown>;
         } catch {
+          onValidityChange?.(false);
           return;
         }
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { onValidityChange?.(false); return; }
+        const invalidScalar = ['listen', 'protocol', 'tag'].some((key) => key in parsed && typeof parsed[key] !== 'string')
+          || ('port' in parsed && (typeof parsed.port !== 'number' || !Number.isFinite(parsed.port)));
+        const invalidObject = ['settings', 'sniffing', 'streamSettings'].some((key) => key in parsed
+          && (!parsed[key] || typeof parsed[key] !== 'object' || Array.isArray(parsed[key])));
+        if (invalidScalar || invalidObject) { onValidityChange?.(false); return; }
+        onValidityChange?.(true);
         if (typeof parsed.listen === 'string') setValue('listen', parsed.listen);
         if (typeof parsed.port === 'number' && Number.isFinite(parsed.port)) {
           setValue('port', parsed.port);

@@ -60,6 +60,7 @@ const (
 
 // User represents a user account in the Penhoon UI panel.
 type User struct {
+	Role       string `json:"role" gorm:"not null;default:''" example:"admin"`
 	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	Username   string `json:"username"`
 	Password   string `json:"password"`
@@ -1042,6 +1043,7 @@ func PreSharedKeyOf(stored string) *string {
 }
 
 type ClientRecord struct {
+	OwnerUserID  *int   `json:"ownerUserId" gorm:"column:owner_user_id;index" example:"2"`
 	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	Email        string `json:"email" gorm:"uniqueIndex;not null"`
 	SubID        string `json:"subId" gorm:"index;column:sub_id"`

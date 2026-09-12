@@ -46,8 +46,8 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
   const shapedInbounds = kinds.filter((kind) => verdict.shapeable.includes(kind)).length;
   const options = useMemo(() => [
     { label: t('pages.policies.noPlan'), value: POLICY_NONE },
-    ...(policiesQuery.data ?? []).map((row) => ({ label: row.name, value: row.id })),
-  ], [policiesQuery.data, t]);
+    ...(policiesQuery.data ?? []).filter((row) => !row.archived || row.id === value).map((row) => ({ label: row.name, value: row.id })),
+  ], [policiesQuery.data, t, value]);
 
   if (enforcedQuery.isError) {
     return (

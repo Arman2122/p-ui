@@ -11,6 +11,8 @@ import { useTheme } from '@/hooks/useTheme';
 import './DateTimePicker.css';
 
 interface DateTimePickerProps {
+  id?: string;
+  'aria-label'?: string;
   value: Dayjs | null;
   onChange: (next: Dayjs | null) => void;
   showTime?: boolean;
@@ -47,6 +49,8 @@ const ULTRA_DARK_THEME = {
 };
 
 export default function DateTimePicker({
+  id,
+  'aria-label': ariaLabel,
   value,
   onChange,
   showTime = true,
@@ -68,14 +72,16 @@ export default function DateTimePicker({
     return LIGHT_THEME;
   }, [isDark, isUltra]);
 
-  // The library hardcodes a Persian placeholder and exposes no working prop to
-  // override it, so clear it (or apply the caller's) on the input directly so
-  // the empty field shows no leftover Persian text. No dep array: re-apply
-  // after every render (incl. clear-remounts).
+  /* The library does not forward input props, including after a clear remount. */
   useEffect(() => {
     if (datepicker !== 'jalalian') return;
     const input = jalaliRef.current?.querySelector('input');
-    if (input) input.placeholder = placeholder;
+    if (!input) return;
+    input.placeholder = placeholder;
+    if (id !== undefined) input.id = id;
+    else input.removeAttribute('id');
+    if (ariaLabel !== undefined) input.setAttribute('aria-label', ariaLabel);
+    else input.removeAttribute('aria-label');
   });
 
   if (datepicker === 'jalalian') {
@@ -119,6 +125,8 @@ export default function DateTimePicker({
 
   return (
     <DatePicker
+      id={id}
+      aria-label={ariaLabel}
       value={value}
       onChange={(next) => onChange(next || null)}
       onCalendarChange={(next) => onChange((Array.isArray(next) ? next[0] : next) || null)}

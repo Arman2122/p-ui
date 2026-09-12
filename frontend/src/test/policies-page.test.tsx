@@ -5,7 +5,7 @@ import PoliciesPage from '@/pages/policies/PoliciesPage';
 import { HttpUtil, Msg } from '@/utils';
 import enUS from '../../../internal/web/translation/en-US.json';
 
-import { renderWithProviders } from './test-utils';
+import { makeTestQueryClient, renderWithProviders } from './test-utils';
 
 const LADDER = [
   { fromBytes: 0, upBps: 0, downBps: 0 },
@@ -29,16 +29,20 @@ const WG_CORE = {
 
 const XRAY_CORE = { ...WG_CORE, id: 'xray', kinds: ['vless'], shaping: {} };
 
-function mockHost(plans: unknown[], cores: unknown[]) {
+function mockHost(plans: unknown[], cores: unknown[], reseller = false) {
+  const base = reseller ? '/panel/api/reseller/plans' : '/panel/api/policies';
   vi.spyOn(HttpUtil, 'get').mockImplementation((url: string) => Promise.resolve(
-    url === '/panel/api/policies/list' ? new Msg(true, '', plans)
+    url === `${base}/list` ? new Msg(true, '', plans)
       : url === '/panel/api/cores' ? new Msg(true, '', cores)
+        : url === (reseller ? '/panel/api/reseller/inbounds' : '/panel/api/inbounds/options') ? new Msg(true, '', [])
+          : url.includes('/members/') ? new Msg(true, '', { items: [], total: 0 })
+            : url.endsWith('/summary') ? new Msg(true, '', { withoutPlan: 0 })
         : new Msg(true, '', {}),
   ));
 }
 
-async function renderPage() {
-  renderWithProviders(<PoliciesPage />);
+async function renderPage(reseller = false, queryClient?: ReturnType<typeof makeTestQueryClient>) {
+  renderWithProviders(<PoliciesPage reseller={reseller} />, { queryClient });
   for (let i = 0; i < 6; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }
@@ -46,6 +50,63 @@ async function renderPage() {
 
 describe('PoliciesPage', () => {
   afterEach(() => { vi.restoreAllMocks(); });
+
+  it.each([
+    { role: 'administrator', reseller: false, query: 'planId=2&create=1' },
+    { role: 'reseller', reseller: true, query: 'new=1&plan=2' },
+  ])('opens the selected plan in the $role client creation flow', async ({ reseller, query }) => {
+    const previousBasePath = window.PUI_BASE_PATH;
+    window.PUI_BASE_PATH = '/private-panel/';
+    try {
+      mockHost([PLAN, { ...PLAN, id: 2, name: 'Premium' }], [WG_CORE], reseller);
+      await renderPage(reseller);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Premium/ })); });
+      expect(screen.getByRole('link', { name: new RegExp(`${enUS.plans.newClient}$`) }).getAttribute('href')).toBe(`/private-panel/panel/clients?${query}`);
+      expect(screen.getByRole('button', { name: enUS.plans.archive }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: new RegExp(`${enUS.plans.duplicate}$`) }).hasAttribute('disabled')).toBe(false);
+      if (reseller) expect(screen.queryByRole('button', { name: enUS.plans.reapply })).toBeNull();
+    } finally {
+      if (previousBasePath === undefined) delete window.PUI_BASE_PATH;
+      else window.PUI_BASE_PATH = previousBasePath;
+    }
+  });
+
+  it('archives and reapplies through real catalogue endpoints', async () => {
+    mockHost([PLAN], [WG_CORE]);
+    const post = vi.spyOn(HttpUtil, 'post').mockImplementation((url) => Promise.resolve(
+      new Msg(true, '', url.includes('/reapply/') ? { applied: 3, needRestart: false, failures: [] } : {}),
+    ));
+    await renderPage();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^(Archive|plans.archive)$/i })); });
+    expect(post).toHaveBeenCalledWith('/panel/api/policies/archive/1', { archived: true }, expect.anything());
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^(Reapply to members|plans.reapply)$/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+    const confirms = screen.getAllByRole('button', { name: /^(Reapply to members|plans.reapply)$/i });
+    await act(async () => { fireEvent.click(confirms[confirms.length - 1]); });
+    expect(post).toHaveBeenCalledWith('/panel/api/policies/reapply/1', { clearOverrides: true }, expect.anything());
+  });
+
+  it('keeps archive and duplicate private and refreshes reseller plan choices', async () => {
+    const cache = makeTestQueryClient();
+    const choices = ['resellers', 'my-provisioning-plans'];
+    const dashboardChoices = ['resellers', 'my-plan-choices'];
+    cache.setQueryData(choices, [PLAN]);
+    cache.setQueryData(dashboardChoices, [PLAN]);
+    mockHost([PLAN], [], true);
+    const post = vi.spyOn(HttpUtil, 'post').mockResolvedValue(new Msg(true, '', {}));
+    await renderPage(true, cache);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: enUS.plans.archive })); });
+    expect(post).toHaveBeenCalledWith('/panel/api/reseller/plans/archive/1', { archived: true }, expect.anything());
+    expect(cache.getQueryState(choices)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(dashboardChoices)?.isInvalidated).toBe(true);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(`${enUS.plans.duplicate}$`) })); });
+    fireEvent.change(screen.getByRole('textbox', { name: enUS.pages.policies.name }), { target: { value: 'Private copy' } });
+    const confirms = screen.getAllByRole('button', { name: new RegExp(`${enUS.plans.duplicate}$`) });
+    await act(async () => { fireEvent.click(confirms[confirms.length - 1]); });
+    expect(post).toHaveBeenCalledWith('/panel/api/reseller/plans/duplicate/1', { name: 'Private copy' }, expect.anything());
+    expect(post.mock.calls.every(([url]) => url.startsWith('/panel/api/reseller/plans/'))).toBe(true);
+    expect(screen.queryByRole('button', { name: enUS.plans.reapply })).toBeNull();
+  });
 
   /* Zero bits per second is unlimited, and the whole point of the ladder is
      that an operator can read what each rung grants without decoding a 0. */

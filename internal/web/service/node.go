@@ -30,15 +30,16 @@ import (
 )
 
 type HeartbeatPatch struct {
-	Status        string
-	LastHeartbeat int64
-	LatencyMs     int
-	XrayVersion   string
-	PanelVersion  string
-	Guid          string
-	CpuPct        float64
-	MemPct        float64
-	UptimeSecs    uint64
+	MetricsMissing bool
+	Status         string
+	LastHeartbeat  int64
+	LatencyMs      int
+	XrayVersion    string
+	PanelVersion   string
+	Guid           string
+	CpuPct         float64
+	MemPct         float64
+	UptimeSecs     uint64
 	// NetUp/NetDown are the node's current interface throughput (bytes/sec),
 	// summed over non-virtual interfaces, read from its status response.
 	NetUp     uint64
@@ -751,8 +752,10 @@ func (s *NodeService) Delete(id int) error {
 	if mgr := runtime.GetManager(); mgr != nil {
 		mgr.InvalidateNode(id)
 	}
-	nodeMetrics.drop(nodeMetricKey(id, "cpu"))
-	nodeMetrics.drop(nodeMetricKey(id, "mem"))
+	for _, metric := range NodeMetricKeys {
+		nodeMetrics.drop(nodeMetricKey(id, metric))
+	}
+	nodeMetricAvailability.Delete(id)
 	return nil
 }
 
@@ -867,7 +870,8 @@ func (s *NodeService) UpdateHeartbeat(id int, p HeartbeatPatch) error {
 	if err := db.Model(model.Node{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return err
 	}
-	if p.Status == "online" {
+	nodeMetricAvailability.Store(id, p.Status == "online" && !p.MetricsMissing)
+	if p.Status == "online" && !p.MetricsMissing {
 		now := time.Unix(p.LastHeartbeat, 0)
 		nodeMetrics.append(nodeMetricKey(id, "cpu"), now, p.CpuPct)
 		nodeMetrics.append(nodeMetricKey(id, "mem"), now, p.MemPct)
@@ -1159,8 +1163,8 @@ func (s *NodeService) probe(ctx context.Context, n *model.Node, proxyURL string)
 		Success bool   `json:"success"`
 		Msg     string `json:"msg"`
 		Obj     *struct {
-			CpuPct float64 `json:"cpu"`
-			Mem    struct {
+			CpuPct *float64 `json:"cpu"`
+			Mem    *struct {
 				Current uint64 `json:"current"`
 				Total   uint64 `json:"total"`
 			} `json:"mem"`
@@ -1172,10 +1176,11 @@ func (s *NodeService) probe(ctx context.Context, n *model.Node, proxyURL string)
 			PanelVersion string `json:"panelVersion"`
 			PanelGuid    string `json:"panelGuid"`
 			Uptime       uint64 `json:"uptime"`
-			NetIO        struct {
+			NetIO        *struct {
 				Up   uint64 `json:"up"`
 				Down uint64 `json:"down"`
 			} `json:"netIO"`
+			Unavailable []string `json:"unavailable"`
 		} `json:"obj"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
@@ -1187,8 +1192,14 @@ func (s *NodeService) probe(ctx context.Context, n *model.Node, proxyURL string)
 		return patch, errors.New(patch.LastError)
 	}
 	o := envelope.Obj
-	patch.CpuPct = o.CpuPct
-	if o.Mem.Total > 0 {
+	patch.MetricsMissing = o.CpuPct == nil || o.Mem == nil || o.NetIO == nil || (o.Mem != nil && o.Mem.Total == 0)
+	for _, metric := range []string{"cpu", "mem", "netUp", "netDown"} {
+		patch.MetricsMissing = patch.MetricsMissing || slices.Contains(o.Unavailable, metric)
+	}
+	if o.CpuPct != nil {
+		patch.CpuPct = *o.CpuPct
+	}
+	if o.Mem != nil && o.Mem.Total > 0 {
 		patch.MemPct = float64(o.Mem.Current) * 100.0 / float64(o.Mem.Total)
 	}
 	patch.XrayVersion = o.Xray.Version
@@ -1197,8 +1208,10 @@ func (s *NodeService) probe(ctx context.Context, n *model.Node, proxyURL string)
 	patch.PanelVersion = o.PanelVersion
 	patch.Guid = o.PanelGuid
 	patch.UptimeSecs = o.Uptime
-	patch.NetUp = o.NetIO.Up
-	patch.NetDown = o.NetIO.Down
+	if o.NetIO != nil {
+		patch.NetUp = o.NetIO.Up
+		patch.NetDown = o.NetIO.Down
+	}
 	return patch, nil
 }
 

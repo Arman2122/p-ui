@@ -3,6 +3,149 @@
   min-width: 100px;
 }
 
+.clients-page-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clients-page .clients-table-card > .ant-card-body {
+  padding: 0;
+}
+
+.clients-table-card > .ant-card-body > .filter-bar {
+  margin: 0;
+  padding: 12px;
+}
+
+.clients-table-card .filter-chips {
+  margin-inline: 12px;
+}
+
+.clients-table-card .client-cards,
+.clients-table-card .ant-table-pagination {
+  padding-inline: 12px;
+}
+
+.clients-page .p-clients-table .ant-table-cell {
+  padding: 8px 6px;
+}
+
+.clients-page .p-clients-table .p-client-identity {
+  min-width: 0;
+  gap: 3px;
+}
+
+.clients-page .p-clients-table .p-client-name,
+.clients-page .p-clients-table .p-client-context {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.p-clients-table .p-client-name > .p-name,
+.p-clients-table .p-client-context > .p-desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-clients-table .p-client-name > .p-pip,
+.p-clients-table .p-client-name > .ant-switch {
+  flex-shrink: 0;
+}
+
+.p-clients-table .p-client-context > button {
+  min-width: 0;
+  max-width: 65px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-client-inbounds {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 130px;
+  gap: 2px;
+}
+
+.p-client-inbounds .ant-tag {
+  min-width: 0;
+  max-width: 90px;
+  margin: 0 !important;
+  padding-inline: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-client-inbounds .ant-tag:last-child {
+  flex-shrink: 0;
+}
+
+.p-client-plan .ant-tag,
+.p-client-plan .p-sub,
+.p-client-speed > div,
+.p-client-expiry > * {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-client-plan .ant-tag {
+  margin-inline: 0;
+  font-size: 11px;
+}
+
+.p-client-plan .p-sub {
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.p-client-speed,
+.p-client-expiry {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.p-client-expiry > span {
+  display: block;
+}
+
+.clients-page .p-clients-table .client-traffic-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 4px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.clients-page .p-clients-table .client-traffic-cell-used,
+.clients-page .p-clients-table .client-traffic-cell-limit {
+  min-width: 0;
+  font-size: 11px;
+  text-align: start;
+}
+
+.clients-page .p-clients-table .client-traffic-cell-limit {
+  text-align: end;
+}
+
+.clients-page .p-clients-table .client-traffic-cell-bar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
 .client-email-list {
   max-height: 280px;
   min-width: 160px;

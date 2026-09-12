@@ -20,8 +20,7 @@ import { useAllSettings } from '@/api/queries/useAllSettings';
 import { RESTART_FIELD_LABELS } from '@/lib/settings/restartKeys';
 import { AllSettingSchema } from '@/schemas/setting';
 import GeneralTab from './GeneralTab';
-import BackupModal from '@/pages/index/BackupModal';
-import { PanelCard } from '@/components/ui/panel';
+import BackupSection from './BackupSection';
 import SectionRail from '@/components/ui/SectionRail';
 import type { IconName } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/panel';
@@ -94,8 +93,6 @@ export default function SettingsPage() {
   }, []);
 
   const [alertVisible, setAlertVisible] = useState(true);
-  const [backupOpen, setBackupOpen] = useState(false);
-  const [backupBusy, setBackupBusy] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const slug = location.hash.replace(/^#/, '');
@@ -232,7 +229,7 @@ export default function SettingsPage() {
       case 'ldap': return <GeneralTab section="6" allSetting={allSetting} updateSetting={updateSetting} />;
       case 'iplimit': return <GeneralTab section="7" allSetting={allSetting} updateSetting={updateSetting} />;
       case 'tokens': return <SecurityTab tokensOnly allSetting={allSetting} updateSetting={updateSetting} saveSetting={savePayload} />;
-      case 'backup': return <PanelCard title={t('pages.index.backupTitle')} icon="backup"><Button onClick={() => setBackupOpen(true)}>{t('pages.index.backupTitle')}</Button></PanelCard>;
+      case 'backup': return <BackupSection />;
 
       case 'security': return <SecurityTab allSetting={allSetting} updateSetting={updateSetting} saveSetting={savePayload} />;
       case 'telegram': return <TelegramTab allSetting={allSetting} updateSetting={updateSetting} />;
@@ -241,7 +238,7 @@ export default function SettingsPage() {
       case 'subscription-formats': return <SubscriptionFormatsTab allSetting={allSetting} updateSetting={updateSetting} />;
       default: return <GeneralTab section="1" allSetting={allSetting} updateSetting={updateSetting} />;
     }
-  }, [activeSlug, allSetting, updateSetting, savePayload, t]);
+  }, [activeSlug, allSetting, updateSetting, savePayload]);
 
   return (
     <ConfigProvider theme={antdThemeConfig}>
@@ -251,7 +248,7 @@ export default function SettingsPage() {
 
         <Layout className="content-shell">
           <Layout.Content id="content-layout" className="content-area">
-            <Spin spinning={spinning || backupBusy || !fetched} delay={200} description={t('loading')} size="large">
+            <Spin spinning={spinning || !fetched} delay={200} description={t('loading')} size="large">
               {!fetched ? (
                 <div className="loading-spacer" />
               ) : (
@@ -330,7 +327,6 @@ export default function SettingsPage() {
           </Layout.Content>
         </Layout>
       </Layout>
-      <BackupModal open={backupOpen} onClose={() => setBackupOpen(false)} onBusy={({ busy }) => setBackupBusy(busy)} />
     </ConfigProvider>
   );
 }

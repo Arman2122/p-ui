@@ -1,0 +1,176 @@
+---
+title: Resellers
+description: Administrator account management and owner-scoped reseller clients,
+  inbound grants, budgets, private plans and tokens.
+full: true
+_openapi:
+  preload:
+    - ./public/openapi.json
+  toc:
+    - depth: 2
+      title: Read the authenticated identity, role, permissions and home route
+      url: '#read-the-authenticated-identity-role-permissions-and-home-route'
+    - depth: 2
+      title: List reseller accounts and actual usage budgets
+      url: '#list-reseller-accounts-and-actual-usage-budgets'
+    - depth: 2
+      title: Create reseller credentials, budget and inbound grants
+      url: '#create-reseller-credentials-budget-and-inbound-grants'
+    - depth: 2
+      title: Read one reseller account
+      url: '#read-one-reseller-account'
+    - depth: 2
+      title: List clients owned by one reseller
+      url: '#list-clients-owned-by-one-reseller'
+    - depth: 2
+      title: Update reseller credentials, permissions and grants
+      url: '#update-reseller-credentials-permissions-and-grants'
+    - depth: 2
+      title: Suspend or reactivate a reseller and its previously enabled clients
+      url: '#suspend-or-reactivate-a-reseller-and-its-previously-enabled-clients'
+    - depth: 2
+      title: Add traffic capacity, account days or client slots
+      url: '#add-traffic-capacity-account-days-or-client-slots'
+    - depth: 2
+      title: Read owned account usage, client attention, grants and quota allocation
+        history
+      url: '#read-owned-account-usage-client-attention-grants-and-quota-allocation-history'
+    - depth: 2
+      title: Read granted inbound labels and owned counts without configuration or
+        keys
+      url: '#read-granted-inbound-labels-and-owned-counts-without-configuration-or-keys'
+    - depth: 2
+      title: Page through owned clients
+      url: '#page-through-owned-clients'
+    - depth: 2
+      title: Provision an owned client within the reseller account constraints
+      url: '#provision-an-owned-client-within-the-reseller-account-constraints'
+    - depth: 2
+      title: Edit an owned client with extension, top-up and suspension permissions
+      url: '#edit-an-owned-client-with-extension-top-up-and-suspension-permissions'
+    - depth: 2
+      title: Delete an owned client without refunding account usage
+      url: '#delete-an-owned-client-without-refunding-account-usage'
+    - depth: 2
+      title: Reset an owned client's traffic counter without refunding account usage
+      url: '#reset-an-owned-clients-traffic-counter-without-refunding-account-usage'
+    - depth: 2
+      title: Read connection links for one owned client
+      url: '#read-connection-links-for-one-owned-client'
+    - depth: 2
+      title: List the caller's reseller token metadata
+      url: '#list-the-callers-reseller-token-metadata'
+    - depth: 2
+      title: Create a token bound to the caller and current login epoch
+      url: '#create-a-token-bound-to-the-caller-and-current-login-epoch'
+    - depth: 2
+      title: Revoke one token owned by the caller
+      url: '#revoke-one-token-owned-by-the-caller'
+    - depth: 2
+      title: Change the caller's password and invalidate its sessions and tokens
+      url: '#change-the-callers-password-and-invalidate-its-sessions-and-tokens'
+    - depth: 2
+      title: Plan list within the authenticated owner's scope.
+      url: '#plan-list-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan summary within the authenticated owner's scope.
+      url: '#plan-summary-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan get within the authenticated owner's scope.
+      url: '#plan-get-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan members within the authenticated owner's scope.
+      url: '#plan-members-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan add within the authenticated owner's scope.
+      url: '#plan-add-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan update within the authenticated owner's scope.
+      url: '#plan-update-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan archive within the authenticated owner's scope.
+      url: '#plan-archive-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan duplicate within the authenticated owner's scope.
+      url: '#plan-duplicate-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan del within the authenticated owner's scope.
+      url: '#plan-del-within-the-authenticated-owners-scope'
+  structuredData:
+    headings:
+      - content: Read the authenticated identity, role, permissions and home route
+        id: read-the-authenticated-identity-role-permissions-and-home-route
+      - content: List reseller accounts and actual usage budgets
+        id: list-reseller-accounts-and-actual-usage-budgets
+      - content: Create reseller credentials, budget and inbound grants
+        id: create-reseller-credentials-budget-and-inbound-grants
+      - content: Read one reseller account
+        id: read-one-reseller-account
+      - content: List clients owned by one reseller
+        id: list-clients-owned-by-one-reseller
+      - content: Update reseller credentials, permissions and grants
+        id: update-reseller-credentials-permissions-and-grants
+      - content: Suspend or reactivate a reseller and its previously enabled clients
+        id: suspend-or-reactivate-a-reseller-and-its-previously-enabled-clients
+      - content: Add traffic capacity, account days or client slots
+        id: add-traffic-capacity-account-days-or-client-slots
+      - content: Read owned account usage, client attention, grants and quota allocation
+          history
+        id: read-owned-account-usage-client-attention-grants-and-quota-allocation-history
+      - content: Read granted inbound labels and owned counts without configuration or
+          keys
+        id: read-granted-inbound-labels-and-owned-counts-without-configuration-or-keys
+      - content: Page through owned clients
+        id: page-through-owned-clients
+      - content: Provision an owned client within the reseller account constraints
+        id: provision-an-owned-client-within-the-reseller-account-constraints
+      - content: Edit an owned client with extension, top-up and suspension permissions
+        id: edit-an-owned-client-with-extension-top-up-and-suspension-permissions
+      - content: Delete an owned client without refunding account usage
+        id: delete-an-owned-client-without-refunding-account-usage
+      - content: Reset an owned client's traffic counter without refunding account usage
+        id: reset-an-owned-clients-traffic-counter-without-refunding-account-usage
+      - content: Read connection links for one owned client
+        id: read-connection-links-for-one-owned-client
+      - content: List the caller's reseller token metadata
+        id: list-the-callers-reseller-token-metadata
+      - content: Create a token bound to the caller and current login epoch
+        id: create-a-token-bound-to-the-caller-and-current-login-epoch
+      - content: Revoke one token owned by the caller
+        id: revoke-one-token-owned-by-the-caller
+      - content: Change the caller's password and invalidate its sessions and tokens
+        id: change-the-callers-password-and-invalidate-its-sessions-and-tokens
+      - content: Plan list within the authenticated owner's scope.
+        id: plan-list-within-the-authenticated-owners-scope
+      - content: Plan summary within the authenticated owner's scope.
+        id: plan-summary-within-the-authenticated-owners-scope
+      - content: Plan get within the authenticated owner's scope.
+        id: plan-get-within-the-authenticated-owners-scope
+      - content: Plan members within the authenticated owner's scope.
+        id: plan-members-within-the-authenticated-owners-scope
+      - content: Plan add within the authenticated owner's scope.
+        id: plan-add-within-the-authenticated-owners-scope
+      - content: Plan update within the authenticated owner's scope.
+        id: plan-update-within-the-authenticated-owners-scope
+      - content: Plan archive within the authenticated owner's scope.
+        id: plan-archive-within-the-authenticated-owners-scope
+      - content: Plan duplicate within the authenticated owner's scope.
+        id: plan-duplicate-within-the-authenticated-owners-scope
+      - content: Plan del within the authenticated owner's scope.
+        id: plan-del-within-the-authenticated-owners-scope
+    contents: []
+---
+
+{/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}
+
+export default function Layout(props) {
+  const { APIPage, OpenAPIPage } = props.components ?? {};
+  // "APIPage" is the old name from v10, this allows both for backward compatibility
+  const Comp = OpenAPIPage ?? APIPage;
+  return (
+    <>
+      {props.children}
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/me","method":"get"},{"path":"/panel/api/resellers","method":"get"},{"path":"/panel/api/resellers","method":"post"},{"path":"/panel/api/resellers/{id}","method":"get"},{"path":"/panel/api/resellers/{id}/clients","method":"get"},{"path":"/panel/api/resellers/{id}/update","method":"post"},{"path":"/panel/api/resellers/{id}/suspend","method":"post"},{"path":"/panel/api/resellers/{id}/top-up","method":"post"},{"path":"/panel/api/reseller/dashboard","method":"get"},{"path":"/panel/api/reseller/inbounds","method":"get"},{"path":"/panel/api/reseller/clients","method":"get"},{"path":"/panel/api/reseller/clients","method":"post"},{"path":"/panel/api/reseller/clients/{id}/update","method":"post"},{"path":"/panel/api/reseller/clients/{id}/delete","method":"post"},{"path":"/panel/api/reseller/clients/{id}/reset","method":"post"},{"path":"/panel/api/reseller/clients/{id}/links","method":"get"},{"path":"/panel/api/reseller/tokens","method":"get"},{"path":"/panel/api/reseller/tokens","method":"post"},{"path":"/panel/api/reseller/tokens/{id}/delete","method":"post"},{"path":"/panel/api/reseller/password","method":"post"},{"path":"/panel/api/reseller/plans/list","method":"get"},{"path":"/panel/api/reseller/plans/summary","method":"get"},{"path":"/panel/api/reseller/plans/get/{id}","method":"get"},{"path":"/panel/api/reseller/plans/members/{id}","method":"get"},{"path":"/panel/api/reseller/plans/add","method":"post"},{"path":"/panel/api/reseller/plans/update/{id}","method":"post"},{"path":"/panel/api/reseller/plans/archive/{id}","method":"post"},{"path":"/panel/api/reseller/plans/duplicate/{id}","method":"post"},{"path":"/panel/api/reseller/plans/del/{id}","method":"post"}]} showTitle />
+    </>
+  );
+}

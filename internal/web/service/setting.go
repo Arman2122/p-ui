@@ -27,7 +27,6 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/random"
 	"github.com/Arman2122/p-ui/internal/util/reflect_util"
 	"github.com/Arman2122/p-ui/internal/web/entity"
-	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 //go:embed config.json
@@ -995,15 +994,22 @@ func (s *SettingService) GetIpLimitEnable() (bool, error) {
 	return true, nil
 }
 
-// GetAccessLogEnable reports whether an Xray access log is configured. Used by
-// the UI for features that genuinely read the log file (the xray log viewer) —
-// distinct from IP limiting, which works without it.
+// GetAccessLogEnable reports saved file-log intent before a core has generated its config.
+// Runtime log readers resolve their own active file path.
 func (s *SettingService) GetAccessLogEnable() (bool, error) {
-	accessLogPath, err := xray.GetAccessLogPath()
+	template, err := s.GetXrayConfigTemplate()
 	if err != nil {
 		return false, err
 	}
-	return (accessLogPath != "none" && accessLogPath != ""), nil
+	var configured struct {
+		Log struct {
+			Access string `json:"access"`
+		} `json:"log"`
+	}
+	if err := json.Unmarshal([]byte(template), &configured); err != nil {
+		return false, err
+	}
+	return configured.Log.Access != "none" && configured.Log.Access != "", nil
 }
 
 // GetLdapEnable returns whether LDAP is enabled.

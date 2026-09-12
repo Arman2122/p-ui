@@ -66,6 +66,8 @@ type ClientService struct{}
 var ErrClientNotInInbound = errors.New("client not found in inbound")
 
 type ClientCreatePayload struct {
+	PolicyID      *int                `json:"policyId,omitempty" example:"1"`
+	PlanOverrides *PlanOverrides      `json:"planOverrides,omitempty"`
 	Client        model.Client        `json:"client"`
 	InboundIds    []int               `json:"inboundIds"`
 	ExternalLinks []ExternalLinkInput `json:"externalLinks,omitempty"`

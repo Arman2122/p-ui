@@ -16,6 +16,10 @@ const OutboundsPage = lazy(() => import('@/pages/outbounds/OutboundsPage'));
 const RoutingPage = lazy(() => import('@/pages/routing/RoutingPage'));
 const XrayPage = lazy(() => import('@/pages/xray/XrayPage'));
 const ApiDocsPage = lazy(() => import('@/pages/api-docs/ApiExplorer'));
+const ActivityPage = lazy(() => import('@/pages/activity/ActivityPage'));
+const ResellersPage = lazy(() => import('@/pages/resellers/ResellersPage'));
+const ResellerDashboardPage = lazy(() => import('@/pages/resellers/ResellerDashboardPage'));
+const ResellerAccountPage = lazy(() => import('@/pages/resellers/ResellerAccountPage'));
 
 function withSuspense(node: React.ReactNode) {
   return <Suspense fallback={null}>{node}</Suspense>;
@@ -41,6 +45,10 @@ const routes: RouteObject[] = [
       { path: 'outbounds', element: withSuspense(<OutboundsPage />) },
       { path: 'routing', element: withSuspense(<RoutingPage />) },
       { path: 'api-docs', element: withSuspense(<ApiDocsPage />) },
+      { path: 'activity', element: withSuspense(<ActivityPage />) },
+      { path: 'resellers', element: withSuspense(<ResellersPage />) },
+      { path: 'reseller', element: withSuspense(<ResellerDashboardPage />) },
+      { path: 'reseller/account', element: withSuspense(<ResellerAccountPage />) },
     ],
   },
 ];

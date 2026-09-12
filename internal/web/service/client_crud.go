@@ -72,10 +72,22 @@ func validateNewClientSubID(subID string) error {
 }
 
 func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreatePayload) (bool, error) {
+	if payload != nil && payload.PolicyID != nil && *payload.PolicyID != 0 {
+		return s.CreateWithPlan(inboundSvc, PlanScope{}, payload)
+	}
+	return s.create(inboundSvc, payload)
+}
+
+func (s *ClientService) create(inboundSvc *InboundService, payload *ClientCreatePayload) (bool, error) {
 	if payload == nil {
 		return false, common.NewError("empty payload")
 	}
 	client := payload.Client
+	if client.Enable {
+		if err := ValidateClientOwnerEnable(client.Email); err != nil {
+			return false, err
+		}
+	}
 	if strings.TrimSpace(client.Email) == "" {
 		return false, common.NewError("client email is required")
 	}
@@ -85,8 +97,20 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	if err := validateNewClientSubID(client.SubID); err != nil {
 		return false, err
 	}
+	if err := s.includeGroupInbounds(payload); err != nil {
+		return false, err
+	}
+	if err := ValidateClientOwnerGroup(client.Email, client.Group); err != nil {
+		return false, err
+	}
+	if err := ValidateClientOwnerInbounds(client.Email, payload.InboundIds); err != nil {
+		return false, err
+	}
 	if len(payload.InboundIds) == 0 {
 		return false, common.NewError("at least one inbound is required")
+	}
+	if err := (&PolicyService{}).ValidatePlanClientInbounds(client.Email, payload.InboundIds); err != nil {
+		return false, err
 	}
 
 	if client.SubID == "" {
@@ -307,8 +331,21 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if err != nil {
 		return false, err
 	}
+	if updated.Enable {
+		if err := ValidateClientOwnerEnable(existing.Email); err != nil {
+			return false, err
+		}
+	}
+	if err := ValidateClientOwnerGroup(existing.Email, updated.Group); err != nil {
+		return false, err
+	}
+	targetGroup := updated.Group
+	updated.Group = existing.Group
 	inboundIds, err := s.GetInboundIdsForRecord(id)
 	if err != nil {
+		return false, err
+	}
+	if err := (&PolicyService{}).ValidatePlanClientInbounds(existing.Email, inboundIds); err != nil {
 		return false, err
 	}
 	if len(inboundFilter) > 0 {
@@ -540,9 +577,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	// That guard also meant clearing the group in the client editor never took
 	// effect. The editor always round-trips the field, so apply it here,
 	// including the empty string that removes the client from its group.
-	if err := database.GetDB().Model(&model.ClientRecord{}).
-		Where("id = ?", id).
-		UpdateColumn("group_name", updated.Group).Error; err != nil {
+	if _, err := s.AddToGroup([]string{updated.Email}, targetGroup); err != nil {
 		return needRestart, err
 	}
 
@@ -566,6 +601,11 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		Where("id = ?", id).
 		UpdateColumn("updated_at", time.Now().UnixMilli()).Error; err != nil {
 		return needRestart, err
+	}
+	if targetGroup != existing.Group {
+		if err := s.ApplyGroupInbounds(targetGroup); err != nil {
+			return needRestart, err
+		}
 	}
 	return needRestart, nil
 }
@@ -666,8 +706,20 @@ func (s *ClientService) Attach(inboundSvc *InboundService, id int, inboundIds []
 	if err != nil {
 		return false, err
 	}
+	if existing.Enable {
+		if err := ValidateClientOwnerEnable(existing.Email); err != nil {
+			return false, err
+		}
+	}
 	currentIds, err := s.GetInboundIdsForRecord(id)
 	if err != nil {
+		return false, err
+	}
+	desired := append(slices.Clone(currentIds), inboundIds...)
+	if err := ValidateClientOwnerInbounds(existing.Email, desired); err != nil {
+		return false, err
+	}
+	if err := (&PolicyService{}).ValidatePlanClientInbounds(existing.Email, desired); err != nil {
 		return false, err
 	}
 	have := make(map[int]struct{}, len(currentIds))

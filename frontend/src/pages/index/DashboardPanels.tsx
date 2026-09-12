@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { EventItem, Field, Kicker, PanelCard } from '@/components/ui/panel';
 import { SizeFormatter, TimeFormatter } from '@/utils';
 import { activateOnKey } from '@/utils/a11y';
-import { isAlert, useNotificationFeed, type FeedItem } from '@/api/notificationFeed';
+import { isAlert, useNotificationFeed, useNotificationState, type FeedItem } from '@/api/notificationFeed';
 import { translateEvent } from '@/api/eventText';
 import type { Status } from '@/models/status';
 import { mean, peak, type OverviewHistory } from './useOverviewHistory';
@@ -146,13 +146,15 @@ function toneOf(item: FeedItem): string {
 export function ActivityPanel({ relative }: { relative: (at: number) => string }) {
   const { t } = useTranslation();
   const feed = useNotificationFeed();
-  const items = feed.slice(0, 8);
+  const state = useNotificationState();
+  const items = feed.filter((item) => item.category !== 'alert').slice(0, 8);
 
   return (
     <PanelCard
       kicker={t('pages.index.activity')}
       icon="history"
       pad={0}
+      extra={<Button type="text" size="small" href={`${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/activity`}>{t('activity.history')}</Button>}
     >
       <div style={{ padding: 14 }}>
         {items.map((item, i) => (
@@ -166,7 +168,8 @@ export function ActivityPanel({ relative }: { relative: (at: number) => string }
             last={i === items.length - 1}
           />
         ))}
-        {!items.length && <div className="p-empty" style={{ padding: 24 }}>{t('pages.index.noActivity')}</div>}
+        {state.error && <div role="alert" className="p-sub">{t('activity.loadFailed')}</div>}
+        {!items.length && !state.error && <div className="p-empty" style={{ padding: 24 }}>{state.loading ? t('loading') : t('pages.index.noActivity')}</div>}
       </div>
     </PanelCard>
   );
@@ -189,7 +192,7 @@ export function PanelHostPanel({ status, nodeCount, webPort, basePath, sessionMi
   const cells: [string, string][] = [
     [t('pages.index.memory'), SizeFormatter.sizeFormat(status.appStats.mem)],
     [t('pages.index.threads'), String(status.appStats.threads)],
-    [t('pages.index.listenPort'), String(webPort)],
+    [t('pages.index.listenPort'), String(status.listenPort ?? webPort)],
     [t('pages.index.nodesLinked'), String(nodeCount)],
     [t('pages.index.uptime'), TimeFormatter.formatSecond(status.uptime)],
     ['Xray', status.xray.version || '—'],

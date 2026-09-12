@@ -183,6 +183,10 @@ func loadTranslationsFromDisk(bundle *i18n.Bundle) error {
 		if err != nil {
 			return err
 		}
+		data, err = flattenTranslationJSON(data)
+		if err != nil {
+			return err
+		}
 		_, err = bundle.ParseMessageFileBytes(data, path)
 		return err
 	})
@@ -205,6 +209,10 @@ func parseTranslationFiles(i18nFS embed.FS, i18nBundle *i18n.Bundle) error {
 				return err
 			}
 
+			data, err = flattenTranslationJSON(data)
+			if err != nil {
+				return err
+			}
 			_, err = i18nBundle.ParseMessageFileBytes(data, path)
 			return err
 		})
@@ -213,4 +221,31 @@ func parseTranslationFiles(i18nFS embed.FS, i18nBundle *i18n.Bundle) error {
 	}
 
 	return nil
+}
+
+// Frontend labels such as "description" are not go-i18n message metadata.
+// Flatten namespaces before parsing so both consumers use the same dotted keys.
+func flattenTranslationJSON(data []byte) ([]byte, error) {
+	var nested map[string]any
+	if err := json.Unmarshal(data, &nested); err != nil {
+		return nil, err
+	}
+	flat := map[string]string{}
+	var walk func(map[string]any, string)
+	walk = func(values map[string]any, prefix string) {
+		for key, value := range values {
+			id := key
+			if prefix != "" {
+				id = prefix + "." + key
+			}
+			switch value := value.(type) {
+			case string:
+				flat[id] = value
+			case map[string]any:
+				walk(value, id)
+			}
+		}
+	}
+	walk(nested, "")
+	return json.Marshal(flat)
 }

@@ -192,6 +192,10 @@ func (a *ClientController) create(c *gin.Context) {
 	}
 	needRestart, err := a.clientService.Create(&a.inboundService, &payload)
 	if err != nil {
+		if needRestart {
+			a.xrayService.SetToNeedRestart()
+		}
+		notifyClientsChanged()
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
@@ -206,13 +210,22 @@ func (a *ClientController) create(c *gin.Context) {
 func (a *ClientController) update(c *gin.Context) {
 	email := c.Param("email")
 	var updated model.Client
-	if err := c.ShouldBindJSON(&updated); err != nil {
+	if err := c.ShouldBindBodyWithJSON(&updated); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	var options service.ClientUpdateOptions
+	if err := c.ShouldBindBodyWithJSON(&options); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
 	inboundFilter := parseInboundIdsQuery(c.Query("inboundIds"))
-	needRestart, err := a.clientService.UpdateByEmail(&a.inboundService, email, updated, inboundFilter...)
+	needRestart, err := a.clientService.UpdateWithPlan(c.Request.Context(), &a.inboundService, email, updated, options, inboundFilter...)
 	if err != nil {
+		if needRestart {
+			a.xrayService.SetToNeedRestart()
+		}
+		notifyClientsChanged()
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
@@ -598,7 +611,7 @@ func (a *ClientController) bulkCreate(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	result, needRestart, err := a.clientService.BulkCreate(&a.inboundService, payloads)
+	result, needRestart, err := a.clientService.BulkCreateWithPlans(&a.inboundService, payloads)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

@@ -46,6 +46,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/status", a.status)
 	g.GET("/cpuHistory/:bucket", a.getCpuHistoryBucket)
 	g.GET("/history/:metric/:bucket", a.getMetricHistoryBucket)
+	g.GET("/historyWindow/:bucket", a.historyWindow)
 	g.GET("/xrayMetricsState", a.getXrayMetricsState)
 	g.GET("/xrayMetricsHistory/:metric/:bucket", a.getXrayMetricsHistoryBucket)
 	g.GET("/xrayObservatory", a.getXrayObservatory)
@@ -53,8 +54,8 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getXrayVersion", a.getXrayVersion)
 	g.GET("/getPanelUpdateInfo", a.getPanelUpdateInfo)
 	g.GET("/getUpdateStatus", a.getUpdateStatus)
-	g.GET("/getConfigJson", a.getConfigJson)
-	g.GET("/getDb", middleware.LongRequest(), a.getDb)
+	g.GET("/getConfigJson", requireConfigAdmin, a.getConfigJson)
+	g.GET("/getDb", requireConfigAdmin, middleware.LongRequest(), a.getDb)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getWebCertFiles", a.getWebCertFiles)
 	g.GET("/descendants", a.descendants)
@@ -118,6 +119,14 @@ func parseHistoryBucket(c *gin.Context) (int, bool) {
 		return 0, false
 	}
 	return bucket, true
+}
+
+func (a *ServerController) historyWindow(c *gin.Context) {
+	bucket, ok := parseHistoryBucket(c)
+	if !ok {
+		return
+	}
+	jsonObj(c, a.serverService.SystemHistoryWindow(bucket), nil)
 }
 
 // getCpuHistoryBucket retrieves aggregated CPU usage history based on the specified time bucket.
@@ -322,6 +331,7 @@ func (a *ServerController) getXrayLogs(c *gin.Context) {
 
 // getConfigJson retrieves the Xray configuration as JSON.
 func (a *ServerController) getConfigJson(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	configJson, err := a.serverService.GetConfigJson()
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.index.getConfigError"), err)
@@ -332,6 +342,7 @@ func (a *ServerController) getConfigJson(c *gin.Context) {
 
 // getDb downloads a pg_dump archive of the panel database.
 func (a *ServerController) getDb(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	filename := a.serverService.BackupFilename(c.Request.Host)
 	if !filenameRegex.MatchString(filename) {
 		_ = c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid filename"))

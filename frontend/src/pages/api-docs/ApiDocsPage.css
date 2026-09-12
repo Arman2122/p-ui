@@ -48,6 +48,10 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+.api-docs-page .api-explorer-detail .swagger-ui .information-container {
+  display: none;
+}
+
 /* ──────────────────────────────────────────────────────────────────
    Dark mode — Swagger UI does not ship a dark theme, so every visual
    surface needs an explicit override. Method-color chips (GET / POST /

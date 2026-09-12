@@ -69,6 +69,11 @@ func (w *WebSocketController) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
+	if !session.IsAdmin(c) {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		logger.Error("Failed to upgrade WebSocket connection:", err)

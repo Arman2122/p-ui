@@ -2,6 +2,28 @@
 export type OnlineAPISupport = number;
 export type Protocol = 'vmess' | 'vless' | 'tunnel' | 'http' | 'trojan' | 'shadowsocks' | 'mixed' | 'wireguard' | 'hysteria' | 'mtproto' | 'wgkernel' | 'awgkernel' | 'tun' | 'ssh' | 'tuic' | 'anytls' | 'openvpn' | 'ocserv';
 
+export interface ActivityPage {
+  generation: string;
+  items: ActivityView[];
+  nextBefore: number;
+  recent: number;
+  unread: number;
+}
+
+export interface ActivityView {
+  at: number;
+  category: string;
+  id: string;
+  kind: string;
+  level: string;
+  message: string;
+  messageKey: string;
+  params: Record<string, string>;
+  read: boolean;
+  title: string;
+  titleKey: string;
+}
+
 export interface AllSetting {
   datepicker: string;
   expireDiff: number;
@@ -251,6 +273,47 @@ export interface ApiTokenView {
   token?: string;
 }
 
+export interface BackupCreateOptions {
+  encrypt: boolean;
+  passphrase: string;
+  sendToTelegram: boolean;
+}
+
+export interface BackupRecordView {
+  available: boolean;
+  encrypted: boolean;
+  error: string;
+  filename: string;
+  finishedAt: number;
+  id: string;
+  operation: string;
+  size: number;
+  source: string;
+  startedAt: number;
+  status: string;
+  telegramError: string;
+  telegramStatus: string;
+}
+
+export interface BackupSchedule {
+  cadence: string;
+  enabled: boolean;
+  encrypt: boolean;
+  keep: number;
+  sendToTelegram: boolean;
+}
+
+export interface BackupStatusView {
+  busy: boolean;
+  directory: string;
+  managedCoreConfigs: boolean;
+  nextRun: number;
+  records: BackupRecordView[];
+  schedule: BackupSchedule;
+  telegramAvailable: boolean;
+  trafficHistory: boolean;
+}
+
 export interface BanView {
   clientEmail: string;
   createdAt: number;
@@ -318,6 +381,55 @@ export interface ClientConfigFile {
   filename: string;
 }
 
+export interface ClientCreatePayload {
+  adTag?: string;
+  allowedIPs?: string[];
+  auth?: string;
+  comment: string;
+  created_at?: number;
+  email: string;
+  enable: boolean;
+  expiryTime: number;
+  externalLinks?: ExternalLinkInput[];
+  flow?: string;
+  group?: string;
+  id?: string;
+  inboundIds: number[];
+  keepAlive?: number;
+  limitIp: number;
+  password?: string;
+  planOverrides?: PlanOverrides | null;
+  policyId?: number | null;
+  preSharedKey?: string | null;
+  privateKey?: string;
+  publicKey?: string;
+  reset: number;
+  reverse?: ClientReverse | null;
+  secret?: string;
+  security: string;
+  subId: string;
+  tgId: number;
+  tlsCryptV2?: string;
+  totalGB: number;
+  updated_at?: number;
+  username?: string;
+}
+
+export interface ClientGroup {
+  createdAt: number;
+  id: number;
+  name: string;
+  resetDown: number;
+  resetUp: number;
+  updatedAt: number;
+}
+
+export interface ClientHistoryPoint {
+  down: number;
+  t: number;
+  up: number;
+}
+
 export interface ClientInbound {
   clientId: number;
   createdAt: number;
@@ -330,9 +442,36 @@ export interface ClientLocalAddress {
   core: string;
 }
 
+export interface ClientPageResponse {
+  filtered: number;
+  groups: string[];
+  items: ClientSlim[];
+  page: number;
+  pageSize: number;
+  summary: ClientsSummary;
+  total: number;
+}
+
+export interface ClientPlanMetadata {
+  name: string;
+  overridden: boolean;
+  overrideExpiry: boolean;
+  overrideInbounds: boolean;
+  overrideLimitIp: boolean;
+  overrideQuota: boolean;
+  pending: boolean;
+  policyId?: number | null;
+  unresolved: boolean;
+}
+
 export interface ClientPolicy {
+  appliedDurationDays?: number | null;
+  appliedOnDepletion: string;
+  appliedResetCycle: string;
   appliedRev: number;
+  depletionNotifiedAt: number;
   email: string;
+  lastResetAt: number;
   overrideExpiry: boolean;
   overrideInbounds: boolean;
   overrideLimitIp: boolean;
@@ -355,6 +494,7 @@ export interface ClientRecord {
   id: number;
   keepAlive: number;
   limitIp: number;
+  ownerUserId?: number | null;
   password: string;
   preSharedKey: string;
   privateKey: string;
@@ -373,6 +513,25 @@ export interface ClientReverse {
   tag: string;
 }
 
+export interface ClientSlim {
+  comment?: string;
+  createdAt: number;
+  disabledReason?: string;
+  email: string;
+  enable: boolean;
+  expiryTime: number;
+  group?: string;
+  history: ClientHistoryPoint[];
+  inboundIds: number[];
+  limitIp: number;
+  plan?: ClientPlanMetadata | null;
+  reset: number;
+  subId: string;
+  totalGB: number;
+  traffic?: ClientTraffic | null;
+  updatedAt: number;
+}
+
 export interface ClientTraffic {
   down: number;
   email: string;
@@ -386,6 +545,52 @@ export interface ClientTraffic {
   total: number;
   up: number;
   uuid: string;
+}
+
+export interface ClientUpdateOptions {
+  inboundIds?: number[] | null;
+  planOverrides?: PlanOverrides | null;
+  policyId?: number | null;
+}
+
+export interface ClientsSummary {
+  active: number;
+  deactive: string[];
+  deactiveCount: number;
+  depleted: string[];
+  depletedCount: number;
+  expiring: string[];
+  expiringCount: number;
+  online: string[];
+  onlineCount: number;
+  total: number;
+}
+
+export interface CoreConfigInstanceView {
+  enabled: boolean;
+  id: number;
+  kind: string;
+  listen: string;
+  port: number;
+  remark: string;
+  settings: string;
+  sniffing: string;
+  streamSettings: string;
+  tag: string;
+}
+
+export interface CoreConfigValidateForm {
+  document: string;
+  kind: string;
+}
+
+export interface CoreConfigView {
+  id: string;
+  instanceValidation: boolean;
+  instances: CoreConfigInstanceView[];
+  template: string;
+  templateEditable: boolean;
+  titleKey: string;
 }
 
 export interface CoreStatusView {
@@ -468,9 +673,53 @@ export interface EnforcedLimits {
   wantUpBps: number;
 }
 
+export interface ExternalLinkInput {
+  kind: string;
+  remark: string;
+  value: string;
+}
+
 export interface FallbackParentInfo {
   masterId: number;
   path?: string;
+}
+
+export interface GroupDetails {
+  clientCount: number;
+  down: number;
+  expiringCount: number;
+  history: ClientHistoryPoint[];
+  inboundIds: number[];
+  name: string;
+  onlineCount: number;
+  quotaBytes: number;
+  sharedInboundIds: number[];
+  trafficUsed: number;
+  up: number;
+}
+
+export interface GroupInbound {
+  inboundId: number;
+  name: string;
+}
+
+export interface GroupQuota {
+  name: string;
+  quotaBytes: number;
+}
+
+export interface GroupQuotaRequest {
+  inboundIds?: number[] | null;
+  name: string;
+  quotaBytes: number;
+}
+
+export interface GroupSummary {
+  clientCount: number;
+  down: number;
+  name: string;
+  trafficUsed: number;
+  up: number;
 }
 
 export interface HistoryOfSeeders {
@@ -632,6 +881,17 @@ export interface IpLimitStatus {
   reason: string;
 }
 
+export interface MetricHistoryWindow {
+  bucket: number;
+  end: number;
+  series: Record<string, MetricSample[]>;
+}
+
+export interface MetricSample {
+  t: number;
+  v: number;
+}
+
 export interface Msg {
   msg: string;
   obj: unknown;
@@ -682,6 +942,14 @@ export interface Node {
   xrayVersion: string;
 }
 
+export interface NodeInboundTelemetry {
+  down: number;
+  id: number;
+  protocol: string;
+  tag: string;
+  up: number;
+}
+
 export interface NodeMutationRequest {
   address: string;
   allowPrivateAddress: boolean;
@@ -724,6 +992,7 @@ export interface NodeView {
   lastHeartbeat: number;
   latencyMs: number;
   memPct: number;
+  metricsAvailable: boolean;
   name: string;
   netDown: number;
   netUp: number;
@@ -735,6 +1004,7 @@ export interface NodeView {
   port: number;
   remark: string;
   scheme: string;
+  servedInbounds: NodeInboundTelemetry[];
   status: string;
   tlsVerifyMode: string;
   transitive?: boolean;
@@ -760,16 +1030,93 @@ export interface PanelUpdateStatus {
   state: string;
 }
 
+export interface PlanApplyFailure {
+  email: string;
+  reason: string;
+}
+
+export interface PlanApplyResult {
+  appliedRev: number;
+  email: string;
+  needRestart: boolean;
+  policyId: number;
+}
+
+export interface PlanCycleResult {
+  needRestart: boolean;
+  notices: PlanDepletionNotice[];
+  reset: number;
+}
+
+export interface PlanDepletionNotice {
+  email: string;
+  ownerUserId?: number | null;
+  planName: string;
+  policyId: number;
+  quotaBytes: number;
+  usedBytes: number;
+}
+
+export interface PlanMember {
+  appliedRev: number;
+  email: string;
+  enable: boolean;
+  expiryTime: number;
+  group: string;
+  overrideExpiry: boolean;
+  overrideInbounds: boolean;
+  overrideLimitIp: boolean;
+  overrideQuota: boolean;
+  pending: boolean;
+  quotaBytes: number;
+  usedBytes: number;
+}
+
+export interface PlanMemberPage {
+  items: PlanMember[];
+  total: number;
+}
+
+export interface PlanOverrides {
+  expiry?: boolean | null;
+  inbounds?: boolean | null;
+  limitIp?: boolean | null;
+  quota?: boolean | null;
+}
+
+export interface PlanReapplyResult {
+  applied: number;
+  failures: PlanApplyFailure[];
+  needRestart: boolean;
+}
+
+export interface PlanSummary {
+  withoutPlan: number;
+}
+
 export interface Policy {
+  archived: boolean;
+  assignedClients: number;
+  autoRenewDays: number;
+  burst: boolean;
+  committedBytes: number;
   createdAt: number;
+  description: string;
   durationDays?: number | null;
   id: number;
+  inboundIds: number[];
   limitIp?: number | null;
   name: string;
+  onDepletion: string;
+  ownerUserId?: number | null;
+  pendingClients: number;
   quotaBytes?: number | null;
+  resetCycle: string;
   rev: number;
+  startOnFirstUse: boolean;
   tiers: unknown;
   updatedAt: number;
+  usedBytes: number;
 }
 
 export interface ProbeResultUI {
@@ -804,6 +1151,150 @@ export interface RealityScanResult {
   tls13: boolean;
   tlsVersion: string;
   x25519: boolean;
+}
+
+export interface ResellerAccount {
+  allowExtend: boolean;
+  allowPlans: boolean;
+  allowReset: boolean;
+  allowSuspend: boolean;
+  allowTopUp: boolean;
+  budgetBlocked: boolean;
+  clientCap: number;
+  createdAt: number;
+  email: string;
+  expiresAt: number;
+  name: string;
+  note?: string;
+  notifyOnDepletion: boolean;
+  suspended: boolean;
+  trafficAllocated: number;
+  trafficLimit: number;
+  trafficUsed: number;
+  updatedAt: number;
+  userId: number;
+}
+
+export interface ResellerClientInput {
+  comment: string;
+  email: string;
+  enable: boolean;
+  expiryTime: number;
+  inboundIds: number[];
+  limitIp: number;
+  planId: number;
+  totalGB: number;
+}
+
+export interface ResellerClientPage {
+  items: ResellerClientView[];
+  total: number;
+}
+
+export interface ResellerClientView {
+  comment: string;
+  email: string;
+  enable: boolean;
+  expiryTime: number;
+  history?: ClientHistoryPoint[];
+  id: number;
+  inboundIds: number[];
+  lastOnline: number;
+  limitIp: number;
+  plan?: ClientPlanMetadata | null;
+  subId: string;
+  totalGB: number;
+  trafficUsed: number;
+}
+
+export interface ResellerDashboardView {
+  active: number;
+  attention: ResellerClientView[];
+  inbounds: ResellerInboundView[];
+  online: number;
+  reseller?: ResellerView | null;
+  sales: ResellerSaleDay[];
+}
+
+export interface ResellerInboundView {
+  clients: number;
+  enable: boolean;
+  id: number;
+  protocol: string;
+  remark: string;
+  trafficUsed: number;
+}
+
+export interface ResellerInput {
+  allowExtend: boolean;
+  allowPlans: boolean;
+  allowReset: boolean;
+  allowSuspend: boolean;
+  allowTopUp: boolean;
+  clientCap: number;
+  email: string;
+  expiresAt: number;
+  inboundIds: number[];
+  name: string;
+  note: string;
+  notifyOnDepletion: boolean;
+  password: string;
+  trafficLimit: number;
+  username: string;
+}
+
+export interface ResellerMutationResult {
+  clientId: number;
+  pending: boolean;
+}
+
+export interface ResellerPasswordRequest {
+  current: string;
+  password: string;
+}
+
+export interface ResellerPermissions {
+  extend: boolean;
+  plans: boolean;
+  reset: boolean;
+  suspend: boolean;
+  topUp: boolean;
+}
+
+export interface ResellerSaleDay {
+  bytes: number;
+  day: string;
+}
+
+export interface ResellerSuspendRequest {
+  suspended?: boolean | null;
+}
+
+export interface ResellerTokenRequest {
+  expiresAt: number;
+  name: string;
+}
+
+export interface ResellerTokenView {
+  createdAt: number;
+  expiresAt: number;
+  id: number;
+  name: string;
+  token?: string;
+}
+
+export interface ResellerTopUpRequest {
+  clients: number;
+  days: number;
+  traffic: number;
+}
+
+export interface ResellerView {
+  account: ResellerAccount;
+  clients: number;
+  inboundIds: number[];
+  trafficUsed: number;
+  username: string;
 }
 
 export interface RoutingExitView {
@@ -873,9 +1364,55 @@ export interface Setting {
   value: string;
 }
 
+export interface SettingsAPITokenView {
+  allowedIPs: string;
+  createdAt: number;
+  enabled: boolean;
+  expiresAt: number;
+  id: number;
+  name: string;
+  scope: string;
+  token?: string;
+}
+
+export interface SignedInUser {
+  home: string;
+  id: number;
+  permissions: ResellerPermissions;
+  role: string;
+  username: string;
+}
+
+export interface Status {
+  appStats: unknown;
+  cpu: number;
+  cpuCores: number;
+  cpuSpeedMhz: number;
+  disk: unknown;
+  diskIO: unknown;
+  diskTraffic: unknown;
+  listenPort?: number;
+  loads: number[];
+  logicalPro: number;
+  mem: unknown;
+  netIO: unknown;
+  netTraffic: unknown;
+  observedAt: number;
+  panelGuid: string;
+  panelVersion: string;
+  publicIP: unknown;
+  swap: unknown;
+  tcpCount: number;
+  udpCount: number;
+  unavailable: string[];
+  uptime: number;
+  xray: unknown;
+}
+
 export interface User {
   id: number;
   password: string;
+  role: string;
   username: string;
 }
 

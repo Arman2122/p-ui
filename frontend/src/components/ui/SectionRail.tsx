@@ -13,12 +13,7 @@ export interface SectionRailItem {
   extra?: ReactNode;
 }
 
-/*
-The in-page navigation for a settings-shaped screen: sections down the side,
-content beside them. It exists because these sections are chosen by the URL
-fragment, and a fragment nobody links to is a section nobody can reach.
-Searchable, which a nested menu never was.
-*/
+// The searchable rail keeps sections addressed by URL fragments discoverable.
 export default function SectionRail({ items, active, onPick, searchable = true }: {
   items: SectionRailItem[];
   active: string;
@@ -49,7 +44,7 @@ export default function SectionRail({ items, active, onPick, searchable = true }
           />
         </div>
       )}
-      <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <div className="p-section-items" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 1 }}>
         {shown.map((s) => (
           <button
             type="button"

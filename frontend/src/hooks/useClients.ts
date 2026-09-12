@@ -7,6 +7,7 @@ import { keys } from '@/api/queryKeys';
 import { markLocalInvalidate } from '@/api/invalidationTracker';
 import {
   ClientHydrateSchema,
+  ClientCreateRequestSchema,
   ClientPageResponseSchema,
   InboundOptionsSchema,
   OnlinesSchema,
@@ -399,7 +400,7 @@ export function useClients(options: UseClientsOptions = {}) {
 
   const createMut = useMutation({
     mutationFn: (payload: unknown) =>
-      HttpUtil.post('/panel/api/clients/add', payload, JSON_HEADERS),
+      HttpUtil.post('/panel/api/clients/add', ClientCreateRequestSchema.parse(payload), JSON_HEADERS),
     onSuccess: (msg) => { if (msg?.success) invalidateAll(); },
   });
 
@@ -445,7 +446,7 @@ export function useClients(options: UseClientsOptions = {}) {
 
   const bulkCreateMut = useMutation({
     mutationFn: async (payloads: unknown[]): Promise<Msg<BulkCreateResult>> => {
-      const raw = await HttpUtil.post('/panel/api/clients/bulkCreate', payloads, JSON_HEADERS);
+      const raw = await HttpUtil.post('/panel/api/clients/bulkCreate', payloads.map((payload) => ClientCreateRequestSchema.parse(payload)), JSON_HEADERS);
       return parseMsg(raw, BulkCreateResultSchema, 'clients/bulkCreate');
     },
     onSuccess: (msg) => { if (msg?.success) invalidateAll(); },

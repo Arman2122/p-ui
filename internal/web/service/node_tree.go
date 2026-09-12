@@ -162,7 +162,11 @@ func (s *NodeService) GetNodeTreeView() ([]*NodeView, error) {
 	if err != nil {
 		return nil, err
 	}
-	return toNodeViews(nodes), nil
+	views := toNodeViews(nodes)
+	if err := enrichNodeTelemetry(nodes, views); err != nil {
+		return nil, err
+	}
+	return views, nil
 }
 
 // recountByGuid recomputes InboundCount/OnlineCount/DepletedCount for every node

@@ -13,6 +13,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/crypto"
 	ldaputil "github.com/Arman2122/p-ui/internal/util/ldap"
 	"github.com/Arman2122/p-ui/internal/web/service"
+	"github.com/Arman2122/p-ui/internal/web/session"
 )
 
 // UserService provides business logic for user management and authentication.
@@ -28,6 +29,7 @@ func (s *UserService) GetFirstUser() (*model.User, error) {
 
 	user := &model.User{}
 	err := db.Model(model.User{}).
+		Where("role = ? OR role = ?", "admin", "").
 		First(user).
 		Error
 	if err != nil {
@@ -56,6 +58,9 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 	}
 
 	if !crypto.CheckPasswordHash(user.Password, password) {
+		if !session.IsAdminUser(user) {
+			return nil, errors.New("invalid credentials")
+		}
 		ldapEnabled, _ := s.settingService.GetLdapEnable()
 		if !ldapEnabled {
 			return nil, errors.New("invalid credentials")
@@ -112,7 +117,7 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 		return nil, err
 	}
 
-	if twoFactorEnable {
+	if twoFactorEnable && session.IsAdminUser(user) {
 		twoFactorToken, err := s.settingService.GetTwoFactorToken()
 		if err != nil {
 			logger.Warning("check two factor token err:", err)
@@ -143,24 +148,39 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 		}
 	}
 
+	if !session.IsAdminUser(user) {
+		if err := (&service.ResellerService{}).CheckAccess(user); err != nil {
+			return nil, errors.New("invalid credentials")
+		}
+	}
 	return user, nil
 }
 
-func (s *UserService) BumpLoginEpoch() error {
+func (s *UserService) BumpLoginEpoch(userIDs ...int) error {
 	db := database.GetDB()
 	if db == nil {
 		// logout's contract is that a failed revocation is logged and the browser
 		// is still cleared. A nil dereference here would defeat exactly that.
 		return errors.New("panel: no database connection to revoke sessions with")
 	}
-	return db.Model(model.User{}).
-		Where("1 = 1").
+	q := db.Model(model.User{}).Where("role = ? OR role = ?", "admin", "")
+	if len(userIDs) > 0 {
+		q = db.Model(model.User{}).Where("id = ?", userIDs[0])
+	}
+	return q.
 		Update("login_epoch", gorm.Expr("login_epoch + 1")).
 		Error
 }
 
 func (s *UserService) UpdateUser(id int, username string, password string) error {
 	db := database.GetDB()
+	var target model.User
+	if err := db.First(&target, id).Error; err != nil {
+		return err
+	}
+	if !session.IsAdminUser(&target) {
+		return service.ErrResellerForbidden
+	}
 	hashedPassword, err := crypto.HashPasswordAsBcrypt(password)
 	if err != nil {
 		return err
@@ -200,7 +220,7 @@ func (s *UserService) UpdateFirstUser(username string, password string) error {
 
 	db := database.GetDB()
 	user := &model.User{}
-	err := db.Model(model.User{}).First(user).Error
+	err := db.Model(model.User{}).Where("role = ? OR role = ?", "admin", "").First(user).Error
 	if database.IsNotFound(err) {
 		user.Username = username
 		user.Password = hashedPassword

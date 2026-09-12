@@ -15,15 +15,8 @@ import (
 	"github.com/Arman2122/p-ui/internal/web/global"
 )
 
-/*
-updateUser must not dereference a login user the request never had.
-
-checkAPIAuth admits a bearer-token caller and attaches the first user only when
-GetFirstUser succeeds; with no user row it still sets api_authed and continues.
-updateUser then read user.Username off a nil pointer. gin recovers the panic
-into a 500, so nothing crashed -- but a request that should have been refused
-answered with a stack trace instead. F213.
-*/
+// A bearer token without an administrator must be refused before updateUser runs.
+// Keep the explicit JSON refusal contract while preventing the historical nil dereference. F213.
 func TestUpdateUserWithNoLoginUserIsRefusedNotPanicked(t *testing.T) {
 	initTestDB(t)
 	previous := global.GetWebServer()
@@ -40,7 +33,7 @@ func TestUpdateUserWithNoLoginUserIsRefusedNotPanicked(t *testing.T) {
 	if err := database.GetDB().Create(&model.ApiToken{Name: "f213", Token: crypto.HashTokenSHA256(token), Enabled: true}).Error; err != nil {
 		t.Fatalf("mint token: %v", err)
 	}
-	// The one state that leaves api_authed set and no user attached.
+	// The token still exists, but there is no administrator who can authenticate with it.
 	if err := database.GetDB().Where("1 = 1").Delete(&model.User{}).Error; err != nil {
 		t.Fatalf("delete users: %v", err)
 	}
@@ -52,8 +45,8 @@ func TestUpdateUserWithNoLoginUserIsRefusedNotPanicked(t *testing.T) {
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 
-	if rec.Code == http.StatusInternalServerError {
-		t.Fatalf("updateUser answered 500: the nil login user was dereferenced\n%s", rec.Body.String())
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("updateUser status=%d want401\n%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"success":false`) {
 		t.Fatalf("status %d, body %s: want an explicit refusal", rec.Code, rec.Body.String())

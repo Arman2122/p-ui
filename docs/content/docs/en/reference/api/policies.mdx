@@ -1,20 +1,13 @@
 ---
 title: Policies
-description: A speed ladder and who is on it. A plan is a list of tiers, each
-  naming the usage at which it starts and the rate it grants from there; the
-  panel evaluates the last tier a client has reached against the same usage
-  figure their quota is enforced against, so a client cannot be over quota by
-  one number and under a threshold by another. A plain speed limit is a one-tier
-  plan starting at zero, so there is no separate concept. Zero bits per second
-  means unlimited in that direction, never blocked, and an empty or unreadable
-  ladder leaves the client unlimited — a malformed plan must never throttle.
-  Assignment is keyed by client email, so it survives a client being deleted and
-  re-synced under a new id. Rate limits are enforced in the kernel and only for
-  protocols whose core can give each client a distinguishable kernel identity;
-  GET /panel/api/cores reports which those are, and a client on any other
-  protocol keeps quota, expiry and IP limits in full. Nothing here touches a
-  core’s configuration, so a plan edit cannot restart a daemon or drop a
-  connection. All endpoints under /panel/api/policies.
+description: Reusable client plans combine traffic quotas, duration, device
+  limits, inbound assignments and speed tiers. Template changes are tracked
+  separately from applied client settings; reapply updates members while
+  preserving explicit overrides unless requested otherwise. Quota continuation,
+  renewal and rate shaping are validated against each core capability. Zero bits
+  per second means unlimited in that direction. Administrator plans use
+  /panel/api/policies; permitted resellers manage their own plans under
+  /panel/api/reseller/plans.
 full: true
 _openapi:
   preload:
@@ -92,6 +85,24 @@ _openapi:
         each pass so an inbound added later is inside it, for the given minutes
         or the operator's default ban duration."
       url: '#ban-an-address-by-hand-dropped-on-every-local-inbound-port-resolved-each-pass-so-an-inbound-added-later-is-inside-it-for-the-given-minutes-or-the-operators-default-ban-duration'
+    - depth: 2
+      title: Plan summary within the authenticated owner's scope.
+      url: '#plan-summary-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan members within the authenticated owner's scope.
+      url: '#plan-members-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan archive within the authenticated owner's scope.
+      url: '#plan-archive-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan duplicate within the authenticated owner's scope.
+      url: '#plan-duplicate-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan apply within the authenticated owner's scope.
+      url: '#plan-apply-within-the-authenticated-owners-scope'
+    - depth: 2
+      title: Plan reapply within the authenticated owner's scope.
+      url: '#plan-reapply-within-the-authenticated-owners-scope'
   structuredData:
     headings:
       - content: List every plan in id order.
@@ -154,6 +165,18 @@ _openapi:
           each pass so an inbound added later is inside it, for the given
           minutes or the operator's default ban duration."
         id: ban-an-address-by-hand-dropped-on-every-local-inbound-port-resolved-each-pass-so-an-inbound-added-later-is-inside-it-for-the-given-minutes-or-the-operators-default-ban-duration
+      - content: Plan summary within the authenticated owner's scope.
+        id: plan-summary-within-the-authenticated-owners-scope
+      - content: Plan members within the authenticated owner's scope.
+        id: plan-members-within-the-authenticated-owners-scope
+      - content: Plan archive within the authenticated owner's scope.
+        id: plan-archive-within-the-authenticated-owners-scope
+      - content: Plan duplicate within the authenticated owner's scope.
+        id: plan-duplicate-within-the-authenticated-owners-scope
+      - content: Plan apply within the authenticated owner's scope.
+        id: plan-apply-within-the-authenticated-owners-scope
+      - content: Plan reapply within the authenticated owner's scope.
+        id: plan-reapply-within-the-authenticated-owners-scope
     contents: []
 ---
 
@@ -166,7 +189,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"},{"path":"/panel/api/policies/pushAssignments","method":"post"},{"path":"/panel/api/policies/pushBans","method":"post"},{"path":"/panel/api/policies/bans","method":"get"},{"path":"/panel/api/policies/bans/release","method":"post"},{"path":"/panel/api/policies/bans/releaseAll","method":"post"},{"path":"/panel/api/policies/bans/add","method":"post"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/policies/list","method":"get"},{"path":"/panel/api/policies/get/{id}","method":"get"},{"path":"/panel/api/policies/enforced/{email}","method":"get"},{"path":"/panel/api/policies/add","method":"post"},{"path":"/panel/api/policies/update/{id}","method":"post"},{"path":"/panel/api/policies/del/{id}","method":"post"},{"path":"/panel/api/policies/assign","method":"post"},{"path":"/panel/api/policies/pushAssignments","method":"post"},{"path":"/panel/api/policies/pushBans","method":"post"},{"path":"/panel/api/policies/bans","method":"get"},{"path":"/panel/api/policies/bans/release","method":"post"},{"path":"/panel/api/policies/bans/releaseAll","method":"post"},{"path":"/panel/api/policies/bans/add","method":"post"},{"path":"/panel/api/policies/summary","method":"get"},{"path":"/panel/api/policies/members/{id}","method":"get"},{"path":"/panel/api/policies/archive/{id}","method":"post"},{"path":"/panel/api/policies/duplicate/{id}","method":"post"},{"path":"/panel/api/policies/apply","method":"post"},{"path":"/panel/api/policies/reapply/{id}","method":"post"}]} showTitle />
     </>
   );
 }

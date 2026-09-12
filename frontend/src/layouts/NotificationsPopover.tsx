@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Popover, Segmented } from 'antd';
+import { Alert, Badge, Button, Popover, Segmented } from 'antd';
 
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { isAlert, markAllRead, markRead, useNotificationFeed, type FeedItem } from '@/api/notificationFeed';
+import { isAlert, markAllRead, markRead, useNotificationFeed, useNotificationState, type FeedItem } from '@/api/notificationFeed';
 import { translateEvent } from '@/api/eventText';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
 
@@ -26,6 +26,7 @@ function iconOf(item: FeedItem): IconName {
 function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void }) {
   const { t } = useTranslation();
   const feed = useNotificationFeed();
+  const state = useNotificationState();
   const relative = useRelativeTime();
   const [tab, setTab] = useState<'all' | 'alerts' | 'activity'>('all');
 
@@ -35,8 +36,9 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
     return feed;
   }, [feed, tab]);
 
-  const unread = feed.filter((item) => !item.read).length;
-  const recent = feed.filter((item) => Date.now() - item.at < DAY_MS).length;
+  const unread = state.ready ? state.unread : feed.filter((item) => !item.read).length;
+  const activeAlerts = feed.filter((item) => item.category === 'alert').length;
+  const recent = state.ready ? state.recent : feed.filter((item) => Date.now() - item.at < DAY_MS).length;
 
   return (
     <div className="p-pop">
@@ -44,7 +46,7 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
         <div>
           <div style={{ fontSize: 13, fontWeight: 650, color: 'var(--p-text)' }}>{t('menu.notifications')}</div>
           <div className="p-sub" style={{ marginTop: 1 }}>
-            {unread ? t('menu.unreadCount', { count: unread }) : t('menu.allCaughtUp')}
+            {unread ? t('menu.unreadCount', { count: unread }) : activeAlerts ? `${t('menu.tabAlerts')}: ${activeAlerts}` : t('menu.allCaughtUp')}
           </div>
         </div>
         <Button size="small" type="text" disabled={!unread} onClick={markAllRead}>{t('menu.markAllRead')}</Button>
@@ -63,6 +65,7 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
         />
       </div>
       <div className="p-pop-b">
+        {state.error && <Alert type="error" showIcon title={t('activity.loadFailed')} description={t(state.error)} />}
         {items.map((item) => {
           const tone = toneOf(item);
           const body = item.messageKey ? translateEvent(item.messageKey, item.params) : item.message;
@@ -83,14 +86,14 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
                   </span>
                 </span>
                 <span className="p-sub" style={{ display: 'block', marginTop: 2, whiteSpace: 'normal' }}>
-                  {body ? `${body} · ` : ''}{relative(item.at)}
+                  {body ? `${body} · ` : ''}{item.category === 'alert' ? t('activity.current') : relative(item.at)}
                 </span>
               </span>
               {!item.read && <span className="p-unread" />}
             </button>
           );
         })}
-        {!items.length && <div className="p-empty" style={{ padding: 26 }}>{t('menu.nothingHere')}</div>}
+        {!items.length && !state.error && <div className="p-empty" style={{ padding: 26 }}>{state.loading ? t('loading') : t('menu.nothingHere')}</div>}
       </div>
       <div className="p-pop-f">
         <span className="p-sub">{t('menu.inLast24h', { count: recent })}</span>
@@ -103,7 +106,9 @@ function NotificationPanel({ onOpenDashboard }: { onOpenDashboard: () => void })
 export default function NotificationsPopover({ onOpenDashboard }: { onOpenDashboard: () => void }) {
   const { t } = useTranslation();
   const feed = useNotificationFeed();
-  const unread = feed.filter((item) => !item.read).length;
+  const state = useNotificationState();
+  const unread = state.ready ? state.unread : feed.filter((item) => !item.read).length;
+  const activeAlerts = feed.filter((item) => item.category === 'alert').length;
   return (
     <Popover
       content={<NotificationPanel onOpenDashboard={onOpenDashboard} />}
@@ -111,7 +116,7 @@ export default function NotificationsPopover({ onOpenDashboard }: { onOpenDashbo
       placement="bottomRight"
       arrow={false}
     >
-      <Badge count={unread} size="small" offset={[-3, 4]}>
+      <Badge count={unread + activeAlerts} size="small" offset={[-3, 4]}>
         <button type="button" className="p-iconbtn" title={t('menu.notifications')} aria-label={t('menu.notifications')}>
           <Icon name="bell" />
         </button>

@@ -5,6 +5,7 @@ import { Tooltip } from 'antd';
 import { Icon } from '@/components/ui/Icon';
 import { NAV, type NavItem } from '@/layouts/nav';
 import { formatPanelVersion } from '@/lib/panel-version';
+import type { SignedInUser } from '@/pages/resellers/schema';
 
 const REPO_URL = 'https://github.com/Arman2122/p-ui';
 
@@ -31,15 +32,18 @@ function NavButton({ item, active, collapsed, count, onClick }: {
   return collapsed ? <Tooltip title={label} placement="right">{body}</Tooltip> : body;
 }
 
-export default function PanelSidebar({ route, collapsed, open, counts, onNavigate }: {
+export default function PanelSidebar({ route, collapsed, open, counts, user, onNavigate }: {
   route: string;
   collapsed: boolean;
   open: boolean;
   counts: Partial<Record<NonNullable<NavItem['count']>, number>>;
+  user: SignedInUser;
   onNavigate: (key: string) => void;
 }) {
   const { t } = useTranslation();
   const version = formatPanelVersion(window.PUI_CUR_VER || '');
+  const admin = user.role === 'admin';
+  const groups = admin ? NAV : NAV.map((g) => ({ ...g, items: g.items.filter((i) => ['/', '/clients', '/inbounds', '/activity', '/api-docs'].includes(i.key) || i.key === '/plans' && user.permissions.plans).map((i) => i.key === '/' ? { ...i, key: '/reseller' } : i) })).filter((g) => g.items.length > 0);
   return (
     <aside className={`p-rail${collapsed ? ' is-collapsed' : ''}${open ? ' is-open' : ''}`}>
       <div className="p-brand">
@@ -47,7 +51,7 @@ export default function PanelSidebar({ route, collapsed, open, counts, onNavigat
         {!collapsed && <span className="p-brand-txt">Penhoon</span>}
       </div>
       <nav className="p-nav">
-        {NAV.map((group) => (
+        {groups.map((group) => (
           <Fragment key={group.groupKey ?? 'root'}>
             {group.groupKey && !collapsed && <div className="p-navgroup">{t(group.groupKey)}</div>}
             {group.groupKey && collapsed && <div className="p-divider" style={{ margin: '8px 6px' }} />}

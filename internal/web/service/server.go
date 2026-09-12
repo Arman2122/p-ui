@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,9 @@ const (
 // Status represents comprehensive system and application status information.
 // It includes CPU, memory, disk, network statistics, and Xray process status.
 type Status struct {
+	ObservedAt  int64     `json:"observedAt" example:"1789227000000"`
+	ListenPort  int       `json:"listenPort,omitempty" example:"16119"`
+	Unavailable []string  `json:"unavailable" example:"[]"`
 	T           time.Time `json:"-"`
 	Cpu         float64   `json:"cpu"`
 	CpuCores    int       `json:"cpuCores"`
@@ -151,6 +155,7 @@ type ServerService struct {
 // frontend's bucket selector self-documenting.
 var allowedHistoryBuckets = map[int]bool{
 	2:     true, // 2m
+	15:    true, // 15m
 	30:    true, // 30m
 	60:    true, // 1h
 	180:   true, // 3h
@@ -396,13 +401,17 @@ func (s *ServerService) resolvePublicIPs() {
 func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	now := time.Now()
 	status := &Status{
-		T: now,
+		T: now, ObservedAt: now.UnixMilli(), Unavailable: []string{},
+	}
+	if port, configured, err := config.GetPortOverride(); configured && err == nil {
+		status.ListenPort = port
 	}
 
 	// CPU stats
 	util, err := s.sampleCPUUtilization()
 	if err != nil {
 		logger.Warning("get cpu percent failed:", err)
+		status.Unavailable = append(status.Unavailable, "cpu")
 	} else {
 		status.Cpu = util
 	}
@@ -452,6 +461,7 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
 		logger.Warning("get virtual memory failed:", err)
+		status.Unavailable = append(status.Unavailable, "mem")
 	} else {
 		status.Mem.Current = memInfo.Used
 		status.Mem.Total = memInfo.Total
@@ -460,6 +470,7 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	swapInfo, err := mem.SwapMemory()
 	if err != nil {
 		logger.Warning("get swap memory failed:", err)
+		status.Unavailable = append(status.Unavailable, "swap")
 	} else {
 		status.Swap.Current = swapInfo.Used
 		status.Swap.Total = swapInfo.Total
@@ -469,6 +480,7 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	diskInfo, err := disk.Usage("/")
 	if err != nil {
 		logger.Warning("get disk usage failed:", err)
+		status.Unavailable = append(status.Unavailable, "diskUsage")
 	} else {
 		status.Disk.Current = diskInfo.Used
 		status.Disk.Total = diskInfo.Total
@@ -477,6 +489,7 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	diskIOStats, err := disk.IOCounters()
 	if err != nil {
 		logger.Warning("get disk io counters failed:", err)
+		status.Unavailable = append(status.Unavailable, "diskRead", "diskWrite")
 	} else {
 		var totalRead, totalWrite uint64
 		for _, counter := range diskIOStats {
@@ -510,6 +523,7 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	ioStats, err := net.IOCounters(true)
 	if err != nil {
 		logger.Warning("get io counters failed:", err)
+		status.Unavailable = append(status.Unavailable, "netTraffic", "netUp", "netDown", "pktUp", "pktDown")
 	} else {
 		var totalSent, totalRecv, totalPktSent, totalPktRecv uint64
 		for _, iface := range ioStats {
@@ -530,16 +544,19 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 		if lastStatus != nil {
 			duration := now.Sub(lastStatus.T)
 			seconds := float64(duration) / float64(time.Second)
-			up := uint64(float64(status.NetTraffic.Sent-lastStatus.NetTraffic.Sent) / seconds)
-			down := uint64(float64(status.NetTraffic.Recv-lastStatus.NetTraffic.Recv) / seconds)
-			status.NetIO.Up = up
-			status.NetIO.Down = down
+			status.NetIO.Up = interfaceRate(status.NetTraffic.Sent, lastStatus.NetTraffic.Sent, seconds)
+			status.NetIO.Down = interfaceRate(status.NetTraffic.Recv, lastStatus.NetTraffic.Recv, seconds)
+			if seconds <= 0 || slices.Contains(lastStatus.Unavailable, "netTraffic") || status.NetTraffic.Sent < lastStatus.NetTraffic.Sent || status.NetTraffic.Recv < lastStatus.NetTraffic.Recv {
+				status.Unavailable = append(status.Unavailable, "netUp", "netDown", "pktUp", "pktDown")
+			}
 			if seconds > 0 && status.NetTraffic.PktSent >= lastStatus.NetTraffic.PktSent {
 				status.NetIO.PktUp = uint64(float64(status.NetTraffic.PktSent-lastStatus.NetTraffic.PktSent) / seconds)
 			}
 			if seconds > 0 && status.NetTraffic.PktRecv >= lastStatus.NetTraffic.PktRecv {
 				status.NetIO.PktDown = uint64(float64(status.NetTraffic.PktRecv-lastStatus.NetTraffic.PktRecv) / seconds)
 			}
+		} else {
+			status.Unavailable = append(status.Unavailable, "netUp", "netDown", "pktUp", "pktDown")
 		}
 	}
 
@@ -547,11 +564,13 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	status.TcpCount, err = sys.GetTCPCount()
 	if err != nil {
 		logger.Warning("get tcp connections failed:", err)
+		status.Unavailable = append(status.Unavailable, "tcpCount")
 	}
 
 	status.UdpCount, err = sys.GetUDPCount()
 	if err != nil {
 		logger.Warning("get udp connections failed:", err)
+		status.Unavailable = append(status.Unavailable, "udpCount")
 	}
 
 	s.resolvePublicIPs()
@@ -606,38 +625,50 @@ func (s *ServerService) AppendCpuSample(t time.Time, v float64) {
 // load averages. Called by RefreshStatus on the same @2s cadence as
 // AppendCpuSample, so all series stay aligned.
 func (s *ServerService) AppendStatusSample(t time.Time, status *Status) {
+	appendReading := func(metric string, at time.Time, value float64) {
+		if !slices.Contains(status.Unavailable, metric) {
+			systemMetrics.append(metric, at, value)
+		}
+	}
 	if status == nil {
 		return
 	}
-	systemMetrics.append("cpu", t, status.Cpu)
+	appendReading("cpu", t, status.Cpu)
 	if status.Mem.Total > 0 {
-		systemMetrics.append("mem", t, float64(status.Mem.Current)*100.0/float64(status.Mem.Total))
+		appendReading("mem", t, float64(status.Mem.Current)*100.0/float64(status.Mem.Total))
 	}
 	if status.Swap.Total > 0 {
-		systemMetrics.append("swap", t, float64(status.Swap.Current)*100.0/float64(status.Swap.Total))
+		appendReading("swap", t, float64(status.Swap.Current)*100.0/float64(status.Swap.Total))
 	} else {
-		systemMetrics.append("swap", t, 0)
+		appendReading("swap", t, 0)
 	}
-	systemMetrics.append("netUp", t, float64(status.NetIO.Up))
-	systemMetrics.append("netDown", t, float64(status.NetIO.Down))
-	systemMetrics.append("diskRead", t, float64(status.DiskIO.Read))
-	systemMetrics.append("diskWrite", t, float64(status.DiskIO.Write))
+	appendReading("netUp", t, float64(status.NetIO.Up))
+	appendReading("netDown", t, float64(status.NetIO.Down))
+	appendReading("diskRead", t, float64(status.DiskIO.Read))
+	appendReading("diskWrite", t, float64(status.DiskIO.Write))
 	if status.Disk.Total > 0 {
-		systemMetrics.append("diskUsage", t, float64(status.Disk.Current)*100.0/float64(status.Disk.Total))
+		appendReading("diskUsage", t, float64(status.Disk.Current)*100.0/float64(status.Disk.Total))
 	}
-	systemMetrics.append("pktUp", t, float64(status.NetIO.PktUp))
-	systemMetrics.append("pktDown", t, float64(status.NetIO.PktDown))
-	systemMetrics.append("tcpCount", t, float64(status.TcpCount))
-	systemMetrics.append("udpCount", t, float64(status.UdpCount))
+	appendReading("pktUp", t, float64(status.NetIO.PktUp))
+	appendReading("pktDown", t, float64(status.NetIO.PktDown))
+	appendReading("tcpCount", t, float64(status.TcpCount))
+	appendReading("udpCount", t, float64(status.UdpCount))
 	// Asked of the panel's presence view, not of the Xray process: the count is
 	// every core's clients and every node's, and a panel serving only MTProto or
 	// kernel WireGuard used to graph a flat zero forever. F089.
-	systemMetrics.append("online", t, float64(len(presence.Shared().Online())))
+	appendReading("online", t, float64(len(presence.Shared().Online())))
 	if len(status.Loads) >= 3 {
-		systemMetrics.append("load1", t, status.Loads[0])
-		systemMetrics.append("load5", t, status.Loads[1])
-		systemMetrics.append("load15", t, status.Loads[2])
+		appendReading("load1", t, status.Loads[0])
+		appendReading("load5", t, status.Loads[1])
+		appendReading("load15", t, status.Loads[2])
 	}
+}
+
+func interfaceRate(current, previous uint64, seconds float64) uint64 {
+	if seconds <= 0 || current < previous {
+		return 0
+	}
+	return uint64(float64(current-previous) / seconds)
 }
 
 func (s *ServerService) sampleCPUUtilization() (float64, error) {

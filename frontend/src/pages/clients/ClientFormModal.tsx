@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
+import type { ClientPlanOverrides } from '@/schemas/client';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -66,6 +68,7 @@ interface ApiMsg<T = unknown> {
 type Mode = 'add' | 'edit';
 
 interface SaveMetaEdit {
+  planOverrides?: ClientPlanOverrides;
   isEdit: true;
   email: string;
   attach: number[];
@@ -77,6 +80,7 @@ interface SaveMetaEdit {
 }
 
 interface SaveMetaCreate {
+  planOverrides?: ClientPlanOverrides;
   isEdit: false;
   email: string;
   externalLinks: ExternalLinkInput[];
@@ -89,6 +93,7 @@ interface SaveCreatePayload {
 }
 
 interface ClientFormModalProps {
+  initialPolicyId?: number;
   open: boolean;
   mode: Mode;
   client: ClientRecord | null;
@@ -106,6 +111,10 @@ interface ClientFormModalProps {
 }
 
 type Values = ClientFormValues & {
+  overrideQuota: boolean;
+  overrideExpiry: boolean;
+  overrideLimitIp: boolean;
+  overrideInbounds: boolean;
   expiryDate: number;
   externalLinks: ExternalLinkRow[];
   wgPrivateKey: string;
@@ -121,6 +130,7 @@ type Values = ClientFormValues & {
 };
 
 const EMPTY: Values = {
+  overrideQuota: false, overrideExpiry: false, overrideLimitIp: false, overrideInbounds: false,
   email: '',
   subId: '',
   uuid: '',
@@ -178,6 +188,7 @@ export function resolveTotalBytes(originalBytes: number | null | undefined, disp
 }
 
 export default function ClientFormModal({
+  initialPolicyId = 0,
   open,
   mode,
   client,
@@ -213,9 +224,36 @@ export default function ClientFormModal({
   const wgPrivateKey = useWatch({ control: methods.control, name: 'wgPrivateKey' });
   const limitIp = useWatch({ control: methods.control, name: 'limitIp' });
   const policyId = useWatch({ control: methods.control, name: 'policyId' });
+  const overrideQuota = useWatch({ control: methods.control, name: 'overrideQuota' });
+  const overrideExpiry = useWatch({ control: methods.control, name: 'overrideExpiry' });
+  const overrideLimitIp = useWatch({ control: methods.control, name: 'overrideLimitIp' });
+  const overrideInbounds = useWatch({ control: methods.control, name: 'overrideInbounds' });
+  const plans = usePoliciesQuery({ enabled: open });
+  const selectedPlan = plans.data?.find((plan) => plan.id === policyId);
+  const quotaManaged = policyId > 0 && selectedPlan?.quotaBytes != null && !overrideQuota;
+  const expiryManaged = policyId > 0 && selectedPlan?.durationDays != null && !overrideExpiry;
+  const ipManaged = policyId > 0 && selectedPlan?.limitIp != null && !overrideLimitIp;
+  const inboundsManaged = policyId > 0 && !!selectedPlan?.inboundIds?.length && !overrideInbounds;
+  const selectPlan = useCallback((id: number) => {
+    methods.setValue('policyId', id);
+    const plan = plans.data?.find((p) => p.id === id);
+    if (!plan) return;
+    const values = methods.getValues();
+    if (plan.quotaBytes != null && !values.overrideQuota) methods.setValue('totalGB', plan.quotaBytes / 1073741824);
+    if (plan.limitIp != null && !values.overrideLimitIp) methods.setValue('limitIp', plan.limitIp);
+    if (plan.inboundIds?.length && !values.overrideInbounds) methods.setValue('inboundIds', plan.inboundIds);
+    if (plan.durationDays != null && !values.overrideExpiry) {
+      const delayed = plan.startOnFirstUse && (!isEdit || (client?.expiryTime ?? 0) <= 0) && plan.durationDays > 0;
+      methods.setValue('delayedStart', delayed);
+      methods.setValue('delayedDays', delayed ? plan.durationDays : 0);
+      methods.setValue('expiryDate', delayed || !plan.durationDays ? 0 : Date.now() + plan.durationDays * 86400000);
+      methods.setValue('reset', plan.autoRenewDays);
+    }
+  }, [isEdit, client?.expiryTime, methods, plans.data]);
   /* The Form.Items below are hand-built rather than FormField, so they do not
      get the error rendering FormField already does. This is that. */
   const formErrors = methods.formState.errors;
+  const dirtyFields = methods.formState.dirtyFields;
   function fieldError(name: keyof ClientFormValues) {
     const raw = formErrors[name]?.message;
     if (!raw) return {};
@@ -278,6 +316,10 @@ export default function ClientFormModal({
         wgAllowedIPs: client.allowedIPs || '',
         secret: client.secret || '',
         adTag: client.adTag || '',
+        overrideQuota: client.plan?.overrideQuota ?? false,
+        overrideExpiry: client.plan?.overrideExpiry ?? false,
+        overrideLimitIp: client.plan?.overrideLimitIp ?? false,
+        overrideInbounds: client.plan?.overrideInbounds ?? false,
         policyId: POLICY_UNLOADED,
         policyIdBaseline: POLICY_UNLOADED,
       };
@@ -310,6 +352,10 @@ export default function ClientFormModal({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit]);
+
+  useEffect(() => {
+    if (open && !isEdit && initialPolicyId > 0 && plans.data && methods.getValues('policyId') === 0) selectPlan(initialPolicyId);
+  }, [open, isEdit, initialPolicyId, plans.data, methods, selectPlan]);
 
   const flowCapableIds = useMemo(() => {
     const ids = new Set<number>();
@@ -514,6 +560,18 @@ export default function ClientFormModal({
 
   async function onSubmit() {
     const values = methods.getValues();
+    if (values.policyId > 0 && (!selectedPlan || (!isEdit && selectedPlan.archived))) {
+      messageApi.error(t('telemetry.planUnavailable'));
+      return;
+    }
+    const dirty = dirtyFields;
+    const overrides: ClientPlanOverrides = {
+      quota: dirty.overrideQuota ? values.overrideQuota : undefined,
+      expiry: dirty.overrideExpiry ? values.overrideExpiry : undefined,
+      limitIp: dirty.overrideLimitIp ? values.overrideLimitIp : undefined,
+      inbounds: dirty.overrideInbounds ? values.overrideInbounds : undefined,
+    };
+    const planOverrides = values.policyId > 0 && Object.values(overrides).some((v) => v !== undefined) ? overrides : undefined;
     const schema = isEdit ? ClientFormSchema : ClientCreateFormSchema;
     const validated = schema.safeParse({
       email: values.email,
@@ -647,7 +705,8 @@ export default function ClientFormModal({
         const next = new Set(values.inboundIds || []);
         const toAttach = [...next].filter((id) => !original.has(id));
         const toDetach = [...original].filter((id) => !next.has(id));
-        msg = await save(clientPayload, {
+        msg = await save({ ...clientPayload, inboundIds: values.inboundIds }, {
+          planOverrides,
           isEdit: true,
           email: client.email,
           attach: toAttach,
@@ -658,7 +717,7 @@ export default function ClientFormModal({
       } else {
         msg = await save(
           { client: clientPayload, inboundIds: values.inboundIds },
-          { isEdit: false, email: clientPayload.email as string, externalLinks, policyId: plan },
+          { isEdit: false, email: clientPayload.email as string, externalLinks, policyId: plan, planOverrides },
         );
       }
       if (msg?.success) close();
@@ -748,7 +807,7 @@ export default function ClientFormModal({
                             tooltip={t('pages.clients.totalGBDesc')}
                             transform={{ output: (v) => Number(v) || 0 }}
                           >
-                            <InputNumber min={0} step={1} style={{ width: '100%' }} />
+                            <InputNumber disabled={quotaManaged} min={0} step={1} style={{ width: '100%' }} />
                           </FormField>
                         </Col>
                       </Row>
@@ -761,11 +820,12 @@ export default function ClientFormModal({
                               label={t('pages.clients.expireDays')}
                               transform={{ output: (v) => Number(v) || 0 }}
                             >
-                              <InputNumber min={0} style={{ width: '100%' }} />
+                              <InputNumber disabled={expiryManaged} min={0} style={{ width: '100%' }} />
                             </FormField>
                           ) : (
                             <Form.Item label={t('pages.clients.expiryTime')}>
                               <DateTimePicker
+                                disabled={expiryManaged}
                                 value={expiryDayjs}
                                 onChange={(d) => methods.setValue('expiryDate', d ? d.valueOf() : 0)}
                               />
@@ -776,6 +836,7 @@ export default function ClientFormModal({
                           <Form.Item label={t('pages.clients.delayedStart')}>
                             <Switch
                               checked={delayedStart}
+                              disabled={expiryManaged}
                               onChange={(v) => {
                                 methods.setValue('delayedStart', v);
                                 if (v) methods.setValue('expiryDate', 0);
@@ -792,7 +853,7 @@ export default function ClientFormModal({
                             extra={renewWithoutExpiry ? t('pages.clients.renewNeedsExpiry') : undefined}
                             transform={{ output: (v) => Number(v) || 0 }}
                           >
-                            <InputNumber min={0} style={{ width: '100%' }} />
+                            <InputNumber disabled={expiryManaged} min={0} style={{ width: '100%' }} />
                           </FormField>
                         </Col>
                       </Row>
@@ -844,12 +905,13 @@ export default function ClientFormModal({
                       )}
 
                       <Form.Item label={t('pages.clients.attachedInbounds')} required={!isEdit} {...fieldError('inboundIds')}>
-                        <SelectAllClearButtons
+                        {!inboundsManaged && <SelectAllClearButtons
                           options={inboundOptions}
                           value={inboundIds}
                           onChange={(v) => methods.setValue('inboundIds', v)}
-                        />
+                        />}
                         <Select
+                          disabled={inboundsManaged}
                           mode="multiple"
                           value={inboundIds}
                           onChange={(v) => methods.setValue('inboundIds', v)}
@@ -880,7 +942,7 @@ export default function ClientFormModal({
                         <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')} {...fieldError('limitIp')}>
                           <IpLimitControl
                             value={limitIp}
-                            disabled={limitIpDisabled}
+                            disabled={limitIpDisabled || ipManaged}
                             notice={limitIpNotice || undefined}
                             onChange={(v) => methods.setValue('limitIp', v)}
                             addon={isEdit ? (
@@ -903,8 +965,19 @@ export default function ClientFormModal({
                             methods.setValue('policyId', id);
                             methods.setValue('policyIdBaseline', id);
                           }}
-                          onSelect={(id) => methods.setValue('policyId', id)}
+                          onSelect={selectPlan}
                         />
+                        {policyId > 0 && <Space orientation="vertical" style={{ marginTop: 12 }}>
+                          <span className="p-sub">{t('telemetry.planManaged')}</span>
+                          {([
+                            ['overrideQuota', t('telemetry.overrideQuota'), overrideQuota],
+                            ['overrideExpiry', t('telemetry.overrideExpiry'), overrideExpiry],
+                            ['overrideLimitIp', t('telemetry.overrideLimitIp'), overrideLimitIp],
+                            ['overrideInbounds', t('telemetry.overrideInbounds'), overrideInbounds],
+                          ] as const).map(([key, label, checked]) => <Space key={key}>
+                            <Switch size="small" aria-label={label} checked={checked} onChange={(v) => methods.setValue(key, v, { shouldDirty: true })} />{label}
+                          </Space>)}
+                        </Space>}
                       </Col>
                     </Row>
                   ),

@@ -124,7 +124,7 @@ func crossPanelTrafficIsLive(tx *gorm.DB) bool {
 // the predicate cannot carry a second opinion about what a client has used.
 // Placeholders: whatever used binds, then now.
 func depletedCondFrom(used string) string {
-	return `((total > 0 AND ` + used + ` >= total)
+	return `((total > 0 AND ` + used + ` >= total AND (` + PlanQuotaDisableSQL() + `))
 	OR (expiry_time > 0 AND expiry_time <= ?))`
 }
 

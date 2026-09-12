@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	htmlpkg "html"
 	"io/fs"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/config"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/session"
 )
 
@@ -24,16 +26,37 @@ func SetDistFS(fsys fs.FS) {
 
 var distPageBuildTime = time.Now()
 
-// ServeOpenAPISpec returns the generated OpenAPI 3.0 description of the
-// panel API. Postman / Insomnia / openapi-generator consume this URL
-// directly; the in-panel Swagger UI page also fetches it. The spec is
-// produced at frontend build time by scripts/build-openapi.mjs and
-// embedded into the binary via the dist FS.
+// ServeOpenAPISpec serves the embedded schema with the authenticated role's API surface.
+// Shared components remain available so retained operations keep their schema references.
 func ServeOpenAPISpec(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	c.Writer.Header().Add("Vary", "Cookie, Authorization")
+	user := session.GetLoginUser(c)
+	if user == nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var reseller *service.SignedInUser
+	if !session.IsAdminUser(user) {
+		var err error
+		reseller, err = (&service.ResellerService{}).Me(user)
+		if err != nil {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+	}
 	body, err := fs.ReadFile(distFS, "dist/openapi.json")
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "msg": "openapi.json not found"})
 		return
+	}
+	if reseller != nil {
+		body, err = withResellerOpenAPI(body, reseller.Permissions.Plans)
+		if err != nil {
+			logger.Warning("openapi.json: could not filter reseller paths:", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// The embedded spec ships with `servers: [{url: "/"}]`. When the panel runs
@@ -48,8 +71,44 @@ func ServeOpenAPISpec(c *gin.Context) {
 		}
 	}
 
-	c.Header("Cache-Control", "public, max-age=300")
 	c.Data(http.StatusOK, "application/json; charset=utf-8", body)
+}
+
+func withResellerOpenAPI(spec []byte, allowPlans bool) ([]byte, error) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		return nil, err
+	}
+	var paths map[string]json.RawMessage
+	if err := json.Unmarshal(doc["paths"], &paths); err != nil {
+		return nil, err
+	}
+	if paths == nil {
+		return nil, errors.New("OpenAPI paths must be an object")
+	}
+	for path := range paths {
+		if !resellerOpenAPIPath(path, allowPlans) {
+			delete(paths, path)
+		}
+	}
+	filtered, err := json.Marshal(paths)
+	if err != nil {
+		return nil, err
+	}
+	doc["paths"] = filtered
+	delete(doc, "x-websocket-messages")
+	return json.Marshal(doc)
+}
+
+func resellerOpenAPIPath(path string, allowPlans bool) bool {
+	switch path {
+	case "/panel/api/me", "/panel/api/activity", "/panel/api/activity/read", "/panel/api/activity/alerts":
+		return true
+	}
+	if !allowPlans && (path == "/panel/api/reseller/plans" || strings.HasPrefix(path, "/panel/api/reseller/plans/")) {
+		return false
+	}
+	return strings.HasPrefix(path, "/panel/api/reseller/")
 }
 
 // withServerBasePath rewrites the spec's `servers` entry so requests target the

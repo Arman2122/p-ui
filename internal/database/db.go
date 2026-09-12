@@ -80,6 +80,19 @@ func allModels() []any {
 		&model.PolicyInbound{},
 		&model.RoutingRule{},
 		&model.ClientBan{},
+		&model.ActivityEvent{},
+		&model.ActivityRead{},
+		&model.ResellerAccount{},
+		&model.ResellerInboundGrant{},
+		&model.ResellerPausedClient{},
+		&model.ResellerToken{},
+		&model.ResellerAllocation{},
+		&model.ResellerUsageSource{},
+		&model.ResellerClientUsage{},
+		&model.ClientTrafficSample{},
+		&model.ClientHistoryCursor{},
+		&model.GroupQuota{},
+		&model.GroupInbound{},
 	}
 }
 
@@ -112,6 +125,15 @@ func initModels() error {
 		return err
 	}
 	if err := migratePlanTemplateInbounds(); err != nil {
+		return err
+	}
+	if err := migrateActivityReadReferences(); err != nil {
+		return err
+	}
+	if err := migrateResellerUsage(); err != nil {
+		return err
+	}
+	if err := migrateDesignProductReferences(); err != nil {
 		return err
 	}
 	if err := normalizeApiTokenCreatedAtSeconds(); err != nil {
@@ -2420,4 +2442,18 @@ func migrateDropHostIsHidden() error {
 		return nil
 	}
 	return db.Migrator().DropColumn(&model.Host{}, "is_hidden")
+}
+
+func migrateActivityReadReferences() error {
+	for _, fk := range []struct{ name, statement string }{
+		{"activity_reads_event_fk", "ALTER TABLE activity_reads ADD CONSTRAINT activity_reads_event_fk FOREIGN KEY (event_id) REFERENCES activity_events(id) ON DELETE CASCADE"},
+		{"activity_reads_user_fk", "ALTER TABLE activity_reads ADD CONSTRAINT activity_reads_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"},
+	} {
+		if !db.Migrator().HasConstraint(&model.ActivityRead{}, fk.name) {
+			if err := db.Exec(fk.statement).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

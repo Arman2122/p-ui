@@ -7,6 +7,30 @@ export const PROTOCOL_VALUES = ['vmess', 'vless', 'tunnel', 'http', 'trojan', 's
 export const ProtocolSchema = z.enum(PROTOCOL_VALUES);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
+export const ActivityPageSchema = z.object({
+  generation: z.string(),
+  items: z.array(z.lazy(() => ActivityViewSchema)),
+  nextBefore: z.number().int(),
+  recent: z.number().int(),
+  unread: z.number().int(),
+});
+export type ActivityPage = z.infer<typeof ActivityPageSchema>;
+
+export const ActivityViewSchema = z.object({
+  at: z.number().int(),
+  category: z.string(),
+  id: z.string(),
+  kind: z.string(),
+  level: z.string(),
+  message: z.string(),
+  messageKey: z.string(),
+  params: z.record(z.string(), z.string()),
+  read: z.boolean(),
+  title: z.string(),
+  titleKey: z.string(),
+});
+export type ActivityView = z.infer<typeof ActivityViewSchema>;
+
 export const AllSettingSchema = z.object({
   datepicker: z.string(),
   expireDiff: z.number().int().min(0),
@@ -260,6 +284,51 @@ export const ApiTokenViewSchema = z.object({
 });
 export type ApiTokenView = z.infer<typeof ApiTokenViewSchema>;
 
+export const BackupCreateOptionsSchema = z.object({
+  encrypt: z.boolean(),
+  passphrase: z.string(),
+  sendToTelegram: z.boolean(),
+});
+export type BackupCreateOptions = z.infer<typeof BackupCreateOptionsSchema>;
+
+export const BackupRecordViewSchema = z.object({
+  available: z.boolean(),
+  encrypted: z.boolean(),
+  error: z.string(),
+  filename: z.string(),
+  finishedAt: z.number().int(),
+  id: z.string(),
+  operation: z.string(),
+  size: z.number().int(),
+  source: z.string(),
+  startedAt: z.number().int(),
+  status: z.string(),
+  telegramError: z.string(),
+  telegramStatus: z.string(),
+});
+export type BackupRecordView = z.infer<typeof BackupRecordViewSchema>;
+
+export const BackupScheduleSchema = z.object({
+  cadence: z.string(),
+  enabled: z.boolean(),
+  encrypt: z.boolean(),
+  keep: z.number().int(),
+  sendToTelegram: z.boolean(),
+});
+export type BackupSchedule = z.infer<typeof BackupScheduleSchema>;
+
+export const BackupStatusViewSchema = z.object({
+  busy: z.boolean(),
+  directory: z.string(),
+  managedCoreConfigs: z.boolean(),
+  nextRun: z.number().int(),
+  records: z.array(z.lazy(() => BackupRecordViewSchema)),
+  schedule: z.lazy(() => BackupScheduleSchema),
+  telegramAvailable: z.boolean(),
+  trafficHistory: z.boolean(),
+});
+export type BackupStatusView = z.infer<typeof BackupStatusViewSchema>;
+
 export const BanViewSchema = z.object({
   clientEmail: z.string(),
   createdAt: z.number().int(),
@@ -332,6 +401,58 @@ export const ClientConfigFileSchema = z.object({
 });
 export type ClientConfigFile = z.infer<typeof ClientConfigFileSchema>;
 
+export const ClientCreatePayloadSchema = z.object({
+  adTag: z.string().optional(),
+  allowedIPs: z.array(z.string()).optional(),
+  auth: z.string().optional(),
+  comment: z.string(),
+  created_at: z.number().int().optional(),
+  email: z.string(),
+  enable: z.boolean(),
+  expiryTime: z.number().int(),
+  externalLinks: z.array(z.lazy(() => ExternalLinkInputSchema)).optional(),
+  flow: z.string().optional(),
+  group: z.string().optional(),
+  id: z.string().optional(),
+  inboundIds: z.array(z.number().int()),
+  keepAlive: z.number().int().optional(),
+  limitIp: z.number().int(),
+  password: z.string().optional(),
+  planOverrides: z.lazy(() => PlanOverridesSchema).nullable().optional(),
+  policyId: z.number().int().nullable().optional(),
+  preSharedKey: z.string().nullable().optional(),
+  privateKey: z.string().optional(),
+  publicKey: z.string().optional(),
+  reset: z.number().int(),
+  reverse: z.lazy(() => ClientReverseSchema).nullable().optional(),
+  secret: z.string().optional(),
+  security: z.string(),
+  subId: z.string(),
+  tgId: z.number().int(),
+  tlsCryptV2: z.string().optional(),
+  totalGB: z.number().int(),
+  updated_at: z.number().int().optional(),
+  username: z.string().optional(),
+});
+export type ClientCreatePayload = z.infer<typeof ClientCreatePayloadSchema>;
+
+export const ClientGroupSchema = z.object({
+  createdAt: z.number().int(),
+  id: z.number().int(),
+  name: z.string(),
+  resetDown: z.number().int(),
+  resetUp: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type ClientGroup = z.infer<typeof ClientGroupSchema>;
+
+export const ClientHistoryPointSchema = z.object({
+  down: z.number().int(),
+  t: z.number().int(),
+  up: z.number().int(),
+});
+export type ClientHistoryPoint = z.infer<typeof ClientHistoryPointSchema>;
+
 export const ClientInboundSchema = z.object({
   clientId: z.number().int(),
   createdAt: z.number().int(),
@@ -346,9 +467,38 @@ export const ClientLocalAddressSchema = z.object({
 });
 export type ClientLocalAddress = z.infer<typeof ClientLocalAddressSchema>;
 
+export const ClientPageResponseSchema = z.object({
+  filtered: z.number().int(),
+  groups: z.array(z.string()),
+  items: z.array(z.lazy(() => ClientSlimSchema)),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  summary: z.lazy(() => ClientsSummarySchema),
+  total: z.number().int(),
+});
+export type ClientPageResponse = z.infer<typeof ClientPageResponseSchema>;
+
+export const ClientPlanMetadataSchema = z.object({
+  name: z.string(),
+  overridden: z.boolean(),
+  overrideExpiry: z.boolean(),
+  overrideInbounds: z.boolean(),
+  overrideLimitIp: z.boolean(),
+  overrideQuota: z.boolean(),
+  pending: z.boolean(),
+  policyId: z.number().int().nullable().optional(),
+  unresolved: z.boolean(),
+});
+export type ClientPlanMetadata = z.infer<typeof ClientPlanMetadataSchema>;
+
 export const ClientPolicySchema = z.object({
+  appliedDurationDays: z.number().int().nullable().optional(),
+  appliedOnDepletion: z.string(),
+  appliedResetCycle: z.string(),
   appliedRev: z.number().int(),
+  depletionNotifiedAt: z.number().int(),
   email: z.string(),
+  lastResetAt: z.number().int(),
   overrideExpiry: z.boolean(),
   overrideInbounds: z.boolean(),
   overrideLimitIp: z.boolean(),
@@ -372,6 +522,7 @@ export const ClientRecordSchema = z.object({
   id: z.number().int(),
   keepAlive: z.number().int(),
   limitIp: z.number().int(),
+  ownerUserId: z.number().int().nullable().optional(),
   password: z.string(),
   preSharedKey: z.string(),
   privateKey: z.string(),
@@ -392,6 +543,26 @@ export const ClientReverseSchema = z.object({
 });
 export type ClientReverse = z.infer<typeof ClientReverseSchema>;
 
+export const ClientSlimSchema = z.object({
+  comment: z.string().optional(),
+  createdAt: z.number().int(),
+  disabledReason: z.string().optional(),
+  email: z.string(),
+  enable: z.boolean(),
+  expiryTime: z.number().int(),
+  group: z.string().optional(),
+  history: z.array(z.lazy(() => ClientHistoryPointSchema)),
+  inboundIds: z.array(z.number().int()),
+  limitIp: z.number().int(),
+  plan: z.lazy(() => ClientPlanMetadataSchema).nullable().optional(),
+  reset: z.number().int(),
+  subId: z.string(),
+  totalGB: z.number().int(),
+  traffic: z.lazy(() => ClientTrafficSchema).nullable().optional(),
+  updatedAt: z.number().int(),
+});
+export type ClientSlim = z.infer<typeof ClientSlimSchema>;
+
 export const ClientTrafficSchema = z.object({
   down: z.number().int(),
   email: z.string(),
@@ -407,6 +578,57 @@ export const ClientTrafficSchema = z.object({
   uuid: z.string(),
 });
 export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
+
+export const ClientUpdateOptionsSchema = z.object({
+  inboundIds: z.array(z.number().int()).nullable().optional(),
+  planOverrides: z.lazy(() => PlanOverridesSchema).nullable().optional(),
+  policyId: z.number().int().nullable().optional(),
+});
+export type ClientUpdateOptions = z.infer<typeof ClientUpdateOptionsSchema>;
+
+export const ClientsSummarySchema = z.object({
+  active: z.number().int(),
+  deactive: z.array(z.string()),
+  deactiveCount: z.number().int(),
+  depleted: z.array(z.string()),
+  depletedCount: z.number().int(),
+  expiring: z.array(z.string()),
+  expiringCount: z.number().int(),
+  online: z.array(z.string()),
+  onlineCount: z.number().int(),
+  total: z.number().int(),
+});
+export type ClientsSummary = z.infer<typeof ClientsSummarySchema>;
+
+export const CoreConfigInstanceViewSchema = z.object({
+  enabled: z.boolean(),
+  id: z.number().int(),
+  kind: z.string(),
+  listen: z.string(),
+  port: z.number().int(),
+  remark: z.string(),
+  settings: z.string(),
+  sniffing: z.string(),
+  streamSettings: z.string(),
+  tag: z.string(),
+});
+export type CoreConfigInstanceView = z.infer<typeof CoreConfigInstanceViewSchema>;
+
+export const CoreConfigValidateFormSchema = z.object({
+  document: z.string(),
+  kind: z.string(),
+});
+export type CoreConfigValidateForm = z.infer<typeof CoreConfigValidateFormSchema>;
+
+export const CoreConfigViewSchema = z.object({
+  id: z.string(),
+  instanceValidation: z.boolean(),
+  instances: z.array(z.lazy(() => CoreConfigInstanceViewSchema)),
+  template: z.string(),
+  templateEditable: z.boolean(),
+  titleKey: z.string(),
+});
+export type CoreConfigView = z.infer<typeof CoreConfigViewSchema>;
 
 export const CoreStatusViewSchema = z.object({
   available: z.boolean(),
@@ -494,11 +716,61 @@ export const EnforcedLimitsSchema = z.object({
 });
 export type EnforcedLimits = z.infer<typeof EnforcedLimitsSchema>;
 
+export const ExternalLinkInputSchema = z.object({
+  kind: z.string(),
+  remark: z.string(),
+  value: z.string(),
+});
+export type ExternalLinkInput = z.infer<typeof ExternalLinkInputSchema>;
+
 export const FallbackParentInfoSchema = z.object({
   masterId: z.number().int(),
   path: z.string().optional(),
 });
 export type FallbackParentInfo = z.infer<typeof FallbackParentInfoSchema>;
+
+export const GroupDetailsSchema = z.object({
+  clientCount: z.number().int(),
+  down: z.number().int(),
+  expiringCount: z.number().int(),
+  history: z.array(z.lazy(() => ClientHistoryPointSchema)),
+  inboundIds: z.array(z.number().int()),
+  name: z.string(),
+  onlineCount: z.number().int(),
+  quotaBytes: z.number().int(),
+  sharedInboundIds: z.array(z.number().int()),
+  trafficUsed: z.number().int(),
+  up: z.number().int(),
+});
+export type GroupDetails = z.infer<typeof GroupDetailsSchema>;
+
+export const GroupInboundSchema = z.object({
+  inboundId: z.number().int(),
+  name: z.string(),
+});
+export type GroupInbound = z.infer<typeof GroupInboundSchema>;
+
+export const GroupQuotaSchema = z.object({
+  name: z.string(),
+  quotaBytes: z.number().int(),
+});
+export type GroupQuota = z.infer<typeof GroupQuotaSchema>;
+
+export const GroupQuotaRequestSchema = z.object({
+  inboundIds: z.array(z.number().int()).nullable().optional(),
+  name: z.string(),
+  quotaBytes: z.number().int(),
+});
+export type GroupQuotaRequest = z.infer<typeof GroupQuotaRequestSchema>;
+
+export const GroupSummarySchema = z.object({
+  clientCount: z.number().int(),
+  down: z.number().int(),
+  name: z.string(),
+  trafficUsed: z.number().int(),
+  up: z.number().int(),
+});
+export type GroupSummary = z.infer<typeof GroupSummarySchema>;
 
 export const HistoryOfSeedersSchema = z.object({
   id: z.number().int(),
@@ -668,6 +940,19 @@ export const IpLimitStatusSchema = z.object({
 });
 export type IpLimitStatus = z.infer<typeof IpLimitStatusSchema>;
 
+export const MetricHistoryWindowSchema = z.object({
+  bucket: z.number().int(),
+  end: z.number().int(),
+  series: z.record(z.string(), z.array(z.lazy(() => MetricSampleSchema))),
+});
+export type MetricHistoryWindow = z.infer<typeof MetricHistoryWindowSchema>;
+
+export const MetricSampleSchema = z.object({
+  t: z.number().int(),
+  v: z.number(),
+});
+export type MetricSample = z.infer<typeof MetricSampleSchema>;
+
 export const MsgSchema = z.object({
   msg: z.string(),
   obj: z.unknown(),
@@ -720,6 +1005,15 @@ export const NodeSchema = z.object({
 });
 export type Node = z.infer<typeof NodeSchema>;
 
+export const NodeInboundTelemetrySchema = z.object({
+  down: z.number().int(),
+  id: z.number().int(),
+  protocol: z.string(),
+  tag: z.string(),
+  up: z.number().int(),
+});
+export type NodeInboundTelemetry = z.infer<typeof NodeInboundTelemetrySchema>;
+
 export const NodeMutationRequestSchema = z.object({
   address: z.string(),
   allowPrivateAddress: z.boolean(),
@@ -763,6 +1057,7 @@ export const NodeViewSchema = z.object({
   lastHeartbeat: z.number().int(),
   latencyMs: z.number().int(),
   memPct: z.number(),
+  metricsAvailable: z.boolean(),
   name: z.string(),
   netDown: z.number().int(),
   netUp: z.number().int(),
@@ -774,6 +1069,7 @@ export const NodeViewSchema = z.object({
   port: z.number().int(),
   remark: z.string(),
   scheme: z.string(),
+  servedInbounds: z.array(z.lazy(() => NodeInboundTelemetrySchema)),
   status: z.string(),
   tlsVerifyMode: z.string(),
   transitive: z.boolean().optional(),
@@ -802,16 +1098,102 @@ export const PanelUpdateStatusSchema = z.object({
 });
 export type PanelUpdateStatus = z.infer<typeof PanelUpdateStatusSchema>;
 
+export const PlanApplyFailureSchema = z.object({
+  email: z.string(),
+  reason: z.string(),
+});
+export type PlanApplyFailure = z.infer<typeof PlanApplyFailureSchema>;
+
+export const PlanApplyResultSchema = z.object({
+  appliedRev: z.number().int(),
+  email: z.string(),
+  needRestart: z.boolean(),
+  policyId: z.number().int(),
+});
+export type PlanApplyResult = z.infer<typeof PlanApplyResultSchema>;
+
+export const PlanCycleResultSchema = z.object({
+  needRestart: z.boolean(),
+  notices: z.array(z.lazy(() => PlanDepletionNoticeSchema)),
+  reset: z.number().int(),
+});
+export type PlanCycleResult = z.infer<typeof PlanCycleResultSchema>;
+
+export const PlanDepletionNoticeSchema = z.object({
+  email: z.string(),
+  ownerUserId: z.number().int().nullable().optional(),
+  planName: z.string(),
+  policyId: z.number().int(),
+  quotaBytes: z.number().int(),
+  usedBytes: z.number().int(),
+});
+export type PlanDepletionNotice = z.infer<typeof PlanDepletionNoticeSchema>;
+
+export const PlanMemberSchema = z.object({
+  appliedRev: z.number().int(),
+  email: z.string(),
+  enable: z.boolean(),
+  expiryTime: z.number().int(),
+  group: z.string(),
+  overrideExpiry: z.boolean(),
+  overrideInbounds: z.boolean(),
+  overrideLimitIp: z.boolean(),
+  overrideQuota: z.boolean(),
+  pending: z.boolean(),
+  quotaBytes: z.number().int(),
+  usedBytes: z.number().int(),
+});
+export type PlanMember = z.infer<typeof PlanMemberSchema>;
+
+export const PlanMemberPageSchema = z.object({
+  items: z.array(z.lazy(() => PlanMemberSchema)),
+  total: z.number().int(),
+});
+export type PlanMemberPage = z.infer<typeof PlanMemberPageSchema>;
+
+export const PlanOverridesSchema = z.object({
+  expiry: z.boolean().nullable().optional(),
+  inbounds: z.boolean().nullable().optional(),
+  limitIp: z.boolean().nullable().optional(),
+  quota: z.boolean().nullable().optional(),
+});
+export type PlanOverrides = z.infer<typeof PlanOverridesSchema>;
+
+export const PlanReapplyResultSchema = z.object({
+  applied: z.number().int(),
+  failures: z.array(z.lazy(() => PlanApplyFailureSchema)),
+  needRestart: z.boolean(),
+});
+export type PlanReapplyResult = z.infer<typeof PlanReapplyResultSchema>;
+
+export const PlanSummarySchema = z.object({
+  withoutPlan: z.number().int(),
+});
+export type PlanSummary = z.infer<typeof PlanSummarySchema>;
+
 export const PolicySchema = z.object({
+  archived: z.boolean(),
+  assignedClients: z.number().int(),
+  autoRenewDays: z.number().int(),
+  burst: z.boolean(),
+  committedBytes: z.number().int(),
   createdAt: z.number().int(),
+  description: z.string(),
   durationDays: z.number().int().nullable().optional(),
   id: z.number().int(),
+  inboundIds: z.array(z.number().int()),
   limitIp: z.number().int().nullable().optional(),
   name: z.string(),
+  onDepletion: z.string(),
+  ownerUserId: z.number().int().nullable().optional(),
+  pendingClients: z.number().int(),
   quotaBytes: z.number().int().nullable().optional(),
+  resetCycle: z.string(),
   rev: z.number().int(),
+  startOnFirstUse: z.boolean(),
   tiers: z.unknown(),
   updatedAt: z.number().int(),
+  usedBytes: z.number().int(),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 
@@ -850,6 +1232,166 @@ export const RealityScanResultSchema = z.object({
   x25519: z.boolean(),
 });
 export type RealityScanResult = z.infer<typeof RealityScanResultSchema>;
+
+export const ResellerAccountSchema = z.object({
+  allowExtend: z.boolean(),
+  allowPlans: z.boolean(),
+  allowReset: z.boolean(),
+  allowSuspend: z.boolean(),
+  allowTopUp: z.boolean(),
+  budgetBlocked: z.boolean(),
+  clientCap: z.number().int(),
+  createdAt: z.number().int(),
+  email: z.string(),
+  expiresAt: z.number().int(),
+  name: z.string(),
+  note: z.string().optional(),
+  notifyOnDepletion: z.boolean(),
+  suspended: z.boolean(),
+  trafficAllocated: z.number().int(),
+  trafficLimit: z.number().int(),
+  trafficUsed: z.number().int(),
+  updatedAt: z.number().int(),
+  userId: z.number().int(),
+});
+export type ResellerAccount = z.infer<typeof ResellerAccountSchema>;
+
+export const ResellerClientInputSchema = z.object({
+  comment: z.string(),
+  email: z.string(),
+  enable: z.boolean(),
+  expiryTime: z.number().int(),
+  inboundIds: z.array(z.number().int()),
+  limitIp: z.number().int(),
+  planId: z.number().int(),
+  totalGB: z.number().int(),
+});
+export type ResellerClientInput = z.infer<typeof ResellerClientInputSchema>;
+
+export const ResellerClientPageSchema = z.object({
+  items: z.array(z.lazy(() => ResellerClientViewSchema)),
+  total: z.number().int(),
+});
+export type ResellerClientPage = z.infer<typeof ResellerClientPageSchema>;
+
+export const ResellerClientViewSchema = z.object({
+  comment: z.string(),
+  email: z.string(),
+  enable: z.boolean(),
+  expiryTime: z.number().int(),
+  history: z.array(z.lazy(() => ClientHistoryPointSchema)).optional(),
+  id: z.number().int(),
+  inboundIds: z.array(z.number().int()),
+  lastOnline: z.number().int(),
+  limitIp: z.number().int(),
+  plan: z.lazy(() => ClientPlanMetadataSchema).nullable().optional(),
+  subId: z.string(),
+  totalGB: z.number().int(),
+  trafficUsed: z.number().int(),
+});
+export type ResellerClientView = z.infer<typeof ResellerClientViewSchema>;
+
+export const ResellerDashboardViewSchema = z.object({
+  active: z.number().int(),
+  attention: z.array(z.lazy(() => ResellerClientViewSchema)),
+  inbounds: z.array(z.lazy(() => ResellerInboundViewSchema)),
+  online: z.number().int(),
+  reseller: z.lazy(() => ResellerViewSchema).nullable().optional(),
+  sales: z.array(z.lazy(() => ResellerSaleDaySchema)),
+});
+export type ResellerDashboardView = z.infer<typeof ResellerDashboardViewSchema>;
+
+export const ResellerInboundViewSchema = z.object({
+  clients: z.number().int(),
+  enable: z.boolean(),
+  id: z.number().int(),
+  protocol: z.string(),
+  remark: z.string(),
+  trafficUsed: z.number().int(),
+});
+export type ResellerInboundView = z.infer<typeof ResellerInboundViewSchema>;
+
+export const ResellerInputSchema = z.object({
+  allowExtend: z.boolean(),
+  allowPlans: z.boolean(),
+  allowReset: z.boolean(),
+  allowSuspend: z.boolean(),
+  allowTopUp: z.boolean(),
+  clientCap: z.number().int(),
+  email: z.string(),
+  expiresAt: z.number().int(),
+  inboundIds: z.array(z.number().int()),
+  name: z.string(),
+  note: z.string(),
+  notifyOnDepletion: z.boolean(),
+  password: z.string(),
+  trafficLimit: z.number().int(),
+  username: z.string(),
+});
+export type ResellerInput = z.infer<typeof ResellerInputSchema>;
+
+export const ResellerMutationResultSchema = z.object({
+  clientId: z.number().int(),
+  pending: z.boolean(),
+});
+export type ResellerMutationResult = z.infer<typeof ResellerMutationResultSchema>;
+
+export const ResellerPasswordRequestSchema = z.object({
+  current: z.string(),
+  password: z.string(),
+});
+export type ResellerPasswordRequest = z.infer<typeof ResellerPasswordRequestSchema>;
+
+export const ResellerPermissionsSchema = z.object({
+  extend: z.boolean(),
+  plans: z.boolean(),
+  reset: z.boolean(),
+  suspend: z.boolean(),
+  topUp: z.boolean(),
+});
+export type ResellerPermissions = z.infer<typeof ResellerPermissionsSchema>;
+
+export const ResellerSaleDaySchema = z.object({
+  bytes: z.number().int(),
+  day: z.string(),
+});
+export type ResellerSaleDay = z.infer<typeof ResellerSaleDaySchema>;
+
+export const ResellerSuspendRequestSchema = z.object({
+  suspended: z.boolean().nullable().optional(),
+});
+export type ResellerSuspendRequest = z.infer<typeof ResellerSuspendRequestSchema>;
+
+export const ResellerTokenRequestSchema = z.object({
+  expiresAt: z.number().int(),
+  name: z.string(),
+});
+export type ResellerTokenRequest = z.infer<typeof ResellerTokenRequestSchema>;
+
+export const ResellerTokenViewSchema = z.object({
+  createdAt: z.number().int(),
+  expiresAt: z.number().int(),
+  id: z.number().int(),
+  name: z.string(),
+  token: z.string().optional(),
+});
+export type ResellerTokenView = z.infer<typeof ResellerTokenViewSchema>;
+
+export const ResellerTopUpRequestSchema = z.object({
+  clients: z.number().int(),
+  days: z.number().int(),
+  traffic: z.number().int(),
+});
+export type ResellerTopUpRequest = z.infer<typeof ResellerTopUpRequestSchema>;
+
+export const ResellerViewSchema = z.object({
+  account: z.lazy(() => ResellerAccountSchema),
+  clients: z.number().int(),
+  inboundIds: z.array(z.number().int()),
+  trafficUsed: z.number().int(),
+  username: z.string(),
+});
+export type ResellerView = z.infer<typeof ResellerViewSchema>;
 
 export const RoutingExitViewSchema = z.object({
   id: z.number().int(),
@@ -925,9 +1467,58 @@ export const SettingSchema = z.object({
 });
 export type Setting = z.infer<typeof SettingSchema>;
 
+export const SettingsAPITokenViewSchema = z.object({
+  allowedIPs: z.string(),
+  createdAt: z.number().int(),
+  enabled: z.boolean(),
+  expiresAt: z.number().int(),
+  id: z.number().int(),
+  name: z.string(),
+  scope: z.string(),
+  token: z.string().optional(),
+});
+export type SettingsAPITokenView = z.infer<typeof SettingsAPITokenViewSchema>;
+
+export const SignedInUserSchema = z.object({
+  home: z.string(),
+  id: z.number().int(),
+  permissions: z.lazy(() => ResellerPermissionsSchema),
+  role: z.string(),
+  username: z.string(),
+});
+export type SignedInUser = z.infer<typeof SignedInUserSchema>;
+
+export const StatusSchema = z.object({
+  appStats: z.unknown(),
+  cpu: z.number(),
+  cpuCores: z.number().int(),
+  cpuSpeedMhz: z.number(),
+  disk: z.unknown(),
+  diskIO: z.unknown(),
+  diskTraffic: z.unknown(),
+  listenPort: z.number().int().optional(),
+  loads: z.array(z.number()),
+  logicalPro: z.number().int(),
+  mem: z.unknown(),
+  netIO: z.unknown(),
+  netTraffic: z.unknown(),
+  observedAt: z.number().int(),
+  panelGuid: z.string(),
+  panelVersion: z.string(),
+  publicIP: z.unknown(),
+  swap: z.unknown(),
+  tcpCount: z.number().int(),
+  udpCount: z.number().int(),
+  unavailable: z.array(z.string()),
+  uptime: z.number().int(),
+  xray: z.unknown(),
+});
+export type Status = z.infer<typeof StatusSchema>;
+
 export const UserSchema = z.object({
   id: z.number().int(),
   password: z.string(),
+  role: z.string(),
   username: z.string(),
 });
 export type User = z.infer<typeof UserSchema>;

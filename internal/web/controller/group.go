@@ -29,12 +29,13 @@ func (a *GroupController) initRouter(g *gin.RouterGroup) {
 	g.POST("/groups/rename", a.rename)
 	g.POST("/groups/delete", a.delete)
 	g.POST("/groups/resetTraffic", a.resetTraffic)
+	g.POST("/groups/quota", a.quota)
 	g.POST("/groups/bulkAdd", a.bulkAdd)
 	g.POST("/groups/bulkRemove", a.bulkRemove)
 }
 
 func (a *GroupController) list(c *gin.Context) {
-	rows, err := a.clientService.ListGroups()
+	rows, err := a.clientService.ListGroupDetails()
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
@@ -54,6 +55,20 @@ func (a *GroupController) emails(c *gin.Context) {
 
 type groupCreateBody struct {
 	Name string `json:"name"`
+}
+
+func (a *GroupController) quota(c *gin.Context) {
+	var body service.GroupQuotaRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.clientService.SetGroupQuota(body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, body, nil)
+	notifyClientsChanged()
 }
 
 func (a *GroupController) create(c *gin.Context) {
@@ -151,6 +166,16 @@ func (a *GroupController) bulkAdd(c *gin.Context) {
 	}
 	result, err := a.clientService.AddToGroupOutcome(emails, req.Group)
 	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.clientService.ApplyGroupInbounds(req.Group); err != nil {
+		notifyClientsChanged()
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("group membership saved; shared inbounds could not be applied:", err))
+		return
+	}
+	if err := a.clientService.EnforceGroupQuotas(); err != nil {
+		notifyClientsChanged()
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
