@@ -33,6 +33,7 @@ interface ApiMsg<T = unknown> {
 }
 
 interface GeneralTabProps {
+  section?: string;
   allSetting: AllSetting;
   updateSetting: (patch: Partial<AllSetting>) => void;
 }
@@ -42,7 +43,7 @@ const DATEPICKER_LIST: { name: string; value: 'gregorian' | 'jalalian' }[] = [
   { name: 'Jalalian (شمسی)', value: 'jalalian' },
 ];
 
-export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProps) {
+export default function GeneralTab({ allSetting, updateSetting, section }: GeneralTabProps) {
   const { t } = useTranslation();
   const { isMobile } = useMediaQuery();
 
@@ -157,8 +158,7 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
     [],
   );
 
-  return (
-    <Tabs defaultActiveKey="1" items={[
+  const items = [
       {
         key: '1',
         label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
@@ -436,6 +436,6 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
           </>
         ),
       },
-    ]} />
-  );
+    ];
+  return section ? <>{items.find((item) => item.key === section)?.children}</> : <Tabs defaultActiveKey="1" items={items} />;
 }

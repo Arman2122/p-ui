@@ -44,6 +44,7 @@ import {
 } from '@/schemas/forms/inbound-form';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
 import { wireguardPoolUsage, type WireguardPoolClient } from '@/lib/xray/wireguard-pool';
 import { unavailableKinds } from '@/lib/cores/core-availability';
@@ -203,6 +204,7 @@ export default function InboundFormModal({
   availableNodesFetched = true,
 }: InboundFormModalProps) {
   const { t } = useTranslation();
+  const { isMobile } = useMediaQuery();
   const [messageApi, messageContextHolder] = message.useMessage();
   const methods = useForm<InboundFormValues>({ defaultValues: buildAddModeValues() });
   const setV = methods.setValue as unknown as (name: string, value: unknown) => void;
@@ -1061,7 +1063,7 @@ export default function InboundFormModal({
         cancelText={t('close')}
         confirmLoading={saving}
         mask={{ closable: false }}
-        width={780}
+        width={960}
         onOk={submit}
         onCancel={onClose}
         destroyOnHidden
@@ -1073,7 +1075,7 @@ export default function InboundFormModal({
             wrapperCol={{ sm: { span: 14 } }}
             labelWrap
           >
-            <Tabs items={[
+            <Tabs className="p-inbound-form-tabs" tabPlacement={isMobile ? 'top' : 'start'} items={[
               { key: 'basic', label: t('pages.xray.basicTemplate'), children: basicTab, forceRender: true },
               ...((kind?.settingsTab ?? true) || isFallbackHost
                 ? [{ key: 'protocol', label: t('pages.inbounds.protocol'), children: protocolTab, forceRender: true }]

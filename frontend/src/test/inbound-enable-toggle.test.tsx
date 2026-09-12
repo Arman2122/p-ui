@@ -8,6 +8,7 @@ import InboundList from '@/pages/inbounds/list/InboundList';
 import type { DBInboundRecord, InboundListProps } from '@/pages/inbounds/list/types';
 import { makeTestQueryClient } from '@/test/test-utils';
 import { HttpUtil, Msg } from '@/utils';
+import { ThemeProvider } from '@/hooks/useTheme';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -70,7 +71,7 @@ function harness(rows: DBInboundRecord[]) {
     onBulkSetEnable: async () => true,
   };
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}><ThemeProvider>{children}</ThemeProvider></QueryClientProvider>
   );
   render(<InboundList {...props} />, { wrapper });
   return { invalidated };

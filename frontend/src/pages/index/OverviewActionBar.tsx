@@ -1,7 +1,6 @@
-import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Tag, Tooltip } from 'antd';
+import { Button, Dropdown, Tag, Tooltip } from 'antd';
 import {
   ArrowUpOutlined,
   AreaChartOutlined,
@@ -14,6 +13,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 
+import { PageHeader } from '@/components/ui/panel';
 import { formatPanelVersion } from '@/lib/panel-version';
 import type { Status } from '@/models/status';
 
@@ -24,6 +24,7 @@ interface OverviewActionBarProps {
   panelVersion: string;
   latestVersion: string;
   updateAvailable: boolean;
+  onRefresh: () => void;
   onStopXray: () => void;
   onRestartXray: () => void;
   onOpenLogs: () => void;
@@ -57,6 +58,7 @@ export default function OverviewActionBar({
   panelVersion,
   latestVersion,
   updateAvailable,
+  onRefresh,
   onStopXray,
   onRestartXray,
   onOpenLogs,
@@ -110,54 +112,14 @@ export default function OverviewActionBar({
     </span>
   );
 
-  return (
-    <div className="ov-bar">
-      {status.xray.state === 'error' && status.xray.errorMsg ? (
-        <Tooltip title={<span className="ov-error-detail">{status.xray.errorMsg}</span>}>
-          {statePill}
-        </Tooltip>
-      ) : (
-        statePill
-      )}
-
-      {updateAvailable ? (
-        <Tag
-          className="ov-update-tag"
-          color="warning"
-          icon={<CloudDownloadOutlined />}
-          onClick={onOpenPanelUpdate}
-        >
-          {`${t('update')} ${formatPanelVersion(latestVersion)}`}
-        </Tag>
-      ) : (
-        <Tooltip title={t('pages.index.updatePanel')}>
-          <button type="button" className="ov-panel-version ov-mono" onClick={onOpenPanelUpdate}>
-            {formatPanelVersion(panelVersion)}
-          </button>
-        </Tooltip>
-      )}
-
-      <div className="ov-bar-actions">
-        {actionGroups.map((group, groupIndex) => (
-          <Fragment key={group[0].key}>
-            {groupIndex > 0 && <span className="ov-bar-sep" />}
-            {group.map((action) => (
-              <Button
-                key={action.key}
-                type={action.primary ? undefined : 'text'}
-                color={action.primary ? 'primary' : undefined}
-                variant={action.primary ? 'outlined' : undefined}
-                size={size}
-                icon={action.icon}
-                aria-label={action.text}
-                onClick={action.onClick}
-              >
-                {isMobile ? undefined : action.text}
-              </Button>
-            ))}
-          </Fragment>
-        ))}
-      </div>
-    </div>
-  );
+  return <PageHeader title={t('menu.dashboard')} sub={statePill} actions={<>
+    {updateAvailable && <Tag color="warning" icon={<CloudDownloadOutlined />} onClick={onOpenPanelUpdate}>
+      {`${t('update')} ${formatPanelVersion(latestVersion)}`}
+    </Tag>}
+    <Dropdown trigger={['click']} menu={{ items: [
+      ...actionGroups.flat().map((action) => ({ key: action.key, icon: action.icon, label: action.text, onClick: action.onClick })),
+      { key: 'panelUpdate', label: `${t('pages.index.updatePanel')} · ${formatPanelVersion(panelVersion)}`, onClick: onOpenPanelUpdate },
+    ] }}><Button size={size}>{t('more')}</Button></Dropdown>
+    <Button size={size} icon={<ReloadOutlined />} onClick={onRefresh}>{t('refresh')}</Button>
+  </>} />;
 }

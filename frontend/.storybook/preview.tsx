@@ -1,6 +1,7 @@
 import { useLayoutEffect } from 'react';
 import type { Decorator, Preview } from '@storybook/react-vite';
 import { ConfigProvider } from 'antd';
+import 'antd/dist/reset.css';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
@@ -8,6 +9,7 @@ import { buildAntdThemeConfig } from '@/hooks/useTheme';
 import { applyPanelTokens } from '@/hooks/useTokenBridge';
 import enUS from '../../internal/web/translation/en-US.json';
 import '@/styles/panel.css';
+import '@/styles/design-pages.css';
 
 if (!i18next.isInitialized) {
   void i18next.use(initReactI18next).init({

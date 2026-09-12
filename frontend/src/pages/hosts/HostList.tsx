@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Card, Popover, Space, Switch, Table, Tag, Tooltip } from 'antd';
+import { Button, Input, Popover, Space, Switch, Table, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   ArrowDownOutlined,
@@ -13,6 +13,7 @@ import {
 
 import type { HostRecord } from '@/api/queries/useHostsQuery';
 import type { InboundOption } from '@/schemas/client';
+import { PanelCard } from '@/components/ui/panel';
 import './HostList.css';
 
 interface HostListProps {
@@ -67,7 +68,9 @@ export default function HostList(props: HostListProps) {
     return map;
   }, [inboundOptions]);
 
+  const [search, setSearch] = useState('');
   const sorted = useMemo(() => sortHosts(hosts), [hosts]);
+  const shown = sorted.filter((h) => `${h.remark} ${h.sni} ${(h.hosts ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
 
   const columns: ColumnsType<HostRecord> = [
     {
@@ -99,7 +102,7 @@ export default function HostList(props: HostListProps) {
       key: 'enable',
       width: 90,
       render: (_, h) => (
-        <Switch size="small" checked={!h.isDisabled} onChange={(next) => onToggleEnable(h, next)} />
+        <Switch size="small" aria-label={`${t('enable')}: ${h.remark}`} checked={!h.isDisabled} onChange={(next) => onToggleEnable(h, next)} />
       ),
     },
     {
@@ -201,6 +204,7 @@ export default function HostList(props: HostListProps) {
 
   const toolbar = (
     <div className="card-toolbar">
+      <Input.Search value={search} onChange={(e) => setSearch(e.target.value)} allowClear placeholder={t('search')} aria-label={t('search')} style={{ width: 240 }} />
       {selectedGroupIds.length === 0 ? (
         <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
           {!isMobile && t('pages.hosts.addHost')}
@@ -224,13 +228,14 @@ export default function HostList(props: HostListProps) {
   );
 
   return (
-    <Card size="small" hoverable title={toolbar} className="hosts-card">
+    <PanelCard pad={0} title={toolbar} className="hosts-card">
       <Table<HostRecord>
+        className="p-table"
         rowKey="groupId"
         size="small"
         loading={loading}
-        columns={columns}
-        dataSource={sorted}
+        columns={[...columns.filter((c) => c.key !== 'actions'), ...columns.filter((c) => c.key === 'actions')]}
+        dataSource={shown}
         pagination={false}
         scroll={{ x: 'max-content' }}
         rowSelection={{
@@ -246,6 +251,6 @@ export default function HostList(props: HostListProps) {
           ),
         }}
       />
-    </Card>
+    </PanelCard>
   );
 }

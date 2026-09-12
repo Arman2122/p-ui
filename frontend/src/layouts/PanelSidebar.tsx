@@ -56,7 +56,7 @@ export default function PanelSidebar({ route, collapsed, open, counts, onNavigat
                 key={item.key}
                 item={item}
                 collapsed={collapsed}
-                active={route === item.key}
+                active={(route === '/policies' ? '/plans' : route) === item.key}
                 count={item.count ? counts[item.count] : undefined}
                 onClick={() => onNavigate(item.key)}
               />

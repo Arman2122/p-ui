@@ -635,6 +635,7 @@ export default function OutboundsTab({
           />
         ) : (
           <Table
+            className="p-table"
             columns={columns}
             dataSource={tableRows}
             rowKey={(r) => r.key}

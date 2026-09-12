@@ -178,6 +178,7 @@ export default function IndexPage() {
               ) : (
                 <div className="ov-page">
                   <OverviewActionBar
+                    onRefresh={refresh}
                     status={status}
                     isMobile={isMobile}
                     accessLogEnable={accessLogEnable}
@@ -203,7 +204,6 @@ export default function IndexPage() {
                     </div>
                   )}
 
-                  <hr className="ov-rule" />
 
                   <VitalsBand
                     status={status}

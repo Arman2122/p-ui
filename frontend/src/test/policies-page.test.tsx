@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 
 import PoliciesPage from '@/pages/policies/PoliciesPage';
 import { HttpUtil, Msg } from '@/utils';
@@ -13,7 +13,7 @@ const LADDER = [
   { fromBytes: 107374182400, upBps: 2000000, downBps: 2000000 },
 ];
 
-const PLAN = { id: 1, name: 'fair use', tiers: LADDER, createdAt: 0, updatedAt: 0 };
+const PLAN = { id: 1, name: 'fair use', tiers: LADDER, rev: 0, createdAt: 0, updatedAt: 0 };
 
 const WG_CORE = {
   id: 'wireguard',
@@ -24,6 +24,7 @@ const WG_CORE = {
   unavailable: '',
   clientCredentials: {},
   shaping: { wgkernel: 'innerIP' },
+  applyDelaySeconds: {}, exitKinds: [], rateKinds: [], sessionKinds: [], portlessKinds: [],
 };
 
 const XRAY_CORE = { ...WG_CORE, id: 'xray', kinds: ['vless'], shaping: {} };
@@ -52,7 +53,7 @@ describe('PoliciesPage', () => {
     mockHost([PLAN], [WG_CORE]);
     await renderPage();
 
-    const row = document.querySelector('.ant-table-tbody tr.ant-table-row');
+    const row = document.querySelector('.p-plan-detail');
     const text = row?.textContent ?? '';
     expect(text).toContain('fair use');
     expect(text).toContain(enUS.pages.policies.fromStart);
@@ -87,7 +88,7 @@ describe('PoliciesPage', () => {
     mockHost([{ ...PLAN, tiers: [] }], [WG_CORE]);
     await renderPage();
 
-    const row = document.querySelector('.ant-table-tbody tr.ant-table-row');
+    const row = document.querySelector('.p-plan-detail');
     expect(row?.textContent).toContain(enUS.pages.policies.noTiersHint);
   });
 
@@ -95,7 +96,17 @@ describe('PoliciesPage', () => {
     mockHost([{ ...PLAN, tiers: [LADDER[1]] }], [WG_CORE]);
     await renderPage();
 
-    const row = document.querySelector('.ant-table-tbody tr.ant-table-row');
+    const row = document.querySelector('.p-plan-detail');
     expect(row?.textContent).toContain(enUS.pages.policies.belowFirstHint);
+  });
+
+  it('keeps the visible plan and its details together after filtering the catalogue', async () => {
+    mockHost([PLAN, { ...PLAN, id: 2, name: 'Premium', tiers: [{ fromBytes: 0, upBps: 50000000, downBps: 50000000 }] }], [WG_CORE]);
+    await renderPage();
+    fireEvent.change(screen.getByRole('searchbox', { name: enUS.design.searchPlans }), { target: { value: 'Premium' } });
+    const detail = document.querySelector('.p-plan-detail');
+    expect(detail?.textContent).toContain('Premium');
+    expect(detail?.textContent).toContain('50 Mbps');
+    expect(detail?.textContent).not.toContain('fair use');
   });
 });

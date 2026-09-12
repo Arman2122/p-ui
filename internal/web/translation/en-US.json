@@ -116,7 +116,7 @@
     "routing": "Routing",
     "outbounds": "Outbounds",
     "apiDocs": "API Docs",
-    "policies": "Speed Plans",
+    "policies": "Plans",
     "groupManage": "Manage",
     "groupNetwork": "Network",
     "groupSystem": "System",
@@ -1281,8 +1281,8 @@
         "subtitle": "Shared inbound sets and pooled quota for a set of clients"
     },
     "policies": {
-      "title": "Speed Plans",
-      "desc": "A plan is a ladder of tiers: each names the usage a client must reach before it applies and the speed they get from there. Below the lowest threshold a client is unlimited. A plain speed limit is a one-tier plan starting at zero. Editing a plan never restarts anything and never drops a connection.",
+      "title": "Plans",
+      "desc": "Manage client speed profiles and inspect their limits.",
       "add": "Add Plan",
       "edit": "Edit Plan",
       "name": "Plan name",
@@ -1961,7 +1961,15 @@
         "noSettingMatch": "No setting matches “{q}”.",
         "unsaved": "Unsaved changes",
         "allSaved": "All changes saved",
-        "subtitle": "Panel-level configuration; core behaviour lives under Core Configs"
+        "subtitle": "Panel-level configuration; core behaviour lives under Core Configs",
+      "sectionDesc_certs": "TLS material for the panel listener",
+      "sectionDesc_notifications": "Event thresholds and notifications",
+      "sectionDesc_tokens": "Credentials for bots and provisioning scripts",
+      "sectionDesc_backup": "Download and restore database snapshots",
+      "sectionDesc_ext": "Third-party traffic accounting",
+      "sectionDesc_time": "Calendar, timezone and language",
+      "sectionDesc_ldap": "Directory authentication and synchronisation",
+      "sectionDesc_iplimit": "Device caps and active bans"
     },
     "xray": {
       "save": "Save",
@@ -2715,5 +2723,21 @@
     "awgkernel": {
       "title": "AmneziaWG (kernel)"
     }
+  },
+  "design": {
+    "inherit": "Keep client value",
+    "searchPlans": "Search plans",
+    "days": "{count} days",
+    "devices": "Device limit",
+    "planDeleteImpact": "Assigned clients retain their data; the removed plan can no longer apply its speed ladder.",
+    "apiSearch": "Search endpoints",
+    "apiSubtitle": "Explore endpoints, edit parameters and inspect real responses.",
+    "apiDownload": "Download OpenAPI",
+    "apiTokens": "Manage API tokens",
+    "allEndpoints": "All endpoints",
+    "cardView": "Cards",
+    "tableView": "Table",
+    "searchNodes": "Search nodes",
+    "ldap": "LDAP"
   }
 }

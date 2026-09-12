@@ -70,11 +70,10 @@ import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import ClientSpeedTag, { isActiveSpeed } from '@/components/clients/ClientSpeedTag';
 import ClientCardComment from '@/components/clients/ClientCardComment';
 import { StatStrip } from '@/components/ui';
-import { PageHeader } from '@/components/ui/panel';
+import { PageHeader, StatusPip } from '@/components/ui/panel';
 import { IntlUtil, SizeFormatter } from '@/utils';
 import { setMessageInstance } from '@/utils/messageBus';
 import { LazyMount } from '@/components/utility';
-import { SPEED_COLUMN_WIDTH, SPEED_TAG_CLASS_NAME, SPEED_TAG_STYLE } from '@/components/utility/speedTagStyle';
 const ClientFormModal = lazy(() => import('./ClientFormModal'));
 const ClientInfoModal = lazy(() => import('./ClientInfoModal'));
 const ClientQrModal = lazy(() => import('./ClientQrModal'));
@@ -938,165 +937,64 @@ export default function ClientsPage() {
     if (pag?.pageSize) setPageSizeChoice(pag.pageSize);
   };
 
-  const columns = useMemo<ColumnsType<ClientRecord>>(() => [
+  const columns: ColumnsType<ClientRecord> = [
     {
-      title: t('pages.clients.actions'),
-      key: 'actions',
-      width: 200,
-      render: (_v, record) => (
-        <ClientRowActions
-          email={record.email}
-          onShowQr={onShowQr}
-          onShowInfo={onShowInfo}
-          onResetTraffic={onResetTraffic}
-          onEdit={onEdit}
-          onDelete={onDelete}
-        />
-      ),
-    },
-    {
-      title: t('pages.clients.enabled'),
-      key: 'enable',
-      width: 80,
-      render: (_v, record) => (
-        <Switch
-          checked={!!record.enable}
-          size="small"
-          loading={togglingEmail === record.email}
-          onChange={(next) => onToggleEnable(record, next)}
-        />
-      ),
-    },
-    {
-      title: t('pages.clients.online'),
-      key: 'online',
-      width: 90,
+      title: t('pages.clients.client'), key: 'email', width: 340,
       render: (_v, record) => {
         const bucket = clientBucket(record);
-        const lastOnline = record.traffic?.lastOnline ?? 0;
-        const lastOnlineTitle = `${t('lastOnline')}: ${lastOnline > 0 ? IntlUtil.formatDate(lastOnline, datepicker) : '-'}`;
-        if (bucket === 'depleted') return (
-          <Tooltip title={lastOnlineTitle}>
-            <Tag color="red">{t('depleted')}</Tag>
-          </Tooltip>
-        );
-        if (record.enable && isOnline(record.email)) return (
-          <Tag color="green" className="dot-tag"><span className="online-dot" />{t('pages.clients.online')}</Tag>
-        );
-        if (!record.enable) {
-          const why = record.disabledReason === 'quota'
-            ? t('pages.clients.disabledBy.quota')
-            : record.disabledReason === 'expiry'
-              ? t('pages.clients.disabledBy.expiry')
-              : record.disabledReason === 'manual'
-                ? t('pages.clients.disabledBy.manual')
-                : '';
-          return <Tag>{why ? `${t('disabled')} · ${why}` : t('disabled')}</Tag>;
-        }
-        if (bucket === 'expiring') return <Tag color="orange">{t('depletingSoon')}</Tag>;
+        const key = bucket === 'depleted' ? 'ended' : !record.enable ? 'disabled' : bucket === 'expiring' ? 'expiring' : 'active';
+        const label = bucket === 'depleted' ? t('depleted') : !record.enable ? t('disabled') : bucket === 'expiring' ? t('depletingSoon') : t('subscription.active');
+        const color = key === 'ended' ? 'var(--p-error)' : key === 'disabled' ? 'var(--p-text-3)' : key === 'expiring' ? 'var(--p-warning)' : 'var(--p-success)';
+        const reason = record.disabledReason ? t(`pages.clients.disabledBy.${record.disabledReason}`) : '';
         return (
-          <Tooltip title={lastOnlineTitle}>
-            <Tag>{t('pages.clients.offline')}</Tag>
-          </Tooltip>
+          <div className="p-client-identity">
+            <div className="p-client-name">
+              <button className="p-text-action p-name" onClick={() => onShowInfo(record.email)}>{record.email}</button>
+              <StatusPip status={{ key, label, color }} online={!!record.enable && isOnline(record.email)}
+                note={`${reason ? `${reason} · ` : ''}${t('lastOnline')}: ${record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—'}`} />
+              <Switch checked={!!record.enable} size="small" loading={togglingEmail === record.email}
+                aria-label={`${t('pages.clients.enabled')}: ${record.email}`} onChange={(next) => onToggleEnable(record, next)} />
+            </div>
+            <div className="p-client-context">
+              <ClientCardComment comment={record.comment} className="p-desc" />
+              <ClientInboundChips ids={record.inboundIds || EMPTY_INBOUND_IDS} inboundsById={inboundsById}
+                protocolColors={INBOUND_PROTOCOL_COLORS} chipLimit={INBOUND_CHIP_LIMIT} />
+              {record.group && <button className="p-text-action p-sub" onClick={() => setFilters({ ...filters, groups: [record.group!] })}>{record.group}</button>}
+            </div>
+            {record.subId && <span className="p-sub p-mono" title={record.subId}>{record.subId}</span>}
+          </div>
         );
       },
     },
     {
-      title: t('pages.clients.client'),
-      key: 'email',
-      width: 220,
-      render: (_v, record) => (
-        <div className="email-cell">
-          <span className="email">{record.email}</span>
-          {record.subId && <span className="sub" title={record.subId}>{record.subId}</span>}
-          <ClientCardComment comment={record.comment} className="sub" />
-        </div>
-      ),
+      title: t('pages.clients.traffic'), key: 'traffic', width: 250,
+      render: (_v, record) => <>
+        <ClientTrafficCell up={record.traffic?.up} down={record.traffic?.down} total={record.totalGB}
+          enabled={record.enable} trafficDiff={trafficDiff} />
+        <span className="p-sub" style={{ color: `color-mix(in srgb, ${remainingColor(record)} 58%, var(--p-ink))` }}>{t('pages.clients.remaining')}: {remainingLabel(record)}</span>
+      </>,
     },
     {
-      title: t('pages.clients.group'),
-      key: 'group',
-      width: 130,
-      hidden: allGroups.length === 0,
-      render: (_v, record) => {
-        if (!record.group) return <span style={{ color: 'rgba(0,0,0,0.45)' }}>—</span>;
-        const isActive = filters.groups.includes(record.group);
-        return (
-          <Tag
-            color="geekblue"
-            style={{ margin: 0, cursor: 'pointer', opacity: isActive ? 0.6 : 1 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isActive) {
-                setFilters({ ...filters, groups: [...filters.groups, record.group!] });
-              }
-            }}
-          >
-            {record.group}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: t('pages.clients.attachedInbounds'),
-      key: 'inboundIds',
-      width: 170,
-      render: (_v, record) => {
-        return (
-          <ClientInboundChips
-            ids={record.inboundIds || EMPTY_INBOUND_IDS}
-            inboundsById={inboundsById}
-            protocolColors={INBOUND_PROTOCOL_COLORS}
-            chipLimit={INBOUND_CHIP_LIMIT}
-          />
-        );
-      },
-    },
-    {
-      title: t('pages.clients.traffic'),
-      key: 'traffic',
-      width: 300,
-      render: (_v, record) => (
-        <ClientTrafficCell
-          up={record.traffic?.up}
-          down={record.traffic?.down}
-          total={record.totalGB}
-          enabled={record.enable}
-          trafficDiff={trafficDiff}
-        />
-      ),
-    },
-    {
-      title: t('pages.clients.speed'),
-      key: 'speed',
-      width: SPEED_COLUMN_WIDTH,
-      align: 'center',
+      title: t('pages.clients.speed'), key: 'speed', width: 155, align: 'end',
       render: (_v, record) => {
         const speed = clientSpeed[record.email];
-        if (!isActiveSpeed(speed)) {
-          return <Tag color="default" className={SPEED_TAG_CLASS_NAME} style={SPEED_TAG_STYLE}>—</Tag>;
-        }
-        return <ClientSpeedTag speed={speed} tableCell />;
+        return isActiveSpeed(speed) ? <ClientSpeedTag speed={speed} tableCell /> :
+          <div className="p-sub">{t('pages.clients.offline')}<div>{record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—'}</div></div>;
       },
     },
     {
-      title: t('pages.clients.remaining'),
-      key: 'remaining',
-      width: 130,
-      render: (_v, record) => <Tag color={remainingColor(record)}>{remainingLabel(record)}</Tag>,
+      title: t('pages.clients.duration'), key: 'expiryTime', width: 145, align: 'end',
+      render: (_v, record) => <div>
+        <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 58%, var(--p-ink))` }}>{record.expiryTime ? expiryRelative(record) : '∞'}</span>
+        <div className="p-sub">{expiryLabel(record)}</div>
+      </div>,
     },
     {
-      title: t('pages.clients.duration'),
-      key: 'expiryTime',
-      width: 130,
-      render: (_v, record) => (
-        <Tooltip title={expiryLabel(record)}>
-          <Tag color={expiryColor(record)}>{record.expiryTime ? expiryRelative(record) : '∞'}</Tag>
-        </Tooltip>
-      ),
+      title: t('pages.clients.actions'), key: 'actions', width: 176, align: 'end',
+      render: (_v, record) => <ClientRowActions email={record.email} onShowQr={onShowQr} onShowInfo={onShowInfo}
+        onResetTraffic={onResetTraffic} onEdit={onEdit} onDelete={onDelete} />,
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [t, togglingEmail, clientBucket, isOnline, inboundsById, filters, allGroups, datepicker, trafficDiff, clientSpeed]);
+  ];
 
   const tablePagination = {
     current: currentPage,
@@ -1189,7 +1087,7 @@ export default function ClientsPage() {
 
                   <Col span={24}>
                     <StatStrip
-                      active={filters.buckets.length ? filters.buckets[0] : 'all'}
+                      active={filters.buckets.length === 1 ? filters.buckets[0] : filters.buckets.length === 0 ? 'all' : undefined}
                       onPick={(key) => setFilters({ ...filters, buckets: key === 'all' ? [] : [key] })}
                       items={[
                         { key: 'all', label: t('clients'), value: summary.total },
@@ -1541,6 +1439,7 @@ export default function ClientsPage() {
                       )}
                       {!isMobile ? (
                         <Table<ClientRecord>
+                          className="p-table p-clients-table"
                           columns={columns}
                           dataSource={sortedClients}
                           loading={transitioning}

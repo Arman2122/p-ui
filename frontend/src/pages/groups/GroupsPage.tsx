@@ -13,12 +13,9 @@ import {
   Row,
   Space,
   Spin,
-  Table,
-  Tag,
-  Tooltip,
   message,
 } from 'antd';
-import type { MenuProps, TableColumnsType } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   ClockCircleOutlined,
   DeleteOutlined,
@@ -27,7 +24,6 @@ import {
   MoreOutlined,
   PlusOutlined,
   RetweetOutlined,
-  TagsOutlined,
   UsergroupAddOutlined,
   UsergroupDeleteOutlined,
 } from '@ant-design/icons';
@@ -40,7 +36,7 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { useClients } from '@/hooks/useClients';
 import { HttpUtil, SizeFormatter } from '@/utils';
 import { StatStrip } from '@/components/ui';
-import { PageHeader, PanelCard } from '@/components/ui/panel';
+import { PageHeader, PanelCard, Field } from '@/components/ui/panel';
 import { setMessageInstance } from '@/utils/messageBus';
 import { LazyMount } from '@/components/utility';
 import { keys } from '@/api/queryKeys';
@@ -391,58 +387,6 @@ export default function GroupsPage() {
     ];
   }
 
-  const columns: TableColumnsType<GroupSummary> = [
-    {
-      title: t('pages.clients.actions'),
-      key: 'actions',
-      width: 90,
-      render: (_v, row) => (
-        <Space size={4}>
-          <Dropdown trigger={['click']} menu={{ items: rowActions(row) }}>
-            <Button aria-label={t('more')} size="small" type="text" style={{ fontSize: 16 }} icon={<MoreOutlined />} />
-          </Dropdown>
-          <Tooltip title={t('pages.groups.rename')}>
-            <Button aria-label={t('pages.groups.rename')} size="small" type="text" style={{ fontSize: 16 }} icon={<EditOutlined />} onClick={() => openRename(row)} />
-          </Tooltip>
-        </Space>
-      ),
-    },
-    {
-      title: t('pages.groups.name'),
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string) => <Tag color="geekblue" style={{ margin: 0, fontSize: 13 }}>{name}</Tag>,
-    },
-    {
-      title: t('pages.groups.clientCount'),
-      dataIndex: 'clientCount',
-      key: 'clientCount',
-      width: 180,
-      render: (count: number) => <span>{count || 0}</span>,
-    },
-    {
-      title: t('pages.groups.upload'),
-      dataIndex: 'up',
-      key: 'up',
-      width: 140,
-      render: (bytes: number) => <span>{SizeFormatter.sizeFormat(bytes || 0)}</span>,
-    },
-    {
-      title: t('pages.groups.download'),
-      dataIndex: 'down',
-      key: 'down',
-      width: 140,
-      render: (bytes: number) => <span>{SizeFormatter.sizeFormat(bytes || 0)}</span>,
-    },
-    {
-      title: t('pages.groups.trafficUsed'),
-      dataIndex: 'trafficUsed',
-      key: 'trafficUsed',
-      width: 160,
-      render: (bytes: number) => <span>{SizeFormatter.sizeFormat(bytes || 0)}</span>,
-    },
-  ];
-
   const pageClass = useMemo(() => {
     const classes = ['groups-page'];
     if (isDark) classes.push('is-dark');
@@ -493,25 +437,28 @@ export default function GroupsPage() {
                   </Col>
 
                   <Col span={24}>
-                    <PanelCard pad={0}>
-                      <Table<GroupSummary>
-                        className="p-table"
-                        dataSource={groups}
-                        columns={columns}
-                        rowKey="name"
-                        size="small"
-                        pagination={false}
-                        loading={loading}
-                        locale={{
-                          emptyText: (
-                            <div className="card-empty">
-                              <TagsOutlined style={{ fontSize: 32, marginBottom: 8 }} />
-                              <div>{t('noData')}</div>
-                            </div>
-                          ),
-                        }}
-                      />
-                    </PanelCard>
+                    <div className="p-groupgrid">
+                      {groups.map((g) => <PanelCard key={g.name} title={g.name} icon="groups" pad={0}
+                        extra={<Space size={4}>
+                          <Button type="text" size="small" aria-label={`${t('pages.groups.rename')}: ${g.name}`} icon={<EditOutlined />} onClick={() => openRename(g)} />
+                          <Dropdown trigger={['click']} menu={{ items: rowActions(g) }}>
+                            <Button type="text" size="small" aria-label={`${t('more')}: ${g.name}`} icon={<MoreOutlined />} />
+                          </Dropdown>
+                        </Space>}>
+                        <div className="p-groupbody">
+                          <div><span className="p-stat">{SizeFormatter.sizeFormat(g.trafficUsed)}</span><span className="p-stat-u"> {t('pages.groups.trafficUsed')}</span></div>
+                          <div className="p-detail-grid">
+                            <Field label={t('pages.groups.upload')} value={`↑ ${SizeFormatter.sizeFormat(g.up)}`} />
+                            <Field label={t('pages.groups.download')} value={`↓ ${SizeFormatter.sizeFormat(g.down)}`} />
+                          </div>
+                        </div>
+                        <div className="p-card-body" style={{ borderTop: '1px solid var(--p-border)', padding: 14 }}>
+                          <div className="p-kv"><span className="p-kv-k">{t('pages.groups.clientCount')}</span><span className="p-kv-v">{g.clientCount}</span></div>
+                          <Button size="small" icon={<UsergroupAddOutlined />} onClick={() => openAddClientsFor(g)}>{t('pages.groups.addToGroup')}</Button>
+                        </div>
+                      </PanelCard>)}
+                      {!groups.length && <div className="p-plan-empty">{t('noData')}</div>}
+                    </div>
                   </Col>
                 </Row>
               )}

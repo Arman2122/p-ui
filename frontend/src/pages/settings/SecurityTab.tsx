@@ -38,6 +38,7 @@ interface ApiTokenRow {
 }
 
 interface SecurityTabProps {
+  tokensOnly?: boolean;
   allSetting: AllSetting;
   updateSetting: (patch: Partial<AllSetting>) => void;
   saveSetting: (payload: Partial<AllSetting> & Record<string, unknown>) => Promise<unknown>;
@@ -69,7 +70,7 @@ const TFA_INITIAL: TfaState = {
   onConfirm: () => {},
 };
 
-export default function SecurityTab({ allSetting, updateSetting, saveSetting }: SecurityTabProps) {
+export default function SecurityTab({ allSetting, updateSetting, saveSetting, tokensOnly }: SecurityTabProps) {
   const { t } = useTranslation();
   const { isMobile } = useMediaQuery();
   const [modal, modalContextHolder] = Modal.useModal();
@@ -258,7 +259,7 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting }: 
     <>
       {messageContextHolder}
       {modalContextHolder}
-      <Tabs defaultActiveKey="1" items={[
+      <Tabs key={tokensOnly ? 'tokens' : 'security'} defaultActiveKey={tokensOnly ? '3' : '1'} tabBarStyle={tokensOnly ? { display: 'none' } : undefined} items={[
         {
           key: '1',
           label: catTabLabel(<UserOutlined />, t('pages.settings.security.admin'), isMobile),

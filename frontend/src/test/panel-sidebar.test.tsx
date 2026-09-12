@@ -31,7 +31,7 @@ test('groups every nav destination under its section heading', () => {
   const labels = Array.from(container.querySelectorAll('.p-navitem-label')).map((el) => el.textContent);
   expect(labels).toEqual([
     'Dashboard',
-    'Inbounds', 'Clients', 'Speed Plans', 'Groups',
+    'Inbounds', 'Clients', 'Plans', 'Groups',
     'Nodes', 'Hosts', 'Outbounds', 'Routing',
     'Cores', 'Core Configs', 'Panel Settings',
     'API Docs',

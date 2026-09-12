@@ -38,7 +38,7 @@ import { isPanelUpdateAvailable } from '@/lib/panel-version';
 import { activateOnKey } from '@/utils/a11y';
 import './NodeList.css';
 
-interface NodeListProps {
+export interface NodeListProps {
   nodes: NodeRecord[];
   loading?: boolean;
   isMobile?: boolean;

@@ -49,7 +49,7 @@ const XRAY_SECTIONS: { slug: string; labelKey: string; icon: IconName }[] = [
 
 type AdvKey = 'xraySetting' | 'inboundSettings' | 'outboundSettings' | 'routingRuleSettings';
 
-export default function XrayPage() {
+export default function XrayPage({ section }: { section?: 'routing' | 'outbound' } = {}) {
   const { t } = useTranslation();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
   const { isMobile } = useMediaQuery();
@@ -91,7 +91,7 @@ export default function XrayPage() {
   const [advSettings, setAdvSettings] = useState<AdvKey>('xraySetting');
   const location = useLocation();
   const navigate = useNavigate();
-  const pathSection = location.pathname === '/outbound' ? 'outbound' : location.pathname === '/routing' ? 'routing' : '';
+  const pathSection = section || (location.pathname === '/outbound' || location.pathname === '/outbounds' ? 'outbound' : location.pathname === '/routing' ? 'routing' : '');
   const sectionSlug = pathSection || location.hash.replace(/^#/, '');
   const activeSection = SECTION_SLUGS.includes(sectionSlug) ? sectionSlug : 'basic';
 
@@ -351,13 +351,13 @@ export default function XrayPage() {
                 />
               ) : (
                 <>
-                  <PageHeader title={t('menu.xray')} sub={t('pages.xray.subtitle')} />
+                  <PageHeader title={t(pathSection === 'routing' ? 'menu.routing' : pathSection === 'outbound' ? 'menu.outbounds' : 'menu.xray')} sub={t(pathSection ? `pages.xray.sectionDesc_${pathSection}` : 'pages.xray.subtitle')} />
 
                   <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
                   <Alert type="warning" showIcon title={t('pages.settings.infoDesc')} />
 
-                  <div className="p-settings">
-                    <SectionRail
+                  <div className={pathSection ? 'p-network-page' : 'p-settings'}>
+                    {!pathSection && <SectionRail
                       items={XRAY_SECTIONS.map((x) => ({
                         key: x.slug,
                         label: t(x.labelKey),
@@ -366,7 +366,7 @@ export default function XrayPage() {
                       }))}
                       active={activeSection}
                       onPick={(slug) => navigate(slug === 'routing' || slug === 'outbound' ? `/${slug}` : `/xray#${slug}`)}
-                    />
+                    />}
                     <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                         <div>

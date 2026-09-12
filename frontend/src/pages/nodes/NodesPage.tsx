@@ -9,7 +9,7 @@ import { StatStrip } from '@/components/ui';
 import { PageHeader } from '@/components/ui/panel';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { useNodeMutations } from '@/api/queries/useNodeMutations';
-import NodeList from './NodeList';
+import NodeList from './NodeFleet';
 import NodeFormModal from './NodeFormModal';
 import { setMessageInstance } from '@/utils/messageBus';
 import { HttpUtil } from '@/utils';

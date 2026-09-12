@@ -17,7 +17,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: '/inbounds', labelKey: 'menu.inbounds', icon: 'inbounds' },
       { key: '/clients', labelKey: 'menu.clients', icon: 'users' },
-      { key: '/policies', labelKey: 'menu.policies', icon: 'speed', count: 'plans' },
+      { key: '/plans', labelKey: 'menu.policies', icon: 'speed', count: 'plans' },
       { key: '/groups', labelKey: 'menu.groups', icon: 'groups' },
     ],
   },
@@ -45,9 +45,9 @@ const SECTION_OF = new Map<string, string | null>();
 for (const group of NAV) for (const item of group.items) SECTION_OF.set(item.key, group.groupKey);
 
 export function sectionKeyOf(route: string): string | null {
-  return SECTION_OF.get(route) ?? null;
+  return SECTION_OF.get(route === '/policies' ? '/plans' : route) ?? null;
 }
 
 export function navItemOf(route: string): NavItem | undefined {
-  return NAV.flatMap((g) => g.items).find((i) => i.key === route);
+  return NAV.flatMap((g) => g.items).find((i) => i.key === (route === '/policies' ? '/plans' : route));
 }

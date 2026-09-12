@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
-  Card,
   Checkbox,
   Dropdown,
   Input,
@@ -37,6 +36,7 @@ import { buildRowActionsMenu } from './RowActions';
 import { useInboundColumns } from './useInboundColumns';
 import InboundStatsModal from './InboundStatsModal';
 import type { DBInboundRecord, GeneralAction, InboundListProps, RowAction } from './types';
+import { PanelCard } from '@/components/ui/panel';
 import './InboundList.css';
 
 export default function InboundList({
@@ -176,8 +176,8 @@ export default function InboundList({
   };
 
   return (
-    <Card
-      hoverable
+    <PanelCard
+      pad={0}
       title={(
         <Space>
           <Button type="primary" onClick={onAddInbound} icon={<PlusOutlined />} aria-label={t('pages.inbounds.addInbound')}>
@@ -327,6 +327,6 @@ export default function InboundList({
         expireDiff={expireDiff}
         onClose={() => setStatsRecord(null)}
       />
-    </Card>
+    </PanelCard>
   );
 }

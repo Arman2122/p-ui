@@ -5,6 +5,7 @@ import { TeamOutlined } from '@ant-design/icons';
 
 import { SizeFormatter, IntlUtil, ColorUtils } from '@/utils';
 import { InfinityIcon } from '@/components/ui';
+import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { coerceInboundJsonField } from '@/models/dbinbound';
@@ -129,6 +130,8 @@ export function useInboundColumns({
         render: (_, record) => (
           <Switch
             checked={record.enable}
+            size="small"
+            aria-label={`${t('pages.inbounds.enable')}: ${record.remark || record.id}`}
             onChange={(next) => onSwitchEnable(record, next)}
           />
         ),
@@ -357,6 +360,22 @@ export function useInboundColumns({
       },
     );
 
-    return cols;
+    const identity: TableColumnType<DBInboundRecord> = {
+      title: t('menu.inbounds'), key: 'identity', width: 240,
+      sorter: (a, b) => compareText(a.remark, b.remark),
+      render: (_, record) => <div>
+        <div className="p-name">{record.remark || `#${record.id}`}</div>
+        <div className="p-sub">#{record.id} · {t('pages.inbounds.port')} <span className="p-mono">{record.port}</span></div>
+      </div>,
+    };
+    const traffic = cols.find((c) => c.key === 'traffic');
+    if (traffic) {
+      traffic.width = 220;
+      traffic.align = 'start';
+      traffic.render = (_, record) => <ClientTrafficCell up={record.up} down={record.down} total={record.total} enabled={record.enable} trafficDiff={trafficDiff} />;
+    }
+    const ordered = ['enable', 'identity', 'protocol', 'clients', 'traffic', 'speed', 'expiryTime', 'node', 'subSortIndex', 'action'];
+    return [...cols.filter((c) => !['id', 'remark', 'port'].includes(String(c.key))), identity]
+      .sort((a, b) => ordered.indexOf(String(a.key)) - ordered.indexOf(String(b.key)));
   }, [t, hasAnyRemark, hasAnySubSortIndex, hasActiveNode, nodesById, clientCount, inboundSpeed, subEnable, expireDiff, trafficDiff, datepicker, onRowAction, onSwitchEnable]);
 }
