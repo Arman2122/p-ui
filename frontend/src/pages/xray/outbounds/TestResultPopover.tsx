@@ -40,14 +40,14 @@ export default function TestResultPopover({ result: r, children }: TestResultPop
       content={
         <div className="timing-breakdown">
           <div className={`td-head ${r.success ? 'ok' : 'fail'}`}>
-            {r.success ? <span>{r.delay} ms</span> : <span>{r.error || 'failed'}</span>}
+            {r.success ? <span>{typeof r.delay === 'number' ? `${r.delay} ms` : t('success')}</span> : <span>{r.error || t('uiRepair.outbounds.probeFailed')}</span>}
             {r.mode && <span className="mode-badge">{testModeLabel(String(r.mode), t)}</span>}
           </div>
           {(r.endpoints || []).map((ep) => (
             <div key={ep.address} className="endpoint-row">
               <span className={ep.success ? 'dot-ok' : 'dot-fail'}>●</span>
               <span className="ep-addr">{ep.address}</span>
-              <span className="ep-meta">{ep.success ? `${ep.delay} ms` : ep.error || 'failed'}</span>
+              <span className="ep-meta">{ep.success ? (typeof ep.delay === 'number' ? `${ep.delay} ms` : t('success')) : ep.error || t('uiRepair.outbounds.probeFailed')}</span>
             </div>
           ))}
           {breakdown.map((row) => (
@@ -62,7 +62,7 @@ export default function TestResultPopover({ result: r, children }: TestResultPop
       {children ?? (
         <span className={r.success ? 'pill-ok' : 'pill-fail'}>
           {r.success ? <CheckCircleFilled /> : <CloseCircleFilled />}
-          {r.success ? <span>{r.delay}&nbsp;ms</span> : <span>failed</span>}
+          {r.success ? <span>{typeof r.delay === 'number' ? `${r.delay} ms` : t('success')}</span> : <span>{t('uiRepair.outbounds.probeFailed')}</span>}
         </span>
       )}
     </Popover>

@@ -26,9 +26,11 @@ _openapi:
         generated a config since it started."
       url: '#list-every-routing-rule-in-the-operators-own-first-match-order-each-rule-carries-a-diags-array-when-the-last-config-generation-could-not-realise-it----one-entry-per-rule-subject-pair-with-a-messagekey-rather-than-a-sentence-so-the-panel-translates-it-saving-an-unrealisable-rule-is-already-refused-so-these-are-the-rules-that-went-inert-afterwards-the-inbound-they-name-was-disabled-their-exit-stopped-resolving-or-the-xray-template-changed-under-them-the-key-is-omitted-entirely-for-a-rule-that-is-being-applied-and-on-a-panel-that-has-not-generated-a-config-since-it-started'
     - depth: 2
-      title: Create a rule. It is appended last and converges before the response
-        returns.
-      url: '#create-a-rule-it-is-appended-last-and-converges-before-the-response-returns'
+      title: 'Create a rule, append it last, and converge. A convergence failure
+        returns success: false with the persisted rule in obj; retry by updating
+        obj.id instead of creating again. A validation refusal returns no
+        persisted rule.'
+      url: '#create-a-rule-append-it-last-and-converge-a-convergence-failure-returns-success-false-with-the-persisted-rule-in-obj-retry-by-updating-objid-instead-of-creating-again-a-validation-refusal-returns-no-persisted-rule'
     - depth: 2
       title: Which inbounds a rule may name. An inbound that cannot be a subject right
         now is listed with routable=false and a blockedKey naming why, never
@@ -48,8 +50,11 @@ _openapi:
         list; a partial application would silently change which rule wins.
       url: '#set-the-whole-first-match-order-in-one-write-the-body-is-the-complete-id-list-a-partial-application-would-silently-change-which-rule-wins'
     - depth: 2
-      title: Update one rule.
-      url: '#update-one-rule'
+      title: 'Update one rule and converge. A convergence failure returns success:
+        false with the persisted rule in obj; retry the same rule ID. A
+        validation refusal leaves the stored rule unchanged and returns no
+        persisted rule.'
+      url: '#update-one-rule-and-converge-a-convergence-failure-returns-success-false-with-the-persisted-rule-in-obj-retry-the-same-rule-id-a-validation-refusal-leaves-the-stored-rule-unchanged-and-returns-no-persisted-rule'
     - depth: 2
       title: Delete one rule and converge.
       url: '#delete-one-rule-and-converge'
@@ -65,9 +70,11 @@ _openapi:
           omitted entirely for a rule that is being applied, and on a panel that
           has not generated a config since it started."
         id: list-every-routing-rule-in-the-operators-own-first-match-order-each-rule-carries-a-diags-array-when-the-last-config-generation-could-not-realise-it----one-entry-per-rule-subject-pair-with-a-messagekey-rather-than-a-sentence-so-the-panel-translates-it-saving-an-unrealisable-rule-is-already-refused-so-these-are-the-rules-that-went-inert-afterwards-the-inbound-they-name-was-disabled-their-exit-stopped-resolving-or-the-xray-template-changed-under-them-the-key-is-omitted-entirely-for-a-rule-that-is-being-applied-and-on-a-panel-that-has-not-generated-a-config-since-it-started
-      - content: Create a rule. It is appended last and converges before the response
-          returns.
-        id: create-a-rule-it-is-appended-last-and-converges-before-the-response-returns
+      - content: 'Create a rule, append it last, and converge. A convergence failure
+          returns success: false with the persisted rule in obj; retry by
+          updating obj.id instead of creating again. A validation refusal
+          returns no persisted rule.'
+        id: create-a-rule-append-it-last-and-converge-a-convergence-failure-returns-success-false-with-the-persisted-rule-in-obj-retry-by-updating-objid-instead-of-creating-again-a-validation-refusal-returns-no-persisted-rule
       - content: Which inbounds a rule may name. An inbound that cannot be a subject
           right now is listed with routable=false and a blockedKey naming why,
           never omitted. criteriaMask names the criteria that can actually match
@@ -84,8 +91,11 @@ _openapi:
       - content: Set the whole first-match order in one write. The body is the complete
           id list; a partial application would silently change which rule wins.
         id: set-the-whole-first-match-order-in-one-write-the-body-is-the-complete-id-list-a-partial-application-would-silently-change-which-rule-wins
-      - content: Update one rule.
-        id: update-one-rule
+      - content: 'Update one rule and converge. A convergence failure returns success:
+          false with the persisted rule in obj; retry the same rule ID. A
+          validation refusal leaves the stored rule unchanged and returns no
+          persisted rule.'
+        id: update-one-rule-and-converge-a-convergence-failure-returns-success-false-with-the-persisted-rule-in-obj-retry-the-same-rule-id-a-validation-refusal-leaves-the-stored-rule-unchanged-and-returns-no-persisted-rule
       - content: Delete one rule and converge.
         id: delete-one-rule-and-converge
     contents: []

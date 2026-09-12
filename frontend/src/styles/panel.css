@@ -2,6 +2,8 @@
    Every colour is a --p-* token published by useTokenBridge from the antd theme. */
 
 .p-root { min-height: 100vh; }
+.p-root { color-scheme: light; }
+body.dark .p-root { color-scheme: dark; }
 .p-root,.p-page,.p-auth{font-family:var(--p-font);color:var(--p-text)}
 /* The login bundle mounts .p-auth directly, with no shell behind it. */
 body:has(.p-auth){background:var(--p-bg);margin:0}

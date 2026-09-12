@@ -1,25 +1,14 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Table, Tag, Tooltip } from 'antd';
-import { ThunderboltOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Button, Table, Tooltip } from 'antd';
+import { ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-
-import { SizeFormatter } from '@/utils';
-import { OutboundProtocols as Protocols } from '@/schemas/primitives';
-import type { OutboundTestMode, OutboundTestState, OutboundTrafficRow } from '@/hooks/useXraySetting';
-
+import type { OutboundTestMode, OutboundTestState, OutboundTrafficRow, XraySettingsValue } from '@/hooks/useXraySetting';
+import type { RoutingRuleRecord } from '@/schemas/api/routing';
+import { PanelCard } from '@/components/ui/panel';
 import type { OutboundRow } from './outbounds-tab-types';
-import TestResultPopover from './TestResultPopover';
-import {
-  effectiveTestMode,
-  isTesting,
-  isUntestable,
-  outboundAddresses,
-  showSecurity,
-  testModeLabel,
-  testResult,
-  trafficFor,
-} from './outbounds-tab-helpers';
+import { effectiveTestMode, isUntestable, referencedRules, testModeLabel } from './outbounds-tab-helpers';
+import { OutboundDestinationCell, OutboundHealthCell, OutboundProtocolCell, OutboundReferencesCell, OutboundTrafficCell } from './OutboundCells';
 
 interface SubscriptionOutboundsProps {
   subscriptionOutbounds: unknown[];
@@ -27,149 +16,40 @@ interface SubscriptionOutboundsProps {
   subscriptionTestStates: Record<string, OutboundTestState>;
   testMode: OutboundTestMode;
   isMobile: boolean;
+  templateSettings?: XraySettingsValue | null;
+  hostRules?: RoutingRuleRecord[];
   onTestSubscription: (outbound: Record<string, unknown>, mode: string) => void;
 }
 
-// Read-only view of outbounds imported from active subscriptions. They are not
-// part of the editable template (so no edit/delete/move), but traffic is matched
-// by tag and they can be latency-tested via the same backend endpoint.
-export default function SubscriptionOutbounds({
-  subscriptionOutbounds,
-  outboundsTraffic,
-  subscriptionTestStates,
-  testMode,
-  isMobile,
-  onTestSubscription,
-}: SubscriptionOutboundsProps) {
+export default function SubscriptionOutbounds({ subscriptionOutbounds, outboundsTraffic, subscriptionTestStates,
+  testMode, isMobile, templateSettings = null, hostRules, onTestSubscription }: SubscriptionOutboundsProps) {
   const { t } = useTranslation();
-
-  const rows = useMemo<OutboundRow[]>(
-    () => (subscriptionOutbounds || []).map((o, i) => ({ ...(o as object), key: i }) as OutboundRow),
-    [subscriptionOutbounds],
-  );
-
-  if (rows.length === 0) return null;
-
-  const identityCell = (record: OutboundRow) => (
-    <div className="identity-cell">
-      <Tooltip title={record.tag}>
-        <span className="tag-name">{record.tag || '—'}</span>
-      </Tooltip>
-      <div className="protocol-line">
-        <Tag color="green">{record.protocol}</Tag>
-        {[Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks].includes(record.protocol as never) && (
-          <>
-            <Tag>{record.streamSettings?.network}</Tag>
-            {showSecurity(record.streamSettings?.security) && <Tag color="purple">{record.streamSettings?.security}</Tag>}
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-  const addressCell = (record: OutboundRow) => {
-    const addrs = outboundAddresses(record);
-    return (
-      <div className="address-list">
-        {addrs.length === 0 ? (
-          <span className="empty">—</span>
-        ) : (
-          addrs.map((addr) => (
-            <Tooltip key={addr} title={addr}>
-              <span className="address-pill">{addr}</span>
-            </Tooltip>
-          ))
-        )}
-      </div>
-    );
-  };
-
-  const trafficCell = (record: OutboundRow) => {
-    const tr = trafficFor(outboundsTraffic, record);
-    return (
-      <>
-        <span className="traffic-up">↑ {SizeFormatter.sizeFormat(tr.up)}</span>
-        <span className="traffic-sep" />
-        <span className="traffic-down">↓ {SizeFormatter.sizeFormat(tr.down)}</span>
-      </>
-    );
-  };
-
-  const latencyCell = (record: OutboundRow) => {
-    const key = record.tag || '';
-    const r = testResult(subscriptionTestStates, key);
-    if (!r) return isTesting(subscriptionTestStates, key) ? <LoadingOutlined /> : <span className="empty">—</span>;
-    return <TestResultPopover result={r} />;
-  };
-
-  const testButton = (record: OutboundRow) => {
-    const key = record.tag || '';
-    return (
-      <Tooltip title={`${t('check')} (${testModeLabel(effectiveTestMode(record, testMode), t)})`}>
-        <Button
-          aria-label={t('check')}
-          type="primary"
-          shape="circle"
-          size={isMobile ? 'small' : undefined}
-          loading={isTesting(subscriptionTestStates, key)}
-          disabled={!record.tag || isUntestable(record) || isTesting(subscriptionTestStates, key)}
-          icon={<ThunderboltOutlined />}
-          onClick={() => onTestSubscription(record as unknown as Record<string, unknown>, testMode)}
-        />
-      </Tooltip>
-    );
-  };
-
-  const header = (
-    <div className="subscription-outbounds-head">
-      <div className="subscription-outbounds-title">{t('pages.xray.outboundSub.fromSubsTitle')}</div>
-      <div className="subscription-outbounds-desc">{t('pages.xray.outboundSub.fromSubsDesc')}</div>
-    </div>
-  );
-
-  if (isMobile) {
-    return (
-      <div className="subscription-outbounds" style={{ marginTop: 16 }}>
-        {header}
-        {rows.map((record, index) => (
-          <div key={record.key} className="outbound-card">
-            <div className="card-head">
-              <div className="card-identity">
-                <span className="card-num">{index + 1}</span>
-                {identityCell(record)}
-              </div>
-              {testButton(record)}
-            </div>
-            {outboundAddresses(record).length > 0 && addressCell(record)}
-            <div className="card-foot">
-              {trafficCell(record)}
-              <span className="card-test">{latencyCell(record)}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
+  const rows = useMemo<OutboundRow[]>(() => subscriptionOutbounds.map((row, key) => ({ ...(row as object), key })), [subscriptionOutbounds]);
+  if (!rows.length) return null;
+  const probe = (row: OutboundRow) => <Tooltip title={`${t('check')} (${testModeLabel(effectiveTestMode(row, testMode), t)})`}>
+    <Button type="text" size="small" icon={<ThunderboltOutlined />} aria-label={t('check')}
+      loading={subscriptionTestStates[row.tag || '']?.testing}
+      disabled={!row.tag || isUntestable(row) || subscriptionTestStates[row.tag || '']?.testing}
+      onClick={() => onTestSubscription(row as unknown as Record<string, unknown>, testMode)} />
+  </Tooltip>;
   const columns: ColumnsType<OutboundRow> = [
-    {
-      title: '#',
-      key: 'num',
-      align: 'center',
-      width: 60,
-      render: (_v, _record, index) => <span className="row-index">{index + 1}</span>,
-    },
-    { title: t('pages.xray.outbound.tag'), key: 'identity', align: 'left', render: (_v, record) => identityCell(record) },
-    { title: t('pages.inbounds.address'), key: 'address', align: 'left', render: (_v, record) => addressCell(record) },
-    { title: t('pages.inbounds.traffic'), key: 'traffic', align: 'left', width: 200, render: (_v, record) => trafficCell(record) },
-    { title: t('pages.nodes.latency'), key: 'testResult', align: 'left', width: 140, render: (_v, record) => latencyCell(record) },
-    { title: t('check'), key: 'test', align: 'center', width: 80, render: (_v, record) => testButton(record) },
+    { title: t('pages.xray.outbound.tag'), key: 'identity', width: 170, render: (_, row) => <span className="p-name" title={row.tag}>{row.tag || '—'}</span> },
+    { title: t('protocol'), key: 'protocol', width: 120, render: (_, row) => <OutboundProtocolCell row={row} /> },
+    { title: t('uiRepair.outbounds.destination'), key: 'address', width: 200, render: (_, row) => <OutboundDestinationCell row={row} /> },
+    { title: t('pages.nodes.latency'), key: 'health', width: 130, render: (_, row) => <OutboundHealthCell row={row} state={subscriptionTestStates[row.tag || '']} /> },
+    { title: t('uiRepair.outbounds.measuredTraffic'), key: 'traffic', width: 165, render: (_, row) => <OutboundTrafficCell row={row} traffic={outboundsTraffic} /> },
+    { title: t('uiRepair.outbounds.rules'), key: 'rules', width: 70, render: (_, row) => <OutboundReferencesCell references={referencedRules(templateSettings, row, hostRules)} /> },
+    { title: '', key: 'test', width: 50, align: 'end', render: (_, row) => probe(row) },
   ];
-
-  return (
-    <div className="subscription-outbounds" style={{ marginTop: 16 }}>
-      {header}
-      <Table columns={columns} dataSource={rows} rowKey={(r) => r.key} pagination={false} size="small" />
-    </div>
-  );
+  return <PanelCard pad={0} className="outbounds-card subscription-outbounds" title={t('pages.xray.outboundSub.fromSubsTitle')}>
+    <div className="outbounds-note">{t('pages.xray.outboundSub.fromSubsDesc')}</div>
+    {isMobile ? <div className="outbound-mobile-list">{rows.map((row) => <article className="outbound-card" key={row.key}>
+      <div className="outbound-name"><span className="p-name">{row.tag}</span>{probe(row)}</div>
+      <OutboundProtocolCell row={row} /><OutboundDestinationCell row={row} />
+      <div className="outbound-mobile-stats"><OutboundHealthCell row={row} state={subscriptionTestStates[row.tag || '']} />
+        <OutboundTrafficCell row={row} traffic={outboundsTraffic} />
+        <OutboundReferencesCell references={referencedRules(templateSettings, row, hostRules)} /></div>
+    </article>)}</div> : <Table className="p-table outbounds-table" columns={columns} dataSource={rows} rowKey="key"
+      pagination={false} size="small" tableLayout="fixed" scroll={{ x: 905 }} />}
+  </PanelCard>;
 }

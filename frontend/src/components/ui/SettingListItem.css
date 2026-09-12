@@ -15,6 +15,11 @@
   gap: 4px;
 }
 
+.setting-list-label,
+.setting-list-control {
+  min-width: 0;
+}
+
 .setting-list-title {
   font-size: 14px;
   color: var(--ant-color-text);

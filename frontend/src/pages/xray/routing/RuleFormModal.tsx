@@ -50,6 +50,7 @@ interface RuleFormModalProps {
   exits?: RoutingExitView[];
   onClose: () => void;
   onConfirm: (rule: Record<string, unknown>) => void;
+  disabled?: boolean;
 }
 
 const initialForm = (): RuleFormValues => ({
@@ -87,6 +88,7 @@ export default function RuleFormModal({
   exits,
   onClose,
   onConfirm,
+  disabled = false,
 }: RuleFormModalProps) {
   const { t } = useTranslation();
   const methods = useForm<RuleFormValues>({ defaultValues: initialForm() });
@@ -135,7 +137,7 @@ export default function RuleFormModal({
   }, [open, rule, methods]);
 
   const attrs = useWatch({ control: methods.control, name: 'attrs' }) ?? [];
-  const chosenTags = useWatch({ control: methods.control, name: 'inboundTag' }) ?? [];
+  const chosenTags = useWatch({ control: methods.control, name: 'inboundTag' });
 
   /* A criterion the selected inbounds cannot match is disabled with the reason
      rather than hidden: a rule that saves and never matches is the bug this
@@ -167,6 +169,7 @@ export default function RuleFormModal({
   }, [subjects, chosenTags]);
 
   function submit() {
+    if (disabled) return;
     const validated = RuleFormSchema.safeParse(methods.getValues());
     if (!validated.success) return;
     const v = validated.data;
@@ -214,12 +217,14 @@ export default function RuleFormModal({
       open={open}
       title={title}
       okText={okText}
+      okButtonProps={{ disabled }}
       cancelText={t('close')}
       mask={{ closable: false }}
       width={640}
       onOk={submit}
       onCancel={onClose}
     >
+      {disabled && <Alert type="warning" showIcon title={t('routingPage.loadBeforeEdit')} />}
       <FormProvider {...methods}>
         <Form colon={false} labelCol={{ md: { span: 8 } }} wrapperCol={{ md: { span: 14 } }}>
           <FormField name="enabled" label={t('enable')} valueProp="checked">

@@ -43,9 +43,7 @@ export default function SubJsonFinalMaskForm({ value, onChange }: SubJsonFinalMa
   return (
     <Form
       form={form}
-      layout="horizontal"
-      labelCol={{ flex: '160px' }}
-      wrapperCol={{ flex: 'auto' }}
+      layout="vertical"
       colon={false}
       initialValues={{ finalmask: initial }}
     >

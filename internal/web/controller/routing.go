@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sort"
 	"strconv"
 
@@ -95,10 +96,10 @@ func (a *RoutingController) add(c *gin.Context) {
 	created, err := a.routingService.Add(context.Background(), rule)
 	if err != nil {
 		if msg, refused := refusalMessage(c, err); refused {
-			jsonMsg(c, msg, nil)
+			pureJsonMsg(c, http.StatusOK, false, msg)
 			return
 		}
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		jsonMsgObj(c, I18nWeb(c, "somethingWentWrong"), created, err)
 		return
 	}
 	jsonObj(c, created, nil)
@@ -119,10 +120,10 @@ func (a *RoutingController) update(c *gin.Context) {
 	updated, err := a.routingService.Update(context.Background(), rule)
 	if err != nil {
 		if msg, refused := refusalMessage(c, err); refused {
-			jsonMsg(c, msg, nil)
+			pureJsonMsg(c, http.StatusOK, false, msg)
 			return
 		}
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		jsonMsgObj(c, I18nWeb(c, "somethingWentWrong"), updated, err)
 		return
 	}
 	jsonObj(c, updated, nil)

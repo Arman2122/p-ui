@@ -2,6 +2,7 @@ import { Button, Input, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 interface SecretInputProps {
+  'aria-labelledby'?: string;
   value: string;
   configured: boolean;
   clearArmed: boolean;
@@ -11,6 +12,7 @@ interface SecretInputProps {
 }
 
 export default function SecretInput({
+  'aria-labelledby': labelledBy,
   value,
   configured,
   clearArmed,
@@ -22,6 +24,7 @@ export default function SecretInput({
   return (
     <Space.Compact style={{ width: '100%' }}>
       <Input.Password
+        aria-labelledby={labelledBy}
         value={value}
         placeholder={configured && !clearArmed ? placeholder : ''}
         onChange={(e) => {

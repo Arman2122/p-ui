@@ -6,10 +6,11 @@ import {
   Button,
   ConfigProvider,
   FloatButton,
-  Layout,
   Modal,
+  Result,
   Space,
   Spin,
+  Tooltip,
   message,
 } from 'antd';
 
@@ -53,10 +54,6 @@ function isIp(h: string): boolean {
   return parts.length === 2 ? groups < 8 : groups === 8;
 }
 
-function scrollTarget() {
-  return document.getElementById('content-layout') as HTMLElement;
-}
-
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
@@ -71,6 +68,8 @@ export default function SettingsPage() {
     allSetting,
     updateSetting,
     fetched,
+    fetchError,
+    retryFetch,
     spinning,
     setSpinning,
     saveDisabled,
@@ -84,15 +83,17 @@ export default function SettingsPage() {
   const [entryIsIP, setEntryIsIP] = useState(false);
 
   useEffect(() => {
-     
+
     const host = window.location.hostname;
     setEntryHost(host);
     setEntryPort(window.location.port);
     setEntryIsIP(isIp(host));
-     
+
   }, []);
 
   const [alertVisible, setAlertVisible] = useState(true);
+  const [warningsExpanded, setWarningsExpanded] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   const slug = location.hash.replace(/^#/, '');
@@ -109,6 +110,8 @@ export default function SettingsPage() {
       const url = new URL(window.location.href);
       url.pathname = `/${base}panel/settings`;
       url.protocol = newProtocol;
+      url.hash = location.hash;
+      url.search = location.search;
       return url.toString();
     }
 
@@ -120,10 +123,13 @@ export default function SettingsPage() {
     const url = new URL(`${newProtocol}//${finalHost}`);
     if (finalPort) url.port = finalPort;
     url.pathname = `/${base}panel/settings`;
+    url.hash = location.hash;
+    url.search = location.search;
     return url.toString();
   }
 
   async function onSave() {
+    setSaveError('');
     const result = AllSettingSchema.safeParse(allSetting);
     if (!result.success) {
       const issue = result.error.issues[0];
@@ -132,13 +138,21 @@ export default function SettingsPage() {
       messageApi.error(`${fieldPath}: ${t(msgKey, { defaultValue: msgKey })}`);
       return;
     }
-    await saveAll();
+    try {
+      const result = await saveAll();
+      if (!result.success) setSaveError(result.msg || t('somethingWentWrong'));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   function restartPanel() {
     modal.confirm({
       title: t('pages.settings.restartPanel'),
-      content: t('pages.settings.restartPanelDesc'),
+      content: <>
+        <p>{t('pages.settings.restartPanelDesc')}</p>
+        <p>{t('pages.settings.restartPendingFor', { fields: restartPendingKeys.map((key) => t(RESTART_FIELD_LABELS[key] ?? key)).join(', ') })}</p>
+      </>,
       okText: t('pages.settings.restartPanel'),
       okButtonProps: { danger: true },
       cancelText: t('cancel'),
@@ -212,11 +226,11 @@ export default function SettingsPage() {
       { slug: 'email', labelKey: 'pages.settings.emailSettings', icon: 'mail' },
       { slug: 'subscription', labelKey: 'pages.settings.subSettings', icon: 'hosts' },
     ];
-    if (allSetting.subJsonEnable || allSetting.subClashEnable) {
+    if (allSetting.subJsonEnable || allSetting.subClashEnable || activeSlug === 'subscription-formats') {
       list.push({ slug: 'subscription-formats', labelKey: 'pages.settings.subFormats', icon: 'config' });
     }
     return list;
-  }, [allSetting.subJsonEnable, allSetting.subClashEnable]);
+  }, [allSetting.subJsonEnable, allSetting.subClashEnable, activeSlug]);
 
   const activeSection = sections.find((x) => x.slug === activeSlug) ?? sections[0];
 
@@ -240,93 +254,73 @@ export default function SettingsPage() {
     }
   }, [activeSlug, allSetting, updateSetting, savePayload]);
 
+  const restartCount = restartPendingKeys.length;
+  const restartHint = fetchError ? t('uiRepair.settings.refreshBeforeRestart') : !saveDisabled ? t('uiRepair.settings.saveBeforeRestart')
+    : restartCount ? t('pages.settings.restartPendingFor', { fields: restartPendingKeys.map((key) => t(RESTART_FIELD_LABELS[key] ?? key)).join(', ') })
+      : t('uiRepair.settings.noRestartPending');
+
   return (
     <ConfigProvider theme={antdThemeConfig}>
       {messageContextHolder}
       {modalContextHolder}
-      <Layout className={pageClass}>
-
-        <Layout className="content-shell">
-          <Layout.Content id="content-layout" className="content-area">
-            <Spin spinning={spinning || !fetched} delay={200} description={t('loading')} size="large">
-              {!fetched ? (
-                <div className="loading-spacer" />
-              ) : (
-                <>
-                  {confAlerts.length > 0 && alertVisible && (
-                    <Alert
-                      type="error"
-                      showIcon
-                      closable={{ onClose: () => setAlertVisible(false) }}
-                      className="conf-alert"
-                      title={t('pages.settings.securityWarnings')}
-                      description={(
-                        <>
-                          <b>{t('pages.settings.panelExposed')}</b>
-                          <ul>
-                            {confAlerts.map((msg, i) => <li key={i}>{msg}</li>)}
-                          </ul>
-                        </>
-                      )}
-                    />
-                  )}
-
-                  <PageHeader title={t('menu.settings')} sub={t('pages.settings.subtitle')} />
-
-                  <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
-
-                  {restartPendingKeys.length > 0 && (
-                    <Alert
-                      type="warning"
-                      showIcon
-                      title={t('pages.settings.restartPendingFor', {
-                        fields: restartPendingKeys.map((key) => t(RESTART_FIELD_LABELS[key] ?? key)).join(', '),
-                      })}
-                    />
-                  )}
-
-                  <div className="p-settings">
-                    <SectionRail
-                      items={sections.map((x) => ({
-                        key: x.slug,
-                        label: t(x.labelKey),
-                        desc: t(`pages.settings.sectionDesc_${x.slug.replace(/-/g, '_')}`),
-                        icon: x.icon,
-                      }))}
-                      active={activeSlug}
-                      onPick={(slug) => navigate(`/settings#${slug}`)}
-                    />
-                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                        <div>
-                          <div style={{ fontSize: 15, fontWeight: 650, color: 'var(--p-text)' }}>
-                            {t(activeSection.labelKey)}
-                          </div>
-                          <div className="p-sub" style={{ marginTop: 2 }}>
-                            {t(`pages.settings.sectionDesc_${activeSlug.replace(/-/g, '_')}`)}
-                          </div>
-                        </div>
-                        <Space size={8}>
-                          <span className="p-sub">
-                            {saveDisabled ? t('pages.settings.allSaved') : t('pages.settings.unsaved')}
-                          </span>
-                          <Button type="primary" danger disabled={!saveDisabled} onClick={restartPanel}>
-                            {t('pages.settings.restartPanel')}
-                          </Button>
-                          <Button type="primary" disabled={saveDisabled} onClick={onSave}>
-                            {t('pages.settings.save')}
-                          </Button>
-                        </Space>
-                      </div>
-                      {categoryBody}
-                    </div>
+      <div className={pageClass}>
+        <PageHeader title={t('menu.settings')} sub={t('pages.settings.subtitle')} />
+        {fetched && confAlerts.length > 0 && alertVisible && (
+          <Alert type="warning" showIcon className="settings-warning"
+            closable={{ closeIcon: true, onClose: () => setAlertVisible(false) }}
+            title={<div className="settings-warning-summary">
+              <span>{t('pages.settings.securityWarnings')} · {t('uiRepair.settings.warningCount', { count: confAlerts.length })}</span>
+              <Button type="link" size="small" aria-expanded={warningsExpanded} aria-controls="settings-warning-details" onClick={() => setWarningsExpanded((value) => !value)}>
+                {t(warningsExpanded ? 'uiRepair.settings.hideDetails' : 'uiRepair.settings.showDetails')}
+              </Button>
+            </div>}
+            description={warningsExpanded && <div id="settings-warning-details">
+              <p>{t('pages.settings.panelExposed')}</p>
+              <ul>{confAlerts.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+            </div>}
+          />
+        )}
+        {!fetched && fetchError ? (
+          <Result status="error" title={t('uiRepair.settings.readFailed')} subTitle={fetchError.message}
+            extra={<Button type="primary" onClick={() => { void retryFetch(); }}>{t('refresh')}</Button>} />
+        ) : <Spin spinning={spinning || !fetched} delay={200} description={t('loading')} size="large">
+          {!fetched ? <div className="settings-loading" /> : (
+            <div className="p-settings settings-workspace">
+              <SectionRail mobileCollapsible
+                items={sections.map((item) => ({ key: item.slug, label: t(item.labelKey), desc: t(`pages.settings.sectionDesc_${item.slug.replace(/-/g, '_')}`), icon: item.icon }))}
+                active={activeSlug}
+                onPick={(next) => navigate({ pathname: location.pathname, search: location.search, hash: `#${next}` })}
+              />
+              <section className="settings-content" aria-labelledby="settings-section-heading">
+                <div className="settings-section-header">
+                  <div className="settings-section-title">
+                    <h2 id="settings-section-heading">{t(activeSection.labelKey)}</h2>
+                    <p>{t(`pages.settings.sectionDesc_${activeSlug.replace(/-/g, '_')}`)}</p>
                   </div>
-                </>
-              )}
-            </Spin>
-          </Layout.Content>
-        </Layout>
-      </Layout>
+                  <div className="settings-actions">
+                    <span role="status" className={`settings-save-state${saveDisabled ? '' : ' is-dirty'}`}>
+                      {saveDisabled ? t('pages.settings.allSaved') : t('pages.settings.unsaved')}
+                    </span>
+                    <Space size={8} wrap>
+                      <Tooltip title={restartHint}><span>
+                        <Button disabled={!saveDisabled || restartCount === 0 || spinning || !!fetchError} onClick={restartPanel}>
+                          {restartCount ? t('uiRepair.settings.restartApply', { count: restartCount }) : t('pages.settings.restartPanel')}
+                        </Button>
+                      </span></Tooltip>
+                      <Button type="primary" loading={spinning} disabled={saveDisabled} onClick={onSave}>{t('pages.settings.save')}</Button>
+                    </Space>
+                  </div>
+                </div>
+                {restartCount > 0 && <Alert type="warning" showIcon className="settings-pending" title={restartHint} />}
+                {fetchError && <Alert type="warning" showIcon title={t('uiRepair.settings.readFailed')} description={fetchError.message} action={<Button onClick={() => { void retryFetch(); }}>{t('refresh')}</Button>} />}
+                {saveError && <Alert type="error" showIcon title={t('uiRepair.settings.saveFailed')} description={saveError} closable={{ closeIcon: true, onClose: () => setSaveError('') }} />}
+                {categoryBody}
+              </section>
+            </div>
+          )}
+        </Spin>}
+        <FloatButton.BackTop visibilityHeight={200} />
+      </div>
     </ConfigProvider>
   );
 }

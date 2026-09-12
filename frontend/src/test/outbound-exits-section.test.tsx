@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import OutboundsTab from '@/pages/xray/outbounds/OutboundsTab';
@@ -7,7 +7,7 @@ import type { XraySettingsValue } from '@/hooks/useXraySetting';
 import { HttpUtil, Msg } from '@/utils';
 import enUS from '../../../internal/web/translation/en-US.json';
 
-import { renderWithProviders } from './test-utils';
+import { chooseSelectOption, renderWithProviders } from './test-utils';
 
 const REFUSAL = 'egress: net.ipv4.conf.all.rp_filter is 1, so the return path is dropped';
 const NOTE = 'net.ipv4.ip_forward is 0, so no L3 inbound on this host forwards a packet at all';
@@ -41,7 +41,8 @@ function mockHost(preflight: { ok: boolean; refusals: string[]; notes: string[] 
   vi.spyOn(HttpUtil, 'get').mockImplementation((url: string) => Promise.resolve(
     url.includes('/egresses/preflight') ? new Msg(true, '', preflight)
       : url.includes('/egresses/list') ? new Msg(true, '', rows)
-        : new Msg(true, '', {}),
+        : url.endsWith('/cores') ? new Msg(true, '', [{ id: 'wireguard', titleKey: 'cores.wgkernel.title', kinds: ['wgkernel'], exitKinds: ['wgkernel'], available: true, unavailable: '', caps: {}, clientCredentials: {}, shaping: {}, applyDelaySeconds: {}, portlessKinds: [], rateKinds: [], sessionKinds: [] }])
+          : new Msg(true, '', []),
   ));
 }
 
@@ -107,14 +108,31 @@ describe('exits share the outbounds table', () => {
   /* Refusals name a sysctl the panel cannot override, so they survive the move
      onto the merged table verbatim and left-to-right. */
   it('still says what stops this host carrying an exit', async () => {
-    mockHost({ ok: false, refusals: [REFUSAL], notes: [NOTE] }, []);
+    mockHost({ ok: false, refusals: [REFUSAL], notes: [NOTE] }, [UPLINK]);
     await renderTab();
 
     const alerts = Array.from(document.querySelectorAll('.ant-alert'));
     const blocked = alerts.find((a) => a.textContent?.includes(enUS.pages.xray.egress.preflightBlocked));
-    expect(blocked?.querySelector('[dir="ltr"]')?.textContent).toBe(REFUSAL);
+    expect(alerts).toHaveLength(1);
+    expect(blocked?.querySelector('[dir="ltr"]')?.textContent).toBe(REFUSAL + NOTE);
+  });
 
-    const notes = alerts.find((a) => a.textContent?.includes(enUS.pages.xray.egress.preflightNotes));
-    expect(notes?.querySelector('[dir="ltr"]')?.textContent).toBe(NOTE);
+  it('does not fetch or show hypothetical host warnings on a pure Xray page', async () => {
+    mockHost({ ok: false, refusals: [REFUSAL], notes: [NOTE] }, []);
+    await renderTab();
+    expect(document.querySelectorAll('.ant-alert')).toHaveLength(0);
+    expect(vi.mocked(HttpUtil.get).mock.calls.some(([url]) => url.includes('/egresses/preflight'))).toBe(false);
+  });
+
+  it('shows preflight reasons only after the add form selects a host exit', async () => {
+    mockHost({ ok: false, refusals: [REFUSAL], notes: [NOTE] }, []);
+    await renderTab();
+    fireEvent.click(screen.getByRole('button', { name: /Add outbound/ }));
+    await waitFor(() => expect(document.querySelector('#protocol')).not.toBeNull());
+    expect(screen.queryByText(REFUSAL)).toBeNull();
+    chooseSelectOption('protocol', enUS.protocols.names.wgkernel);
+    await screen.findByText(REFUSAL);
+    expect(document.querySelector('.outbounds-card')?.textContent).not.toContain(REFUSAL);
+    expect(screen.getByRole('dialog').textContent).toContain(NOTE);
   });
 });

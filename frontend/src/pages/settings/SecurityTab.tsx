@@ -1,6 +1,8 @@
+import SettingsGroup from './SettingsGroup';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { InputNumber, Select, Tag,
+import {
+  InputNumber, Select, Tag,
   Alert,
   Button,
   Empty,
@@ -60,7 +62,7 @@ const TFA_INITIAL: TfaState = {
   description: '',
   token: '',
   type: 'set',
-  onConfirm: () => {},
+  onConfirm: () => { },
 };
 
 export default function SecurityTab({ allSetting, updateSetting, saveSetting, tokensOnly }: SecurityTabProps) {
@@ -146,7 +148,7 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
   }, [t]);
 
   useEffect(() => {
-     
+
     loadApiTokens();
   }, [loadApiTokens]);
 
@@ -259,11 +261,11 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
     <>
       {messageContextHolder}
       {modalContextHolder}
-      <Tabs key={tokensOnly ? 'tokens' : 'security'} defaultActiveKey={tokensOnly ? '3' : '1'} tabBarStyle={tokensOnly ? { display: 'none' } : undefined} items={[
+      <Tabs className="settings-tabs" key={tokensOnly ? 'tokens' : 'security'} defaultActiveKey={tokensOnly ? '3' : '1'} tabBarStyle={tokensOnly ? { display: 'none' } : undefined} items={[
         {
           key: '1',
           label: catTabLabel(<UserOutlined />, t('pages.settings.security.admin'), isMobile),
-          children: (
+          children: (<SettingsGroup title={t('pages.settings.security.admin')}>{(
             <>
               <SettingListItem paddings="small" title={t('pages.settings.oldUsername')}>
                 <Input value={user.oldUsername} autoComplete="username"
@@ -289,12 +291,12 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
                 </Space>
               </div>
             </>
-          ),
+          )}</SettingsGroup>),
         },
         {
           key: '2',
           label: catTabLabel(<SafetyOutlined />, t('pages.settings.security.twoFactor'), isMobile),
-          children: (
+          children: (<SettingsGroup title={t('pages.settings.security.twoFactor')}>{(
             <SettingListItem
               paddings="small"
               title={t('pages.settings.security.twoFactorEnable')}
@@ -302,12 +304,12 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
             >
               <Switch checked={allSetting.twoFactorEnable} onClick={toggleTwoFactor} />
             </SettingListItem>
-          ),
+          )}</SettingsGroup>),
         },
         {
           key: '3',
           label: catTabLabel(<ApiOutlined />, t('pages.nodes.apiToken'), isMobile),
-          children: (
+          children: (<SettingsGroup title={t('pages.nodes.apiToken')}>{(
             <div className="api-token-section">
               {apiTokensError && <Alert type="error" title={apiTokensError} action={<Button onClick={() => void loadApiTokens()}>{t('refresh')}</Button>} />}
               <div className="api-token-header">
@@ -349,7 +351,7 @@ export default function SecurityTab({ allSetting, updateSetting, saveSetting, to
                 ))}
               </Spin>
             </div>
-          ),
+          )}</SettingsGroup>),
         },
       ]} />
 

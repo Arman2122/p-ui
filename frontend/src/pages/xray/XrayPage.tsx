@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router';
 import {
@@ -98,6 +98,9 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
   const [invalidSlices, setInvalidSlices] = useState<Partial<Record<AdvKey, string>>>({});
   const [testingConfig, setTestingConfig] = useState(false);
   const [configValidation, setConfigValidation] = useState<{ text: string; error: boolean; document: string } | null>(null);
+  const [saveFailure, setSaveFailure] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
   const pathSection = section || (location.pathname === '/outbound' || location.pathname === '/outbounds' ? 'outbound' : location.pathname === '/routing' ? 'routing' : '');
@@ -213,6 +216,7 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
   }
 
   async function onSaveAll() {
+    if (savingRef.current || routing.loading || routing.error) return;
     if (Object.keys(invalidSlices).length) {
       messageApi.error(t('settingsOps.core.invalidJSON'));
       navigate('/xray#advanced');
@@ -225,6 +229,7 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
       navigate('/xray#advanced');
       return;
     }
+    let snapshot = xraySetting;
     if (templateSettings) {
       const clone = JSON.parse(JSON.stringify(templateSettings));
       ensureMissingBalancerLoopbacks(clone);
@@ -236,13 +241,23 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
         return;
       }
       const serialized = JSON.stringify(clone, null, 2);
+      snapshot = serialized;
       setXraySetting(serialized);
       setTemplateSettings(clone);
     }
-    /* Routing rules first: each write raises the restart flag, so flushing
-       them before the template save means one reload carries everything. */
-    await routing.flush();
-    await saveAll();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveFailure('');
+    try {
+      await routing.flush();
+      await saveAll(snapshot);
+    } catch (error) {
+      setSaveFailure(error instanceof Error ? error.message : String(error));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   async function testConfig() {
@@ -270,11 +285,25 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
 
   const pageClass = `xray-page ${isDark ? 'is-dark' : ''} ${isUltra ? 'is-ultra' : ''}`.trim();
 
+  const saveActions = <Space wrap size={8}>
+    <span className="p-sub" role="status">{routing.loading ? t('loading') : routing.error ? t('somethingWentWrong') : saveDisabled ? t('pages.settings.allSaved') : t('pages.settings.unsaved')}</span>
+    <Button type="primary" disabled={saveDisabled || routing.loading || !!routing.error} loading={saving} onClick={() => { void onSaveAll(); }}>{t('pages.xray.save')}</Button>
+  </Space>;
+  const renderNetworkHeader = (actions: ReactNode) => <>
+    <PageHeader title={t(pathSection === 'routing' ? 'menu.routing' : 'menu.outbounds')}
+      sub={t(pathSection === 'routing' ? 'routingPage.subtitle' : 'pages.xray.sectionDesc_outbound')}
+      actions={<>{actions}{saveActions}</>} />
+    {saveFailure && <Alert type="error" showIcon title={t('somethingWentWrong')} description={t(saveFailure)} />}
+  </>;
+
   const sectionBody = (() => {
     switch (activeSection) {
       case 'routing':
         return (
           <RoutingTab
+            standalone={pathSection === 'routing'}
+            renderHeader={pathSection === 'routing' ? renderNetworkHeader : undefined}
+            hasUnsavedChanges={!saveDisabled}
             templateSettings={templateSettings}
             setTemplateSettings={setTemplateSettings}
             inboundTags={inboundTags}
@@ -288,6 +317,8 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
       case 'outbound':
         return (
           <OutboundsTab
+            standalone={pathSection === 'outbound'}
+            renderHeader={pathSection === 'outbound' ? renderNetworkHeader : undefined}
             templateSettings={templateSettings}
             setTemplateSettings={setTemplateSettings}
             outboundsTraffic={outboundsTraffic}
@@ -370,7 +401,7 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
       <Layout className={pageClass}>
 
         <Layout className="content-shell">
-          <Layout.Content id="content-layout" className="content-area">
+          <div id="content-layout" className="ant-layout-content content-area">
             <Spin spinning={spinning || !fetched} delay={200} description={t('loading')} size="large">
               {!fetched ? (
                 <div className="loading-spacer" />
@@ -382,14 +413,12 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
                   extra={<Button type="primary" onClick={fetchAll}>{t('check')}</Button>}
                 />
               ) : (
-                <>
-                  <PageHeader title={t(pathSection === 'routing' ? 'menu.routing' : pathSection === 'outbound' ? 'menu.outbounds' : 'menu.xray')} sub={t(pathSection ? `pages.xray.sectionDesc_${pathSection}` : 'pages.xray.subtitle')} />
-
+                <div className="p-network-page">
                   <FloatButton.BackTop target={scrollTarget} visibilityHeight={200} />
-                  <Alert type="warning" showIcon title={t('pages.settings.infoDesc')} />
-
-                  <div className={pathSection ? 'p-network-page' : 'p-settings'}>
-                    {!pathSection && <SectionRail
+                  {pathSection ? sectionBody : <>
+                  <PageHeader title={t('menu.xray')} sub={t('pages.xray.subtitle')} />
+                  <div className="p-settings">
+                    <SectionRail
                       items={XRAY_SECTIONS.map((x) => ({
                         key: x.slug,
                         label: t(x.labelKey),
@@ -398,34 +427,31 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
                       }))}
                       active={activeSection}
                       onPick={(slug) => navigate(slug === 'routing' || slug === 'outbound' ? `/${slug}` : `/xray#${slug}`)}
-                    />}
-                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                    />
+                    <section className="p-card p-core-editor">
+                      <div className="p-card-h">
                         <div>
                           <div style={{ fontSize: 15, fontWeight: 650, color: 'var(--p-text)' }}>
                             {t(XRAY_SECTIONS.find((x) => x.slug === activeSection)?.labelKey ?? 'menu.xray')}
                           </div>
                           <div className="p-sub" style={{ marginTop: 2 }}>{t(`pages.xray.sectionDesc_${activeSection}`)}</div>
                         </div>
-                        <Space size={8}>
-                          <span className="p-sub">
-                            {saveDisabled ? t('pages.settings.allSaved') : t('pages.settings.unsaved')}
-                          </span>
-                          <Button type="primary" disabled={saveDisabled} onClick={onSaveAll}>
-                            {t('pages.xray.save')}
-                          </Button>
-                          <Button loading={testingConfig} onClick={testConfig}>{t('settingsOps.core.validate')}</Button>
+                        <Space wrap size={8}>
+                          {saveActions}
+                          <Button loading={testingConfig} disabled={saving || routing.dirty} onClick={testConfig}>{t('settingsOps.core.validate')}</Button>
                           <Button onClick={() => downloadConfig('xray-template.json', xraySetting)}>{t('download')}</Button>
                         </Space>
                       </div>
+                      {saveFailure && <Alert type="error" showIcon title={t('somethingWentWrong')} description={t(saveFailure)} />}
                       {configValidation?.document === xraySetting && <Alert type={configValidation.error ? 'error' : 'success'} title={configValidation.text} showIcon />}
-                      {sectionBody}
-                    </div>
+                      <div className="p-core-editor-body">{sectionBody}</div>
+                    </section>
                   </div>
-                </>
+                  </>}
+                </div>
               )}
             </Spin>
-          </Layout.Content>
+          </div>
         </Layout>
 
         <WarpModal

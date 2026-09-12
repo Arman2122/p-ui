@@ -115,10 +115,14 @@ export function ruleCriteriaChips(rule: RuleRow) {
   if (rule.port) chips.push({ label: 'Port', value: rule.port });
   if (rule.sourceIP) chips.push({ label: 'Src IP', value: rule.sourceIP });
   if (rule.sourcePort) chips.push({ label: 'Src Port', value: rule.sourcePort });
+  if (rule.localIP) chips.push({ label: 'Local IP', value: rule.localIP });
+  if (rule.localPort) chips.push({ label: 'Local Port', value: rule.localPort });
+  if (rule.process) chips.push({ label: 'Process', value: rule.process });
   if (rule.network) chips.push({ label: 'L4', value: rule.network.toUpperCase() });
   if (rule.protocol) chips.push({ label: 'Protocol', value: rule.protocol });
   if (rule.user) chips.push({ label: 'User', value: rule.user });
   if (rule.vlessRoute) chips.push({ label: 'VLESS', value: rule.vlessRoute });
+  if (rule.attrs) chips.push({ label: 'Attrs', value: rule.attrs });
   return chips;
 }
 

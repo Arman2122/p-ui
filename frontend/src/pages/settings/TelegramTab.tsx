@@ -1,15 +1,14 @@
+import SettingsGroup from './SettingsGroup';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Input, InputNumber, Select, Space, Switch, Tabs } from 'antd';
-import { BellOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
+import { Alert, Button, Input, InputNumber, Select, Space, Switch } from 'antd';
+import { SendOutlined } from '@ant-design/icons';
 import { LanguageManager } from '@/utils';
 import { HttpUtil } from '@/utils';
 import { onNumber } from '@/utils/onNumber';
 import type { AllSetting } from '@/models/setting';
 import { SettingListItem } from '@/components/ui';
 import { TelegramNotifications } from '@/components/ui/notifications/TelegramNotifications';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { catTabLabel } from './catTabLabel';
 import SecretInput from './SecretInput';
 
 interface TelegramTabProps {
@@ -152,7 +151,6 @@ function NotifyTimeField({ value, onChange }: { value: string; onChange: (v: str
 
 export default function TelegramTab({ allSetting, updateSetting }: TelegramTabProps) {
   const { t } = useTranslation();
-  const { isMobile } = useMediaQuery();
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
 
@@ -183,86 +181,74 @@ export default function TelegramTab({ allSetting, updateSetting }: TelegramTabPr
   );
 
   return (
-    <Tabs defaultActiveKey="1" items={[
-      {
-        key: '1',
-        label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.telegramBotEnable')} description={t('pages.settings.telegramBotEnableDesc')}>
-              <Switch checked={allSetting.tgBotEnable} onChange={(v) => updateSetting({ tgBotEnable: v })} />
-            </SettingListItem>
+    <div className="settings-groups">
+      <SettingsGroup title={t('pages.settings.TGBotSettings')}>
+        <SettingListItem paddings="small" title={t('pages.settings.telegramBotEnable')} description={t('pages.settings.telegramBotEnableDesc')}>
+          <Switch checked={allSetting.tgBotEnable} onChange={(v) => updateSetting({ tgBotEnable: v })} />
+        </SettingListItem>
 
-            <SettingListItem
-              paddings="small"
-              title={t('pages.settings.telegramToken')}
-              description={allSetting.hasTgBotToken && !allSetting.clearTgBotToken ? t('pages.settings.telegramTokenConfigured') : t('pages.settings.telegramTokenDesc')}
-            >
-              <SecretInput
-                value={allSetting.tgBotToken}
-                configured={allSetting.hasTgBotToken}
-                clearArmed={allSetting.clearTgBotToken}
-                placeholder={t('pages.settings.telegramTokenPlaceholder')}
-                onChange={(v) => updateSetting({ tgBotToken: v })}
-                onClearArmedChange={(armed) => updateSetting({ clearTgBotToken: armed })}
-              />
-            </SettingListItem>
+        <SettingListItem
+          paddings="small"
+          title={t('pages.settings.telegramToken')}
+          description={allSetting.hasTgBotToken && !allSetting.clearTgBotToken ? t('pages.settings.telegramTokenConfigured') : t('pages.settings.telegramTokenDesc')}
+        >
+          <SecretInput
+            value={allSetting.tgBotToken}
+            configured={allSetting.hasTgBotToken}
+            clearArmed={allSetting.clearTgBotToken}
+            placeholder={t('pages.settings.telegramTokenPlaceholder')}
+            onChange={(v) => updateSetting({ tgBotToken: v })}
+            onClearArmedChange={(armed) => updateSetting({ clearTgBotToken: armed })}
+          />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.telegramChatId')} description={t('pages.settings.telegramChatIdDesc')}>
-              <Input value={allSetting.tgBotChatId} onChange={(e) => updateSetting({ tgBotChatId: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.telegramBotProxy')} description={t('pages.settings.telegramBotProxyDesc')}>
-              <Input value={allSetting.tgBotProxy} placeholder="socks5://user:pass@host:1080" onChange={(e) => updateSetting({ tgBotProxy: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.telegramChatId')} description={t('pages.settings.telegramChatIdDesc')}>
+          <Input value={allSetting.tgBotChatId} onChange={(e) => updateSetting({ tgBotChatId: e.target.value })} />
+        </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.telegramBotProxy')} description={t('pages.settings.telegramBotProxyDesc')}>
+          <Input value={allSetting.tgBotProxy} placeholder="socks5://user:pass@host:1080" onChange={(e) => updateSetting({ tgBotProxy: e.target.value })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.telegramBotLanguage')}>
-              <Select
-                value={allSetting.tgLang}
-                onChange={(v) => updateSetting({ tgLang: v })}
-                style={{ width: '100%' }}
-                options={langOptions}
-              />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.telegramBotLanguage')}>
+          <Select
+            value={allSetting.tgLang}
+            onChange={(v) => updateSetting({ tgLang: v })}
+            style={{ width: '100%' }}
+            options={langOptions}
+          />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.telegramAPIServer')} description={t('pages.settings.telegramAPIServerDesc')}>
-              <Input value={allSetting.tgBotAPIServer} placeholder="https://api.example.com"
-                onChange={(e) => updateSetting({ tgBotAPIServer: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.telegramAPIServer')} description={t('pages.settings.telegramAPIServerDesc')}>
+          <Input value={allSetting.tgBotAPIServer} placeholder="https://api.example.com"
+            onChange={(e) => updateSetting({ tgBotAPIServer: e.target.value })} />
+        </SettingListItem>
 
-            <Space orientation="vertical" size={8} style={{ width: '100%', marginTop: 16 }}>
-              <Button type="primary" icon={<SendOutlined />} loading={testLoading} onClick={handleTestTgBot}>
-                {t('pages.settings.testTgBot')}
-              </Button>
-              {testResult && (
-                <Alert
-                  type={testResult.success ? 'success' : 'error'}
-                  title={testResult.msg}
-                  showIcon
-                  closable={{ onClose: () => setTestResult(null) }}
-                />
-              )}
-            </Space>
-          </>
-        ),
-      },
-      {
-        key: '2',
-        label: catTabLabel(<BellOutlined />, t('pages.settings.notifications'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.telegramNotifyTime')} description={t('pages.settings.telegramNotifyTimeDesc')}>
-              <NotifyTimeField value={allSetting.tgRunTime} onChange={(v) => updateSetting({ tgRunTime: v })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.tgNotifyBackup')} description={t('pages.settings.tgNotifyBackupDesc')}>
-              <Switch checked={allSetting.tgBotBackup} onChange={(v) => updateSetting({ tgBotBackup: v })} />
-            </SettingListItem>
+        <Space orientation="vertical" size={8} style={{ width: '100%', marginTop: 16 }}>
+          <Button type="primary" icon={<SendOutlined />} loading={testLoading} onClick={handleTestTgBot}>
+            {t('pages.settings.testTgBot')}
+          </Button>
+          {testResult && (
+            <Alert
+              type={testResult.success ? 'success' : 'error'}
+              title={testResult.msg}
+              showIcon
+              closable={{ closeIcon: true, onClose: () => setTestResult(null) }}
+            />
+          )}
+        </Space>
+      </SettingsGroup>
+      <SettingsGroup title={t('pages.settings.notifications')}>
+        <SettingListItem paddings="small" title={t('pages.settings.telegramNotifyTime')} description={t('pages.settings.telegramNotifyTimeDesc')}>
+          <NotifyTimeField value={allSetting.tgRunTime} onChange={(v) => updateSetting({ tgRunTime: v })} />
+        </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.tgNotifyBackup')} description={t('pages.settings.tgNotifyBackupDesc')}>
+          <Switch checked={allSetting.tgBotBackup} onChange={(v) => updateSetting({ tgBotBackup: v })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.tgEventBusNotify')} description={t('pages.settings.tgEventBusNotifyDesc')}>
-              <TelegramNotifications allSetting={allSetting} updateSetting={updateSetting} />
-            </SettingListItem>
-          </>
-        ),
-      },
-    ]} />
+        <SettingListItem paddings="small" title={t('pages.settings.tgEventBusNotify')} description={t('pages.settings.tgEventBusNotifyDesc')}>
+          <div className="settings-wide-control"><TelegramNotifications allSetting={allSetting} updateSetting={updateSetting} /></div>
+        </SettingListItem>
+      </SettingsGroup>
+    </div>
   );
 }

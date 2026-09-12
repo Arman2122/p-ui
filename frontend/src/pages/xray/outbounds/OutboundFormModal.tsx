@@ -84,6 +84,8 @@ import {
 } from './transport';
 import { RealityForm, TlsForm } from './security';
 import './OutboundFormModal.css';
+import { isBuiltinOutbound } from './outbounds-tab-helpers';
+import HostEgressPreflight from './HostEgressPreflight';
 
 type StreamValue = OutboundFormValues['streamSettings'];
 
@@ -96,7 +98,7 @@ interface OutboundFormModalProps {
   onConfirm: (outbound: Record<string, unknown>) => void;
   /* An exit is a database row, not a line in the Xray config, so it leaves by a
      different door. Absent means this build offers no exit kinds to pick. */
-  onConfirmExit?: (payload: EgressPayload) => void;
+  onConfirmExit?: (payload: EgressPayload) => void | Promise<void>;
 }
 
 export default function OutboundFormModal({
@@ -117,6 +119,8 @@ export default function OutboundFormModal({
   const [jsonText, setJsonText] = useState('');
   const [jsonDirty, setJsonDirty] = useState(false);
   const [linkInput, setLinkInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const builtin = isBuiltinOutbound({ key: -1, tag: String(outboundProp?.tag ?? ''), protocol: String(outboundProp?.protocol ?? '') });
 
   const isEdit = outboundProp != null;
   const title = isEdit
@@ -360,7 +364,10 @@ export default function OutboundFormModal({
     if (!parsed.success) return;
     const module = exitModuleForKind(protocol);
     if (!module) return;
-    onConfirmExit(module.toPayload(parsed.data, methods.getValues('tag') ?? ''));
+    setSubmitting(true);
+    try { await onConfirmExit(module.toPayload(parsed.data, methods.getValues('tag') ?? '')); }
+    catch { messageApi.error(t('somethingWentWrong')); }
+    finally { setSubmitting(false); }
   }
 
   async function onOk() {
@@ -412,6 +419,8 @@ export default function OutboundFormModal({
         open={open}
         title={title}
         okText={okText}
+        confirmLoading={submitting}
+        okButtonProps={{ disabled: isExit && !exitModule }}
         cancelText={t('close')}
         mask={{ closable: false }}
         width={780}
@@ -441,6 +450,7 @@ export default function OutboundFormModal({
                       >
                         <Select
                           id="protocol"
+                          disabled={builtin}
                           showSearch
                           virtual={false}
                           options={protocolOptions}
@@ -477,6 +487,7 @@ export default function OutboundFormModal({
                             >
                               <Input
                                 value={field.value}
+                                disabled={builtin}
                                 onChange={(e) => field.onChange(e.target.value)}
                                 onBlur={field.onBlur}
                                 ref={field.ref}
@@ -487,6 +498,7 @@ export default function OutboundFormModal({
                         }}
                       />
 
+                      {isExit && <HostEgressPreflight />}
                       {isExit && exitModule && (
                         <FormProvider {...exitMethods}>
                           <exitModule.Fields />

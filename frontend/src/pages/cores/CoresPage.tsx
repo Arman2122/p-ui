@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Col, ConfigProvider, Layout, Modal, Result, Row, Space, Spin, Table, Tooltip, Tabs, Input, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import { Button, Col, ConfigProvider, Layout, Modal, Result, Row, Space, Spin, Tooltip, Input, message } from 'antd';
 import { FileTextOutlined, ReloadOutlined, TagsOutlined } from '@ant-design/icons';
 
 import { useTheme } from '@/hooks/useTheme';
@@ -11,17 +10,15 @@ import { setMessageInstance } from '@/utils/messageBus';
 import { HttpUtil } from '@/utils';
 import { CoreStateBadge } from '@/components/cores/CoreStateBadge';
 import { summarizeCores } from '@/lib/cores/status';
+import { coreColor, coreIcon, coreInstanceSummary, coreMaintenanceKey, coreRestarts, coreState, coreStateTone, coreVersionLabel } from '@/lib/cores/display';
 import { StatStrip } from '@/components/ui';
 import { PageHeader, PanelCard, Field } from '@/components/ui/panel';
-import type { CoreStatusView, InstanceStatusView } from '@/generated/zod';
+import type { CoreStatusView } from '@/generated/zod';
 import CoreVersionsModal from './CoreVersionsModal';
 import CoreLogsDrawer from './CoreLogsDrawer';
+import CoreDetailModal from './CoreDetailModal';
 import { Icon } from '@/components/ui/Icon';
 import './CoresPage.css';
-
-function when(ms?: number): string {
-  return ms ? new Date(ms).toLocaleString() : '';
-}
 
 export default function CoresPage() {
   const { t } = useTranslation();
@@ -38,7 +35,7 @@ export default function CoresPage() {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = cores.find((c) => c.id === selectedId);
-  const visibleCores = cores.filter((c) => `${t(c.titleKey)} ${c.id} ${c.state}`.toLowerCase().includes(query.toLowerCase()));
+  const visibleCores = cores.filter((c) => `${t(c.titleKey)} ${c.id} ${t(coreStateTone(c).labelKey)}`.toLowerCase().includes(query.toLowerCase()));
 
   const restart = useCallback((core: CoreStatusView) => {
     modal.confirm({
@@ -49,7 +46,8 @@ export default function CoresPage() {
       onOk: async () => {
         setRestarting(core.id);
         try {
-          await HttpUtil.post(`/panel/api/cores/${core.id}/restart`);
+          const result = await HttpUtil.post(`/panel/api/cores/${core.id}/restart`);
+          if (!result?.success) throw new Error(result?.msg || t('somethingWentWrong'));
           await refetch();
         } finally {
           setRestarting('');
@@ -59,15 +57,6 @@ export default function CoresPage() {
   }, [modal, t, refetch]);
 
   const summary = useMemo(() => summarizeCores(cores), [cores]);
-
-  const instanceColumns = useMemo<ColumnsType<InstanceStatusView>>(() => [
-    { title: t('pages.cores.columns.instance'), dataIndex: 'tag', key: 'tag', render: (tag: string, i) => <span>{tag} <span className="core-id">#{i.instanceId}</span></span> },
-    { title: t('pages.cores.columns.state'), key: 'state', render: (_, i) => <CoreStateBadge state={i.state} ready={i.ready} detail={i.detail} /> },
-    { title: 'PID', dataIndex: 'pid', key: 'pid', render: (pid?: number) => pid || '' },
-    { title: t('pages.cores.columns.restarts'), dataIndex: 'restarts', key: 'restarts', render: (n?: number) => n ?? 0 },
-    { title: t('pages.cores.columns.since'), dataIndex: 'since', key: 'since', render: (ms?: number) => when(ms) },
-    { title: t('pages.cores.columns.detail'), dataIndex: 'detail', key: 'detail', render: (d?: string) => d ? <Tooltip title={d}><span className="core-detail">{d}</span></Tooltip> : '' },
-  ], [t]);
 
   const pageClass = useMemo(() => {
     const classes = ['cores-page'];
@@ -82,7 +71,7 @@ export default function CoresPage() {
       {modalContextHolder}
       <Layout className={pageClass}>
         <Layout className="content-shell">
-          <Layout.Content id="content-layout" className="content-area">
+          <section id="content-layout" className="content-area" aria-label={t('pages.cores.title')}>
             <Spin spinning={!fetched} delay={200} size="large">
               {!fetched ? (
                 <div className="loading-spacer" />
@@ -117,55 +106,43 @@ export default function CoresPage() {
                     <PanelCard pad={0} className="p-core-list">
                       <div style={{ padding: 12 }}><Input.Search value={query} onChange={(e) => setQuery(e.target.value)}
                         allowClear aria-label={t('menu.cores')} placeholder={t('menu.cores')} /></div>
-                      {visibleCores.map((c) => <div className="p-corerow" key={c.id}>
-                        <span className="p-alert-i"><Icon name="xray" /></span>
+                      {visibleCores.map((c) => {
+                        const version = coreVersionLabel(c);
+                        const instance = coreInstanceSummary(c);
+                        return <div className="p-corerow" key={c.id} data-core-id={c.id}>
+                        <span className="p-alert-i" style={{ color: coreColor(c.id), background: `color-mix(in srgb, ${coreColor(c.id)} 15%, transparent)` }}><Icon name={coreIcon(c.id)} /></span>
                         <div className="p-corerow-id">
                           <Space wrap size={8}>
-                            <button className="p-text-action p-name" onClick={() => setSelectedId(c.id)}>{t(c.titleKey)}</button>
-                            <CoreStateBadge state={c.state} ready={c.ready} detail={c.detail || c.healthError || c.unavailable} />
+                            <button type="button" className="p-text-action p-name" onClick={() => setSelectedId(c.id)}>{t(c.titleKey)}</button>
+                            <CoreStateBadge state={coreState(c)} ready={c.ready} detail={c.unavailable || c.healthError || c.detail} />
                           </Space>
-                          <div className="p-sub" style={{ marginTop: 4 }}>{c.id} · <span className="p-mono">{c.version.installed || t('pages.cores.notInstalled')}</span></div>
-                          {(c.healthError || c.unavailable) && <div className="p-sub">{!c.available ? `${t('pages.cores.unavailable')}: ` : ''}{c.healthError || c.unavailable}</div>}
+                          <div className="p-sub core-version">{c.id} · <Tooltip title={<>{t(coreMaintenanceKey(c))}{c.version.error && <div>{c.version.error}</div>}</>}>
+                            <span className="p-mono">{version.text ?? t(version.key!)}</span>
+                          </Tooltip></div>
+                          {(c.healthError || c.unavailable) && <div className="p-sub core-unavailable">{c.unavailable || c.healthError}</div>}
                           {c.trafficError && <div className="p-sub">{t('pages.cores.trafficError')}: {c.trafficError}</div>}
                         </div>
                         <div className="p-corerow-stats">
-                          <Field label={t('pages.cores.columns.instances')} value={c.instances.length} />
-                          <Field label={t('pages.cores.columns.restarts')} value={c.restarts ?? c.instances.reduce((n, i) => n + (i.restarts ?? 0), 0)} />
+                          <Field label={t(instance.labelKey)} value={instance.valueKey ? t(instance.valueKey) : instance.value} />
+                          <Field label={t('pages.cores.columns.restarts')} value={coreRestarts(c) ?? '—'} />
                         </div>
                         <div className="p-core-row-actions" role="group" aria-label={t('pages.cores.columns.actions')}>
                           <Button size="small" onClick={() => setSelectedId(c.id)}>{t('pages.cores.columns.detail')}</Button>
-                          <Button size="small" icon={<ReloadOutlined />} disabled={!c.available} loading={restarting === c.id} onClick={() => restart(c)}>{t('pages.cores.restart')}</Button>
-                          {c.logs && <Button size="small" icon={<FileTextOutlined />} onClick={() => setLogsFor(c)}>{t('pages.cores.logs')}</Button>}
-                          {c.version.manageable && <Button size="small" icon={<TagsOutlined />} onClick={() => setVersionsFor(c)}>{t('pages.cores.versions')}</Button>}
+                          <Tooltip title={!c.available ? c.unavailable : undefined}><span><Button size="small" aria-label={t('pages.cores.restart')} icon={<ReloadOutlined aria-hidden />} disabled={!c.available} loading={restarting === c.id} onClick={() => restart(c)}>{t('pages.cores.restart')}</Button></span></Tooltip>
+                          {c.logs && <Button size="small" aria-label={t('pages.cores.logs')} icon={<FileTextOutlined aria-hidden />} onClick={() => setLogsFor(c)}>{t('pages.cores.logs')}</Button>}
+                          {c.version.manageable && <Button size="small" aria-label={t('pages.cores.versions')} icon={<TagsOutlined aria-hidden />} onClick={() => setVersionsFor(c)}>{t('pages.cores.versions')}</Button>}
                         </div>
-                      </div>)}
+                      </div>; })}
                       {!visibleCores.length && <div className="p-plan-empty">{t('noData')}</div>}
                     </PanelCard>
                   </Col>
                 </Row>
               )}
             </Spin>
-          </Layout.Content>
+          </section>
         </Layout>
       </Layout>
-      <Modal open={!!selected} title={selected ? t(selected.titleKey) : ''} width={900} footer={null} onCancel={() => setSelectedId(null)}>
-        {selected && <Tabs items={[
-          { key: 'overview', label: t('menu.dashboard'), children: <>
-            <div className="p-detail-grid" style={{ padding: '12px 0' }}>
-              <Field label={t('pages.cores.columns.core')} value={selected.id} />
-              <Field label={t('pages.cores.columns.state')} value={<CoreStateBadge state={selected.state} ready={selected.ready} detail={selected.detail} />} />
-              <Field label={t('pages.cores.columns.version')} value={selected.version.installed || t('pages.cores.notInstalled')} />
-              <Field label="PID" value={selected.pid || '—'} />
-              <Field label={t('pages.cores.columns.since')} value={when(selected.since) || '—'} />
-              <Field label={t('pages.cores.columns.traffic')} value={selected.trafficSeenAt ? when(selected.trafficSeenAt) : t('pages.cores.trafficNever')} />
-            </div>
-            {[selected.detail, selected.healthError, selected.trafficError, selected.unavailable, selected.version.error].filter(Boolean).map((detail, i) => <p className="p-sub" key={i}>{detail}</p>)}
-            {!selected.version.manageable && <p className="p-sub"><b>{t('pages.cores.reportOnlyShort')}</b> · {t('pages.cores.reportOnly')}</p>}
-          </> },
-          { key: 'instances', label: t('pages.cores.columns.instances'), children: <Table<InstanceStatusView> className="p-table" rowKey="instanceId" size="small"
-            columns={instanceColumns} dataSource={selected.instances} pagination={false} scroll={{ x: 650 }} /> },
-        ]} />}
-      </Modal>
+      {selected && <CoreDetailModal key={selected.id} core={selected} onClose={() => setSelectedId(null)} onRestart={() => restart(selected)} restarting={restarting === selected.id} onInstalled={() => void refetch()} />}
       <CoreVersionsModal core={versionsFor} onClose={() => setVersionsFor(null)} onInstalled={() => refetch()} />
       <CoreLogsDrawer core={logsFor} onClose={() => setLogsFor(null)} />
     </ConfigProvider>

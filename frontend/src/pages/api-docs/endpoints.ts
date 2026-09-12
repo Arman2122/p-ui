@@ -1278,7 +1278,8 @@ responseSchemaArray: true,
       {
         method: 'POST',
         path: '/panel/api/routing/rules',
-        summary: 'Create a rule. It is appended last and converges before the response returns.',
+        summary:
+          'Create a rule, append it last, and converge. A convergence failure returns success: false with the persisted rule in obj; retry by updating obj.id instead of creating again. A validation refusal returns no persisted rule.',
         responseSchema: 'RoutingRule',
       },
       {
@@ -1290,7 +1291,8 @@ responseSchemaArray: true,
       {
         method: 'POST',
         path: '/panel/api/routing/rules/:id',
-        summary: 'Update one rule.',
+        summary:
+          'Update one rule and converge. A convergence failure returns success: false with the persisted rule in obj; retry the same rule ID. A validation refusal leaves the stored rule unchanged and returns no persisted rule.',
         params: [{ name: 'id', in: 'path', type: 'number', desc: 'Routing rule ID.' }],
         responseSchema: 'RoutingRule',
       },

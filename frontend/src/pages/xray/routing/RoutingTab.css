@@ -252,3 +252,47 @@
   color: var(--ant-color-warning, #faad14);
   cursor: help;
 }
+
+.routing-standalone-actions { margin-block-end: 14px; }
+.routing-load-error { margin-block-end: 14px; }
+.routing-standalone { min-width: 0; }
+.routing-standalone.ant-tabs > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--p-text); font-weight: 600; }
+.routing-overview { display: grid; gap: 16px; min-width: 0; }
+.routing-overview-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.routing-overview-stats .p-stat { font-size: 22px; }
+.routing-overview-stats .p-sub { margin-block-start: 5px; }
+.routing-overview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; }
+.routing-overview-toolbar strong { font-size: 13px; }
+.routing-overview-order-note { padding: 0 14px 12px; margin: 0; color: var(--p-text-2); font-size: 12px; }
+.routing-overview-list { list-style: none; margin: 0; padding: 0; }
+.routing-overview-source { padding: 8px 14px; border-block: 1px solid var(--p-border); background: var(--p-fill); color: var(--p-text-2); font-size: 11px; font-weight: 600; }
+.routing-overview-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-width: 0; border-block-end: 1px solid var(--p-border); }
+.routing-overview-item:last-child .routing-overview-row { border-block-end: 0; }
+.routing-overview-row.is-disabled { background: var(--p-fill); }
+.routing-overview-row.is-disabled .routing-overview-match { color: var(--p-text-2); }
+.routing-overview-grip { flex: 0 0 14px; display: grid; place-items: center; color: var(--p-text-2); }
+.routing-overview-grip .drag-handle { opacity: 1; }
+.routing-overview-rank { font-variant-numeric: tabular-nums; flex: 0 0 20px; color: var(--p-text-2); }
+.routing-overview-match { flex: 1; min-width: 0; }
+.routing-overview-match > strong { display: block; font-size: 13px; margin-block-end: 4px; overflow-wrap: anywhere; }
+.routing-overview-criteria { display: flex; flex-wrap: wrap; gap: 4px 10px; min-width: 0; font-size: 12px; }
+.routing-overview-criterion { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.routing-overview-criterion > .p-mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.routing-overview-criterion .ant-tag { margin: 0; flex-shrink: 0; }
+.routing-overview-scope { display: block; margin-block-start: 4px; color: var(--p-text-2); font-size: 11px; overflow-wrap: anywhere; }
+.routing-overview-arrow { color: var(--p-text-2); flex-shrink: 0; }
+.routing-overview-destination { margin: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.routing-overview-actions { flex-shrink: 0; }
+.routing-overview-row.drop-before { box-shadow: inset 0 2px 0 var(--p-primary); }
+.routing-overview-row.drop-after { box-shadow: inset 0 -2px 0 var(--p-primary); }
+.routing-settings-panel { border: 1px solid var(--p-border); border-radius: var(--p-radius, 10px); background: var(--p-surface); padding: 16px; }
+[dir='rtl'] .routing-overview-arrow { transform: rotate(180deg); }
+
+@media (max-width: 760px) {
+  .routing-overview-stats { grid-template-columns: 1fr; gap: 8px; }
+  .routing-overview-row { flex-wrap: wrap; gap: 8px; }
+  .routing-overview-match { flex-basis: calc(100% - 108px); }
+  .routing-overview-actions { margin-inline-start: auto; }
+  .routing-overview-destination { max-width: min(50vw, 240px); }
+  .routing-overview-toolbar { align-items: flex-start; }
+}

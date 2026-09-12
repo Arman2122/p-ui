@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Dropdown, Modal, Space, Table, Tabs, message } from 'antd';
+import { Alert, Button, Dropdown, Modal, Skeleton, Space, Table, Tabs, message } from 'antd';
 import {
   AimOutlined,
   ControlOutlined,
@@ -20,6 +21,7 @@ import RouteTester from './RouteTester';
 import RuleFormModal from './RuleFormModal';
 import type { RoutingRule } from './RuleFormModal';
 import RuleCardList from './RuleCardList';
+import RoutingOverview from './RoutingOverview';
 import { useRoutingColumns } from './useRoutingColumns';
 import { arrJoin, buildInboundTagOptions, canSwapRows, exportableRuleList, originalRuleIndex } from './helpers';
 import type { RoutingDraft } from '@/hooks/useRoutingDraft';
@@ -43,6 +45,9 @@ interface RoutingTabProps {
   isMobile: boolean;
   /* Owned by the page so its Save button can see the changes and flush them. */
   routing: RoutingDraft;
+  standalone?: boolean;
+  renderHeader?: (actions: ReactNode) => ReactNode;
+  hasUnsavedChanges?: boolean;
 }
 
 export default function RoutingTab({
@@ -54,6 +59,9 @@ export default function RoutingTab({
   subscriptionOutboundTags,
   isMobile,
   routing,
+  standalone = false,
+  renderHeader,
+  hasUnsavedChanges = false,
 }: RoutingTabProps) {
   const { t } = useTranslation();
   const [modal, modalContextHolder] = Modal.useModal();
@@ -63,6 +71,7 @@ export default function RoutingTab({
   const [editingSource, setEditingSource] = useState<'intent' | 'template'>('intent');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const rulesUnavailable = !!routing.loading || !!routing.error;
   const dragRef = useRef<{ from: number | null; to: number | null; startY: number; moved: boolean }>({
     from: null,
     to: null,
@@ -84,6 +93,7 @@ export default function RoutingTab({
         .map((rule, idx) => {
           const r: RuleRow = { key: idx };
           r.enabled = rule.enabled !== false;
+          r.remark = typeof rule.remark === 'string' ? rule.remark : undefined;
           r.domain = arrJoin(rule.domain);
           r.ip = arrJoin(rule.ip);
           r.port = rule.port;
@@ -91,6 +101,9 @@ export default function RoutingTab({
           r.vlessRoute = rule.vlessRoute;
           r.network = rule.network;
           r.sourceIP = arrJoin(rule.sourceIP);
+          r.localIP = arrJoin(rule.localIP);
+          r.localPort = arrJoin(rule.localPort);
+          r.process = arrJoin(rule.process);
           r.user = arrJoin(rule.user);
           r.inboundTag = arrJoin(rule.inboundTag);
           r.protocol = arrJoin(rule.protocol);
@@ -111,6 +124,7 @@ export default function RoutingTab({
 
   const mutate = useCallback(
     (mutator: (next: XraySettingsValue) => void) => {
+      if (rulesUnavailable) return;
       setTemplateSettings((prev) => {
         if (!prev) return prev;
         const clone = JSON.parse(JSON.stringify(prev)) as XraySettingsValue;
@@ -118,7 +132,7 @@ export default function RoutingTab({
         return clone;
       });
     },
-    [setTemplateSettings],
+    [setTemplateSettings, rulesUnavailable],
   );
 
   const inboundTagOptions = useMemo(() => {
@@ -170,6 +184,8 @@ export default function RoutingTab({
         source: 'intent' as const,
         storeIndex: index,
         enabled: record.enable,
+        remark: record.remark,
+        destKind: record.destKind,
         inboundTag: (shape.inboundTag ?? []).join(',') || t('pages.xray.routing.scopeAll'),
         domain: arrJoin(shape.domain),
         ip: arrJoin(shape.ip),
@@ -179,6 +195,7 @@ export default function RoutingTab({
         sourceIP: arrJoin(shape.sourceIP),
         user: arrJoin(shape.user),
         protocol: arrJoin(shape.protocol),
+        attrs: shape.attrs ? JSON.stringify(shape.attrs) : undefined,
         outboundTag: shape.outboundTag,
         balancerTag: shape.balancerTag,
         diags: record.diags,
@@ -309,6 +326,7 @@ export default function RoutingTab({
     setRuleModalOpen(true);
   }
   function onRuleConfirm(rule: Record<string, unknown>) {
+    if (rulesUnavailable) return;
     if (JSON.stringify(rule).length <= 3) {
       setRuleModalOpen(false);
       return;
@@ -358,6 +376,20 @@ export default function RoutingTab({
       okType: 'danger',
       cancelText: t('cancel'),
       onOk: remove,
+    });
+  }
+
+  function duplicateRule(idx: number) {
+    const row = rowAt(idx);
+    if (row?.source === 'intent') {
+      const record = intentRecordsRef.current[row.storeIndex ?? 0];
+      if (record) routing.addRule(recordToPayload(record));
+      return;
+    }
+    const target = row?.storeIndex ?? originalRuleIndex(rowsRef.current, idx);
+    mutate((next) => {
+      const list = next.routing?.rules;
+      if (list?.[target]) list.splice(target + 1, 0, JSON.parse(JSON.stringify(list[target])) as RuleObject);
     });
   }
 
@@ -472,17 +504,18 @@ export default function RoutingTab({
     document.addEventListener('pointercancel', onUp);
   }
 
-  const hasSource = rows.some((r) => r.sourceIP || r.sourcePort || r.vlessRoute);
-  const hasBalancer = rows.some((r) => r.balancerTag);
+  const hasSource = mergedRows.some((r) => r.sourceIP || r.sourcePort || r.vlessRoute);
+  const hasBalancer = mergedRows.some((r) => r.balancerTag);
 
   const desktopColumns = useRoutingColumns({
     isMobile,
     inboundTagOptions,
-    rowsLength: mergedRows.length,
+    rows: mergedRows,
     showSource: hasSource,
     showBalancer: hasBalancer,
     onHandlePointerDown,
     openEdit,
+    duplicateRule,
     moveUp,
     moveDown,
     confirmDelete,
@@ -494,28 +527,51 @@ export default function RoutingTab({
     return col.hidden ? sum : sum + (typeof col.width === 'number' ? col.width : 0);
   }, 0);
 
+  const ruleActions = <Space wrap>
+    <Button type="primary" icon={<PlusOutlined />} disabled={rulesUnavailable} onClick={openAdd}>{t('routingPage.addRule')}</Button>
+    <Dropdown trigger={['click']} menu={{ items: [
+      { key: 'import', icon: <ImportOutlined />, label: t('pages.xray.importRules'), disabled: rulesUnavailable, onClick: () => setImportOpen(true) },
+      { key: 'export', icon: <ExportOutlined />, label: t('pages.xray.exportRules'), disabled: rulesUnavailable || exportableRules.length === 0, onClick: exportRules },
+    ] }}><Button icon={<MoreOutlined />}>{t('more')}</Button></Dropdown>
+  </Space>;
+  const blockingTags = new Set(['blocked', ...(templateSettings?.outbounds ?? []).filter((outbound) => outbound.protocol === 'blackhole').map((outbound) => outbound.tag ?? '')]);
+  const exitLabels = new Map(exits.map((exit) => [`exit:${exit.id}`, exit.label]));
+
   return (
     <>
       {modalContextHolder}
+      {standalone && (renderHeader ? renderHeader(ruleActions) : <div className="routing-standalone-actions">{ruleActions}</div>)}
+      {routing.error && <Alert className="routing-load-error" type="error" showIcon title={t('somethingWentWrong')} description={routing.error.message}
+        action={<Button disabled={!routing.retry} onClick={routing.retry}>{t('routingPage.retry')}</Button>} />}
+      <div inert={rulesUnavailable || undefined} aria-busy={routing.loading || undefined}>
       <Tabs
-        defaultActiveKey="basic"
+        key={standalone ? 'standalone' : 'embedded'}
+        defaultActiveKey={standalone ? 'overview' : 'basic'}
+        className={standalone ? 'routing-standalone' : undefined}
         items={[
+          ...(standalone ? [{
+            key: 'overview',
+            label: catTabLabel(<UnorderedListOutlined />, t('routingPage.overview'), isMobile),
+            children: rulesUnavailable ? <Skeleton active={routing.loading} /> : <RoutingOverview rows={mergedRows} blockingTags={blockingTags} exitLabels={exitLabels}
+              draggedIndex={draggedIndex} dropTargetIndex={dropTargetIndex} onHandlePointerDown={onHandlePointerDown}
+              openEdit={openEdit} duplicateRule={duplicateRule} confirmDelete={confirmDelete} toggleRule={toggleRule} moveUp={moveUp} moveDown={moveDown} />,
+          }] : []),
           {
             key: 'basic',
             label: catTabLabel(<ControlOutlined />, t('pages.xray.basicRouting'), isMobile),
             children: (
-              <RoutingBasic
+              <div className={standalone ? 'routing-settings-panel' : undefined}><RoutingBasic
                 templateSettings={templateSettings}
                 setTemplateSettings={setTemplateSettings}
-              />
+              /></div>
             ),
           },
           {
             key: 'rules',
-            label: catTabLabel(<UnorderedListOutlined />, t('pages.xray.Routings'), isMobile),
+            label: catTabLabel(<UnorderedListOutlined />, t(standalone ? 'routingPage.details' : 'pages.xray.Routings'), isMobile),
             children: (
               <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-                <Space wrap>
+                {!standalone && <Space wrap>
                   <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
                     {t('pages.xray.Routings')}
                   </Button>
@@ -530,7 +586,7 @@ export default function RoutingTab({
                   >
                     <Button icon={<MoreOutlined />}>{t('more')}</Button>
                   </Dropdown>
-                </Space>
+                </Space>}
 
                 {isMobile ? (
                   <RuleCardList
@@ -539,6 +595,7 @@ export default function RoutingTab({
                     dropTargetIndex={dropTargetIndex}
                     onHandlePointerDown={onHandlePointerDown}
                     openEdit={openEdit}
+                    duplicateRule={duplicateRule}
                     moveUp={moveUp}
                     moveDown={moveDown}
                     confirmDelete={confirmDelete}
@@ -570,10 +627,11 @@ export default function RoutingTab({
           {
             key: 'tester',
             label: catTabLabel(<AimOutlined />, t('pages.xray.routeTester'), isMobile),
-            children: <RouteTester inboundTags={inboundTagOptions} isMobile={isMobile} />,
+            children: <div className={standalone ? 'routing-settings-panel' : undefined}><RouteTester inboundTags={inboundTagOptions} isMobile={isMobile} disabled={rulesUnavailable || hasUnsavedChanges || routing.dirty} /></div>,
           },
         ]}
       />
+      </div>
       {/* subjects is intent-only, exactly like exits: a template rule is
           written verbatim into the config, where every criterion works. */}
       <RuleFormModal
@@ -586,6 +644,7 @@ export default function RoutingTab({
         subjects={editingSource === 'intent' ? subjects : undefined}
         exits={editingSource === 'intent' ? exits : undefined}
         onConfirm={onRuleConfirm}
+        disabled={rulesUnavailable}
       />
       <PromptModal
         open={importOpen}

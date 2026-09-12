@@ -28,6 +28,24 @@ beforeEach(() => {
 });
 
 describe('useXraySetting', () => {
+  it('rejects a refused save and retains the edited configuration for retry', async () => {
+    const payload = xrayPayload({ xraySetting: { outbounds: [{ tag: 'direct', protocol: 'freedom' }] } });
+    const post = vi.spyOn(HttpUtil, 'post').mockImplementation(async (url) => {
+      if (url === '/panel/api/xray/') return new Msg(true, '', JSON.stringify(payload));
+      return new Msg(false, 'Configuration rejected');
+    });
+    const queryClient = makeTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    const { result } = renderHook(() => useXraySetting(), { wrapper });
+    await waitFor(() => expect(result.current.fetched).toBe(true));
+    const edited = '{"outbounds":[{"tag":"changed","protocol":"freedom"}]}';
+    act(() => result.current.setXraySetting(edited));
+    await act(async () => { await expect(result.current.saveAll()).rejects.toThrow('Configuration rejected'); });
+    expect(result.current.saveDisabled).toBe(false);
+    expect(result.current.xraySetting).toBe(edited);
+    expect(post).toHaveBeenCalledWith('/panel/api/xray/update', expect.objectContaining({ xraySetting: edited }));
+  });
+
   it('refreshes server-derived outbounds while the editor is dirty', async () => {
     let payload = xrayPayload({ subscriptionOutbounds: [{ tag: 'before' }] });
     vi.spyOn(HttpUtil, 'post').mockImplementation(async (url) => {

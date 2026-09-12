@@ -10,10 +10,11 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   HolderOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
-import { buildRemarkByTag, chipPreview, inboundTagChipPreview, inboundTagsDisplayTitle, isApiRule, ruleCriteriaChips } from './helpers';
+import { buildRemarkByTag, canSwapRows, chipPreview, inboundTagChipPreview, inboundTagsDisplayTitle, isApiRule, ruleCriteriaChips } from './helpers';
 import type { RuleRow } from './types';
 
 interface RuleCardListProps {
@@ -22,6 +23,7 @@ interface RuleCardListProps {
   dropTargetIndex: number | null;
   onHandlePointerDown: (idx: number, ev: React.PointerEvent) => void;
   openEdit: (idx: number) => void;
+  duplicateRule: (idx: number) => void;
   moveUp: (idx: number) => void;
   moveDown: (idx: number) => void;
   confirmDelete: (idx: number) => void;
@@ -34,6 +36,7 @@ export default function RuleCardList({
   dropTargetIndex,
   onHandlePointerDown,
   openEdit,
+  duplicateRule,
   moveUp,
   moveDown,
   confirmDelete,
@@ -58,20 +61,21 @@ export default function RuleCardList({
             data-row-key={index}
           >
             <div className="rule-card-head">
-              <HolderOutlined
+              {!isApiRule(rule) && <HolderOutlined
                 className="drag-handle"
                 aria-hidden="true"
                 onPointerDown={(ev) => onHandlePointerDown(index, ev)}
-              />
+              />}
               <span className="rule-number">#{index + 1}</span>
               <Dropdown
                 trigger={['click']}
                 menu={{
                   items: [
-                    { key: 'edit', label: <><EditOutlined /> {t('edit')}</>, onClick: () => openEdit(index) },
-                    { key: 'up', label: <><ArrowUpOutlined /> {t('pages.inbounds.form.moveUp')}</>, disabled: index === 0, onClick: () => moveUp(index) },
-                    { key: 'down', label: <><ArrowDownOutlined /> {t('pages.inbounds.form.moveDown')}</>, disabled: index === rows.length - 1, onClick: () => moveDown(index) },
-                    { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, onClick: () => confirmDelete(index) },
+                    { key: 'edit', label: <><EditOutlined /> {t('edit')}</>, disabled: isApiRule(rule), onClick: () => openEdit(index) },
+                    { key: 'duplicate', label: <><CopyOutlined /> {t('routingPage.duplicate')}</>, disabled: isApiRule(rule), onClick: () => duplicateRule(index) },
+                    { key: 'up', label: <><ArrowUpOutlined /> {t('pages.inbounds.form.moveUp')}</>, disabled: !canSwapRows(rule, rows[index - 1]), onClick: () => moveUp(index) },
+                    { key: 'down', label: <><ArrowDownOutlined /> {t('pages.inbounds.form.moveDown')}</>, disabled: !canSwapRows(rule, rows[index + 1]), onClick: () => moveDown(index) },
+                    { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, disabled: isApiRule(rule), onClick: () => confirmDelete(index) },
                   ],
                 }}
               >
@@ -79,6 +83,7 @@ export default function RuleCardList({
               </Dropdown>
               <Switch
                 size="small"
+                aria-label={`${t('enable')} ${index + 1}`}
                 checked={rule.enabled !== false}
                 onChange={(checked) => toggleRule(index, checked)}
                 disabled={isApiRule(rule)}

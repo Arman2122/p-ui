@@ -4,6 +4,130 @@
   gap: 2px;
 }
 
+.cores-page,
+.cores-page .content-shell {
+  min-width: 0;
+  background: transparent;
+}
+
+.cores-page .content-area {
+  padding: 0;
+}
+
+.cores-page .p-text-action,
+.cores-page .p-core-list .ant-badge .ant-badge-status-text,
+.core-detail-modal .ant-badge .ant-badge-status-text,
+.cores-page .p-core-list .ant-input-search .ant-input {
+  color: var(--p-text);
+}
+
+.cores-page .p-core-list .ant-input-search .ant-input::placeholder {
+  color: var(--p-text-2);
+}
+
+.cores-page .p-kicker,
+.core-detail-modal .p-kicker {
+  color: var(--p-text-2);
+}
+
+.cores-page .p-core-list .p-corerow {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.cores-page .p-corerow > .p-alert-i {
+  flex: 0 0 30px;
+}
+
+.cores-page .core-version {
+  margin-top: 3px;
+}
+
+.cores-page .core-unavailable {
+  margin-top: 4px;
+  max-width: 650px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.cores-page .p-corerow-stats {
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.cores-page .p-corerow-stats > div {
+  min-width: 76px;
+}
+
+.cores-page .p-core-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 260px;
+}
+
+.core-detail-modal .core-detail-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.core-detail-modal .ant-tabs-tabpane > .ant-alert,
+.core-detail-modal .ant-tabs-tabpane > p,
+.core-detail-modal .ant-tabs-tabpane > .ant-table-wrapper {
+  margin-bottom: 12px;
+}
+
+.core-detail-modal .ant-tabs-content-holder {
+  min-width: 0;
+}
+
+.core-detail-modal .core-inbound-list > div {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--p-border);
+}
+
+.core-detail-modal .core-inbound-list > div > strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.core-detail-modal .core-inbound-list {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1050px) {
+  .cores-page .p-core-list .p-corerow {
+    flex-wrap: wrap;
+  }
+  .cores-page .p-core-row-actions {
+    max-width: none;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  .cores-page .p-corerow-stats {
+    justify-content: flex-start;
+    padding-inline-start: 42px;
+  }
+  .cores-page .p-corerow-stats > div:last-child {
+    display: block;
+  }
+  .cores-page .p-core-row-actions {
+    justify-content: flex-start;
+  }
+}
+
 .cores-page .core-id {
   font-size: 12px;
   opacity: 0.65;

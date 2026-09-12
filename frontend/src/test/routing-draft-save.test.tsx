@@ -31,6 +31,7 @@ pressed.
 
 const SERVER_RULE = {
   id: 5,
+  sortIndex: 0,
   enable: true,
   remark: 'existing',
   ingressScope: 'all',
@@ -180,12 +181,133 @@ describe('a refused write', () => {
     await waitFor(() => expect(result.current.rules).toHaveLength(1));
 
     act(() => result.current.addRule(NEW_RULE));
-    await act(async () => { await result.current.flush(); });
+    await act(async () => { await expect(result.current.flush()).rejects.toThrow('rule refused'); });
 
     expect(
       result.current.dirty,
       'the draft was cleared after the server refused the rule, so the operator lost what they typed',
     ).toBe(true);
     expect(result.current.rules).toHaveLength(2);
+  });
+
+  it('retains a created ID after refused ordering and updates that same rule on retry', async () => {
+    recordCalls();
+    let refuseOrder = true;
+    const post = vi.mocked(HttpUtil.post).mockImplementation(async (url) => {
+      if (url.endsWith('/order') && refuseOrder) return new Msg(false, 'order refused', null);
+      return new Msg(true, '', { id: 99 });
+    });
+    const { result } = renderHook(() => useRoutingDraft(), { wrapper });
+    await waitFor(() => expect(result.current.rules).toHaveLength(1));
+    act(() => result.current.addRule(NEW_RULE));
+    act(() => result.current.reorderRules([...result.current.rules].reverse()));
+
+    await act(async () => { await expect(result.current.flush()).rejects.toThrow('order refused'); });
+    expect(result.current.rules.map((rule) => rule.id)).toEqual([99, 5]);
+    expect(result.current.dirty).toBe(true);
+    act(() => result.current.updateRule(99, { ...NEW_RULE, remark: 'corrected' }));
+    refuseOrder = false;
+    await act(async () => { await result.current.flush(); });
+
+    expect(post.mock.calls.filter(([url]) => url.endsWith('/routing/rules'))).toHaveLength(1);
+    expect(post).toHaveBeenCalledWith('/panel/api/routing/rules/99', expect.objectContaining({ remark: 'corrected' }), expect.anything());
+    expect(post).toHaveBeenLastCalledWith('/panel/api/routing/rules/order', { ids: [99, 5] }, expect.anything());
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('retains the persisted ID when creation reports a convergence failure', async () => {
+    recordCalls();
+    const post = vi.mocked(HttpUtil.post).mockImplementation(async (url) => {
+      if (url.endsWith('/routing/rules')) return new Msg(false, 'core convergence failed', { id: 99 });
+      return new Msg(true, '', { id: 99 });
+    });
+    const { result } = renderHook(() => useRoutingDraft(), { wrapper });
+    await waitFor(() => expect(result.current.rules).toHaveLength(1));
+    act(() => result.current.addRule(NEW_RULE));
+
+    await act(async () => { await expect(result.current.flush()).rejects.toThrow('core convergence failed'); });
+    expect(result.current.rules[1].id).toBe(99);
+    expect(result.current.dirty).toBe(true);
+    await act(async () => { await result.current.flush(); });
+
+    expect(post.mock.calls.filter(([url]) => url.endsWith('/routing/rules'))).toHaveLength(1);
+    expect(post).toHaveBeenCalledWith('/panel/api/routing/rules/99', NEW_RULE, expect.anything());
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('retries a refused update even when the operator restores the original values', async () => {
+    recordCalls();
+    const post = vi.mocked(HttpUtil.post).mockResolvedValueOnce(new Msg(false, 'core convergence failed', { id: 5 }));
+    const { result } = renderHook(() => useRoutingDraft(), { wrapper });
+    await waitFor(() => expect(result.current.rules).toHaveLength(1));
+    act(() => result.current.updateRule(5, NEW_RULE));
+    await act(async () => { await expect(result.current.flush()).rejects.toThrow('core convergence failed'); });
+    act(() => result.current.updateRule(5, { ...NEW_RULE, remark: SERVER_RULE.remark, destTag: SERVER_RULE.destTag }));
+    await act(async () => { await result.current.flush(); });
+
+    expect(post.mock.calls.filter(([url]) => url.endsWith('/rules/5'))).toHaveLength(2);
+    expect(post).toHaveBeenLastCalledWith('/panel/api/routing/rules/5', expect.objectContaining({ remark: 'existing', destTag: 'direct' }), expect.anything());
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('retries convergence after deletion persisted, even when the refreshed list is empty', async () => {
+    let rules = [SERVER_RULE];
+    const get = vi.spyOn(HttpUtil, 'get').mockImplementation(async () => new Msg(true, '', rules));
+    let converged = false;
+    const post = vi.spyOn(HttpUtil, 'post').mockImplementation(async () => {
+      const alreadyDeleted = rules.length === 0;
+      rules = [];
+      converged = alreadyDeleted;
+      return new Msg(alreadyDeleted, alreadyDeleted ? '' : 'core convergence failed', null);
+    });
+    const { result } = renderHook(() => useRoutingDraft(), { wrapper });
+    await waitFor(() => expect(result.current.rules).toHaveLength(1));
+    act(() => result.current.removeRule(5));
+    await act(async () => { await expect(result.current.flush()).rejects.toThrow('core convergence failed'); });
+    expect(rules).toHaveLength(0);
+    expect(converged).toBe(false);
+    await act(async () => { result.current.retry?.(); });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    expect(result.current.dirty).toBe(true);
+
+    await act(async () => { await result.current.flush(); });
+
+    expect(post.mock.calls.map(([url]) => url)).toEqual(['/panel/api/routing/rules/5/del', '/panel/api/routing/rules/5/del']);
+    expect(converged).toBe(true);
+    expect(result.current.rules).toHaveLength(0);
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it.each(['refusal', 'transport error'])('keeps acknowledged deletes and creates before a later %s', async (failure) => {
+    recordCalls();
+    let rejectSecond = true;
+    const post = vi.mocked(HttpUtil.post).mockImplementation(async (url, body) => {
+      if (url.endsWith('/routing/rules') && (body as RoutingRulePayload).remark === 'second') {
+        if (rejectSecond) {
+          if (failure === 'transport error') throw new Error('connection lost');
+          return new Msg(false, 'second refused', null);
+        }
+        return new Msg(true, '', { id: 100 });
+      }
+      return new Msg(true, '', { id: 99 });
+    });
+    const { result } = renderHook(() => useRoutingDraft(), { wrapper });
+    await waitFor(() => expect(result.current.rules).toHaveLength(1));
+    act(() => result.current.removeRule(5));
+    act(() => result.current.addRule(NEW_RULE));
+    act(() => result.current.addRule({ ...NEW_RULE, remark: 'second' }));
+
+    await act(async () => { await expect(result.current.flush()).rejects.toThrow(failure === 'refusal' ? 'second refused' : 'connection lost'); });
+    expect(result.current.rules[0].id).toBe(99);
+    expect(result.current.rules[1].id).toBeLessThan(0);
+    expect(post.mock.calls.filter(([url]) => url.endsWith('/order'))).toHaveLength(0);
+    expect(result.current.dirty).toBe(true);
+    rejectSecond = false;
+    await act(async () => { await result.current.flush(); });
+
+    expect(post.mock.calls.filter(([url]) => url.endsWith('/5/del'))).toHaveLength(1);
+    expect(post.mock.calls.filter(([url, body]) => url.endsWith('/routing/rules') && (body as RoutingRulePayload).remark === NEW_RULE.remark)).toHaveLength(1);
+    expect(post.mock.calls.filter(([url, body]) => url.endsWith('/routing/rules') && (body as RoutingRulePayload).remark === 'second')).toHaveLength(2);
+    expect(result.current.dirty).toBe(false);
   });
 });

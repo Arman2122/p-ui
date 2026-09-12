@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  Col,
   Dropdown,
   Form,
   Input,
@@ -10,7 +10,6 @@ import {
   Modal,
   Popconfirm,
   Radio,
-  Row,
   Space,
   Switch,
   Alert,
@@ -39,6 +38,9 @@ import {
 } from '@ant-design/icons';
 
 import { HttpUtil } from '@/utils';
+import { PageHeader, PanelCard } from '@/components/ui/panel';
+import { useRoutingRulesQuery } from '@/api/queries/useRoutingQuery';
+import { reservedOutboundTagMessage } from '@/schemas/xray';
 import { onNumber } from '@/utils/onNumber';
 import PromptModal from '@/components/feedback/PromptModal';
 import TextModal from '@/components/feedback/TextModal';
@@ -52,24 +54,15 @@ import type { XraySettingsValue, SetTemplate, OutboundTestMode, OutboundTestStat
 import './OutboundsTab.css';
 
 import type { OutboundRow } from './outbounds-tab-types';
-import { dialerProxyCycleTags, exitAsOutboundRow, isUntestable, originalOutboundIndex } from './outbounds-tab-helpers';
-import { useOutboundColumns } from './useOutboundColumns';
+import { dialerProxyCycleTags, exitAsOutboundRow, isBuiltinOutbound, isUntestable, originalOutboundIndex } from './outbounds-tab-helpers';
+import { useOutboundColumns, type OutboundColumnsParams } from './useOutboundColumns';
 import OutboundCardList from './OutboundCardList';
 import SubscriptionOutbounds from './SubscriptionOutbounds';
 import ExitFormModal from './ExitFormModal';
 import { useEgressMutations } from '@/api/queries/useEgressMutations';
-import { useEgressesQuery, useEgressPreflightQuery } from '@/api/queries/useEgressesQuery';
+import { useEgressesQuery } from '@/api/queries/useEgressesQuery';
 import type { EgressPayload, EgressRecord } from '@/schemas/api/egress';
-
-/* Backend sentences name a sysctl, a device or a rule priority, so they are
-   shown verbatim and left-to-right even when the panel is in Persian. */
-function HostSentences({ lines }: { lines: string[] }) {
-  return (
-    <div dir="ltr" style={{ textAlign: 'left' }}>
-      {lines.map((line) => <div key={line}><code>{line}</code></div>)}
-    </div>
-  );
-}
+import HostEgressPreflight from './HostEgressPreflight';
 
 interface OutboundSub {
   id: number;
@@ -88,6 +81,8 @@ interface OutboundSub {
 }
 
 interface OutboundsTabProps {
+  standalone?: boolean;
+  renderHeader?: (actions: ReactNode) => ReactNode;
   templateSettings: XraySettingsValue | null;
   setTemplateSettings: SetTemplate;
   outboundsTraffic: OutboundTrafficRow[];
@@ -108,6 +103,8 @@ interface OutboundsTabProps {
 }
 
 export default function OutboundsTab({
+  standalone = false,
+  renderHeader,
   templateSettings,
   setTemplateSettings,
   outboundsTraffic,
@@ -136,7 +133,8 @@ export default function OutboundsTab({
   const [existingTags, setExistingTags] = useState<string[]>([]);
   const egressMut = useEgressMutations();
   const egressesQuery = useEgressesQuery();
-  const preflight = useEgressPreflightQuery().data;
+  const hostRulesQuery = useRoutingRulesQuery();
+  const [busyExitId, setBusyExitId] = useState<number | null>(null);
   const [editingExit, setEditingExit] = useState<EgressRecord | null>(null);
   const [exitFormOpen, setExitFormOpen] = useState(false);
 
@@ -246,6 +244,11 @@ export default function OutboundsTab({
     setModalOpen(true);
   }
   function onConfirm(outbound: Record<string, unknown>) {
+    if (!templateSettings) { messageApi.error(t('uiRepair.outbounds.templateUnavailable')); return; }
+    const previous = editingIndex == null ? undefined : outbounds[editingIndex];
+    if (previous && isBuiltinOutbound(previous) && (outbound.tag !== previous.tag || outbound.protocol !== previous.protocol)) {
+      messageApi.error(t('uiRepair.outbounds.builtinFixed')); return;
+    }
     mutate((tt) => {
       if (!Array.isArray(tt.outbounds)) tt.outbounds = [];
       const newTag = typeof outbound.tag === 'string' ? outbound.tag : '';
@@ -266,12 +269,16 @@ export default function OutboundsTab({
   /* An exit is a row the panel owns, not a line in the Xray config, so it is
      posted rather than folded into the template mutation above. */
   async function onConfirmExit(payload: EgressPayload) {
-    const msg = await egressMut.add(payload);
-    if (msg?.success) setModalOpen(false);
+    try {
+      const msg = await egressMut.add(payload);
+      if (msg?.success) setModalOpen(false);
+      else messageApi.error(msg?.msg || t('somethingWentWrong'));
+    } catch { messageApi.error(t('somethingWentWrong')); }
   }
 
   function confirmDelete(idx: number) {
     const target = originalOutboundIndex(rowsRef.current, idx);
+    if (outbounds[target] && isBuiltinOutbound(outbounds[target])) { messageApi.error(t('uiRepair.outbounds.builtinFixed')); return; }
     const impact = templateSettings
       ? planOutboundDeletion(templateSettings, target)
       : { rules: [], balancers: [], observatory: false, burst: false };
@@ -321,6 +328,7 @@ export default function OutboundsTab({
   }
 
   function importOutbounds(value: string) {
+    if (!templateSettings) { messageApi.error(t('uiRepair.outbounds.templateUnavailable')); return; }
     let parsed: unknown;
     try {
       parsed = JSON.parse(value);
@@ -333,6 +341,14 @@ export default function OutboundsTab({
     if (!list) {
       messageApi.error(t('pages.xray.importInvalidJson'));
       return;
+    }
+    const seen = new Set(outbounds.map((outbound) => outbound.tag));
+    for (const row of list) {
+      if (!row || typeof row !== 'object' || Array.isArray(row) || typeof row.tag !== 'string' || !row.tag.trim()
+        || typeof row.protocol !== 'string' || !row.protocol.trim() || reservedOutboundTagMessage(row.tag) || seen.has(row.tag)) {
+        messageApi.error(t('uiRepair.outbounds.importInvalidOutbound')); return;
+      }
+      seen.add(row.tag);
     }
     mutate((tt) => {
       if (!Array.isArray(tt.outbounds)) tt.outbounds = [];
@@ -347,6 +363,7 @@ export default function OutboundsTab({
     try {
       const r = await HttpUtil.get('/panel/api/xray/outbound-subs');
       if (r?.success) setSubs(Array.isArray(r.obj) ? r.obj : []);
+      else messageApi.error(r?.msg || t('pages.xray.outboundSub.toastLoadFailed'));
     } catch {
       messageApi.error(t('pages.xray.outboundSub.toastLoadFailed'));
     } finally {
@@ -455,9 +472,11 @@ export default function OutboundsTab({
       if (r?.success) {
         await loadSubs();
         onRefreshXrayData?.();
+      } else {
+        messageApi.error(r?.msg || t('uiRepair.outbounds.subscriptionMoveFailed'));
       }
     } catch {
-      /* ignore */
+      messageApi.error(t('uiRepair.outbounds.subscriptionMoveFailed'));
     } finally {
       setBusyId(null);
     }
@@ -483,10 +502,12 @@ export default function OutboundsTab({
     if (subs.length === 0) return;
     setRefreshingAll(true);
     try {
+      let failed = 0;
       for (const s of subs) {
-        try { await HttpUtil.post(`/panel/api/xray/outbound-subs/${s.id}/refresh`); } catch { /* continue */ }
+        try { if (!(await HttpUtil.post(`/panel/api/xray/outbound-subs/${s.id}/refresh`))?.success) failed += 1; } catch { failed += 1; }
       }
-      messageApi.success(t('pages.xray.outboundSub.toastRefreshed'));
+      if (failed) messageApi.error(t('uiRepair.outbounds.subscriptionRefreshPartial', { failed, total: subs.length }));
+      else messageApi.success(t('pages.xray.outboundSub.toastRefreshed'));
       await loadSubs();
       onRefreshXrayData?.();
     } finally {
@@ -511,15 +532,19 @@ export default function OutboundsTab({
     setExitFormOpen(true);
   }
 
-  function toggleExit(exit: EgressRecord) {
-    void egressMut.update(exit.id, {
+  async function toggleExit(exit: EgressRecord) {
+    setBusyExitId(exit.id);
+    try { const result = await egressMut.update(exit.id, {
       id: exit.id,
       type: exit.type,
       enable: !exit.enable,
       remark: exit.remark,
       target: exit.target,
       settings: exit.settings,
-    });
+      owner: exit.owner,
+      ingressInboundId: exit.ingressInboundId,
+    }); if (!result?.success) messageApi.error(result?.msg || t('somethingWentWrong')); } catch { messageApi.error(t('somethingWentWrong')); }
+    finally { setBusyExitId(null); }
   }
 
   function deleteExit(exit: EgressRecord) {
@@ -528,11 +553,14 @@ export default function OutboundsTab({
       content: t('pages.xray.egress.deleteConfirm'),
       okText: t('confirm'),
       cancelText: t('cancel'),
-      onOk: () => { void egressMut.remove(exit.id); },
+      onOk: async () => {
+        const result = await egressMut.remove(exit.id);
+        if (!result?.success) throw new Error(result?.msg || t('somethingWentWrong'));
+      },
     });
   }
 
-  const columns = useOutboundColumns({
+  const controls: OutboundColumnsParams = {
     testMode,
     rows,
     outboundsTraffic,
@@ -547,100 +575,66 @@ export default function OutboundsTab({
     editExit,
     toggleExit,
     deleteExit,
-  });
+    templateSettings,
+    hostRules: hostRulesQuery.data,
+    busyExitId,
+  };
+  const columns = useOutboundColumns(controls);
+  const canTestAll = tableRows.some((row) => !isUntestable(row))
+    || (subscriptionOutbounds ?? []).some((outbound) => !!(outbound as OutboundRow)?.tag && !isUntestable(outbound as OutboundRow));
+  const primaryActions = <>
+    <Button loading={testingAll} disabled={!canTestAll} icon={<PlayCircleOutlined />} onClick={() => onTestAll(testMode, testableExitKeys)}>{t('pages.xray.outbound.testAll')}</Button>
+    <Dropdown trigger={['click']} menu={{ items: [
+      { key: 'subscriptions', icon: <CloudOutlined />, label: t('pages.xray.outboundSub.manage'), onClick: openSubManager },
+      { key: 'warp', icon: <CloudOutlined />, label: 'WARP', onClick: onShowWarp },
+      { key: 'nord', icon: <ApiOutlined />, label: 'NordVPN', onClick: onShowNord },
+      { type: 'divider' },
+      { key: 'import', icon: <ImportOutlined />, label: t('pages.xray.importOutbounds'), disabled: !templateSettings, onClick: () => setImportOpen(true) },
+      { key: 'export', icon: <ExportOutlined />, label: t('pages.xray.exportOutbounds'), disabled: !outbounds.length, onClick: exportOutbounds },
+    ] }}><Button icon={<MoreOutlined />}>{t('more')}</Button></Dropdown>
+    <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>{t('uiRepair.outbounds.addOutbound')}</Button>
+  </>;
 
   return (
-    <>
+    <div className="outbounds-tab">
       {modalContextHolder}
       {messageContextHolder}
-      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-        <Row gutter={[12, 12]} align="middle" justify="space-between">
-          <Col xs={24} sm={12}>
-            <Space size="small" wrap>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-                {!isMobile && t('pages.xray.Outbounds')}
-              </Button>
-              <Button icon={<CloudOutlined />} onClick={openSubManager}>
-                {t('pages.xray.outboundSub.manage')}
-              </Button>
-              <Dropdown
-                trigger={['click']}
-                menu={{
-                  items: [
-                    { key: 'warp', icon: <CloudOutlined />, label: 'WARP', onClick: onShowWarp },
-                    { key: 'nord', icon: <ApiOutlined />, label: 'NordVPN', onClick: onShowNord },
-                    { type: 'divider' },
-                    { key: 'import', icon: <ImportOutlined />, label: t('pages.xray.importOutbounds'), onClick: () => setImportOpen(true) },
-                    { key: 'export', icon: <ExportOutlined />, label: t('pages.xray.exportOutbounds'), disabled: outbounds.length === 0, onClick: exportOutbounds },
-                  ],
-                }}
-              >
-                <Button icon={<MoreOutlined />}>{t('more')}</Button>
-              </Dropdown>
-            </Space>
-          </Col>
-          <Col xs={24} sm={12} className="toolbar-right">
-            <Space size="small" wrap>
-              <Tooltip title={t('pages.xray.outbound.testModeTooltip')}>
-                <Radio.Group value={testMode} onChange={(e) => setTestMode(e.target.value)} buttonStyle="solid" size="small">
-                  <Radio.Button value="tcp">TCP</Radio.Button>
-                  <Radio.Button value="http">HTTP</Radio.Button>
-                  <Radio.Button value="real">{t('pages.xray.outbound.modeRealDelay')}</Radio.Button>
-                </Radio.Group>
-              </Tooltip>
-              <Button type="primary" loading={testingAll} icon={<PlayCircleOutlined />} onClick={() => onTestAll(testMode, testableExitKeys)}>
-                {!isMobile && t('pages.xray.outbound.testAll')}
-              </Button>
-              <Popconfirm
-                placement="topRight"
-                okText={t('reset')}
-                cancelText={t('cancel')}
-                title={t('pages.inbounds.resetAllTrafficContent')}
-                onConfirm={() => onResetTraffic('-alltags-')}
-              >
-                <Button aria-label={t('pages.inbounds.resetTraffic')} icon={<RetweetOutlined />} />
-              </Popconfirm>
-            </Space>
-          </Col>
-        </Row>
-
-        {preflight && !preflight.ok && (
-          <Alert
-            type="error"
-            showIcon
-            title={t('pages.xray.egress.preflightBlocked')}
-            description={<HostSentences lines={preflight.refusals} />}
-          />
-        )}
-        {preflight && preflight.notes.length > 0 && (
-          <Alert
-            type="warning"
-            showIcon
-            title={t('pages.xray.egress.preflightNotes')}
-            description={<HostSentences lines={preflight.notes} />}
-          />
-        )}
+      {standalone ? (renderHeader ? renderHeader(primaryActions) : <PageHeader title={t('menu.outbounds')} sub={t('pages.xray.sectionDesc_outbound')} actions={primaryActions} />)
+        : <div className="outbounds-embedded-actions">{primaryActions}</div>}
+      <PanelCard pad={0} className="outbounds-card">
+        <div className="outbounds-toolbar">
+          <Tooltip title={t('pages.xray.outbound.testModeTooltip')}>
+            <Radio.Group value={testMode} onChange={(event) => setTestMode(event.target.value)} buttonStyle="solid" size="small">
+              <Radio.Button value="tcp">TCP</Radio.Button>
+              <Radio.Button value="http">HTTP</Radio.Button>
+              <Radio.Button value="real">{t('pages.xray.outbound.modeRealDelay')}</Radio.Button>
+            </Radio.Group>
+          </Tooltip>
+          <span className="p-sub">{t('uiRepair.outbounds.saveHint')}</span>
+          <Popconfirm placement="topRight" okText={t('reset')} cancelText={t('cancel')} title={t('pages.inbounds.resetAllTrafficContent')}
+            onConfirm={() => onResetTraffic('-alltags-')}>
+            <Button size="small" aria-label={t('pages.inbounds.resetTraffic')} icon={<RetweetOutlined />} />
+          </Popconfirm>
+        </div>
+        {(egressesQuery.isError || hostRulesQuery.isError) && <Alert type="warning" showIcon
+          title={t('uiRepair.outbounds.metadataUnavailable')} action={<Button size="small" onClick={() => { void egressesQuery.refetch(); void hostRulesQuery.refetch(); }}>{t('refresh')}</Button>} />}
+        {!!egressesQuery.data?.length && <HostEgressPreflight />}
 
         {isMobile ? (
           <OutboundCardList
             rows={tableRows}
-            testMode={testMode}
-            outboundsTraffic={outboundsTraffic}
-            outboundTestStates={outboundTestStates}
-            setFirst={setFirst}
-            openEdit={openEdit}
-            onResetTraffic={onResetTraffic}
-            confirmDelete={confirmDelete}
-            onTest={onTest}
+            controls={controls}
           />
         ) : (
           <Table
-            className="p-table"
+            className="p-table outbounds-table"
             columns={columns}
             dataSource={tableRows}
             rowKey={(r) => r.key}
             pagination={false}
             size="small"
+            tableLayout="fixed"
+            scroll={{ x: 985 }}
             locale={{
               emptyText: (
                 <div className="card-empty">
@@ -652,6 +646,7 @@ export default function OutboundsTab({
           />
         )}
 
+      </PanelCard>
         <OutboundFormModal
           open={modalOpen}
           outbound={editingOutbound}
@@ -682,6 +677,8 @@ export default function OutboundsTab({
         {/* Subscription outbounds (read-only, merged at runtime) */}
         {Array.isArray(subscriptionOutbounds) && subscriptionOutbounds.length > 0 && (
           <SubscriptionOutbounds
+            templateSettings={templateSettings}
+            hostRules={hostRulesQuery.data}
             subscriptionOutbounds={subscriptionOutbounds}
             outboundsTraffic={outboundsTraffic}
             subscriptionTestStates={subscriptionTestStates}
@@ -692,8 +689,6 @@ export default function OutboundsTab({
         )}
 
         <ExitFormModal open={exitFormOpen} exit={editingExit} onClose={() => setExitFormOpen(false)} />
-      </Space>
-
       <Modal
         title={t('pages.xray.outboundSub.title')}
         open={subDrawerOpen}
@@ -862,6 +857,6 @@ export default function OutboundsTab({
           </div>
         </Space>
       </Modal>
-    </>
+    </div>
   );
 }

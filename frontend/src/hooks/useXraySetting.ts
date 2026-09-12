@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { HttpUtil, Msg } from '@/utils';
 import { parseMsg } from '@/utils/zodValidate';
 import { keys } from '@/api/queryKeys';
-import { exitIdFromKey } from '@/schemas/api/egress';
+import { exitIdFromKey, isExitKey } from '@/schemas/api/egress';
 import {
   OutboundTrafficListSchema,
   OutboundTestResultListSchema,
@@ -87,7 +87,7 @@ export interface UseXraySettingResult {
     mode?: string,
   ) => Promise<OutboundTestResult | null>;
   testAllOutbounds: (mode?: string, exitKeys?: number[]) => Promise<void>;
-  saveAll: () => Promise<void>;
+  saveAll: (snapshot?: string) => Promise<void>;
   resetToDefault: () => Promise<void>;
 }
 
@@ -157,6 +157,34 @@ export function useXraySetting(): UseXraySettingResult {
   const savedOutboundTestUrlRef = useRef(savedOutboundTestUrl);
   const templateSettingsRef = useRef<XraySettingsValue | null>(null);
   const subscriptionOutboundsRef = useRef<unknown[]>([]);
+  const probeFingerprintRef = useRef('');
+  const invalidDraftRef = useRef('');
+  const probeEpochRef = useRef(0);
+  const probeSequenceRef = useRef(0);
+  const probeRequestsRef = useRef(new Map<string, number>());
+  const testAllRunRef = useRef<number | null>(null);
+
+  const syncProbeContext = useCallback(() => {
+    const fingerprint = JSON.stringify([templateSettingsRef.current, invalidDraftRef.current, subscriptionOutboundsRef.current,
+      normalizeOutboundTestUrl(outboundTestUrlRef.current)]);
+    if (fingerprint === probeFingerprintRef.current) return;
+    probeFingerprintRef.current = fingerprint;
+    probeEpochRef.current += 1;
+    for (const key of probeRequestsRef.current.keys()) {
+      if (!key.startsWith('exit:')) probeRequestsRef.current.delete(key);
+    }
+    setOutboundTestStates((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => Number(key) < 0 || isExitKey(Number(key)))));
+    setSubscriptionTestStates({});
+    testAllRunRef.current = null;
+    setTestingAll(false);
+  }, []);
+
+  const beginProbe = useCallback((key: string) => {
+    const request = ++probeSequenceRef.current;
+    probeRequestsRef.current.set(key, request);
+    return request;
+  }, []);
+  const isCurrentProbe = useCallback((key: string, request: number) => probeRequestsRef.current.get(key) === request, []);
 
   xraySettingRef.current = xraySetting;
   outboundTestUrlRef.current = outboundTestUrl;
@@ -174,54 +202,63 @@ export function useXraySetting(): UseXraySettingResult {
     setRoutingSubjects(obj.routingSubjects || []);
     setClientReverseTags(obj.clientReverseTags || []);
     setSubscriptionOutbounds(obj.subscriptionOutbounds || []);
+    subscriptionOutboundsRef.current = obj.subscriptionOutbounds || [];
     setSubscriptionOutboundTags(obj.subscriptionOutboundTags || []);
     const isDirty = savedXraySettingRef.current !== xraySettingRef.current
       || savedOutboundTestUrlRef.current !== normalizeOutboundTestUrl(outboundTestUrlRef.current);
-    if (isDirty) return;
+    if (isDirty) { syncProbeContext(); return; }
     syncingRef.current = true;
     setXraySettingState(pretty);
     setTemplateSettingsState(obj.xraySetting);
+    templateSettingsRef.current = obj.xraySetting;
+    invalidDraftRef.current = '';
+    xraySettingRef.current = pretty;
     setSavedXraySetting(pretty);
     syncingRef.current = false;
     setOutboundTestUrlState(nextUrl);
+    outboundTestUrlRef.current = nextUrl;
     setSavedOutboundTestUrl(nextUrl);
-  }, [configQuery.data]);
+    syncProbeContext();
+  }, [configQuery.data, syncProbeContext]);
 
   const fetched = configQuery.data !== undefined || configQuery.isError;
   const fetchError = configQuery.error ? (configQuery.error as Error).message : '';
 
   const setXraySetting = useCallback((next: string) => {
     setXraySettingState(next);
+    xraySettingRef.current = next;
     if (syncingRef.current) return;
     try {
       const parsed = JSON.parse(next);
       syncingRef.current = true;
       setTemplateSettingsState(parsed);
+      templateSettingsRef.current = parsed;
+      invalidDraftRef.current = '';
       syncingRef.current = false;
     } catch {
-      /* ignore — wait for user to finish */
+      invalidDraftRef.current = next;
     }
-  }, []);
+    syncProbeContext();
+  }, [syncProbeContext]);
 
   const setTemplateSettings: SetTemplate = useCallback((nextOrFn) => {
-    setTemplateSettingsState((prev) => {
-      const next = typeof nextOrFn === 'function' ? nextOrFn(prev) : nextOrFn;
-      if (next == null) return next;
-      if (!syncingRef.current) {
-        try {
-          syncingRef.current = true;
-          setXraySettingState(JSON.stringify(next, null, 2));
-        } finally {
-          syncingRef.current = false;
-        }
-      }
-      return next;
-    });
-  }, []);
+    const next = typeof nextOrFn === 'function' ? nextOrFn(templateSettingsRef.current) : nextOrFn;
+    templateSettingsRef.current = next;
+    invalidDraftRef.current = '';
+    setTemplateSettingsState(next);
+    if (next != null && !syncingRef.current) {
+      const pretty = JSON.stringify(next, null, 2);
+      xraySettingRef.current = pretty;
+      setXraySettingState(pretty);
+    }
+    syncProbeContext();
+  }, [syncProbeContext]);
 
   const setOutboundTestUrl = useCallback((v: string) => {
     setOutboundTestUrlState(v);
-  }, []);
+    outboundTestUrlRef.current = v;
+    syncProbeContext();
+  }, [syncProbeContext]);
 
   const fetchAll = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: keys.xray.config() });
@@ -232,8 +269,8 @@ export function useXraySetting(): UseXraySettingResult {
   }, [queryClient]);
 
   const saveMut = useMutation({
-    mutationFn: async () => {
-      const sentXraySetting = xraySettingRef.current;
+    mutationFn: async (snapshot?: string) => {
+      const sentXraySetting = snapshot ?? xraySettingRef.current;
       const sentTestUrl = normalizeOutboundTestUrl(outboundTestUrlRef.current);
       const msg = await HttpUtil.post('/panel/api/xray/update', {
         xraySetting: sentXraySetting,
@@ -270,16 +307,17 @@ export function useXraySetting(): UseXraySettingResult {
     },
   });
 
-  const saveAll = useCallback(async () => { await saveMut.mutateAsync(); }, [saveMut]);
+  const saveAll = useCallback(async (snapshot?: string) => {
+    const { msg } = await saveMut.mutateAsync(snapshot);
+    if (!msg?.success) throw new Error(msg?.msg || 'somethingWentWrong');
+  }, [saveMut]);
   const resetOutboundsTraffic = useCallback(async (tag: string) => { await resetTrafficMut.mutateAsync(tag); }, [resetTrafficMut]);
   const resetToDefault = useCallback(async () => { await resetDefaultMut.mutateAsync(); }, [resetDefaultMut]);
 
   const spinning = saveMut.isPending || resetDefaultMut.isPending;
 
-  // Shared POST + parse for a batch of outbound tests. The backend probes the
-  // whole batch through one shared temp xray instance and returns results in
-  // request order; this aligns them by index and shapes failures so every
-  // input gets an OutboundTestResult.
+  /* One shared temporary Xray instance probes each batch in request order.
+     Keep a result for every input, including missing results and failures. */
   const postOutboundTestBatch = useCallback(
     async (outbounds: unknown[], effMode: string): Promise<OutboundTestResult[]> => {
       const failAll = (error: string): OutboundTestResult[] =>
@@ -302,25 +340,29 @@ export function useXraySetting(): UseXraySettingResult {
   );
 
   const testOutbound = useCallback(
-    async (index: number, outbound: unknown, mode = 'tcp'): Promise<OutboundTestResult | null> => {
-      if (!outbound) return null;
+    async (index: number, outbound: unknown, mode = 'tcp', request = beginProbe(`tpl:${index}`)): Promise<OutboundTestResult | null> => {
+      const key = `tpl:${index}`;
+      if (!outbound || !isCurrentProbe(key, request)) return null;
       const effMode = mode === 'tcp' && isUdpOutbound(outbound) ? 'http' : mode;
       setOutboundTestStates((prev) => ({
         ...prev,
         [index]: { testing: true, result: null, mode: effMode },
       }));
       const [result] = await postOutboundTestBatch([outbound], effMode);
-      setOutboundTestStates((prev) => ({ ...prev, [index]: { testing: false, result } }));
+      if (!isCurrentProbe(key, request)) return null;
+      setOutboundTestStates((prev) => isCurrentProbe(key, request) ? { ...prev, [index]: { testing: false, result } } : prev);
       return result.success ? result : null;
     },
-    [postOutboundTestBatch],
+    [postOutboundTestBatch, beginProbe, isCurrentProbe],
   );
 
   /* A host-level exit is not in templateSettings.outbounds and has no SOCKS
      inbound to route through, so it is timed by its own endpoint — but it lands
      in the same state map, because the table it renders in is the same table. */
   const testExit = useCallback(
-    async (key: number, mode = 'tcp'): Promise<OutboundTestResult | null> => {
+    async (key: number, mode = 'tcp', request = beginProbe(`exit:${key}`)): Promise<OutboundTestResult | null> => {
+      const requestKey = `exit:${key}`;
+      if (!isCurrentProbe(requestKey, request)) return null;
       const id = exitIdFromKey(key);
       const effMode = mode === 'tcp' ? 'http' : mode;
       setOutboundTestStates((prev) => ({
@@ -340,27 +382,30 @@ export function useXraySetting(): UseXraySettingResult {
       } catch (e) {
         result = { success: false, error: String(e), mode: effMode };
       }
-      setOutboundTestStates((prev) => ({ ...prev, [key]: { testing: false, result } }));
+      if (!isCurrentProbe(requestKey, request)) return null;
+      setOutboundTestStates((prev) => isCurrentProbe(requestKey, request) ? { ...prev, [key]: { testing: false, result } } : prev);
       return result.success ? result : null;
     },
-    [],
+    [beginProbe, isCurrentProbe],
   );
 
   // Test a subscription outbound (not present in templateSettings.outbounds);
   // results are keyed by tag in subscriptionTestStates.
   const testSubscriptionOutbound = useCallback(
-    async (tag: string, outbound: unknown, mode = 'tcp'): Promise<OutboundTestResult | null> => {
-      if (!outbound || !tag) return null;
+    async (tag: string, outbound: unknown, mode = 'tcp', request = beginProbe(`sub:${tag}`)): Promise<OutboundTestResult | null> => {
+      const key = `sub:${tag}`;
+      if (!outbound || !tag || !isCurrentProbe(key, request)) return null;
       const effMode = mode === 'tcp' && isUdpOutbound(outbound) ? 'http' : mode;
       setSubscriptionTestStates((prev) => ({
         ...prev,
         [tag]: { testing: true, result: null, mode: effMode },
       }));
       const [result] = await postOutboundTestBatch([outbound], effMode);
-      setSubscriptionTestStates((prev) => ({ ...prev, [tag]: { testing: false, result } }));
+      if (!isCurrentProbe(key, request)) return null;
+      setSubscriptionTestStates((prev) => isCurrentProbe(key, request) ? { ...prev, [tag]: { testing: false, result } } : prev);
       return result.success ? result : null;
     },
-    [postOutboundTestBatch],
+    [postOutboundTestBatch, beginProbe, isCurrentProbe],
   );
 
   const testAllOutbounds = useCallback(async (mode = 'tcp', exitKeys: number[] = []) => {
@@ -371,33 +416,38 @@ export function useXraySetting(): UseXraySettingResult {
     // because they live in the egress rows rather than in the xray config.
     const templateList = templateSettingsRef.current?.outbounds || [];
     const subList = (subscriptionOutboundsRef.current || []) as Array<{ tag?: string; protocol?: string }>;
-    if ((templateList.length === 0 && subList.length === 0 && exitKeys.length === 0) || testingAll) return;
+    if ((templateList.length === 0 && subList.length === 0 && exitKeys.length === 0) || testAllRunRef.current !== null) return;
+    const run = ++probeSequenceRef.current;
+    const epoch = probeEpochRef.current;
+    const isCurrentRun = () => epoch === probeEpochRef.current && testAllRunRef.current === run;
+    testAllRunRef.current = run;
     setTestingAll(true);
     try {
       type TcpEntry =
-        | { kind: 'tpl'; index: number; outbound: unknown }
-        | { kind: 'sub'; tag: string; outbound: unknown };
+        | { kind: 'tpl'; index: number; outbound: unknown; request: number }
+        | { kind: 'sub'; tag: string; outbound: unknown; request: number };
       const tcpQueue: TcpEntry[] = [];
       // HTTP batches stay homogeneous (all template or all subscription) so a
       // tag shared between a template and a subscription outbound can't collide
       // inside one batch, and each batch's results route to one state map.
       const probeMode = mode === 'real' ? 'real' : 'http';
-      const httpTplQueue: { index: number; outbound: unknown }[] = [];
-      const httpSubQueue: { tag: string; outbound: unknown }[] = [];
+      const httpTplQueue: { index: number; outbound: unknown; request: number }[] = [];
+      const httpSubQueue: { tag: string; outbound: unknown; request: number }[] = [];
       const enqueue = (ob: { tag?: string; protocol?: string }, kind: 'tpl' | 'sub', index: number, tag: string) => {
         const proto = ob?.protocol;
         if (proto === 'blackhole' || proto === 'loopback' || ob?.tag === 'blocked') return;
         // freedom ("direct") and dns aren't proxies — skip them in every mode.
         if (proto === 'freedom' || proto === 'dns') return;
         if (kind === 'sub' && !tag) return;
+        const request = beginProbe(kind === 'tpl' ? `tpl:${index}` : `sub:${tag}`);
         const toHttp = mode !== 'tcp' || isUdpOutbound(ob);
         if (kind === 'tpl') {
-          if (toHttp) httpTplQueue.push({ index, outbound: ob });
-          else tcpQueue.push({ kind: 'tpl', index, outbound: ob });
+          if (toHttp) httpTplQueue.push({ index, outbound: ob, request });
+          else tcpQueue.push({ kind: 'tpl', index, outbound: ob, request });
         } else if (toHttp) {
-          httpSubQueue.push({ tag, outbound: ob });
+          httpSubQueue.push({ tag, outbound: ob, request });
         } else {
-          tcpQueue.push({ kind: 'sub', tag, outbound: ob });
+          tcpQueue.push({ kind: 'sub', tag, outbound: ob, request });
         }
       };
       templateList.forEach((ob, i) => enqueue(ob, 'tpl', i, ''));
@@ -408,11 +458,11 @@ export function useXraySetting(): UseXraySettingResult {
       const runTcpLane = async () => {
         const queue = [...tcpQueue];
         const worker = async () => {
-          while (queue.length > 0) {
+          while (queue.length > 0 && isCurrentRun()) {
             const item = queue.shift();
             if (!item) break;
-            if (item.kind === 'sub') await testSubscriptionOutbound(item.tag, item.outbound, mode);
-            else await testOutbound(item.index, item.outbound, mode);
+            if (item.kind === 'sub') await testSubscriptionOutbound(item.tag, item.outbound, mode, item.request);
+            else await testOutbound(item.index, item.outbound, mode, item.request);
           }
         };
         await Promise.all(Array.from({ length: Math.min(8, queue.length) }, () => worker()));
@@ -421,17 +471,20 @@ export function useXraySetting(): UseXraySettingResult {
       // chunk instead of one per outbound, with results landing per chunk.
       const runTplHttpLane = async () => {
         for (let at = 0; at < httpTplQueue.length; at += HTTP_BATCH_CHUNK) {
-          const chunk = httpTplQueue.slice(at, at + HTTP_BATCH_CHUNK);
+          if (!isCurrentRun()) return;
+          const chunk = httpTplQueue.slice(at, at + HTTP_BATCH_CHUNK).filter((item) => isCurrentProbe(`tpl:${item.index}`, item.request));
+          if (!chunk.length) continue;
           setOutboundTestStates((prev) => {
             const next = { ...prev };
-            for (const item of chunk) next[item.index] = { testing: true, result: null, mode: probeMode };
+            for (const item of chunk) if (isCurrentProbe(`tpl:${item.index}`, item.request)) next[item.index] = { testing: true, result: null, mode: probeMode };
             return next;
           });
           const results = await postOutboundTestBatch(chunk.map((c) => c.outbound), probeMode);
+          if (!isCurrentRun()) return;
           setOutboundTestStates((prev) => {
             const next = { ...prev };
             chunk.forEach((item, i) => {
-              next[item.index] = { testing: false, result: results[i] };
+              if (isCurrentProbe(`tpl:${item.index}`, item.request)) next[item.index] = { testing: false, result: results[i] };
             });
             return next;
           });
@@ -439,17 +492,20 @@ export function useXraySetting(): UseXraySettingResult {
       };
       const runSubHttpLane = async () => {
         for (let at = 0; at < httpSubQueue.length; at += HTTP_BATCH_CHUNK) {
-          const chunk = httpSubQueue.slice(at, at + HTTP_BATCH_CHUNK);
+          if (!isCurrentRun()) return;
+          const chunk = httpSubQueue.slice(at, at + HTTP_BATCH_CHUNK).filter((item) => isCurrentProbe(`sub:${item.tag}`, item.request));
+          if (!chunk.length) continue;
           setSubscriptionTestStates((prev) => {
             const next = { ...prev };
-            for (const item of chunk) next[item.tag] = { testing: true, result: null, mode: probeMode };
+            for (const item of chunk) if (isCurrentProbe(`sub:${item.tag}`, item.request)) next[item.tag] = { testing: true, result: null, mode: probeMode };
             return next;
           });
           const results = await postOutboundTestBatch(chunk.map((c) => c.outbound), probeMode);
+          if (!isCurrentRun()) return;
           setSubscriptionTestStates((prev) => {
             const next = { ...prev };
             chunk.forEach((item, i) => {
-              next[item.tag] = { testing: false, result: results[i] };
+              if (isCurrentProbe(`sub:${item.tag}`, item.request)) next[item.tag] = { testing: false, result: results[i] };
             });
             return next;
           });
@@ -467,21 +523,24 @@ export function useXraySetting(): UseXraySettingResult {
       /* Exits take no xray instance and so no batch lock, but each one holds a
          connection open through its own tunnel for seconds — a few at a time. */
       const runExitLane = async () => {
-        const queue = [...exitKeys];
+        const queue = exitKeys.map((key) => ({ key, request: beginProbe(`exit:${key}`) }));
         const worker = async () => {
           while (queue.length > 0) {
-            const key = queue.shift();
-            if (key === undefined) break;
-            await testExit(key, mode);
+            const item = queue.shift();
+            if (!item) break;
+            await testExit(item.key, mode, item.request);
           }
         };
         await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => worker()));
       };
       await Promise.all([runTcpLane(), runHttpLane(), runExitLane()]);
     } finally {
-      setTestingAll(false);
+      if (testAllRunRef.current === run) {
+        testAllRunRef.current = null;
+        setTestingAll(false);
+      }
     }
-  }, [testingAll, testOutbound, testExit, testSubscriptionOutbound, postOutboundTestBatch]);
+  }, [testOutbound, testExit, testSubscriptionOutbound, postOutboundTestBatch, beginProbe, isCurrentProbe]);
 
   const saveDisabled = savedXraySetting === xraySetting
     && savedOutboundTestUrl === normalizeOutboundTestUrl(outboundTestUrl);

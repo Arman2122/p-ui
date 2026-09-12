@@ -6,6 +6,8 @@ export type StateTone = 'success' | 'warning' | 'error' | 'default';
 
 export function stateTone(state: string, ready: boolean): { tone: StateTone; labelKey: string } {
   switch (state) {
+    case 'unavailable':
+      return { tone: 'default', labelKey: 'pages.cores.unavailable' };
     case 'running':
       return ready
         ? { tone: 'success', labelKey: 'pages.cores.state.running' }
@@ -30,9 +32,7 @@ export interface CoresSummary {
   unavailable: number;
 }
 
-/* attention is everything an operator should look at: a failed or degraded
-   core, and a running one whose daemon does not answer. Stopped and idle cores
-   are neither healthy nor a problem; unavailable ones the host cannot run. */
+/* Stopped and idle cores are neutral; failures and running cores without readiness need attention. */
 export function summarizeCores(cores: CoreStatusView[]): CoresSummary {
   let healthy = 0;
   let attention = 0;

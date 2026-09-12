@@ -14015,7 +14015,7 @@
         "tags": [
           "Routing"
         ],
-        "summary": "Create a rule. It is appended last and converges before the response returns.",
+        "summary": "Create a rule, append it last, and converge. A convergence failure returns success: false with the persisted rule in obj; retry by updating obj.id instead of creating again. A validation refusal returns no persisted rule.",
         "operationId": "post_panel_api_routing_rules",
         "responses": {
           "200": {
@@ -14195,7 +14195,7 @@
         "tags": [
           "Routing"
         ],
-        "summary": "Update one rule.",
+        "summary": "Update one rule and converge. A convergence failure returns success: false with the persisted rule in obj; retry the same rule ID. A validation refusal leaves the stored rule unchanged and returns no persisted rule.",
         "operationId": "post_panel_api_routing_rules_id",
         "parameters": [
           {

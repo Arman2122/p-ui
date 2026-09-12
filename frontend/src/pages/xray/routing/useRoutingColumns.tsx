@@ -11,22 +11,24 @@ import {
   ArrowDownOutlined,
   HolderOutlined,
   WarningOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import CriterionRow from './CriterionRow';
-import { buildRemarkByTag, formatInboundTagList, inboundTagsDisplayTitle, isApiRule } from './helpers';
+import { buildRemarkByTag, canSwapRows, formatInboundTagList, inboundTagsDisplayTitle, isApiRule } from './helpers';
 import type { InboundTagOption, RuleRow } from './types';
 
 interface RoutingColumnsParams {
   isMobile: boolean;
   inboundTagOptions?: InboundTagOption[];
-  rowsLength: number;
+  rows: RuleRow[];
   showSource: boolean;
   showBalancer: boolean;
   onHandlePointerDown: (idx: number, ev: React.PointerEvent) => void;
   openEdit: (idx: number) => void;
+  duplicateRule: (idx: number) => void;
   moveUp: (idx: number) => void;
   moveDown: (idx: number) => void;
   confirmDelete: (idx: number) => void;
@@ -36,11 +38,12 @@ interface RoutingColumnsParams {
 export function useRoutingColumns({
   isMobile,
   inboundTagOptions,
-  rowsLength,
+  rows,
   showSource,
   showBalancer,
   onHandlePointerDown,
   openEdit,
+  duplicateRule,
   moveUp,
   moveDown,
   confirmDelete,
@@ -88,23 +91,24 @@ export function useRoutingColumns({
         render: (_v, _r, index) => (
           <div className={!isMobile ? 'action-buttons' : ''} style={{ justifyContent: 'center', margin: 0 }}>
             {!isMobile && (
-              <Button shape="circle" size="small" icon={<EditOutlined />} aria-label={t('edit')} onClick={() => openEdit(index)} />
+              <Button shape="circle" size="small" icon={<EditOutlined />} disabled={isApiRule(_r)} title={isApiRule(_r) ? t('routingPage.fixedRule') : undefined} aria-label={t('edit')} onClick={() => openEdit(index)} />
             )}
             <Dropdown
               trigger={['click']}
               menu={{
                 items: [
                   ...(isMobile
-                    ? [{ key: 'edit', label: <><EditOutlined /> {t('edit')}</>, onClick: () => openEdit(index) }]
+                    ? [{ key: 'edit', label: <><EditOutlined /> {t('edit')}</>, disabled: isApiRule(_r), onClick: () => openEdit(index) }]
                     : []),
-                  { key: 'up', label: <><ArrowUpOutlined /> {t('pages.inbounds.form.moveUp')}</>, disabled: index === 0, onClick: () => moveUp(index) },
+                  { key: 'duplicate', label: <><CopyOutlined /> {t('routingPage.duplicate')}</>, disabled: isApiRule(_r), onClick: () => duplicateRule(index) },
+                  { key: 'up', label: <><ArrowUpOutlined /> {t('pages.inbounds.form.moveUp')}</>, disabled: !canSwapRows(_r, rows[index - 1]), onClick: () => moveUp(index) },
                   {
                     key: 'down',
                     label: <><ArrowDownOutlined /> {t('pages.inbounds.form.moveDown')}</>,
-                    disabled: index === rowsLength - 1,
+                    disabled: !canSwapRows(_r, rows[index + 1]),
                     onClick: () => moveDown(index),
                   },
-                  { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, onClick: () => confirmDelete(index) },
+                  { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, disabled: isApiRule(_r), onClick: () => confirmDelete(index) },
                 ],
               }}
             >
@@ -122,6 +126,7 @@ export function useRoutingColumns({
           <span className="rule-enable-cell">
             <Switch
               size="small"
+              aria-label={`${t('enable')} ${index + 1}`}
               checked={_r.enabled !== false}
               onChange={(checked) => toggleRule(index, checked)}
               disabled={isApiRule(_r)}
@@ -249,6 +254,6 @@ export function useRoutingColumns({
           ),
       },
     ],
-    [t, isMobile, rowsLength, showSource, showBalancer, remarkByTag, deadTags, onHandlePointerDown, openEdit, moveUp, moveDown, confirmDelete, toggleRule],
+    [t, isMobile, rows, showSource, showBalancer, remarkByTag, deadTags, onHandlePointerDown, openEdit, duplicateRule, moveUp, moveDown, confirmDelete, toggleRule],
   );
 }

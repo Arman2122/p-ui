@@ -2,34 +2,11 @@ import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
 import type { CoreStatusView } from '@/generated/zod';
 
-import { Icon, type IconName } from '@/components/ui/Icon';
+import { Icon } from '@/components/ui/Icon';
 import { StatusDot } from '@/components/ui/panel';
-import { stateTone, summarizeCores } from '@/lib/cores/status';
+import { summarizeCores } from '@/lib/cores/status';
+import { coreIcon, coreColor, coreStateTone, coreVersionLabel } from '@/lib/cores/display';
 import { TimeFormatter } from '@/utils';
-
-/* The panel ships one core-specific glyph, so the rest borrow the nearest fitting
-   shape from the same set. An unknown core falls back rather than rendering blank. */
-const CORE_ICON: Record<string, IconName> = {
-  xray: 'xray',
-  singbox: 'nodes',
-  wgkernel: 'shield',
-  awgkernel: 'shield',
-  openvpn: 'shield',
-  ocserv: 'hosts',
-  mtproto: 'link',
-  ssh: 'lock',
-};
-
-const CORE_TONE: Record<string, string> = {
-  xray: '#4c8dff',
-  singbox: '#9254de',
-  wgkernel: '#5ac8b0',
-  awgkernel: '#c79a4b',
-  openvpn: '#5ac8b0',
-  ocserv: '#4c8dff',
-  mtproto: '#9254de',
-  ssh: '#8c8f99',
-};
 
 const TONE_COLOR: Record<string, string> = {
   success: 'var(--p-success)',
@@ -37,14 +14,6 @@ const TONE_COLOR: Record<string, string> = {
   error: 'var(--p-error)',
   default: '#8b8d94',
 };
-
-function iconOf(id: string): IconName {
-  return CORE_ICON[id] ?? 'config';
-}
-
-function toneOf(id: string): string {
-  return CORE_TONE[id] ?? '#8c8f99';
-}
 
 /* Only Xray reports a top-level start time; a per-inbound core carries one per
    instance, and the kernel modules report none at all. */
@@ -65,7 +34,7 @@ function uptimeOf(core: CoreStatusView): string {
 export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; onOpen: () => void }) {
   const { t } = useTranslation();
   const summary = summarizeCores(cores);
-  const stopped = cores.filter((c) => c.state !== 'idle' && (c.state !== 'running' || !c.ready));
+  const stopped = cores.filter((c) => !c.available || c.state !== 'running' || !c.ready);
   return (
     <div className="p-vitals-core">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -75,7 +44,7 @@ export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; o
           </div>
           <div className="p-sub" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {stopped.length
-              ? t('pages.index.coresStopped', { names: stopped.map((c) => t(c.titleKey)).join(', ') })
+              ? stopped.map((c) => `${t(c.titleKey)} · ${t(coreStateTone(c).labelKey)}`).join(' · ')
               : cores.length ? t('pages.index.coresAllAnswering') : t('telemetry.noReadings')}
           </div>
         </div>
@@ -83,7 +52,7 @@ export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; o
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 11, flexWrap: 'wrap' }}>
         {cores.map((c) => {
-          const tone = stateTone(c.state, c.ready);
+          const tone = coreStateTone(c);
           return (
             <Tooltip key={c.id} title={`${t(c.titleKey)} · ${t(tone.labelKey)}`}>
               <button type="button" className="p-corechip" onClick={onOpen}>
@@ -103,22 +72,22 @@ export default function DashboardCores({ cores, onOpen }: { cores: CoreStatusVie
   return (
     <div className="p-coregrid">
       {cores.map((c) => {
-        const tone = stateTone(c.state, c.ready);
-        const uptime = c.state === 'running' && c.ready ? uptimeOf(c) : '';
+        const tone = coreStateTone(c);
+        const uptime = c.available && c.state === 'running' && c.ready ? uptimeOf(c) : '';
         return (
           <button type="button" key={c.id} className="p-coretile" onClick={onOpen}>
             <span className="p-coretile-h">
               <span
                 className="p-alert-i"
-                style={{ background: `color-mix(in srgb, ${toneOf(c.id)} 15%, transparent)`, color: toneOf(c.id), width: 24, height: 24, flex: '0 0 24px' }}
+                style={{ background: `color-mix(in srgb, ${coreColor(c.id)} 15%, transparent)`, color: coreColor(c.id), width: 24, height: 24, flex: '0 0 24px' }}
               >
-                <Icon name={iconOf(c.id)} size={13} />
+                <Icon name={coreIcon(c.id)} size={13} />
               </span>
               <span className="p-coretile-n">{t(c.titleKey)}</span>
               <StatusDot color={TONE_COLOR[tone.tone]} pulse={tone.tone === 'success'} />
             </span>
             <span className="p-coretile-m">
-              <span className="p-mono">{c.version.installed || '—'}</span>
+              <span className="p-mono">{coreVersionLabel(c).text ?? t(coreVersionLabel(c).key!)}</span>
               <span>{uptime || t(tone.labelKey)}</span>
             </span>
           </button>

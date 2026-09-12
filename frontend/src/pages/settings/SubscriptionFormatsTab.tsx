@@ -1,27 +1,20 @@
+import SettingsGroup from './SettingsGroup';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Card,
   Input,
   InputNumber,
   Select,
   Switch,
-  Tabs,
 } from 'antd';
 import {
   FileTextOutlined,
   NodeIndexOutlined,
-  PartitionOutlined,
-  RocketOutlined,
-  SendOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import type { AllSetting } from '@/models/setting';
 import { onNumber } from '@/utils/onNumber';
 import { SettingListItem } from '@/components/ui';
 import { GoRegexInput } from '@/components/form';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { catTabLabel } from './catTabLabel';
 import { sanitizePath, normalizePath } from './uriPath';
 import SubJsonFinalMaskForm from './SubJsonFinalMaskForm';
 import './SubscriptionFormatsTab.css';
@@ -75,7 +68,6 @@ function readJson<T>(raw: string, fallback: T): T {
 
 export default function SubscriptionFormatsTab({ allSetting, updateSetting }: SubscriptionFormatsTabProps) {
   const { t } = useTranslation();
-  const { isMobile } = useMediaQuery();
 
   const muxEnabled = allSetting.subJsonMux !== '';
   const directEnabled = allSetting.subJsonRules !== '';
@@ -148,190 +140,161 @@ export default function SubscriptionFormatsTab({ allSetting, updateSetting }: Su
   }
 
   return (
-    <Tabs defaultActiveKey="1" items={[
-      {
-        key: '1',
-        label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
-        children: (
-          <div className="subscription-format-sections">
-            {allSetting.subJsonEnable && (
-              <Card
-                size="small"
-                className="subscription-format-card"
-                title={(
-                  <span className="subscription-format-card-title">
-                    <FileTextOutlined />
-                    {t('pages.settings.subJsonEnableTitle')}
-                  </span>
-                )}
-              >
-                <SettingListItem paddings="small" title={<>JSON {t('pages.settings.subPath')}</>} description={t('pages.settings.subPathDesc')}>
-                  <Input
-                    value={allSetting.subJsonPath}
-                    placeholder="/json/"
-                    onChange={(e) => updateSetting({ subJsonPath: sanitizePath(e.target.value) })}
-                    onBlur={() => updateSetting({ subJsonPath: normalizePath(allSetting.subJsonPath) })}
-                  />
-                </SettingListItem>
-                <SettingListItem paddings="small" title={<>JSON {t('pages.settings.subURI')}</>} description={t('pages.settings.subURIDesc')}>
-                  <Input
-                    value={allSetting.subJsonURI}
-                    placeholder="(http|https)://domain[:port]/path/"
-                    onChange={(e) => updateSetting({ subJsonURI: e.target.value })}
-                  />
-                </SettingListItem>
-                <SettingListItem
-                  paddings="small"
-                  title={t('pages.settings.subJsonAlwaysArray')}
-                  description={t('pages.settings.subJsonAlwaysArrayDesc')}
-                >
-                  <Switch checked={allSetting.subJsonAlwaysArray} onChange={(value) => updateSetting({ subJsonAlwaysArray: value })} />
-                </SettingListItem>
-                <SettingListItem paddings="small" title={t('pages.settings.subJsonAutoDetect')} description={t('pages.settings.subJsonAutoDetectDesc')}>
-                  <Switch checked={allSetting.subJsonAutoDetect} onChange={(v) => updateSetting({ subJsonAutoDetect: v })} />
-                </SettingListItem>
-                <SettingListItem
-                  paddings="small"
-                  title={t('pages.settings.subJsonUserAgentRegex')}
-                  description={t('pages.settings.subJsonUserAgentRegexDesc')}
-                >
-                  <GoRegexInput
-                    value={allSetting.subJsonUserAgentRegex}
-                    placeholder="(?i)^myclient([ /]|$)"
-                    onChange={(value) => updateSetting({ subJsonUserAgentRegex: value })}
-                  />
-                </SettingListItem>
-              </Card>
-            )}
-            {allSetting.subClashEnable && (
-              <Card
-                size="small"
-                className="subscription-format-card"
-                title={(
-                  <span className="subscription-format-card-title">
-                    <NodeIndexOutlined />
-                    {t('pages.settings.subClashEnableTitle')}
-                  </span>
-                )}
-              >
-                <SettingListItem paddings="small" title={<>Clash {t('pages.settings.subPath')}</>} description={t('pages.settings.subPathDesc')}>
-                  <Input
-                    value={allSetting.subClashPath}
-                    placeholder="/clash/"
-                    onChange={(e) => updateSetting({ subClashPath: sanitizePath(e.target.value) })}
-                    onBlur={() => updateSetting({ subClashPath: normalizePath(allSetting.subClashPath) })}
-                  />
-                </SettingListItem>
-                <SettingListItem paddings="small" title={<>Clash {t('pages.settings.subURI')}</>} description={t('pages.settings.subURIDesc')}>
-                  <Input
-                    value={allSetting.subClashURI}
-                    placeholder="(http|https)://domain[:port]/path/"
-                    onChange={(e) => updateSetting({ subClashURI: e.target.value })}
-                  />
-                </SettingListItem>
-                <SettingListItem
-                  paddings="small"
-                  title={t('pages.settings.subClashAutoDetect')}
-                  description={t('pages.settings.subClashAutoDetectDesc')}
-                >
-                  <Switch
-                    checked={allSetting.subClashAutoDetect}
-                    onChange={(v) => updateSetting({ subClashAutoDetect: v })}
-                  />
-                </SettingListItem>
-                <SettingListItem
-                  paddings="small"
-                  title={t('pages.settings.subClashUserAgentRegex')}
-                  description={t('pages.settings.subClashUserAgentRegexDesc')}
-                >
-                  <GoRegexInput
-                    value={allSetting.subClashUserAgentRegex}
-                    placeholder="(?i)(clash|mihomo)"
-                    onChange={(value) => updateSetting({ subClashUserAgentRegex: value })}
-                  />
-                </SettingListItem>
-              </Card>
-            )}
-          </div>
-        ),
-      },
-      {
-        key: '2',
-        label: catTabLabel(<RocketOutlined />, t('pages.settings.subFormats.finalMask'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.subFormats.finalMask')} description={t('pages.settings.subFormats.finalMaskDesc')} />
-            <SubJsonFinalMaskForm
-              value={allSetting.subJsonFinalMask}
-              onChange={(v) => updateSetting({ subJsonFinalMask: v })}
+    <div className="settings-groups"><div className="subscription-format-sections">
+      {allSetting.subJsonEnable && (
+        <SettingsGroup
+          title={(
+            <span className="subscription-format-card-title">
+              <FileTextOutlined />
+              {t('pages.settings.subJsonEnableTitle')}
+            </span>
+          )}
+        >
+          <SettingListItem paddings="small" title={<>JSON {t('pages.settings.subPath')}</>} description={t('pages.settings.subPathDesc')}>
+            <Input
+              value={allSetting.subJsonPath}
+              placeholder="/json/"
+              onChange={(e) => updateSetting({ subJsonPath: sanitizePath(e.target.value) })}
+              onBlur={() => updateSetting({ subJsonPath: normalizePath(allSetting.subJsonPath) })}
             />
-          </>
-        ),
-      },
-      {
-        key: '3',
-        label: catTabLabel(<PartitionOutlined />, t('pages.settings.mux'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.mux')} description={t('pages.settings.muxDesc')}>
-              <Switch checked={muxEnabled} onChange={setMuxEnabled} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={<>JSON {t('pages.settings.subURI')}</>} description={t('pages.settings.subURIDesc')}>
+            <Input
+              value={allSetting.subJsonURI}
+              placeholder="(http|https)://domain[:port]/path/"
+              onChange={(e) => updateSetting({ subJsonURI: e.target.value })}
+            />
+          </SettingListItem>
+          <SettingListItem
+            paddings="small"
+            title={t('pages.settings.subJsonAlwaysArray')}
+            description={t('pages.settings.subJsonAlwaysArrayDesc')}
+          >
+            <Switch checked={allSetting.subJsonAlwaysArray} onChange={(value) => updateSetting({ subJsonAlwaysArray: value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.subJsonAutoDetect')} description={t('pages.settings.subJsonAutoDetectDesc')}>
+            <Switch checked={allSetting.subJsonAutoDetect} onChange={(v) => updateSetting({ subJsonAutoDetect: v })} />
+          </SettingListItem>
+          <SettingListItem
+            paddings="small"
+            title={t('pages.settings.subJsonUserAgentRegex')}
+            description={t('pages.settings.subJsonUserAgentRegexDesc')}
+          >
+            <GoRegexInput
+              value={allSetting.subJsonUserAgentRegex}
+              placeholder="(?i)^myclient([ /]|$)"
+              onChange={(value) => updateSetting({ subJsonUserAgentRegex: value })}
+            />
+          </SettingListItem>
+        </SettingsGroup>
+      )}
+      {allSetting.subClashEnable && (
+        <SettingsGroup
+          title={(
+            <span className="subscription-format-card-title">
+              <NodeIndexOutlined />
+              {t('pages.settings.subClashEnableTitle')}
+            </span>
+          )}
+        >
+          <SettingListItem paddings="small" title={<>Clash {t('pages.settings.subPath')}</>} description={t('pages.settings.subPathDesc')}>
+            <Input
+              value={allSetting.subClashPath}
+              placeholder="/clash/"
+              onChange={(e) => updateSetting({ subClashPath: sanitizePath(e.target.value) })}
+              onBlur={() => updateSetting({ subClashPath: normalizePath(allSetting.subClashPath) })}
+            />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={<>Clash {t('pages.settings.subURI')}</>} description={t('pages.settings.subURIDesc')}>
+            <Input
+              value={allSetting.subClashURI}
+              placeholder="(http|https)://domain[:port]/path/"
+              onChange={(e) => updateSetting({ subClashURI: e.target.value })}
+            />
+          </SettingListItem>
+          <SettingListItem
+            paddings="small"
+            title={t('pages.settings.subClashAutoDetect')}
+            description={t('pages.settings.subClashAutoDetectDesc')}
+          >
+            <Switch
+              checked={allSetting.subClashAutoDetect}
+              onChange={(v) => updateSetting({ subClashAutoDetect: v })}
+            />
+          </SettingListItem>
+          <SettingListItem
+            paddings="small"
+            title={t('pages.settings.subClashUserAgentRegex')}
+            description={t('pages.settings.subClashUserAgentRegexDesc')}
+          >
+            <GoRegexInput
+              value={allSetting.subClashUserAgentRegex}
+              placeholder="(?i)(clash|mihomo)"
+              onChange={(value) => updateSetting({ subClashUserAgentRegex: value })}
+            />
+          </SettingListItem>
+        </SettingsGroup>
+      )}
+    </div>
+      <SettingsGroup title={t('pages.settings.subFormats.finalMask')}>
+        <SettingListItem paddings="small" title={t('pages.settings.subFormats.finalMask')} description={t('pages.settings.subFormats.finalMaskDesc')} />
+        <div className="settings-editor"><SubJsonFinalMaskForm
+          value={allSetting.subJsonFinalMask}
+          onChange={(v) => updateSetting({ subJsonFinalMask: v })}
+        /></div>
+      </SettingsGroup>
+      <SettingsGroup title={t('pages.settings.mux')}>
+        <SettingListItem paddings="small" title={t('pages.settings.mux')} description={t('pages.settings.muxDesc')}>
+          <Switch checked={muxEnabled} onChange={setMuxEnabled} />
+        </SettingListItem>
+        {muxEnabled && (
+          <div className="format-settings">
+            <SettingListItem paddings="small" title={t('pages.settings.subFormats.concurrency')}>
+              <InputNumber value={muxObj.concurrency} min={-1} max={1024} style={{ width: '100%' }}
+                onChange={onNumber((v) => setMuxField('concurrency', v))} />
             </SettingListItem>
-            {muxEnabled && (
-              <div className="format-settings">
-                <SettingListItem paddings="small" title={t('pages.settings.subFormats.concurrency')}>
-                  <InputNumber value={muxObj.concurrency} min={-1} max={1024} style={{ width: '100%' }}
-                    onChange={onNumber((v) => setMuxField('concurrency', v))} />
-                </SettingListItem>
-                <SettingListItem paddings="small" title={t('pages.settings.subFormats.xudpConcurrency')}>
-                  <InputNumber value={muxObj.xudpConcurrency} min={-1} max={1024} style={{ width: '100%' }}
-                    onChange={onNumber((v) => setMuxField('xudpConcurrency', v))} />
-                </SettingListItem>
-                <SettingListItem paddings="small" title={t('pages.settings.subFormats.xudpUdp443')}>
-                  <Select
-                    value={muxObj.xudpProxyUDP443}
-                    style={{ width: '100%' }}
-                    onChange={(v) => setMuxField('xudpProxyUDP443', v)}
-                    options={['reject', 'allow', 'skip'].map((p) => ({ value: p, label: p }))}
-                  />
-                </SettingListItem>
-              </div>
-            )}
-          </>
-        ),
-      },
-      {
-        key: '4',
-        label: catTabLabel(<SendOutlined />, t('pages.settings.direct'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.direct')} description={t('pages.settings.directDesc')}>
-              <Switch checked={directEnabled} onChange={setDirectEnabled} />
+            <SettingListItem paddings="small" title={t('pages.settings.subFormats.xudpConcurrency')}>
+              <InputNumber value={muxObj.xudpConcurrency} min={-1} max={1024} style={{ width: '100%' }}
+                onChange={onNumber((v) => setMuxField('xudpConcurrency', v))} />
             </SettingListItem>
-            {directEnabled && (
-              <div className="format-settings">
-                <SettingListItem paddings="small" title={<>{t('pages.settings.direct')} IPs</>}>
-                  <Select
-                    mode="tags"
-                    value={directIPs}
-                    style={{ width: '100%' }}
-                    onChange={setDirectIPs}
-                    options={directIPsOptions}
-                  />
-                </SettingListItem>
-                <SettingListItem paddings="small" title={<>{t('pages.settings.direct')} {t('domainName')}</>}>
-                  <Select
-                    mode="tags"
-                    value={directDomains}
-                    style={{ width: '100%' }}
-                    onChange={setDirectDomains}
-                    options={directDomainsOptions}
-                  />
-                </SettingListItem>
-              </div>
-            )}
-          </>
-        ),
-      },
-    ]} />
+            <SettingListItem paddings="small" title={t('pages.settings.subFormats.xudpUdp443')}>
+              <Select
+                value={muxObj.xudpProxyUDP443}
+                style={{ width: '100%' }}
+                onChange={(v) => setMuxField('xudpProxyUDP443', v)}
+                options={['reject', 'allow', 'skip'].map((p) => ({ value: p, label: p }))}
+              />
+            </SettingListItem>
+          </div>
+        )}
+      </SettingsGroup>
+      <SettingsGroup title={t('pages.settings.direct')}>
+        <SettingListItem paddings="small" title={t('pages.settings.direct')} description={t('pages.settings.directDesc')}>
+          <Switch checked={directEnabled} onChange={setDirectEnabled} />
+        </SettingListItem>
+        {directEnabled && (
+          <div className="format-settings">
+            <SettingListItem paddings="small" title={<>{t('pages.settings.direct')} IPs</>}>
+              <Select
+                mode="tags"
+                value={directIPs}
+                style={{ width: '100%' }}
+                onChange={setDirectIPs}
+                options={directIPsOptions}
+              />
+            </SettingListItem>
+            <SettingListItem paddings="small" title={<>{t('pages.settings.direct')} {t('domainName')}</>}>
+              <Select
+                mode="tags"
+                value={directDomains}
+                style={{ width: '100%' }}
+                onChange={setDirectDomains}
+                options={directDomainsOptions}
+              />
+            </SettingListItem>
+          </div>
+        )}
+      </SettingsGroup>
+    </div>
   );
 }

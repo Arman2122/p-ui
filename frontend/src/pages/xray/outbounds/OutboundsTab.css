@@ -1,12 +1,10 @@
-.toolbar-right {
+.outbounds-tab .toolbar-right {
   display: flex;
   justify-content: flex-end;
 }
 
-/* Keep this in sync with the other pages' .card-empty (it's a global class):
-   the previous opacity:0.4 here leaked onto whichever page's empty state was
-   shown after the Outbounds CSS loaded, fading it. */
-.card-empty {
+/* Empty states are scoped to this page so later routes retain their contrast. */
+.outbounds-tab .card-empty {
   text-align: center;
   color: var(--ant-color-text-secondary);
   padding: 24px 12px;
@@ -16,7 +14,7 @@
   gap: 8px;
 }
 
-.outbound-card {
+.outbounds-tab .outbound-card {
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   padding: 12px;
@@ -26,28 +24,28 @@
   gap: 8px;
 }
 
-.card-head {
+.outbounds-tab .card-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.card-identity {
+.outbounds-tab .card-identity {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
-.card-num {
+.outbounds-tab .card-num {
   font-weight: 500;
   opacity: 0.7;
   min-width: 18px;
   text-align: right;
 }
 
-.tag-name {
+.outbounds-tab .tag-name {
   font-weight: 500;
   max-width: 200px;
   overflow: hidden;
@@ -56,56 +54,57 @@
   display: inline-block;
 }
 
-.protocol-line {
+.outbounds-tab .protocol-line {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 2px;
 }
 
-.address-list {
+.outbounds-tab .address-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
-.address-pill {
+.outbounds-tab .address-pill {
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--ant-color-fill-tertiary);
 }
 
-.egress-header {
+.outbounds-tab .egress-header {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.egress-ip {
+.outbounds-tab .egress-ip {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
 }
 
-.egress-stack {
+.outbounds-tab .egress-stack {
   display: inline-flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.egress-address {
+.outbounds-tab .egress-address {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
 }
 
-.egress-family {
+.outbounds-tab .egress-family {
   color: var(--ant-color-text-secondary);
   font-size: 10px;
   text-transform: uppercase;
 }
 
-.country-pill {
+.outbounds-tab .country-pill,
+.outbound-egress-details .country-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -117,53 +116,56 @@
   white-space: nowrap;
 }
 
-.country-pill.warp-on {
+.outbounds-tab .country-pill.warp-on,
+.outbound-egress-details .country-pill.warp-on {
   border-color: #f48120;
 }
 
-.warp-cloud-icon {
+.outbounds-tab .warp-cloud-icon,
+.outbound-egress-details .warp-cloud-icon {
   width: 1em;
   height: 1em;
   color: #f48120;
   flex: 0 0 auto;
 }
 
-.warp-cloud-icon svg {
+.outbounds-tab .warp-cloud-icon svg,
+.outbound-egress-details .warp-cloud-icon svg {
   fill: #f48120;
 }
 
-.ip-toggle-icon {
+.outbounds-tab .ip-toggle-icon {
   cursor: pointer;
   opacity: 0.65;
 }
 
-.ip-toggle-icon:hover {
+.outbounds-tab .ip-toggle-icon:hover {
   opacity: 1;
 }
 
-.address-hidden {
+.outbounds-tab .address-hidden {
   filter: blur(5px);
   transition: filter 0.2s ease;
 }
 
-.address-visible {
+.outbounds-tab .address-visible {
   filter: none;
 }
 
-.action-cell {
+.outbounds-tab .action-cell {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.row-index {
+.outbounds-tab .row-index {
   font-weight: 500;
   opacity: 0.7;
   min-width: 18px;
   text-align: right;
 }
 
-.action-buttons {
+.outbounds-tab .action-buttons {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -171,21 +173,21 @@
   margin-left: auto;
 }
 
-.identity-cell {
+.outbounds-tab .identity-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
 }
 
-.card-foot {
+.outbounds-tab .card-foot {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.card-egress {
+.outbounds-tab .card-egress {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -194,7 +196,7 @@
   opacity: 0.85;
 }
 
-.card-egress-row {
+.outbounds-tab .card-egress-row {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -202,30 +204,30 @@
   max-width: 100%;
 }
 
-.card-test {
+.outbounds-tab .card-test {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
-.traffic-up {
+.outbounds-tab .traffic-up {
   color: #008771;
   font-size: 12px;
 }
 
-.traffic-down {
+.outbounds-tab .traffic-down {
   color: #3c89e8;
   font-size: 12px;
 }
 
-.traffic-sep {
+.outbounds-tab .traffic-sep {
   display: inline-block;
   width: 4px;
 }
 
-.pill-ok,
-.pill-fail {
+.outbounds-tab .pill-ok,
+.outbounds-tab .pill-fail {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -234,17 +236,17 @@
   font-size: 12px;
 }
 
-.pill-ok {
+.outbounds-tab .pill-ok {
   color: #008771;
   background: rgba(0, 135, 113, 0.12);
 }
 
-.pill-fail {
+.outbounds-tab .pill-fail {
   color: #e04141;
   background: rgba(224, 65, 65, 0.12);
 }
 
-.empty {
+.outbounds-tab .empty {
   opacity: 0.4;
 }
 
@@ -328,16 +330,169 @@
   opacity: 0.75;
 }
 
-.subscription-outbounds-head {
+.outbounds-tab .subscription-outbounds-head {
   margin-bottom: 8px;
 }
 
-.subscription-outbounds-title {
+.outbounds-tab .subscription-outbounds-title {
   font-weight: 600;
   margin-bottom: 2px;
 }
 
-.subscription-outbounds-desc {
+.outbounds-tab .subscription-outbounds-desc {
   font-size: 12px;
   opacity: 0.7;
+}
+.outbounds-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.outbounds-tab .outbounds-card {
+  min-width: 0;
+  background: var(--p-surface, var(--ant-color-bg-container));
+  border: 1px solid var(--p-border, var(--ant-color-border-secondary));
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.outbounds-embedded-actions,
+.outbounds-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outbounds-embedded-actions {
+  justify-content: flex-end;
+}
+
+.outbounds-toolbar {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--p-border, var(--ant-color-border-secondary));
+}
+
+.outbounds-toolbar > .p-sub {
+  flex: 1 1 220px;
+  font-size: 12px;
+}
+
+.outbounds-note {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.outbounds-tab .outbounds-card > div > .ant-alert {
+  margin: 10px 12px;
+}
+
+.outbounds-tab .outbounds-table .ant-table-cell {
+  padding: 11px 8px;
+  vertical-align: middle;
+}
+
+.outbounds-tab .outbound-name,
+.outbounds-tab .outbound-actions,
+.outbounds-tab .outbound-health {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.outbounds-tab .outbound-actions {
+  justify-content: flex-end;
+}
+
+.outbounds-tab .outbound-name > .p-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outbounds-tab .outbound-position {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.outbounds-tab .outbound-protocol,
+.outbounds-tab .outbound-destination {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 3px;
+}
+
+.outbounds-tab .outbound-protocol .ant-tag,
+.outbounds-tab .outbound-destination > *,
+.outbounds-tab .outbounds-table .p-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outbounds-tab .outbound-protocol .ant-tag {
+  margin: 0;
+  font-size: 11px;
+}
+
+.outbounds-tab .outbound-protocol .p-sub,
+.outbounds-tab .outbound-destination {
+  font-size: 11px;
+}
+
+.outbounds-tab .outbound-health {
+  flex-wrap: wrap;
+}
+
+.outbounds-tab .outbound-traffic {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  min-width: 0;
+  gap: 3px 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.outbounds-tab .outbound-traffic > .ant-progress {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.outbounds-tab .outbound-mobile-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.outbounds-tab .outbound-mobile-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.outbound-egress-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.outbound-rule-list {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding-inline-start: 18px;
 }

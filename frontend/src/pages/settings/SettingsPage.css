@@ -1,5 +1,114 @@
-.settings-page .conf-alert {
-  margin-bottom: 10px;
+.settings-page {
+  --setting-row-padding: 13px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 0;
+}
+
+.settings-page .settings-workspace { gap: 20px; }
+.settings-page .settings-content { min-width: 0; display: flex; flex-direction: column; gap: 16px; container: settings-content / inline-size; }
+.settings-page .settings-section-header { position: sticky; top: 64px; z-index: 6; background: var(--p-bg); padding-block: 8px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.settings-page .settings-section-title { min-width: 0; flex: 1 1 220px; }
+.settings-page .settings-section-title h2 { margin: 0; color: var(--p-text); font-size: 16px; line-height: 1.4; font-weight: 650; }
+.settings-page .settings-section-title p { margin: 4px 0 0; color: var(--p-text-2); font-size: 12px; line-height: 1.5; }
+.settings-page .settings-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px 12px; flex-wrap: wrap; }
+.settings-page .settings-save-state { color: var(--p-text-3); font-size: 12px; white-space: nowrap; }
+.settings-page .settings-save-state.is-dirty { color: var(--ant-color-warning-text); }
+.settings-page .settings-loading { min-height: 220px; }
+
+.settings-page .settings-warning { padding: 9px 12px; align-items: flex-start; }
+.settings-page .settings-warning-summary { display: flex; align-items: center; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; font-size: 12px; }
+.settings-page .settings-warning .ant-alert-title { margin-bottom: 0; }
+.settings-page .settings-warning .ant-alert-description { font-size: 12px; line-height: 1.6; }
+.settings-page .settings-warning p { margin: 8px 0 4px; }
+.settings-page .settings-warning ul { margin: 0; padding-inline-start: 18px; }
+.settings-page .settings-pending { padding: 9px 12px; font-size: 12px; }
+.settings-page .settings-pending .ant-alert-title { font-size: 12px; }
+
+.settings-groups { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.settings-group { min-width: 0; overflow: hidden; }
+.settings-group-header { padding: 13px 16px; border-bottom: 1px solid var(--p-border); }
+.settings-group-header h3 { margin: 0; color: var(--p-text); font-size: 13px; line-height: 1.5; font-weight: 650; }
+.settings-group-header p { margin: 4px 0 0; color: var(--p-text-2); font-size: 12px; line-height: 1.5; }
+.settings-group-toggle { display: block; cursor: pointer; list-style: none; }
+.settings-group-toggle h3 { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-group-description { margin: 12px 16px; color: var(--p-text-2); font-size: 12px; line-height: 1.5; }
+.settings-group-toggle::-webkit-details-marker { display: none; }
+.settings-group-toggle:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -3px; }
+.settings-group-toggle svg { color: var(--p-text-2); }
+.settings-group details:not([open]) .settings-group-toggle { border-bottom: 0; }
+.settings-group details[open] .settings-group-toggle svg { transform: rotate(180deg); }
+.settings-group-body { min-width: 0; }
+.settings-editor { padding: 16px; min-width: 0; }
+
+.settings-page .setting-list-item { border-color: var(--p-border); }
+.settings-page .setting-list-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 40%); align-items: start; gap: 10px 28px; margin-inline: 0 !important; }
+.settings-page .setting-list-grid > .ant-col { max-width: none; min-width: 0; padding-inline: 0; }
+.settings-page .setting-list-title { display: flex; align-items: center; gap: 5px 8px; flex-wrap: wrap; font-size: 13px; font-weight: 600; color: var(--p-text); }
+.settings-page .setting-list-description { color: var(--p-text-2); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.settings-page .setting-list-control { width: 100%; max-width: 400px; justify-self: end; }
+.settings-page .setting-list-control > .ant-input,
+.settings-page .setting-list-control > .ant-input-affix-wrapper,
+.settings-page .setting-list-control > .ant-input-number,
+.settings-page .setting-list-control > .ant-select { width: 100%; }
+.settings-page .setting-list-item:has(textarea) .setting-list-grid,
+.settings-page .setting-list-item:has(.settings-wide-control) .setting-list-grid,
+.settings-page .setting-list-item:has(.setting-list-control:empty) .setting-list-grid { grid-template-columns: minmax(0, 1fr); }
+.settings-page .setting-list-item:has(textarea) .setting-list-control,
+.settings-page .setting-list-item:has(.settings-wide-control) .setting-list-control { max-width: none; }
+.settings-page .setting-list-control:empty { display: none; }
+.settings-page .setting-list-control .ant-space-compact { min-width: 0; max-width: 100%; }
+.settings-page .setting-list-control .ant-switch { flex: none; }
+.settings-page .settings-wide-control { width: 100%; min-width: 0; }
+.settings-page .settings-editor .ant-form-item { margin-bottom: 16px; }
+.settings-page .settings-editor .ant-form-item:last-child { margin-bottom: 0; }
+.settings-page .settings-group-body > .ant-space-vertical { padding: 12px 16px 16px; margin-top: 0 !important; }
+.settings-page .settings-group-body > .ant-alert { margin: 12px 16px; }
+.settings-page .subscription-format-sections { display: contents; }
+.settings-page .format-settings { margin: 0; border: 0; border-top: 1px solid var(--p-border); border-radius: 0; }
+.settings-page .settings-tabs > .ant-tabs-nav { padding: 0 16px; background: var(--p-surface); border: 1px solid var(--p-border); border-radius: 10px; margin-bottom: 16px; }
+.settings-page .settings-tabs > .ant-tabs-nav .ant-tabs-tab { padding-block: 11px; font-size: 12px; }
+.settings-page .settings-tabs > .ant-tabs-nav::before { border: 0; }
+.settings-page .security-actions { padding: 12px 16px 16px; }
+.settings-page .security-actions > .ant-space { padding: 0 !important; }
+.settings-page .api-token-section { padding: 14px 16px; }
+.settings-page .api-token-name-wrap { min-width: 0; }
+.settings-page .api-token-name-wrap code { overflow-wrap: anywhere; }
+
+.settings-rail-toggle { width: 100%; display: flex; align-items: center; gap: 12px; padding: 13px 14px; border: 0; background: transparent; color: var(--p-text-2); font: inherit; font-size: 12px; text-align: start; cursor: pointer; }
+.settings-rail-toggle strong { flex: 1; color: var(--p-text); font-size: 13px; }
+.settings-rail-toggle:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -3px; }
+.settings-page .p-section-items { max-height: min(650px, calc(100dvh - 180px)); }
+
+@container settings-content (max-width: 620px) {
+  .settings-page .setting-list-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .settings-page .setting-list-control { max-width: none; justify-self: stretch; }
+  .settings-page .settings-actions { justify-content: flex-start; }
+  .settings-page .setting-list-item:has(.setting-list-control > .ant-switch) .setting-list-grid { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-page .setting-list-control:has(> .ant-switch) { width: auto; justify-self: end; }
+}
+
+@media (max-width: 900px) {
+  .settings-page .settings-workspace { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .settings-page .p-section-items { max-height: 260px; }
+  .settings-page .p-settings-rail { position: static; }
+}
+
+@media (max-width: 600px) {
+  .settings-page { --setting-row-padding: 12px 14px; gap: 12px; }
+  .settings-page .setting-list-grid { grid-template-columns: minmax(0, 1fr); }
+  .settings-page .setting-list-control { max-width: none; }
+  .settings-page .setting-list-item:has(.setting-list-control > .ant-switch) .setting-list-grid { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-page .setting-list-control:has(> .ant-switch) { width: auto; justify-self: end; }
+  .settings-page .settings-section-header { gap: 10px; }
+  .settings-page .settings-actions { width: 100%; justify-content: space-between; }
+  .settings-page .settings-save-state { white-space: normal; }
+  .settings-page .settings-warning-summary .ant-btn { padding-inline: 0; }
+  .settings-page .settings-bans > .ant-space-compact { flex-wrap: wrap; row-gap: 8px; }
+  .settings-page .settings-bans > .ant-space-compact .ant-input { flex-basis: 100%; }
+  .settings-page .api-token-hint { min-width: 0; }
 }
 
 .ldap-no-inbounds {

@@ -28,10 +28,12 @@ export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProp
      the picker used is not carried on the row. */
   const module = exit ? exitModuleForType(exit.type) : undefined;
   const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const { update } = useEgressMutations();
 
   useEffect(() => {
     if (!open) return;
+    setSaveError('');
     methods.reset(exit && module ? module.fromRecord(exit) : EgressFormFields.parse({}));
   }, [open, exit, module, methods]);
 
@@ -39,11 +41,20 @@ export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProp
     if (!exit || !module) return;
     if (!(await methods.trigger())) return;
     const parsed = EgressFormFields.safeParse(methods.getValues());
-    if (!parsed.success) return;
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        if (typeof issue.path[0] === 'string') methods.setError(issue.path[0] as keyof EgressFormValues, { type: 'validate', message: issue.message });
+      }
+      return;
+    }
     setSubmitting(true);
+    setSaveError('');
     try {
       const msg = await update(exit.id, { ...module.toPayload(parsed.data, parsed.data.remark), id: exit.id });
       if (msg?.success) onClose();
+      else setSaveError(msg?.msg || t('somethingWentWrong'));
+    } catch {
+      setSaveError(t('somethingWentWrong'));
     } finally {
       setSubmitting(false);
     }
@@ -59,15 +70,13 @@ export default function ExitFormModal({ open, exit, onClose }: ExitFormModalProp
       mask={{ closable: false }}
       width="520px"
       onOk={onOk}
-      /* Only wg-client has a field module. An xray-tun front or an awg-client
-         uplink rendered an empty form whose OK saved nothing and closed as if
-         it had worked. Refuse visibly instead. F196. */
       okButtonProps={{ disabled: !module }}
       onCancel={() => { if (!submitting) onClose(); }}
       destroyOnHidden
     >
       <FormProvider {...methods}>
         <Form layout="vertical">
+          {saveError && <Alert type="error" showIcon title={saveError} />}
           <FormField label={t('remark')} name="remark">
             <Input placeholder={t('pages.xray.egress.remarkPlaceholder')} />
           </FormField>

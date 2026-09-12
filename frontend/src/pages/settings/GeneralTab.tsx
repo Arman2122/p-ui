@@ -1,3 +1,4 @@
+import SettingsGroup from './SettingsGroup';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -159,283 +160,281 @@ export default function GeneralTab({ allSetting, updateSetting, section }: Gener
   );
 
   const items = [
-      {
-        key: '1',
-        label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.panelListeningIP')} badge={<RestartTag />} description={t('pages.settings.panelListeningIPDesc')}>
-              <Input value={allSetting.webListen} onChange={(e) => updateSetting({ webListen: e.target.value })} />
-            </SettingListItem>
+    {
+      key: '1',
+      label: catTabLabel(<SettingOutlined />, t('pages.settings.panelSettings'), isMobile),
+      children: (<div className="settings-groups">
+        <SettingsGroup title={t('uiRepair.settings.listener')}>
+          <SettingListItem paddings="small" title={t('pages.settings.panelListeningIP')} badge={<RestartTag />} description={t('pages.settings.panelListeningIPDesc')}>
+            <Input value={allSetting.webListen} onChange={(e) => updateSetting({ webListen: e.target.value })} />
+          </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.panelListeningDomain')} description={t('pages.settings.panelListeningDomainDesc')}>
-              <Input value={allSetting.webDomain} onChange={(e) => updateSetting({ webDomain: e.target.value })} />
-            </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.panelListeningDomain')} description={t('pages.settings.panelListeningDomainDesc')}>
+            <Input value={allSetting.webDomain} onChange={(e) => updateSetting({ webDomain: e.target.value })} />
+          </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.panelPort')} badge={<><DefaultSettingTag settingKey="webPort" value={allSetting.webPort} /><RestartTag /></>} description={t('pages.settings.panelPortDesc')}>
-              <InputNumber value={allSetting.webPort} min={1} max={65535} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ webPort: v }))} />
-            </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.panelPort')} badge={<><DefaultSettingTag settingKey="webPort" value={allSetting.webPort} /><RestartTag /></>} description={t('pages.settings.panelPortDesc')}>
+            <InputNumber value={allSetting.webPort} min={1} max={65535} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ webPort: v }))} />
+          </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.panelUrlPath')} badge={<RestartTag />} description={t('pages.settings.panelUrlPathDesc')}>
-              <Input value={allSetting.webBasePath} onChange={(e) => updateSetting({ webBasePath: sanitizePath(e.target.value) })} />
-            </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.panelUrlPath')} badge={<RestartTag />} description={t('pages.settings.panelUrlPathDesc')}>
+            <Input value={allSetting.webBasePath} onChange={(e) => updateSetting({ webBasePath: sanitizePath(e.target.value) })} />
+          </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.sessionMaxAge')} badge={<><DefaultSettingTag settingKey="sessionMaxAge" value={allSetting.sessionMaxAge} /><RestartTag /></>} description={t('pages.settings.sessionMaxAgeDesc')}>
-              <InputNumber value={allSetting.sessionMaxAge} min={60} max={525600} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ sessionMaxAge: v }))} />
-            </SettingListItem>
+        </SettingsGroup>
+        <SettingsGroup title={t('uiRepair.settings.panelBehavior')}>
+          <SettingListItem paddings="small" title={t('pages.settings.sessionMaxAge')} badge={<><DefaultSettingTag settingKey="sessionMaxAge" value={allSetting.sessionMaxAge} /><RestartTag /></>} description={t('pages.settings.sessionMaxAgeDesc')}>
+            <InputNumber value={allSetting.sessionMaxAge} min={60} max={525600} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ sessionMaxAge: v }))} />
+          </SettingListItem>
 
-            <SettingListItem
-              paddings="small"
-              title={t('pages.settings.trustedProxyCidrs')}
-              description={t('pages.settings.trustedProxyCidrsDesc')}
+          <SettingListItem
+            paddings="small"
+            title={t('pages.settings.trustedProxyCidrs')}
+            description={t('pages.settings.trustedProxyCidrsDesc')}
+          >
+            <Input
+              value={allSetting.trustedProxyCIDRs}
+              placeholder="127.0.0.1/32,::1/128"
+              onChange={(e) => updateSetting({ trustedProxyCIDRs: e.target.value })}
+            />
+          </SettingListItem>
+
+          <SettingListItem paddings="small" title={t('pages.settings.panelOutbound')} description={t('pages.settings.panelOutboundDesc')}>
+            <Select
+              style={{ width: '100%' }}
+              allowClear
+              showSearch
+              value={allSetting.panelOutbound || undefined}
+              placeholder={t('pages.settings.panelOutboundPh')}
+              options={outboundOptions}
+              onChange={(v) => updateSetting({ panelOutbound: (v as string | undefined) || '' })}
+            />
+          </SettingListItem>
+
+          <SettingListItem paddings="small" title={t('pages.settings.pageSize')} badge={<DefaultSettingTag settingKey="pageSize" value={allSetting.pageSize} />} description={t('pages.settings.pageSizeDesc')}>
+            <InputNumber value={allSetting.pageSize} min={0} max={1000} step={5} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ pageSize: v }))} />
+          </SettingListItem>
+
+          <SettingListItem paddings="small" title={t('pages.settings.restartXrayOnClientDisable')} description={t('pages.settings.restartXrayOnClientDisableDesc')}>
+            <Switch checked={allSetting.restartXrayOnClientDisable}
+              onChange={(v) => updateSetting({ restartXrayOnClientDisable: v })} />
+          </SettingListItem>
+
+          <SettingListItem paddings="small" title={t('pages.settings.language')}>
+            <Select
+              value={lang}
+              onChange={onLangChange}
+              style={{ width: '100%' }}
+              options={langOptions}
+            />
+          </SettingListItem>
+        </SettingsGroup>
+      </div>),
+    },
+    {
+      key: '2',
+      label: catTabLabel(<BellOutlined />, t('pages.settings.notifications'), isMobile),
+      children: (<SettingsGroup title={t('pages.settings.notifications')}>
+        <SettingListItem paddings="small" title={t('pages.settings.expireTimeDiff')} badge={<DefaultSettingTag settingKey="expireDiff" value={allSetting.expireDiff} />} description={t('pages.settings.expireTimeDiffDesc')}>
+          <InputNumber value={allSetting.expireDiff} min={0} style={{ width: '100%' }}
+            onChange={onNumber((v) => updateSetting({ expireDiff: v }))} />
+        </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.trafficDiff')} badge={<DefaultSettingTag settingKey="trafficDiff" value={allSetting.trafficDiff} />} description={t('pages.settings.trafficDiffDesc')}>
+          <InputNumber value={allSetting.trafficDiff} min={0} max={100} style={{ width: '100%' }}
+            onChange={onNumber((v) => updateSetting({ trafficDiff: v }))} />
+        </SettingListItem>
+      </SettingsGroup>),
+    },
+    {
+      key: '3',
+      label: catTabLabel(<SafetyCertificateOutlined />, t('pages.settings.certs'), isMobile),
+      children: (<SettingsGroup title={t('pages.settings.certs')}>
+        <SettingListItem paddings="small" title={t('pages.settings.publicKeyPath')} badge={<RestartTag />} description={t('pages.settings.publicKeyPathDesc')}>
+          <Input value={allSetting.webCertFile} onChange={(e) => updateSetting({ webCertFile: e.target.value })} />
+        </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.privateKeyPath')} badge={<RestartTag />} description={t('pages.settings.privateKeyPathDesc')}>
+          <Input value={allSetting.webKeyFile} onChange={(e) => updateSetting({ webKeyFile: e.target.value })} />
+        </SettingListItem>
+      </SettingsGroup>),
+    },
+    {
+      key: '4',
+      label: catTabLabel(<GlobalOutlined />, t('pages.settings.externalTraffic'), isMobile),
+      children: (<SettingsGroup title={t('pages.settings.externalTraffic')}>
+        <SettingListItem paddings="small" title={t('pages.settings.externalTrafficInformEnable')} description={t('pages.settings.externalTrafficInformEnableDesc')}>
+          <Switch checked={allSetting.externalTrafficInformEnable}
+            onChange={(v) => updateSetting({ externalTrafficInformEnable: v })} />
+        </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.externalTrafficInformURI')} description={t('pages.settings.externalTrafficInformURIDesc')}>
+          <Input
+            value={allSetting.externalTrafficInformURI}
+            placeholder="(http|https)://domain[:port]/path/"
+            onChange={(e) => updateSetting({ externalTrafficInformURI: e.target.value })}
+          />
+        </SettingListItem>
+      </SettingsGroup>),
+    },
+    {
+      key: '5',
+      label: catTabLabel(<ClockCircleOutlined />, t('pages.settings.dateAndTime'), isMobile),
+      children: (<SettingsGroup title={t('pages.settings.dateAndTime')}>
+        <SettingListItem paddings="small" title={t('pages.settings.timeZone')} description={t('pages.settings.timeZoneDesc')}>
+          <Input value={allSetting.timeLocation} onChange={(e) => updateSetting({ timeLocation: e.target.value })} />
+        </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.datepicker')} description={t('pages.settings.datepickerDescription')}>
+          <Select
+            value={allSetting.datepicker || 'gregorian'}
+            onChange={(v) => updateSetting({ datepicker: v as 'gregorian' | 'jalalian' })}
+            style={{ width: '100%' }}
+            options={DATEPICKER_LIST.map((d) => ({ value: d.value, label: d.name }))}
+          />
+        </SettingListItem>
+      </SettingsGroup>),
+    },
+    {
+      key: '6',
+      label: catTabLabel(<ApartmentOutlined />, 'LDAP', isMobile),
+      children: (<div className="settings-groups">
+        <SettingsGroup title={t('uiRepair.settings.directoryConnection')}>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.enable')}>
+            <Switch checked={allSetting.ldapEnable} onChange={(v) => updateSetting({ ldapEnable: v })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.host')}>
+            <Input value={allSetting.ldapHost} onChange={(e) => updateSetting({ ldapHost: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.port')} badge={<DefaultSettingTag settingKey="ldapPort" value={allSetting.ldapPort} />}>
+            <InputNumber value={allSetting.ldapPort} min={1} max={65535} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ ldapPort: v }))} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.useTls')}>
+            <Switch checked={allSetting.ldapUseTLS} onChange={(v) => updateSetting({ ldapUseTLS: v })} />
+          </SettingListItem>
+          <SettingListItem
+            paddings="small"
+            title={t('pages.settings.ldap.skipTlsVerify')}
+            description={t('pages.settings.ldap.skipTlsVerifyDesc')}
+          >
+            <Switch
+              checked={allSetting.ldapInsecureSkipVerify}
+              disabled={!allSetting.ldapUseTLS}
+              onChange={(v) => updateSetting({ ldapInsecureSkipVerify: v })}
+            />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.bindDn')}>
+            <Input value={allSetting.ldapBindDN} onChange={(e) => updateSetting({ ldapBindDN: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem
+            paddings="small"
+            title={t('password')}
+            description={allSetting.hasLdapPassword && !allSetting.clearLdapPassword ? t('pages.settings.ldap.passwordConfigured') : t('pages.settings.ldap.passwordUnconfigured')}
+          >
+            <SecretInput
+              value={allSetting.ldapPassword}
+              configured={allSetting.hasLdapPassword}
+              clearArmed={allSetting.clearLdapPassword}
+              placeholder={t('pages.settings.ldap.passwordPlaceholder')}
+              onChange={(v) => updateSetting({ ldapPassword: v })}
+              onClearArmedChange={(armed) => updateSetting({ clearLdapPassword: armed })}
+            />
+          </SettingListItem>
+        </SettingsGroup>
+        <SettingsGroup title={t('uiRepair.settings.directorySync')}>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.baseDn')}>
+            <Input value={allSetting.ldapBaseDN} onChange={(e) => updateSetting({ ldapBaseDN: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.userFilter')}>
+            <Input value={allSetting.ldapUserFilter} onChange={(e) => updateSetting({ ldapUserFilter: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.userAttr')}>
+            <Input value={allSetting.ldapUserAttr} onChange={(e) => updateSetting({ ldapUserAttr: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.vlessField')}>
+            <Input value={allSetting.ldapVlessField} onChange={(e) => updateSetting({ ldapVlessField: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.flagField')} description={t('pages.settings.ldap.flagFieldDesc')}>
+            <Input value={allSetting.ldapFlagField} onChange={(e) => updateSetting({ ldapFlagField: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.truthyValues')} description={t('pages.settings.ldap.truthyValuesDesc')}>
+            <Input value={allSetting.ldapTruthyValues} onChange={(e) => updateSetting({ ldapTruthyValues: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.invertFlag')} description={t('pages.settings.ldap.invertFlagDesc')}>
+            <Switch checked={allSetting.ldapInvertFlag} onChange={(v) => updateSetting({ ldapInvertFlag: v })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.syncSchedule')} description={t('pages.settings.ldap.syncScheduleDesc')}>
+            <Input value={allSetting.ldapSyncCron} onChange={(e) => updateSetting({ ldapSyncCron: e.target.value })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.inboundTags')} description={t('pages.settings.ldap.inboundTagsDesc')}>
+            <>
+              <Select
+                mode="multiple"
+                value={ldapInboundTagList}
+                onChange={setLdapInboundTagList}
+                style={{ width: '100%' }}
+                options={inboundOptions}
+              />
+              {inboundOptions.length === 0 && (
+                <div className="ldap-no-inbounds">{t('pages.settings.ldap.noInbounds')}</div>
+              )}
+            </>
+          </SettingListItem>
+        </SettingsGroup>
+        <SettingsGroup title={t('uiRepair.settings.directoryDefaults')}>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.autoCreate')}>
+            <Switch checked={allSetting.ldapAutoCreate} onChange={(v) => updateSetting({ ldapAutoCreate: v })} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.autoDelete')} description={t('pages.settings.ldap.autoDeleteDesc')}>
+            <Popconfirm
+              title={t('pages.settings.ldap.autoDeleteConfirm')}
+              okText={t('confirm')}
+              cancelText={t('cancel')}
+              disabled={!!allSetting.ldapAutoDelete}
+              onConfirm={() => updateSetting({ ldapAutoDelete: true })}
             >
-              <Input
-                value={allSetting.trustedProxyCIDRs}
-                placeholder="127.0.0.1/32,::1/128"
-                onChange={(e) => updateSetting({ trustedProxyCIDRs: e.target.value })}
-              />
-            </SettingListItem>
+              <Switch checked={allSetting.ldapAutoDelete} onChange={(v) => { if (!v) updateSetting({ ldapAutoDelete: false }); }} />
+            </Popconfirm>
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultTotalGb')} badge={<DefaultSettingTag settingKey="ldapDefaultTotalGB" value={allSetting.ldapDefaultTotalGB} />}>
+            <InputNumber value={allSetting.ldapDefaultTotalGB} min={0} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ ldapDefaultTotalGB: v }))} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultExpiryDays')} badge={<DefaultSettingTag settingKey="ldapDefaultExpiryDays" value={allSetting.ldapDefaultExpiryDays} />}>
+            <InputNumber value={allSetting.ldapDefaultExpiryDays} min={0} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ ldapDefaultExpiryDays: v }))} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultIpLimit')} badge={<DefaultSettingTag settingKey="ldapDefaultLimitIP" value={allSetting.ldapDefaultLimitIP} />}>
+            <InputNumber value={allSetting.ldapDefaultLimitIP} min={0} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ ldapDefaultLimitIP: v }))} />
+          </SettingListItem>
+        </SettingsGroup>
+      </div>),
+    },
+    {
+      key: '7',
+      label: catTabLabel(<StopOutlined />, t('pages.settings.ipLimit'), isMobile),
+      children: (<div className="settings-groups">
+        <SettingsGroup title={t('pages.settings.ipLimit')}>
+          <SettingListItem paddings="small" title={t('pages.settings.ipLimitBanMinutes')} description={t('pages.settings.ipLimitBanMinutesDesc')} badge={<DefaultSettingTag settingKey="ipLimitBanMinutes" value={allSetting.ipLimitBanMinutes} />}>
+            <InputNumber value={allSetting.ipLimitBanMinutes} min={1} style={{ width: '100%' }}
+              onChange={onNumber((v) => updateSetting({ ipLimitBanMinutes: v }))} />
+          </SettingListItem>
+          <SettingListItem paddings="small" title={t('pages.settings.ipLimitSharedAddressAction')} description={t('pages.settings.ipLimitSharedAddressActionDesc')}>
+            <Select
+              value={allSetting.ipLimitSharedAddressAction || 'ban'}
+              onChange={(v) => updateSetting({ ipLimitSharedAddressAction: v as 'ban' | 'skip' })}
+              style={{ width: '100%' }}
+              options={[
+                { value: 'ban', label: t('pages.settings.ipLimitSharedBan') },
+                { value: 'skip', label: t('pages.settings.ipLimitSharedSkip') },
+              ]}
+            />
+          </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.panelOutbound')} description={t('pages.settings.panelOutboundDesc')}>
-              <Select
-                style={{ width: '100%' }}
-                allowClear
-                showSearch
-                value={allSetting.panelOutbound || undefined}
-                placeholder={t('pages.settings.panelOutboundPh')}
-                options={outboundOptions}
-                onChange={(v) => updateSetting({ panelOutbound: (v as string | undefined) || '' })}
-              />
-            </SettingListItem>
-
-            <SettingListItem paddings="small" title={t('pages.settings.pageSize')} badge={<DefaultSettingTag settingKey="pageSize" value={allSetting.pageSize} />} description={t('pages.settings.pageSizeDesc')}>
-              <InputNumber value={allSetting.pageSize} min={0} max={1000} step={5} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ pageSize: v }))} />
-            </SettingListItem>
-
-            <SettingListItem paddings="small" title={t('pages.settings.restartXrayOnClientDisable')} description={t('pages.settings.restartXrayOnClientDisableDesc')}>
-              <Switch checked={allSetting.restartXrayOnClientDisable}
-                onChange={(v) => updateSetting({ restartXrayOnClientDisable: v })} />
-            </SettingListItem>
-
-            <SettingListItem paddings="small" title={t('pages.settings.language')}>
-              <Select
-                value={lang}
-                onChange={onLangChange}
-                style={{ width: '100%' }}
-                options={langOptions}
-              />
-            </SettingListItem>
-          </>
-        ),
-      },
-      {
-        key: '2',
-        label: catTabLabel(<BellOutlined />, t('pages.settings.notifications'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.expireTimeDiff')} badge={<DefaultSettingTag settingKey="expireDiff" value={allSetting.expireDiff} />} description={t('pages.settings.expireTimeDiffDesc')}>
-              <InputNumber value={allSetting.expireDiff} min={0} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ expireDiff: v }))} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.trafficDiff')} badge={<DefaultSettingTag settingKey="trafficDiff" value={allSetting.trafficDiff} />} description={t('pages.settings.trafficDiffDesc')}>
-              <InputNumber value={allSetting.trafficDiff} min={0} max={100} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ trafficDiff: v }))} />
-            </SettingListItem>
-          </>
-        ),
-      },
-      {
-        key: '3',
-        label: catTabLabel(<SafetyCertificateOutlined />, t('pages.settings.certs'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.publicKeyPath')} badge={<RestartTag />} description={t('pages.settings.publicKeyPathDesc')}>
-              <Input value={allSetting.webCertFile} onChange={(e) => updateSetting({ webCertFile: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.privateKeyPath')} badge={<RestartTag />} description={t('pages.settings.privateKeyPathDesc')}>
-              <Input value={allSetting.webKeyFile} onChange={(e) => updateSetting({ webKeyFile: e.target.value })} />
-            </SettingListItem>
-          </>
-        ),
-      },
-      {
-        key: '4',
-        label: catTabLabel(<GlobalOutlined />, t('pages.settings.externalTraffic'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.externalTrafficInformEnable')} description={t('pages.settings.externalTrafficInformEnableDesc')}>
-              <Switch checked={allSetting.externalTrafficInformEnable}
-                onChange={(v) => updateSetting({ externalTrafficInformEnable: v })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.externalTrafficInformURI')} description={t('pages.settings.externalTrafficInformURIDesc')}>
-              <Input
-                value={allSetting.externalTrafficInformURI}
-                placeholder="(http|https)://domain[:port]/path/"
-                onChange={(e) => updateSetting({ externalTrafficInformURI: e.target.value })}
-              />
-            </SettingListItem>
-          </>
-        ),
-      },
-      {
-        key: '5',
-        label: catTabLabel(<ClockCircleOutlined />, t('pages.settings.dateAndTime'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.timeZone')} description={t('pages.settings.timeZoneDesc')}>
-              <Input value={allSetting.timeLocation} onChange={(e) => updateSetting({ timeLocation: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.datepicker')} description={t('pages.settings.datepickerDescription')}>
-              <Select
-                value={allSetting.datepicker || 'gregorian'}
-                onChange={(v) => updateSetting({ datepicker: v as 'gregorian' | 'jalalian' })}
-                style={{ width: '100%' }}
-                options={DATEPICKER_LIST.map((d) => ({ value: d.value, label: d.name }))}
-              />
-            </SettingListItem>
-          </>
-        ),
-      },
-      {
-        key: '6',
-        label: catTabLabel(<ApartmentOutlined />, 'LDAP', isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.enable')}>
-              <Switch checked={allSetting.ldapEnable} onChange={(v) => updateSetting({ ldapEnable: v })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.host')}>
-              <Input value={allSetting.ldapHost} onChange={(e) => updateSetting({ ldapHost: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.port')} badge={<DefaultSettingTag settingKey="ldapPort" value={allSetting.ldapPort} />}>
-              <InputNumber value={allSetting.ldapPort} min={1} max={65535} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ ldapPort: v }))} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.useTls')}>
-              <Switch checked={allSetting.ldapUseTLS} onChange={(v) => updateSetting({ ldapUseTLS: v })} />
-            </SettingListItem>
-            <SettingListItem
-              paddings="small"
-              title={t('pages.settings.ldap.skipTlsVerify')}
-              description={t('pages.settings.ldap.skipTlsVerifyDesc')}
-            >
-              <Switch
-                checked={allSetting.ldapInsecureSkipVerify}
-                disabled={!allSetting.ldapUseTLS}
-                onChange={(v) => updateSetting({ ldapInsecureSkipVerify: v })}
-              />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.bindDn')}>
-              <Input value={allSetting.ldapBindDN} onChange={(e) => updateSetting({ ldapBindDN: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem
-              paddings="small"
-              title={t('password')}
-              description={allSetting.hasLdapPassword && !allSetting.clearLdapPassword ? t('pages.settings.ldap.passwordConfigured') : t('pages.settings.ldap.passwordUnconfigured')}
-            >
-              <SecretInput
-                value={allSetting.ldapPassword}
-                configured={allSetting.hasLdapPassword}
-                clearArmed={allSetting.clearLdapPassword}
-                placeholder={t('pages.settings.ldap.passwordPlaceholder')}
-                onChange={(v) => updateSetting({ ldapPassword: v })}
-                onClearArmedChange={(armed) => updateSetting({ clearLdapPassword: armed })}
-              />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.baseDn')}>
-              <Input value={allSetting.ldapBaseDN} onChange={(e) => updateSetting({ ldapBaseDN: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.userFilter')}>
-              <Input value={allSetting.ldapUserFilter} onChange={(e) => updateSetting({ ldapUserFilter: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.userAttr')}>
-              <Input value={allSetting.ldapUserAttr} onChange={(e) => updateSetting({ ldapUserAttr: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.vlessField')}>
-              <Input value={allSetting.ldapVlessField} onChange={(e) => updateSetting({ ldapVlessField: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.flagField')} description={t('pages.settings.ldap.flagFieldDesc')}>
-              <Input value={allSetting.ldapFlagField} onChange={(e) => updateSetting({ ldapFlagField: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.truthyValues')} description={t('pages.settings.ldap.truthyValuesDesc')}>
-              <Input value={allSetting.ldapTruthyValues} onChange={(e) => updateSetting({ ldapTruthyValues: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.invertFlag')} description={t('pages.settings.ldap.invertFlagDesc')}>
-              <Switch checked={allSetting.ldapInvertFlag} onChange={(v) => updateSetting({ ldapInvertFlag: v })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.syncSchedule')} description={t('pages.settings.ldap.syncScheduleDesc')}>
-              <Input value={allSetting.ldapSyncCron} onChange={(e) => updateSetting({ ldapSyncCron: e.target.value })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.inboundTags')} description={t('pages.settings.ldap.inboundTagsDesc')}>
-              <>
-                <Select
-                  mode="multiple"
-                  value={ldapInboundTagList}
-                  onChange={setLdapInboundTagList}
-                  style={{ width: '100%' }}
-                  options={inboundOptions}
-                />
-                {inboundOptions.length === 0 && (
-                  <div className="ldap-no-inbounds">{t('pages.settings.ldap.noInbounds')}</div>
-                )}
-              </>
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.autoCreate')}>
-              <Switch checked={allSetting.ldapAutoCreate} onChange={(v) => updateSetting({ ldapAutoCreate: v })} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.autoDelete')} description={t('pages.settings.ldap.autoDeleteDesc')}>
-              <Popconfirm
-                title={t('pages.settings.ldap.autoDeleteConfirm')}
-                okText={t('confirm')}
-                cancelText={t('cancel')}
-                disabled={!!allSetting.ldapAutoDelete}
-                onConfirm={() => updateSetting({ ldapAutoDelete: true })}
-              >
-                <Switch checked={allSetting.ldapAutoDelete} onChange={(v) => { if (!v) updateSetting({ ldapAutoDelete: false }); }} />
-              </Popconfirm>
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultTotalGb')} badge={<DefaultSettingTag settingKey="ldapDefaultTotalGB" value={allSetting.ldapDefaultTotalGB} />}>
-              <InputNumber value={allSetting.ldapDefaultTotalGB} min={0} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ ldapDefaultTotalGB: v }))} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultExpiryDays')} badge={<DefaultSettingTag settingKey="ldapDefaultExpiryDays" value={allSetting.ldapDefaultExpiryDays} />}>
-              <InputNumber value={allSetting.ldapDefaultExpiryDays} min={0} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ ldapDefaultExpiryDays: v }))} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ldap.defaultIpLimit')} badge={<DefaultSettingTag settingKey="ldapDefaultLimitIP" value={allSetting.ldapDefaultLimitIP} />}>
-              <InputNumber value={allSetting.ldapDefaultLimitIP} min={0} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ ldapDefaultLimitIP: v }))} />
-            </SettingListItem>
-          </>
-        ),
-      },
-      {
-        key: '7',
-        label: catTabLabel(<StopOutlined />, t('pages.settings.ipLimit'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.ipLimitBanMinutes')} description={t('pages.settings.ipLimitBanMinutesDesc')} badge={<DefaultSettingTag settingKey="ipLimitBanMinutes" value={allSetting.ipLimitBanMinutes} />}>
-              <InputNumber value={allSetting.ipLimitBanMinutes} min={1} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ ipLimitBanMinutes: v }))} />
-            </SettingListItem>
-            <SettingListItem paddings="small" title={t('pages.settings.ipLimitSharedAddressAction')} description={t('pages.settings.ipLimitSharedAddressActionDesc')}>
-              <Select
-                value={allSetting.ipLimitSharedAddressAction || 'ban'}
-                onChange={(v) => updateSetting({ ipLimitSharedAddressAction: v as 'ban' | 'skip' })}
-                style={{ width: '100%' }}
-                options={[
-                  { value: 'ban', label: t('pages.settings.ipLimitSharedBan') },
-                  { value: 'skip', label: t('pages.settings.ipLimitSharedSkip') },
-                ]}
-              />
-            </SettingListItem>
-            <DeviceBansPanel datepicker={allSetting.datepicker} />
-          </>
-        ),
-      },
-    ];
-  return section ? <>{items.find((item) => item.key === section)?.children}</> : <Tabs defaultActiveKey="1" items={items} />;
+        </SettingsGroup>
+        <DeviceBansPanel datepicker={allSetting.datepicker} /></div>),
+    },
+  ];
+  return section ? <>{items.find((item) => item.key === section)?.children}</> : <Tabs className="settings-tabs" defaultActiveKey="1" items={items} />;
 }

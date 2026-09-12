@@ -8,7 +8,7 @@ import { renderWithProviders } from './test-utils';
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.pathname}{location.hash}</output>;
+  return <output data-testid="location">{location.pathname}{location.search}{location.hash}</output>;
 }
 
 describe('SubscriptionGeneralTab', () => {
@@ -47,7 +47,7 @@ describe('SubscriptionGeneralTab', () => {
     const allSetting = new AllSetting({ subClashEnable: true });
 
     renderWithProviders(
-      <MemoryRouter initialEntries={['/settings#subscription']}>
+      <MemoryRouter initialEntries={['/settings?retain=yes#subscription']}>
         <SubscriptionGeneralTab allSetting={allSetting} updateSetting={vi.fn()} />
         <LocationProbe />
       </MemoryRouter>,
@@ -55,6 +55,6 @@ describe('SubscriptionGeneralTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Sub Formats' }));
 
-    expect(screen.getByTestId('location').textContent).toBe('/settings#subscription-formats');
+    expect(screen.getByTestId('location').textContent).toBe('/settings?retain=yes#subscription-formats');
   });
 });

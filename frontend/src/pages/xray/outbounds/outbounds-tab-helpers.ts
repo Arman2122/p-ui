@@ -7,6 +7,37 @@ import type { OutboundTestMode, OutboundTestState, OutboundTrafficRow } from '@/
 import { EGRESS_TYPE, EGRESS_TYPE_UPLINK, UplinkSettingsSchema, exitKeyFor, type EgressRecord } from '@/schemas/api/egress';
 
 import type { OutboundRow } from './outbounds-tab-types';
+import type { XraySettingsValue } from '@/hooks/useXraySetting';
+import type { RoutingRuleRecord } from '@/schemas/api/routing';
+
+export function isBuiltinOutbound(row: OutboundRow): boolean {
+  return !row.egress && ((row.tag === 'direct' && row.protocol === Protocols.Freedom)
+    || (row.tag === 'blocked' && row.protocol === Protocols.Blackhole) || row.tag === 'api');
+}
+
+export function observedTraffic(traffic: OutboundTrafficRow[], row: OutboundRow): OutboundTrafficRow | undefined {
+  return row.egress ? undefined : traffic.find((item) => item.tag === row.tag);
+}
+
+export function referencedRules(template: XraySettingsValue | null, row: OutboundRow, hostRules?: RoutingRuleRecord[]): string[] | undefined {
+  if (!hostRules) return undefined;
+  if (row.egress) return hostRules?.filter((rule) => rule.destKind === 'exit' && rule.destExitId === row.egress?.id)
+    .map((rule) => rule.remark || `#${rule.id}`);
+  const tag = row.tag;
+  if (!tag || !template) return undefined;
+  const balancers = new Set((template.routing?.balancers ?? []).filter((balancer) =>
+    balancer.fallbackTag === tag || balancer.selector.some((prefix) => tag.startsWith(prefix))).map((balancer) => balancer.tag));
+  const refs = (template.routing?.rules ?? []).flatMap((rule, index) =>
+    rule.outboundTag === tag || (rule.balancerTag && balancers.has(rule.balancerTag)) ? [rule.ruleTag || `#${index + 1}`] : []);
+  for (const rule of hostRules ?? []) {
+    if ((rule.destKind === 'outbound' && rule.destTag === tag)
+      || (rule.destKind === 'balancer' && balancers.has(rule.destTag))
+      || (rule.destKind === 'direct' && tag === 'direct') || (rule.destKind === 'block' && tag === 'blocked')) {
+      refs.push(rule.remark || `#${rule.id}`);
+    }
+  }
+  return refs;
+}
 
 /**
  * Translate a table row's positional index into that outbound's index in the
@@ -27,7 +58,12 @@ export function exitAddress(row: EgressRecord): string {
   if (row.target) return row.target;
   try {
     const parsed = UplinkSettingsSchema.safeParse(JSON.parse(row.settings || '{}'));
-    return parsed.success ? parsed.data.endpoint : '';
+    if (parsed.success && parsed.data.endpoint) return parsed.data.endpoint;
+    const settings = JSON.parse(row.settings || '{}') as Record<string, unknown>;
+    if (typeof settings.host === 'string') return `${settings.host}${settings.port ? `:${settings.port}` : ''}`;
+    if (typeof settings.server === 'string') return settings.server;
+    if (typeof settings.profile === 'string') return settings.profile.match(/^\s*remote\s+(\S+)(?:\s+(\d+))?/m)?.slice(1).filter(Boolean).join(':') ?? '';
+    return '';
   } catch {
     return '';
   }
@@ -56,7 +92,8 @@ export function outboundAddresses(o: OutboundRow): string[] {
       return serverObj ? serverObj.map((s) => `${s.address}:${s.port}`) : [];
     }
     case Protocols.VLESS:
-      return [`${settings?.address || ''}:${settings?.port || ''}`];
+    case Protocols.Hysteria:
+      return settings?.address ? [`${settings.address}${settings.port ? `:${settings.port}` : ''}`] : [];
     case Protocols.HTTP:
     case Protocols.Socks:
     case Protocols.Shadowsocks:
@@ -71,6 +108,10 @@ export function outboundAddresses(o: OutboundRow): string[] {
     }
     case Protocols.Wireguard:
       return (((settings?.peers as Array<{ endpoint?: string }>) || []).map((p) => p.endpoint || '').filter(Boolean));
+    case Protocols.Freedom:
+      return typeof settings?.redirect === 'string' && settings.redirect ? [settings.redirect] : [];
+    case Protocols.Loopback:
+      return typeof settings?.inboundTag === 'string' && settings.inboundTag ? [settings.inboundTag] : [];
     default:
       return [];
   }

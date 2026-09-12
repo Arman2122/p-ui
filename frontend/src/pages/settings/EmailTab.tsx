@@ -1,14 +1,13 @@
+import SettingsGroup from './SettingsGroup';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Input, InputNumber, Select, Space, Switch, Tabs } from 'antd';
-import { MailOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
+import { Alert, Button, Input, InputNumber, Select, Space, Switch } from 'antd';
+import { SendOutlined } from '@ant-design/icons';
 import { HttpUtil } from '@/utils';
 import { onNumber } from '@/utils/onNumber';
 import type { AllSetting } from '@/models/setting';
 import { DefaultSettingTag, SettingListItem } from '@/components/ui';
 import { EmailNotifications } from '@/components/ui/notifications/EmailNotifications';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { catTabLabel } from './catTabLabel';
 import SecretInput from './SecretInput';
 
 interface EmailTabProps {
@@ -24,7 +23,6 @@ interface SmtpTestResult {
 
 export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
   const { t } = useTranslation();
-  const { isMobile } = useMediaQuery();
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<SmtpTestResult | null>(null);
 
@@ -48,108 +46,96 @@ export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
   }
 
   return (
-    <Tabs defaultActiveKey="1" items={[
-      {
-        key: '1',
-        label: catTabLabel(<SettingOutlined />, t('pages.settings.smtpSettings'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.smtpEnable')} description={t('pages.settings.smtpEnableDesc')}>
-              <Switch checked={allSetting.smtpEnable} onChange={(v) => updateSetting({ smtpEnable: v })} />
-            </SettingListItem>
-            {allSetting.smtpLastError ? (
-              <Alert
-                type="warning"
-                showIcon
-                title={t('pages.settings.smtpLastError')}
-                description={`${allSetting.smtpLastErrorAt ? new Date(allSetting.smtpLastErrorAt * 1000).toLocaleString() : ''} ${allSetting.smtpLastError}`.trim()}
-              />
-            ) : null}
+    <div className="settings-groups">
+      <SettingsGroup title={t('pages.settings.smtpSettings')}>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpEnable')} description={t('pages.settings.smtpEnableDesc')}>
+          <Switch checked={allSetting.smtpEnable} onChange={(v) => updateSetting({ smtpEnable: v })} />
+        </SettingListItem>
+        {allSetting.smtpLastError ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={t('pages.settings.smtpLastError')}
+            description={`${allSetting.smtpLastErrorAt ? new Date(allSetting.smtpLastErrorAt * 1000).toLocaleString() : ''} ${allSetting.smtpLastError}`.trim()}
+          />
+        ) : null}
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpHost')} description={t('pages.settings.smtpHostDesc')}>
-              <Input value={allSetting.smtpHost} placeholder="smtp.gmail.com"
-                onChange={(e) => updateSetting({ smtpHost: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpHost')} description={t('pages.settings.smtpHostDesc')}>
+          <Input value={allSetting.smtpHost} placeholder="smtp.gmail.com"
+            onChange={(e) => updateSetting({ smtpHost: e.target.value })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpPort')} badge={<DefaultSettingTag settingKey="smtpPort" value={allSetting.smtpPort} />} description={t('pages.settings.smtpPortDesc')}>
-              <InputNumber value={allSetting.smtpPort} min={1} max={65535} style={{ width: '100%' }}
-                onChange={onNumber((v) => updateSetting({ smtpPort: v }))} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpPort')} badge={<DefaultSettingTag settingKey="smtpPort" value={allSetting.smtpPort} />} description={t('pages.settings.smtpPortDesc')}>
+          <InputNumber value={allSetting.smtpPort} min={1} max={65535} style={{ width: '100%' }}
+            onChange={onNumber((v) => updateSetting({ smtpPort: v }))} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpUsername')} description={t('pages.settings.smtpUsernameDesc')}>
-              <Input value={allSetting.smtpUsername} placeholder="user@gmail.com"
-                onChange={(e) => updateSetting({ smtpUsername: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpUsername')} description={t('pages.settings.smtpUsernameDesc')}>
+          <Input value={allSetting.smtpUsername} placeholder="user@gmail.com"
+            onChange={(e) => updateSetting({ smtpUsername: e.target.value })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpPassword')}
-              description={allSetting.hasSmtpPassword && !allSetting.clearSmtpPassword ? t('pages.settings.smtpPasswordConfigured') : t('pages.settings.smtpPasswordDesc')}>
-              <SecretInput value={allSetting.smtpPassword}
-                configured={allSetting.hasSmtpPassword}
-                clearArmed={allSetting.clearSmtpPassword}
-                placeholder={t('pages.settings.smtpPasswordPlaceholder')}
-                onChange={(v) => updateSetting({ smtpPassword: v })}
-                onClearArmedChange={(armed) => updateSetting({ clearSmtpPassword: armed })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpPassword')}
+          description={allSetting.hasSmtpPassword && !allSetting.clearSmtpPassword ? t('pages.settings.smtpPasswordConfigured') : t('pages.settings.smtpPasswordDesc')}>
+          <SecretInput value={allSetting.smtpPassword}
+            configured={allSetting.hasSmtpPassword}
+            clearArmed={allSetting.clearSmtpPassword}
+            placeholder={t('pages.settings.smtpPasswordPlaceholder')}
+            onChange={(v) => updateSetting({ smtpPassword: v })}
+            onClearArmedChange={(armed) => updateSetting({ clearSmtpPassword: armed })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpFrom')} description={t('pages.settings.smtpFromDesc')}>
-              <Input value={allSetting.smtpFrom} placeholder="user@gmail.com"
-                onChange={(e) => updateSetting({ smtpFrom: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpFrom')} description={t('pages.settings.smtpFromDesc')}>
+          <Input value={allSetting.smtpFrom} placeholder="user@gmail.com"
+            onChange={(e) => updateSetting({ smtpFrom: e.target.value })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpFromName')} description={t('pages.settings.smtpFromNameDesc')}>
-              <Input value={allSetting.smtpFromName} placeholder="Penhoon UI"
-                onChange={(e) => updateSetting({ smtpFromName: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpFromName')} description={t('pages.settings.smtpFromNameDesc')}>
+          <Input value={allSetting.smtpFromName} placeholder="Penhoon UI"
+            onChange={(e) => updateSetting({ smtpFromName: e.target.value })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpTo')} description={t('pages.settings.smtpToDesc')}>
-              <Input value={allSetting.smtpTo} placeholder="admin@example.com, ops@example.com"
-                onChange={(e) => updateSetting({ smtpTo: e.target.value })} />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpTo')} description={t('pages.settings.smtpToDesc')}>
+          <Input value={allSetting.smtpTo} placeholder="admin@example.com, ops@example.com"
+            onChange={(e) => updateSetting({ smtpTo: e.target.value })} />
+        </SettingListItem>
 
-            <SettingListItem paddings="small" title={t('pages.settings.smtpEncryption')} description={t('pages.settings.smtpEncryptionDesc')}>
-              <Select
-                value={allSetting.smtpEncryptionType}
-                onChange={(v) => updateSetting({ smtpEncryptionType: v })}
-                options={[
-                  { value: 'none', label: t('pages.settings.smtpEncryptionNone') },
-                  { value: 'starttls', label: t('pages.settings.smtpEncryptionStartTLS') },
-                  { value: 'tls', label: t('pages.settings.smtpEncryptionTLS') },
-                ]}
-                style={{ width: '100%' }}
-              />
-            </SettingListItem>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpEncryption')} description={t('pages.settings.smtpEncryptionDesc')}>
+          <Select
+            value={allSetting.smtpEncryptionType}
+            onChange={(v) => updateSetting({ smtpEncryptionType: v })}
+            options={[
+              { value: 'none', label: t('pages.settings.smtpEncryptionNone') },
+              { value: 'starttls', label: t('pages.settings.smtpEncryptionStartTLS') },
+              { value: 'tls', label: t('pages.settings.smtpEncryptionTLS') },
+            ]}
+            style={{ width: '100%' }}
+          />
+        </SettingListItem>
 
-            <Space orientation="vertical" size={8} style={{ width: '100%', marginTop: 16 }}>
-              <Button type="primary" icon={<SendOutlined />} loading={testLoading} onClick={handleTestSmtp}>
-                {t('pages.settings.testSmtp')}
-              </Button>
-              {testResult && (
-                <Alert
-                  type={testResult.success ? 'success' : 'error'}
-                  title={
-                    testResult.success
-                      ? t('pages.settings.' + testResult.msg)
-                      : <span><b>{stageLabel[testResult.stage || ''] || testResult.stage}:</b> {t('pages.settings.' + testResult.msg)}</span>
-                  }
-                  showIcon
-                  closable={{ onClose: () => setTestResult(null) }}
-                />
-              )}
-            </Space>
-          </>
-        ),
-      },
-      {
-        key: '2',
-        label: catTabLabel(<MailOutlined />, t('pages.settings.emailNotifications'), isMobile),
-        children: (
-          <>
-            <SettingListItem paddings="small" title={t('pages.settings.smtpEventBusNotify')} description={t('pages.settings.smtpEventBusNotifyDesc')}>
-              <EmailNotifications allSetting={allSetting} updateSetting={updateSetting} />
-            </SettingListItem>
-          </>
-        ),
-      },
-    ]} />
+        <Space orientation="vertical" size={8} style={{ width: '100%', marginTop: 16 }}>
+          <Button type="primary" icon={<SendOutlined />} loading={testLoading} onClick={handleTestSmtp}>
+            {t('pages.settings.testSmtp')}
+          </Button>
+          {testResult && (
+            <Alert
+              type={testResult.success ? 'success' : 'error'}
+              title={
+                testResult.success
+                  ? t('pages.settings.' + testResult.msg)
+                  : <span><b>{stageLabel[testResult.stage || ''] || testResult.stage}:</b> {t('pages.settings.' + testResult.msg)}</span>
+              }
+              showIcon
+              closable={{ closeIcon: true, onClose: () => setTestResult(null) }}
+            />
+          )}
+        </Space>
+      </SettingsGroup>
+      <SettingsGroup title={t('pages.settings.emailNotifications')}>
+        <SettingListItem paddings="small" title={t('pages.settings.smtpEventBusNotify')} description={t('pages.settings.smtpEventBusNotifyDesc')}>
+          <div className="settings-wide-control"><EmailNotifications allSetting={allSetting} updateSetting={updateSetting} /></div>
+        </SettingListItem>
+      </SettingsGroup>
+    </div>
   );
 }

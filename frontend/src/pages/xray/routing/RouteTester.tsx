@@ -11,6 +11,7 @@ import type { InboundTagOption } from './types';
 interface RouteTesterProps {
   inboundTags: InboundTagOption[];
   isMobile: boolean;
+  disabled?: boolean;
 }
 
 // Mirror of the /xray/routeTest response (RoutingService.TestRoute).
@@ -22,7 +23,7 @@ interface RouteTestResult {
 
 const PROTOCOL_OPTIONS = ['http', 'tls', 'quic', 'bittorrent'].map((p) => ({ label: p, value: p }));
 
-export default function RouteTester({ inboundTags, isMobile }: RouteTesterProps) {
+export default function RouteTester({ inboundTags, isMobile, disabled = false }: RouteTesterProps) {
   const { t } = useTranslation();
   const { data: inboundOptions } = useInboundOptions();
   const remarkByTag = useMemo(() => buildRemarkByTag(inboundOptions || []), [inboundOptions]);
@@ -36,7 +37,7 @@ export default function RouteTester({ inboundTags, isMobile }: RouteTesterProps)
 
   async function run() {
     const value = dest.trim();
-    if (!value) return;
+    if (!value || disabled) return;
     // Domains never contain ':' and a pure dotted-quad is an IPv4 address;
     // everything else is treated as a domain.
     const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(value) || value.includes(':');
@@ -64,6 +65,7 @@ export default function RouteTester({ inboundTags, isMobile }: RouteTesterProps)
   return (
     <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
       <Alert type="info" showIcon title={t('pages.xray.routeTesterDesc')} />
+      <Alert type={disabled ? 'warning' : 'info'} showIcon title={t(disabled ? 'routingPage.saveBeforeTest' : 'routingPage.savedTester')} />
       <Row gutter={[8, 8]} align="bottom">
         <Col xs={fieldSpan} sm={7}>
           <Input
@@ -123,13 +125,13 @@ export default function RouteTester({ inboundTags, isMobile }: RouteTesterProps)
           />
         </Col>
         <Col xs={fieldSpan} sm={3}>
-          <Button type="primary" icon={<AimOutlined />} loading={testing} disabled={!dest.trim()} onClick={run} block>
+          <Button type="primary" icon={<AimOutlined />} loading={testing} disabled={disabled || !dest.trim()} onClick={run} block>
             {t('pages.xray.routeTesterTest')}
           </Button>
         </Col>
       </Row>
 
-      {result && (
+      {!disabled && result && (
         result.matched ? (
           <Alert
             type="success"

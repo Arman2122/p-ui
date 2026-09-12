@@ -21,6 +21,8 @@ export interface RuleRow {
   source?: 'intent' | 'template';
   storeIndex?: number;
   enabled?: boolean;
+  remark?: string;
+  destKind?: string;
   domain?: string;
   ip?: string;
   port?: string;
@@ -28,6 +30,9 @@ export interface RuleRow {
   vlessRoute?: string;
   network?: string;
   sourceIP?: string;
+  localIP?: string;
+  localPort?: string;
+  process?: string;
   user?: string;
   inboundTag?: string;
   protocol?: string;
