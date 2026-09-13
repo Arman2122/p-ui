@@ -178,6 +178,9 @@ func run(root, outDir string) error {
 				"ResellerTopUpRequest",
 				"ResellerTokenRequest",
 				"ResellerPasswordRequest",
+				"ResellerDeleteRequest",
+				"ResellerClientSelection",
+				"ResellerTransferResult",
 			),
 			// Named, and empty: a nil AliasAllow means every alias, and this
 			// package's aliases are internals, not API surface. F409.

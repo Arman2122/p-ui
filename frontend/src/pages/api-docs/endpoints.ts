@@ -2717,6 +2717,55 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       ]
     },
     {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/delete',
+      summary: 'Delete a reseller after deleting or transferring its clients',
+      description: 'clients is "delete" or "transfer"; a transfer names ownerId, where 0 hands the clients to the administrator. Tokens, grants, private plans, allocation history and the account activity go with it. A client the runtime cannot delete keeps the account for a retry.',
+      requestSchema: 'ResellerDeleteRequest',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/clients/assign',
+      summary: 'Move existing clients under this reseller',
+      description: 'Clients may come from the administrator or another reseller. Each must be attached only to granted inbounds, belong to no global group, fit the account term and carry a finite quota under a finite budget. Ownership is prospective: traffic already counted stays with the previous owner, and the quota moves into the allocation history. Plan assignments the new owner cannot see are cleared.',
+      responseSchema: 'ResellerTransferResult',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerClientSelection',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/clients/release',
+      summary: 'Hand owned clients back to the administrator',
+      description: 'Spent traffic stays with the reseller. Private plan assignments are cleared and a paused client stays disabled until an administrator enables it.',
+      responseSchema: 'ResellerTransferResult',
+      responseSchemaArray: false,
+      requestSchema: 'ResellerClientSelection',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
       method: 'GET',
       path: '/panel/api/reseller/dashboard',
       summary: 'Read owned account usage, client attention, grants and quota allocation history',

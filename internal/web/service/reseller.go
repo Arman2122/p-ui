@@ -55,6 +55,9 @@ type ResellerView struct {
 	TrafficUsed int64                 `json:"trafficUsed" example:"10737418240"`
 	InboundIDs  []int                 `json:"inboundIds" example:"[1,2]"`
 	NextResetAt int64                 `json:"nextResetAt" example:"1792000000000"`
+	Online      int64                 `json:"online" example:"3"`
+	Active      int64                 `json:"active" example:"10"`
+	History     []ClientHistoryPoint  `json:"history"`
 }
 
 type ResellerPermissions struct {
@@ -141,49 +144,98 @@ func (s *ResellerService) Get(user *model.User, id int) (*ResellerView, error) {
 			return nil, ErrResellerForbidden
 		}
 	}
-	db := database.GetDB()
-	var a model.ResellerAccount
-	if err := db.First(&a, "user_id = ?", id).Error; err != nil {
+	views, err := s.views(database.GetDB().Where("user_id = ?", id), time.Now())
+	if err != nil {
 		return nil, err
 	}
-	var u model.User
-	if err := db.First(&u, id).Error; err != nil {
-		return nil, err
+	if len(views) == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
-	out := &ResellerView{Account: a, Username: u.Username, InboundIDs: []int{}}
 	if !session.IsAdminUser(user) {
-		out.Account.Note = ""
+		views[0].Account.Note = ""
 	}
-	if err := db.Model(&model.ClientRecord{}).Where("owner_user_id = ?", id).Count(&out.Clients).Error; err != nil {
-		return nil, err
-	}
-	out.TrafficUsed = a.TrafficUsed
-	if err := db.Model(&model.ResellerAllocation{}).Where("user_id = ?", id).
-		Select("COALESCE(SUM(bytes),0)").Scan(&out.Account.TrafficAllocated).Error; err != nil {
-		return nil, err
-	}
-	if err := db.Model(&model.ResellerInboundGrant{}).Where("user_id = ?", id).Order("inbound_id").Pluck("inbound_id", &out.InboundIDs).Error; err != nil {
-		return nil, err
-	}
-	out.NextResetAt = resellerNextReset(&a)
-	return out, nil
+	return views[0], nil
 }
 
 func (s *ResellerService) List(user *model.User) ([]*ResellerView, error) {
 	if !session.IsAdminUser(user) {
 		return nil, ErrResellerForbidden
 	}
-	var ids []int
-	if err := database.GetDB().Model(&model.ResellerAccount{}).Order("user_id").Pluck("user_id", &ids).Error; err != nil {
+	return s.views(database.GetDB(), time.Now())
+}
+
+// views reads every account in scope with the same six queries whatever the count.
+func (s *ResellerService) views(scope *gorm.DB, now time.Time) ([]*ResellerView, error) {
+	db := database.GetDB()
+	var accounts []model.ResellerAccount
+	if err := scope.Order("user_id").Find(&accounts).Error; err != nil {
 		return nil, err
 	}
-	out := make([]*ResellerView, 0, len(ids))
-	for _, id := range ids {
-		v, err := s.Get(user, id)
-		if err != nil {
-			return nil, err
-		}
+	out := make([]*ResellerView, 0, len(accounts))
+	if len(accounts) == 0 {
+		return out, nil
+	}
+	byID := make(map[int]*ResellerView, len(accounts))
+	ids := make([]int, 0, len(accounts))
+	for _, a := range accounts {
+		v := &ResellerView{Account: a, TrafficUsed: a.TrafficUsed, InboundIDs: []int{}, History: []ClientHistoryPoint{}, NextResetAt: resellerNextReset(&a)}
+		v.Account.TrafficAllocated = 0
 		out = append(out, v)
+		byID[a.UserID] = v
+		ids = append(ids, a.UserID)
+	}
+	var users []model.User
+	if err := db.Select("id", "username").Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	for _, u := range users {
+		byID[u.Id].Username = u.Username
+	}
+	var allocations []struct {
+		UserID int
+		Bytes  int64
+	}
+	if err := db.Model(&model.ResellerAllocation{}).Select("user_id, COALESCE(SUM(bytes),0) AS bytes").Where("user_id IN ?", ids).Group("user_id").Scan(&allocations).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range allocations {
+		byID[row.UserID].Account.TrafficAllocated = row.Bytes
+	}
+	var grants []model.ResellerInboundGrant
+	if err := db.Where("user_id IN ?", ids).Order("inbound_id").Find(&grants).Error; err != nil {
+		return nil, err
+	}
+	for _, g := range grants {
+		byID[g.UserID].InboundIDs = append(byID[g.UserID].InboundIDs, g.InboundID)
+	}
+	used, usedArgs := UsedBytesExpr(db)
+	ms := now.UnixMilli()
+	var counts []struct {
+		UserID                  int
+		Clients, Online, Active int64
+	}
+	args := append([]any{ms - 30000, ms}, usedArgs...)
+	if err := db.Table("clients c").Joins("LEFT JOIN client_traffics ON client_traffics.email = c.email").
+		Select("c.owner_user_id AS user_id, COUNT(*) AS clients, COUNT(*) FILTER (WHERE client_traffics.last_online > ?) AS online, COUNT(*) FILTER (WHERE c.enable AND (c.expiry_time = 0 OR c.expiry_time > ?) AND (c.total_gb = 0 OR COALESCE("+used+",0) < c.total_gb)) AS active", args...).
+		Where("c.owner_user_id IN ?", ids).Group("c.owner_user_id").Scan(&counts).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range counts {
+		v := byID[row.UserID]
+		v.Clients, v.Online, v.Active = row.Clients, row.Online, row.Active
+	}
+	var samples []struct {
+		UserID             int
+		ClientHistoryPoint `gorm:"embedded"`
+	}
+	since := now.Unix()/86400*86400 - 13*86400
+	if err := db.Table("client_traffic_samples s").Joins("JOIN clients c ON c.email = s.email").
+		Select("c.owner_user_id AS user_id, s.t / 86400 * 86400 AS t, SUM(s.up) AS up, SUM(s.down) AS down").
+		Where("s.t >= ? AND c.owner_user_id IN ?", since, ids).Group("c.owner_user_id, s.t / 86400").Order("t").Scan(&samples).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range samples {
+		byID[row.UserID].History = append(byID[row.UserID].History, row.ClientHistoryPoint)
 	}
 	return out, nil
 }

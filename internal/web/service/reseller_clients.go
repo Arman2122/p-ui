@@ -417,7 +417,7 @@ func (s *ResellerService) Dashboard(user *model.User) (*ResellerDashboardView, e
 	if err != nil {
 		return nil, err
 	}
-	out := &ResellerDashboardView{Reseller: v, Attention: []ResellerClientView{}, Sales: []ResellerSaleDay{}}
+	out := &ResellerDashboardView{Reseller: v, Online: v.Online, Active: v.Active, Attention: []ResellerClientView{}, Sales: []ResellerSaleDay{}}
 	out.Inbounds, err = s.Inbounds(user)
 	if err != nil {
 		return nil, err
@@ -426,12 +426,6 @@ func (s *ResellerService) Dashboard(user *model.User) (*ResellerDashboardView, e
 	db := database.GetDB()
 	used, usedArgs := UsedBytesExpr(db)
 	q := db.Table("clients c").Joins("LEFT JOIN client_traffics ON client_traffics.email = c.email").Where("c.owner_user_id = ?", user.Id)
-	if err := q.Session(&gorm.Session{}).Where("c.enable = ? AND (c.expiry_time = 0 OR c.expiry_time > ?) AND (c.total_gb = 0 OR COALESCE("+used+",0) < c.total_gb)", append([]any{true, now}, usedArgs...)...).Count(&out.Active).Error; err != nil {
-		return nil, err
-	}
-	if err := q.Session(&gorm.Session{}).Where("client_traffics.last_online > ?", now-30000).Count(&out.Online).Error; err != nil {
-		return nil, err
-	}
 	if err := q.Session(&gorm.Session{}).Where("(c.expiry_time > 0 AND c.expiry_time < ?) OR (c.total_gb > 0 AND COALESCE("+used+",0) >= c.total_gb * 0.9)", append([]any{now + 14*86400000}, usedArgs...)...).
 		Select("c.id,c.email,c.sub_id,c.total_gb,c.expiry_time,c.limit_ip,c.enable,c.comment,COALESCE("+used+",0) AS traffic_used,COALESCE(client_traffics.last_online,0) AS last_online", usedArgs...).Order("c.expiry_time").Limit(50).Scan(&out.Attention).Error; err != nil {
 		return nil, err

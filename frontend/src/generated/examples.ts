@@ -1454,6 +1454,12 @@ export const EXAMPLES: Record<string, unknown> = {
     ],
     "total": 12
   },
+  "ResellerClientSelection": {
+    "clientIds": [
+      1,
+      2
+    ]
+  },
   "ResellerClientView": {
     "comment": "Monthly subscription",
     "email": "customer-001",
@@ -1523,6 +1529,10 @@ export const EXAMPLES: Record<string, unknown> = {
       }
     ]
   },
+  "ResellerDeleteRequest": {
+    "clients": "transfer",
+    "ownerId": 0
+  },
   "ResellerInboundView": {
     "clients": 8,
     "enable": true,
@@ -1591,6 +1601,10 @@ export const EXAMPLES: Record<string, unknown> = {
     "days": 30,
     "traffic": 107374182400
   },
+  "ResellerTransferResult": {
+    "moved": 2,
+    "plansCleared": 1
+  },
   "ResellerView": {
     "account": {
       "allowExtend": false,
@@ -1616,12 +1630,21 @@ export const EXAMPLES: Record<string, unknown> = {
       "updatedAt": 1790000000000,
       "userId": 2
     },
+    "active": 10,
     "clients": 12,
+    "history": [
+      {
+        "down": 8388608,
+        "t": 1789171200,
+        "up": 1048576
+      }
+    ],
     "inboundIds": [
       1,
       2
     ],
     "nextResetAt": 1792000000000,
+    "online": 3,
     "trafficUsed": 10737418240,
     "username": "sina"
   },

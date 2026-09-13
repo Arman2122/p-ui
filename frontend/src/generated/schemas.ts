@@ -5485,6 +5485,24 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ResellerClientSelection": {
+    "properties": {
+      "clientIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "clientIds"
+    ],
+    "type": "object"
+  },
   "ResellerClientView": {
     "properties": {
       "comment": {
@@ -5616,6 +5634,24 @@ export const SCHEMAS: Record<string, unknown> = {
       "inbounds",
       "online",
       "sales"
+    ],
+    "type": "object"
+  },
+  "ResellerDeleteRequest": {
+    "description": "Clients is \"delete\" or \"transfer\"; a transfer to owner 0 hands them to the administrator.",
+    "properties": {
+      "clients": {
+        "example": "transfer",
+        "type": "string"
+      },
+      "ownerId": {
+        "example": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "clients",
+      "ownerId"
     ],
     "type": "object"
   },
@@ -5926,15 +5962,43 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ResellerTransferResult": {
+    "properties": {
+      "moved": {
+        "example": 2,
+        "type": "integer"
+      },
+      "plansCleared": {
+        "example": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "moved",
+      "plansCleared"
+    ],
+    "type": "object"
+  },
   "ResellerView": {
     "properties": {
       "account": {
         "$ref": "#/components/schemas/ResellerAccount"
       },
+      "active": {
+        "example": 10,
+        "format": "int64",
+        "type": "integer"
+      },
       "clients": {
         "example": 12,
         "format": "int64",
         "type": "integer"
+      },
+      "history": {
+        "items": {
+          "$ref": "#/components/schemas/ClientHistoryPoint"
+        },
+        "type": "array"
       },
       "inboundIds": {
         "example": [
@@ -5951,6 +6015,11 @@ export const SCHEMAS: Record<string, unknown> = {
         "format": "int64",
         "type": "integer"
       },
+      "online": {
+        "example": 3,
+        "format": "int64",
+        "type": "integer"
+      },
       "trafficUsed": {
         "example": 10737418240,
         "format": "int64",
@@ -5963,9 +6032,12 @@ export const SCHEMAS: Record<string, unknown> = {
     },
     "required": [
       "account",
+      "active",
       "clients",
+      "history",
       "inboundIds",
       "nextResetAt",
+      "online",
       "trafficUsed",
       "username"
     ],

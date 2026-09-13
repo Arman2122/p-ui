@@ -19,3 +19,18 @@ type ResellerPasswordRequest struct {
 	Current  string `json:"current" example:"current-account-password"`
 	Password string `json:"password" example:"new-unique-account-password"`
 }
+
+// Clients is "delete" or "transfer"; a transfer to owner 0 hands them to the administrator.
+type ResellerDeleteRequest struct {
+	Clients string `json:"clients" example:"transfer"`
+	OwnerID int    `json:"ownerId" example:"0"`
+}
+
+type ResellerClientSelection struct {
+	ClientIDs []int `json:"clientIds" example:"[1,2]"`
+}
+
+type ResellerTransferResult struct {
+	Moved        int `json:"moved" example:"2"`
+	PlansCleared int `json:"plansCleared" example:"1"`
+}

@@ -1208,6 +1208,10 @@ export interface ResellerClientPage {
   total: number;
 }
 
+export interface ResellerClientSelection {
+  clientIds: number[];
+}
+
 export interface ResellerClientView {
   comment: string;
   email: string;
@@ -1231,6 +1235,11 @@ export interface ResellerDashboardView {
   online: number;
   reseller?: ResellerView | null;
   sales: ResellerSaleDay[];
+}
+
+export interface ResellerDeleteRequest {
+  clients: string;
+  ownerId: number;
 }
 
 export interface ResellerInboundView {
@@ -1308,11 +1317,19 @@ export interface ResellerTopUpRequest {
   traffic: number;
 }
 
+export interface ResellerTransferResult {
+  moved: number;
+  plansCleared: number;
+}
+
 export interface ResellerView {
   account: ResellerAccount;
+  active: number;
   clients: number;
+  history: ClientHistoryPoint[];
   inboundIds: number[];
   nextResetAt: number;
+  online: number;
   trafficUsed: number;
   username: string;
 }

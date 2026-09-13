@@ -42,7 +42,39 @@ func NewResellerController(api *gin.RouterGroup) *ResellerController {
 	admin.POST("/:id/suspend", a.suspend)
 	admin.POST("/:id/top-up", a.topUp)
 	admin.POST("/:id/reset-usage", a.resetUsage)
+	admin.POST("/:id/delete", a.delete)
+	admin.POST("/:id/clients/assign", a.assignClients)
+	admin.POST("/:id/clients/release", a.releaseClients)
 	return a
+}
+
+func (a *ResellerController) delete(c *gin.Context) {
+	var in service.ResellerDeleteRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		resellerResponse(c, nil, service.ErrResellerInvalid)
+		return
+	}
+	resellerResponse(c, nil, a.service.Delete(session.GetLoginUser(c), resellerID(c), in))
+}
+
+func (a *ResellerController) assignClients(c *gin.Context) {
+	var in service.ResellerClientSelection
+	if err := c.ShouldBindJSON(&in); err != nil {
+		resellerResponse(c, nil, service.ErrResellerInvalid)
+		return
+	}
+	obj, err := a.service.AssignClients(session.GetLoginUser(c), resellerID(c), in.ClientIDs)
+	resellerResponse(c, obj, err)
+}
+
+func (a *ResellerController) releaseClients(c *gin.Context) {
+	var in service.ResellerClientSelection
+	if err := c.ShouldBindJSON(&in); err != nil {
+		resellerResponse(c, nil, service.ErrResellerInvalid)
+		return
+	}
+	obj, err := a.service.ReleaseClients(session.GetLoginUser(c), resellerID(c), in.ClientIDs)
+	resellerResponse(c, obj, err)
 }
 
 func requireAdmin(c *gin.Context) {

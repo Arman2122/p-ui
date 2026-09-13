@@ -5533,6 +5533,24 @@
         ],
         "type": "object"
       },
+      "ResellerClientSelection": {
+        "properties": {
+          "clientIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "clientIds"
+        ],
+        "type": "object"
+      },
       "ResellerClientView": {
         "properties": {
           "comment": {
@@ -5664,6 +5682,24 @@
           "inbounds",
           "online",
           "sales"
+        ],
+        "type": "object"
+      },
+      "ResellerDeleteRequest": {
+        "description": "Clients is \"delete\" or \"transfer\"; a transfer to owner 0 hands them to the administrator.",
+        "properties": {
+          "clients": {
+            "example": "transfer",
+            "type": "string"
+          },
+          "ownerId": {
+            "example": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clients",
+          "ownerId"
         ],
         "type": "object"
       },
@@ -5974,15 +6010,43 @@
         ],
         "type": "object"
       },
+      "ResellerTransferResult": {
+        "properties": {
+          "moved": {
+            "example": 2,
+            "type": "integer"
+          },
+          "plansCleared": {
+            "example": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moved",
+          "plansCleared"
+        ],
+        "type": "object"
+      },
       "ResellerView": {
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ResellerAccount"
           },
+          "active": {
+            "example": 10,
+            "format": "int64",
+            "type": "integer"
+          },
           "clients": {
             "example": 12,
             "format": "int64",
             "type": "integer"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ClientHistoryPoint"
+            },
+            "type": "array"
           },
           "inboundIds": {
             "example": [
@@ -5999,6 +6063,11 @@
             "format": "int64",
             "type": "integer"
           },
+          "online": {
+            "example": 3,
+            "format": "int64",
+            "type": "integer"
+          },
           "trafficUsed": {
             "example": 10737418240,
             "format": "int64",
@@ -6011,9 +6080,12 @@
         },
         "required": [
           "account",
+          "active",
           "clients",
+          "history",
           "inboundIds",
           "nextResetAt",
+          "online",
           "trafficUsed",
           "username"
         ],
@@ -23160,12 +23232,21 @@
                         "updatedAt": 1790000000000,
                         "userId": 2
                       },
+                      "active": 10,
                       "clients": 12,
+                      "history": [
+                        {
+                          "down": 8388608,
+                          "t": 1789171200,
+                          "up": 1048576
+                        }
+                      ],
                       "inboundIds": [
                         1,
                         2
                       ],
                       "nextResetAt": 1792000000000,
+                      "online": 3,
                       "trafficUsed": 10737418240,
                       "username": "sina"
                     }
@@ -23355,12 +23436,21 @@
                       "updatedAt": 1790000000000,
                       "userId": 2
                     },
+                    "active": 10,
                     "clients": 12,
+                    "history": [
+                      {
+                        "down": 8388608,
+                        "t": 1789171200,
+                        "up": 1048576
+                      }
+                    ],
                     "inboundIds": [
                       1,
                       2
                     ],
                     "nextResetAt": 1792000000000,
+                    "online": 3,
                     "trafficUsed": 10737418240,
                     "username": "sina"
                   }
@@ -23435,12 +23525,21 @@
                       "updatedAt": 1790000000000,
                       "userId": 2
                     },
+                    "active": 10,
                     "clients": 12,
+                    "history": [
+                      {
+                        "down": 8388608,
+                        "t": 1789171200,
+                        "up": 1048576
+                      }
+                    ],
                     "inboundIds": [
                       1,
                       2
                     ],
                     "nextResetAt": 1792000000000,
+                    "online": 3,
                     "trafficUsed": 10737418240,
                     "username": "sina"
                   }
@@ -23713,12 +23812,21 @@
                       "updatedAt": 1790000000000,
                       "userId": 2
                     },
+                    "active": 10,
                     "clients": 12,
+                    "history": [
+                      {
+                        "down": 8388608,
+                        "t": 1789171200,
+                        "up": 1048576
+                      }
+                    ],
                     "inboundIds": [
                       1,
                       2
                     ],
                     "nextResetAt": 1792000000000,
+                    "online": 3,
                     "trafficUsed": 10737418240,
                     "username": "sina"
                   }
@@ -23931,6 +24039,223 @@
                       "type": "string"
                     },
                     "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/resellers/{id}/delete": {
+      "post": {
+        "tags": [
+          "Resellers"
+        ],
+        "summary": "Delete a reseller after deleting or transferring its clients",
+        "operationId": "post_panel_api_resellers_id_delete",
+        "description": "clients is \"delete\" or \"transfer\"; a transfer names ownerId, where 0 hands the clients to the administrator. Tokens, grants, private plans, allocation history and the account activity go with it. A client the runtime cannot delete keeps the account for a retry.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Owned resource ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResellerDeleteRequest"
+              },
+              "example": {
+                "clients": "transfer",
+                "ownerId": 0
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/resellers/{id}/clients/assign": {
+      "post": {
+        "tags": [
+          "Resellers"
+        ],
+        "summary": "Move existing clients under this reseller",
+        "operationId": "post_panel_api_resellers_id_clients_assign",
+        "description": "Clients may come from the administrator or another reseller. Each must be attached only to granted inbounds, belong to no global group, fit the account term and carry a finite quota under a finite budget. Ownership is prospective: traffic already counted stays with the previous owner, and the quota moves into the allocation history. Plan assignments the new owner cannot see are cleared.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Owned resource ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResellerClientSelection"
+              },
+              "example": {
+                "clientIds": [
+                  1,
+                  2
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ResellerTransferResult"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "moved": 2,
+                    "plansCleared": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/resellers/{id}/clients/release": {
+      "post": {
+        "tags": [
+          "Resellers"
+        ],
+        "summary": "Hand owned clients back to the administrator",
+        "operationId": "post_panel_api_resellers_id_clients_release",
+        "description": "Spent traffic stays with the reseller. Private plan assignments are cleared and a paused client stays disabled until an administrator enables it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Owned resource ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResellerClientSelection"
+              },
+              "example": {
+                "clientIds": [
+                  1,
+                  2
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ResellerTransferResult"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "moved": 2,
+                    "plansCleared": 1
                   }
                 }
               }

@@ -1293,6 +1293,11 @@ export const ResellerClientPageSchema = z.object({
 });
 export type ResellerClientPage = z.infer<typeof ResellerClientPageSchema>;
 
+export const ResellerClientSelectionSchema = z.object({
+  clientIds: z.array(z.number().int()),
+});
+export type ResellerClientSelection = z.infer<typeof ResellerClientSelectionSchema>;
+
 export const ResellerClientViewSchema = z.object({
   comment: z.string(),
   email: z.string(),
@@ -1319,6 +1324,12 @@ export const ResellerDashboardViewSchema = z.object({
   sales: z.array(z.lazy(() => ResellerSaleDaySchema)),
 });
 export type ResellerDashboardView = z.infer<typeof ResellerDashboardViewSchema>;
+
+export const ResellerDeleteRequestSchema = z.object({
+  clients: z.string(),
+  ownerId: z.number().int(),
+});
+export type ResellerDeleteRequest = z.infer<typeof ResellerDeleteRequestSchema>;
 
 export const ResellerInboundViewSchema = z.object({
   clients: z.number().int(),
@@ -1405,11 +1416,20 @@ export const ResellerTopUpRequestSchema = z.object({
 });
 export type ResellerTopUpRequest = z.infer<typeof ResellerTopUpRequestSchema>;
 
+export const ResellerTransferResultSchema = z.object({
+  moved: z.number().int(),
+  plansCleared: z.number().int(),
+});
+export type ResellerTransferResult = z.infer<typeof ResellerTransferResultSchema>;
+
 export const ResellerViewSchema = z.object({
   account: z.lazy(() => ResellerAccountSchema),
+  active: z.number().int(),
   clients: z.number().int(),
+  history: z.array(z.lazy(() => ClientHistoryPointSchema)),
   inboundIds: z.array(z.number().int()),
   nextResetAt: z.number().int(),
+  online: z.number().int(),
   trafficUsed: z.number().int(),
   username: z.string(),
 });
