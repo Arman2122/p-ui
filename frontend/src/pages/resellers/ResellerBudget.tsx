@@ -14,6 +14,16 @@ export function Capacity({ label, used, limit, bytes = false }: { label: string;
   </div>;
 }
 
+export function ResellerRules({ reseller }: { reseller: ResellerView }) {
+  const { t } = useTranslation();
+  const a = reseller.account;
+  return <div className="p-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+    <div><Kicker>{t('resellers.onDepletion')}</Kicker><strong>{t(`resellers.policy.${a.onDepletion}`)}</strong></div>
+    <div><Kicker>{t('resellers.resetCycle')}</Kicker><strong>{t(`resellers.cycle.${a.resetCycle}`)}</strong>
+      <div className="p-sub">{reseller.nextResetAt ? t('resellers.nextReset', { date: new Date(reseller.nextResetAt).toLocaleDateString() }) : t('resellers.noReset')}</div></div>
+  </div>;
+}
+
 export default function ResellerBudget({ reseller }: { reseller: ResellerView }) {
   const { t } = useTranslation();
   const a = reseller.account;
@@ -22,5 +32,6 @@ export default function ResellerBudget({ reseller }: { reseller: ResellerView })
     <Capacity label={t('resellers.traffic')} used={reseller.trafficUsed} limit={a.trafficLimit} bytes />
     <Capacity label={t('resellers.clients')} used={reseller.clients} limit={a.clientCap} />
     <div><Kicker>{t('resellers.term')}</Kicker><strong>{days == null ? t('resellers.unlimited') : t('resellers.daysLeft', { days })}</strong><div className="p-sub">{a.expiresAt ? new Date(a.expiresAt).toLocaleDateString() : '—'}</div></div>
+    <ResellerRules reseller={reseller} />
   </div>;
 }

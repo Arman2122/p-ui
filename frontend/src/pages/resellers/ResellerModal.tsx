@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormProvider, useWatch } from 'react-hook-form';
-import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Space, Switch, Tag } from 'antd';
+import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch, Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import dayjs from 'dayjs';
@@ -12,7 +12,7 @@ import { GiB, resellerGet, resellerKeys, resellerPost } from './api';
 import { ResellerFormSchema, type ResellerForm, type ResellerView } from './schema';
 
 const InboundOptionsSchema = z.array(z.object({ id: z.number(), remark: z.string(), protocol: z.string() }));
-const defaults = (): ResellerForm => ({ name: '', username: '', email: '', password: '', trafficGB: 500, clientCap: 50, expiresAt: Date.now() + 90 * 86_400_000, inboundIds: [], allowPlans: true, allowReset: true, allowExtend: false, allowSuspend: true, allowTopUp: true, notifyOnDepletion: true, note: '' });
+const defaults = (): ResellerForm => ({ name: '', username: '', email: '', password: '', trafficGB: 500, clientCap: 50, expiresAt: Date.now() + 90 * 86_400_000, inboundIds: [], allowPlans: true, allowReset: true, allowExtend: false, allowSuspend: true, allowTopUp: true, notifyOnDepletion: true, note: '', onDepletion: 'disable', resetCycle: 'none' });
 
 export default function ResellerModal({ open, reseller, onClose }: { open: boolean; reseller?: ResellerView; onClose: () => void }) {
   const { t } = useTranslation();
@@ -48,6 +48,9 @@ export default function ResellerModal({ open, reseller, onClose }: { open: boole
           <FormField name="clientCap" label={t('resellers.clientCap')} extra={t('resellers.zeroUnlimited')}><InputNumber min={0} precision={0} /></FormField>
           <FormField name="expiresAt" label={t('resellers.expiry')} transform={{ input: (v) => v ? dayjs(Number(v)) : null, output: (v) => dayjs.isDayjs(v) ? v.valueOf() : 0 }} extra={t('resellers.clearUnlimited')}><DateTimePicker value={null} onChange={() => undefined} showTime /></FormField>
           <Space wrap style={{ marginBottom: 16 }}>{[30, 90, 180, 365].map((v) => <Button key={v} size="small" onClick={() => form.setValue('expiresAt', Date.now() + v * 86_400_000)}>{t('resellers.days', { days: v })}</Button>)}</Space>
+          <Kicker>{t('resellers.rules')}</Kicker>
+          <FormField name="onDepletion" label={t('resellers.onDepletion')} extra={t('resellers.onDepletionHelp')}><Segmented block options={[{ value: 'disable', label: t('resellers.policy.disable') }, { value: 'block', label: t('resellers.policy.block') }]} /></FormField>
+          <FormField name="resetCycle" label={t('resellers.resetCycle')} extra={t('resellers.resetCycleHelp')}><Select options={(['none', 'weekly', 'monthly'] as const).map((v) => ({ value: v, label: t(`resellers.cycle.${v}`) }))} /></FormField>
           <Kicker>{t('resellers.grants')}</Kicker>
           {inbounds.error && <Alert type="error" title={t('resellers.loadError')} action={<Button onClick={() => void inbounds.refetch()}>{t('resellers.retry')}</Button>} />}
           <Space style={{ marginBottom: 8 }}><Button size="small" onClick={() => form.setValue('inboundIds', inbounds.data?.map((i) => i.id) || [])}>{t('resellers.grantAll')}</Button><Button size="small" onClick={() => form.setValue('inboundIds', [])}>{t('resellers.clear')}</Button></Space>
@@ -67,6 +70,8 @@ export default function ResellerModal({ open, reseller, onClose }: { open: boole
               <div><Kicker>{t('resellers.clients')}</Kicker><strong>{draft.clientCap || '∞'}</strong></div>
               <div><Kicker>{t('resellers.expiry')}</Kicker><strong>{draft.expiresAt ? new Date(draft.expiresAt).toLocaleDateString() : '∞'}</strong></div>
               <div><Kicker>{t('resellers.grants')}</Kicker><strong>{draft.inboundIds?.length || 0}</strong></div>
+              <div><Kicker>{t('resellers.onDepletion')}</Kicker><strong>{t(`resellers.policy.${draft.onDepletion || 'disable'}`)}</strong></div>
+              <div><Kicker>{t('resellers.resetCycle')}</Kicker><strong>{t(`resellers.cycle.${draft.resetCycle || 'none'}`)}</strong></div>
             </div>
             <p className="p-sub" style={{ whiteSpace: 'normal' }}>{t('resellers.budgetExplanation')}</p>
           </PanelCard>

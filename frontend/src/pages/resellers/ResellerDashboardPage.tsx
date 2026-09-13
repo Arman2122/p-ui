@@ -7,9 +7,20 @@ import { z } from 'zod';
 import { PageHeader, PanelCard } from '@/components/ui/panel';
 import StatStrip from '@/components/ui/StatStrip';
 import Sparkline from '@/components/viz/Sparkline';
+import HistoryChart from '@/pages/index/HistoryChart';
+import { SizeFormatter } from '@/utils';
 import { exportOwnedClients, GiB, resellerGet, resellerKeys, useSignedInUser } from './api';
 import { ResellerDashboardSchema, ResellerInboundSchema } from './schema';
 import ResellerBudget from './ResellerBudget';
+
+export function OwnerUsageChart({ history }: { history: { t: number; up: number; down: number }[] }) {
+  const { t } = useTranslation();
+  if (!history.length) return <Empty description={t('telemetry.noReadings')} />;
+  const start = Math.floor(Date.now() / 86_400_000) * 86_400 - 13 * 86_400;
+  const times = Array.from({ length: 14 }, (_, i) => start + i * 86_400);
+  const byTime = new Map(history.map((p) => [p.t, p.up + p.down]));
+  return <HistoryChart dashboard times={times} height={160} format={SizeFormatter.sizeFormat} series={[{ name: t('pages.clients.traffic'), color: '#4c8dff', values: times.map((ts) => byTime.get(ts) ?? Number.NaN) }]} />;
+}
 
 export default function ResellerDashboardPage() {
   const { t } = useTranslation();
@@ -29,9 +40,13 @@ export default function ResellerDashboardPage() {
       { key: 'active', label: t('resellers.active'), value: d.active }, { key: 'attention', label: t('resellers.attention'), value: d.attention.length },
       { key: 'traffic', label: t('resellers.trafficUsed'), value: `${(d.reseller.trafficUsed / GiB).toFixed(1)} GiB` },
     ]} />
-    {d.reseller.account.budgetBlocked && <Alert type="warning" title={t('resellers.budgetBlocked')} showIcon />}
+    {d.reseller.account.budgetBlocked && <Alert type="warning" title={t(d.reseller.account.onDepletion === 'block' ? 'resellers.budgetBlockedSoft' : 'resellers.budgetBlocked')} showIcon />}
     <div className="p-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,300px),1fr))' }}>
       <PanelCard kicker={t('resellers.yourBudget')}><ResellerBudget reseller={d.reseller} /><p className="p-sub" style={{ whiteSpace: 'normal' }}>{t('resellers.budgetExplanation')}</p></PanelCard>
+      <PanelCard kicker={t('resellers.usageTrend')}>
+        <OwnerUsageChart history={d.reseller.history ?? []} />
+        <p className="p-sub" style={{ whiteSpace: 'normal' }}>{d.reseller.account.periodStartedAt ? t('resellers.periodStarted', { date: new Date(d.reseller.account.periodStartedAt).toLocaleDateString() }) : t('resellers.usageTrendHelp')}</p>
+      </PanelCard>
       <PanelCard kicker={t('resellers.salesHistory')}>
         {d.sales.length ? <Sparkline data={d.sales.map((x) => x.bytes / GiB)} labels={d.sales.map((x) => x.day)} height={180} name1="GiB" showAxes showGrid /> : <Empty description={t('resellers.noSales')} />}
         <p className="p-sub">{t('resellers.allocated')}: {(d.reseller.account.trafficAllocated / GiB).toFixed(1)} GiB</p>
