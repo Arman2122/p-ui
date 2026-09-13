@@ -416,6 +416,21 @@ function hydrateStreamForm(stream: Raw): OutboundStreamFormValues {
   return next as unknown as OutboundStreamFormValues;
 }
 
+/*
+xray-core v26.9.9 removed proxySettings and refuses a config that carries it.
+A row that still has one opens with its tag as the dialerProxy the form
+manages, unless the row already set one; the key itself is never written back.
+*/
+function foldProxySettings(raw: RawOutboundRow): Raw | undefined {
+  const stream = asObject(raw.streamSettings);
+  const sockopt = asObject(stream.sockopt);
+  const legacyTag = asString(asObject(raw.proxySettings).tag);
+  if (legacyTag === '' || asString(sockopt.dialerProxy) !== '') {
+    return Object.keys(stream).length > 0 ? stream : undefined;
+  }
+  return { ...stream, sockopt: { ...sockopt, dialerProxy: legacyTag } };
+}
+
 export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues {
   const protocol = asString(raw.protocol, 'vless');
   const settings = asObject(raw.settings);
@@ -423,12 +438,8 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
   const sendThrough = asString(raw.sendThrough);
   const targetStrategy = targetStrategyFromWire(raw.targetStrategy);
   const mux = muxFromWire(raw.mux);
-  const hasStream = raw.streamSettings
-    && typeof raw.streamSettings === 'object'
-    && Object.keys(raw.streamSettings as Raw).length > 0;
-  const streamSettings = hasStream
-    ? hydrateStreamForm(raw.streamSettings as Raw)
-    : undefined;
+  const stream = foldProxySettings(raw);
+  const streamSettings = stream ? hydrateStreamForm(stream) : undefined;
 
   let typed: OutboundFormSettings;
   switch (protocol) {
@@ -454,7 +465,6 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
     targetStrategy,
     mux,
     streamSettings,
-    proxySettings: raw.proxySettings,
   };
 }
 
@@ -716,17 +726,6 @@ export function formValuesToWirePayload(values: OutboundFormValues): WireOutboun
       const sockopt = (values.streamSettings as { sockopt?: unknown }).sockopt;
       if (sockopt) result.streamSettings = { sockopt };
     }
-  }
-
-  // proxySettings has no form control, so it is carried rather than rebuilt.
-  // Dropped when it would collide: the core refuses a config that sets both
-  // proxySettings.tag and sockopt.dialerProxy, and dialerProxy is the one the
-  // form actually manages.
-  const carried = asObject(values.proxySettings);
-  if (Object.keys(carried).length > 0) {
-    const emittedSockopt = asObject(asObject(result.streamSettings).sockopt);
-    const collides = asString(carried.tag) !== '' && asString(emittedSockopt.dialerProxy) !== '';
-    if (!collides) result.proxySettings = values.proxySettings;
   }
 
   if (values.sendThrough) result.sendThrough = values.sendThrough;

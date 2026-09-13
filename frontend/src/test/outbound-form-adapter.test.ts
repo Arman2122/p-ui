@@ -592,49 +592,49 @@ describe('outbound-form-adapter: full optional-block round-trip', () => {
 });
 
 /*
-proxySettings is the one standard OutboundDetourConfig key the form has no
-control for, and the adapter rebuilds the payload from scratch rather than
-spreading the raw row — so editing an outbound that carried one silently
-deleted it, and the chain it described stopped happening.
-
-Carried verbatim now, with one exception: the core refuses a config that sets
-both proxySettings.tag and sockopt.dialerProxy ("proxySettings.tag is
-conflicted with sockopt.dialerProxy", infra/conf/xray.go:229). dialerProxy is
-the key the form manages, so the carried one yields. A silent degradation is
-better than a hard preflight refusal with an opaque core error. F194.
+xray-core v26.9.9 removed proxySettings: the core refuses any outbound that
+carries the key and names sockopt.dialerProxy as its replacement. The adapter
+opens such a row with the legacy tag as its dialerProxy — the key the form
+manages — and never writes proxySettings back, so the first edit of an old row
+is its migration. A dialerProxy the row already has wins, the same rule the
+startup seeder applies (OutboundProxySettingsToDialerProxy).
 */
-describe('proxySettings round trip', () => {
+describe('proxySettings, removed upstream', () => {
   const base = {
     protocol: 'vless',
     tag: 'chained',
     settings: { vnext: [{ address: 'a.example', port: 443, users: [{ id: 'u' }] }] },
   };
+  const sockoptOf = (back: Record<string, unknown>) =>
+    (back.streamSettings as Record<string, Record<string, unknown>> | undefined)?.sockopt;
 
-  it('survives an edit that touches nothing', () => {
+  it('opens with its tag as the dialerProxy and never writes the key back', () => {
     const back = formValuesToWirePayload(rawOutboundToFormValues({
       ...base,
       proxySettings: { tag: 'upstream', transportLayer: true },
     }));
-    expect(back.proxySettings).toEqual({ tag: 'upstream', transportLayer: true });
+    expect('proxySettings' in back).toBe(false);
+    expect(sockoptOf(back)?.dialerProxy).toBe('upstream');
   });
 
-  it('is dropped when the form sets a dialerProxy, which the core refuses alongside it', () => {
+  it('yields to a dialerProxy the row already has', () => {
     const back = formValuesToWirePayload(rawOutboundToFormValues({
       ...base,
       proxySettings: { tag: 'upstream' },
       streamSettings: { network: 'tcp', sockopt: { dialerProxy: 'front' } },
     }));
-    expect(back.proxySettings).toBeUndefined();
-    expect((back.streamSettings as Record<string, Record<string, unknown>>).sockopt.dialerProxy).toBe('front');
+    expect('proxySettings' in back).toBe(false);
+    expect(sockoptOf(back)?.dialerProxy).toBe('front');
   });
 
-  it('keeps a tagless proxySettings next to a dialerProxy, which the core allows', () => {
+  it('drops a tagless proxySettings without inventing a dialerProxy', () => {
     const back = formValuesToWirePayload(rawOutboundToFormValues({
       ...base,
       proxySettings: { transportLayer: true },
-      streamSettings: { network: 'tcp', sockopt: { dialerProxy: 'front' } },
+      streamSettings: { network: 'tcp' },
     }));
-    expect(back.proxySettings).toEqual({ transportLayer: true });
+    expect('proxySettings' in back).toBe(false);
+    expect(sockoptOf(back)?.dialerProxy).toBeUndefined();
   });
 
   it('emits no key at all when the row never had one', () => {
