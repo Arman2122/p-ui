@@ -124,7 +124,7 @@ jobs:
           cd p-ui/bin
 
           # Download dependencies
-          Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.7.28/"
+          Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
           if [ "${{ matrix.platform }}" == "amd64" ]; then
             fetch ${Xray_URL}Xray-linux-64.zip
             unzip Xray-linux-64.zip

@@ -2761,8 +2761,8 @@
         "properties": {
           "available": {
             "example": [
-              "v26.7.28",
-              "v26.6.27"
+              "v26.9.9",
+              "v26.7.28"
             ],
             "items": {
               "type": "string"
@@ -2775,7 +2775,7 @@
             "type": "string"
           },
           "installed": {
-            "example": "26.7.28",
+            "example": "26.9.9",
             "type": "string"
           },
           "manageable": {
@@ -8567,11 +8567,11 @@
                   "success": true,
                   "obj": {
                     "available": [
-                      "v26.7.28",
-                      "v26.6.27"
+                      "v26.9.9",
+                      "v26.7.28"
                     ],
                     "error": "core: daemon not installed",
-                    "installed": "26.7.28",
+                    "installed": "26.9.9",
                     "manageable": true
                   }
                 }

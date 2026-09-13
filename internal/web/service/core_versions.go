@@ -15,8 +15,8 @@ import (
 // CoreVersionsView is a core's release picture: the build on disk and, when the
 // core can install one, the channel's list.
 type CoreVersionsView struct {
-	Installed  string   `json:"installed,omitempty" example:"26.7.28"`
-	Available  []string `json:"available" example:"[\"v26.7.28\",\"v26.6.27\"]"`
+	Installed  string   `json:"installed,omitempty" example:"26.9.9"`
+	Available  []string `json:"available" example:"[\"v26.9.9\",\"v26.7.28\"]"`
 	Manageable bool     `json:"manageable" example:"true"`
 	// Error is why Installed or Available is missing; a missing binary is one.
 	Error string `json:"error,omitempty" example:"core: daemon not installed"`

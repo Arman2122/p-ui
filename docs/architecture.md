@@ -51,7 +51,7 @@ Two key ideas that explain most of the complexity:
 
 ## 2. Tech stack
 
-**Backend (Go 1.26):**
+**Backend (Go 1.27):**
 - Web framework: **Gin** (`gin-gonic/gin`) + sessions (cookie store), gzip.
 - ORM: **GORM** on **PostgreSQL** — the only backend (`PUI_DB_DSN`, required).
 - Scheduler: **robfig/cron/v3** (seconds-precision) for all background jobs.

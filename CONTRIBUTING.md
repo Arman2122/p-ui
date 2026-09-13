@@ -6,7 +6,7 @@ Thanks for taking the time to contribute to Penhoon UI. This guide gets a develo
 
 Penhoon UI is **Linux-only** — it targets Ubuntu 22.04 / 24.04 / 26.04 and Debian 12+ with systemd, `apt` and `iptables`, and releases ship Linux binaries only. Develop on one of those distributions (a VM or container is fine): the service management, firewall and Fail2ban paths have no equivalent elsewhere.
 
-- **Go 1.26+** (the version pinned in `go.mod`)
+- **Go 1.27+** (the version pinned in `go.mod`)
 - **Node.js 24 LTS** (the version pinned in `.nvmrc`) and npm 10+ (for the React frontend)
 - **Git**
 - **PostgreSQL** — the panel's only database backend. Install the distro package (`apt install postgresql postgresql-client`) and create a role and database for development.

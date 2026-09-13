@@ -396,7 +396,7 @@ jobs:
             confident, wrong finding gets posted on a stranger's first
             contribution. Do NOT check out the PR branch; its code is untrusted.
 
-            Stack: Backend is Go 1.26 (module
+            Stack: Backend is Go 1.27 (module
             github.com/Arman2122/p-ui) with Gin and GORM; it runs
             Xray-core as a managed child process (internal/xray/process.go)
             and imports github.com/xtls/xray-core for config types and its

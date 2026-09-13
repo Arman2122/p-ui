@@ -744,11 +744,11 @@ export const EXAMPLES: Record<string, unknown> = {
   },
   "CoreVersionsView": {
     "available": [
-      "v26.7.28",
-      "v26.6.27"
+      "v26.9.9",
+      "v26.7.28"
     ],
     "error": "core: daemon not installed",
-    "installed": "26.7.28",
+    "installed": "26.9.9",
     "manageable": true
   },
   "CoreView": {

@@ -8,11 +8,11 @@ index, layering rules), read `docs/architecture.md` on demand — do not guess
 file locations when it can answer in one hop.
 
 ## Stack
-- Backend: Go 1.26 (`module github.com/Arman2122/p-ui`), Gin, GORM.
+- Backend: Go 1.27 (`module github.com/Arman2122/p-ui`), Gin, GORM.
   Runs Xray-core as a managed child process (`internal/xray/process.go`) and
   imports `github.com/xtls/xray-core` for config types + gRPC stats/handler/router
   API. The go.mod pin is the pseudo-version of the upstream commit whose
-  release tag `release.yml` downloads (`Xray_URL`, v26.7.28 today) — bump both
+  release tag `release.yml` downloads (`Xray_URL`, v26.9.9 today) — bump both
   together; `internal/arch/xray_pin_test.go` fails when their dates differ.
   MTProto inbounds run a second managed child — the `mtg-proxy` binary
   (a multi-secret mtg fork — NOT a Go dependency; its prebuilt release binary is

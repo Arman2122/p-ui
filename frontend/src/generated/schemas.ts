@@ -2713,8 +2713,8 @@ export const SCHEMAS: Record<string, unknown> = {
     "properties": {
       "available": {
         "example": [
-          "v26.7.28",
-          "v26.6.27"
+          "v26.9.9",
+          "v26.7.28"
         ],
         "items": {
           "type": "string"
@@ -2727,7 +2727,7 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "installed": {
-        "example": "26.7.28",
+        "example": "26.9.9",
         "type": "string"
       },
       "manageable": {

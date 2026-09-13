@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
+	"time"
 )
 
 /*
@@ -46,7 +47,20 @@ func TestXrayPinMatchesTheShippedBinary(t *testing.T) {
 	d, _ := strconv.Atoi(tag[3])
 	shipped := fmt.Sprintf("20%02d%02d%02d", y, m, d)
 
-	if pinned != shipped {
+	if !sameUpstreamRelease(pinned, shipped) {
 		t.Fatalf("go.mod compiles against the Xray-core of %s but release.yml ships v%s.%s.%s (%s): bump both together, the config types and the binary must come from one upstream release", pinned, tag[1], tag[2], tag[3], shipped)
 	}
+}
+
+// sameUpstreamRelease allows the tag to name the day after the commit: the tag
+// carries the maintainer's local date (UTC+8), the pseudo-version the UTC one.
+func sameUpstreamRelease(pinned, shipped string) bool {
+	if pinned == shipped {
+		return true
+	}
+	commit, err := time.Parse("20060102", pinned)
+	if err != nil {
+		return false
+	}
+	return commit.AddDate(0, 0, 1).Format("20060102") == shipped
 }
