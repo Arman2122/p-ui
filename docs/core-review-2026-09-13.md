@@ -102,10 +102,10 @@ and the ranked list below them landed; the anchors are the same as before.
 - The JSON subscription has no entry for TUIC or AnyTLS (xray has none).
 - The SSH login throttle's numbers (5 failures, 5 minutes, 10 minutes) are
   fixed, not settings.
-- An uncommitted go.mod/go.sum bump (go 1.27, a newer xray-core pin, extra
-  dependencies, incomplete go.sum) sits in the shared checkout as of
-  2026-09-14; it is nobody's in this work and breaks a local `go` build until
-  finished or reverted.
+- The Xray v26.7.28 to v26.9.9 bump (go 1.27, new xray-core pin) was in flight
+  in another session's working copy while this landed; this work was verified
+  against the committed go.mod, and the pin test in `internal/arch` holds the
+  two dates together once that bump commits.
 
 ## Adding a core today
 
