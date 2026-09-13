@@ -127,6 +127,9 @@ func initModels() error {
 	if err := migratePlanTemplateInbounds(); err != nil {
 		return err
 	}
+	if err := migratePlanNameUnique(); err != nil {
+		return err
+	}
 	if err := migrateActivityReadReferences(); err != nil {
 		return err
 	}
@@ -324,6 +327,44 @@ func migratePlanTemplateInbounds() error {
 	}
 	return addConstraintOnce("policy_inbounds", "fk_policy_inbounds_inbound",
 		`FOREIGN KEY (inbound_id) REFERENCES inbounds(id) ON DELETE CASCADE`)
+}
+
+// migratePlanNameUnique makes plan names unique per owner, case-insensitively — the rule
+// SavePlan checks; existing duplicates are suffixed first and every rename is logged.
+func migratePlanNameUnique() error {
+	if !db.Migrator().HasTable(&model.Policy{}) {
+		return nil
+	}
+	const passes = 8
+	for pass := 1; ; pass++ {
+		var dupes []struct {
+			Id   int
+			Name string
+			N    int
+		}
+		err := db.Raw(`SELECT id, name, n FROM (
+			SELECT id, name, ROW_NUMBER() OVER (
+				PARTITION BY COALESCE(owner_user_id, 0), lower(name) ORDER BY id) AS n
+			FROM policies) ranked WHERE n > 1 ORDER BY id`).Scan(&dupes).Error
+		if err != nil {
+			return err
+		}
+		if len(dupes) == 0 {
+			break
+		}
+		if pass > passes {
+			return fmt.Errorf("policies: plan names still collide after %d renames: %+v", passes, dupes)
+		}
+		for _, d := range dupes {
+			renamed := fmt.Sprintf("%s (%d)", d.Name, d.N)
+			if err := db.Exec(`UPDATE policies SET name = ? WHERE id = ?`, renamed, d.Id).Error; err != nil {
+				return err
+			}
+			log.Printf("policies: plan %d %q renamed to %q: it shared its name with an older plan of the same owner", d.Id, d.Name, renamed)
+		}
+	}
+	return db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_owner_name
+		ON policies (COALESCE(owner_user_id, 0), lower(name))`).Error
 }
 
 // AutoMigrate adds the column; this only backfills the NULLs the ALTER TABLE on
