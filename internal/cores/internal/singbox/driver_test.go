@@ -136,7 +136,7 @@ func TestPlanChangeReloadsForUsersAndRestartsForListeners(t *testing.T) {
 	users := base
 	users.Users = append(users.Users, userN(KindAnyTLS, 2))
 	if got := c.PlanChange(base, users); got != core.ActionHotApply {
-		t.Fatalf("user edit planned %s, want hot apply: a reload keeps every connection", got)
+		t.Fatalf("user edit planned %s, want hot apply: a reload keeps the process, though not its connections", got)
 	}
 	port := base
 	port.Port = 8443

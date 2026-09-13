@@ -338,6 +338,7 @@ What the panel enforces, and how:
 
 Client edits land on the daemon's next pass, **within 10 seconds**: sing-box
 has no hot user add, so an edit is a config rewrite and a reload, coalesced.
+The reload rebuilds the daemon, so every client of that inbound reconnects.
 The save tells you when that is the case. A change to the port, the address
 or the TLS pair restarts the process.
 

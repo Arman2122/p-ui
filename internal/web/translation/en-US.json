@@ -629,7 +629,7 @@
         "singboxServerNameHint": "The name clients verify the certificate against and put in their share link; empty uses the panel's address.",
         "singboxRouteThroughXray": "Route traffic through Xray",
         "singboxRouteThroughXrayHint": "This inbound's daemon sends everything it dials through Xray instead of straight out, so routing rules can name this inbound. Two consequences: Xray becomes required, and while it is down this inbound carries nothing rather than leaking out of the server's own address; and the Xray template's own rules, ad blocking and the private-address block, start applying to this traffic.",
-        "singboxAppliesLater": "Client changes on this protocol take effect within 10 seconds: sing-box applies a new user list by reloading its config.",
+        "singboxAppliesLater": "Client changes on this protocol take effect within 10 seconds: sing-box applies a new user list by reloading its config, which reconnects every client of this inbound.",
         "singboxNoSpeedLimit": "No per-client speed limit on this protocol: sing-box has no rate control and its clients share one socket, so a speed plan does not apply here.",
         "tuicCongestion": "Congestion control",
         "tuicCongestionHint": "bbr suits lossy links; cubic and new_reno are the conservative choices.",

@@ -366,6 +366,13 @@ func (s *server) handle(raw net.Conn) {
 	c := &conn{sc: sc, email: sc.Permissions.Extensions["email"], source: addrOf(sc.RemoteAddr()), opened: now, done: make(chan struct{})}
 	c.lastSeen.Store(now)
 	s.mu.Lock()
+	// stop() snapshots conns after it flips closed: a login that finished after
+	// the snapshot would be served on a stopped server, and wg.Wait never returns.
+	if s.closed.Load() {
+		s.mu.Unlock()
+		_ = sc.Close()
+		return
+	}
 	s.conns[c] = struct{}{}
 	s.mu.Unlock()
 	defer func() {
@@ -565,8 +572,10 @@ func applyLimit(pair *limiterPair, l core.RateLimit) {
 		if perSec < 1 {
 			perSec = 1
 		}
-		d.lim.SetLimit(rate.Limit(perSec))
+		// Burst first: a write between the two calls sees a finite limit with a
+		// zero burst and ends its forward on "exceeds limiter's burst".
 		d.lim.SetBurst(int(max(perSec, minBurstBytes)))
+		d.lim.SetLimit(rate.Limit(perSec))
 	}
 }
 

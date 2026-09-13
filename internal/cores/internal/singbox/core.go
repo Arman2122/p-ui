@@ -98,7 +98,8 @@ func (c *Core) Describe() core.Descriptor {
 		ID:       ID,
 		TitleKey: "cores.singbox.title",
 		Caps: core.Capabilities{
-			// A user edit is a reload, not a restart: connections survive.
+			// A user edit is a coalesced reload, not a process restart; the daemon
+			// rebuilds on it, and every connection of that inbound drops.
 			UserHotAdd:    core.Yes(),
 			PerUserStats:  core.Yes(),
 			QuotaPushdown: core.No(),
@@ -288,10 +289,17 @@ func (c *Core) applyLocked(ctx context.Context, cur *instance) error {
 	// A unit that outlived the panel runs whatever file it last loaded; if
 	// that differs from what is desired now, the start below is a reload.
 	stale := !cur.running && c.unitRunning(ctx, cur) && fileHash(cur.cfgPath) != hash
-	if err := c.writeFile(cur.cfgPath, body); err != nil {
+	staged, err := c.stageFile(cur.cfgPath, body)
+	if err != nil {
 		return fmt.Errorf("singbox: inbound %d: %w", cur.inst.ID, err)
 	}
-	if err := checkConfig(ctx, c.binaryPath(), cur.cfgPath); err != nil {
+	// Checked before it is the live file: a refused config must not be what the
+	// daemon's next restart loads while the running one keeps serving.
+	if err := checkConfig(ctx, c.binaryPath(), staged); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("singbox: inbound %d: %w", cur.inst.ID, err)
+	}
+	if err := os.Rename(staged, cur.cfgPath); err != nil {
 		return fmt.Errorf("singbox: inbound %d: %w", cur.inst.ID, err)
 	}
 	if cur.running {

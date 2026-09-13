@@ -41,10 +41,13 @@ type Core struct {
 	mu        sync.Mutex
 	hostKeys  []gossh.Signer
 	instances map[int]*instance
-	exits     map[int]*exitClient
-	counter   *core.Counter
-	epoch     string
-	starts    int
+	// failed is every desired listener that could not bind, by inbound id, so
+	// Health can say so: an absent instance reads as idle, not as a fault.
+	failed  map[int]bindFailure
+	exits   map[int]*exitClient
+	counter *core.Counter
+	epoch   string
+	starts  int
 	// active is who moved bytes in the last scrape: online for a client whose
 	// connection the panel polls between, the way every daemon core answers.
 	active map[string]struct{}
@@ -57,9 +60,14 @@ type instance struct {
 	srv         *server
 }
 
+type bindFailure struct {
+	tag string
+	err error
+}
+
 // New returns the core; nothing listens until the first Reconcile.
 func New(deps Deps) *Core {
-	return &Core{deps: deps, instances: map[int]*instance{}, exits: map[int]*exitClient{}, counter: core.NewCounter(), epoch: strconv.FormatInt(time.Now().UnixNano(), 36)}
+	return &Core{deps: deps, instances: map[int]*instance{}, failed: map[int]bindFailure{}, exits: map[int]*exitClient{}, counter: core.NewCounter(), epoch: strconv.FormatInt(time.Now().UnixNano(), 36)}
 }
 
 func (c *Core) Kinds() []core.Kind { return []core.Kind{Kind} }
@@ -147,6 +155,11 @@ func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
 			delete(c.instances, id)
 		}
 	}
+	for id := range c.failed {
+		if _, ok := want[id]; !ok {
+			delete(c.failed, id)
+		}
+	}
 	return errors.Join(failures...)
 }
 
@@ -156,6 +169,7 @@ func (c *Core) ensureLocked(d core.Instance) error {
 			cur.srv.stop()
 			delete(c.instances, d.ID)
 		}
+		delete(c.failed, d.ID)
 		return nil
 	}
 	settings, err := parseSettings(d.Settings)
@@ -175,8 +189,10 @@ func (c *Core) ensureLocked(d core.Instance) error {
 	srv.udp = c.udpDialerFor(settings)
 	userErr := srv.setUsers(d.Users)
 	if _, err := listen(listenSpec{listen: d.Listen, port: d.Port}, srv); err != nil {
+		c.failed[d.ID] = bindFailure{tag: d.Tag, err: err}
 		return fmt.Errorf("ssh: inbound %d: listen: %w", d.ID, err)
 	}
+	delete(c.failed, d.ID)
 	c.starts++
 	c.instances[d.ID] = &instance{inst: d, settings: settings, fingerprint: fp, srv: srv}
 	logger.Infof("ssh: inbound %d (%s) listening on %s:%d over %s", d.ID, d.Tag, d.Listen, d.Port, settings.Transport)
@@ -285,6 +301,7 @@ func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {
 		cur.srv.stop()
 		delete(c.instances, inst.ID)
 	}
+	delete(c.failed, inst.ID)
 	return nil
 }
 
@@ -515,14 +532,22 @@ func randomToken(n int) string {
 func (c *Core) Health(context.Context) (core.Health, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	ids := make([]int, 0, len(c.instances))
+	ids := make([]int, 0, len(c.instances)+len(c.failed))
 	for id := range c.instances {
+		ids = append(ids, id)
+	}
+	for id := range c.failed {
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
 	var h core.Health
 	for _, id := range ids {
-		cur := c.instances[id]
+		cur, ok := c.instances[id]
+		if !ok {
+			bind := c.failed[id]
+			h.Instances = append(h.Instances, core.InstanceHealth{InstanceID: id, Tag: bind.tag, State: core.HealthFailed, Detail: bind.err.Error(), PID: os.Getpid()})
+			continue
+		}
 		ih := core.InstanceHealth{InstanceID: id, Tag: cur.inst.Tag, PID: os.Getpid(), SinceUnixMilli: cur.srv.opened.UnixMilli()}
 		if cur.srv.listening() {
 			ih.State, ih.Ready = core.HealthRunning, true

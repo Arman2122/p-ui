@@ -76,15 +76,24 @@ func (c *Core) chgrp(path string) error {
 // writeFile lands content atomically at 0640 for the daemon group: a config
 // carries every client's password and the API secret.
 func (c *Core) writeFile(path string, body []byte) error {
+	staged, err := c.stageFile(path, body)
+	if err != nil {
+		return err
+	}
+	return os.Rename(staged, path)
+}
+
+// stageFile writes body beside path, for a check to read before it is committed.
+func (c *Core) stageFile(path string, body []byte) (string, error) {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, body, 0o640); err != nil {
-		return err
+		return "", err
 	}
 	if err := c.chgrp(tmp); err != nil {
 		_ = os.Remove(tmp)
-		return err
+		return "", err
 	}
-	return os.Rename(tmp, path)
+	return tmp, nil
 }
 
 /*

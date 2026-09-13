@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,7 +35,11 @@ daemon user, which the operator's originals usually are not.
 func renderConfig(inst core.Instance, settings Settings, ctl control, certFile, keyFile string) ([]byte, error) {
 	users := make([]map[string]any, 0, len(inst.Users))
 	names := make([]string, 0, len(inst.Users))
-	for _, u := range inst.Users {
+	// By email, so a hot add (which appends) and the next pass (which reads the
+	// row's order) render the same bytes and cost one reload, not two.
+	ordered := slices.Clone(inst.Users)
+	slices.SortFunc(ordered, func(a, b core.User) int { return strings.Compare(a.Email, b.Email) })
+	for _, u := range ordered {
 		if !u.Enable {
 			continue
 		}

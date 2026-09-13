@@ -96,7 +96,8 @@ func newE2ECore(t *testing.T, daemon, ctl string) *Core {
 
 func mintedSettings(t *testing.T, c *Core, subnet string) string {
 	t.Helper()
-	out, err := c.MintInstance(Kind, `{"subnet":"`+subnet+`"}`, "")
+	// Everything through the tunnel: the origin sits outside the pool.
+	out, err := c.MintInstance(Kind, `{"subnet":"`+subnet+`","redirectGateway":true}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}

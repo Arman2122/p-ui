@@ -159,10 +159,12 @@ type exitClient struct {
 }
 
 const (
-	exitDialTimeout = 10 * time.Second
-	exitKeepalive   = 30 * time.Second
-	exitBackoffMax  = 30 * time.Second
+	exitKeepalive  = 30 * time.Second
+	exitBackoffMax = 30 * time.Second
 )
+
+// exitDialTimeout bounds the dial and the handshake; a test shortens it.
+var exitDialTimeout = 10 * time.Second
 
 func startExit(id int, settings ExitSettings, dial Dialer) (*exitClient, error) {
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(core.ExitSocksPortFor(id))))
@@ -273,11 +275,15 @@ func (ex *exitClient) connect() (*gossh.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	// ClientConfig.Timeout covers the connect alone; a peer that accepts and
+	// never speaks would otherwise hold maintain() for good.
+	_ = raw.SetDeadline(time.Now().Add(exitDialTimeout))
 	sc, chans, reqs, err := gossh.NewClientConn(raw, addr, cfg)
 	if err != nil {
 		_ = raw.Close()
 		return nil, err
 	}
+	_ = raw.SetDeadline(time.Time{})
 	return gossh.NewClient(sc, chans, reqs), nil
 }
 
