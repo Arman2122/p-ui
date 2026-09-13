@@ -45,6 +45,20 @@ type CoreStatusView struct {
 	// since start) and TrafficError why the last poll failed, if it did.
 	TrafficSeenAt int64  `json:"trafficSeenAt,omitempty" example:"1725000000000"`
 	TrafficError  string `json:"trafficError,omitempty" example:"mtproto: stats unreadable for mtp-1"`
+	// HostRuntime observes matching daemon processes without adopting them.
+	HostRuntime *CoreHostRuntimeView `json:"hostRuntime,omitempty"`
+}
+
+type CoreHostProcessView struct {
+	PID        int    `json:"pid" example:"2046530"`
+	Executable string `json:"executable" example:"/usr/sbin/openvpn"`
+	State      string `json:"state" example:"running"`
+}
+
+type CoreHostRuntimeView struct {
+	State     string                `json:"state" example:"running"`
+	Processes []CoreHostProcessView `json:"processes"`
+	Error     string                `json:"error,omitempty"`
 }
 
 // InstanceStatusView is one daemon of a per-inbound core.
@@ -60,7 +74,7 @@ type InstanceStatusView struct {
 }
 
 // VersionStatusView is what is installed and whether the panel may change it.
-// Reported is false for a core that names no version at all (SSH is the panel).
+// Reported is false for a core that names no version at all.
 type VersionStatusView struct {
 	Installed  string `json:"installed,omitempty" example:"1.2.4"`
 	Reported   bool   `json:"reported" example:"true"`
@@ -96,6 +110,10 @@ func coreStatusViews(ctx context.Context, reg *core.Registry) []CoreStatusView {
 		}(i, bound)
 	}
 	wg.Wait()
+	hosts := observeCoreHostRuntimes(ctx)
+	for i := range views {
+		views[i].HostRuntime = hosts[views[i].ID]
+	}
 	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })
 	return views
 }

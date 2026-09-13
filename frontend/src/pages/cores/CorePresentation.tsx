@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router';
 import type { CoreStatusView, CoreView } from '@/generated/zod';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Field, Kicker, PanelCard, StatusChip } from '@/components/ui/panel';
-import { coreColor, coreIcon, coreMaintenanceKey, coreRestarts, coreStateTone, coreVersionLabel } from '@/lib/cores/display';
+import { coreCanReadLogs, coreCanRestart, coreColor, coreHasManagedRuntime, coreIcon, coreMaintenanceKey, coreRestarts, coreStateTone, coreVersionContextKey, coreVersionLabel } from '@/lib/cores/display';
+import { coreRuntime } from '@/lib/cores/status';
 import { SizeFormatter, TimeFormatter } from '@/utils';
 import { coreUptime, type CoreMetrics } from './useCoreInventory';
 import LiveTrafficTrend from '@/components/viz/LiveTrafficTrend';
@@ -17,7 +18,9 @@ export function CoreStatus({ core }: { core: CoreStatusView }) {
   const { t } = useTranslation();
   const tone = coreStateTone(core);
   const colors = { success: 'var(--p-success)', warning: 'var(--p-warning)', error: 'var(--p-error)', default: '#8b8d94' };
-  return <Tooltip title={core.unavailable || core.healthError || core.detail}><span><StatusChip status={{ key: core.state, label: t(tone.labelKey), color: colors[tone.tone] }} /></span></Tooltip>;
+  const runtime = coreRuntime(core);
+  return <Tooltip title={<>{t(runtime.descriptionKey)}{[core.unavailable, core.healthError, core.detail, core.hostRuntime?.error].filter(Boolean).map((text, i) => <div key={i}>{text}</div>)}</>}>
+    <span><StatusChip status={{ key: runtime.state, label: t(tone.labelKey), color: colors[tone.tone] }} /></span></Tooltip>;
 }
 
 export function CoreTrafficSlot({ height = 26, color, series }: { height?: number; color?: string; series?: LiveTrafficSeries }) {
@@ -35,15 +38,15 @@ function CoreActions({ core, restarting, onRestart, onOpen, card = false }: Core
   const navigate = useNavigate();
   const openConfig = () => navigate(`/xray?core=${encodeURIComponent(core.id)}`);
   const action = (icon: IconName, title: string, onClick: () => void, disabled = false, loading = false) =>
-    <Tooltip title={disabled ? core.unavailable || title : title}><Button type={card ? 'default' : 'text'} size="small" aria-label={title} disabled={disabled} loading={loading}
+    <Tooltip title={disabled ? !coreHasManagedRuntime(core) ? t('coreRuntime.noManagedActions') : core.unavailable || title : title}><Button type={card ? 'default' : 'text'} size="small" aria-label={title} disabled={disabled} loading={loading}
       icon={<Icon name={icon} size={15} />} onClick={onClick}>{card ? title : null}</Button></Tooltip>;
   return <div className={card ? 'core-card-actions' : 'p-acts core-row-actions'} role="group" aria-label={t('pages.cores.columns.actions')}>
-    {action('restart', t('pages.cores.restart'), onRestart, !core.available, restarting)}
-    {action('logs', t('pages.cores.logs'), () => onOpen('logging'), !core.logs)}
+    {action('restart', t('pages.cores.restart'), onRestart, !coreCanRestart(core), restarting)}
+    {action('logs', t('pages.cores.logs'), () => onOpen('logging'), !coreCanReadLogs(core))}
     {!card && action('config', t('pages.cores.fidelity.config'), openConfig)}
     <Tooltip title={t('pages.cores.fidelity.more')}><Dropdown trigger={['click']} menu={{ items: [
       { key: 'status', label: t('pages.cores.columns.state'), icon: <Icon name="gauge" size={14} /> },
-      { key: 'logging', label: t('pages.cores.logs'), icon: <Icon name="logs" size={14} />, disabled: !core.logs },
+      { key: 'logging', label: t('pages.cores.logs'), icon: <Icon name="logs" size={14} />, disabled: !coreCanReadLogs(core) },
       { key: 'config', label: t('pages.cores.fidelity.config'), icon: <Icon name="config" size={14} /> },
       { key: 'runtime', label: t('pages.cores.runtime'), icon: <Icon name="gauge" size={14} /> },
       { key: 'inbounds', label: t('menu.inbounds'), icon: <Icon name="inbounds" size={14} /> },
@@ -64,7 +67,7 @@ export function CoreRow(props: CorePresentationProps) {
     <div className="p-corerow-id">
       <div className="core-row-title"><button className="p-text-action p-name" type="button" onClick={() => onOpen('status')}>{t(core.titleKey)}</button><CoreStatus core={core} />
         {update && <Tag color="orange">{update}</Tag>}</div>
-      <div className="p-sub core-version">{core.id} · <Tooltip title={<>{t(coreMaintenanceKey(core))}{core.version.error && <div>{core.version.error}</div>}</>}><span className="p-mono">{version.text ?? t(version.key!)}</span></Tooltip>
+      <div className="p-sub core-version">{core.id} · <Tooltip title={<>{version.text ?? t(version.key!)}<div>{t(coreVersionContextKey(core))}</div><div>{t(coreMaintenanceKey(core))}</div>{core.version.error && <div>{core.version.error}</div>}</>}><span className="p-mono">{version.text ?? t(version.key!)}</span></Tooltip>
         {uptime !== undefined && <> · {t('pages.cores.fidelity.upFor', { duration: TimeFormatter.formatSecond(uptime) })}</>}</div>
       {(core.unavailable || core.healthError) && <Tooltip title={core.unavailable || core.healthError}><div className="p-sub core-unavailable">{core.unavailable || core.healthError}</div></Tooltip>}
     </div>
@@ -86,7 +89,7 @@ export function CoreCard(props: CorePresentationProps) {
   return <article data-core-id={core.id}><PanelCard pad={0} className="core-card" icon={coreIcon(core.id)}
     title={<button type="button" className="p-text-action" onClick={() => onOpen('status')}>{t(core.titleKey)}</button>}
     extra={<>{update && <Tag color="orange">{update}</Tag>}<CoreStatus core={core} /></>}>
-    <div className="core-card-version"><div><Tooltip title={t(coreMaintenanceKey(core))}><span className="p-mono">{version.text ?? t(version.key!)}</span></Tooltip><div className="p-sub">{core.id}</div></div>
+    <div className="core-card-version"><div><Tooltip title={`${version.text ?? t(version.key!)} · ${t(coreVersionContextKey(core))} ${t(coreMaintenanceKey(core))}`}><span className="p-mono">{version.text ?? t(version.key!)}</span></Tooltip><div className="p-sub">{core.id}</div></div>
       <Field label={t('pages.cores.fidelity.uptime')} value={uptime === undefined ? '—' : TimeFormatter.formatSecond(uptime)} align="end" /></div>
     {core.unavailable && <div className="p-sub core-card-reason">{core.unavailable}</div>}
     <CoreTrafficSlot height={50} series={props.series} color={coreColor(core.id)} />

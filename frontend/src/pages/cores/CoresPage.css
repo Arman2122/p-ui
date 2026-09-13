@@ -25,7 +25,7 @@
 .core-card { overflow: hidden; height: 100%; }
 .core-card-version { padding: 13px 14px; display: flex; justify-content: space-between; gap: 12px; }
 .core-card-version > div { min-width: 0; }
-.core-card-version .p-mono { color: var(--p-text); font-size: 12.5px; }
+.core-card-version .p-mono { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--p-text); font-size: 12.5px; }
 .core-card-reason { padding: 0 14px 10px; }
 .core-card-stats, .core-card-runtime { display: grid; border-top: 1px solid var(--p-border); }
 .core-card-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -40,6 +40,8 @@
 .core-card-actions { display: flex; gap: 6px; padding: 12px; border-top: 1px solid var(--p-border); flex-wrap: wrap; }
 .core-card-actions > .ant-dropdown-trigger { margin-inline-start: auto; }
 .core-detail-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.core-detail-modal .ant-tabs > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--p-text); font-weight: 600; }
+.core-detail-modal .ant-typography-secondary { color: var(--p-text-2); }
 .core-detail-modal .core-detail-band { display: grid; grid-template-columns: repeat(auto-fit,minmax(96px,1fr)); margin-block: 12px; }
 .core-detail-modal .core-detail-band > div { padding: 11px 13px; }
 .core-detail-modal .core-detail-band > div + div { border-inline-start: 1px solid var(--p-border); }

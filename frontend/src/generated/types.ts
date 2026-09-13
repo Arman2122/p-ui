@@ -593,10 +593,23 @@ export interface CoreConfigView {
   titleKey: string;
 }
 
+export interface CoreHostProcessView {
+  executable: string;
+  pid: number;
+  state: string;
+}
+
+export interface CoreHostRuntimeView {
+  error?: string;
+  processes: CoreHostProcessView[];
+  state: string;
+}
+
 export interface CoreStatusView {
   available: boolean;
   detail?: string;
   healthError?: string;
+  hostRuntime?: CoreHostRuntimeView | null;
   id: string;
   instances: InstanceStatusView[];
   logs: boolean;

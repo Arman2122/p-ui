@@ -62,14 +62,14 @@ export function useCoreInventory() {
 }
 
 export function coreUptime(core: CoreStatusView, now = Date.now()): number | undefined {
-  if (!core.available || core.state !== 'running' || !core.ready) return undefined;
-  const starts = core.instances.filter((row) => row.state === 'running' && row.ready && row.since).map((row) => row.since!);
+  if (core.state !== 'running' && core.state !== 'degraded') return undefined;
+  const starts = core.instances.filter((row) => row.state === 'running' && row.since).map((row) => row.since!);
   const since = core.since || (starts.length ? Math.min(...starts) : undefined);
   return since ? Math.max(0, Math.floor((now - since) / 1000)) : undefined;
 }
 
 export function newerCoreVersion(core: CoreStatusView, view: CoreVersionsView | undefined): string | null | undefined {
-  if (!core.version.manageable) return null;
+  if (!core.version.manageable || isBuiltinCore(core)) return null;
   if (!view || view.error || !view.manageable) return undefined;
   const parts = (version: string) => /^v?\d+\.\d+\.\d+$/.test(version) ? version.replace(/^v/, '').split('.').map(Number) : undefined;
   const installed = parts(view.installed || core.version.installed || '');

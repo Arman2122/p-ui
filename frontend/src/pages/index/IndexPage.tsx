@@ -223,7 +223,7 @@ export default function IndexPage() {
                     icon="xray"
                     pad={12}
                     className="ov-cores-panel"
-                    extra={<Space size={8}><span className="p-sub">{t('pages.index.coresRunning', { running: coreSummary.healthy, total: coreSummary.total })}</span>
+                    extra={<Space size={8}><span className="p-sub">{t('pages.index.coresRunning', { running: coreSummary.running, total: coreSummary.total })}</span>
                       <Button type="text" size="small" onClick={goToCores}>{t('menu.manageCores')}</Button></Space>}
                   >
                     <DashboardCores cores={cores} onOpen={goToCores} />

@@ -2559,6 +2559,50 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "CoreHostProcessView": {
+    "properties": {
+      "executable": {
+        "example": "/usr/sbin/openvpn",
+        "type": "string"
+      },
+      "pid": {
+        "example": 2046530,
+        "type": "integer"
+      },
+      "state": {
+        "example": "running",
+        "type": "string"
+      }
+    },
+    "required": [
+      "executable",
+      "pid",
+      "state"
+    ],
+    "type": "object"
+  },
+  "CoreHostRuntimeView": {
+    "properties": {
+      "error": {
+        "type": "string"
+      },
+      "processes": {
+        "items": {
+          "$ref": "#/components/schemas/CoreHostProcessView"
+        },
+        "type": "array"
+      },
+      "state": {
+        "example": "running",
+        "type": "string"
+      }
+    },
+    "required": [
+      "processes",
+      "state"
+    ],
+    "type": "object"
+  },
   "CoreStatusView": {
     "description": "/*\nCoreStatusView is one core as the Cores page shows it: what runs, whether it\nanswers, and which build is installed. Polled — unlike CoreView, which the\nfrontend fetches once because it changes only with the binary.\n\nState and Ready are core.Health.Overall's, so the page, the event pass and the\nconformance suite agree on what degraded means; a core that reports no health\nsays \"unknown\" rather than guessing.\n*/",
     "properties": {
@@ -2574,6 +2618,15 @@ export const SCHEMAS: Record<string, unknown> = {
       "healthError": {
         "example": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
         "type": "string"
+      },
+      "hostRuntime": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CoreHostRuntimeView"
+          }
+        ],
+        "description": "HostRuntime observes matching daemon processes without adopting them.",
+        "nullable": true
       },
       "id": {
         "example": "openvpn",
@@ -6375,7 +6428,7 @@ export const SCHEMAS: Record<string, unknown> = {
     "type": "object"
   },
   "VersionStatusView": {
-    "description": "VersionStatusView is what is installed and whether the panel may change it.\nReported is false for a core that names no version at all (SSH is the panel).",
+    "description": "VersionStatusView is what is installed and whether the panel may change it.\nReported is false for a core that names no version at all.",
     "properties": {
       "error": {
         "example": "core: daemon not installed",

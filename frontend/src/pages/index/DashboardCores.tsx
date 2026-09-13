@@ -4,8 +4,8 @@ import type { CoreStatusView } from '@/generated/zod';
 
 import { Icon } from '@/components/ui/Icon';
 import { StatusDot } from '@/components/ui/panel';
-import { summarizeCores } from '@/lib/cores/status';
-import { coreIcon, coreColor, coreStateTone, coreVersionLabel, orderCores } from '@/lib/cores/display';
+import { coreRuntime, summarizeCores } from '@/lib/cores/status';
+import { coreIcon, coreColor, coreStateTone, coreVersionContextKey, coreVersionLabel, orderCores } from '@/lib/cores/display';
 import { TimeFormatter } from '@/utils';
 
 const TONE_COLOR: Record<string, string> = {
@@ -34,13 +34,13 @@ function uptimeOf(core: CoreStatusView): string {
 export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; onOpen: () => void }) {
   const { t } = useTranslation();
   const summary = summarizeCores(cores);
-  const stopped = cores.filter((c) => !c.available || c.state !== 'running' || !c.ready);
+  const stopped = cores.filter((c) => !coreRuntime(c).healthy);
   return (
     <div className="p-vitals-core">
       <div className="ov-core-summary-heading">
         <div style={{ minWidth: 0 }}>
           <div className="ov-core-summary-count">
-            {t('pages.index.coresRunning', { running: summary.healthy, total: summary.total })}
+            {t('pages.index.coresRunning', { running: summary.running, total: summary.total })}
           </div>
           <div className="p-sub ov-core-summary-state" title={stopped.map((c) => `${t(c.titleKey)} · ${t(coreStateTone(c).labelKey)}`).join(' · ')}>
             {stopped.length
@@ -54,7 +54,7 @@ export function CoreSummaryStrip({ cores, onOpen }: { cores: CoreStatusView[]; o
         {orderCores(cores).map((c) => {
           const tone = coreStateTone(c);
           return (
-            <Tooltip key={c.id} title={`${t(c.titleKey)} · ${t(tone.labelKey)}`}>
+            <Tooltip key={c.id} title={`${t(c.titleKey)} · ${t(tone.labelKey)} · ${t(coreRuntime(c).descriptionKey)}`}>
               <button type="button" className="p-corechip" onClick={onOpen}>
                 <StatusDot color={TONE_COLOR[tone.tone]} pulse={tone.tone === 'success'} />
                 {t(c.titleKey)}
@@ -73,9 +73,10 @@ export default function DashboardCores({ cores, onOpen }: { cores: CoreStatusVie
     <div className="p-coregrid">
       {orderCores(cores).map((c) => {
         const tone = coreStateTone(c);
-        const uptime = c.available && c.state === 'running' && c.ready ? uptimeOf(c) : '';
+        const runtime = coreRuntime(c);
+        const uptime = runtime.source === 'managed' && c.state === 'running' ? uptimeOf(c) : '';
         return (
-          <button type="button" key={c.id} className="p-coretile" onClick={onOpen}>
+          <button type="button" key={c.id} className="p-coretile" onClick={onOpen} title={`${t(runtime.descriptionKey)}${c.hostRuntime?.error ? ` · ${c.hostRuntime.error}` : ''}`}>
             <span className="p-coretile-h">
               <span
                 className="p-alert-i"
@@ -87,7 +88,7 @@ export default function DashboardCores({ cores, onOpen }: { cores: CoreStatusVie
               <StatusDot color={TONE_COLOR[tone.tone]} pulse={tone.tone === 'success'} />
             </span>
             <span className="p-coretile-m">
-              <span className="p-mono">{coreVersionLabel(c).text ?? t(coreVersionLabel(c).key!)}</span>
+              <span className="p-mono" title={`${coreVersionLabel(c).text ?? t(coreVersionLabel(c).key!)} · ${t(coreVersionContextKey(c))}`}>{coreVersionLabel(c).text ?? t(coreVersionLabel(c).key!)}</span>
               <span>{uptime || t(tone.labelKey)}</span>
             </span>
           </button>

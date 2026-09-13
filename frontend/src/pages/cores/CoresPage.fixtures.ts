@@ -15,6 +15,21 @@ export function corePageFixtures(now = Date.now()): CoreStatusView[] {
   ];
 }
 
+export const SSH_BUILD_FIXTURE = 'Penhoon SSH v1.5.3-20260913-2af4639 (golang.org/x/crypto v0.43.0)';
+export function coreHostRuntimeFixtures(): CoreStatusView[] {
+  const counts: Record<string, number> = { mtproto: 2, ocserv: 3, openvpn: 6 };
+  return corePageFixtures().map((core) => {
+    if (core.id === 'ssh') return { ...core, version: { reported: true, manageable: false, installed: SSH_BUILD_FIXTURE } };
+    if (core.id === 'singbox') return { ...core, state: 'idle', ready: false, instances: [], hostRuntime: { state: 'stopped', processes: [] } };
+    if (core.id === 'awgkernel') return { ...core, state: 'running', ready: true, instances: [{ instanceId: 18, tag: 'awg-managed', state: 'running', ready: true }] };
+    const count = counts[core.id];
+    if (!count) return core;
+    return { ...core, state: 'idle', ready: false, instances: [], hostRuntime: { state: 'running', processes: Array.from({ length: count }, (_, i) => ({
+      pid: 8000 + i, executable: `/srv/standalone/${core.id === 'mtproto' ? 'mtg-proxy' : core.id}`, state: 'running',
+    })) } };
+  });
+}
+
 export function coreDescriptorFixtures(): CoreView[] {
   const kinds: Record<string, string[]> = { xray: ['vless', 'vmess', 'trojan'], singbox: ['anytls', 'tuic'], wgkernel: ['wgkernel'], awgkernel: ['awgkernel'], ssh: ['ssh'], mtproto: ['mtproto'], openvpn: ['openvpn'], ocserv: ['ocserv'] };
   const caps = CapabilitiesSchema.parse(Object.fromEntries(Object.keys(CapabilitiesSchema.shape).map((key) => [key, false])));

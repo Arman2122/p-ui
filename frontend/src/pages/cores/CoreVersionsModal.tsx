@@ -6,7 +6,7 @@ import { HttpUtil } from '@/utils';
 import { CoreVersionsViewSchema } from '@/generated/zod';
 import type { CoreStatusView, CoreVersionsView } from '@/generated/zod';
 import { sameVersion } from '@/lib/cores/status';
-import { coreMaintenanceKey, coreVersionLabel } from '@/lib/cores/display';
+import { coreMaintenanceKey, coreVersionContextKey, coreVersionLabel, isBuiltinCore } from '@/lib/cores/display';
 
 interface CoreVersionsModalProps {
   core: CoreStatusView | null;
@@ -24,7 +24,7 @@ export function CoreVersionsPanel({ core, onInstalled }: { core: CoreStatusView;
   const [installing, setInstalling] = useState('');
   const [error, setError] = useState('');
   const coreId = core.id;
-  const manageable = core.version.manageable;
+  const manageable = core.version.manageable && !isBuiltinCore(core);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -47,7 +47,7 @@ export function CoreVersionsPanel({ core, onInstalled }: { core: CoreStatusView;
   }, [coreId, manageable, load]);
 
   const install = useCallback((version: string) => {
-    if (!core.version.manageable) return;
+    if (!manageable) return;
     const name = t(core.titleKey);
     modal.confirm({
       title: t('pages.cores.installConfirm', { core: name, version }),
@@ -67,7 +67,7 @@ export function CoreVersionsPanel({ core, onInstalled }: { core: CoreStatusView;
         }
       },
     });
-  }, [core, modal, t, onInstalled, load]);
+  }, [core, manageable, modal, t, onInstalled, load]);
 
   return (
     <>
@@ -75,21 +75,22 @@ export function CoreVersionsPanel({ core, onInstalled }: { core: CoreStatusView;
       <Spin spinning={loading || !!installing} tip={installing ? t('pages.index.dontRefresh') : undefined}>
         {error && <Alert type="error" showIcon title={t(error)} />}
         {view?.error && <Alert type="warning" showIcon className="mb-12" title={view.error} />}
-        <Typography.Paragraph type="secondary">
+        <Typography.Paragraph type="secondary" style={{ overflowWrap: 'anywhere' }}>
           {t('pages.cores.installedVersion', { version: view?.installed || coreVersionLabel(core).text || t(coreVersionLabel(core).key!) })}
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary">{t(coreMaintenanceKey(core))}</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">{t(coreVersionContextKey(core))}</Typography.Paragraph>
         {core.version.error && <Alert type="warning" showIcon title={core.version.error} />}
         {view && !view.manageable && <Alert type="info" showIcon title={t('pages.cores.reportOnly')} />}
-        {core.version.manageable && <Button onClick={() => void load(core.id)} loading={loading}>{t('refresh')}</Button>}
+        {manageable && <Button onClick={() => void load(core.id)} loading={loading}>{t('refresh')}</Button>}
         {view?.manageable && !loading && !view.available.length && <Alert type="info" showIcon title={t('pages.cores.noVersions')} />}
         <div className="core-version-list">
-          {(view?.available ?? []).map((version) => (
+          {(manageable ? view?.available ?? [] : []).map((version) => (
             <div key={version} className="core-version-item">
               <Tag color={sameVersion(view?.installed, version) ? 'green' : 'purple'}>{version}</Tag>
               <Radio
                 checked={sameVersion(view?.installed, version)}
-                disabled={!view?.manageable || !!installing}
+                disabled={!manageable || !view?.manageable || !!installing}
                 aria-label={t('pages.cores.installConfirm', { core: core ? t(core.titleKey) : '', version })}
                 onClick={() => install(version)}
               />

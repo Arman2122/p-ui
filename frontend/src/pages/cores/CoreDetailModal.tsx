@@ -10,7 +10,8 @@ import { CoreStateBadge } from '@/components/cores/CoreStateBadge';
 import { Icon } from '@/components/ui/Icon';
 import { Field, Kicker, PanelCard } from '@/components/ui/panel';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { coreColor, coreIcon, coreInstanceLabel, coreMaintenanceKey, coreRestarts, coreVersionLabel, isBuiltinCore, isKernelCore } from '@/lib/cores/display';
+import { coreCanReadLogs, coreCanRestart, coreColor, coreHasManagedRuntime, coreHostProcesses, coreIcon, coreInstanceLabel, coreMaintenanceKey, coreRestarts, coreVersionContextKey, coreVersionLabel, isBuiltinCore, isKernelCore } from '@/lib/cores/display';
+import { coreRuntime } from '@/lib/cores/status';
 import { CoreLogsPanel } from './CoreLogsDrawer';
 import { CoreVersionsPanel } from './CoreVersionsModal';
 import { CoreStatus, CoreTrafficSlot, coreBytes, type CoreTab } from './CorePresentation';
@@ -48,6 +49,14 @@ export default function CoreDetailModal({ core, onClose, onRestart, restarting, 
   const kernel = isKernelCore(core.id);
   const builtin = isBuiltinCore(core);
   const uptime = coreUptime(core);
+  const actual = coreRuntime(core);
+  const hostProcesses = coreHostProcesses(core);
+  const hostColumns: ColumnsType<(typeof hostProcesses)[number]> = [
+    { title: t('pages.cores.processId'), dataIndex: 'pid', width: 85 },
+    { title: t('coreRuntime.executable'), dataIndex: 'executable', render: (path: string) => <code style={{ overflowWrap: 'anywhere' }}>{path}</code> },
+    { title: t('coreRuntime.processState'), dataIndex: 'state', width: 100, render: (state: string) => t(state === 'running' ? 'pages.cores.state.running' : state === 'stopped' ? 'pages.cores.state.stopped' : 'pages.cores.state.unknown') },
+    { title: t('coreRuntime.control'), dataIndex: 'managed', render: (managed: boolean) => t(managed ? 'coreRuntime.managedProcess' : 'coreRuntime.otherProcess') },
+  ];
   const columns: ColumnsType<InstanceStatusView> = [
     { title: t(coreInstanceLabel(core)), dataIndex: 'tag', render: (tag: string, row) => <span>{tag || `#${row.instanceId}`}{tag && <span className="core-id"> #{row.instanceId}</span>}</span> },
     { title: t('pages.cores.columns.state'), render: (_, row) => <CoreStateBadge state={row.state} ready={row.ready} detail={row.detail} /> },
@@ -57,6 +66,7 @@ export default function CoreDetailModal({ core, onClose, onRestart, restarting, 
     { title: t('pages.cores.columns.detail'), dataIndex: 'detail', render: (detail?: string) => detail || '—' },
   ];
   const status = <>
+    <Alert type={actual.healthy ? 'success' : actual.source === 'host' ? 'warning' : 'info'} title={t(actual.descriptionKey)} showIcon />
     <div className="p-card core-detail-band">
       <Field label={t('pages.cores.columns.state')} value={<CoreStatus core={core} />} />
       <Field label={t('pages.cores.fidelity.uptime')} value={uptime === undefined ? '—' : TimeFormatter.formatSecond(uptime)} />
@@ -71,29 +81,40 @@ export default function CoreDetailModal({ core, onClose, onRestart, restarting, 
     </div>
     {[...new Set([core.unavailable, core.healthError, core.detail, core.trafficError].filter(Boolean))].map((detail) => <Alert key={detail} type={core.available ? 'warning' : 'info'} title={detail} showIcon />)}
     <Space wrap>
-      <Button disabled={!core.available} loading={restarting} onClick={onRestart}>{t('pages.cores.restart')}</Button>
+      <Button disabled={!coreCanRestart(core)} loading={restarting} onClick={onRestart}>{t('pages.cores.restart')}</Button>
       <Button onClick={() => navigate(`/xray?core=${encodeURIComponent(core.id)}`)}>{t('menu.xray')}</Button>
     </Space>
   </>;
   const runtime = <>
+    <Alert type={actual.source === 'host' ? 'warning' : 'info'} title={t(actual.descriptionKey)} showIcon />
     <p className="p-sub">{t(builtin ? 'pages.cores.builtInMaintenance' : kernel ? 'pages.cores.kernelRuntime' : 'pages.cores.processRuntime')}</p>
     <div className="core-detail-fields">
       {!kernel && <Field label={t(builtin ? 'pages.cores.panelProcessId' : 'pages.cores.processId')} value={core.pid || '—'} />}
       <Field label={t(coreInstanceLabel(core))} value={core.instances.length} />
       <Field label={t('pages.cores.columns.traffic')} value={core.trafficSeenAt ? when(core.trafficSeenAt) : t('pages.cores.trafficNever')} />
       <Field label={t('pages.cores.maintenance')} value={t(coreMaintenanceKey(core))} />
+      <Field label={t('coreRuntime.panelAvailability')} value={t(core.available ? 'coreRuntime.available' : 'coreRuntime.unavailable')} />
     </div>
     {core.instances.length ? <Table<InstanceStatusView> rowKey="instanceId" size="small" columns={columns} dataSource={core.instances} pagination={false} scroll={{ x: kernel ? 450 : 650 }} />
       : <Alert type="info" title={t('pages.cores.noInstanceRecords')} />}
+    {core.hostRuntime && !builtin && <>
+      <Kicker>{t('coreRuntime.hostProcesses')}</Kicker>
+      <p className="p-sub">{t('coreRuntime.hostProcessScope')}</p>
+      {core.hostRuntime.error && <Alert type="warning" showIcon title={t('coreRuntime.hostProbeFailed')} description={core.hostRuntime.error} />}
+      {hostProcesses.length ? <Table rowKey="pid" size="small" columns={hostColumns} dataSource={hostProcesses} pagination={false} scroll={{ x: 600 }} />
+        : <Alert type="info" title={t('coreRuntime.noHostProcesses')} />}
+      <p className="p-sub">{t(coreVersionContextKey(core))}</p>
+    </>}
+    {!coreHasManagedRuntime(core) && <Alert type="info" title={t('coreRuntime.noManagedActions')} showIcon />}
     <Button onClick={() => navigate(`/xray?core=${encodeURIComponent(core.id)}`)}>{t('menu.xray')}</Button>
   </>;
   return <Modal open title={<Space wrap><span className="p-alert-i" style={{ color: coreColor(core.id), background: `color-mix(in srgb, ${coreColor(core.id)} 15%, transparent)` }}><Icon name={coreIcon(core.id)} /></span>{t(core.titleKey)}</Space>}
     className="core-detail-modal" width={820} footer={<Button onClick={onClose}>{t('close')}</Button>} onCancel={onClose}>
-    <div className="core-detail-heading"><CoreStatus core={core} /><span className="p-mono">{version.text ?? t(version.key!)}</span></div>
-    <Tabs activeKey={tab} onChange={setTab} tabPosition={isMobile ? 'top' : 'left'} destroyOnHidden items={[
+    <div className="core-detail-heading"><CoreStatus core={core} /><span className="p-mono" title={t(coreVersionContextKey(core))} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{version.text ?? t(version.key!)}</span></div>
+    <Tabs activeKey={tab} onChange={setTab} tabPlacement={isMobile ? 'top' : 'start'} tabBarGutter={isMobile ? 8 : undefined} destroyOnHidden items={[
       { key: 'status', label: t('pages.cores.columns.state'), children: status },
       { key: 'runtime', label: t('pages.cores.runtime'), children: runtime },
-      { key: 'logging', label: t('pages.cores.logging'), children: core.logs ? <CoreLogsPanel core={core} /> : <Alert type="info" title={t('pages.cores.logsUnavailable')} /> },
+      { key: 'logging', label: t('pages.cores.logging'), children: coreCanReadLogs(core) ? <CoreLogsPanel core={core} /> : <Alert type="info" title={t(coreHasManagedRuntime(core) ? 'pages.cores.logsUnavailable' : 'coreRuntime.noManagedActions')} /> },
       { key: 'inbounds', label: t('menu.inbounds'), children: <CoreInbounds core={core} /> },
       { key: 'version', label: t('pages.cores.columns.version'), children: <CoreVersionsPanel core={core} onInstalled={onInstalled} /> },
     ]} />

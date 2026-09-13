@@ -47,7 +47,8 @@ describe('Cores page metadata', () => {
     expect(within(xray).queryByText(i18next.t('pages.cores.columns.instances'))).toBeNull();
     expect(within(kernel).queryByText(i18next.t('pages.cores.interfaces'))).toBeNull();
     expect(within(kernel).getByText('1')).toBeTruthy();
-    expect(within(unavailable).getByText(i18next.t('pages.cores.unavailable'))).toBeTruthy();
+    expect(within(unavailable).getByText(i18next.t('pages.cores.state.stopped'))).toBeTruthy();
+    expect(within(unavailable).getByText(/mtg-proxy 1.0.1 is installed/)).toBeTruthy();
     expect(within(unavailable).queryByText(i18next.t('pages.cores.state.idle'))).toBeNull();
     expect((within(unavailable).getByRole('button', { name: i18next.t('pages.cores.restart') }) as HTMLButtonElement).disabled).toBe(true);
     expect(within(unavailable).getByRole('button', { name: i18next.t('pages.cores.fidelity.more') })).toBeTruthy();
@@ -144,14 +145,14 @@ describe('Cores page metadata', () => {
     expect(get.mock.calls.filter(([url]) => url.endsWith('/versions')).map(([url]) => url).sort()).toEqual(['/panel/api/cores/mtproto/versions', '/panel/api/cores/singbox/versions', '/panel/api/cores/xray/versions']);
   });
 
-  it('restarts available cores only after confirmation and reports partial failures', async () => {
+  it('restarts available managed runtimes only after confirmation and reports partial failures', async () => {
     const post = vi.spyOn(HttpUtil, 'post').mockImplementation(async function<T>(url: string) { return new Msg<T>(!url.includes('ssh'), url.includes('ssh') ? 'Listener busy' : ''); });
     renderCores();
     fireEvent.click(screen.getByRole('button', { name: i18next.t('pages.cores.fidelity.restartAll') }));
     expect(post).not.toHaveBeenCalled();
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: i18next.t('pages.cores.fidelity.restartAll') }));
     await screen.findByText('SSH: Listener busy');
-    expect(post.mock.calls.map(([url]) => url)).toEqual(corePageFixtures().filter((core) => core.available).map((core) => `/panel/api/cores/${core.id}/restart`));
+    expect(post.mock.calls.map(([url]) => url)).toEqual(['xray', 'singbox', 'wgkernel', 'ssh', 'openvpn', 'ocserv'].map((id) => `/panel/api/cores/${id}/restart`));
   });
 
   it('maps protocols through the descriptor, excludes remote consumption and deduplicates a shared client', () => {
@@ -201,7 +202,7 @@ describe('Cores page metadata', () => {
     const ssh = screen.getByRole('button', { name: /SSH/ });
     const mtproto = screen.getByRole('button', { name: /MTProto/ });
     expect(ssh.textContent).toContain(i18next.t('pages.cores.builtIn'));
-    expect(mtproto.textContent).toContain(i18next.t('pages.cores.unavailable'));
+    expect(mtproto.textContent).toContain(i18next.t('pages.cores.state.stopped'));
     expect(ssh.querySelector('svg')?.innerHTML).not.toBe(screen.getByRole('button', { name: /Xray/ }).querySelector('svg')?.innerHTML);
   });
 });

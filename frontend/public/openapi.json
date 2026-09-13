@@ -2607,6 +2607,50 @@
         ],
         "type": "object"
       },
+      "CoreHostProcessView": {
+        "properties": {
+          "executable": {
+            "example": "/usr/sbin/openvpn",
+            "type": "string"
+          },
+          "pid": {
+            "example": 2046530,
+            "type": "integer"
+          },
+          "state": {
+            "example": "running",
+            "type": "string"
+          }
+        },
+        "required": [
+          "executable",
+          "pid",
+          "state"
+        ],
+        "type": "object"
+      },
+      "CoreHostRuntimeView": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/CoreHostProcessView"
+            },
+            "type": "array"
+          },
+          "state": {
+            "example": "running",
+            "type": "string"
+          }
+        },
+        "required": [
+          "processes",
+          "state"
+        ],
+        "type": "object"
+      },
       "CoreStatusView": {
         "description": "/*\nCoreStatusView is one core as the Cores page shows it: what runs, whether it\nanswers, and which build is installed. Polled — unlike CoreView, which the\nfrontend fetches once because it changes only with the binary.\n\nState and Ready are core.Health.Overall's, so the page, the event pass and the\nconformance suite agree on what degraded means; a core that reports no health\nsays \"unknown\" rather than guessing.\n*/",
         "properties": {
@@ -2622,6 +2666,15 @@
           "healthError": {
             "example": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
             "type": "string"
+          },
+          "hostRuntime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CoreHostRuntimeView"
+              }
+            ],
+            "description": "HostRuntime observes matching daemon processes without adopting them.",
+            "nullable": true
           },
           "id": {
             "example": "openvpn",
@@ -6423,7 +6476,7 @@
         "type": "object"
       },
       "VersionStatusView": {
-        "description": "VersionStatusView is what is installed and whether the panel may change it.\nReported is false for a core that names no version at all (SSH is the panel).",
+        "description": "VersionStatusView is what is installed and whether the panel may change it.\nReported is false for a core that names no version at all.",
         "properties": {
           "error": {
             "example": "core: daemon not installed",
@@ -8289,7 +8342,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "How each core is doing right now, from the daemon’s side: state (running, degraded, stopped, failed, idle or unknown), whether it answers on its control surface, pid, supervisor restarts, since when, the last exit or the reason it is not ready, per inbound for a core that runs one daemon each, plus the installed version and whether the panel may change it. Polled by the Cores page; GET /panel/api/cores is the static half.",
+        "summary": "Managed daemon health, readiness, process IDs, restarts, uptime and installed builds. For daemon cores, hostRuntime separately observes executable-matched processes in the panel’s network namespace, including processes outside its supervision. A detected running process does not certify protocol readiness, and observation never adopts or controls it. The managed state may be idle while hostRuntime is running. Polled by the Cores page; GET /panel/api/cores is the static half.",
         "operationId": "get_panel_api_cores_status",
         "responses": {
           "200": {
@@ -8320,6 +8373,7 @@
                       "available": true,
                       "detail": "exit status 1: 2026-09-05T18:33:49+0000 ocserv[1234]: bind failed",
                       "healthError": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
+                      "hostRuntime": null,
                       "id": "openvpn",
                       "instances": [
                         {
@@ -8363,7 +8417,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "The build of this core’s daemon on disk and, for a core that can install one, the releases its own channel publishes. The list is cached for 15 minutes and a stale list is served over a failed refresh. A core that names no version (SSH is the panel itself) is refused.",
+        "summary": "The installed build and, for a core that can install one, releases published by its channel. The list is cached for 15 minutes and a stale list is served over a failed refresh. Embedded SSH reports the panel build and compiled SSH library version; it updates with the panel and has no independent install channel. A core without version reporting is refused.",
         "operationId": "get_panel_api_cores_id_versions",
         "parameters": [
           {

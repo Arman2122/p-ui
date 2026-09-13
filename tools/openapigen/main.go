@@ -110,6 +110,8 @@ func run(root, outDir string) error {
 				"ClientConfigFile",
 				"ClientLocalAddress",
 				"CoreStatusView",
+				"CoreHostProcessView",
+				"CoreHostRuntimeView",
 				"ActivityView",
 				"ActivityPage",
 				"Status",

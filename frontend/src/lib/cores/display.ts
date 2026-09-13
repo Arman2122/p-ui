@@ -1,6 +1,6 @@
 import type { CoreStatusView } from '@/generated/zod';
 import type { IconName } from '@/components/ui/Icon';
-import { stateTone } from './status';
+import { coreRuntime, stateTone } from './status';
 
 const ICONS: Record<string, IconName> = { xray: 'xray', singbox: 'nodes', wgkernel: 'shield', awgkernel: 'shield', openvpn: 'lock', ocserv: 'hosts', mtproto: 'link', ssh: 'api' };
 const COLORS: Record<string, string> = { xray: '#4c8dff', singbox: '#9254de', wgkernel: '#5ac8b0', awgkernel: '#c79a4b', openvpn: '#5ac8b0', ocserv: '#4c8dff', mtproto: '#9254de', ssh: '#8c8f99' };
@@ -8,14 +8,32 @@ const COLORS: Record<string, string> = { xray: '#4c8dff', singbox: '#9254de', wg
 export const coreIcon = (id: string): IconName => ICONS[id] ?? 'config';
 export const coreColor = (id: string): string => COLORS[id] ?? '#8c8f99';
 export const isKernelCore = (id: string): boolean => id === 'wgkernel' || id === 'awgkernel';
-export const isBuiltinCore = (core: CoreStatusView): boolean => core.id === 'ssh' && !core.version.reported;
+export const isBuiltinCore = (core: CoreStatusView): boolean => core.id === 'ssh';
 
 export function coreState(core: CoreStatusView): string {
-  return core.available ? core.state : 'unavailable';
+  return coreRuntime(core).state;
 }
 
 export function coreStateTone(core: CoreStatusView) {
-  return stateTone(coreState(core), core.available && core.ready);
+  const runtime = coreRuntime(core);
+  return runtime.source === 'host' ? { tone: 'warning' as const, labelKey: 'coreRuntime.runningUnverified' } : stateTone(runtime.state, runtime.healthy);
+}
+
+export function coreHostProcesses(core: CoreStatusView) {
+  const managed = new Set([core.pid, ...core.instances.map((instance) => instance.pid)].filter((pid) => pid !== undefined && pid > 0));
+  return isBuiltinCore(core) ? [] : (core.hostRuntime?.processes ?? []).map((process) => ({ ...process, managed: managed.has(process.pid) }));
+}
+
+export function coreHasOtherProcesses(core: CoreStatusView): boolean { return coreHostProcesses(core).some((process) => !process.managed); }
+
+export function coreHasManagedRuntime(core: CoreStatusView): boolean {
+  return !!core.pid || core.instances.length > 0 || (core.id === 'xray' && !coreHasOtherProcesses(core));
+}
+
+export function coreCanRestart(core: CoreStatusView): boolean { return core.available && coreHasManagedRuntime(core); }
+export function coreCanReadLogs(core: CoreStatusView): boolean { return core.logs && coreHasManagedRuntime(core); }
+export function coreVersionContextKey(core: CoreStatusView): string {
+  return isBuiltinCore(core) ? 'coreRuntime.sshBuild' : coreHasOtherProcesses(core) ? 'coreRuntime.panelBinaryVersion' : 'coreRuntime.installedBinaryVersion';
 }
 
 export function coreVersionLabel(core: CoreStatusView): { text?: string; key?: string } {

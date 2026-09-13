@@ -11,11 +11,9 @@ function core(over: Partial<CoreStatusView>): CoreStatusView {
   };
 }
 
-/* The summary is what an operator reads first, so its buckets are pinned: a
-   running daemon that does not answer needs attention, a stopped one is
-   neither healthy nor a problem, and a core the host cannot run is set apart. */
+/* Process activity and verified health are separate from installation readiness. */
 describe('summarizeCores', () => {
-  it('puts each core in exactly one bucket', () => {
+  it('counts running, readiness and availability independently', () => {
     const s = summarizeCores([
       core({ id: 'a' }),
       core({ id: 'b', state: 'running', ready: false }),
@@ -25,7 +23,7 @@ describe('summarizeCores', () => {
       core({ id: 'f', state: 'idle', ready: true }),
       core({ id: 'g', available: false, state: 'unknown', ready: false }),
     ]);
-    expect(s).toEqual({ total: 7, healthy: 1, attention: 3, unavailable: 1 });
+    expect(s).toEqual({ total: 7, running: 2, healthy: 1, attention: 3, unavailable: 1 });
   });
 });
 

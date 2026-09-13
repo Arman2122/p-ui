@@ -630,10 +630,25 @@ export const CoreConfigViewSchema = z.object({
 });
 export type CoreConfigView = z.infer<typeof CoreConfigViewSchema>;
 
+export const CoreHostProcessViewSchema = z.object({
+  executable: z.string(),
+  pid: z.number().int(),
+  state: z.string(),
+});
+export type CoreHostProcessView = z.infer<typeof CoreHostProcessViewSchema>;
+
+export const CoreHostRuntimeViewSchema = z.object({
+  error: z.string().optional(),
+  processes: z.array(z.lazy(() => CoreHostProcessViewSchema)),
+  state: z.string(),
+});
+export type CoreHostRuntimeView = z.infer<typeof CoreHostRuntimeViewSchema>;
+
 export const CoreStatusViewSchema = z.object({
   available: z.boolean(),
   detail: z.string().optional(),
   healthError: z.string().optional(),
+  hostRuntime: z.lazy(() => CoreHostRuntimeViewSchema).nullable().optional(),
   id: z.string(),
   instances: z.array(z.lazy(() => InstanceStatusViewSchema)),
   logs: z.boolean(),

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Button, ConfigProvider, Modal, Result, Segmented, Spin, message } from 'antd';
 import { useTheme } from '@/hooks/useTheme';
-import { orderCores } from '@/lib/cores/display';
+import { coreCanRestart, coreState, isBuiltinCore, orderCores } from '@/lib/cores/display';
+import { summarizeCores } from '@/lib/cores/status';
 import { useLiveTrafficHistory } from '@/hooks/useLiveTrafficHistory';
 import { useCoresStatusQuery } from '@/api/queries/useCoresStatusQuery';
 import { setMessageInstance } from '@/utils/messageBus';
@@ -45,15 +46,16 @@ export default function CoresPage() {
   });
   const updates = rows.every((row) => row.update !== undefined) ? rows.filter((row) => row.update).length : undefined;
   const traffic = rows.length && rows.every((row) => row.metrics.traffic !== undefined) ? rows.reduce((sum, row) => sum + row.metrics.traffic!, 0) : undefined;
-  const running = cores.filter((core) => core.available && core.ready && core.state === 'running').length;
-  const stopped = cores.filter((core) => core.available && (core.state === 'stopped' || core.state === 'idle')).length;
+  const summary = summarizeCores(cores);
+  const running = summary.running;
+  const stopped = cores.filter((core) => coreState(core) === 'stopped').length;
 
   const restart = useCallback((targets: CoreStatusView[], all = false) => {
-    const eligible = targets.filter((core) => core.available);
+    const eligible = targets.filter(coreCanRestart);
     if (!eligible.length) return;
     modal.confirm({
       title: all ? t('pages.cores.fidelity.restartAllConfirm') : t('pages.cores.restartConfirm', { core: t(eligible[0].titleKey) }),
-      content: <><p>{t('pages.cores.restartNote')}</p>{all && <p>{eligible.map((core) => t(core.titleKey)).join(', ')}</p>}</>,
+      content: <><p>{t('pages.cores.restartNote')}</p><p>{t('coreRuntime.managedActionsOnly')}</p>{all && <p>{eligible.map((core) => t(core.titleKey)).join(', ')}</p>}</>,
       okText: all ? t('pages.cores.fidelity.restartAll') : t('pages.cores.restart'), cancelText: t('cancel'),
       onOk: async () => {
         const failed: string[] = [];
@@ -79,7 +81,7 @@ export default function CoresPage() {
     const results: Record<string, CoreVersionsView> = {};
     const failed: string[] = [];
     try {
-      await Promise.all(cores.filter((core) => core.version.manageable).map(async (core) => {
+      await Promise.all(cores.filter((core) => core.version.manageable && !isBuiltinCore(core)).map(async (core) => {
         try {
           const msg = await HttpUtil.get(`/panel/api/cores/${core.id}/versions`, undefined, { silentSuccess: true });
           if (!msg?.success) throw new Error(msg?.msg || t('somethingWentWrong'));
@@ -113,12 +115,12 @@ export default function CoresPage() {
           <PageHeader title={t('menu.cores')} sub={t('pages.cores.fidelity.subtitle')} actions={<>
             <Segmented size="small" value={view} onChange={setView} options={[{ value: 'cards', label: t('pages.cores.fidelity.cards') }, { value: 'rows', label: t('pages.cores.fidelity.rows') }]} />
             <Button icon={<Icon name="refresh" size={15} />} loading={checking} onClick={() => void checkVersions()}>{t('pages.cores.fidelity.checkVersions')}</Button>
-            <Button icon={<Icon name="restart" size={15} />} loading={restarting.length > 0} disabled={!cores.some((core) => core.available)} onClick={() => restart(cores, true)}>{t('pages.cores.fidelity.restartAll')}</Button>
+            <Button icon={<Icon name="restart" size={15} />} loading={restarting.length > 0} disabled={!cores.some(coreCanRestart)} onClick={() => restart(cores, true)}>{t('pages.cores.fidelity.restartAll')}</Button>
           </>} />
           <StatStrip items={[
             { key: 'installed', label: t('pages.cores.fidelity.installed'), value: cores.filter(coreInstalled).length },
-            { key: 'running', label: t('pages.cores.state.running'), value: running, color: 'var(--p-success)', pulse: running > 0 },
-            { key: 'stopped', label: t('pages.cores.state.stopped'), value: stopped, color: '#8b8d94', detail: t('pages.cores.fidelity.stoppedHelp') },
+            { key: 'running', label: t('pages.cores.state.running'), value: running, color: running > summary.healthy ? 'var(--p-warning)' : 'var(--p-success)', pulse: running > 0 && running === summary.healthy, detail: t('coreRuntime.healthSummary', { healthy: summary.healthy, unverified: running - summary.healthy }) },
+            { key: 'stopped', label: t('pages.cores.state.stopped'), value: stopped, color: '#8b8d94', detail: t('coreRuntime.stoppedHelp') },
             { key: 'updates', label: t('pages.cores.fidelity.updates'), value: updates ?? '—', color: updates ? 'var(--p-warning)' : undefined, detail: t('pages.cores.fidelity.updatesHelp') },
             { key: 'traffic', label: t('pages.cores.fidelity.trafficServed'), value: coreBytes(traffic) },
           ]} />

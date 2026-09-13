@@ -687,10 +687,27 @@ export const EXAMPLES: Record<string, unknown> = {
     "templateEditable": false,
     "titleKey": "cores.singbox.title"
   },
+  "CoreHostProcessView": {
+    "executable": "/usr/sbin/openvpn",
+    "pid": 2046530,
+    "state": "running"
+  },
+  "CoreHostRuntimeView": {
+    "error": "",
+    "processes": [
+      {
+        "executable": "/usr/sbin/openvpn",
+        "pid": 2046530,
+        "state": "running"
+      }
+    ],
+    "state": "running"
+  },
   "CoreStatusView": {
     "available": true,
     "detail": "exit status 1: 2026-09-05T18:33:49+0000 ocserv[1234]: bind failed",
     "healthError": "singbox: inbound 4: supervisor: list p-ui-singbox-4.service: dbus: connection closed",
+    "hostRuntime": null,
     "id": "openvpn",
     "instances": [
       {

@@ -318,14 +318,14 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/cores/status',
-        summary: 'How each core is doing right now, from the daemon’s side: state (running, degraded, stopped, failed, idle or unknown), whether it answers on its control surface, pid, supervisor restarts, since when, the last exit or the reason it is not ready, per inbound for a core that runs one daemon each, plus the installed version and whether the panel may change it. Polled by the Cores page; GET /panel/api/cores is the static half.',
+        summary: 'Managed daemon health, readiness, process IDs, restarts, uptime and installed builds. For daemon cores, hostRuntime separately observes executable-matched processes in the panel’s network namespace, including processes outside its supervision. A detected running process does not certify protocol readiness, and observation never adopts or controls it. The managed state may be idle while hostRuntime is running. Polled by the Cores page; GET /panel/api/cores is the static half.',
         responseSchema: 'CoreStatusView',
         responseSchemaArray: true,
       },
       {
         method: 'GET',
         path: '/panel/api/cores/:id/versions',
-        summary: 'The build of this core’s daemon on disk and, for a core that can install one, the releases its own channel publishes. The list is cached for 15 minutes and a stale list is served over a failed refresh. A core that names no version (SSH is the panel itself) is refused.',
+        summary: 'The installed build and, for a core that can install one, releases published by its channel. The list is cached for 15 minutes and a stale list is served over a failed refresh. Embedded SSH reports the panel build and compiled SSH library version; it updates with the panel and has no independent install channel. A core without version reporting is refused.',
         params: [{ name: 'id', in: 'path', type: 'string', desc: 'Core id from GET /panel/api/cores.' }],
         responseSchema: 'CoreVersionsView',
       },
