@@ -363,6 +363,18 @@ func migratePlanNameUnique() error {
 			log.Printf("policies: plan %d %q renamed to %q: it shared its name with an older plan of the same owner", d.Id, d.Name, renamed)
 		}
 	}
+	// The design migration once created this index case-sensitively; an install
+	// that still carries that definition gets the case-insensitive one instead.
+	var definition string
+	if err := db.Raw(`SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema()
+		AND tablename = 'policies' AND indexname = 'idx_policies_owner_name'`).Scan(&definition).Error; err != nil {
+		return err
+	}
+	if definition != "" && !strings.Contains(definition, "lower(") {
+		if err := db.Exec(`DROP INDEX idx_policies_owner_name`).Error; err != nil {
+			return err
+		}
+	}
 	return db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_owner_name
 		ON policies (COALESCE(owner_user_id, 0), lower(name))`).Error
 }

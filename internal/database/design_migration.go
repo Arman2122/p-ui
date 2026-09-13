@@ -11,7 +11,6 @@ func migrateDesignProductReferences() error {
 		for _, statement := range []string{
 			"ALTER TABLE policies DROP CONSTRAINT IF EXISTS uni_policies_name",
 			"DROP INDEX IF EXISTS idx_policies_name",
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_owner_name ON policies(COALESCE(owner_user_id,0),name)",
 			"UPDATE policies SET reset_cycle = 'none' WHERE reset_cycle IS NULL OR reset_cycle = ''",
 			"UPDATE policies SET on_depletion = 'disable' WHERE on_depletion IS NULL OR on_depletion = ''",
 		} {
