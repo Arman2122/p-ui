@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router';
+import { Navigate, useLocation, useNavigate } from 'react-router';
 import {
   Alert,
   Button,
@@ -38,20 +38,22 @@ import { isExitKey } from '@/schemas/api/egress';
 import CoreConfigsPage, { downloadConfig } from './CoreConfigsPage';
 import { HttpUtil } from '@/utils';
 
-const SECTION_SLUGS = ['basic', 'routing', 'outbound', 'balancer', 'dns', 'advanced'];
-
 const XRAY_SECTIONS: { slug: string; labelKey: string; icon: IconName }[] = [
   { slug: 'basic', labelKey: 'pages.xray.basicTemplate', icon: 'config' },
-  { slug: 'routing', labelKey: 'menu.routing', icon: 'routing' },
-  { slug: 'outbound', labelKey: 'menu.outbounds', icon: 'outbounds' },
   { slug: 'balancer', labelKey: 'pages.xray.Balancers', icon: 'nodes' },
   { slug: 'dns', labelKey: 'pages.inbounds.info.dns', icon: 'hosts' },
   { slug: 'advanced', labelKey: 'pages.xray.advancedTemplate', icon: 'xray' },
 ];
 
-type AdvKey = 'xraySetting' | 'inboundSettings' | 'outboundSettings' | 'routingRuleSettings';
+type AdvKey = 'xraySetting' | 'inboundSettings';
 
 export default function XrayPage({ section }: { section?: 'routing' | 'outbound' } = {}) {
+  const location = useLocation();
+  const legacySection = location.hash.slice(1);
+  const selectedCore = new URLSearchParams(location.search).get('core') || 'xray';
+  if (!section && selectedCore === 'xray' && (legacySection === 'routing' || legacySection === 'outbound')) {
+    return <Navigate to={`/${legacySection}`} replace />;
+  }
   return section ? <XrayTemplatePage section={section} /> : <CoreConfigsPage xray={<XrayTemplatePage />} />;
 }
 
@@ -105,7 +107,7 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
   const navigate = useNavigate();
   const pathSection = section || (location.pathname === '/outbound' || location.pathname === '/outbounds' ? 'outbound' : location.pathname === '/routing' ? 'routing' : '');
   const sectionSlug = pathSection || location.hash.replace(/^#/, '');
-  const activeSection = SECTION_SLUGS.includes(sectionSlug) ? sectionSlug : 'basic';
+  const activeSection = pathSection || (XRAY_SECTIONS.some((item) => item.slug === sectionSlug) ? sectionSlug : 'basic');
 
   const mutate = useCallback(
     (mutator: (next: XraySettingsValue) => void) => {
@@ -176,8 +178,6 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
     try {
       switch (advSettings) {
         case 'inboundSettings': return JSON.stringify(tpl.inbounds || [], null, 2);
-        case 'outboundSettings': return JSON.stringify(tpl.outbounds || [], null, 2);
-        case 'routingRuleSettings': return JSON.stringify(tpl.routing?.rules || [], null, 2);
         default: return '';
       }
     } catch {
@@ -203,13 +203,6 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
       switch (advSettings) {
         case 'inboundSettings':
           tt.inbounds = parsed;
-          break;
-        case 'outboundSettings':
-          tt.outbounds = parsed;
-          break;
-        case 'routingRuleSettings':
-          if (!tt.routing) tt.routing = {};
-          tt.routing.rules = parsed;
           break;
       }
     });
@@ -371,8 +364,6 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
             >
               <Radio.Button value="xraySetting">{t('pages.xray.completeTemplate')}</Radio.Button>
               <Radio.Button value="inboundSettings">{t('pages.xray.Inbounds')}</Radio.Button>
-              <Radio.Button value="outboundSettings">{t('pages.xray.Outbounds')}</Radio.Button>
-              <Radio.Button value="routingRuleSettings">{t('pages.xray.Routings')}</Radio.Button>
             </Radio.Group>
             <JsonEditor
               value={advancedText}
@@ -425,7 +416,7 @@ function XrayTemplatePage({ section }: { section?: 'routing' | 'outbound' } = {}
                         icon: x.icon,
                       }))}
                       active={activeSection}
-                      onPick={(slug) => navigate(slug === 'routing' || slug === 'outbound' ? `/${slug}` : `/xray#${slug}`)}
+                      onPick={(slug) => navigate(`/xray#${slug}`)}
                     />
                     <section className="p-card p-core-editor">
                       <div className="p-card-h">

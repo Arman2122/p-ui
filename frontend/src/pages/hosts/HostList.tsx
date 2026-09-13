@@ -1,19 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Input, Popover, Space, Switch, Table, Tag, Tooltip } from 'antd';
+import { Button, Dropdown, Input, Popover, Space, Switch, Table, Tag, Tooltip, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  GlobalOutlined,
-  PlusOutlined,
-} from '@ant-design/icons';
-
+import { ArrowDownOutlined, ArrowUpOutlined, CopyOutlined, DeleteOutlined, EditOutlined, GlobalOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { HostRecord } from '@/api/queries/useHostsQuery';
 import type { InboundOption } from '@/schemas/client';
-import { PanelCard } from '@/components/ui/panel';
+import { PageHeader, PanelCard, Toolbar } from '@/components/ui/panel';
+import { ClipboardManager } from '@/utils';
 import './HostList.css';
 
 interface HostListProps {
@@ -33,231 +26,79 @@ interface HostListProps {
 }
 
 const INBOUND_PROTOCOL_COLORS: Record<string, string> = {
-  vless: 'blue',
-  vmess: 'geekblue',
-  trojan: 'volcano',
-  shadowsocks: 'magenta',
-  hysteria: 'cyan',
-  hysteria2: 'green',
-  wireguard: 'gold',
-  wgkernel: 'gold',
-  http: 'purple',
-  mixed: 'lime',
-  tunnel: 'orange',
+  vless: 'blue', vmess: 'geekblue', trojan: 'volcano', shadowsocks: 'magenta', hysteria: 'cyan', hysteria2: 'green', wireguard: 'gold', wgkernel: 'gold', http: 'purple', mixed: 'lime', tunnel: 'orange',
 };
 
 export function sortHosts(hosts: HostRecord[]): HostRecord[] {
-  return [...hosts].sort((a, b) => {
-    const sa = a.sortOrder ?? 0;
-    const sb = b.sortOrder ?? 0;
-    if (sa !== sb) return sa - sb;
-    return (a.remark || '').localeCompare(b.remark || '');
-  });
+  return [...hosts].sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || (left.remark || '').localeCompare(right.remark || ''));
 }
 
 export default function HostList(props: HostListProps) {
   const { t } = useTranslation();
-  const {
-    hosts, inboundOptions, loading, isMobile, selectedGroupIds, onSelectionChange,
-    onAdd, onEdit, onDelete, onToggleEnable, onMove, onBulkEnable, onBulkDelete,
-  } = props;
-
-  const inboundsMap = useMemo(() => {
-    const map = new Map<number, InboundOption>();
-    for (const ib of inboundOptions) map.set(ib.id, ib);
-    return map;
-  }, [inboundOptions]);
-
+  const { hosts, inboundOptions, loading, selectedGroupIds, onSelectionChange, onAdd, onEdit, onDelete, onToggleEnable, onMove, onBulkEnable, onBulkDelete } = props;
+  const [messageApi, messageContext] = message.useMessage();
+  const inboundsMap = useMemo(() => new Map(inboundOptions.map(inbound => [inbound.id, inbound])), [inboundOptions]);
   const [search, setSearch] = useState('');
   const sorted = useMemo(() => sortHosts(hosts), [hosts]);
-  const shown = sorted.filter((h) => `${h.remark} ${h.sni} ${(h.hosts ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-
+  const shown = sorted.filter(host => `${host.remark ?? ''} ${host.sni ?? ''} ${host.serverDescription ?? ''} ${(host.hosts ?? []).join(' ')} ${(host.tags ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  const addresses = (host: HostRecord) => host.hosts.filter(address => address.trim() !== '');
+  const endpoint = (address: string, port: number | undefined) => !port || address.includes(':') ? address : `${address}:${port}`;
+  const copyAddresses = async (host: HostRecord) => {
+    const copied = await ClipboardManager.copyText(addresses(host).map(address => endpoint(address, host.port)).join('\n'));
+    if (copied) messageApi.success(t('copied'));
+    else messageApi.error(t('somethingWentWrong'));
+  };
   const columns: ColumnsType<HostRecord> = [
-    {
-      title: t('pages.hosts.fields.actions'),
-      key: 'actions',
-      width: 168,
-      render: (_, h, idx) => {
-        const count = sorted.length;
-        return (
-          <Space size={2}>
-            <Tooltip title={t('pages.hosts.moveUp')}>
-              <Button size="small" type="text" icon={<ArrowUpOutlined />} aria-label={t('pages.hosts.moveUp')} disabled={idx === 0} onClick={() => onMove(h, 'up')} />
-            </Tooltip>
-            <Tooltip title={t('pages.hosts.moveDown')}>
-              <Button size="small" type="text" icon={<ArrowDownOutlined />} aria-label={t('pages.hosts.moveDown')} disabled={idx >= count - 1} onClick={() => onMove(h, 'down')} />
-            </Tooltip>
-            <Tooltip title={t('edit')}>
-              <Button size="small" type="text" icon={<EditOutlined />} aria-label={t('edit')} onClick={() => onEdit(h)} />
-            </Tooltip>
-            <Tooltip title={t('delete')}>
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={t('delete')} onClick={() => onDelete(h)} />
-            </Tooltip>
-          </Space>
-        );
-      },
-    },
-    {
-      title: t('pages.hosts.fields.enable'),
-      key: 'enable',
-      width: 90,
-      render: (_, h) => (
-        <Switch size="small" aria-label={`${t('enable')}: ${h.remark}`} checked={!h.isDisabled} onChange={(next) => onToggleEnable(h, next)} />
-      ),
-    },
-    {
-      title: t('pages.hosts.fields.remark'),
-      dataIndex: 'remark',
-      key: 'remark',
-      render: (_, h) => (
-        <div className="host-remark-cell">
-          <span className="host-remark">{h.remark}</span>
-          {h.serverDescription ? <span className="host-desc">{h.serverDescription}</span> : null}
+    { title: t('pages.hosts.fields.enable'), key: 'enable', width: 58, render: (_, host) => <Switch size="small" aria-label={`${t('enable')}: ${host.remark}`} checked={!host.isDisabled} onChange={next => onToggleEnable(host, next)} /> },
+    { title: t('pages.hosts.fields.remark'), key: 'host', width: 230, render: (_, host) => {
+      const endpoints = addresses(host);
+      return <div className="host-remark-cell">
+        <span className="p-name">{host.remark || host.groupId}</span>
+        <div className="p-mono host-endpoint" title={t('pages.hosts.fields.endpoint')}>{endpoints.length ? endpoint(endpoints[0], host.port) : t('pages.hosts.fields.inheritAddress')}
+          {endpoints.length > 1 && <Popover trigger="click" content={<div className="host-address-overflow">{endpoints.slice(1).map(address => <span className="p-mono" key={address}>{endpoint(address, host.port)}</span>)}</div>}><Button type="text" size="small" aria-label={t('pages.hosts.fields.address')}>+{endpoints.length - 1}</Button></Popover>}
         </div>
-      ),
-    },
-    {
-      title: t('pages.hosts.fields.endpoint'),
-      key: 'endpoint',
-      render: (_, h) => {
-        const addrs = h.hosts?.filter(a => a.trim() !== '') || [];
-        if (addrs.length === 0) return <Tag color="orange">{t('pages.hosts.fields.inheritAddress') || 'inherits'}</Tag>;
-        const visible = addrs.slice(0, 1);
-        const overflow = addrs.slice(1);
-        return (
-          <>
-            {visible.map((addr) => <Tag key={addr}>{addr}</Tag>)}
-            {overflow.length > 0 && (
-              <Popover
-                trigger="click"
-                placement="bottomRight"
-                content={
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 280, maxHeight: 280, overflowY: 'auto' }}>
-                    {overflow.map((addr) => <Tag key={addr}>{addr}</Tag>)}
-                  </div>
-                }
-              >
-                <Tag color="default" style={{ margin: 2, cursor: 'pointer' }}>
-                  +{overflow.length}
-                </Tag>
-              </Popover>
-            )}
-          </>
-        );
-      },
-    },
-    {
-      title: t('pages.hosts.fields.inbound'),
-      key: 'inbound',
-      render: (_, h) => {
-        const ids = h.inboundIds || [];
-        if (ids.length === 0) return <span className="host-muted">—</span>;
-        const visible = ids.slice(0, 1);
-        const overflow = ids.slice(1);
-        const chip = (id: number) => {
-          const ib = inboundsMap.get(id);
-          const label = ib ? (ib.remark || ib.tag || `#${id}`) : `#${id}`;
-          const proto = (ib?.protocol || '').toLowerCase();
-          const color = INBOUND_PROTOCOL_COLORS[proto] ?? 'default';
-          return (
-            <Tooltip key={id} title={label}>
-              <Tag color={color} style={{ margin: 2 }}>{label}</Tag>
-            </Tooltip>
-          );
-        };
-        return (
-          <>
-            {visible.map(chip)}
-            {overflow.length > 0 && (
-              <Popover
-                trigger="click"
-                placement="bottomRight"
-                content={
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 280, maxHeight: 280, overflowY: 'auto' }}>
-                    {overflow.map(chip)}
-                  </div>
-                }
-              >
-                <Tag color="default" style={{ margin: 2, cursor: 'pointer' }}>
-                  +{overflow.length}
-                </Tag>
-              </Popover>
-            )}
-          </>
-        );
-      },
-    },
-    {
-      title: t('pages.hosts.fields.sni'),
-      dataIndex: 'sni',
-      key: 'sni',
-      width: 190,
-      render: (sni: string) => <span className="p-mono">{sni || '—'}</span>,
-    },
-    {
-      title: t('pages.hosts.fields.security'),
-      dataIndex: 'security',
-      key: 'security',
-      render: (security: string) => <Tag>{security || 'same'}</Tag>,
-    },
-    {
-      title: t('pages.hosts.fields.tags'),
-      key: 'tags',
-      render: (_, h) => (h.tags && h.tags.length > 0
-        ? <Space size={[0, 4]} wrap>{h.tags.map((tag) => <Tag key={tag} color="blue">{tag}</Tag>)}</Space>
-        : <span className="host-muted">—</span>),
-    },
+        {host.port && (!endpoints.length || endpoints.some(address => address.includes(':'))) ? <span className="p-sub">{t('pages.hosts.fields.port')}: {host.port}</span> : null}
+        {host.serverDescription && <span className="p-sub">{host.serverDescription}</span>}
+        {!!host.tags?.length && <Space size={4} wrap>{host.tags.map(tag => <Tag key={tag}>{tag}</Tag>)}</Space>}
+      </div>;
+    } },
+    { title: t('pages.hosts.fields.inbound'), key: 'inbound', width: 152, render: (_, host) => {
+      const chip = (id: number) => {
+        const inbound = inboundsMap.get(id);
+        return <Tag color={INBOUND_PROTOCOL_COLORS[inbound?.protocol ?? '']} key={id}>{inbound?.remark || inbound?.tag || `#${id}`}</Tag>;
+      };
+      return host.inboundIds.length ? <Space size={4} wrap>{chip(host.inboundIds[0])}{host.inboundIds.length > 1 && <Popover trigger="click" content={<Space direction="vertical" size={4}>{host.inboundIds.slice(1).map(chip)}</Space>}><Button type="text" size="small" aria-label={t('pages.hosts.fields.inbound')}>+{host.inboundIds.length - 1}</Button></Popover>}</Space> : <span className="p-sub">—</span>;
+    } },
+    { title: t('pages.hosts.fields.security'), key: 'security', width: 122, render: (_, host) => <Tag color={host.security === 'reality' ? 'green' : host.security === 'tls' ? 'blue' : undefined}>{host.security || 'same'}</Tag> },
+    { title: t('pages.hosts.fields.sni'), key: 'sni', width: 190, render: (_, host) => <span className="p-mono">{host.sni || '—'}</span> },
+    { title: <span className="host-actions-label">{t('pages.hosts.fields.actions')}</span>, key: 'actions', width: 140, align: 'right', render: (_, host) => {
+      const index = sorted.findIndex(item => item.groupId === host.groupId);
+      return <Space size={2}>
+        <Tooltip title={t('designParityHosts.copyAddress', { defaultValue: 'Copy addresses' })}><Button size="small" type="text" icon={<CopyOutlined />} disabled={!addresses(host).length} aria-label={t('designParityHosts.copyAddress', { defaultValue: 'Copy addresses' })} onClick={() => { void copyAddresses(host); }} /></Tooltip>
+        <Tooltip title={t('edit')}><Button size="small" type="text" icon={<EditOutlined />} aria-label={t('edit')} onClick={() => onEdit(host)} /></Tooltip>
+        <Tooltip title={t('delete')}><Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={t('delete')} onClick={() => onDelete(host)} /></Tooltip>
+        <Dropdown trigger={['click']} menu={{ items: [
+          { key: 'up', label: t('pages.hosts.moveUp'), icon: <ArrowUpOutlined aria-hidden />, disabled: index === 0, onClick: () => onMove(host, 'up') },
+          { key: 'down', label: t('pages.hosts.moveDown'), icon: <ArrowDownOutlined aria-hidden />, disabled: index === sorted.length - 1, onClick: () => onMove(host, 'down') },
+        ] }}><Button type="text" size="small" icon={<MoreOutlined />} aria-label={t('more')} /></Dropdown>
+      </Space>;
+    } },
   ];
-
-  const toolbar = (
-    <div className="card-toolbar">
-      <Input.Search value={search} onChange={(e) => setSearch(e.target.value)} allowClear placeholder={t('search')} aria-label={t('search')} style={{ width: 240 }} />
-      {selectedGroupIds.length === 0 ? (
-        <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-          {!isMobile && t('pages.hosts.addHost')}
-        </Button>
-      ) : (
-        <>
-          <Tag
-            color="blue"
-            closable
-            onClose={() => onSelectionChange([])}
-            style={{ marginInlineEnd: 0, padding: '4px 8px', fontSize: 13 }}
-          >
-            {t('pages.hosts.selectedCount', { count: selectedGroupIds.length })}
-          </Tag>
-          <Button onClick={() => onBulkEnable(true)}>{t('pages.hosts.bulkEnable')}</Button>
-          <Button onClick={() => onBulkEnable(false)}>{t('pages.hosts.bulkDisable')}</Button>
-          <Button danger icon={<DeleteOutlined />} onClick={onBulkDelete}>{t('pages.hosts.bulkDelete')}</Button>
-        </>
-      )}
-    </div>
-  );
-
-  return (
-    <PanelCard pad={0} title={toolbar} className="hosts-card">
-      <Table<HostRecord>
-        className="p-table"
-        rowKey="groupId"
-        size="small"
-        loading={loading}
-        columns={[...columns.filter((c) => c.key !== 'actions'), ...columns.filter((c) => c.key === 'actions')]}
-        dataSource={shown}
-        pagination={false}
-        scroll={{ x: 'max-content' }}
-        rowSelection={{
-          selectedRowKeys: selectedGroupIds,
-          onChange: (keys) => onSelectionChange(keys as string[]),
-        }}
-        locale={{
-          emptyText: (
-            <div className="card-empty">
-              <GlobalOutlined style={{ fontSize: 32, marginBottom: 8 }} />
-              <div>{t('noData')}</div>
-            </div>
-          ),
-        }}
-      />
+  return <div className="host-list-page">
+    {messageContext}
+    <PageHeader title={t('menu.hosts')} sub={t('pages.hosts.subtitle')} actions={<Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>{t('pages.hosts.addHost')}</Button>} />
+    <PanelCard pad={0} className="hosts-card">
+      <Toolbar left={<Input type="search" prefix={<SearchOutlined />} value={search} onChange={event => setSearch(event.target.value)} allowClear placeholder={t('designParityHosts.search', { defaultValue: 'Search host, SNI…' })} aria-label={t('search')} />}
+        right={<Tooltip title={`${t('pages.hosts.summary.total')}: ${hosts.length} · ${t('pages.hosts.summary.enabled')}: ${hosts.filter(host => !host.isDisabled).length} · ${t('pages.hosts.summary.disabled')}: ${hosts.filter(host => host.isDisabled).length}`}><span className="p-sub">{t('designParityHosts.count', { count: shown.length, defaultValue: '{count} hosts' })}</span></Tooltip>} />
+      {selectedGroupIds.length > 0 && <div className="host-bulk-toolbar">
+        <Tag closable onClose={() => onSelectionChange([])}>{t('pages.hosts.selectedCount', { count: selectedGroupIds.length })}</Tag>
+        <Button size="small" onClick={() => onBulkEnable(true)}>{t('pages.hosts.bulkEnable')}</Button>
+        <Button size="small" onClick={() => onBulkEnable(false)}>{t('pages.hosts.bulkDisable')}</Button>
+        <Button size="small" danger icon={<DeleteOutlined />} onClick={onBulkDelete}>{t('pages.hosts.bulkDelete')}</Button>
+      </div>}
+      <Table<HostRecord> className="p-table" rowKey="groupId" size="middle" loading={loading} columns={columns} dataSource={shown} pagination={false} scroll={{ x: 900 }}
+        rowSelection={{ columnWidth: 38, selectedRowKeys: selectedGroupIds, onChange: keys => onSelectionChange(keys as string[]) }}
+        locale={{ emptyText: <div className="card-empty"><GlobalOutlined /><div>{t('noData')}</div></div> }} />
     </PanelCard>
-  );
+  </div>;
 }

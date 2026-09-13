@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Checkbox, Input, Modal, Select, Space, Table, Tag } from 'antd';
-import { CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Alert, Button, Checkbox, Collapse, Dropdown, Input, Modal, Pagination, Space, Spin, Tag, Tooltip } from 'antd';
+import { CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined, FilterOutlined, SearchOutlined } from '@ant-design/icons';
 import { usePlanInboundOptions, usePlanMembersQuery, usePlanSummaryQuery, usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
 import { usePolicyMutations } from '@/api/queries/usePolicyMutations';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
@@ -16,22 +16,26 @@ import { PageHeader, PanelCard, Field, Meter, StatusChip } from '@/components/ui
 import { ConfirmDelete } from '@/components/feedback';
 import { SizeFormatter } from '@/utils';
 import PolicyFormModal from './PolicyFormModal';
+import { StatStrip } from '@/components/ui';
+import { StatusDot } from '@/components/ui/panel';
+import './plans-parity.css';
+import { inboundTone } from './inbound-tone';
 
 function IncludedInbounds({ ids, inbounds, cores = [] }: { ids: number[]; inbounds: InboundOption[]; cores?: CoreView[] }) {
   const { t } = useTranslation();
-  const groups = new Map<string, { label: string; core?: string; names: string[] }>();
+  const groups = new Map<string, { label: string; core?: string; items: { id: number; name: string; protocol?: string }[] }>();
   for (const id of ids) {
     const inbound = inbounds.find(row => row.id === id);
     const core = cores.find(row => row.kinds.includes(inbound?.protocol || ''));
     const key = core?.id || inbound?.protocol || 'unknown';
-    const group = groups.get(key) || { label: core ? t(core.titleKey) : inbound?.protocol || t('plansFidelity.otherInbounds'), core: core?.id, names: [] };
-    group.names.push(inbound?.remark || inbound?.tag || `#${id}`); groups.set(key, group);
+    const group = groups.get(key) || { label: core ? t(core.titleKey) : inbound?.protocol || t('plansFidelity.otherInbounds'), core: core?.id, items: [] };
+    group.items.push({ id, name: inbound?.remark || inbound?.tag || `#${id}`, protocol: inbound?.protocol }); groups.set(key, group);
   }
   return <div style={{ display: 'grid', gap: 11 }}>{[...groups].map(([key, group]) => <div key={key}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
       {group.core && <span style={{ color: coreColor(group.core) }}><Icon name={coreIcon(group.core)} size={13} /></span>}
       <span className="p-kicker">{group.label}</span>
-    </div><Space wrap size={4}>{group.names.map(name => <Tag key={name} style={{ marginInlineEnd: 0 }}>{name}</Tag>)}</Space>
+    </div><Space wrap size={4}>{group.items.map(item => <Tag key={item.id} color={inboundTone(item.protocol)} style={{ marginInlineEnd: 0 }}>{item.name}</Tag>)}</Space>
   </div>)}</div>;
 }
 
@@ -76,6 +80,7 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
   const members = usePlanMembersQuery(selected?.id, page, reseller);
   const tiers = selected ? parseTiers(selected.tiers) : [];
   const initialTier = tiers.find(tier => tier.fromBytes === 0);
+  const maxClients = Math.max(1, ...rows.map((row) => row.assignedClients));
   const highest = Math.max(1, ...tiers.map((tier) => tier.fromBytes));
   function openForm(policy: PolicyRecord | null) { setEditing(policy); setFormOpen(true); }
   const limit = (value: number | null | undefined, format: (n: number) => string = String) =>
@@ -87,43 +92,48 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  return <>
+  return <div className="plans-parity">
     <PageHeader title={t('pages.policies.title')} sub={t('pages.policies.desc')} actions={<Space wrap>
       <Button icon={<ReloadOutlined />} loading={query.isFetching} onClick={() => { void query.refetch(); }}>{t('refresh')}</Button>
       <Button icon={<DownloadOutlined />} disabled={!rows.length} onClick={exportPlans}>{t('plans.export')}</Button>
       <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm(null)}>{t('pages.policies.add')}</Button>
     </Space>} />
     {query.isError && <Alert type="error" showIcon title={t('somethingWentWrong')} description={query.error.message} />}
-    <div className="p-planspec" style={{ marginBottom: 16 }}>
-      {[[t('pages.policies.title'), String(rows.length)], [t('plans.members'), String(rows.reduce((s, p) => s + (p.assignedClients || 0), 0))],
-        [t('plans.withoutPlan'), summary.data ? String(summary.data.withoutPlan) : '—'],
-        [t('plans.busiest'), busiest?.assignedClients ? busiest.name : '—'], [t('plans.committed'), SizeFormatter.sizeFormat(rows.reduce((s, p) => s + (p.committedBytes || 0), 0))],
-      ].map(([label, value]) => <div className="p-planspec-c" key={label}><Field label={label} value={value} /></div>)}
-    </div>
+    <StatStrip items={[
+      { key: 'plans', label: t('pages.policies.title'), value: rows.length },
+      { key: 'members', label: t('plans.members'), value: rows.reduce((sum, row) => sum + row.assignedClients, 0), color: 'var(--p-primary)' },
+      { key: 'custom', label: t('plans.withoutPlan'), value: summary.data?.withoutPlan ?? '—', color: 'var(--p-text-2)' },
+      { key: 'busiest', label: t('plans.busiest'), value: busiest?.assignedClients ? busiest.name : '—' },
+      { key: 'committed', label: t('plans.committed'), value: SizeFormatter.sizeFormat(rows.reduce((sum, row) => sum + row.committedBytes, 0)) },
+    ]} />
     {summary.isError && <Alert type="error" title={t('somethingWentWrong')} description={summary.error.message} />}
     <div className="p-plans">
       <PanelCard className="p-plans-rail" pad={0}>
-        <div style={{ padding: 12 }}><Input.Search value={search} onChange={(e) => setSearch(e.target.value)} allowClear
-          placeholder={t('design.searchPlans')} aria-label={t('design.searchPlans')} />
-          <Select aria-label={t('plans.status')} value={status} onChange={(value) => { setStatus(value); setPage(1); }} style={{ width: '100%', marginTop: 8 }} options={[{ value: 'all', label: t('plans.all') }, { value: 'active', label: t('plans.active') }, { value: 'archived', label: t('plans.archived') }]} /></div>
+        <div className="plans-rail-search"><Input size="small" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} allowClear
+          prefix={<SearchOutlined />} placeholder={t('design.searchPlans')} aria-label={t('design.searchPlans')} />
+          <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [status], items: [
+            { key: 'all', label: t('plans.all') }, { key: 'active', label: t('plans.active') }, { key: 'archived', label: t('plans.archived') },
+          ], onClick: ({ key }) => { setStatus(key); setPage(1); } }}><Button type="text" size="small" aria-label={t('plans.status')} icon={<FilterOutlined />} /></Dropdown>
+        </div>
         <div className="p-plan-list" aria-label={t('menu.policies')}>
           {visible.map((p) => <button type="button" key={p.id} className={`p-planrow${selected?.id === p.id ? ' is-active' : ''}`}
             aria-pressed={selected?.id === p.id} onClick={() => { setSelectedId(p.id); setPage(1); }}>
-            <div className="p-name">{p.name} <span className="p-sub">{p.assignedClients || 0}</span>{p.archived && <Tag>{t('plans.archived')}</Tag>}</div>
-            <div className="p-sub" style={{ marginTop: 4 }}>{limit(p.quotaBytes, SizeFormatter.sizeFormat)} · {limit(p.durationDays, (n) => t('design.days', { count: n }))}</div>
+            <div className="plans-row-name"><span className="p-name">{p.name}</span>{p.archived && <Tag>{t('plans.archived')}</Tag>}<span className="p-sub">{p.assignedClients}</span></div>
+            <div className="p-sub plans-row-summary">{limit(p.quotaBytes, SizeFormatter.sizeFormat)} · {limit(p.durationDays, (n) => t('design.days', { count: n }))} · {parseTiers(p.tiers).find((tier) => tier.fromBytes === 0)?.downBps ? formatRate(parseTiers(p.tiers).find((tier) => tier.fromBytes === 0)!.downBps, t) : t('plansFidelity.unshaped')}</div>
+            <Meter pct={p.assignedClients / maxClients * 100} tone={selected?.id === p.id ? 'var(--p-primary)' : 'var(--p-fill)'} height={3} />
           </button>)}
           {!visible.length && <div className="p-plan-empty">{query.isPending ? t('loading') : t('pages.policies.empty')}</div>}
         </div>
+        <div className="plans-rail-footer"><Button block size="small" icon={<PlusOutlined />} onClick={() => openForm(null)}>{t('pages.policies.add')}</Button></div>
       </PanelCard>
       {selected && <div className="p-plan-detail">
         <PanelCard pad={0}>
           <div className="p-plandetail-h">
-            <div><h2 className="p-h1">{selected.name}</h2><StatusChip status={{ key: selected.archived ? 'archived' : 'active', label: selected.archived ? t('plans.archived') : t('plans.active'), color: selected.archived ? 'var(--p-text-2)' : 'var(--p-success)' }} /><p className="p-sub">{selected.description}</p></div>
-            <Space wrap><Button type="primary" disabled={selected.archived} icon={<PlusOutlined />} href={`${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/clients?${reseller ? `new=1&plan=${selected.id}` : `planId=${selected.id}&create=1`}`}>{t('plans.newClient')}</Button>
+            <div><div className="plans-detail-title"><h2 className="p-h1">{selected.name}</h2><StatusChip status={{ key: selected.archived ? 'archived' : 'active', label: selected.archived ? t('plans.archived') : t('plans.active'), color: selected.archived ? 'var(--p-text-2)' : 'var(--p-success)' }} /></div><p className="p-sub plans-description">{selected.description}</p></div>
+            <Space size={6} wrap><Button type="primary" disabled={selected.archived} icon={<PlusOutlined />} href={`${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/clients?${reseller ? `new=1&plan=${selected.id}` : `planId=${selected.id}&create=1`}`}>{t('plans.newClient')}</Button>
               <Button icon={<EditOutlined />} onClick={() => openForm(selected)}>{t('pages.policies.edit')}</Button>
               <Button icon={<CopyOutlined />} onClick={() => { setCopying(selected); setCopyName(`${selected.name} ${t('plans.copySuffix')}`); }}>{t('plans.duplicate')}</Button>
-              <Button loading={saving} onClick={() => { void archive(selected.id, !selected.archived); }}>{selected.archived ? t('plans.restore') : t('plans.archive')}</Button>
-              <Button danger icon={<DeleteOutlined />} onClick={() => setDeleting(selected)}>{t('remove')}</Button></Space>
+              <Button type="text" danger aria-label={t('remove')} icon={<DeleteOutlined />} onClick={() => setDeleting(selected)} /></Space>
           </div>
           <div className="p-planspec">
             <div className="p-planspec-c"><Field label={t('pages.clients.traffic')} value={limit(selected.quotaBytes, SizeFormatter.sizeFormat)} /></div>
@@ -155,7 +165,37 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
             {!!selected.committedBytes && <div style={{ marginTop: 12 }}><Meter pct={Math.min(100, selected.usedBytes / selected.committedBytes * 100)} tone="var(--p-primary)" height={4} /></div>}
           </PanelCard>
         </div>
-        <PanelCard title={t('pages.policies.ladder')} icon="speed" pad={14}>
+        <PanelCard className="plans-clients" kicker={t('planParity.clientsOn', { name: selected.name, defaultValue: 'Clients on {name}' })} icon="users" pad={0}
+          extra={<Space size={6}><Button type="text" size="small" href={`${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/clients?${reseller ? 'plan' : 'planId'}=${selected.id}`}>{t('planParity.openClients', { defaultValue: 'Open in Clients' })}</Button>
+            {!reseller && <Button type="text" size="small" loading={saving} onClick={() => { setClearOverrides(false); setReapplying(true); }}>{t('plans.reapply')}</Button>}</Space>}>
+          {(selected.pendingClients > 0 || applyReport) && <div className="plans-members-notices">
+            {!!selected.pendingClients && <Alert type="warning" title={t('plans.pendingCount', { count: selected.pendingClients })} />}
+            {applyReport && <Alert type="info" title={applyReport} />}
+          </div>}
+          <Spin spinning={members.isPending}>
+            <div>{(members.data?.items ?? []).map((member) => {
+              const pct = member.quotaBytes ? Math.min(100, member.usedBytes / member.quotaBytes * 100) : 100;
+              const ended = (member.expiryTime > 0 && member.expiryTime < Date.now()) || (member.quotaBytes > 0 && member.usedBytes >= member.quotaBytes);
+              const state = !member.enable ? t('plans.disabled') : ended ? t('depleted') : t('plans.active');
+              return <div className="plans-member" key={member.email}>
+                <Tooltip title={state}><span role="img" aria-label={state}><StatusDot color={!member.enable ? 'var(--p-text-2)' : ended ? 'var(--p-error)' : 'var(--p-success)'} /></span></Tooltip>
+                <span className="p-name plans-member-name" dir="ltr">{member.email}</span><span className="p-sub plans-member-group">{member.group || '—'}</span>
+                <div className="plans-member-usage"><div><span>{SizeFormatter.sizeFormat(member.usedBytes)}</span><span className="p-sub">{member.quotaBytes ? `${Math.round(pct)}%` : '∞'}</span></div>
+                  <Meter pct={pct} tone={member.quotaBytes && pct > 90 ? 'var(--p-warning)' : 'var(--p-primary)'} height={3} /></div>
+                <span className="p-sub plans-member-expiry">{member.expiryTime === 0 ? '∞' : member.expiryTime < 0 ? t('plans.firstUse') : new Date(member.expiryTime).toLocaleDateString()}</span>
+                {(member.pending || member.overrideQuota || member.overrideExpiry || member.overrideLimitIp || member.overrideInbounds) && <span className="plans-member-state">
+                  {member.pending && <Tag color="orange">{t('plans.pending')}</Tag>}
+                  {(member.overrideQuota || member.overrideExpiry || member.overrideLimitIp || member.overrideInbounds) && <Tag>{t('plans.overridden')}</Tag>}
+                </span>}
+              </div>;
+            })}</div>
+            {!members.isPending && !members.data?.items.length && <div className="p-plan-empty">{t('noData')}</div>}
+          </Spin>
+          {(members.data?.total ?? 0) > 20 && <div className="plans-pagination"><Pagination current={page} pageSize={20} total={members.data?.total} showSizeChanger={false} onChange={setPage} /></div>}
+          {members.isError && <Alert type="error" title={t('somethingWentWrong')} description={members.error.message} />}
+        </PanelCard>
+        <Collapse className="plans-operations" items={[{ key: 'rules', label: t('planParity.operations', { defaultValue: 'Plan rules and operations' }), children: <>
+<PanelCard title={t('pages.policies.ladder')} icon="speed" pad={14} extra={<Button loading={saving} onClick={() => { void archive(selected.id, !selected.archived); }}>{selected.archived ? t('plans.restore') : t('plans.archive')}</Button>}>
           {!tiers.length ? <p className="p-sub">{t('pages.policies.noTiersHint')}</p> : <>
             {tiers[0].fromBytes > 0 && <p className="p-sub">{t('pages.policies.belowFirstHint')}</p>}
             {tiers.map((tier) => <div key={tier.fromBytes} style={{ marginBottom: 14 }}>
@@ -165,21 +205,7 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
           </>}
         </PanelCard>
         {!reseller && <RateAvailability />}
-        <PanelCard title={t('plans.members')} extra={!reseller && <Button loading={saving} onClick={() => { setClearOverrides(false); setReapplying(true); }}>{t('plans.reapply')}</Button>}>
-          {!!selected.pendingClients && <Alert type="warning" title={t('plans.pendingCount', { count: selected.pendingClients })} style={{ marginBottom: 12 }} />}
-          {applyReport && <Alert type="info" title={applyReport} style={{ marginBottom: 12 }} />}
-          <div className="p-planspec"><Field label={t('plans.used')} value={SizeFormatter.sizeFormat(selected.usedBytes || 0)} /><Field label={t('plans.committed')} value={SizeFormatter.sizeFormat(selected.committedBytes || 0)} /></div>
-          <Table rowKey="email" size="small" loading={members.isPending} dataSource={members.data?.items ?? []} scroll={{ x: 560 }}
-            pagination={{ current: page, pageSize: 20, total: members.data?.total ?? 0, showSizeChanger: false, onChange: setPage }}
-            columns={[
-              { title: t('plans.client'), dataIndex: 'email', render: (email: string) => <span dir="ltr">{email}</span> },
-              { title: t('plans.group'), dataIndex: 'group' },
-              { title: t('plans.used'), key: 'usage', render: (_, member) => <><span>{SizeFormatter.sizeFormat(member.usedBytes)} / {member.quotaBytes ? SizeFormatter.sizeFormat(member.quotaBytes) : '∞'}</span><Meter pct={member.quotaBytes ? Math.min(100, member.usedBytes / member.quotaBytes * 100) : 0} /></> },
-              { title: t('plans.duration'), dataIndex: 'expiryTime', render: (expiry: number) => expiry === 0 ? '∞' : expiry < 0 ? t('plans.firstUse') : new Date(expiry).toLocaleDateString() },
-              { title: t('plans.status'), key: 'status', render: (_, member) => <Space direction="vertical" size={2}><Tag>{member.enable ? t('plans.active') : t('plans.disabled')}</Tag>{member.pending && <Tag color="orange">{t('plans.pending')}</Tag>}{(member.overrideQuota || member.overrideExpiry || member.overrideLimitIp || member.overrideInbounds) && <Tag>{t('plans.overridden')}</Tag>}</Space> },
-            ]} />
-          {members.isError && <Alert type="error" title={t('somethingWentWrong')} description={members.error.message} />}
-        </PanelCard>
+        </> }]} />
       </div>}
     </div>
     <PolicyFormModal open={formOpen} policy={editing} plans={rows} inbounds={inbounds.data ?? []} reseller={reseller} onClose={() => setFormOpen(false)} />
@@ -197,5 +223,5 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
     <ConfirmDelete open={!!deleting} title={t('pages.policies.deleteConfirm')} what={deleting?.name ?? ''}
       lines={[t('design.planDeleteImpact')]} confirmLoading={saving} onCancel={() => setDeleting(null)}
       onConfirm={async () => { if (deleting && (await remove(deleting.id))?.success) setDeleting(null); }} />
-  </>;
+  </div>;
 }

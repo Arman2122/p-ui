@@ -78,12 +78,24 @@ async function renderPanel(kinds: string[], cores: CoreView[]) {
   }
 }
 
+async function openReadback(label = enUS.pages.policies.enforced) {
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(label) }));
+  await waitFor(() => expect(document.querySelector('.ant-descriptions')).not.toBeNull());
+}
+
+function expectVisibleWarning(text: string) {
+  expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(
+    expect.arrayContaining([expect.stringContaining(text)]),
+  );
+}
+
 describe('ClientPlanPanel', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
   it('shows what the plan asks for beside what the kernel is holding', async () => {
     mockHost(ENFORCED);
     await renderPanel(['wgkernel'], [WG_CORE]);
+    await openReadback();
 
     const text = document.body.textContent ?? '';
     expect(text).toContain(enUS.pages.policies.inEffect);
@@ -98,7 +110,7 @@ describe('ClientPlanPanel', () => {
     mockHost({ ...ENFORCED, shapeable: false, policyId: 0 });
     await renderPanel(['vless'], [XRAY_CORE]);
 
-    expect(document.body.textContent).toContain(enUS.pages.policies.notShapeable);
+    expectVisibleWarning(enUS.pages.policies.notShapeable);
   });
 
   it('a client on a shapeable and an unshapeable inbound is told which one a rate reaches', async () => {
@@ -107,6 +119,7 @@ describe('ClientPlanPanel', () => {
 
     const text = document.body.textContent ?? '';
     expect(text).toContain(enUS.pages.policies.partlyShapeable);
+    expectVisibleWarning(enUS.pages.policies.partlyShapeable);
     expect(text).not.toContain(enUS.pages.policies.notShapeable);
   });
 
@@ -116,14 +129,14 @@ describe('ClientPlanPanel', () => {
     mockHost(ENFORCED);
     await renderPanel(['wgkernel', 'wgkernel'], [WG_CORE]);
 
-    expect(document.body.textContent).toContain(enUS.pages.policies.perInbound);
+    expectVisibleWarning(enUS.pages.policies.perInbound);
   });
 
   it('a plan that no longer exists is reported rather than read as no plan', async () => {
     mockHost({ ...ENFORCED, unresolved: true, wantUpBps: 0, wantDownBps: 0 });
     await renderPanel(['wgkernel'], [WG_CORE]);
 
-    expect(document.body.textContent).toContain(enUS.pages.policies.unresolved);
+    expectVisibleWarning(enUS.pages.policies.unresolved);
   });
 
   /* Shapeable is computed from live wants, so false also means "the device is
@@ -131,6 +144,7 @@ describe('ClientPlanPanel', () => {
   it('a limit that never landed reads as not enforced, not as a number', async () => {
     mockHost({ ...ENFORCED, shapeable: false });
     await renderPanel(['wgkernel'], [WG_CORE]);
+    await openReadback();
 
     expect(document.body.textContent).toContain(enUS.pages.policies.notEnforcedYet);
   });
@@ -140,10 +154,12 @@ describe('ClientPlanPanel', () => {
   it('a client on a core that throttles in-process reads what the core holds', async () => {
     mockHost({ ...ENFORCED, shapeable: false, rateEnforced: true }, true, [SSH_CORE]);
     await renderPanel(['ssh'], [SSH_CORE]);
+    await openReadback();
 
     const text = document.body.textContent ?? '';
     expect(text).toContain(enUS.pages.policies.enforced);
     expect(text).not.toContain(enUS.pages.policies.notEnforcedYet);
+    expect(text).toContain('10 Mbps');
   });
 
   it('offers a retry rather than guessing when the assignment cannot be read', async () => {
@@ -221,11 +237,7 @@ const CLIENT = {
 } as unknown as ClientRecord;
 
 function planSelect(): HTMLElement {
-  const label = Array.from(document.querySelectorAll('.ant-form-item-label label'))
-    .find((el) => (el.textContent ?? '').includes(enUS.pages.policies.plan));
-  const select = label?.closest('.ant-form-item')?.querySelector('.ant-select');
-  if (!select) throw new Error('the plan select is not on screen');
-  return (select.querySelector('.ant-select-selector') ?? select) as HTMLElement;
+  return screen.getByRole('combobox', { name: enUS.pages.clients.design.plan });
 }
 
 type SaveProp = ComponentProps<typeof ClientFormModal>['save'];
@@ -257,10 +269,10 @@ async function openLimitsTab(save: SaveSpy) {
   }
 }
 
-async function saveForm() {
+async function saveForm(save: SaveSpy) {
   const button = await screen.findByRole('button', { name: /save/i });
   await act(async () => { fireEvent.click(button); });
-  await waitFor(() => expect(document.body).toBeTruthy());
+  await waitFor(() => expect(save).toHaveBeenCalled());
 }
 
 function assignedPlan(save: SaveSpy): number | undefined {
@@ -270,10 +282,10 @@ function assignedPlan(save: SaveSpy): number | undefined {
 describe('ClientFormModal — the plan rides its own endpoint', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  /* The assignment is only ever read on the Limits tab, so a save that never
-     opened it must leave it alone rather than write back a value it invented. */
+  /* A failed Basics readback must leave the assignment alone rather than
+     write back a value the form invented. */
   it('a save that never read the assignment does not rewrite it', async () => {
-    mockHost(ENFORCED);
+    mockHost(null, false);
     const save = makeSave();
     renderWithProviders(
       <ClientFormModal open mode="edit" client={CLIENT} inbounds={[WG_INBOUND]} attachedIds={[4]} save={save} onOpenChange={() => {}} />,
@@ -281,7 +293,8 @@ describe('ClientFormModal — the plan rides its own endpoint', () => {
     for (let i = 0; i < 6; i += 1) {
       await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     }
-    await saveForm();
+    expectVisibleWarning(enUS.pages.policies.readbackFailed);
+    await saveForm(save);
 
     expect(save).toHaveBeenCalled();
     expect(assignedPlan(save)).toBeUndefined();
@@ -291,7 +304,7 @@ describe('ClientFormModal — the plan rides its own endpoint', () => {
     mockHost(ENFORCED);
     const save = makeSave();
     await openLimitsTab(save);
-    await saveForm();
+    await saveForm(save);
 
     expect(assignedPlan(save)).toBeUndefined();
   });
@@ -301,11 +314,13 @@ describe('ClientFormModal — the plan rides its own endpoint', () => {
     const save = makeSave();
     await openLimitsTab(save);
 
+    fireEvent.click(screen.getByRole('tab', { name: enUS.pages.clients.tabBasics }));
+
     await act(async () => { fireEvent.mouseDown(planSelect()); });
     const option = Array.from(document.querySelectorAll('.ant-select-item-option'))
       .find((o) => (o.textContent ?? '').trim() === enUS.pages.policies.noPlan);
     await act(async () => { fireEvent.click(option!); });
-    await saveForm();
+    await saveForm(save);
 
     expect(assignedPlan(save)).toBe(0);
     expect(save.mock.calls[0][0]).not.toHaveProperty('policyId');
@@ -322,6 +337,7 @@ describe('ClientPlanPanel shaping rows', () => {
   it('omits the tier and kernel rows on a client no core can shape', async () => {
     mockHost({ ...ENFORCED, shapeable: false, policyId: 0 });
     await renderPanel(['vless'], [XRAY_CORE]);
+    await openReadback(enUS.pages.clients.design.speedCompatibility);
 
     const text = document.body.textContent ?? '';
     expect(text).toContain(enUS.pages.policies.used);
@@ -333,6 +349,7 @@ describe('ClientPlanPanel shaping rows', () => {
   it('keeps them on a client whose protocol can be shaped, device down or not', async () => {
     mockHost({ ...ENFORCED, shapeable: false });
     await renderPanel(['wgkernel'], [WG_CORE]);
+    await openReadback();
 
     const text = document.body.textContent ?? '';
     expect(text).toContain(enUS.pages.policies.inEffect);

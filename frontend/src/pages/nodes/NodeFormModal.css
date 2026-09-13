@@ -1,22 +1,16 @@
-.test-row .hint {
-  font-size: 12px;
-  opacity: 0.6;
-  margin-top: 4px;
-}
-
-.ant-form .hint {
-  font-size: 12px;
-  opacity: 0.6;
-  margin-top: 4px;
-}
-
-.test-row {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.test-result {
-  width: 100%;
+.node-form-modal .ant-modal-title .p-h1 { font-size: 16px; }
+.node-form-modal .ant-modal-title .p-sub { margin-top: 3px; font-weight: 400; }
+.node-form-modal .ant-modal-body { max-height: 68vh; overflow-y: auto; padding-top: 4px; }
+.node-form-modal .node-form-section { border: 1px solid var(--p-border); border-radius: 8px; padding: 13px 14px 0; margin-bottom: 14px; }
+.node-form-modal .node-form-section > .p-kicker { margin-bottom: 12px; color: var(--p-text-2); }
+.node-form-modal .ant-form-item { margin-bottom: 14px; }
+.node-form-modal .ant-form-item-label { padding-bottom: 5px; }
+.node-form-modal .ant-form-item-label > label { font-size: 12px; }
+.node-form-modal .ant-form-item-extra { font-size: 11px; }
+.node-form-modal .node-form-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; text-align: start; }
+.node-form-modal .node-form-footer > div { display: flex; gap: 8px; flex-wrap: wrap; margin-inline-start: auto; }
+.node-form-modal .test-row { display: flex; flex-direction: column; gap: 12px; }
+.node-form-modal .test-result { width: 100%; }
+@media (max-width: 600px) {
+  .node-form-modal .node-form-section { padding-inline: 12px; }
 }

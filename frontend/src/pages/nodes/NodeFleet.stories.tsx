@@ -118,3 +118,24 @@ export const DetailHistory: Story = {
     await waitFor(() => expect(within(dialog).getByText(text('telemetry.hour'))).toBeVisible());
   },
 };
+
+export const CardActions: Story = {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const card = within(canvas.getByRole('button', { name: 'Helsinki' }).closest('section')!);
+    await userEvent.click(card.getByRole('button', { name: text('check') }));
+    expect(args.onProbe).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+    await userEvent.click(card.getByRole('button', { name: text('more') }));
+    await userEvent.click(await within(document.body).findByRole('menuitem', { name: text('edit') }));
+    expect(args.onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+    await userEvent.click(card.getByRole('button', { name: text('more') }));
+    await userEvent.click(await within(document.body).findByRole('menuitem', { name: text('pages.clients.disable') }));
+    expect(args.onToggleEnable).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), false);
+    await userEvent.click(card.getByRole('checkbox'));
+    await userEvent.click(canvas.getByRole('button', { name: String(i18next.t('pages.nodes.updateSelected', { count: 1 })) }));
+    expect(args.onUpdateSelected).toHaveBeenCalledOnce();
+    const child = within(canvas.getByRole('button', { name: 'Oslo child' }).closest('section')!);
+    expect(child.queryByRole('button', { name: text('more') })).toBeNull();
+    expect(child.queryByRole('checkbox')).toBeNull();
+  },
+};

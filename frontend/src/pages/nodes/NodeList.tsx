@@ -13,7 +13,7 @@ import {
   Tooltip,
 } from 'antd';
 import type { BadgeProps } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnType } from 'antd/es/table';
 import {
   ApartmentOutlined,
   ClusterOutlined,
@@ -38,6 +38,7 @@ import { SizeFormatter } from '@/utils';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { isPanelUpdateAvailable } from '@/lib/panel-version';
 import { activateOnKey } from '@/utils/a11y';
+import { Meter } from '@/components/ui/panel';
 import './NodeList.css';
 
 export interface NodeListProps {
@@ -55,6 +56,9 @@ export interface NodeListProps {
   onToggleEnable: (node: NodeRecord, next: boolean) => void;
   onUpdateNode: (node: NodeRecord) => void;
   onUpdateSelected: () => void;
+  onRefresh?: () => void;
+  hideToolbar?: boolean;
+  onDetails?: (node: NodeRecord) => void;
 }
 
 function isUpdateEligible(n: NodeRecord): boolean {
@@ -176,6 +180,8 @@ export default function NodeList({
   onToggleEnable,
   onUpdateNode,
   onUpdateSelected,
+  hideToolbar = false,
+  onDetails,
 }: NodeListProps) {
   const { t } = useTranslation();
   const relativeTime = useRelativeTime();
@@ -236,7 +242,7 @@ export default function NodeList({
     });
   }
 
-  const columns = useMemo<ColumnsType<NodeRow>>(() => [
+  const columns = useMemo<ColumnType<NodeRow>[]>(() => [
     {
       title: t('pages.nodes.actions'),
       align: 'center',
@@ -246,7 +252,8 @@ export default function NodeList({
           <Tag icon={<ApartmentOutlined />} style={{ margin: 0 }}>{t('pages.nodes.subNode')}</Tag>
         </Tooltip>
       ) : (
-        <Space>
+        <Space size={4}>
+          <Switch size="small" checked={!!record.enable} aria-label={`${t('enable')}: ${record.name}`} onChange={(next) => onToggleEnable(record, next)} />
           <Tooltip title={t('pages.nodes.probe')}>
             <Button type="text" size="small" style={{ fontSize: 16 }} icon={<ThunderboltOutlined />} aria-label={t('pages.nodes.probe')} onClick={() => onProbe(record)} />
           </Tooltip>
@@ -286,10 +293,12 @@ export default function NodeList({
       render: (_value, record) => (
         <div className="name-cell" style={record.transitive ? { paddingInlineStart: 20 } : undefined}>
           <span className="name">
+            <StatusDot status={record.status} xrayState={record.xrayState} />
             {record.transitive && <ApartmentOutlined style={{ marginInlineEnd: 6, opacity: 0.6 }} />}
             {record.name}
           </span>
           {record.remark && <span className="remark">{record.remark}</span>}
+          <Tooltip title={record.lastError || record.xrayError}><span className="p-sub"><StatusLabel status={record.status} xrayState={record.xrayState} /></span></Tooltip>
         </div>
       ),
     },
@@ -339,11 +348,13 @@ export default function NodeList({
       },
     },
     {
-      title: t('pages.nodes.cpu'),
+      title: `${t('pages.nodes.cpu')} / ${t('pages.nodes.mem')}`,
       dataIndex: 'cpuPct',
       align: 'center',
-      width: 90,
-      render: (_value, record) => nodeHasReadings(record) ? formatPct(record.cpuPct) : '—',
+      width: 168,
+      render: (_value, record) => <div className="node-table-load"><div><span>{t('pages.nodes.cpu')} <b>{nodeHasReadings(record) ? formatPct(record.cpuPct) : '—'}</b></span><span>{t('pages.nodes.mem')} <b>{nodeHasReadings(record) ? formatPct(record.memPct) : '—'}</b></span></div>
+        {nodeHasReadings(record) && record.cpuPct != null && record.memPct != null && <Meter pct={Math.min(100, Math.max(record.cpuPct, record.memPct))} height={3} tone={Math.max(record.cpuPct, record.memPct) > 80 ? 'var(--p-warning)' : 'var(--p-primary)'} />}
+      </div>,
     },
     {
       title: t('pages.nodes.mem'),
@@ -356,7 +367,7 @@ export default function NodeList({
       title: t('pages.nodes.xrayVersion'),
       dataIndex: 'xrayVersion',
       align: 'center',
-      render: (_value, record) => record.xrayVersion || '-',
+      render: (_value, record) => <div><span className="p-mono">{record.xrayVersion || '—'}</span><div className="p-sub">{t('pages.nodes.panelVersion')}: {record.panelVersion || '—'}</div></div>,
     },
     {
       title: t('pages.nodes.panelVersion') || 'Panel version',
@@ -442,8 +453,8 @@ export default function NodeList({
   ], [t, showAddress, relativeTime, latestVersion, onToggleEnable, onProbe, onEdit, onDelete, onUpdateNode, nameByGuid]);
 
   return (
-    <Card size="small" hoverable>
-      <div className="toolbar">
+    <Card size="small" className="node-table-card">
+      {!hideToolbar && <div className="toolbar">
         <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
           {t('pages.nodes.addNode')}
         </Button>
@@ -455,7 +466,7 @@ export default function NodeList({
             {t('pages.nodes.updateSelected', { count: selectedIds.length })}
           </Button>
         )}
-      </div>
+      </div>}
 
       {isMobile ? (
         <>
@@ -655,8 +666,18 @@ export default function NodeList({
         </>
       ) : (
         <Table<NodeRow>
+          className="p-table"
           dataSource={dataSource}
-          columns={columns}
+          columns={[
+            ...columns.filter((column) => column.dataIndex === 'name'),
+            ...columns.filter((column) => column.dataIndex === 'url'),
+            ...columns.filter((column) => column.dataIndex === 'xrayVersion'),
+            ...columns.filter((column) => column.dataIndex === 'cpuPct'),
+            ...columns.filter((column) => column.title === t('clients') || column.title === t('telemetry.inboundTraffic')),
+            ...columns.filter((column) => column.dataIndex === 'latencyMs' || column.dataIndex === 'lastHeartbeat'),
+            ...columns.filter((column) => column.title === t('pages.nodes.actions') || column.key === 'actions'),
+            ...(onDetails ? [{ title: '', key: 'details', width: 76, render: (_value: unknown, record: NodeRow) => <Button type="text" size="small" onClick={() => onDetails(record)}>{t('pages.cores.columns.detail')}</Button> }] : []),
+          ]}
           pagination={false}
           loading={loading}
           scroll={{ x: 'max-content' }}

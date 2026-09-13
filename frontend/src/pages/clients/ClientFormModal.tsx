@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
 import type { ClientPlanOverrides } from '@/schemas/client';
 import { useTranslation } from 'react-i18next';
@@ -7,12 +7,14 @@ import {
   AutoComplete,
   Button,
   Col,
+  Collapse,
   Form,
   Input,
   InputNumber,
   Modal,
   Popconfirm,
   Row,
+  Segmented,
   Select,
   Space,
   Spin,
@@ -40,6 +42,9 @@ import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
 import { DateTimePicker, SelectAllClearButtons } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
 import { IpLimitControl } from '@/components/clients/IpLimitControl';
+import ClientPlanSummary from './ClientPlanSummary';
+import ClientSavedLinks, { type ClientSavedLinksProps } from './ClientSavedLinks';
+import './ClientFormModal.css';
 import ClientPlanPanel, { POLICY_NONE, POLICY_UNLOADED } from './ClientPlanPanel';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
@@ -93,6 +98,7 @@ interface SaveCreatePayload {
 }
 
 interface ClientFormModalProps {
+  subSettings?: ClientSavedLinksProps['subSettings'];
   initialPolicyId?: number;
   open: boolean;
   mode: Mode;
@@ -188,6 +194,7 @@ export function resolveTotalBytes(originalBytes: number | null | undefined, disp
 }
 
 export default function ClientFormModal({
+  subSettings,
   initialPolicyId = 0,
   open,
   mode,
@@ -206,6 +213,7 @@ export default function ClientFormModal({
   const isEdit = mode === 'edit';
 
   const methods = useForm<Values>({ defaultValues: EMPTY });
+  const planSeeded = useRef(false);
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
   const delayedStart = useWatch({ control: methods.control, name: 'delayedStart' });
   const expiryDate = useWatch({ control: methods.control, name: 'expiryDate' });
@@ -221,6 +229,7 @@ export default function ClientFormModal({
   const username = useWatch({ control: methods.control, name: 'username' });
   const subId = useWatch({ control: methods.control, name: 'subId' });
   const auth = useWatch({ control: methods.control, name: 'auth' });
+  const tlsCryptV2 = useWatch({ control: methods.control, name: 'tlsCryptV2' });
   const wgPrivateKey = useWatch({ control: methods.control, name: 'wgPrivateKey' });
   const limitIp = useWatch({ control: methods.control, name: 'limitIp' });
   const policyId = useWatch({ control: methods.control, name: 'policyId' });
@@ -265,6 +274,7 @@ export default function ClientFormModal({
     remove: removeExternalLink,
   } = useFieldArray({ control: methods.control, name: 'externalLinks' });
 
+  const [activeTab, setActiveTab] = useState('basic');
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [clientIps, setClientIps] = useState<ClientIpInfo[]>([]);
@@ -284,6 +294,8 @@ export default function ClientFormModal({
   useEffect(() => {
     if (!open) return;
     setIpsModalOpen(false);
+    setActiveTab('basic');
+    planSeeded.current = false;
 
     if (isEdit && client) {
       const et = Number(client.expiryTime) || 0;
@@ -354,7 +366,12 @@ export default function ClientFormModal({
   }, [open, isEdit]);
 
   useEffect(() => {
-    if (open && !isEdit && initialPolicyId > 0 && plans.data && methods.getValues('policyId') === 0) selectPlan(initialPolicyId);
+    if (!open || isEdit || planSeeded.current || !plans.data) return;
+    planSeeded.current = true;
+    if (!initialPolicyId && Object.keys(methods.formState.dirtyFields).length) return;
+    const available = plans.data.filter((plan) => !plan.archived && plan.ownerUserId == null);
+    const initial = initialPolicyId > 0 ? available.find((plan) => plan.id === initialPolicyId) : available[0];
+    if (initial) selectPlan(initial.id);
   }, [open, isEdit, initialPolicyId, plans.data, methods, selectPlan]);
 
   const flowCapableIds = useMemo(() => {
@@ -609,6 +626,9 @@ export default function ClientFormModal({
         attached += 1;
       }
       const first = validated.error.issues[0];
+      const firstField = String(first?.path[0] ?? '');
+      setActiveTab(['totalGB', 'delayedDays', 'reset', 'limitIp'].includes(firstField) ? 'limits'
+        : ['subId', 'uuid', 'password', 'flow', 'security', 'auth'].includes(firstField) ? 'config' : 'basic');
       if (attached === 0) {
         messageApi.error(t(first?.message ?? 'somethingWentWrong', { defaultValue: first?.message ?? '' }));
       }
@@ -731,7 +751,10 @@ export default function ClientFormModal({
       {messageContextHolder}
       <Modal
         open={open}
-        title={isEdit ? t('pages.clients.editClient') : t('pages.clients.addClient')}
+        className="client-form-modal"
+        title={<div><div className="client-form-title">{isEdit ? t('pages.clients.editClient') : t('pages.clients.addClient')}</div>
+          <div className="client-form-subtitle">{isEdit ? client?.email : t('pages.clients.design.provisionHint', { defaultValue: 'Provision from a plan, or set every limit by hand.' })}</div>
+        </div>}
         destroyOnHidden
         width={720}
         zIndex={CLIENT_FORM_MODAL_Z_INDEX}
@@ -739,7 +762,11 @@ export default function ClientFormModal({
         styles={{ body: { maxHeight: 'calc(100vh - 160px)', overflowY: 'auto', overflowX: 'hidden' } }}
         onCancel={close}
         footer={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="client-form-footer">
+            <Space size={8}>
+              <Switch size="small" aria-label={t('enable')} checked={enable} onChange={(v) => methods.setValue('enable', v)} />
+              <span>{t('pages.clients.design.enabledOnSave', { defaultValue: 'Enabled on save' })}</span>
+            </Space>
             {isEdit && resetTraffic && (
               <Popconfirm
                 title={t('pages.inbounds.resetTraffic')}
@@ -776,211 +803,128 @@ export default function ClientFormModal({
       >
         <FormProvider {...methods}>
           <Form layout="vertical">
+            <div className="client-form-mode">
+              <Segmented
+                aria-label={t('pages.policies.plan')}
+                disabled={policyId === POLICY_UNLOADED}
+                value={policyId > 0 ? 'plan' : 'custom'}
+                onChange={(value) => selectPlan(value === 'custom' ? POLICY_NONE : (plans.data?.find((plan) => !plan.archived && plan.ownerUserId == null)?.id ?? POLICY_NONE))}
+                options={[
+                  { value: 'plan', label: t('pages.clients.design.fromPlan', { defaultValue: 'From a plan' }), disabled: !plans.data?.some((plan) => !plan.archived && plan.ownerUserId == null) && policyId <= 0 },
+                  { value: 'custom', label: t('pages.clients.design.customClient', { defaultValue: 'Custom client' }) },
+                ]}
+              />
+              <span className="p-sub">{policyId > 0 ? t('telemetry.planManaged') : t('pages.clients.design.customHint', { defaultValue: 'Pick inbounds and limits yourself.' })}</span>
+            </div>
             <Tabs
-              defaultActiveKey="basic"
+              activeKey={activeTab}
+              onChange={setActiveTab}
               items={[
                 {
                   key: 'basic',
+                  forceRender: true,
                   label: t('pages.clients.tabBasics'),
-                  children: (
-                    <>
-                      <Row gutter={16}>
-                        <Col xs={24} md={12}>
-                          <Form.Item label={t('pages.clients.email')} required {...fieldError('email')}>
-                            <Space.Compact style={{ display: 'flex' }}>
-                              <Input
-                                value={email}
-                                placeholder={t('pages.clients.email')}
-                                style={{ flex: 1 }}
-                                onChange={(e) => methods.setValue('email', e.target.value)}
-                              />
-                              {!isEdit && (
-                                <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('email', RandomUtil.randomLowerAndNum(12))} />
-                              )}
-                            </Space.Compact>
-                          </Form.Item>
-                        </Col>
-                        <Col xs={24} md={12}>
-                          <FormField
-                            name="totalGB"
-                            label={t('pages.clients.totalGB')}
-                            tooltip={t('pages.clients.totalGBDesc')}
-                            transform={{ output: (v) => Number(v) || 0 }}
-                          >
-                            <InputNumber disabled={quotaManaged} min={0} step={1} style={{ width: '100%' }} />
-                          </FormField>
-                        </Col>
-                      </Row>
-
-                      <Row gutter={16}>
-                        <Col xs={24} md={12}>
-                          {delayedStart ? (
-                            <FormField
-                              name="delayedDays"
-                              label={t('pages.clients.expireDays')}
-                              transform={{ output: (v) => Number(v) || 0 }}
-                            >
-                              <InputNumber disabled={expiryManaged} min={0} style={{ width: '100%' }} />
-                            </FormField>
-                          ) : (
-                            <Form.Item label={t('pages.clients.expiryTime')}>
-                              <DateTimePicker
-                                disabled={expiryManaged}
-                                value={expiryDayjs}
-                                onChange={(d) => methods.setValue('expiryDate', d ? d.valueOf() : 0)}
-                              />
-                            </Form.Item>
-                          )}
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <Form.Item label={t('pages.clients.delayedStart')}>
-                            <Switch
-                              checked={delayedStart}
-                              disabled={expiryManaged}
-                              onChange={(v) => {
-                                methods.setValue('delayedStart', v);
-                                if (v) methods.setValue('expiryDate', 0);
-                                else methods.setValue('delayedDays', 0);
-                              }}
-                            />
-                          </Form.Item>
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <FormField
-                            name="reset"
-                            label={t('pages.clients.renewDays')}
-                            tooltip={t('pages.clients.renewDesc')}
-                            extra={renewWithoutExpiry ? t('pages.clients.renewNeedsExpiry') : undefined}
-                            transform={{ output: (v) => Number(v) || 0 }}
-                          >
-                            <InputNumber disabled={expiryManaged} min={0} style={{ width: '100%' }} />
-                          </FormField>
-                        </Col>
-                      </Row>
-
-                      <Row gutter={16}>
-                        <Col xs={24} md={12}>
-                          <FormField name="comment" label={t('pages.clients.comment')}>
-                            <Input />
-                          </FormField>
-                        </Col>
-                        <Col xs={24} md={12}>
-                          <FormField
-                            name="group"
-                            label={t('pages.clients.group')}
-                            tooltip={t('pages.clients.groupDesc')}
-                            transform={{ output: (v) => v ?? '' }}
-                          >
-                            <AutoComplete
-                              placeholder={t('pages.clients.groupPlaceholder')}
-                              options={groups.map((g) => ({ value: g }))}
-                              allowClear
-                            />
-                          </FormField>
-                        </Col>
-                      </Row>
-
-                      {(tgBotEnable || showReverseTag) && (
-                        <Row gutter={16}>
-                          {tgBotEnable && (
-                            <Col xs={24} md={12}>
-                              <FormField
-                                name="tgId"
-                                label={t('pages.clients.telegramId')}
-                                transform={{ output: (v) => Number(v) || 0 }}
-                              >
-                                <InputNumber min={0} controls={false}
-                                  placeholder={t('pages.clients.telegramIdPlaceholder')} style={{ width: '100%' }} />
-                              </FormField>
-                            </Col>
-                          )}
-                          {showReverseTag && (
-                            <Col xs={24} md={12}>
-                              <FormField name="reverseTag" label={t('pages.clients.reverseTag')}>
-                                <Input placeholder={t('pages.clients.reverseTagPlaceholder')} />
-                              </FormField>
-                            </Col>
-                          )}
-                        </Row>
-                      )}
-
-                      <Form.Item label={t('pages.clients.attachedInbounds')} required={!isEdit} {...fieldError('inboundIds')}>
-                        {!inboundsManaged && <SelectAllClearButtons
-                          options={inboundOptions}
-                          value={inboundIds}
-                          onChange={(v) => methods.setValue('inboundIds', v)}
-                        />}
-                        <Select
-                          disabled={inboundsManaged}
-                          mode="multiple"
-                          value={inboundIds}
-                          onChange={(v) => methods.setValue('inboundIds', v)}
-                          options={inboundOptions}
-                          placeholder={t('pages.clients.selectInbound')}
-                          maxTagCount="responsive"
-                          placement="topLeft"
-                          listHeight={220}
-                          showSearch={{
-                            filterOption: (input, option) => ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase()),
-                          }}
-                        />
-                      </Form.Item>
-
-                      <Form.Item>
-                        <Switch aria-label={t('enable')} checked={enable} onChange={(v) => methods.setValue('enable', v)} />
-                        <span style={{ marginLeft: 8 }}>{t('enable')}</span>
-                      </Form.Item>
-                    </>
-                  ),
-                },
-                {
-                  key: 'limits',
-                  label: t('pages.clients.tabLimits'),
-                  children: (
+                  children: <>
                     <Row gutter={16}>
                       <Col xs={24} md={12}>
-                        <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')} {...fieldError('limitIp')}>
-                          <IpLimitControl
-                            value={limitIp}
-                            disabled={limitIpDisabled || ipManaged}
-                            notice={limitIpNotice || undefined}
-                            onChange={(v) => methods.setValue('limitIp', v)}
-                            addon={isEdit ? (
-                              <Tooltip title={t('pages.clients.ipLog')}>
-                                <Button aria-label={t('pages.clients.ipLog')} icon={<EyeOutlined />} loading={ipsLoading} onClick={openIpsModal}>
-                                  {clientIps.length > 0 ? clientIps.length : ''}
-                                </Button>
-                              </Tooltip>
-                            ) : undefined}
-                          />
+                        <Form.Item label={t('pages.clients.email')} required {...fieldError('email')}>
+                          <Input value={email} aria-label={t('pages.clients.email')} placeholder={t('pages.clients.email')}
+                            onChange={(e) => methods.setValue('email', e.target.value)}
+                            suffix={!isEdit && <Tooltip title={t('regenerate')}><Button type="text" size="small" aria-label={t('regenerate')}
+                              icon={<ReloadOutlined />} onClick={() => methods.setValue('email', RandomUtil.randomLowerAndNum(12))} /></Tooltip>} />
                         </Form.Item>
                       </Col>
                       <Col xs={24} md={12}>
-                        <ClientPlanPanel
-                          email={isEdit ? (client?.email ?? '') : ''}
-                          kinds={attachedKinds}
-                          cores={cores}
-                          value={policyId}
-                          onSeed={(id) => {
-                            methods.setValue('policyId', id);
-                            methods.setValue('policyIdBaseline', id);
-                          }}
-                          onSelect={selectPlan}
-                        />
-                        {policyId > 0 && <Space orientation="vertical" style={{ marginTop: 12 }}>
-                          <span className="p-sub">{t('telemetry.planManaged')}</span>
-                          {([
-                            ['overrideQuota', t('telemetry.overrideQuota'), overrideQuota],
-                            ['overrideExpiry', t('telemetry.overrideExpiry'), overrideExpiry],
-                            ['overrideLimitIp', t('telemetry.overrideLimitIp'), overrideLimitIp],
-                            ['overrideInbounds', t('telemetry.overrideInbounds'), overrideInbounds],
-                          ] as const).map(([key, label, checked]) => <Space key={key}>
-                            <Switch size="small" aria-label={label} checked={checked} onChange={(v) => methods.setValue(key, v, { shouldDirty: true })} />{label}
-                          </Space>)}
-                        </Space>}
+                        <FormField name="group" label={t('pages.clients.group')} tooltip={t('pages.clients.groupDesc')} transform={{ output: (v) => v ?? '' }}>
+                          <AutoComplete placeholder={t('pages.clients.groupPlaceholder')} options={groups.map((g) => ({ value: g }))} allowClear />
+                        </FormField>
                       </Col>
                     </Row>
-                  ),
+                    <ClientPlanPanel email={isEdit ? (client?.email ?? '') : ''} kinds={attachedKinds} cores={cores} value={policyId}
+                      detailsVisible={!isEdit}
+                      selectionVisible={policyId !== POLICY_NONE}
+                      onSeed={(id) => { methods.setValue('policyId', id); methods.setValue('policyIdBaseline', id); }} onSelect={selectPlan} />
+                    {selectedPlan && <ClientPlanSummary plan={selectedPlan} inbounds={inbounds} />}
+                    {(!inboundsManaged || formErrors.inboundIds) && <Form.Item className="client-form-inbounds" label={t('pages.clients.attachedInbounds')} required={!isEdit} {...fieldError('inboundIds')}
+                      extra={!inboundsManaged && <SelectAllClearButtons options={inboundOptions} value={inboundIds} onChange={(v) => methods.setValue('inboundIds', v)} />}>
+                      <Select aria-label={t('pages.clients.attachedInbounds')} disabled={inboundsManaged} mode="multiple" value={inboundIds}
+                        onChange={(v) => methods.setValue('inboundIds', v)} options={inboundOptions} placeholder={t('pages.clients.selectInbound')}
+                        maxTagCount="responsive" listHeight={220}
+                        showSearch={{ filterOption: (input, option) => ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase()) }} />
+                    </Form.Item>}
+                    <FormField name="comment" label={t('pages.clients.comment')} className="client-form-comment">
+                      <Input.TextArea rows={2} />
+                    </FormField>
+                    {(tgBotEnable || showReverseTag) && <Collapse ghost items={[{ key: 'advanced', label: t('pages.clients.design.advanced', { defaultValue: 'Advanced options' }), children: <Row gutter={16}>
+                      {tgBotEnable && <Col xs={24} md={12}><FormField name="tgId" label={t('pages.clients.telegramId')} transform={{ output: (v) => Number(v) || 0 }}>
+                        <InputNumber min={0} controls={false} placeholder={t('pages.clients.telegramIdPlaceholder')} style={{ width: '100%' }} />
+                      </FormField></Col>}
+                      {showReverseTag && <Col xs={24} md={12}><FormField name="reverseTag" label={t('pages.clients.reverseTag')}>
+                        <Input placeholder={t('pages.clients.reverseTagPlaceholder')} />
+                      </FormField></Col>}
+                    </Row> }]} />}
+                  </>,
+                },
+                {
+                  key: 'limits',
+                  forceRender: true,
+                  label: t('pages.clients.tabLimits'),
+                  children: <>
+                    {isEdit && <ClientPlanPanel email={client?.email ?? ''} kinds={attachedKinds} cores={cores} value={policyId}
+                      selectionVisible={false} onSeed={(id) => { methods.setValue('policyId', id); methods.setValue('policyIdBaseline', id); }} onSelect={selectPlan} />}
+                    {policyId > 0 && <div className="client-form-overrides">
+                      <div className="client-form-overrides-title">{t('telemetry.planManaged')}</div>
+                      <Space size={[16, 8]} wrap>
+                        {([
+                          ['overrideQuota', t('telemetry.overrideQuota'), overrideQuota],
+                          ['overrideExpiry', t('telemetry.overrideExpiry'), overrideExpiry],
+                          ['overrideLimitIp', t('telemetry.overrideLimitIp'), overrideLimitIp],
+                          ['overrideInbounds', t('telemetry.overrideInbounds'), overrideInbounds],
+                        ] as const).map(([key, label, checked]) => <Space key={key}>
+                          <Switch size="small" aria-label={label} checked={checked} onChange={(v) => methods.setValue(key, v, { shouldDirty: true })} />{label}
+                        </Space>)}
+                      </Space>
+                    </div>}
+                    <Row gutter={16}>
+                      <Col xs={24} md={12}>
+                        <FormField name="totalGB" label={t('pages.clients.totalGB')} tooltip={t('pages.clients.totalGBDesc')} extra={t('pages.clients.totalGBDesc')}
+                          transform={{ output: (v) => Number(v) || 0 }}>
+                          <InputNumber disabled={quotaManaged} min={0} step={1} style={{ width: '100%' }} />
+                        </FormField>
+                      </Col>
+                      <Col xs={24} md={12}>
+                        {delayedStart ? <FormField name="delayedDays" label={t('pages.clients.expireDays')} transform={{ output: (v) => Number(v) || 0 }}>
+                          <InputNumber disabled={expiryManaged} min={0} style={{ width: '100%' }} />
+                        </FormField> : <Form.Item label={t('pages.clients.expiryTime')}>
+                          <DateTimePicker disabled={expiryManaged} value={expiryDayjs} onChange={(d) => methods.setValue('expiryDate', d ? d.valueOf() : 0)} />
+                        </Form.Item>}
+                      </Col>
+                    </Row>
+                    <div className="client-form-settings">
+                      <div className="client-form-setting">
+                        <div><div className="client-form-setting-title">{t('pages.clients.delayedStart')}</div>
+                          <div className="p-sub">{t('pages.clients.design.delayedHint', { defaultValue: 'The quota window begins when the client first connects.' })}</div></div>
+                        <Switch aria-label={t('pages.clients.delayedStart')} checked={delayedStart} disabled={expiryManaged}
+                          onChange={(v) => { methods.setValue('delayedStart', v); if (v) methods.setValue('expiryDate', 0); else methods.setValue('delayedDays', 0); }} />
+                      </div>
+                      <div className="client-form-setting">
+                        <div><div className="client-form-setting-title">{t('pages.clients.renewDays')}</div><div className="p-sub">{t('pages.clients.renewDesc')}</div></div>
+                        <FormField name="reset" extra={renewWithoutExpiry ? t('pages.clients.renewNeedsExpiry') : undefined} transform={{ output: (v) => Number(v) || 0 }}>
+                          <InputNumber aria-label={t('pages.clients.renewDays')} disabled={expiryManaged} min={0} style={{ width: 110 }} />
+                        </FormField>
+                      </div>
+                      <div className="client-form-setting">
+                        <div><div className="client-form-setting-title">{t('pages.clients.limitIp')}</div><div className="p-sub">{t('pages.clients.limitIpDesc')}</div></div>
+                        <Form.Item {...fieldError('limitIp')}>
+                          <IpLimitControl value={limitIp} disabled={limitIpDisabled || ipManaged} notice={limitIpNotice || undefined}
+                            onChange={(v) => methods.setValue('limitIp', v)}
+                            addon={isEdit ? <Tooltip title={t('pages.clients.ipLog')}>
+                              <Button aria-label={t('pages.clients.ipLog')} icon={<EyeOutlined />} loading={ipsLoading} onClick={openIpsModal}>{clientIps.length > 0 ? clientIps.length : ''}</Button>
+                            </Tooltip> : undefined} />
+                        </Form.Item>
+                      </div>
+                    </div>
+                  </>,
                 },
                 {
                   key: 'config',
@@ -1100,7 +1044,7 @@ export default function ClientFormModal({
                       )}
                       {credentials.has('tlsCryptV2') && (
                         <Form.Item label={t('pages.clients.tlsCryptV2')} extra={t('pages.clients.tlsCryptV2Hint')}>
-                          <Input.TextArea value={methods.watch('tlsCryptV2') || ''} readOnly rows={3} placeholder={t('pages.clients.tlsCryptV2Pending')} />
+                          <Input.TextArea value={tlsCryptV2 || ''} readOnly rows={3} placeholder={t('pages.clients.tlsCryptV2Pending')} />
                         </Form.Item>
                       )}
                       {credentials.has('adTag') && (
@@ -1123,6 +1067,7 @@ export default function ClientFormModal({
                   label: t('pages.clients.tabLinks'),
                   children: (
                     <>
+                      <ClientSavedLinks active={open && activeTab === 'links'} client={isEdit ? client : null} subSettings={subSettings} />
                       <Typography.Paragraph type="secondary" style={{ marginTop: 4 }}>
                         {t('pages.clients.linksHint')}
                       </Typography.Paragraph>

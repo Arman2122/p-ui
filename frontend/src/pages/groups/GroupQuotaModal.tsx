@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { useZodForm, FormField } from '@/components/form/rhf';
 import type { GroupSummary, InboundOption } from '@/schemas/client';
 import { HttpUtil } from '@/utils';
+import './groups-parity.css';
 
 const QuotaFormSchema = z.object({
   quotaGiB: z.number().min(0, 'pages.clients.errNotNegative').max(Number.MAX_SAFE_INTEGER / 1073741824, 'telemetry.quotaTooLarge'),
@@ -24,11 +25,11 @@ export default function GroupQuotaModal({ group, inbounds = [], onClose, onSaved
         ...(dirtyFields.inboundIds ? { inboundIds } : {}) }, { headers: { 'Content-Type': 'application/json' } });
     if (!msg?.success) throw new Error(msg?.msg || t('somethingWentWrong'));
   }, onSuccess: () => { onSaved(); onClose(); } });
-  return <Modal open title={`${t('telemetry.groupQuota')}: ${group.name}`} onCancel={onClose}
+  return <Modal open className="groups-parity-modal" title={`${t('telemetry.groupQuota')}: ${group.name}`} onCancel={onClose}
     onOk={methods.handleSubmit((values) => mutation.mutate(values))} confirmLoading={mutation.isPending}
     okText={t('save')} cancelText={t('cancel')}>
     <FormProvider {...methods}><Form layout="vertical">
-      <FormField name="quotaGiB" label={t('telemetry.quotaGiB')}><InputNumber min={0} style={{ width: '100%' }} /></FormField>
+      <FormField name="quotaGiB" label={t('telemetry.quotaGiB')}><InputNumber size="large" min={0} suffix="GiB" style={{ width: '100%' }} /></FormField>
       <FormField name="inboundIds" label={t('telemetry.sharedInbounds')} extra={t('telemetry.sharedInboundsHelp')}>
         <Select mode="multiple" allowClear options={inbounds.map((ib) => ({ value: ib.id, label: `${ib.remark || ib.tag || ib.id} · ${ib.protocol ?? ''}` }))} />
       </FormField>

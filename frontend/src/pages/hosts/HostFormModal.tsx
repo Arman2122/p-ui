@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Form, Input, InputNumber, Modal, Select, Switch, Tabs, message } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Select, Switch, Tabs, message } from 'antd';
 import {
   ProfileOutlined,
   SafetyCertificateOutlined,
@@ -23,6 +23,7 @@ import { useNodesQuery } from '@/api/queries/useNodesQuery';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { catTabLabel } from '@/pages/settings/catTabLabel';
 import { HostDownloadForm, HostFinalMaskForm, HostMuxForm, HostSockoptForm } from './json-forms';
+import './HostFormModal.css';
 
 type FormShape = Omit<BulkAddHostValues, 'isDisabled'> & {
   enable: boolean;
@@ -36,6 +37,10 @@ interface HostFormModalProps {
   existingHosts: HostRecord[];
   save: (payload: BulkAddHostValues) => Promise<{ success?: boolean; msg?: string } | undefined>;
   onOpenChange: (open: boolean) => void;
+}
+
+function namedOptions(label: string, menu: ReactNode) {
+  return <div ref={element => { element?.querySelector('[role="listbox"]')?.setAttribute('aria-label', label); }}>{menu}</div>;
 }
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -164,23 +169,25 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
   return (
     <Modal
       open={open}
-      title={t(mode === 'add' ? 'pages.hosts.addHost' : 'pages.hosts.editHost')}
+      className="host-form-modal"
+      title={<div><div className="p-h1">{t(mode === 'add' ? 'pages.hosts.addHost' : 'pages.hosts.editHost')}</div><div className="p-sub">{t('designParityHosts.formIntro', { defaultValue: 'Public endpoints advertised in client links and subscriptions.' })}</div></div>}
       onOk={methods.handleSubmit(onFinish)}
       onCancel={() => onOpenChange(false)}
       confirmLoading={loading}
       okText={t('save')}
       cancelText={t('cancel')}
       destroyOnHidden
-      width={isMobile ? '95vw' : 760}
+      width={isMobile ? '95vw' : 680}
+      footer={<div className="host-form-footer"><span className="p-sub">{t('designParityHosts.formHint', { defaultValue: 'Overrides apply to the selected inbounds.' })}</span><div><Button onClick={() => onOpenChange(false)} disabled={loading}>{t('cancel')}</Button><Button type="primary" loading={loading} onClick={methods.handleSubmit(onFinish)}>{t('save')}</Button></div></div>}
       styles={{ body: { maxHeight: '70vh', overflowY: 'auto', overflowX: 'hidden' } }}
     >
       {messageContextHolder}
       <FormProvider {...methods}>
         <Form
+          layout="vertical"
           colon={false}
-          labelCol={{ sm: { span: 8 } }}
-          wrapperCol={{ sm: { span: 14 } }}
           labelWrap
+          onFinish={methods.handleSubmit(onFinish)}
         >
           <Tabs
             defaultActiveKey="basic"
@@ -188,9 +195,9 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
               {
                 key: 'basic',
                 forceRender: true,
-                label: catTabLabel(<ProfileOutlined />, t('pages.hosts.sections.basic'), isMobile),
+                label: catTabLabel(<ProfileOutlined aria-hidden />, t('pages.hosts.sections.basic'), isMobile),
                 children: (
-                  <>
+                  <div className="host-form-grid">
                     <FormField name="remark" label={t('pages.hosts.fields.remark')} tooltip={t('pages.hosts.hints.remark')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.remark) }}>
                       <Input maxLength={256} />
                     </FormField>
@@ -198,7 +205,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       <Input maxLength={64} />
                     </FormField>
                     <FormField name="inboundIds" label={t('pages.hosts.fields.inbound')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.inboundIds) }}>
-                      <Select
+                      <Select popupRender={menu => namedOptions(t('pages.hosts.fields.inbound'), menu)}
                         mode="multiple"
                         options={inboundSelectOptions}
                         showSearch={{ optionFilterProp: 'label' }}
@@ -206,7 +213,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       />
                     </FormField>
                     <FormField name="hosts" label={t('pages.hosts.fields.address')} tooltip={t('pages.hosts.hints.address')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.hosts) }}>
-                      <Select
+                      <Select popupRender={menu => namedOptions(t('pages.hosts.fields.address'), menu)}
                         mode="tags"
                         options={hostOptions}
                         tokenSeparators={[',', ';', ' ']}
@@ -217,25 +224,25 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       <InputNumber min={0} max={65535} />
                     </FormField>
                     <FormField name="tags" label={t('pages.hosts.fields.tags')} tooltip={t('pages.hosts.hints.tags')} rules={{ validate: rhfZodValidate(BulkAddHostSchema.shape.tags) }}>
-                      <Select mode="tags" allowClear tokenSeparators={[',']} />
+                      <Select popupRender={menu => namedOptions(t('pages.hosts.fields.tags'), menu)} mode="tags" allowClear tokenSeparators={[',']} />
                     </FormField>
                     <FormField name="nodeGuids" label={t('pages.hosts.fields.nodeGuids')} tooltip={t('pages.hosts.hints.nodeGuids')}>
-                      <Select mode="multiple" allowClear options={nodeSelectOptions} showSearch={{ optionFilterProp: 'label' }} />
+                      <Select popupRender={menu => namedOptions(t('pages.hosts.fields.nodeGuids'), menu)} mode="multiple" allowClear options={nodeSelectOptions} showSearch={{ optionFilterProp: 'label' }} />
                     </FormField>
                     <FormField name="enable" label={t('pages.hosts.fields.enable')} valueProp="checked">
                       <Switch />
                     </FormField>
-                  </>
+                  </div>
                 ),
               },
               {
                 key: 'security',
                 forceRender: true,
-                label: catTabLabel(<SafetyCertificateOutlined />, t('pages.hosts.sections.security'), isMobile),
+                label: catTabLabel(<SafetyCertificateOutlined aria-hidden />, t('pages.hosts.sections.security'), isMobile),
                 children: (
-                  <>
+                  <div className="host-form-grid">
                     <FormField name="security" label={t('pages.hosts.fields.security')}>
-                      <Select
+                      <Select popupRender={menu => namedOptions(t('pages.hosts.fields.security'), menu)}
                         options={['same', 'tls', 'none', 'reality'].map((v) => ({ value: v, label: v }))}
                       />
                     </FormField>
@@ -251,17 +258,17 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                           <Switch />
                         </FormField>
                         <FormField name="fingerprint" label={t('pages.hosts.fields.fingerprint')}>
-                          <Select allowClear options={fpOptions} />
+                          <Select popupRender={menu => namedOptions(t('pages.hosts.fields.fingerprint'), menu)} allowClear options={fpOptions} />
                         </FormField>
                       </>
                     )}
                     {showTlsExtras && (
                       <>
                         <FormField name="alpn" label={t('pages.hosts.fields.alpn')}>
-                          <Select mode="multiple" allowClear options={alpnOptions} />
+                          <Select popupRender={menu => namedOptions(t('pages.hosts.fields.alpn'), menu)} mode="multiple" allowClear options={alpnOptions} />
                         </FormField>
                         <FormField name="pinnedPeerCertSha256" label={t('pages.hosts.fields.pins')}>
-                          <Select mode="tags" allowClear tokenSeparators={[',']} />
+                          <Select popupRender={menu => namedOptions(t('pages.hosts.fields.pins'), menu)} mode="tags" allowClear tokenSeparators={[',']} />
                         </FormField>
                         <FormField name="verifyPeerCertByName" label={t('pages.hosts.fields.verifyPeerCertByName')} tooltip={t('pages.inbounds.form.verifyPeerCertByNameTip')}>
                           <Input placeholder="example.com" />
@@ -274,13 +281,13 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                         </FormField>
                       </>
                     )}
-                  </>
+                  </div>
                 ),
               },
               {
                 key: 'advanced',
                 forceRender: true,
-                label: catTabLabel(<ControlOutlined />, t('pages.hosts.sections.advanced'), isMobile),
+                label: catTabLabel(<ControlOutlined aria-hidden />, t('pages.hosts.sections.advanced'), isMobile),
                 children: (
                   <Tabs
                     size="small"
@@ -289,7 +296,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       {
                         key: 'adv-general',
                         forceRender: true,
-                        label: catTabLabel(<SettingOutlined />, t('pages.hosts.sections.general'), isMobile),
+                        label: catTabLabel(<SettingOutlined aria-hidden />, t('pages.hosts.sections.general'), isMobile),
                         children: (
                           <>
                             <FormField name="hostHeader" label={t('pages.hosts.fields.hostHeader')} tooltip={t('pages.hosts.hints.hostHeader')}>
@@ -302,7 +309,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                               <Input placeholder="443" />
                             </FormField>
                             <FormField name="excludeFromSubTypes" label={t('pages.hosts.fields.excludeFromSubTypes')}>
-                              <Select
+                              <Select popupRender={menu => namedOptions(t('pages.hosts.fields.excludeFromSubTypes'), menu)}
                                 mode="multiple"
                                 allowClear
                                 options={['raw', 'json', 'clash'].map((v) => ({ value: v, label: v }))}
@@ -314,7 +321,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       {
                         key: 'adv-mux',
                         forceRender: true,
-                        label: catTabLabel(<PartitionOutlined />, t('pages.hosts.fields.muxParams'), isMobile),
+                        label: catTabLabel(<PartitionOutlined aria-hidden />, t('pages.hosts.fields.muxParams'), isMobile),
                         children: (
                           <Form.Item noStyle>
                             <Controller
@@ -330,7 +337,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       {
                         key: 'adv-sockopt',
                         forceRender: true,
-                        label: catTabLabel(<DeploymentUnitOutlined />, t('pages.hosts.fields.sockoptParams'), isMobile),
+                        label: catTabLabel(<DeploymentUnitOutlined aria-hidden />, t('pages.hosts.fields.sockoptParams'), isMobile),
                         children: (
                           <Form.Item noStyle>
                             <Controller
@@ -346,7 +353,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       {
                         key: 'adv-finalmask',
                         forceRender: true,
-                        label: catTabLabel(<RocketOutlined />, t('pages.hosts.fields.finalMask'), isMobile),
+                        label: catTabLabel(<RocketOutlined aria-hidden />, t('pages.hosts.fields.finalMask'), isMobile),
                         children: (
                           <Form.Item noStyle>
                             <Controller
@@ -362,7 +369,7 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
                       {
                         key: 'adv-download',
                         forceRender: true,
-                        label: catTabLabel(<CloudDownloadOutlined />, t('pages.hosts.fields.downloadSettings'), isMobile),
+                        label: catTabLabel(<CloudDownloadOutlined aria-hidden />, t('pages.hosts.fields.downloadSettings'), isMobile),
                         children: (
                           <Form.Item noStyle>
                             <Controller
@@ -382,11 +389,11 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
               {
                 key: 'clash',
                 forceRender: true,
-                label: catTabLabel(<NodeIndexOutlined />, t('pages.hosts.sections.clash'), isMobile),
+                label: catTabLabel(<NodeIndexOutlined aria-hidden />, t('pages.hosts.sections.clash'), isMobile),
                 children: (
                   <>
                     <FormField name="mihomoIpVersion" label={t('pages.hosts.fields.mihomoIpVersion')}>
-                      <Select
+                      <Select popupRender={menu => namedOptions(t('pages.hosts.fields.mihomoIpVersion'), menu)}
                         allowClear
                         options={['dual', 'ipv4', 'ipv6', 'ipv4-prefer', 'ipv6-prefer'].map((v) => ({ value: v, label: v }))}
                       />

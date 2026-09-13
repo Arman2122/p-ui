@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -13,14 +13,19 @@ import {
   Switch,
   message,
 } from 'antd';
-import { FormProvider, useForm, useWatch } from 'react-hook-form';
+import { FormProvider, useWatch } from 'react-hook-form';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import type { RemoteInboundOption } from '@/api/queries/useNodeMutations';
 import type { Msg } from '@/utils';
 import { NodeFormSchema, type NodeFormValues, type ProbeResult } from '@/schemas/node';
-import { FormField, rhfZodValidate } from '@/components/form/rhf';
+import { FormField, rhfZodValidate, useZodForm } from '@/components/form/rhf';
+import { Kicker } from '@/components/ui/panel';
 import { useOutboundTagGroups } from '@/api/queries/useOutboundTags';
 import './NodeFormModal.css';
+
+function namedOptions(label: string, menu: ReactNode) {
+  return <div ref={element => { element?.querySelector('[role="listbox"]')?.setAttribute('aria-label', label); }}>{menu}</div>;
+}
 
 type Mode = 'add' | 'edit';
 
@@ -67,7 +72,7 @@ export default function NodeFormModal({
   onOpenChange,
 }: NodeFormModalProps) {
   const { t } = useTranslation();
-  const methods = useForm<NodeFormValues>({ defaultValues: defaultValues() });
+  const methods = useZodForm(NodeFormSchema, { defaultValues: defaultValues() });
   const [messageApi, messageContextHolder] = message.useMessage();
 
   const [submitting, setSubmitting] = useState(false);
@@ -198,14 +203,10 @@ export default function NodeFormModal({
   }
 
   async function onFinish(values: NodeFormValues) {
-    const result = NodeFormSchema.safeParse(values);
-    if (!result.success) {
-      messageApi.error(t(result.error.issues[0]?.message ?? 'pages.nodes.toasts.fillRequired'));
-      return;
-    }
+    if (submitting) return;
     setSubmitting(true);
     try {
-      const payload = buildPayload(result.data);
+      const payload = buildPayload(values);
       const test = await testConnection(payload);
       const probe = test?.success ? test.obj : null;
       if (!probe || probe.status !== 'online') {
@@ -231,17 +232,23 @@ export default function NodeFormModal({
       {messageContextHolder}
       <Modal
         open={open}
-        title={title}
+        className="node-form-modal"
+        title={<div><div className="p-h1">{title}</div><div className="p-sub">{t('designParityNodes.formIntro', { defaultValue: 'Connect to the node panel and choose which inbounds to synchronize.' })}</div></div>}
         confirmLoading={submitting}
         okText={t('save')}
         cancelText={t('cancel')}
         mask={{ closable: false }}
-        width="640px"
+        width={620}
         onOk={methods.handleSubmit(onFinish)}
         onCancel={close}
+        footer={<div className="node-form-footer"><span className="p-sub">{t('designParityNodes.formHint', { defaultValue: 'Connection is checked before saving.' })}</span>
+          <div><Button loading={testing} disabled={submitting} onClick={onTest}>{t('pages.nodes.testConnection')}</Button><Button onClick={close} disabled={submitting}>{t('cancel')}</Button><Button type="primary" loading={submitting} onClick={methods.handleSubmit(onFinish)}>{mode === 'add' ? t('designParityNodes.connect', { defaultValue: 'Connect node' }) : t('save')}</Button></div>
+        </div>}
       >
         <FormProvider {...methods}>
-          <Form layout="vertical">
+          <Form layout="vertical" onFinish={methods.handleSubmit(onFinish)}>
+            <section className="node-form-section">
+            <Kicker>{t('designParityNodes.connection', { defaultValue: 'Connection' })}</Kicker>
             <Row gutter={16}>
               <Col xs={24} md={12}>
                 <FormField
@@ -268,7 +275,7 @@ export default function NodeFormModal({
                     if (value === 'http') methods.setValue('tlsVerifyMode', 'skip');
                   }}
                 >
-                  <Select
+                  <Select popupRender={menu => namedOptions(t('pages.nodes.scheme'), menu)}
                     options={[
                       { value: 'https', label: 'https' },
                       { value: 'http', label: 'http' },
@@ -313,6 +320,9 @@ export default function NodeFormModal({
               </Col>
             </Row>
 
+            </section>
+            <section className="node-form-section">
+            <Kicker>{t('designParityNodes.security', { defaultValue: 'Authentication and security' })}</Kicker>
             <FormField
               label={t('pages.nodes.allowPrivateAddress')}
               name="allowPrivateAddress"
@@ -329,6 +339,7 @@ export default function NodeFormModal({
             >
               <Select
                 disabled={scheme === 'http'}
+                popupRender={menu => namedOptions(t('pages.nodes.tlsVerifyMode'), menu)}
                 options={[
                   { value: 'verify', label: t('pages.nodes.tlsVerify') },
                   { value: 'pin', label: t('pages.nodes.tlsPin') },
@@ -383,13 +394,16 @@ export default function NodeFormModal({
               />
             </FormField>
 
+            </section>
+            <section className="node-form-section">
+            <Kicker>{t('designParityNodes.sync', { defaultValue: 'Routing and synchronization' })}</Kicker>
             <FormField
               label={t('pages.nodes.outboundTag')}
               name="outboundTag"
               tooltip={t('pages.nodes.outboundTagHint')}
               transform={{ input: (v) => (v as string) || undefined }}
             >
-              <Select
+              <Select popupRender={menu => namedOptions(t('pages.nodes.outboundTag'), menu)}
                 allowClear
                 showSearch
                 placeholder={t('pages.nodes.outboundTagPlaceholder')}
@@ -402,7 +416,7 @@ export default function NodeFormModal({
               name="inboundSyncMode"
               tooltip={t('pages.nodes.inboundSyncModeHint')}
             >
-              <Select
+              <Select popupRender={menu => namedOptions(t('pages.nodes.inboundSyncMode'), menu)}
                 options={[
                   { value: 'all', label: t('pages.nodes.allInbounds') },
                   { value: 'selected', label: t('pages.nodes.selectedInbounds') },
@@ -421,7 +435,7 @@ export default function NodeFormModal({
                   allowClear
                   loading={fetchingInbounds}
                   placeholder={t('pages.nodes.inboundTagsPlaceholder')}
-                  popupRender={(menu) => (
+                  popupRender={(menu) => namedOptions(t('pages.nodes.inboundTags'),
                     <>
                       <Button type="text" block loading={fetchingInbounds} onClick={onFetchInbounds}>
                         {t('pages.nodes.loadInbounds')}
@@ -436,11 +450,9 @@ export default function NodeFormModal({
                 />
               </FormField>
             )}
+            </section>
 
             <div className="test-row">
-              <Button type="default" loading={testing} onClick={onTest}>
-                {t('pages.nodes.testConnection')}
-              </Button>
               {testResult && (
                 <div className="test-result">
                   {testResult.status === 'online' ? (

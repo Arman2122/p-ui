@@ -18,6 +18,7 @@ import {
   Result,
   Row,
   Select,
+  Segmented,
   Space,
   Spin,
   Switch,
@@ -66,6 +67,7 @@ import { useClients } from '@/hooks/useClients';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
 import { usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
 import { useDatepicker } from '@/hooks/useDatepicker';
+import { useRelativeTime } from '@/hooks/useRelativeTime';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import ClientSpeedTag, { isActiveSpeed } from '@/components/clients/ClientSpeedTag';
@@ -180,7 +182,7 @@ const INBOUND_PROTOCOL_COLORS: Record<string, string> = {
   mixed: 'lime',
   tunnel: 'orange',
 };
-const INBOUND_CHIP_LIMIT = 1;
+const INBOUND_CHIP_LIMIT = 2;
 // A shared empty array keeps the memoised chip cell from seeing a fresh prop for
 // every unattached client on every render.
 const EMPTY_INBOUND_IDS: number[] = [];
@@ -236,6 +238,7 @@ export default function ClientsPage() {
   const { t } = useTranslation();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
   const { datepicker } = useDatepicker();
+  const relativeTime = useRelativeTime();
   const { isMobile } = useMediaQuery();
   const [modal, modalContextHolder] = Modal.useModal();
   const [messageApi, messageContextHolder] = message.useMessage();
@@ -268,6 +271,7 @@ export default function ClientsPage() {
 
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [twoLine, setTwoLine] = useState(() => localStorage.getItem('clientsRowLayout') !== 'columns');
   const [searchParams, setSearchParams] = useSearchParams();
   const [initialPolicyId, setInitialPolicyId] = useState(0);
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
@@ -594,6 +598,19 @@ export default function ClientsPage() {
     setInfoOpen(true);
   }, [hydrate]);
 
+  const onCopySubscription = useCallback(async (email: string) => {
+    const row = rowsByEmail.current.get(email);
+    if (!row || !subSettings.enable || !subSettings.subURI) return;
+    const full = row.subId ? row : (await hydrate(email))?.client;
+    if (!full?.subId) return;
+    try {
+      await navigator.clipboard.writeText(subSettings.subURI + full.subId);
+      messageApi.success(t('copied'));
+    } catch {
+      messageApi.error(t('somethingWentWrong'));
+    }
+  }, [hydrate, subSettings.enable, subSettings.subURI, messageApi, t]);
+
   const onShowQr = useCallback(async (email: string) => {
     const row = rowsByEmail.current.get(email);
     if (!row) return;
@@ -919,7 +936,7 @@ export default function ClientsPage() {
 
   const columns: ColumnsType<ClientRecord> = [
     {
-      title: t('pages.clients.client'), key: 'email', width: 250,
+      title: t('pages.clients.client'), key: 'email', width: twoLine ? undefined : 220,
       render: (_v, record) => {
         const bucket = clientBucket(record);
         const key = bucket === 'depleted' ? 'ended' : !record.enable ? 'disabled' : bucket === 'expiring' ? 'expiring' : 'active';
@@ -932,21 +949,21 @@ export default function ClientsPage() {
               <button className="p-text-action p-name" title={record.email} onClick={() => onShowInfo(record.email)}>{record.email}</button>
               <StatusPip status={{ key, label, color }} online={!!record.enable && isOnline(record.email)}
                 note={`${reason ? `${reason} · ` : ''}${t('lastOnline')}: ${record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—'}`} />
-              <Switch checked={!!record.enable} size="small" loading={togglingEmail === record.email}
-                aria-label={`${t('pages.clients.enabled')}: ${record.email}`} onChange={(next) => onToggleEnable(record, next)} />
+              {!twoLine && <Switch checked={!!record.enable} size="small" loading={togglingEmail === record.email}
+                aria-label={`${t('pages.clients.enabled')}: ${record.email}`} onChange={(next) => onToggleEnable(record, next)} />}
             </div>
             <div className="p-client-context">
               <ClientCardComment comment={record.comment} className="p-desc" />
-              <span className="p-client-inbounds"><ClientInboundChips ids={record.inboundIds || EMPTY_INBOUND_IDS} inboundsById={inboundsById}
-                protocolColors={INBOUND_PROTOCOL_COLORS} chipLimit={INBOUND_CHIP_LIMIT} /></span>
-              {record.group && <button className="p-text-action p-sub" title={record.group} onClick={() => setFilters({ ...filters, groups: [record.group!] })}>{record.group}</button>}
+              {twoLine && <span className="p-client-inbounds"><ClientInboundChips ids={record.inboundIds || EMPTY_INBOUND_IDS} inboundsById={inboundsById}
+                protocolColors={INBOUND_PROTOCOL_COLORS} chipLimit={INBOUND_CHIP_LIMIT} /></span>}
+              {twoLine && record.group && <button className="p-text-action" title={record.group} onClick={() => setFilters({ ...filters, groups: [record.group!] })}><Tag>{record.group}</Tag></button>}
             </div>
           </div>
         );
       },
     },
     {
-      title: t('telemetry.plan'), key: 'plan', width: 100,
+      title: t('telemetry.plan'), key: 'plan', width: 118,
       render: (_v, record) => <div className="p-client-plan" title={[
         record.plan?.name,
         record.plan?.pending ? t('telemetry.planPending') : '',
@@ -954,36 +971,50 @@ export default function ClientsPage() {
       ].filter(Boolean).join(' · ')}><ClientPlanCell client={record} /></div>,
     },
     {
-      title: t('pages.clients.traffic'), key: 'traffic', width: 145,
-      render: (_v, record) => <ClientTrafficCell compact up={record.traffic?.up} down={record.traffic?.down} total={record.totalGB}
-        enabled={record.enable} trafficDiff={trafficDiff} />,
+      title: t('pages.clients.traffic'), key: 'traffic', width: twoLine ? 240 : 172,
+      render: (_v, record) => {
+        const total = record.totalGB ?? 0;
+        const remaining = total - (record.traffic?.up ?? 0) - (record.traffic?.down ?? 0);
+        return <div className={record.enable && total > 0 && remaining > total * 0.1 && remaining > trafficDiff ? 'client-traffic-blue' : undefined}>
+          <ClientTrafficCell compact up={record.traffic?.up} down={record.traffic?.down} total={record.totalGB}
+            enabled={record.enable} trafficDiff={trafficDiff} /></div>;
+      },
     },
     {
-      title: t('telemetry.trend14d'), key: 'history', width: 100,
+      title: t('pages.clients.design.fourteenDays', { defaultValue: '14 days' }), key: 'history', width: 100,
       render: (_v, record) => <ClientTrendCell compact client={record} />,
     },
     {
-      title: t('pages.clients.speed'), key: 'speed', width: 110, align: 'end',
+      title: t('pages.clients.speed'), key: 'speed', width: 140, align: 'end',
       render: (_v, record) => {
         const speed = clientSpeed[record.email];
         const seen = record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—';
         return isActiveSpeed(speed) ? <div className="p-client-speed"><div>↓ {SizeFormatter.speedFormat(speed.down)}</div><div className="p-sub">↑ {SizeFormatter.speedFormat(speed.up)}</div></div> :
-          <div className="p-client-speed p-sub">{t('pages.clients.offline')}<div title={seen}>{seen}</div></div>;
+          <div className="p-client-speed p-sub">{t('pages.clients.design.idle', { defaultValue: 'Idle' })}<div title={seen}>{record.traffic?.lastOnline
+            ? t('pages.clients.design.seen', { defaultValue: 'Seen {time}', time: relativeTime(record.traffic.lastOnline) }) : '—'}</div></div>;
       },
     },
     {
-      title: t('pages.clients.duration'), key: 'expiryTime', width: 110, align: 'end',
+      title: t('pages.clients.expiryTime'), key: 'expiryTime', width: 118, align: 'end',
       render: (_v, record) => <div className="p-client-expiry" title={expiryLabel(record)}>
         <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 58%, var(--p-ink))` }}>{record.expiryTime ? expiryRelative(record) : '∞'}</span>
         <div className="p-sub">{expiryLabel(record)}</div>
       </div>,
     },
     {
-      title: t('pages.clients.actions'), key: 'actions', width: 150, align: 'end',
+      title: <span className="clients-visually-hidden">{t('pages.clients.actions')}</span>, key: 'actions', width: 168, align: 'end',
       render: (_v, record) => <ClientRowActions email={record.email} onShowQr={onShowQr} onShowInfo={onShowInfo}
-        onResetTraffic={onResetTraffic} onEdit={onEdit} onDelete={onDelete} />,
+        onResetTraffic={onResetTraffic} onEdit={onEdit} onDelete={onDelete}
+        onCopySubscription={subSettings.enable && subSettings.subURI ? onCopySubscription : undefined} />,
     },
   ];
+
+  if (!twoLine) columns.splice(2, 0,
+    { key: 'group', title: t('pages.clients.group'), width: 104, render: (_value, record) => record.group
+      ? <button className="p-text-action p-sub" onClick={() => setFilters({ ...filters, groups: [record.group!] })}>{record.group}</button> : '—' },
+    { key: 'inbounds', title: t('inbounds'), width: 168, render: (_value, record) => <ClientInboundChips
+      ids={record.inboundIds || EMPTY_INBOUND_IDS} inboundsById={inboundsById} protocolColors={INBOUND_PROTOCOL_COLORS} chipLimit={2} /> },
+  );
 
   const tablePagination = {
     current: currentPage,
@@ -996,7 +1027,7 @@ export default function ClientsPage() {
   };
 
   const rowSelection = {
-    columnWidth: 30,
+    columnWidth: 46,
     selectedRowKeys,
     onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
   };
@@ -1055,7 +1086,7 @@ export default function ClientsPage() {
       <Layout className={pageClass}>
 
         <Layout className="content-shell">
-          <Layout.Content id="content-layout" className="content-area">
+          <Layout.Content id="content-layout" className="content-area" inert={formOpen || bulkAddOpen || infoOpen || qrOpen}>
             <Spin spinning={!fetched} delay={200} description={t('loading')} size="large">
               {!fetched ? (
                 <div className="loading-spacer" />
@@ -1074,20 +1105,9 @@ export default function ClientsPage() {
                       sub={`${summary.total} ${t('clients')} · ${summary.onlineCount} ${t('online')}`}
                       actions={
                         <div className="clients-page-actions">
-                          {selectionCount === 0 ? (
-                            <Button type="primary" icon={<PlusOutlined />} onClick={onAdd} aria-label={t('pages.clients.addClients')}>
-                              {!isMobile && t('pages.clients.addClients')}
-                            </Button>
-                          ) : (
-                            <Tag
-                              color="blue"
-                              closable
-                              onClose={clearSelection}
-                              style={{ marginInlineEnd: 0, padding: '4px 8px', fontSize: 13 }}
-                            >
-                              {t('pages.clients.selectedCount', { count: selectionCount })}
-                            </Tag>
-                          )}
+                          <Button className="clients-add-button" type="primary" icon={<PlusOutlined />} onClick={onAdd} aria-label={t('pages.clients.addClients')}>
+                            {t('pages.clients.addClients')}
+                          </Button>
                           <Dropdown
                             trigger={['click']}
                             placement="bottomRight"
@@ -1233,21 +1253,10 @@ export default function ClientsPage() {
                                 ],
                             }}
                           >
-                            <Button icon={<MoreOutlined />} aria-label={t('more')}>
-                              {!isMobile && t('more')}
+                            <Button icon={<MoreOutlined />} aria-label={t('pages.clients.design.bulkActions', { defaultValue: 'Bulk actions' })}>
+                              {t('pages.clients.design.bulkActions', { defaultValue: 'Bulk actions' })}
                             </Button>
                           </Dropdown>
-                          {selectedRowKeys.length > 0 && (
-                            <Button
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={onBulkDelete}
-                              style={{ marginInlineStart: 'auto' }}
-                              aria-label={t('delete')}
-                            >
-                              {!isMobile && t('delete')}
-                            </Button>
-                          )}
                         </div>
                       }
                     />
@@ -1285,7 +1294,6 @@ export default function ClientsPage() {
                     <Card
                       className="clients-table-card"
                       size="small"
-                      hoverable
                     >
                       <div className={isMobile ? 'filter-bar mobile' : 'filter-bar'}>
                         <Input
@@ -1295,7 +1303,7 @@ export default function ClientsPage() {
                           allowClear
                           prefix={<SearchOutlined />}
                           size={isMobile ? 'small' : 'middle'}
-                          style={{ maxWidth: 320 }}
+                          style={{ maxWidth: 300, flex: '1 1 160px', minWidth: 0 }}
                           aria-label={t('search')}
                         />
                         <Badge count={activeCount} size="small" offset={[-4, 4]}>
@@ -1314,7 +1322,7 @@ export default function ClientsPage() {
                           aria-label={t('sort')}
                           size={isMobile ? 'small' : 'middle'}
                           suffix={<SortAscendingOutlined />}
-                          style={{ minWidth: isMobile ? 130 : 200 }}
+                          style={{ width: 136, flex: '0 0 auto' }}
                           onChange={(value) => {
                             const opt = SORT_OPTIONS.find((o) => o.value === value);
                             setSortColumn(opt?.column ?? null);
@@ -1330,12 +1338,30 @@ export default function ClientsPage() {
                             {t('pages.clients.clearAllFilters')}
                           </Button>
                         )}
-                        {(activeCount > 0 || debouncedSearch.trim().length > 0) && (
+                        {(
                           <span className="filter-count">
                             {t('pages.clients.showingCount', { shown: filtered, total })}
                           </span>
                         )}
+                        {!isMobile && <Segmented size="small" aria-label={t('pages.clients.design.layout', { defaultValue: 'Row layout' })}
+                          value={twoLine ? 'two-line' : 'columns'} onChange={(value) => { setTwoLine(value === 'two-line'); localStorage.setItem('clientsRowLayout', value); }}
+                          options={[
+                            { value: 'two-line', label: t('pages.clients.design.twoLine', { defaultValue: 'Two-line' }) },
+                            { value: 'columns', label: t('pages.clients.design.columns', { defaultValue: 'Columns' }) },
+                          ]} />}
                       </div>
+
+                      {selectionCount > 0 && <div className="clients-selection-bar">
+                        <Space size={10}><strong>{t('pages.clients.selectedCount', { count: selectionCount })}</strong>
+                          <Button size="small" type="text" onClick={clearSelection}>{t('clear')}</Button></Space>
+                        <Space size={6} wrap>
+                          <Button size="small" icon={<RetweetOutlined />} onClick={onResetSelectedTraffics}>{t('pages.inbounds.resetTraffic')}</Button>
+                          <Button size="small" icon={<ClockCircleOutlined />} onClick={() => setBulkAdjustOpen(true)}>{t('pages.clients.adjust')}</Button>
+                          <Button size="small" icon={<SwapOutlined />} onClick={() => setBulkMoveOpen(true)}>{t('pages.clients.move')}</Button>
+                          <Button size="small" icon={<ExportOutlined />} onClick={() => void onExportSelected()}>{t('pages.clients.exportSelected')}</Button>
+                          <Button size="small" danger icon={<DeleteOutlined />} onClick={onBulkDelete}>{t('delete')}</Button>
+                        </Space>
+                      </div>}
 
                       {activeCount > 0 && (
                         <div className="filter-chips">
@@ -1437,9 +1463,9 @@ export default function ClientsPage() {
                           rowKey="email"
                           rowSelection={rowSelection}
                           pagination={tablePagination}
-                          size="small"
+                          size="middle"
                           tableLayout="fixed"
-                          scroll={{ x: 995 }}
+                          scroll={{ x: twoLine ? 1260 : 1500 }}
                           onChange={onTableChange}
                           locale={{
                             emptyText: (
@@ -1593,6 +1619,7 @@ export default function ClientsPage() {
         <LazyMount when={formOpen}>
           <ClientFormModal
             initialPolicyId={initialPolicyId}
+            subSettings={subSettings}
             open={formOpen}
             mode={formMode}
             client={editingClient}

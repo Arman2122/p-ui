@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Popover, Space, Tag, Tooltip } from 'antd';
 import {
   DeleteOutlined,
+  CopyOutlined,
   EditOutlined,
   InfoCircleOutlined,
   QrcodeOutlined,
@@ -21,6 +22,7 @@ interface ClientRowActionsProps {
   onResetTraffic: (email: string) => void;
   onEdit: (email: string) => void;
   onDelete: (email: string) => void;
+  onCopySubscription?: (email: string) => void;
 }
 
 // Five Tooltip-wrapped buttons per row, none of which depend on traffic. Left
@@ -35,6 +37,7 @@ export const ClientRowActions = memo(function ClientRowActions({
   onResetTraffic,
   onEdit,
   onDelete,
+  onCopySubscription,
 }: ClientRowActionsProps) {
   const { t } = useTranslation();
   return (
@@ -49,6 +52,10 @@ export const ClientRowActions = memo(function ClientRowActions({
           onClick={() => onShowQr(email)}
         />
       </Tooltip>
+      {onCopySubscription && <Tooltip title={t('pages.clients.design.copySubscription', { defaultValue: 'Copy subscription link' })}>
+        <Button size="small" type="text" style={ICON_BUTTON_STYLE} icon={<CopyOutlined />}
+          aria-label={t('pages.clients.design.copySubscription', { defaultValue: 'Copy subscription link' })} onClick={() => onCopySubscription(email)} />
+      </Tooltip>}
       <Tooltip title={t('pages.clients.clientInfo')}>
         <Button
           size="small"

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Descriptions, Form, Select, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Collapse, Descriptions, Form, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 
 import { SizeFormatter } from '@/utils';
@@ -20,6 +20,8 @@ export interface ClientPlanPanelProps {
   value: number;
   onSeed: (policyId: number) => void;
   onSelect: (policyId: number) => void;
+  selectionVisible?: boolean;
+  detailsVisible?: boolean;
 }
 
 /* Kinds name a core's protocols, so they are rendered as identifiers and stay
@@ -32,7 +34,7 @@ function KindTags({ kinds }: { kinds: string[] }) {
   );
 }
 
-export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, onSelect }: ClientPlanPanelProps) {
+export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, onSelect, selectionVisible = true, detailsVisible = true }: ClientPlanPanelProps) {
   const { t } = useTranslation();
   const policiesQuery = usePoliciesQuery();
   const enforcedQuery = useEnforcedLimitsQuery(email);
@@ -46,7 +48,7 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
   const shapedInbounds = kinds.filter((kind) => verdict.shapeable.includes(kind)).length;
   const options = useMemo(() => [
     { label: t('pages.policies.noPlan'), value: POLICY_NONE },
-    ...(policiesQuery.data ?? []).filter((row) => !row.archived || row.id === value).map((row) => ({ label: row.name, value: row.id })),
+    ...(policiesQuery.data ?? []).filter((row) => row.id === value || (!row.archived && row.ownerUserId == null)).map((row) => ({ label: row.name, value: row.id })),
   ], [policiesQuery.data, t, value]);
 
   if (enforcedQuery.isError) {
@@ -72,9 +74,10 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
   const loading = value === POLICY_UNLOADED;
 
   return (
-    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-      <Form.Item label={t('pages.policies.plan')} tooltip={t('pages.policies.planHint')} style={{ marginBottom: 0 }}>
+    <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+      {selectionVisible && <Form.Item label={t('pages.clients.design.plan', { defaultValue: 'Plan' })} tooltip={t('pages.policies.planHint')} style={{ marginBottom: 0 }}>
         <Select
+          aria-label={t('pages.clients.design.plan', { defaultValue: 'Plan' })}
           value={loading ? undefined : value}
           loading={loading || policiesQuery.isPending}
           disabled={loading}
@@ -82,13 +85,13 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
           placeholder={t('pages.policies.noPlan')}
           onChange={(next) => onSelect(Number(next) || POLICY_NONE)}
         />
-      </Form.Item>
+      </Form.Item>}
 
       {enforced?.unresolved && (
         <Alert type="warning" showIcon message={t('pages.policies.unresolved')} />
       )}
 
-      {kinds.length > 0 && verdict.shapeable.length === 0 && (
+      {!!cores?.length && kinds.length > 0 && verdict.shapeable.length === 0 && (
         <Alert
           type="info"
           showIcon
@@ -110,7 +113,8 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
         <Alert type="info" showIcon message={t('pages.policies.perInbound')} />
       )}
 
-      {enforced && (
+      {detailsVisible && enforced && <Collapse ghost size="small" items={[{
+        key: 'enforcement', label: verdict.shapeable.length > 0 ? t('pages.policies.enforced') : t('pages.clients.design.speedCompatibility', { defaultValue: 'Speed compatibility' }), children: (
         <Descriptions size="small" column={1} bordered items={[
           {
             key: 'used',
@@ -142,7 +146,8 @@ export default function ClientPlanPanel({ email, kinds, cores, value, onSeed, on
             },
           ] : []),
         ]} />
-      )}
+        ),
+      }]} />}
     </Space>
   );
 }

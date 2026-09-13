@@ -47,6 +47,7 @@ describe('the Auto Renew field with no expiry date', () => {
   it('says the period will never run', async () => {
     const user = userEvent.setup();
     renderForm();
+    await user.click(await screen.findByRole('tab', { name: 'Limits' }));
 
     const renew = await screen.findByLabelText(/Auto Renew/i);
     await user.clear(renew);
@@ -61,12 +62,9 @@ describe('the Auto Renew field with no expiry date', () => {
   it('says nothing once an expiry is set', async () => {
     const user = userEvent.setup();
     renderForm();
+    await user.click(await screen.findByRole('tab', { name: 'Limits' }));
 
-    // "Start After First Use" is the expiry shape reachable without a date picker.
-    const label = screen.getByText('Start After First Use');
-    const toggle = label.closest('.ant-form-item')?.querySelector('.ant-switch');
-    expect(toggle, 'the delayed-start switch was not found').not.toBeNull();
-    await user.click(toggle as HTMLElement);
+    await user.click(screen.getByRole('switch', { name: 'Start After First Use' }));
 
     const days = await screen.findByLabelText(/Duration \(days\)/i);
     await user.clear(days);

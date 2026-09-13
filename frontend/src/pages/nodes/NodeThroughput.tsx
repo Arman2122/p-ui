@@ -60,7 +60,7 @@ export default function NodeThroughput({ node }: { node: NodeRecord }) {
     </figcaption>
     {!available ? <div className="node-throughput-empty">{t('nodesFidelity.transitiveHistory')}</div>
       : query.isError ? <div className="node-throughput-empty" role="status"><span>{t('telemetry.historyUnavailable')}</span><Button size="small" onClick={() => { void query.refetch(); }}>{t('refresh')}</Button></div>
-        : hasHistory ? <HistoryChart compact height={72} times={times} format={SizeFormatter.speedFormat} series={[
+        : hasHistory ? <HistoryChart dashboard compact height={72} times={times} format={SizeFormatter.speedFormat} series={[
           { name: t('pages.index.upload'), values: up, color: '#4c8dff' },
           { name: t('pages.index.download'), values: down, color: '#5ac8b0' },
         ]} /> : <div className="node-throughput-empty">{t(query.isPending ? 'loading' : 'telemetry.noReadings')}</div>}

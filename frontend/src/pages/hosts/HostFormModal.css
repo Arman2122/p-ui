@@ -1,0 +1,16 @@
+.host-form-modal .ant-modal-title .p-h1 { font-size: 16px; }
+.host-form-modal .ant-modal-title .p-sub { margin-top: 3px; font-weight: 400; }
+.host-form-modal .ant-tabs-nav { margin-bottom: 14px; }
+.host-form-modal .ant-tabs-tab { padding-block: 9px; font-size: 12px; }
+.host-form-modal .host-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border: 1px solid var(--p-border); border-radius: 8px; padding: 14px 14px 0; }
+.host-form-modal .ant-form-item { min-width: 0; margin-bottom: 14px; }
+.host-form-modal .ant-form-item-label { padding-bottom: 5px; }
+.host-form-modal .ant-form-item-label > label { font-size: 12px; }
+.host-form-modal .ant-form-item-extra { font-size: 11px; }
+.host-form-modal .ant-input-number { width: 100%; }
+.host-form-modal .host-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; text-align: start; }
+.host-form-modal .host-form-footer > div { display: flex; gap: 8px; margin-inline-start: auto; }
+@media (max-width: 600px) {
+  .host-form-modal .host-form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.host-form-modal .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: color-mix(in srgb, var(--p-primary) 75%, var(--p-ink)); }

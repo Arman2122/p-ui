@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 
 import PoliciesPage from '@/pages/policies/PoliciesPage';
 import { HttpUtil, Msg } from '@/utils';
@@ -46,6 +46,8 @@ async function renderPage(reseller = false, queryClient?: ReturnType<typeof make
   for (let i = 0; i < 6; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(`${enUS.planParity.operations}$`) })); });
+  await waitFor(() => expect(screen.getByRole('button', { name: enUS.plans.archive })).toBeTruthy());
 }
 
 describe('PoliciesPage', () => {
@@ -164,7 +166,7 @@ describe('PoliciesPage', () => {
   it('keeps the visible plan and its details together after filtering the catalogue', async () => {
     mockHost([PLAN, { ...PLAN, id: 2, name: 'Premium', tiers: [{ fromBytes: 0, upBps: 50000000, downBps: 50000000 }] }], [WG_CORE]);
     await renderPage();
-    fireEvent.change(screen.getByRole('searchbox', { name: enUS.design.searchPlans }), { target: { value: 'Premium' } });
+    fireEvent.change(screen.getByRole('textbox', { name: enUS.design.searchPlans }), { target: { value: 'Premium' } });
     const detail = document.querySelector('.p-plan-detail');
     expect(detail?.textContent).toContain('Premium');
     expect(detail?.textContent).toContain('50 Mbps');

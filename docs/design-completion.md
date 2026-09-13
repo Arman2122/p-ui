@@ -42,6 +42,17 @@ real plan creation, notification persistence, role-restricted API discovery, lig
 and dark themes, and phone layouts. No sample response is substituted into the
 running application.
 
+## Page and form parity review
+
+- Plans use the catalog/detail layout, grouped inbound badges, lifecycle and adoption cards, and a numbered editor with a live preview. Basic speed controls stay compact; additional tiers and lifecycle rules remain available in advanced options.
+- Groups use quota/history cards and a combined name, shared quota and inbound editor. A retry after a partial save continues from the saved group name instead of creating or renaming twice.
+- Clients use the designed two-line identity, adjacent status, inline inbound/group tags, quota meter, history and compact actions. Single and bulk creation retain plan/custom modes, explicit overrides, credentials and saved-link workflows. A delayed plan read does not overwrite a custom draft already being edited.
+- Nodes use resource rings, throughput, served-inbound summaries and compact card actions. Create/edit keeps real certificate, token, mTLS and synchronization controls. Supported node operations are distinguished from the prototype's unimplemented remote core commands.
+- Hosts use the designed searchable table and a matching form treatment for the existing Basic, Security, Advanced and Clash settings. Editing preserves transport and subscription overrides; filtered reorder actions use the saved global order.
+- Xray Core Configs no longer duplicates the Routing and Outbounds navigation or JSON slice tabs. Old section bookmarks redirect to the dedicated Network pages. The complete template editor remains available.
+
+Browser checks cover create/edit/save, plan inheritance, group retries, node authentication, host override preservation, light/dark contrast and narrow layouts. Histories retain real gaps and missing telemetry stays unreported. Test fixtures are confined to test and Storybook modules.
+
 ## Reference handling
 
 The export was verified and extracted into the Git-ignored

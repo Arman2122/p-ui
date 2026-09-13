@@ -5,8 +5,6 @@ import { Alert, Button, Checkbox, Col, ConfigProvider, Input, Layout, Modal, Res
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNodesQuery } from '@/api/queries/useNodesQuery';
-import { StatStrip } from '@/components/ui';
-import { PageHeader } from '@/components/ui/panel';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { useNodeMutations } from '@/api/queries/useNodeMutations';
 import NodeList from './NodeFleet';
@@ -50,7 +48,7 @@ export default function NodesPage() {
   const [messageApi, messageContextHolder] = message.useMessage();
   useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
 
-  const { nodes, loading, fetched, fetchError, refetch, totals } = useNodesQuery();
+  const { nodes, loading, fetched, fetchError, refetch } = useNodesQuery();
   const { create, update, remove, setEnable, testConnection, fetchFingerprint, fetchInbounds, probe, updatePanels } = useNodeMutations();
 
   const { data: latestVersion = '' } = useQuery({
@@ -191,7 +189,7 @@ export default function NodesPage() {
 
   const onUpdateSelected = useCallback(() => {
     const eligible = nodes
-      .filter((n) => selectedIds.includes(n.id) && n.enable && n.status === 'online')
+      .filter((n) => !n.transitive && selectedIds.includes(n.id) && n.enable && n.status === 'online')
       .map((n) => n.id);
     if (eligible.length === 0) {
       messageApi.warning(t('pages.nodes.toasts.updateNoneEligible'));
@@ -235,21 +233,6 @@ export default function NodesPage() {
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
                   <Col span={24}>
-                    <PageHeader title={t('menu.nodes')} sub={t('pages.nodes.subtitle')} />
-                  </Col>
-
-                  <Col span={24}>
-                    <StatStrip
-                      items={[
-                        { key: 'total', label: t('pages.nodes.totalNodes'), value: totals.total },
-                        { key: 'online', label: t('pages.nodes.onlineNodes'), value: totals.online, color: 'var(--p-success)', pulse: totals.online > 0 },
-                        { key: 'offline', label: t('pages.nodes.offlineNodes'), value: totals.offline, color: totals.offline ? 'var(--p-error)' : '#8b8d94' },
-                        { key: 'latency', label: t('pages.nodes.avgLatency'), value: totals.avgLatency > 0 ? `${totals.avgLatency} ms` : '—' },
-                      ]}
-                    />
-                  </Col>
-
-                  <Col span={24}>
                     <NodeList
                       nodes={nodes}
                       loading={loading}
@@ -265,6 +248,7 @@ export default function NodesPage() {
                       onToggleEnable={onToggleEnable}
                       onUpdateNode={onUpdateNode}
                       onUpdateSelected={onUpdateSelected}
+                      onRefresh={() => { void refetch(); }}
                     />
                   </Col>
                 </Row>

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AutoComplete, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, message } from 'antd';
+import { AutoComplete, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Tabs, Tag, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 
+import ClientPlanSummary from './ClientPlanSummary';
+import './ClientFormModal.css';
 import { bulkClientSubId } from '@/lib/clients/bulk-subid';
 import { RandomUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
@@ -246,52 +248,24 @@ export default function ClientBulkAddModal({
       {messageContextHolder}
       <Modal
         open={open}
-        title={t('pages.clients.bulk')}
+        className="client-form-modal client-bulk-form-modal"
+        title={<div><div className="client-form-title">{t('pages.clients.bulk')}</div>
+          <div className="client-form-subtitle">{t('pages.clients.design.provisionHint', { defaultValue: 'Provision from a plan, or set every limit by hand.' })}</div></div>}
         okText={t('create')}
         cancelText={t('close')}
         confirmLoading={saving}
         mask={{ closable: false }}
-        width={640}
+        width={720}
+        style={{ top: 20 }}
+        destroyOnHidden
+        styles={{ body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' } }}
         onOk={submit}
         onCancel={() => onOpenChange(false)}
       >
         <FormProvider {...methods}>
-          <Form colon={false} labelCol={{ sm: { span: 8 } }} wrapperCol={{ sm: { span: 14 } }}>
-            <Form.Item label={t('telemetry.usePlan')}>
-              <Select value={policyId} loading={plans.isPending} onChange={(id) => {
-                setPolicyId(id); setOverridePlan(false);
-                const plan = plans.data?.find((p) => p.id === id);
-                if (!plan) return;
-                if (plan.quotaBytes != null) methods.setValue('totalGB', plan.quotaBytes / 1073741824);
-                if (plan.limitIp != null) methods.setValue('limitIp', plan.limitIp);
-                if (plan.inboundIds?.length) methods.setValue('inboundIds', plan.inboundIds);
-                if (plan.durationDays != null) {
-                  setDelayedStart(plan.startOnFirstUse && plan.durationDays > 0);
-                  methods.setValue('expiryTime', !plan.durationDays ? 0 : plan.startOnFirstUse ? -plan.durationDays * 86400000 : Date.now() + plan.durationDays * 86400000);
-                  methods.setValue('reset', plan.autoRenewDays);
-                }
-              }} options={[{ value: 0, label: t('telemetry.customPlan') }, ...(plans.data ?? []).filter((p) => !p.archived).map((p) => ({ value: p.id, label: p.name }))]} />
-            </Form.Item>
-            {policyId > 0 && <Form.Item label={t('telemetry.bulkOverride')}><Switch checked={overridePlan} onChange={setOverridePlan} /></Form.Item>}
-            <Form.Item label={t('pages.clients.attachedInbounds')} required>
-              {!inboundsManaged && <SelectAllClearButtons
-                options={inboundOptions}
-                value={inboundIds}
-                onChange={(v) => methods.setValue('inboundIds', v)}
-              />}
-              <Select
-                disabled={inboundsManaged}
-                mode="multiple"
-                value={inboundIds}
-                onChange={(v) => methods.setValue('inboundIds', v)}
-                options={inboundOptions}
-                placeholder={t('pages.clients.selectInbound')}
-                showSearch={{
-                  filterOption: (input, option) => ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase()),
-                }}
-              />
-            </Form.Item>
-
+          <Form layout="vertical">
+            <Tabs defaultActiveKey="batch" items={[
+              { key: 'batch', label: t('pages.clients.design.batch', { defaultValue: 'Batch' }), children: <div className="client-batch-fields">
             <FormField name="emailMethod" label={t('pages.clients.method')}>
               <Select
                 options={[
@@ -330,19 +304,43 @@ export default function ClientBulkAddModal({
               </FormField>
             )}
 
-            <Form.Item label={t('pages.clients.subId')}>
-              <Space.Compact style={{ display: 'flex' }}>
-                <Input
-                  value={subId}
-                  onChange={(e) => methods.setValue('subId', e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  aria-label={t('regenerate')}
-                  icon={<ReloadOutlined />}
-                  onClick={() => methods.setValue('subId', RandomUtil.randomLowerAndNum(16))}
-                />
-              </Space.Compact>
+
+              </div> },
+              { key: 'basic', forceRender: true, label: t('pages.clients.tabBasics'), children: <>
+            <Form.Item label={t('telemetry.usePlan')}>
+              <Select value={policyId} loading={plans.isPending} onChange={(id) => {
+                setPolicyId(id); setOverridePlan(false);
+                const plan = plans.data?.find((p) => p.id === id);
+                if (!plan) return;
+                if (plan.quotaBytes != null) methods.setValue('totalGB', plan.quotaBytes / 1073741824);
+                if (plan.limitIp != null) methods.setValue('limitIp', plan.limitIp);
+                if (plan.inboundIds?.length) methods.setValue('inboundIds', plan.inboundIds);
+                if (plan.durationDays != null) {
+                  setDelayedStart(plan.startOnFirstUse && plan.durationDays > 0);
+                  methods.setValue('expiryTime', !plan.durationDays ? 0 : plan.startOnFirstUse ? -plan.durationDays * 86400000 : Date.now() + plan.durationDays * 86400000);
+                  methods.setValue('reset', plan.autoRenewDays);
+                }
+              }} options={[{ value: 0, label: t('telemetry.customPlan') }, ...(plans.data ?? []).filter((p) => !p.archived && p.ownerUserId == null).map((p) => ({ value: p.id, label: p.name }))]} />
+            </Form.Item>
+            {selectedPlan && <ClientPlanSummary plan={selectedPlan} inbounds={inbounds} />}
+            {policyId > 0 && <Form.Item label={t('telemetry.bulkOverride')}><Switch checked={overridePlan} onChange={setOverridePlan} /></Form.Item>}
+            <Form.Item label={t('pages.clients.attachedInbounds')} required>
+              {!inboundsManaged && <SelectAllClearButtons
+                options={inboundOptions}
+                value={inboundIds}
+                onChange={(v) => methods.setValue('inboundIds', v)}
+              />}
+              <Select
+                disabled={inboundsManaged}
+                mode="multiple"
+                value={inboundIds}
+                onChange={(v) => methods.setValue('inboundIds', v)}
+                options={inboundOptions}
+                placeholder={t('pages.clients.selectInbound')}
+                showSearch={{
+                  filterOption: (input, option) => ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase()),
+                }}
+              />
             </Form.Item>
 
             <FormField
@@ -362,18 +360,9 @@ export default function ClientBulkAddModal({
               <Input />
             </FormField>
 
-            {showFlow && (
-              <FormField name="flow" label={t('pages.clients.flow')}>
-                <Select
-                  style={{ width: 220 }}
-                  options={[
-                    { value: '', label: t('none') },
-                    ...FLOW_OPTIONS.map((k) => ({ value: k, label: k })),
-                  ]}
-                />
-              </FormField>
-            )}
 
+              </> },
+              { key: 'limits', forceRender: true, label: t('pages.clients.tabLimits'), children: <div className="client-batch-fields">
             <Form.Item label={t('pages.clients.limitIp')} tooltip={t('pages.clients.limitIpDesc')}>
               <IpLimitControl
                 value={limitIp}
@@ -423,6 +412,40 @@ export default function ClientBulkAddModal({
             >
               <InputNumber disabled={expiryManaged} min={0} />
             </FormField>
+
+              </div> },
+              { key: 'credentials', forceRender: true, label: t('pages.clients.tabCredentials'), children: <>
+                <Tag>{t('pages.clients.design.uniqueCredentials', { defaultValue: 'A unique UUID is generated for each client.' })}</Tag>
+            <Form.Item label={t('pages.clients.subId')}>
+              <Space.Compact style={{ display: 'flex' }}>
+                <Input
+                  value={subId}
+                  onChange={(e) => methods.setValue('subId', e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  aria-label={t('regenerate')}
+                  icon={<ReloadOutlined />}
+                  onClick={() => methods.setValue('subId', RandomUtil.randomLowerAndNum(16))}
+                />
+              </Space.Compact>
+            </Form.Item>
+
+            {showFlow && (
+              <FormField name="flow" label={t('pages.clients.flow')}>
+                <Select
+                  style={{ width: 220 }}
+                  options={[
+                    { value: '', label: t('none') },
+                    ...FLOW_OPTIONS.map((k) => ({ value: k, label: k })),
+                  ]}
+                />
+              </FormField>
+            )}
+
+
+              </> },
+            ]} />
           </Form>
         </FormProvider>
       </Modal>

@@ -5,8 +5,6 @@ import { Button, Col, ConfigProvider, Layout, Modal, Result, Row, Spin, message 
 import { useTheme } from '@/hooks/useTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHostsQuery, type HostRecord } from '@/api/queries/useHostsQuery';
-import { StatStrip } from '@/components/ui';
-import { PageHeader } from '@/components/ui/panel';
 import { useHostMutations } from '@/api/queries/useHostMutations';
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import { setMessageInstance } from '@/utils/messageBus';
@@ -100,12 +98,6 @@ export default function HostsPage() {
     });
   }, [selectedGroupIds, modal, t, bulkDel, messageApi]);
 
-  const summary = useMemo(() => {
-    const total = hosts.length;
-    const enabled = hosts.filter((h) => !h.isDisabled).length;
-    return { total, enabled, disabled: total - enabled };
-  }, [hosts]);
-
   const pageClass = useMemo(() => {
     const classes = ['hosts-page'];
     if (isDark) classes.push('is-dark');
@@ -132,20 +124,6 @@ export default function HostsPage() {
                 />
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
-                  <Col span={24}>
-                    <PageHeader title={t('menu.hosts')} sub={t('pages.hosts.subtitle')} />
-                  </Col>
-
-                  <Col span={24}>
-                    <StatStrip
-                      items={[
-                        { key: 'total', label: t('pages.hosts.summary.total'), value: summary.total },
-                        { key: 'enabled', label: t('pages.hosts.summary.enabled'), value: summary.enabled, color: 'var(--p-success)' },
-                        { key: 'disabled', label: t('pages.hosts.summary.disabled'), value: summary.disabled, color: '#8b8d94' },
-                      ]}
-                    />
-                  </Col>
-
                   <Col span={24}>
                     <HostList
                       hosts={hosts}

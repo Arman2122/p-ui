@@ -1,17 +1,11 @@
 import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Button,
-  Col,
-  ConfigProvider,
   Dropdown,
-  Form,
-  Input,
-  Layout,
   Modal,
-  Progress,
   Result,
-  Row,
   Space,
   Spin,
   Tag,
@@ -20,6 +14,8 @@ import {
 import type { MenuProps } from 'antd';
 import {
   ClockCircleOutlined,
+  DownloadOutlined,
+  InfoCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   LinkOutlined,
@@ -32,18 +28,19 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { useTheme } from '@/hooks/useTheme';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useClients } from '@/hooks/useClients';
 import { HttpUtil, SizeFormatter, FileManager } from '@/utils';
 import GroupQuotaModal from './GroupQuotaModal';
+import GroupFormModal from './GroupFormModal';
+import './groups-parity.css';
+import { inboundTone } from '../policies/inbound-tone';
 import { ClientTrendCell } from '../clients/ClientMetadataCells';
-import { StatStrip } from '@/components/ui';
-import { PageHeader, PanelCard, Field } from '@/components/ui/panel';
+import { PageHeader, PanelCard, Field, Meter } from '@/components/ui/panel';
 import { setMessageInstance } from '@/utils/messageBus';
 import { LazyMount } from '@/components/utility';
 import { keys } from '@/api/queryKeys';
+import { useInboundOptions } from '@/api/queries/useInboundOptions';
 import {
   ClientRecordSchema,
   GroupSummaryListSchema,
@@ -81,14 +78,14 @@ async function fetchEmailsForGroup(name: string): Promise<string[]> {
 export default function GroupsPage() {
   usePageTitle();
   const { t } = useTranslation();
-  const { isDark, isUltra, antdThemeConfig } = useTheme();
-  const { isMobile } = useMediaQuery();
   const [modal, modalContextHolder] = Modal.useModal();
   const [messageApi, messageContextHolder] = message.useMessage();
   useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
   const queryClient = useQueryClient();
 
-  const { subSettings, inbounds, bulkAdjust, bulkAddToGroup, bulkRemoveFromGroup, bulkDelete } = useClients({ list: false });
+  const { subSettings, bulkAdjust, bulkAddToGroup, bulkRemoveFromGroup, bulkDelete } = useClients({ list: false });
+  const inboundQuery = useInboundOptions();
+  const inbounds = inboundQuery.data ?? [];
 
   const groupsQuery = useQuery({
     queryKey: keys.clients.groups(),
@@ -103,18 +100,6 @@ export default function GroupsPage() {
     queryClient.invalidateQueries({ queryKey: keys.clients.root() });
   }, [queryClient]);
 
-  const createMut = useMutation({
-    mutationFn: (body: { name: string }) =>
-      HttpUtil.post('/panel/api/clients/groups/create', body, JSON_HEADERS),
-    onSuccess: (msg) => { if (msg?.success) invalidate(); },
-  });
-
-  const renameMut = useMutation({
-    mutationFn: (body: { oldName: string; newName: string }) =>
-      HttpUtil.post('/panel/api/clients/groups/rename', body, JSON_HEADERS),
-    onSuccess: (msg) => { if (msg?.success) invalidate(); },
-  });
-
   const deleteMut = useMutation({
     mutationFn: (body: { name: string }) =>
       HttpUtil.post('/panel/api/clients/groups/delete', body, JSON_HEADERS),
@@ -127,13 +112,10 @@ export default function GroupsPage() {
     onSuccess: (msg) => { if (msg?.success) invalidate(); },
   });
 
-  const [createOpen, setCreateOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<GroupSummary | null>(null);
+  const [detailGroup, setDetailGroup] = useState<GroupSummary | null>(null);
   const [quotaGroup, setQuotaGroup] = useState<GroupSummary | null>(null);
-  const [createName, setCreateName] = useState('');
-
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<GroupSummary | null>(null);
-  const [renameValue, setRenameValue] = useState('');
 
   const [subLinksOpen, setSubLinksOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -155,67 +137,8 @@ export default function GroupsPage() {
   });
   const allClients = allClientsQuery.data ?? [];
 
-  const totalGroups = groups.length;
-  const totalClients = useMemo(
-    () => groups.reduce((acc, g) => acc + (g.clientCount || 0), 0),
-    [groups],
-  );
-  const totalTraffic = useMemo(
-    () => groups.reduce((acc, g) => acc + (g.trafficUsed || 0), 0),
-    [groups],
-  );
-  const totalUpload = useMemo(
-    () => groups.reduce((acc, g) => acc + (g.up || 0), 0),
-    [groups],
-  );
-  const totalDownload = useMemo(
-    () => groups.reduce((acc, g) => acc + (g.down || 0), 0),
-    [groups],
-  );
-
-  function openCreate() {
-    setCreateName('');
-    setCreateOpen(true);
-  }
-
-  async function confirmCreate() {
-    const name = createName.trim();
-    if (!name) return;
-    if (groups.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
-      messageApi.error(t('pages.groups.renameCollision', { name }));
-      return;
-    }
-    const msg = await createMut.mutateAsync({ name });
-    if (msg?.success) {
-      messageApi.success(t('pages.groups.createSuccess', { name }));
-      setCreateOpen(false);
-    }
-  }
-
-  function openRename(g: GroupSummary) {
-    setRenameTarget(g);
-    setRenameValue(g.name);
-    setRenameOpen(true);
-  }
-
-  async function confirmRename() {
-    if (!renameTarget) return;
-    const next = renameValue.trim();
-    if (!next || next === renameTarget.name) {
-      setRenameOpen(false);
-      return;
-    }
-    if (groups.some((g) => g.name.toLowerCase() === next.toLowerCase() && g.name !== renameTarget.name)) {
-      messageApi.error(t('pages.groups.renameCollision', { name: next }));
-      return;
-    }
-    const msg = await renameMut.mutateAsync({ oldName: renameTarget.name, newName: next });
-    if (msg?.success) {
-      const affected = (msg.obj as { affected?: number } | undefined)?.affected ?? 0;
-      messageApi.success(t('pages.groups.renameSuccess', { count: affected }));
-      setRenameOpen(false);
-    }
-  }
+  function openCreate() { setEditing(null); setFormOpen(true); }
+  function openRename(group: GroupSummary) { setEditing(group); setFormOpen(true); }
 
   function onDelete(g: GroupSummary) {
     modal.confirm({
@@ -332,6 +255,7 @@ export default function GroupsPage() {
 
   function rowActions(row: GroupSummary): MenuProps['items'] {
     return [
+      { key: 'details', icon: <InfoCircleOutlined />, label: t('groupParity.details', { defaultValue: 'Group details' }), onClick: () => setDetailGroup(row) },
       { key: 'quota', label: t('telemetry.groupQuota'), onClick: () => setQuotaGroup(row) },
       {
         key: 'subLinks',
@@ -393,138 +317,48 @@ export default function GroupsPage() {
     ];
   }
 
-  const pageClass = useMemo(() => {
-    const classes = ['groups-page'];
-    if (isDark) classes.push('is-dark');
-    if (isUltra) classes.push('is-ultra');
-    return classes.join(' ');
-  }, [isDark, isUltra]);
-
-  return (
-    <ConfigProvider theme={antdThemeConfig}>
-      {messageContextHolder}
-      {modalContextHolder}
-      <Layout className={pageClass}>
-        <Layout className="content-shell">
-          <Layout.Content id="content-layout" className="content-area">
-            <Spin spinning={!fetched} delay={200} description={t('loading')} size="large">
-              {!fetched ? (
-                <div className="loading-spacer" />
-              ) : fetchError ? (
-                <Result
-                  status="error"
-                  title={t('somethingWentWrong')}
-                  subTitle={fetchError}
-                  extra={<Button type="primary" loading={loading} onClick={() => groupsQuery.refetch()}>{t('refresh')}</Button>}
-                />
-              ) : (
-                <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
-                  <Col span={24}>
-                    <PageHeader
-                      title={t('menu.groups')}
-                      sub={t('pages.groups.subtitle')}
-                      actions={
-                        <Space><Button onClick={() => FileManager.downloadTextFile(JSON.stringify(groups, null, 2), 'group-usage.json')}>{t('telemetry.exportUsage')}</Button>
-                        <Button aria-label={t('pages.groups.addGroup')} type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                          {t('pages.groups.addGroup')}
-                        </Button></Space>
-                      }
-                    />
-                  </Col>
-
-                  <Col span={24}>
-                    <StatStrip
-                      items={[
-                        { key: 'groups', label: t('pages.groups.totalGroups'), value: totalGroups },
-                        { key: 'clients', label: t('pages.groups.totalGroupedClients'), value: totalClients, color: 'var(--p-primary)' },
-                        { key: 'updown', label: t('pages.groups.totalUpDown'), value: `↑ ${SizeFormatter.sizeFormat(totalUpload)} / ↓ ${SizeFormatter.sizeFormat(totalDownload)}` },
-                        { key: 'traffic', label: t('pages.groups.totalTraffic'), value: SizeFormatter.sizeFormat(totalTraffic) },
-                      ]}
-                    />
-                  </Col>
-
-                  <Col span={24}>
-                    <div className="p-groupgrid">
-                      {groups.map((g) => <PanelCard key={g.name} title={g.name} icon="groups" pad={0}
-                        extra={<Space size={4}>
-                          <Button type="text" size="small" aria-label={`${t('pages.groups.rename')}: ${g.name}`} icon={<EditOutlined />} onClick={() => openRename(g)} />
-                          <Dropdown trigger={['click']} menu={{ items: rowActions(g) }}>
-                            <Button type="text" size="small" aria-label={`${t('more')}: ${g.name}`} icon={<MoreOutlined />} />
-                          </Dropdown>
-                        </Space>}>
-                        <div className="p-groupbody">
-                          <div><div className="p-sub">{t('pages.groups.trafficUsed')}</div><span className="p-stat">{SizeFormatter.sizeFormat(g.trafficUsed)}</span><span className="p-stat-u"> / {g.quotaBytes ? SizeFormatter.sizeFormat(g.quotaBytes) : '∞'}</span></div>
-                          <Progress percent={g.quotaBytes ? Math.min(100, g.trafficUsed / g.quotaBytes * 100) : 0}
-                            showInfo={false} status={g.quotaBytes && g.trafficUsed >= g.quotaBytes ? 'exception' : 'normal'} />
-                          <ClientTrendCell wide client={{ email: g.name, history: g.history }} hint={t('telemetry.currentMemberHistory')} />
-                          <Space wrap size={4}>{(g.inboundIds ?? []).map((id) => <Tag key={id}>{inbounds.find((ib) => ib.id === id)?.remark || `#${id}`}</Tag>)}</Space>
-                          <div className="p-detail-grid">
-                            <Field label={t('pages.groups.upload')} value={`↑ ${SizeFormatter.sizeFormat(g.up)}`} />
-                            <Field label={t('pages.groups.download')} value={`↓ ${SizeFormatter.sizeFormat(g.down)}`} />
-                          </div>
-                        </div>
-                        <div className="p-card-body" style={{ borderTop: '1px solid var(--p-border)', padding: 14 }}>
-                          <div className="p-kv"><span className="p-kv-k">{t('pages.groups.clientCount')}</span><span className="p-kv-v">{g.clientCount} · {g.onlineCount ?? '—'} {t('online')}</span></div>
-                          <div className="p-kv"><span className="p-kv-k">{t('depletingSoon')}</span><span className="p-kv-v">{g.expiringCount ?? '—'}</span></div>
-                          <Button size="small" icon={<UsergroupAddOutlined />} onClick={() => openAddClientsFor(g)}>{t('pages.groups.addToGroup')}</Button>
-                        </div>
-                      </PanelCard>)}
-                      {!groups.length && <div className="p-plan-empty">{t('noData')}</div>}
-                    </div>
-                  </Col>
-                </Row>
-              )}
-            </Spin>
-          </Layout.Content>
-        </Layout>
-
-        {quotaGroup && <GroupQuotaModal group={quotaGroup} inbounds={inbounds} onClose={() => setQuotaGroup(null)} onSaved={invalidate} />}
-        <Modal
-          open={createOpen}
-          title={t('pages.groups.addGroup')}
-          okText={t('create')}
-          cancelText={t('cancel')}
-          confirmLoading={createMut.isPending}
-          onCancel={() => setCreateOpen(false)}
-          onOk={confirmCreate}
-          destroyOnHidden
-        >
-          <Form layout="vertical">
-            <Form.Item label={t('pages.groups.name')}>
-              <Input
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                onPressEnter={confirmCreate}
-                placeholder={t('pages.clients.groupPlaceholder')}
-                autoFocus
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
-
-        <Modal
-          open={renameOpen}
-          title={renameTarget ? t('pages.groups.renameTitle', { name: renameTarget.name }) : ''}
-          okText={t('save')}
-          cancelText={t('cancel')}
-          confirmLoading={renameMut.isPending}
-          onCancel={() => setRenameOpen(false)}
-          onOk={confirmRename}
-          destroyOnHidden
-        >
-          <Form layout="vertical">
-            <Form.Item label={t('pages.groups.name')}>
-              <Input
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onPressEnter={confirmRename}
-                placeholder={t('pages.clients.groupPlaceholder')}
-                autoFocus
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
-
+  return <div className="groups-parity">
+    {messageContextHolder}{modalContextHolder}
+    <PageHeader title={t('menu.groups')} sub={t('pages.groups.subtitle')} actions={<Space size={8} wrap>
+      <Button icon={<DownloadOutlined />} onClick={() => FileManager.downloadTextFile(JSON.stringify(groups, null, 2), 'group-usage.json')}>{t('telemetry.exportUsage')}</Button>
+      <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>{t('pages.groups.addGroup')}</Button>
+    </Space>} />
+    {inboundQuery.isError && <Alert type="error" title={t('somethingWentWrong')} description={inboundQuery.error.message} />}
+    <Spin spinning={!fetched} delay={200} description={t('loading')}>
+      {fetchError ? <Result status="error" title={t('somethingWentWrong')} subTitle={fetchError} extra={<Button loading={loading} onClick={() => groupsQuery.refetch()}>{t('refresh')}</Button>} /> :
+        <div className="groups-grid">{groups.map((g) => {
+          const pct = g.quotaBytes ? Math.min(100, g.trafficUsed / g.quotaBytes * 100) : 100;
+          const tone = g.quotaBytes ? pct > 90 ? 'var(--p-warning)' : 'var(--p-primary)' : 'color-mix(in srgb,#9254de 55%,transparent)';
+          return <PanelCard className="groups-card" key={g.name} title={g.name} icon="groups" pad={0} extra={<Space size={4}>
+            <Button type="text" size="small" aria-label={`${t('groupParity.edit', { defaultValue: 'Edit group' })}: ${g.name}`} icon={<EditOutlined />} onClick={() => openRename(g)} />
+            <Dropdown trigger={['click']} menu={{ items: rowActions(g) }}><Button type="text" size="small" aria-label={`${t('more')}: ${g.name}`} icon={<MoreOutlined />} /></Dropdown>
+          </Space>}>
+            <div className="groups-card-usage"><div className="groups-card-total"><span><span className="p-stat">{SizeFormatter.sizeFormat(g.trafficUsed)}</span>
+              <span className="p-stat-u">{g.quotaBytes ? ` ${t('panel.of')} ${SizeFormatter.sizeFormat(g.quotaBytes)}` : ` · ${t('panel.noCap')}`}</span></span>
+              {!!g.quotaBytes && <span className="p-sub">{Math.round(pct)}%</span>}</div>
+              <Meter pct={pct} tone={tone} height={5} />
+              <div className="groups-card-history"><ClientTrendCell wide client={{ email: g.name, history: g.history }} hint={t('telemetry.currentMemberHistory')} /></div>
+            </div>
+            <div className="groups-card-inbounds">{(g.sharedInboundIds ?? []).map((id) => <Tag key={id} color={inboundTone(inbounds.find((ib) => ib.id === id)?.protocol)}>{inbounds.find((ib) => ib.id === id)?.remark || inbounds.find((ib) => ib.id === id)?.tag || `#${id}`}</Tag>)}</div>
+            <div className="groups-card-footer"><div className="p-kv"><span className="p-kv-k">{t('pages.groups.clientCount')}</span><span className="p-kv-v">{g.clientCount} · {g.onlineCount ?? '—'} {t('online')}</span></div>
+              <div className="p-kv"><span className="p-kv-k">{t('groupParity.expiring', { defaultValue: 'Expiring soon' })}</span><span className="p-kv-v">{g.expiringCount ?? '—'}</span></div></div>
+          </PanelCard>;
+        })}{fetched && !groups.length && <div className="groups-empty">{t('noData')}</div>}</div>}
+    </Spin>
+    {formOpen && <GroupFormModal group={editing} groups={groups} inbounds={inbounds} onClose={() => setFormOpen(false)} onSaved={invalidate} />}
+    {quotaGroup && <GroupQuotaModal group={quotaGroup} inbounds={inbounds} onClose={() => setQuotaGroup(null)} onSaved={invalidate} />}
+    <Modal open={!!detailGroup} className="groups-parity-modal" title={detailGroup?.name} onCancel={() => setDetailGroup(null)} footer={<Button onClick={() => setDetailGroup(null)}>{t('close')}</Button>}>
+      {detailGroup && <>
+        <div className="groups-detail-grid"><Field label={t('pages.groups.upload')} value={SizeFormatter.sizeFormat(detailGroup.up)} /><Field label={t('pages.groups.download')} value={SizeFormatter.sizeFormat(detailGroup.down)} />
+          <Field label={t('pages.groups.trafficUsed')} value={SizeFormatter.sizeFormat(detailGroup.trafficUsed)} /><Field label={t('telemetry.groupQuota')} value={detailGroup.quotaBytes ? SizeFormatter.sizeFormat(detailGroup.quotaBytes) : '∞'} /></div>
+        <div className="groups-detail-section"><div className="p-kicker">{t('plans.inbounds')}</div><Space wrap size={4}>{(detailGroup.inboundIds ?? []).map((id) => <Tag key={id} color={inboundTone(inbounds.find((ib) => ib.id === id)?.protocol)}>{inbounds.find((ib) => ib.id === id)?.remark || `#${id}`}</Tag>)}</Space></div>
+        <div className="groups-detail-section"><div className="p-kicker">{t('telemetry.sharedInbounds')}</div><Space wrap size={4}>{(detailGroup.sharedInboundIds ?? []).map((id) => <Tag key={id} color={inboundTone(inbounds.find((ib) => ib.id === id)?.protocol)}>{inbounds.find((ib) => ib.id === id)?.remark || `#${id}`}</Tag>)}</Space></div>
+        <div className="groups-detail-section"><div className="p-kicker">{t('groupParity.membership', { defaultValue: 'Membership' })}</div>
+        <Space wrap><Button icon={<UsergroupAddOutlined />} onClick={() => { openAddClientsFor(detailGroup); setDetailGroup(null); }}>{t('pages.groups.addToGroup')}</Button>
+          <Button disabled={!detailGroup.clientCount} icon={<UsergroupDeleteOutlined />} onClick={() => { openRemoveClientsFor(detailGroup); setDetailGroup(null); }}>{t('pages.groups.removeFromGroup')}</Button>
+          <Button onClick={() => { openRename(detailGroup); setDetailGroup(null); }}>{t('groupParity.edit', { defaultValue: 'Edit group' })}</Button></Space></div>
+      </>}
+    </Modal>
         <LazyMount when={subLinksOpen}>
           <SubLinksModal
             open={subLinksOpen}
@@ -588,7 +422,5 @@ export default function GroupsPage() {
             }}
           />
         </LazyMount>
-      </Layout>
-    </ConfigProvider>
-  );
+  </div>;
 }

@@ -1,58 +1,18 @@
-.hosts-card {
-  width: 100%;
-}
-
-.host-remark-cell {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-.host-remark {
-  font-weight: 500;
-}
-
-.host-desc {
-  font-size: 0.82em;
-  color: var(--ant-color-text-secondary);
-}
-
-.host-endpoint {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.92em;
-}
-
-.host-muted {
-  color: var(--ant-color-text-quaternary);
-}
-
-/* card-toolbar is shared with the Clients/Inbounds list cards, but its rules
-   live in a lazily-loaded page stylesheet — re-declare here so the Hosts page
-   renders correctly when opened directly. */
-.hosts-card .card-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 6px 0;
-}
-
-@media (min-width: 769px) and (max-width: 920px) {
-  .hosts-card .card-toolbar {
-    gap: 6px;
-  }
-}
-
-/* Empty-table state. The shared .card-empty rule otherwise lives only in the
-   lazily-loaded Clients/Inbounds/Nodes stylesheets, so a direct /hosts refresh
-   would render it unstyled (faint + uncentered) until another page is visited.
-   Re-declare it here so it's correct on first load. */
-.card-empty {
-  text-align: center;
-  color: var(--ant-color-text-secondary);
-  padding: 24px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
+.host-list-page { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.host-list-page .p-pagehead { margin-bottom: 0; }
+.host-list-page .hosts-card { width: 100%; overflow: hidden; }
+.host-list-page .p-toolbar .ant-input-affix-wrapper { width: 250px; max-width: 100%; }
+.host-list-page .host-remark-cell { display: flex; flex-direction: column; line-height: 1.5; gap: 2px; }
+.host-list-page .host-endpoint { font-size: 11px; color: var(--p-text-2); overflow-wrap: anywhere; }
+.host-list-page .host-bulk-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--p-border); }
+.host-list-page .p-table .ant-table-cell { padding: 10px 14px; font-size: 12px; }
+.host-list-page .p-table .ant-tag { margin-inline-end: 0; }
+.host-list-page .p-name { font-size: 13px; font-weight: 600; }
+.host-list-page .card-empty { text-align: center; color: var(--p-text-2); padding: 24px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.host-address-overflow { display: flex; flex-direction: column; gap: 6px; max-width: 320px; max-height: 280px; overflow: auto; overflow-wrap: anywhere; }
+.host-list-page .host-actions-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* AntD duplicates header controls for measuring widths; the hidden copies must not receive focus. */
+.host-list-page .ant-table-measure-row { visibility: hidden; }
+.host-list-page .p-table .ant-table-thead > tr > th { color: var(--p-text-2) !important; }
+.host-list-page .ant-tag.ant-tag-filled.ant-tag-green { color: color-mix(in srgb, #389e0d 72%, var(--p-ink)); }
+.host-list-page .ant-tag.ant-tag-filled.ant-tag-volcano { color: color-mix(in srgb, #d4380d 72%, var(--p-ink)); }

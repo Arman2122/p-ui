@@ -29,21 +29,29 @@
 }
 
 .clients-page .p-clients-table .ant-table-cell {
-  padding: 8px 6px;
+  padding: 12px 8px;
 }
 
 .clients-page .p-clients-table .p-client-identity {
   min-width: 0;
-  gap: 3px;
+  gap: 5px;
 }
 
 .clients-page .p-clients-table .p-client-name,
 .clients-page .p-clients-table .p-client-context {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
-.p-clients-table .p-client-name > .p-name,
+.clients-page .p-clients-table .p-client-name > .p-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .p-clients-table .p-client-context > .p-desc {
   flex: 1 1 auto;
   min-width: 0;
@@ -69,17 +77,17 @@
   display: flex;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 130px;
-  gap: 2px;
+  max-width: 220px;
+  gap: 4px;
 }
 
 .p-client-inbounds .ant-tag {
   min-width: 0;
-  max-width: 90px;
+  max-width: 120px;
   margin: 0 !important;
   padding-inline: 4px;
-  font-size: 10px;
-  line-height: 16px;
+  font-size: 11px;
+  line-height: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -135,6 +143,25 @@
   font-size: 11px;
   text-align: start;
 }
+
+.clients-page .clients-add-button { order: 2; }
+.clients-page .clients-selection-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--p-border); border-bottom: 1px solid var(--p-border); background: color-mix(in srgb, var(--p-primary) 6%, transparent); font-size: 12.5px; }
+.clients-page .clients-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.clients-page .p-clients-table .client-traffic-cell-used { font-size: 12.5px; font-weight: 600; }
+.clients-page .p-clients-table .client-traffic-cell-limit { font-size: 12px; }
+.clients-page .p-clients-table .p-client-speed,
+.clients-page .p-clients-table .p-client-expiry { font-size: 12.5px; font-weight: 600; }
+.clients-page .p-clients-table .p-client-speed .p-sub,
+.clients-page .p-clients-table .p-client-expiry .p-sub { font-weight: 400; }
+.clients-page .p-clients-table .ant-table-thead > tr > th { padding-block: 8px; }
+.clients-page .p-clients-table .ant-table-selection-column { padding-inline-start: 14px; }
+.clients-page .client-traffic-blue .ant-progress-track { background: var(--p-primary) !important; }
+.clients-page .p-clients-table .client-traffic-cell-bar .ant-progress-rail,
+.clients-page .p-clients-table .client-traffic-cell-bar .ant-progress-track { height: 4px !important; }
+.clients-page .p-client-context > button .ant-tag { margin: 0; }
+.clients-page .p-clients-table .ant-table-thead th { white-space: nowrap; }
+.clients-page .ant-table-measure-row { visibility: hidden; }
+.clients-page:not(.is-dark) .p-client-inbounds .ant-tag-volcano { color: #ad2d0c; }
 
 .clients-page .p-clients-table .client-traffic-cell-limit {
   text-align: end;

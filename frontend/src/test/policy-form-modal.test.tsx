@@ -23,10 +23,11 @@ async function renderModal(policy: typeof PLAN | null) {
   for (let i = 0; i < 4; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(`${enUS.pages.policies.ladder}$`) })); });
 }
 
 async function save() {
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /save/i })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(`^(?:${enUS.save}|${enUS.pages.policies.add})$`, 'i') })); });
   for (let i = 0; i < 4; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }

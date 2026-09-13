@@ -23,7 +23,7 @@ export function ClientTrendCell({ client, hint, wide = false, compact = false }:
   const times = Array.from({ length: 14 }, (_, i) => start + i * 86400);
   const byTime = new Map(points.map((p) => [p.t, p.up + p.down]));
   return <Tooltip title={hint ?? t('telemetry.dailyTraffic')}>
-    <div style={{ width: wide ? '100%' : compact ? 88 : 140 }}><HistoryChart times={times} compact height={compact ? 28 : 42} format={SizeFormatter.sizeFormat}
-      series={[{ name: t('pages.clients.traffic'), color: '#5ac8b0', values: times.map((ts) => byTime.get(ts) ?? Number.NaN) }]} /></div>
+    <div style={{ width: wide ? '100%' : compact ? 88 : 140 }}><HistoryChart times={times} compact dashboard height={compact ? 28 : 42} format={SizeFormatter.sizeFormat}
+      series={[{ name: t('pages.clients.traffic'), color: '#4c8dff', values: times.map((ts) => byTime.get(ts) ?? Number.NaN) }]} /></div>
   </Tooltip>;
 }

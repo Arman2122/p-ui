@@ -69,10 +69,13 @@ describe('node fleet confirmed fidelity gaps', () => {
     await waitFor(() => expect(view.get).toHaveBeenCalledTimes(2));
     expect(view.get.mock.calls.every(([url]) => String(url).includes('/history/7/'))).toBe(true);
     const parentCard = screen.getByRole('button', { name: 'Primary node' }).closest('section')!;
-    fireEvent.click(within(parentCard).getByRole('button', { name: text('edit') }));
+    fireEvent.click(within(parentCard).getByRole('button', { name: text('more') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: text('edit') }));
     fireEvent.click(within(parentCard).getByRole('button', { name: text('check') }));
-    fireEvent.click(within(parentCard).getByRole('button', { name: text('delete') }));
-    fireEvent.click(within(parentCard).getByRole('switch'));
+    fireEvent.click(within(parentCard).getByRole('button', { name: text('more') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: text('delete') }));
+    fireEvent.click(within(parentCard).getByRole('button', { name: text('more') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: text('pages.clients.disable') }));
     expect(view.onEdit).toHaveBeenCalledWith(parent);
     expect(view.onProbe).toHaveBeenCalledWith(parent);
     expect(view.onDelete).toHaveBeenCalledWith(parent);
