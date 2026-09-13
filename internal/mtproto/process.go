@@ -112,6 +112,21 @@ func BinaryVersion(ctx context.Context, path string) (string, error) {
 	return fields[0], nil
 }
 
+// CheckConfig asks binary whether it would run configPath, without listening:
+// `run --check`, answered by every release the panel accepts (1.9.0+).
+func CheckConfig(ctx context.Context, binary, configPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, binary, "run", "--check", configPath).CombinedOutput()
+	if err != nil {
+		if last := lastLine(string(out)); last != "" {
+			return errors.New(last)
+		}
+		return err
+	}
+	return nil
+}
+
 func configDir() string {
 	return config.GetBinFolderPath() + "/mtproto"
 }

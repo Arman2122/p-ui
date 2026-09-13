@@ -857,6 +857,29 @@ func (m *Manager) runningTargets() []apiTarget {
 	return targets
 }
 
+// RunningConfig is one live sidecar's rendered file, and whether a WEB relay
+// runs off it too, for a candidate binary to be asked about before an install.
+type RunningConfig struct {
+	ID       int
+	Path     string
+	WebRelay bool
+}
+
+// RunningConfigs snapshots the file of every sidecar running right now.
+func (m *Manager) RunningConfigs() []RunningConfig {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]RunningConfig, 0, len(m.procs))
+	for id, cur := range m.procs {
+		if cur.proc == nil || !cur.proc.IsRunning() {
+			continue
+		}
+		out = append(out, RunningConfig{ID: id, Path: configPathForID(id), WebRelay: cur.relay != nil && cur.relay.IsRunning()})
+	}
+	slices.SortFunc(out, func(a, b RunningConfig) int { return a.ID - b.ID })
+	return out
+}
+
 func kick(port int, token, email string, source netip.Addr) (int, error) {
 	body, err := json.Marshal(struct {
 		IPs []string `json:"ips"`
@@ -1134,6 +1157,12 @@ func dedupSecrets(entries []SecretEntry) []SecretEntry {
 		out = append(out, e)
 	}
 	return out
+}
+
+// RenderConfig is the file the panel writes for inst, for a check that needs
+// one without a process behind it.
+func RenderConfig(inst Instance, apiPort int, apiToken string) string {
+	return renderConfig(inst, apiPort, apiToken)
 }
 
 func writeConfig(path string, inst Instance, apiPort int, apiToken string) error {

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -165,11 +166,17 @@ func (c *Core) Install(ctx context.Context, version string) error {
 	if err := validateUpdateProtocols(ctx, staged); err != nil {
 		return err
 	}
+	// The paths are read under the lock and the checks run outside it: a check
+	// is a process per inbound, and the scrapes must not wait on it.
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, instance := range c.instances {
-		if err := checkConfig(ctx, staged, instance.cfgPath); err != nil {
-			return fmt.Errorf("singbox: update cannot load inbound %d; installed binary preserved: %w", instance.inst.ID, err)
+	paths := make(map[int]string, len(c.instances))
+	for id, instance := range c.instances {
+		paths[id] = instance.cfgPath
+	}
+	c.mu.Unlock()
+	for _, id := range slices.Sorted(maps.Keys(paths)) {
+		if err := checkConfig(ctx, staged, paths[id]); err != nil {
+			return fmt.Errorf("singbox: update cannot load inbound %d; installed binary preserved: %w", id, err)
 		}
 	}
 	if err := ctx.Err(); err != nil {

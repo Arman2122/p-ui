@@ -302,3 +302,76 @@ func TestTheInstallerRefusesAReleaseThePanelRefusesAtBoot(t *testing.T) {
 		t.Fatalf("a refused install replaced the binary with %q", got)
 	}
 }
+
+// The candidate is asked whether it runs the panel's config before it lands: a
+// binary that reads a key the panel writes as unknown is refused whole.
+func TestInstallIsRefusedWhenTheCandidateCannotRunThePanelsConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("staged shell binary requires a POSIX host")
+	}
+	binDir := t.TempDir()
+	t.Setenv("PUI_BIN_FOLDER", binDir)
+	installed := engine.GetBinaryPath()
+	if err := os.WriteFile(installed, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := "#!/bin/sh\ncase \"$1\" in\n--version) echo \"9.9.9 (go1.26 fake)\"; exit 0;;\n" +
+		"run) [ \"$2\" = --check ] && grep -q speed-up \"$3\" && { echo \"unknown config keys: secret-limits.update-check.speed-up\"; exit 1; };;\n" +
+		"esac\nexit 0\n"
+	archive, sum := mtgTarball(t, "mtg-proxy-9.9.9-linux-amd64", payload)
+	c := channel(t, "v9.9.9", archive, sum)
+	err := c.Install(context.Background(), "v9.9.9")
+	if err == nil || !strings.Contains(err.Error(), "cannot run the panel's config") || !strings.Contains(err.Error(), "speed-up") {
+		t.Fatalf("Install = %v; want the candidate's own refusal, naming the key", err)
+	}
+	if got, _ := os.ReadFile(installed); string(got) != "old" {
+		t.Fatalf("a refused install replaced the binary with %q", got)
+	}
+	if stray, _ := filepath.Glob(filepath.Join(binDir, ".mtg-*")); len(stray) != 0 {
+		t.Fatalf("a refused install left %v staged beside the binary", stray)
+	}
+}
+
+// A live inbound's own file is put to the candidate too, so an install never
+// lands a binary that inbound's next restart would refuse.
+func TestInstallIsRefusedWhenTheCandidateCannotRunALiveInbound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("staged shell binary requires a POSIX host")
+	}
+	r := newRig(t)
+	inst := r.instance(1)
+	if err := New(Deps{}).Reconcile(t.Context(), []core.Instance{inst}); err != nil {
+		t.Fatal(err)
+	}
+	r.waitReady()
+	live := engine.GetManager().RunningConfigs()
+	if len(live) != 1 || live[0].ID != inst.ID || live[0].WebRelay {
+		t.Fatalf("RunningConfigs = %+v; want the one live inbound, without a relay", live)
+	}
+	installed := engine.GetBinaryPath()
+	before, err := os.ReadFile(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := "#!/bin/sh\ncase \"$1\" in\n--version) echo \"9.9.9 (go1.26 fake)\"; exit 0;;\n" +
+		"run) [ \"$2\" = --check ] && [ \"$3\" = \"" + live[0].Path + "\" ] && { echo \"unknown config keys: track-client-ips\"; exit 1; };;\n" +
+		"esac\nexit 0\n"
+	archive, sum := mtgTarball(t, "mtg-proxy-9.9.9-linux-amd64", payload)
+	c := channel(t, "v9.9.9", archive, sum)
+	err = c.Install(context.Background(), "v9.9.9")
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("cannot run inbound %d", inst.ID)) || !strings.Contains(err.Error(), "track-client-ips") {
+		t.Fatalf("Install = %v; want the refusal to name the inbound and the key", err)
+	}
+	if after, _ := os.ReadFile(installed); !bytes.Equal(after, before) {
+		t.Fatal("a refused install replaced the binary the live inbound runs on")
+	}
+}
+
+func TestInstallRefusesAConcurrentInstall(t *testing.T) {
+	c := channel(t, "v9.9.9", nil, "")
+	c.updateMu.Lock()
+	defer c.updateMu.Unlock()
+	if err := c.Install(context.Background(), "v9.9.9"); err == nil || !strings.Contains(err.Error(), "already in progress") {
+		t.Fatalf("concurrent Install = %v, want busy refusal", err)
+	}
+}

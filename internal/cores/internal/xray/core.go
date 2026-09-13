@@ -53,6 +53,8 @@ type Core struct {
 	mu      sync.Mutex
 	api     *engine.XrayAPI
 	apiPort int
+	// updateMu serialises installs: two at once would race on the staged file.
+	updateMu sync.Mutex
 
 	// Tag deltas arrive on the same scrape as the per-user ones and would be
 	// lost if discarded, so they accumulate here until CollectTagTraffic drains

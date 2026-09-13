@@ -49,9 +49,15 @@ func ensureWebKey(id int) error {
 // webRelayCheck runs the relay's own validation over the rendered file, so a
 // [web] table it would refuse is refused before a process is started for it.
 func webRelayCheck(configPath string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	return CheckWebRelay(context.Background(), GetBinaryPath(), configPath)
+}
+
+// CheckWebRelay is webRelayCheck with the binary named, so a candidate can be
+// asked about a live relay's file before it replaces the running one.
+func CheckWebRelay(ctx context.Context, binary, configPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, GetBinaryPath(), "web-relay", "--check", configPath).CombinedOutput()
+	out, err := exec.CommandContext(ctx, binary, "web-relay", "--check", configPath).CombinedOutput()
 	if err != nil {
 		if last := lastLine(string(out)); last != "" {
 			return errors.New(last)

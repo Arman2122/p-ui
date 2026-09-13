@@ -426,3 +426,12 @@ func TestXrayUpdaterCancellationPreservesBinary(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallRefusesAConcurrentInstall(t *testing.T) {
+	c := &Core{}
+	c.updateMu.Lock()
+	defer c.updateMu.Unlock()
+	if err := c.Install(context.Background(), "v26.7.28"); err == nil || !strings.Contains(err.Error(), "already in progress") {
+		t.Fatalf("concurrent Install = %v, want busy refusal", err)
+	}
+}

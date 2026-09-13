@@ -35,6 +35,8 @@ type Core struct {
 	mu          sync.Mutex
 	online      []string
 	pendingTags map[string]core.TagDelta
+	// updateMu serialises installs: two at once would race on the staged file.
+	updateMu sync.Mutex
 }
 
 // Deps are the panel-side facts the core cannot derive.

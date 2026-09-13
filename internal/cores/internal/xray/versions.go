@@ -166,6 +166,10 @@ func parseVersion(version string) ([3]int, bool) {
 
 // Install validates a staged release before replacing the on-disk binary.
 func (c *Core) Install(ctx context.Context, version string) error {
+	if !c.updateMu.TryLock() {
+		return errors.New("xray: an installation is already in progress")
+	}
+	defer c.updateMu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}

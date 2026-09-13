@@ -42,7 +42,11 @@ Xray verifies published digests, exact executable identity/version and its
 current configuration. Its installed-version report reads the file on disk.
 MTProto uses the panel's fork, enforces the minimum supported version, rejects
 draft/development releases and verifies that the downloaded version matches the
-requested stable tag. It does not claim a separate configuration dry-run check.
+requested stable tag. The candidate then runs `run --check` (mtg-proxy 1.9.0+)
+over a file carrying every key the panel writes and over every live inbound's
+own file, plus `web-relay --check` where a WEB relay runs off it, so a binary
+that would refuse an inbound at its next restart is never installed. Installs
+are serialized, as for sing-box and Xray.
 
 SSH updates with the panel. System package and kernel cores retain their own
 maintenance paths. Core install/restart controls never adopt or restart unrelated

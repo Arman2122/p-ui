@@ -86,9 +86,13 @@ func (c *Core) Available(ctx context.Context) ([]string, error) {
 	return tags, nil
 }
 
-// Install fetches, verifies, stages and lands one listed release; see the
-// package note for what it checks and why it restarts nothing.
+// Install fetches, verifies, stages and lands one listed release once the
+// candidate has run `--check` over the panel's config and every live one.
 func (c *Core) Install(ctx context.Context, version string) error {
+	if !c.updateMu.TryLock() {
+		return errors.New("mtproto: an installation is already in progress")
+	}
+	defer c.updateMu.Unlock()
 	versions, err := c.Available(ctx)
 	if err != nil {
 		return err
@@ -125,6 +129,12 @@ func (c *Core) Install(ctx context.Context, version string) error {
 	}
 	if strings.TrimPrefix(reported, "v") != bare {
 		return fmt.Errorf("mtproto: downloaded %s reports %q, which does not match requested %s; it was not installed", pkg, reported, version)
+	}
+	if err := validateUpdateConfig(ctx, staged); err != nil {
+		return err
+	}
+	if err := validateRunningConfigs(ctx, staged, c.mgr.RunningConfigs()); err != nil {
+		return err
 	}
 	return replaceStagedBinary(ctx, staged, engine.GetBinaryPath())
 }
