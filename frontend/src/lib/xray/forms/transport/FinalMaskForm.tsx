@@ -260,7 +260,7 @@ export default function FinalMaskForm({ name, network, protocol, form, showAll =
               }}
             />
           </Form.Item>
-          {hasQuicParams && <QuicParamsForm base={[...base, 'quicParams']} form={form} advertiseHop={!udpHopMask} />}
+          {hasQuicParams && <QuicParamsForm base={[...base, 'quicParams']} form={form} advertiseHop={!udpHopMask || showAll} />}
         </>
       )}
     </>
@@ -1334,7 +1334,7 @@ function QuicParamsForm({ base, form, advertiseHop }: { base: (string | number)[
         <>
           <Form.Item
             label="Hop Ports (mport)"
-            tooltip="Advertised to clients in their links and configs; the core itself hops through the udphop UDP mask on the client side."
+            tooltip="On an inbound: the range clients are told to hop across (mport in links). In a client-side config: read only by cores before Xray v26.9.9 — newer cores hop through the udphop UDP mask."
           >
             <Switch
               checked={hasUdpHop}
