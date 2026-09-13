@@ -66,6 +66,24 @@ function assertNoOverflow(canvasElement: HTMLElement) {
   for (const card of canvasElement.querySelectorAll<HTMLElement>('.api-reference-card')) expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
 }
 
+async function selectStoryOption(canvas: ReturnType<typeof within>, label: string, value: string) {
+  const input = canvas.getByRole('combobox', { name: label });
+  await userEvent.click(input.closest('.ant-select')!);
+  const option = [...document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')].find(item => item.title === value || item.textContent === value)!;
+  await waitFor(() => expect(option).toBeVisible());
+  await userEvent.click(option);
+  await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'false'));
+  await waitFor(() => {
+    const listbox = within(document.body).queryByRole('listbox');
+    const ancestors = [];
+    for (let element = listbox; element && ancestors.length < 6; element = element.parentElement) {
+      const style = getComputedStyle(element);
+      ancestors.push({ tag: element.tagName, class: element.className, display: style.display, visibility: style.visibility, opacity: style.opacity });
+    }
+    expect(listbox, JSON.stringify(ancestors)).toBeNull();
+  }, { timeout: 2500 });
+}
+
 const meta = {
   title: 'Pages/API', component: ApiStory, tags: ['autodocs'], parameters: { layout: 'fullscreen' },
   render: (args, context) => <ApiStory {...args} dark={context.globals.theme === 'dark'} />,
@@ -114,17 +132,56 @@ export const RequestExplorer: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => expect(canvasElement.querySelector('.p-apirequest')).toBeVisible());
-    expect(canvas.getByRole('combobox', { name: text('apiExplorer.categories') }).closest('.ant-select')).toBeVisible();
+    const mobile = window.innerWidth <= 760;
+    const browse = mobile ? canvas.getByRole('button', { name: new RegExp(text('apiUx.browseEndpoints')) }) : undefined;
+    let navigation = canvas;
+    if (browse) {
+      expect(browse).toHaveAttribute('aria-expanded', 'false');
+      expect(canvas.queryByRole('navigation', { name: text('apiExplorer.operations') })).toBeNull();
+      await userEvent.click(browse);
+      const dialog = await within(document.body).findByRole('dialog');
+      navigation = within(dialog);
+      expect(navigation.getByText(text('apiUx.browseEndpoints'))).toBeVisible();
+      const navigationSearch = navigation.getByRole('textbox', { name: text('apiUx.searchInNavigation') });
+      expect(navigationSearch).toBeVisible();
+      navigationSearch.focus(); await userEvent.keyboard('{Enter}');
+      expect(browse).toHaveAttribute('aria-expanded', 'true');
+    }
+    expect(navigation.getByRole('combobox', { name: text('apiExplorer.categories') }).closest('.ant-select')).toBeVisible();
     expect(canvas.queryByRole('navigation', { name: text('apiExplorer.categories') })).toBeNull();
     expect(canvas.getByRole('button', { name: new RegExp(text('apiRepair.request.send')) })).toBeVisible();
     expect(canvas.getAllByText(text('apiRepair.request.unsentHint')).length).toBeGreaterThan(0);
-    const firstOperation = canvasElement.querySelector<HTMLElement>('.p-eprow')!;
-    expect(firstOperation.getBoundingClientRect().top).toBeLessThan(window.innerHeight);
-    for (const key of ['liveResponse', 'responseHeaders', 'responseExample']) expect(canvas.getByRole('tab', { name: text(`apiRepair.request.${key}`) })).toBeVisible();
-    await userEvent.click(canvas.getByRole('tab', { name: text('apiRepair.request.responseExample') }));
+    const activeOperation = navigation.getByRole('button', { name: 'GET /panel/api/me' });
+    expect(activeOperation).toBeVisible();
+    expect(activeOperation.closest('details')).toHaveAttribute('open');
+    expect(activeOperation.querySelector('code')).toHaveTextContent('/me');
+    expect(activeOperation.querySelector('code')).toHaveAttribute('title', '/panel/api/me');
+    expect(activeOperation.querySelector('.api-nav-entry-summary')?.textContent?.length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const nav = activeOperation.closest('nav')!;
+      const navigationGeometry = { viewport: window.innerHeight, scrollY: window.scrollY, navTop: nav.getBoundingClientRect().top, navBottom: nav.getBoundingClientRect().bottom, height: nav.clientHeight, scrollTop: nav.scrollTop, scrollHeight: nav.scrollHeight, activeTop: activeOperation.getBoundingClientRect().top };
+      expect(activeOperation.getBoundingClientRect().top, JSON.stringify(navigationGeometry)).toBeLessThan(window.innerHeight);
+    });
+    if (browse) {
+      await userEvent.click(activeOperation);
+      expect(browse).toHaveAttribute('aria-expanded', 'false');
+      await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());
+      expect(canvas.queryByRole('navigation', { name: text('apiExplorer.operations') })).toBeNull();
+    }
+    const editor = canvasElement.querySelector('.p-apirequest-editor')!.getBoundingClientRect();
+    const response = canvasElement.querySelector('.p-apirequest-response')!.getBoundingClientRect();
+    if (window.innerWidth > 1050) expect(response.left).toBeGreaterThanOrEqual(editor.right - 1);
+    else expect(response.top).toBeGreaterThanOrEqual(editor.bottom - 1);
+    const responseTabs = within(canvasElement.querySelector<HTMLElement>('.p-apirequest-response')!);
+    for (const key of ['responseBody', 'responseHeaders', 'responseExample']) expect(responseTabs.getByRole('tab', { name: text(`apiUx.${key}`) })).toBeVisible();
+    await userEvent.click(responseTabs.getByRole('tab', { name: text('apiUx.responseExample') }));
     await waitFor(() => expect(canvas.getByText(text('apiRepair.request.exampleOnly'))).toBeVisible());
-    await userEvent.click(canvas.getByRole('tab', { name: text('apiRepair.request.liveResponse') }));
+    await userEvent.click(responseTabs.getByRole('tab', { name: text('apiUx.responseBody') }));
     assertNoOverflow(canvasElement);
+    if (browse) {
+      await userEvent.click(browse);
+      await waitFor(() => expect(within(document.body).getByRole('dialog')).toBeVisible());
+    }
   },
 };
 
@@ -193,4 +250,93 @@ export const NarrowCatalogue: Story = {
 export const NarrowExplorer: Story = {
   ...RequestExplorer,
   parameters: NarrowCatalogue.parameters,
+};
+
+export const NavigationAt764: Story = {
+  ...RequestExplorer,
+  name: 'Navigation at 764px',
+  parameters: { viewport: { defaultViewport: 'boundary', viewports: { boundary: { name: 'Navigation boundary', styles: { width: '764px', height: '900px' }, type: 'tablet' } } } },
+};
+
+export const RequestExplorerDark: Story = { ...RequestExplorer, globals: { theme: 'dark' } };
+export const NarrowExplorerDark: Story = { ...NarrowExplorer, globals: { theme: 'dark' } };
+
+export const DraftWhileSearching: Story = {
+  args: { view: 'explorer', endpoint: 'POST /panel/api/setting/update' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvasElement.querySelector('.p-apirequest')).toBeVisible());
+    const bodyTab = within(canvasElement.querySelector<HTMLElement>('.p-apirequest-editor')!).queryByRole('tab', { name: text('apiRepair.request.body') });
+    if (bodyTab) await userEvent.click(bodyTab);
+    const json = canvas.queryByRole('radio', { name: 'JSON' });
+    if (json) await userEvent.click(json.closest('label')!);
+    const body = canvas.getByRole('textbox', { name: text('apiRepair.request.jsonBody') });
+    await userEvent.clear(body); await userEvent.type(body, '{{"webPort":1234}', { skipClick: true });
+    const value = (body as HTMLTextAreaElement).value;
+    await userEvent.keyboard('/');
+    expect(body).toHaveFocus();
+    const draft = (body as HTMLTextAreaElement).value;
+    expect(draft).toBe(`${value}/`);
+    const headerButton = canvas.getByRole('button', { name: new RegExp(text('design.apiTokens')) });
+    headerButton.focus(); await userEvent.keyboard('/');
+    const search = canvas.getByRole('textbox', { name: text('design.apiSearch') });
+    expect(search).toHaveFocus(); expect(search).toHaveValue('');
+    await userEvent.type(search, 'no-such-operation-xyz');
+    await selectStoryOption(canvas, text('apiExplorer.method'), 'GET');
+    expect(canvas.getByText(text('apiUx.selectionOutsideSearch'))).toBeVisible();
+    expect(canvas.getByRole('textbox', { name: text('apiRepair.request.jsonBody') })).toBe(body);
+    expect(body).toHaveValue(draft);
+    search.focus(); await userEvent.keyboard('{Escape}');
+    expect(search).toHaveValue(''); expect(body).toHaveValue(draft);
+    expect(canvas.getByRole('combobox', { name: text('apiExplorer.method') }).closest('.ant-select')).toHaveTextContent('GET');
+    expect(canvas.getByText(text('apiUx.selectionOutsideSearch'))).toBeVisible();
+    assertNoOverflow(canvasElement);
+  },
+};
+
+export const NarrowDraftWhileSearching: Story = { ...DraftWhileSearching, parameters: NarrowCatalogue.parameters };
+
+export const QuickstartAndRecents: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const key of ['startIdentity', 'startClients', 'startStatus']) {
+      await userEvent.click(canvas.getByRole('button', { name: text(`apiUx.${key}`) }));
+    }
+    const disclosure = canvasElement.querySelector<HTMLDetailsElement>('.api-recent')!;
+    expect(disclosure.open).toBe(false);
+    await userEvent.click(disclosure.querySelector('summary')!);
+    const recent = canvas.getByLabelText(text('apiUx.recent'));
+    const choices = within(recent).getAllByRole('button');
+    expect(choices).toHaveLength(3);
+    expect(choices[0]).toHaveAccessibleName(`${text('apiUx.openRecent')}: GET /panel/api/server/status`);
+    await userEvent.click(choices[2]);
+    expect(canvas.getByRole('button', { name: 'GET /panel/api/me' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(recent).getAllByRole('button')).toHaveLength(3);
+    assertNoOverflow(canvasElement);
+  },
+};
+
+export const LoginFields: Story = {
+  args: { view: 'explorer', endpoint: 'POST /login' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const username = await canvas.findByLabelText('body: username');
+    const password = canvas.getByLabelText('body: password');
+    expect(username).toHaveValue(''); expect(password).toHaveValue('');
+    expect(password).toHaveAttribute('type', 'password');
+    expect(password).toHaveAttribute('autocomplete', 'new-password');
+    const label = (username as HTMLInputElement).labels?.[0];
+    expect(label).toBeDefined();
+    await waitFor(() => expect(label).toBeVisible());
+    expect(label!.getBoundingClientRect().bottom).toBeLessThanOrEqual(username.getBoundingClientRect().top + 1);
+    await userEvent.click(label!); expect(username).toHaveFocus();
+    await userEvent.type(username, 'storybook-user');
+    await userEvent.tab(); expect(password).toHaveFocus();
+    await userEvent.type(password, 'Story-only-password-42!');
+    expect(username).toHaveValue('storybook-user');
+    expect(password).toHaveValue('Story-only-password-42!');
+    expect(canvasElement.querySelector('label label')).toBeNull();
+    expect(canvas.getByText(text('apiRepair.request.unsentHint'))).toBeVisible();
+    assertNoOverflow(canvasElement);
+  },
 };
