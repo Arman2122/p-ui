@@ -279,14 +279,23 @@ over SSH: the app is given `127.0.0.1` and that port as its UDPGW address.
 Nothing else listens on the host; every datagram is billed and rate-limited to
 the client like a TCP forward, DNS-flagged datagrams go to the server's own
 resolver, and destinations follow the same policy as TCP forwards. Routed
-through Xray, the datagrams follow the routing rules like any TCP forward.
+through Xray, the datagrams follow the routing rules like any TCP forward, and
+DNS travels through the route as DNS over TCP — to the resolver the app named
+when it is a public one, otherwise to `1.1.1.1` — so a lookup never leaves
+with the server's own address.
 
 **Forward policy.** A forward cannot reach the server itself or a private
 network: loopback, link-local, private and reserved ranges and the host's own
 addresses are refused, after resolving a name, so the panel's own services are
 never one forward away. The server offers an ed25519 and an RSA host key, cuts
 off a handshake that never finishes, drops a peer that stops answering
-keepalives, and caps open forwards per connection.
+keepalives, and caps open forwards per connection. Five refused logins from one
+address inside five minutes close that address's connections before the
+handshake for ten minutes; a successful login clears the count. A client whose
+login is refused because the account is disabled, expired or over its device
+cap is told so in the app's banner; a wrong password gets a bare refusal.
+Editing the inbound's banner applies to the running listener and drops no
+session.
 
 **Routing.** By default an SSH inbound dials its forwards straight out, and no
 routing rule can name it. Turn on **Route forwards through Xray** and the panel
@@ -444,8 +453,10 @@ and log in with a **username** and **password**, minted when left empty. On the
 first save the panel mints a self-signed certificate and keeps it in the
 inbound's row; the profile it serves pins that certificate's public key, which
 `openconnect` understands. The official Cisco AnyConnect app does not pin: for
-it, paste a certificate and key your clients already trust into the inbound's
-own fields, and the profile then carries no pin.
+it, paste a CA-signed certificate (chain included) and its key into the
+inbound's **Server certificate** and **Server private key** fields; the two are
+set together and checked as a pair on save, and the profile then carries no
+pin.
 
 **Camouflage** is worth turning on where the protocol itself is filtered. The
 daemon answers every request that does not carry the secret exactly as a web

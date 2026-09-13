@@ -8,7 +8,7 @@ real daemons (Xray 26.7.28, sing-box 1.14.0, ocserv 1.2.4, OpenVPN 2.6.19, the
 mtg-proxy fork). This file is the record of what was fixed, what is still open,
 and what needs a decision.
 
-## Fixed (commits f0b6e6e, 1a17718, 3356f95, cbb9238, 11d8f88)
+## Fixed (commits f0b6e6e, 1a17718, 3356f95, cbb9238, 11d8f88, then d65a61e, 5c06677, f811d77)
 
 Production-breaking, found by three lanes independently:
 
@@ -56,48 +56,56 @@ Correctness the operator would hit:
   ocserv out; REALITY offered the `unsafe` fingerprint xray-core refuses; an
   XHTTP-over-h3 inbound was counted as TCP by port-conflict detection.
 
-## Still open, ranked
+## Decided and landed (2026-09-14: d65a61e, 5c06677, f811d77)
 
-Each with the lane's anchor and the smallest fix. Nothing here is fail-open.
+The four decisions the review left open were taken, each the fail-closed way,
+and the ranked list below them landed; the anchors are the same as before.
 
-1. **UDP toward a TCP-only exit stays uncovered by design** (`plan.go`
-   `narrowToTCP`). The rule now warns visibly; the alternative is a companion
-   `network: udp -> blackhole` rule at the same position, which would break a
-   layered "all -> SSH exit, then udp -> WG exit" setup. Decision for the owner.
-2. **Routed SSH udpgw DNS goes to the host resolver** (`ssh/udpgw.go:208-212`):
-   DNS-flagged datagrams are answered from the server even on a routed inbound.
-   Fix needs a resolver reachable through the router; a design choice.
-3. **A failed `ip rule add fwmark` fails open** (`routing.go` `Exits`): the
-   marked outbound is emitted from the row, never from the kernel. Two-line fix:
-   ask `egressManager.MarkedExit` per device exit and drop `ErrNotRouted` ones
-   from `Input.Exits`. Needs a check that the service tests' fake plane answers.
-4. **Host-row TLS overrides are dropped from the JSON subscription**
-   (`sub/service.go` `applyExternalProxyTLSToStream` writes
-   `pinnedPeerCertSha256`/`echConfigList`/`verifyPeerCertByName` under
-   `tlsSettings.settings`, a key xray has no member for). Verify the field types
-   in the pinned `infra/conf/transport_security.go` before writing them top-level.
-5. **No per-source throttle on failed SSH logins** (`ssh/server.go:247-255`):
-   MaxAuthTries 3 per connection, no lockout, failures reach only the UI toast.
-6. **mtproto's WEB relay and ocserv's workers show as "Other host process"**
-   (`core_host_runtime.go`, `display.ts:22-27`) and the install dialog says they
-   will not be restarted, while RestartCore restarts them. Fix: report the
-   parent pid and count a child of a managed pid as managed.
-7. **The Cisco Secure Client path needs a CA-signed pair the form cannot take**
-   (`ocserv.tsx` has no `serverCert`/`serverKey` inputs; the API accepts them).
-8. **The SSH exit cannot authenticate to keyboard-interactive-only sshd**
-   (`ssh/exit.go:203-213`); an OpenConnect exit cannot dial a camouflaged
-   server (`ocserv/exit.go:33-43`); SSH refusal reasons never reach the client
-   (`BannerError`); a banner edit drops every session; `/clash` and `/json`
-   omit TUIC and AnyTLS while mihomo supports both.
-9. **Conformance runs in CI for five of eight cores**: ocserv, openvpn and
-   sing-box call `coretest.Check` only under their e2e gates; a fake-backend
-   rig for each would make CI hold the contract. `RoutableEgress`,
-   `TagTrafficSource`, `InstanceMinter`, `ExitSupervisor` have no coretest case.
-10. Lower: sing-box `Sessions()` forgets activity after one transient read
-    failure; a systemd auto-restart changes no counter epoch (undercount only);
-    the release-list cache has no age cap; `RequiredBuildTags` and
-    `release.yml`'s `-tags` are unguarded copies; the kcp/vmess+xhttp share
-    links disagree between the Go and TS builders with no golden fixture.
+1. **UDP toward a TCP-only exit is dropped, not left to fall through.** A
+   companion `network: udp -> blackhole` rule follows the narrowed one; the
+   warning says a `udp` rule placed above carries UDP elsewhere. Chosen over
+   "warn only" because the fall-through left with the server's own address,
+   which is the leak an exit rule exists to prevent.
+2. **Routed SSH udpgw DNS goes through the route as DNS over TCP**, to the
+   resolver the app named when it is public, else to `1.1.1.1`. TCP because the
+   common routed exit is an SSH server, which carries nothing else; a direct
+   inbound keeps the host resolver.
+3. **A device exit the host does not route is contained.** `Exits()` asks the
+   egress manager per device exit; a contained one compiles to the blackhole
+   with a warning, and a change in what the host routes after a reconcile arms
+   the Xray restart. Chosen over "drop the exit from the input", which would
+   have compiled its rules to nothing and let the traffic through direct.
+4. **The JSON subscription writes a Host row's TLS keys at the top level** of
+   `tlsSettings` (pins comma-joined), verified against xray's own `TLSConfig`.
+5. SSH: five refused logins from one address in five minutes shut it out for
+   ten; refusals carry their reason as a banner (not a wrong password); the
+   banner is hot-applied; the exit answers keyboard-interactive-only servers.
+6. The Cores page counts a child of a managed pid as managed (`parentPid`).
+7. The OpenConnect form takes an operator's own certificate pair, checked as a
+   pair; the OpenConnect exit dials a camouflaged server with its secret.
+8. TUIC and AnyTLS render in the Clash profile through the registry's share
+   seam; the JSON format still omits them, because xray has no outbound.
+9. Conformance runs in CI for every core: sing-box, OpenConnect and OpenVPN
+   have daemon-less rigs, and the suite holds `InstanceMinter`,
+   `RoutableEgress`, `ExitSupervisor` and `TagTrafficSource` to invariants.
+10. sing-box keeps activity across a failed read and treats a restart it did
+    not make as a new epoch; `RequiredBuildTags` is guarded against
+    `release.yml`; the vmess XHTTP mode travels in `type` on both builders and
+    the corpus pins vmess links. The release-list cache already had a
+    15-minute TTL (`core_versions.go`); that item was wrong.
+
+## What remains
+
+- mKCP header type and seed are API-only: the form's kcp schema has neither,
+  so the Go link renders them for API rows and the panel's link cannot. The
+  corpus pins the form-reachable shape. Adding the fields is a form feature.
+- The JSON subscription has no entry for TUIC or AnyTLS (xray has none).
+- The SSH login throttle's numbers (5 failures, 5 minutes, 10 minutes) are
+  fixed, not settings.
+- An uncommitted go.mod/go.sum bump (go 1.27, a newer xray-core pin, extra
+  dependencies, incomplete go.sum) sits in the shared checkout as of
+  2026-09-14; it is nobody's in this work and breaks a local `go` build until
+  finished or reverted.
 
 ## Adding a core today
 

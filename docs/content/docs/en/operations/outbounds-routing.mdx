@@ -51,17 +51,20 @@ Assemble any outbound below and paste the JSON into **Xray Settings → Outbound
 ### SSH exit
 
 An exit that is a remote SSH server. Pick **ssh** in the outbound form, give it
-the host, port and username, a password or a PEM private key, and the server's
-host key fingerprint, which is required. **Fetch from server** under the field asks
+the host, port and username, a password or a PEM private key (a server that
+offers keyboard-interactive alone, PAM's default, is answered with the same
+password), and the server's host key fingerprint, which is required. **Fetch from server** under the field asks
 the panel to perform the key exchange and fills in what the server presented,
 for you to confirm; or get it yourself with
 `ssh-keyscan -t ed25519 HOST | ssh-keygen -lf -`. The panel keeps one SSH
 connection to that server, reconnecting with a backoff when it drops, and fronts
 it with a loopback SOCKS port (`41000` plus the exit's id). Routing rules that
 send traffic to the exit are compiled onto that port and narrowed to TCP: an SSH
-forward carries no UDP, and a rule asking for UDP alone is refused rather than
-sent into a port that drops it. **Test** on the Outbounds page probes through
-the port.
+forward carries no UDP, so a rule asking for UDP alone is refused, and a rule
+that also matched UDP gets a companion rule that drops that UDP rather than
+letting it fall through to the next rule or the default route with the server's
+own address. To carry UDP elsewhere, put a rule matching network `udp` above
+the exit rule. **Test** on the Outbounds page probes through the port.
 
 ### OpenVPN exit
 
@@ -79,7 +82,10 @@ names a file the panel does not have (`ca /etc/...` instead of an inline
 block), and a server's profile are refused at save with the reason. Routing
 rules that send traffic to the exit are compiled onto a marked outbound, the
 way a WireGuard uplink is reached, and the plane routes that mark into the tun.
-**Test** on the Outbounds page probes through it. Two v1 limits: IPv4 only,
+The compiler reads the host, not the row: while the host does not route the
+exit's mark — its device is down, or the rule has not landed — rules toward it
+drop their traffic and the rules page says so, and Xray is rebuilt when the
+host routes it again. **Test** on the Outbounds page probes through it. Two v1 limits: IPv4 only,
 and nothing else on the server is rerouted.
 
 ### OpenConnect exit
@@ -90,7 +96,9 @@ and password, and for a self-signed server the certificate pin as
 `pin-sha256:…` — the form openconnect itself prints, and the one a Penhoon
 OpenConnect inbound shows in the profile it hands out; leave it empty for a
 server the system's CAs vouch for. A group answers a server that offers
-several. The panel runs `openconnect` as a client under systemd as
+several. For a camouflaged ocserv give the **camouflage secret**: the panel
+dials `https://server/?secret`, the form the daemon expects. The panel runs
+`openconnect` as a client under systemd as
 `p-ui-core`, with the password on stdin from a file rather than on the command
 line, and with a script of its own that addresses the tunnel (`pcx` plus the
 exit's id) and touches no route and no resolver: the stock vpnc-script would

@@ -49,7 +49,10 @@ The **format is chosen by path**, each with its own enable toggle:
 | **Clash / Mihomo**    | `/clash/` | `subClashEnable` | YAML profile.                                       |
 
 Only enabled inbounds using **VLESS, VMess, Trojan, Shadowsocks, Hysteria2, or a
-WireGuard-family kind** appear in a subscription, ordered by their sub-sort index. Requesting `/sub/`
+WireGuard-family kind** appear in a subscription, ordered by their sub-sort index;
+TUIC and AnyTLS inbounds appear in the raw list and in the Clash profile (mihomo
+carries both), and the JSON format omits them because xray has no outbound for
+either. Requesting `/sub/`
 with an `Accept: text/html` header (or `?html=1`) returns a human-readable info
 page instead of the raw body.
 On that page a kernel WireGuard or AmneziaWG entry is shown as the `.conf`

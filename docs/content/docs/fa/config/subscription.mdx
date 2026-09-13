@@ -49,7 +49,9 @@ https://<sub-host>:<sub-port>/sub/<sub-id>
 | **Clash / Mihomo**    | `/clash/` | `subClashEnable` | پروفایل YAML.                                        |
 
 فقط ورودی‌های فعالی که از **VLESS، VMess، Trojan، Shadowsocks، Hysteria2 یا یکی از
-خانواده‌ی WireGuard** استفاده می‌کنند در یک اشتراک ظاهر می‌شوند و بر اساس شاخص sub-sort آن‌ها مرتب می‌شوند.
+خانواده‌ی WireGuard** استفاده می‌کنند در یک اشتراک ظاهر می‌شوند و بر اساس شاخص sub-sort آن‌ها مرتب می‌شوند؛
+ورودی‌های TUIC و AnyTLS در فهرست خام و در پروفایل Clash می‌آیند (mihomo هر دو را دارد) و
+قالب JSON آن‌ها را ندارد، چون xray برای هیچ‌کدام خروجی ندارد.
 درخواست `/sub/` همراه با هدر `Accept: text/html` (یا `?html=1`) به‌جای بدنه‌ی خام،
 یک صفحه‌ی اطلاعات خوانا برای انسان برمی‌گرداند.
 در آن صفحه، یک ورودی WireGuard هسته یا AmneziaWG به‌صورت فایل `.conf`

@@ -2988,3 +2988,53 @@ the contract changed. What the review corrected that this document had claimed:
   the template direct's `finalRules`, and the bridge refuses the box's own
   public addresses, which no private block covers (1a17718).
 
+
+### 12.5r The review's open list, closed (2026-09-14)
+
+The decisions the 2026-09-13 review left to the owner were taken the
+fail-closed way, and the rest of its list landed (d65a61e, 5c06677, f811d77).
+What changed in the mechanisms this document describes:
+
+- §5.5: a rule bound for a TCP-only exit (§12.5f) that also matched UDP no
+  longer leaves that UDP to the next rule or the default route. The compiler
+  writes a companion rule right behind the narrowed one, same subject and
+  criteria, `network: udp`, to the blackhole; the warning tells the operator
+  that a `udp` rule placed above carries UDP elsewhere. The operator's order
+  is the only ordering.
+- §5.5 / §5: `Exits()` reads the host, not the row. A device exit whose mark
+  no `ip rule` catches, or whose table holds only the blackhole, is handed to
+  the planner as `Contained`; the planner compiles its rules to the blackhole
+  with a warning instead of a marked outbound nothing catches. Which exits the
+  host routes is noted after every egress reconcile, and a change arms the Xray
+  restart, so the config never stays compiled from a stale answer. Boot order
+  already converged egress before the first Xray start.
+- §12.5i: UDPGW DNS on a routed SSH inbound travels through the bridge as DNS
+  over TCP (RFC 7766) to the resolver the app named when it is public, else to
+  a fixed public one — TCP because the common routed exit is an SSH server,
+  which carries nothing else. A direct inbound keeps the host resolver.
+- §12.5f: the SSH server shuts out a source after five refused logins in five
+  minutes for ten, keyed on the address alone; a refused login carries its
+  reason as a banner except for a wrong password; the banner is hot-applied,
+  no longer part of the listener fingerprint; the exit answers a
+  keyboard-interactive-only server with its password.
+- §12.5j: the OpenConnect exit dials a camouflaged server as
+  `https://server/?secret`. §12.5e: the inbound form takes an operator's own
+  certificate pair, checked as a pair on save.
+- §3.2 / §15: the Cores page counts a child of a managed pid as managed
+  (`parentPid` on the host-process view), so the MTProto relay and ocserv's
+  workers stop reading as foreign processes.
+- §9 / §12.5g: the Clash renderer reaches a non-Xray kind through the registry
+  — `cores.ClientShare` renders the core's own link and mihomo's entry is built
+  from that link's scheme — rather than a protocol switch, which the dispatch
+  ratchet refused. The JSON format still omits TUIC and AnyTLS: xray has no
+  outbound for either. The JSON format now carries a Host row's TLS keys at
+  the top level of `tlsSettings`, where xray's `TLSConfig` reads them.
+- §10: the conformance suite gained invariants for `InstanceMinter`,
+  `RoutableEgress`, `ExitSupervisor` and `TagTrafficSource`, and sing-box,
+  OpenConnect and OpenVPN run it in CI without their daemons: a ledger
+  backend, a script for the binary, the daemon's read seams answering what the
+  rig feeds (occtl's three answers became package vars; the OpenVPN management
+  socket is stood in for, kills included). The real-daemon runs stay gated on
+  the VM. sing-box also keeps its clients' activity across one failed
+  connections read and treats a daemon restart it did not make (the daemon's
+  own start time moved) as a new counter epoch.
