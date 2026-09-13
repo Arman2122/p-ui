@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
 
 	"gorm.io/gorm"
@@ -32,7 +34,66 @@ type PlanCycleResult struct {
 	Notices     []PlanDepletionNotice `json:"notices"`
 }
 
-// The scheduler publishes returned notices on its event bus; delivery and subscription policy stay there.
+// planCycleSubject is one assignment's client as the pass reads it: the record,
+// whether its reseller may serve it, and its usage, in one row per client.
+type planCycleSubject struct {
+	ID           int
+	Email        string
+	Enable       bool
+	ExpiryTime   int64
+	TotalGB      int64
+	OwnerAllowed bool
+	UsedBytes    int64
+}
+
+// planCycleSubjects reads every named client in chunks. A client with no traffic
+// row is absent, which the caller skips exactly as a per-client read did.
+func planCycleSubjects(db *gorm.DB, emails []string, now time.Time) (map[string]planCycleSubject, error) {
+	out := make(map[string]planCycleSubject, len(emails))
+	used, usedArgs := UsedBytesExpr(db)
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		var rows []planCycleSubject
+		args := append(append([]any{}, usedArgs...), now.UnixMilli())
+		err := db.Table("clients").
+			Select("clients.id, clients.email, clients.enable, clients.expiry_time, clients.total_gb, "+
+				used+" AS used_bytes, "+ResellerClientEnabledSQL()+" AS owner_allowed", args...).
+			Joins("JOIN client_traffics ON client_traffics.email = clients.email").
+			Where("clients.email IN ?", batch).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			out[row.Email] = row
+		}
+	}
+	return out, nil
+}
+
+func planCyclePlans(db *gorm.DB, assignments []model.ClientPolicy) (map[int]*model.Policy, error) {
+	ids := make([]int, 0, len(assignments))
+	for _, a := range assignments {
+		if a.PolicyId != nil {
+			ids = append(ids, *a.PolicyId)
+		}
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	out := make(map[int]*model.Policy, len(ids))
+	for _, batch := range chunkInts(ids, sqlInChunk) {
+		var rows []*model.Policy
+		if err := db.Where("id IN ?", batch).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			out[row.Id] = row
+		}
+	}
+	return out, nil
+}
+
+// ConvergePlanCycles runs due resets and depletion notices from a few batched reads under the
+// assignment lock; a client reset this pass is judged for depletion next pass, its usage being stale.
 func (s *PolicyService) ConvergePlanCycles(ctx context.Context, now time.Time) (PlanCycleResult, error) {
 	out := PlanCycleResult{Notices: []PlanDepletionNotice{}}
 	planAssignmentMu.Lock()
@@ -42,7 +103,21 @@ func (s *PolicyService) ConvergePlanCycles(ctx context.Context, now time.Time) (
 	if err := db.Joins("JOIN policies p ON p.id=client_policies.policy_id").Where("client_policies.applied_reset_cycle <> 'none' OR client_policies.applied_on_depletion = 'notify'").Find(&assignments).Error; err != nil {
 		return out, err
 	}
-	plans := map[int]*model.Policy{}
+	if len(assignments) == 0 {
+		return out, nil
+	}
+	plans, err := planCyclePlans(db, assignments)
+	if err != nil {
+		return out, err
+	}
+	emails := make([]string, 0, len(assignments))
+	for _, a := range assignments {
+		emails = append(emails, a.Email)
+	}
+	subjects, err := planCycleSubjects(db, emails, now)
+	if err != nil {
+		return out, err
+	}
 	var failures []error
 	for _, a := range assignments {
 		if err := ctx.Err(); err != nil {
@@ -50,29 +125,14 @@ func (s *PolicyService) ConvergePlanCycles(ctx context.Context, now time.Time) (
 		}
 		p := plans[*a.PolicyId]
 		if p == nil {
-			p = &model.Policy{}
-			if err := db.First(p, *a.PolicyId).Error; err != nil {
-				failures = append(failures, err)
-				continue
-			}
-			plans[p.Id] = p
+			failures = append(failures, fmt.Errorf("%w: %d", ErrPolicyUnknown, *a.PolicyId))
+			continue
 		}
-		var rec model.ClientRecord
-		if err := db.Where("email = ?", a.Email).First(&rec).Error; err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				failures = append(failures, err)
-			}
+		rec, known := subjects[a.Email]
+		if !known || !rec.OwnerAllowed {
 			continue
 		}
 		if rec.ExpiryTime < 0 || (rec.ExpiryTime > 0 && rec.ExpiryTime <= now.UnixMilli()) {
-			continue
-		}
-		var ownerAllowed bool
-		if err := db.Table("client_traffics").Select(ResellerClientEnabledSQL(), now.UnixMilli()).Where("email = ?", rec.Email).Scan(&ownerAllowed).Error; err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		if !ownerAllowed {
 			continue
 		}
 		anchor := a.LastResetAt
@@ -94,7 +154,7 @@ func (s *PolicyService) ConvergePlanCycles(ctx context.Context, now time.Time) (
 					continue
 				}
 			}
-			ids, err := (&ClientService{}).GetInboundIdsForRecord(rec.Id)
+			ids, err := (&ClientService{}).GetInboundIdsForRecord(rec.ID)
 			if err != nil {
 				failures = append(failures, err)
 				continue
@@ -120,18 +180,12 @@ func (s *PolicyService) ConvergePlanCycles(ctx context.Context, now time.Time) (
 				continue
 			}
 			out.Reset++
-			a.DepletionNotifiedAt = 0
+			continue
 		}
 		if a.AppliedOnDepletion != "notify" || a.OverrideQuota || rec.TotalGB <= 0 {
 			continue
 		}
-		used, args := UsedBytesExpr(db)
-		var usedBytes int64
-		if err := db.Table("client_traffics").Select(used, args...).Where("email = ?", a.Email).Scan(&usedBytes).Error; err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		if usedBytes < rec.TotalGB {
+		if rec.UsedBytes < rec.TotalGB {
 			if a.DepletionNotifiedAt > 0 {
 				if err := db.Model(&model.ClientPolicy{}).Where("email = ?", a.Email).Update("depletion_notified_at", 0).Error; err != nil {
 					failures = append(failures, err)
@@ -146,7 +200,7 @@ func (s *PolicyService) ConvergePlanCycles(ctx context.Context, now time.Time) (
 				continue
 			}
 			if res.RowsAffected > 0 {
-				out.Notices = append(out.Notices, PlanDepletionNotice{Email: a.Email, PolicyID: p.Id, PlanName: p.Name, OwnerUserID: p.OwnerUserID, UsedBytes: usedBytes, QuotaBytes: rec.TotalGB})
+				out.Notices = append(out.Notices, PlanDepletionNotice{Email: a.Email, PolicyID: p.Id, PlanName: p.Name, OwnerUserID: p.OwnerUserID, UsedBytes: rec.UsedBytes, QuotaBytes: rec.TotalGB})
 			}
 		}
 	}
