@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { inboundFromDb } from '@/lib/xray/inbound-from-db';
+import { Base64 } from '@/utils';
 import { genLink, genWireguardLinks, getInboundClients } from '@/lib/xray/inbound-link';
 
 /*
@@ -97,6 +98,37 @@ function render(fixture: Fixture): string {
   }).split(/\r?\n/)[0] ?? '';
 }
 
+/* One rendered link as the fixtures describe it: a URI's parts, or a vmess://
+   document's keys read as parameters, so one fixture shape covers both. */
+interface LinkView {
+  scheme: string;
+  username: string;
+  hostname: string;
+  port: string;
+  get(key: string): string | null;
+  has(key: string): boolean;
+}
+
+function linkViewOf(raw: string): LinkView {
+  if (raw.startsWith('vmess://')) {
+    const doc = JSON.parse(Base64.decode(raw.slice('vmess://'.length))) as Record<string, unknown>;
+    const get = (key: string) => {
+      const value = doc[key];
+      return value === undefined || value === null || typeof value === 'object' ? null : String(value);
+    };
+    return { scheme: 'vmess', username: '', hostname: get('add') ?? '', port: get('port') ?? '', get, has: (key) => get(key) !== null };
+  }
+  const url = new URL(raw);
+  return {
+    scheme: url.protocol.replace(/:$/, ''),
+    username: decodeURIComponent(url.username),
+    hostname: url.hostname,
+    port: url.port,
+    get: (key) => url.searchParams.get(key),
+    has: (key) => url.searchParams.has(key),
+  };
+}
+
 const corpus = loadCorpus();
 
 describe('every corpus fixture renders its declared link', () => {
@@ -109,34 +141,34 @@ describe('every corpus fixture renders its declared link', () => {
   corpus.forEach((fixture) => {
     describe(fixture.name, () => {
       const raw = render(fixture);
-      const url = new URL(raw);
+      const url = linkViewOf(raw);
 
       it('renders a link at all', () => {
         expect(raw, fixture.why).not.toBe('');
       });
 
       it('uses the declared scheme, credential and endpoint', () => {
-        expect(url.protocol).toBe(`${fixture.expected.scheme}:`);
-        expect(decodeURIComponent(url.username)).toBe(fixture.expected.userinfo);
+        expect(url.scheme).toBe(fixture.expected.scheme);
+        expect(url.username).toBe(fixture.expected.userinfo);
         expect(url.hostname).toBe(fixture.expected.host);
         expect(url.port).toBe(String(fixture.expected.port));
       });
 
       Object.entries(fixture.expected.params).forEach(([key, want]) => {
         it(`emits ${key}`, () => {
-          expect(url.searchParams.get(key), `${key} — ${fixture.why}`).toBe(want);
+          expect(url.get(key), `${key} — ${fixture.why}`).toBe(want);
         });
       });
 
       fixture.presentOnly.forEach((key) => {
         it(`emits ${key} at some value`, () => {
-          expect(url.searchParams.has(key)).toBe(true);
+          expect(url.has(key)).toBe(true);
         });
       });
 
       (fixture.absentParams ?? []).forEach((key) => {
         it(`does not emit ${key}`, () => {
-          expect(url.searchParams.has(key), `${key} — ${fixture.why}`).toBe(false);
+          expect(url.has(key), `${key} — ${fixture.why}`).toBe(false);
         });
       });
     });

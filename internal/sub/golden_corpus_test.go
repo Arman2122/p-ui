@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/url"
 	"os"
@@ -103,22 +104,19 @@ func TestEveryCorpusFixtureRendersItsDeclaredLink(t *testing.T) {
 				raw = first
 			}
 
-			parsed, err := url.Parse(strings.TrimSpace(raw))
-			if err != nil {
-				t.Fatalf("rendered a link that does not parse: %v\n got: %s", err, raw)
+			view := linkViewOf(t, strings.TrimSpace(raw))
+			if view.scheme != fixture.Expected.Scheme {
+				t.Errorf("scheme = %q, want %q", view.scheme, fixture.Expected.Scheme)
 			}
-			if parsed.Scheme != fixture.Expected.Scheme {
-				t.Errorf("scheme = %q, want %q", parsed.Scheme, fixture.Expected.Scheme)
-			}
-			if got := parsed.User.Username(); got != fixture.Expected.Userinfo {
-				t.Errorf("userinfo = %q, want %q", got, fixture.Expected.Userinfo)
+			if view.user != fixture.Expected.Userinfo {
+				t.Errorf("userinfo = %q, want %q", view.user, fixture.Expected.Userinfo)
 			}
 			wantHost := fixture.Expected.Host + ":" + strconv.Itoa(fixture.Expected.Port)
-			if parsed.Host != wantHost {
-				t.Errorf("host = %q, want %q", parsed.Host, wantHost)
+			if view.host != wantHost {
+				t.Errorf("host = %q, want %q", view.host, wantHost)
 			}
 
-			query := parsed.Query()
+			query := view.query
 			for key, want := range fixture.Expected.Params {
 				if got := query.Get(key); got != want {
 					t.Errorf("param %q = %q, want %q — %s", key, got, want, fixture.Why)
@@ -137,4 +135,46 @@ func TestEveryCorpusFixtureRendersItsDeclaredLink(t *testing.T) {
 			}
 		})
 	}
+}
+
+// linkView is one rendered link as the fixtures describe it: a URI's parts, or
+// a vmess:// document's keys read as parameters, so one fixture shape covers both.
+type linkView struct {
+	scheme, user, host string
+	query              url.Values
+}
+
+func linkViewOf(t *testing.T, raw string) linkView {
+	t.Helper()
+	if payload, ok := strings.CutPrefix(raw, "vmess://"); ok {
+		body, err := base64.StdEncoding.DecodeString(payload)
+		if err != nil {
+			body, err = base64.RawStdEncoding.DecodeString(payload)
+		}
+		if err != nil {
+			t.Fatalf("vmess payload is not base64: %v", err)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(body, &doc); err != nil {
+			t.Fatalf("vmess payload is not a JSON object: %v\n%s", err, body)
+		}
+		view := linkView{scheme: "vmess", query: url.Values{}}
+		for key, value := range doc {
+			switch v := value.(type) {
+			case string:
+				view.query.Set(key, v)
+			case float64:
+				view.query.Set(key, strconv.FormatFloat(v, 'f', -1, 64))
+			case bool:
+				view.query.Set(key, strconv.FormatBool(v))
+			}
+		}
+		view.host = view.query.Get("add") + ":" + view.query.Get("port")
+		return view
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("rendered a link that does not parse: %v\n got: %s", err, raw)
+	}
+	return linkView{scheme: parsed.Scheme, user: parsed.User.Username(), host: parsed.Host, query: parsed.Query()}
 }

@@ -1,0 +1,32 @@
+{
+  "name": "vmess-xhttp-tls",
+  "why": "VMess over XHTTP. The two builders disagreed on where the XHTTP mode travels: the frontend put it in \"type\" (the header-type slot v2rayN reads it from) and the subscription put \"none\" there with a separate \"mode\", so the same inbound imported with two different modes. Both keys carry it now.",
+  "email": "golden",
+  "inbound": {
+    "protocol": "vmess",
+    "listen": "203.0.113.13",
+    "port": 2053,
+    "remark": "golden-vmess-xhttp",
+    "settings": "{\"clients\":[{\"id\":\"33333333-4444-4555-8666-777777777777\",\"email\":\"golden\",\"security\":\"auto\"}]}",
+    "streamSettings": "{\"network\":\"xhttp\",\"security\":\"tls\",\"xhttpSettings\":{\"path\":\"/vx\",\"host\":\"v.golden.test\",\"mode\":\"packet-up\"},\"tlsSettings\":{\"serverName\":\"tls.golden.test\"}}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "vmess",
+    "userinfo": "",
+    "host": "203.0.113.13",
+    "port": 2053,
+    "params": {
+      "v": "2",
+      "id": "33333333-4444-4555-8666-777777777777",
+      "net": "xhttp",
+      "type": "packet-up",
+      "mode": "packet-up",
+      "path": "/vx",
+      "host": "v.golden.test",
+      "tls": "tls",
+      "sni": "tls.golden.test"
+    }
+  },
+  "presentOnly": []
+}

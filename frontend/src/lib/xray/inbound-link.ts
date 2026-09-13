@@ -248,6 +248,7 @@ export function genVmessLink(input: GenVmessLinkInput): string {
     }
   } else if (stream.network === 'kcp') {
     const kcp = stream.kcpSettings;
+    obj.type = 'none';
     obj.mtu = kcp.mtu;
     obj.tti = kcp.tti;
   } else if (stream.network === 'ws') {

@@ -69,6 +69,13 @@ func (b *unitLedger) List(context.Context) ([]string, error) {
 
 func (b *unitLedger) Close() error { return nil }
 
+func (b *unitLedger) has(name string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	_, ok := b.units[name]
+	return ok
+}
+
 /*
 A daemon that outlived the panel was never adopted: the unit was asked about
 under inbound id 0, so the ports its file names were discarded, a fresh control

@@ -241,8 +241,10 @@ func (s *SubClashService) buildProxy(subReq *SubService, inbound *model.Inbound,
 	if carriesWireguardClient(inbound.Protocol) {
 		return s.buildWireguardProxy(subReq, inbound, client, ep)
 	}
-	if inbound.Protocol == "tuic" || inbound.Protocol == "anytls" {
-		return s.buildSingboxProxy(subReq, inbound, client, ep)
+	// A core that renders its own share link (TUIC, AnyTLS) is read through it,
+	// so the Clash entry never re-derives what the core already knows.
+	if proxy, rendered := s.buildProxyFromShare(subReq, inbound, client, ep); rendered {
+		return proxy
 	}
 
 	network, _ := stream["network"].(string)
@@ -303,50 +305,6 @@ func (s *SubClashService) buildProxy(subReq *SubService, inbound *model.Inbound,
 		return nil
 	}
 
-	return proxy
-}
-
-// buildSingboxProxy is the mihomo entry for a TUIC or AnyTLS inbound, carrying
-// what the tuic:// and anytls:// links carry; xray's JSON has no such outbound.
-func (s *SubClashService) buildSingboxProxy(subReq *SubService, inbound *model.Inbound, client model.Client, ep map[string]any) map[string]any {
-	inboundSettings := subReq.linkSettings(inbound)
-	sni, _ := inboundSettings["serverName"].(string)
-	if v, ok := externalProxySNI(ep); ok && v != "" {
-		sni = v
-	}
-	if sni == "" {
-		sni = inbound.Listen
-	}
-	transport := "tcp"
-	if inbound.Protocol == "tuic" {
-		transport = "quic"
-	}
-	proxy := map[string]any{
-		"name":   subReq.endpointRemark(inbound, client.Email, ep, transport),
-		"server": inbound.Listen,
-		"port":   inbound.Port,
-		"sni":    sni,
-		"udp":    true,
-	}
-	if inbound.Protocol == "tuic" {
-		congestion, _ := inboundSettings["congestionControl"].(string)
-		if congestion == "" {
-			congestion = "bbr"
-		}
-		proxy["type"] = "tuic"
-		proxy["uuid"] = client.ID
-		proxy["password"] = client.Password
-		proxy["alpn"] = []string{"h3"}
-		proxy["congestion-controller"] = congestion
-		proxy["udp-relay-mode"] = "native"
-	} else {
-		proxy["type"] = "anytls"
-		proxy["password"] = client.Password
-		proxy["client-fingerprint"] = "chrome"
-	}
-	if insecure, ok := ep["allowInsecure"].(bool); ok && insecure {
-		proxy["skip-cert-verify"] = true
-	}
 	return proxy
 }
 

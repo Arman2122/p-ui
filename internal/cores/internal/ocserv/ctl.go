@@ -60,7 +60,7 @@ the device over a cap is dropped and the ones inside it stay connected.
 session's id and remote address, and only the ones from source are disconnected
 by id. Returns how many it ended.
 */
-func disconnectSource(ctx context.Context, occtl, socket, username string, source netip.Addr) (int, error) {
+func occtlDisconnectSource(ctx context.Context, occtl, socket, username string, source netip.Addr) (int, error) {
 	if strings.ContainsAny(username, " \t\r\n\"'") {
 		return 0, fmt.Errorf("ocserv: refusing to disconnect %q", username)
 	}
@@ -104,9 +104,16 @@ type userRow struct {
 // errNoDaemon: no control socket means no daemon, and no daemon lists no session.
 var errNoDaemon = errors.New("ocserv: no control socket")
 
+// The occtl-backed answers; the daemon-less conformance rig swaps them.
+var (
+	listUsers        = occtlUsers
+	disconnectSource = occtlDisconnectSource
+	daemonAnswers    = occtlStatus
+)
+
 // listUsers asks the daemon for its live sessions: the one source that knows
 // which of its transient devices carries whom.
-func listUsers(ctx context.Context, occtl, socket string) ([]userRow, error) {
+func occtlUsers(ctx context.Context, occtl, socket string) ([]userRow, error) {
 	if _, err := os.Stat(socket); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, errNoDaemon
@@ -131,7 +138,7 @@ func listUsers(ctx context.Context, occtl, socket string) ([]userRow, error) {
 
 // daemonAnswers asks the main process for its status through occtl, which is
 // what "ready" means for a daemon whose listeners the panel cannot see.
-func daemonAnswers(ctx context.Context, occtl, socket string) error {
+func occtlStatus(ctx context.Context, occtl, socket string) error {
 	out, err := exec.CommandContext(ctx, occtl, "-s", socket, "show", "status").CombinedOutput()
 	if err != nil {
 		if msg := strings.TrimSpace(string(out)); msg != "" {

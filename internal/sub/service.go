@@ -1534,6 +1534,10 @@ func applyVmessNetworkParams(stream map[string]any, network string, obj map[stri
 		applyPathAndHostObj(xhttp, obj)
 		if mode, ok := xhttp["mode"].(string); ok {
 			obj["mode"] = mode
+			// v2rayN reads the XHTTP mode from "type", the header-type slot.
+			if mode != "" {
+				obj["type"] = mode
+			}
 		}
 		applyXhttpExtraObj(xhttp, obj)
 	}

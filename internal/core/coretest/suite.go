@@ -3,10 +3,12 @@ package coretest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"net/netip"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -125,6 +127,9 @@ func Check(rig Rig) []Failure {
 	checkIdentity(r, c)
 	checkDescriptor(r, bound)
 	checkVersions(r, bound)
+	checkMinter(r, rig, bound)
+	checkEgress(r, bound)
+	checkTagTraffic(r, bound)
 	checkCredentials(r, bound)
 	checkUserKinds(r, bound)
 	checkTransports(r, bound)
@@ -1033,4 +1038,89 @@ func total(deltas []core.TrafficDelta) int64 {
 		sum += d.Up + d.Down
 	}
 	return sum
+}
+
+/*
+checkMinter holds an InstanceMinter to the one promise a re-save depends on:
+minting its own output again changes nothing, or every save rotates a secret
+the clients pin. A kind the core does not serve is handed back untouched.
+*/
+func checkMinter(r *report, rig Rig, bound *core.Bound) {
+	if bound.Mint == nil {
+		return
+	}
+	inst := rig.Instance(0)
+	first, err := bound.Mint.MintInstance(inst.Kind, inst.Settings, "")
+	if err != nil {
+		r.fail("mint/succeeds", "MintInstance failed on the rig's own settings: %v", err)
+		return
+	}
+	var minted map[string]any
+	if json.Unmarshal([]byte(first), &minted) != nil {
+		r.fail("mint/object", "MintInstance returned %q, which is not a JSON object", first)
+		return
+	}
+	again, err := bound.Mint.MintInstance(inst.Kind, first, first)
+	if err != nil {
+		r.fail("mint/carries-forward", "minting the minted settings again failed: %v", err)
+		return
+	}
+	var repeated map[string]any
+	_ = json.Unmarshal([]byte(again), &repeated)
+	if !reflect.DeepEqual(minted, repeated) {
+		r.fail("mint/carries-forward", "minting %s's own output again changed it; a re-save must never rotate a minted secret", inst.Kind)
+	}
+	if out, err := bound.Mint.MintInstance("kind-this-core-does-not-serve", `{"x":1}`, ""); err != nil || out != `{"x":1}` {
+		r.fail("mint/foreign-kind-untouched", "MintInstance on a foreign kind returned (%q, %v); another core's settings must pass through", out, err)
+	}
+}
+
+/*
+checkEgress holds a RoutableEgress to what a compile relies on: every exit kind
+answers a handle kind and is a kind the core serves, a foreign kind answers
+none, the supervisor refuses settings it cannot parse, and no rows to run is
+nothing to do rather than an error.
+*/
+func checkEgress(r *report, bound *core.Bound) {
+	if bound.Egress == nil {
+		return
+	}
+	kinds := bound.Egress.ExitKinds()
+	for _, kind := range kinds {
+		if bound.Egress.ExitHandleKind(kind) == core.ExitNone {
+			r.fail("egress/handle-kind", "kind %q is an exit kind and answers ExitNone; the planner cannot realise a rule toward it", kind)
+		}
+		if !slices.Contains(bound.Core.Kinds(), kind) {
+			r.fail("egress/kind-served", "exit kind %q is not among the core's kinds, and the registry routes an exit by kind", kind)
+		}
+	}
+	if bound.Egress.ExitHandleKind("kind-this-core-does-not-serve") != core.ExitNone {
+		r.fail("egress/foreign-kind-none", "a kind this core does not serve answers an exit handle kind")
+	}
+	if bound.ExitSupervise == nil || len(kinds) == 0 {
+		return
+	}
+	if err := bound.ExitSupervise.ValidateExit(core.Exit{ID: 1, Kind: kinds[0], Enable: true, Settings: "not json"}); err == nil {
+		r.fail("egress/validate-refuses-garbage", "ValidateExit accepted settings that are not JSON; a row nothing can dial would be saved and run")
+	}
+	if err := bound.ExitSupervise.ReconcileExits(context.Background(), nil); err != nil {
+		r.fail("egress/reconcile-none", "ReconcileExits with no rows failed: %v; an empty desired set is nothing to do", err)
+	}
+}
+
+// checkTagTraffic: a core with nothing running reports no deltas and no error,
+// because the collector reads an error as a core that stopped answering.
+func checkTagTraffic(r *report, bound *core.Bound) {
+	if bound.TagTraffic == nil {
+		return
+	}
+	deltas, err := bound.TagTraffic.CollectTagTraffic(context.Background())
+	if err != nil {
+		r.fail("tag-traffic/answers", "CollectTagTraffic failed on a core with nothing running: %v", err)
+	}
+	for _, d := range deltas {
+		if d.Tag == "" || d.Up < 0 || d.Down < 0 {
+			r.fail("tag-traffic/well-formed", "CollectTagTraffic returned %+v; a delta names its tag and never runs backwards", d)
+		}
+	}
 }

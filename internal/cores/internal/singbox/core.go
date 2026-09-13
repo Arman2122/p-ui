@@ -77,6 +77,9 @@ type instance struct {
 	dirty      bool
 	epoch      string
 	counter    *core.Counter
+	// startedAt is the daemon's own start time at the last traffic read; a
+	// change is a restart the panel did not make, whose counters begin at zero.
+	startedAt int64
 }
 
 // New returns the core; nothing runs until the first Reconcile.
@@ -546,27 +549,29 @@ func withoutEmail(users []core.User, email string) []core.User {
 // outside the lock, so a hung one stalls no edit.
 func (c *Core) CollectTraffic(ctx context.Context) ([]core.TrafficDelta, error) {
 	type target struct {
-		id   int
-		port int
+		id  int
+		ctl control
 	}
 	c.mu.Lock()
 	targets := make([]target, 0, len(c.instances))
 	for id, cur := range c.instances {
 		if cur.running {
-			targets = append(targets, target{id: id, port: cur.ctl.statsPort})
+			targets = append(targets, target{id: id, ctl: cur.ctl})
 		}
 	}
 	c.mu.Unlock()
 	sort.Slice(targets, func(i, j int) bool { return targets[i].id < targets[j].id })
 	var failures []error
 	answers := make(map[int]map[string]int64, len(targets))
+	started := make(map[int]int64, len(targets))
 	for _, t := range targets {
-		readings, err := readUserStats(ctx, t.port)
+		readings, err := readUserStats(ctx, t.ctl.statsPort)
 		if err != nil {
 			failures = append(failures, err)
 			continue
 		}
 		answers[t.id] = readings
+		started[t.id], _ = readStartedAt(ctx, t.ctl.apiPort, t.ctl.secret)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -575,8 +580,16 @@ func (c *Core) CollectTraffic(ctx context.Context) ([]core.TrafficDelta, error) 
 	for _, t := range targets {
 		cur, ok := c.instances[t.id]
 		readings, answered := answers[t.id]
-		if !ok || !answered || cur.ctl.statsPort != t.port {
+		if !ok || !answered || cur.ctl != t.ctl {
 			continue
+		}
+		// systemd restarts a crashed daemon on its own: the counters begin at
+		// zero again, which the engine is told through a new epoch.
+		if at := started[t.id]; at != 0 && cur.startedAt != 0 && at != cur.startedAt {
+			cur.epoch = newEpoch()
+		}
+		if started[t.id] != 0 {
+			cur.startedAt = started[t.id]
 		}
 		out = append(out, c.deltasLocked(cur, readings)...)
 	}
@@ -648,6 +661,15 @@ func (c *Core) Sessions(ctx context.Context) ([]core.Session, error) {
 			}
 			live[key] = entry
 			out = append(out, core.Session{Email: conn.user, Source: conn.source, LastSeenUnixMilli: entry.lastSeen, StartedUnixMilli: conn.createdAt})
+		}
+	}
+	// A daemon that failed to answer this pass keeps what was known of it,
+	// or its clients' activity restarts at zero on the next successful read.
+	if len(failures) > 0 {
+		for key, entry := range c.seen {
+			if _, observed := live[key]; !observed {
+				live[key] = entry
+			}
 		}
 	}
 	c.seen = live

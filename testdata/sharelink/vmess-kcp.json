@@ -1,0 +1,30 @@
+{
+  "name": "vmess-kcp",
+  "why": "VMess over mKCP as the form can produce it. The frontend named no header type for kcp while every other network and the subscription did; v2rayN reads \"type\" for the kcp header and a missing one is a guess.",
+  "email": "golden",
+  "inbound": {
+    "protocol": "vmess",
+    "listen": "203.0.113.14",
+    "port": 2054,
+    "remark": "golden-vmess-kcp",
+    "settings": "{\"clients\":[{\"id\":\"44444444-5555-4666-8777-888888888888\",\"email\":\"golden\",\"security\":\"auto\"}]}",
+    "streamSettings": "{\"network\":\"kcp\",\"security\":\"none\",\"kcpSettings\":{\"mtu\":1350,\"tti\":20,\"uplinkCapacity\":5,\"downlinkCapacity\":20}}",
+    "sniffing": "{}"
+  },
+  "expected": {
+    "scheme": "vmess",
+    "userinfo": "",
+    "host": "203.0.113.14",
+    "port": 2054,
+    "params": {
+      "v": "2",
+      "id": "44444444-5555-4666-8777-888888888888",
+      "net": "kcp",
+      "type": "none",
+      "mtu": "1350",
+      "tti": "20",
+      "tls": "none"
+    }
+  },
+  "presentOnly": []
+}
