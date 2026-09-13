@@ -160,6 +160,8 @@
 .clients-page .p-clients-table .client-traffic-cell-bar .ant-progress-track { height: 4px !important; }
 .clients-page .p-client-context > button .ant-tag { margin: 0; }
 .clients-page .p-clients-table .ant-table-thead th { white-space: nowrap; }
+.clients-page .p-clients-table .ant-table-thead th,
+.clients-page .p-strip .p-kicker { color: var(--p-text-2) !important; }
 .clients-page .ant-table-measure-row { visibility: hidden; }
 .clients-page:not(.is-dark) .p-client-inbounds .ant-tag-volcano { color: #ad2d0c; }
 

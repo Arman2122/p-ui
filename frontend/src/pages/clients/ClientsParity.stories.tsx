@@ -65,6 +65,32 @@ type Story = StoryObj<typeof meta>;
 
 export const Page: Story = {};
 export const PageDark: Story = { globals: { theme: 'dark' } };
+export const WideTableFits: Story = {
+  globals: { theme: 'dark' },
+  parameters: { viewport: { defaultViewport: 'wide', options: { wide: { name: 'Wide desktop', styles: { width: '2305px', height: '900px' } } } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findAllByRole('button', { name: 'Delete' });
+    function fits() {
+      const content = canvasElement.querySelector<HTMLElement>('.ant-table-content')!;
+      expect(content.clientWidth).toBeGreaterThanOrEqual(1260);
+      expect(content.scrollWidth).toBe(content.clientWidth);
+      for (const button of canvas.getAllByRole('button', { name: 'Delete' })) {
+        const cell = button.closest('td')!;
+        expect(cell.querySelectorAll('button')).toHaveLength(6);
+        expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth);
+        expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(content.getBoundingClientRect().right);
+      }
+    }
+    await waitFor(fits);
+    await userEvent.click(canvas.getByRole('radio', { name: 'Columns' }).closest('label')!);
+    await waitFor(fits);
+  },
+};
+export const DesktopTableFits: Story = {
+  ...WideTableFits,
+  parameters: { viewport: { defaultViewport: 'desktop', options: { desktop: { name: 'Desktop', styles: { width: '1600px', height: '900px' } } } } },
+};
 export const PageMobile: Story = { args: { mobile: true }, globals: { theme: 'dark' } };
 export const BulkForm: Story = { play: async ({ canvasElement }) => {
   await userEvent.click(await within(canvasElement).findByRole('button', { name: 'Bulk actions' }));

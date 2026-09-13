@@ -997,12 +997,12 @@ export default function ClientsPage() {
     {
       title: t('pages.clients.expiryTime'), key: 'expiryTime', width: 118, align: 'end',
       render: (_v, record) => <div className="p-client-expiry" title={expiryLabel(record)}>
-        <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 58%, var(--p-ink))` }}>{record.expiryTime ? expiryRelative(record) : '∞'}</span>
+        <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 50%, var(--p-ink))` }}>{record.expiryTime ? expiryRelative(record) : '∞'}</span>
         <div className="p-sub">{expiryLabel(record)}</div>
       </div>,
     },
     {
-      title: <span className="clients-visually-hidden">{t('pages.clients.actions')}</span>, key: 'actions', width: 168, align: 'end',
+      title: <span className="clients-visually-hidden">{t('pages.clients.actions')}</span>, key: 'actions', width: 180, align: 'end',
       render: (_v, record) => <ClientRowActions email={record.email} onShowQr={onShowQr} onShowInfo={onShowInfo}
         onResetTraffic={onResetTraffic} onEdit={onEdit} onDelete={onDelete}
         onCopySubscription={subSettings.enable && subSettings.subURI ? onCopySubscription : undefined} />,
