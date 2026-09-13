@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"sync"
@@ -271,7 +272,40 @@ func (s *EgressService) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return errors.Join(egressManager.Reconcile(ctx, desired), reconcileCoreExits(ctx, rows))
+	err = errors.Join(egressManager.Reconcile(ctx, desired), reconcileCoreExits(ctx, rows))
+	noteRoutedExits(ctx, rows)
+	return err
+}
+
+// lastRoutedExits is which device exits the host routed at the previous pass:
+// a change means the Xray config compiled from the old answer is stale.
+var lastRoutedExits struct {
+	sync.Mutex
+	known bool
+	byID  map[int]bool
+}
+
+func noteRoutedExits(ctx context.Context, rows []*model.Egress) {
+	current := map[int]bool{}
+	for _, row := range rows {
+		if row == nil || !row.Enable || row.Owner == model.EgressOwnerPanel {
+			continue
+		}
+		kind := exitKindFor(row.Type)
+		if kind == "" || cores.ExitHandleKindFor(kind) != core.ExitDevice {
+			continue
+		}
+		routed, err := egressManager.MarkedExit(ctx, row.Id)
+		current[row.Id] = err == nil && routed.Routed()
+	}
+	lastRoutedExits.Lock()
+	defer lastRoutedExits.Unlock()
+	changed := lastRoutedExits.known && !maps.Equal(lastRoutedExits.byID, current)
+	lastRoutedExits.known, lastRoutedExits.byID = true, current
+	if changed {
+		logger.Info("egress: the exits this host routes changed; an Xray restart is pending")
+		(&XrayService{}).SetToNeedRestart()
+	}
 }
 
 /*

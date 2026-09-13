@@ -2226,7 +2226,8 @@
           "noFront": "{{ .subject }} has no front device on this host, so its traffic never passes through Xray and this rule cannot match it. Nothing you can change on the rule fixes this."
         },
         "warn": {
-          "exitTcpNarrowed": "{{ .exit }} carries TCP only, so this rule applies to TCP alone; the UDP it also matched is not covered here and takes the next matching rule or the default route."
+          "exitTcpNarrowed": "{{ .exit }} carries TCP only, so this rule applies to TCP; the UDP it also matched is dropped here rather than sent around the exit. To carry UDP elsewhere, place a rule matching network udp above this one.",
+          "exitContained": "{{ .exit }} is not routed on this host right now (its rule or device is missing), so this traffic is dropped rather than sent out with the server's own address; it resumes when the exit comes back."
         },
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
         "domainReadFromTraffic": "The name is read from the connection itself — the TLS SNI, the HTTP Host header, or QUIC. Traffic that carries no name, such as a plain IP connection, is matched by the IP rules instead. The panel turns this reading on for the inbounds this rule names, in the generated config only.",

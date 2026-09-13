@@ -45,6 +45,7 @@ const (
 	KeyNoDefaultOutbound    = "pages.xray.routing.refuse.noDefaultOutbound"
 	KeyExitTCPOnly          = "pages.xray.routing.refuse.exitTcpOnly"
 	KeyExitTCPNarrowed      = "pages.xray.routing.warn.exitTcpNarrowed"
+	KeyExitContained        = "pages.xray.routing.warn.exitContained"
 )
 
 // Refusals returns the diags that must block a save. A preview shows every diag;

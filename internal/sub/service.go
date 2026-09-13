@@ -1911,29 +1911,23 @@ func applyExternalProxyTLSToStream(ep map[string]any, stream map[string]any, sec
 	if alpn, ok := externalProxyALPNList(ep["alpn"]); ok {
 		tlsSettings["alpn"] = alpn
 	}
+	// Top level, where xray's TLSConfig reads them: the renderer flattened the
+	// inbound's own "settings" bag before this ran, so a key left there is dropped.
 	if pins, ok := externalProxyPins(ep["pinnedPeerCertSha256"]); ok {
-		settings, _ := tlsSettings["settings"].(map[string]any)
-		if settings == nil {
-			settings = map[string]any{}
-			tlsSettings["settings"] = settings
+		joined := make([]string, 0, len(pins))
+		for _, pin := range pins {
+			if s, ok := pin.(string); ok {
+				joined = append(joined, s)
+			}
 		}
-		settings["pinnedPeerCertSha256"] = pins
+		tlsSettings["pinnedPeerCertSha256"] = strings.Join(joined, ",")
+		tlsSettings["pin-sha256"] = pins
 	}
 	if ech, ok := ep["echConfigList"].(string); ok && ech != "" {
-		settings, _ := tlsSettings["settings"].(map[string]any)
-		if settings == nil {
-			settings = map[string]any{}
-			tlsSettings["settings"] = settings
-		}
-		settings["echConfigList"] = ech
+		tlsSettings["echConfigList"] = ech
 	}
 	if vcn, ok := ep["verifyPeerCertByName"].(string); ok && vcn != "" {
-		settings, _ := tlsSettings["settings"].(map[string]any)
-		if settings == nil {
-			settings = map[string]any{}
-			tlsSettings["settings"] = settings
-		}
-		settings["verifyPeerCertByName"] = vcn
+		tlsSettings["verifyPeerCertByName"] = vcn
 	}
 	if ai, ok := ep["allowInsecure"].(bool); ok && ai {
 		settings, _ := tlsSettings["settings"].(map[string]any)

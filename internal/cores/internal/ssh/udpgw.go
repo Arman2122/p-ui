@@ -206,7 +206,9 @@ func (sess *udpgwSession) connFor(conid uint16, orig netip.AddrPort, flags byte)
 
 	dst, dial := orig, sess.dial
 	if flags&udpgwFlagDNS != 0 {
-		if resolver, ok := hostResolver(); ok {
+		if sess.s.settings.RouteThroughXray {
+			dst, dial = routedResolverFor(orig), sess.dnsOverTCP
+		} else if resolver, ok := hostResolver(); ok {
 			dst, dial = resolver, resolverDialer
 		}
 	}
@@ -223,6 +225,60 @@ func (sess *udpgwSession) connFor(conid uint16, orig netip.AddrPort, flags byte)
 	sess.mu.Unlock()
 	go sess.pump(con)
 	return con, nil
+}
+
+// routedResolver answers a routed inbound's DNS when the app named a resolver
+// no exit can reach (the phone's own); a public one the app named is kept.
+var routedResolver = netip.MustParseAddrPort("1.1.1.1:53")
+
+func routedResolverFor(orig netip.AddrPort) netip.AddrPort {
+	addr := orig.Addr().Unmap()
+	if addr.IsGlobalUnicast() && !addr.IsPrivate() && orig.Port() != 0 {
+		return orig
+	}
+	return routedResolver
+}
+
+// dnsOverTCP carries one DNS conversation through the inbound's routed TCP
+// dialer (RFC 7766 framing), so a query leaves exactly where a forward leaves.
+func (sess *udpgwSession) dnsOverTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
+	raw, err := sess.s.dial(ctx, "tcp", dst.String())
+	if err != nil {
+		return nil, err
+	}
+	return &dnsTCPConn{Conn: raw, r: bufio.NewReader(raw)}, nil
+}
+
+// dnsTCPConn is a datagram conn over a TCP stream: each Write is one framed
+// query, each Read one framed answer.
+type dnsTCPConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c *dnsTCPConn) Write(p []byte) (int, error) {
+	if len(p) > 0xffff {
+		return 0, errUDPGWFrame
+	}
+	frame := make([]byte, 2+len(p))
+	binary.BigEndian.PutUint16(frame, uint16(len(p)))
+	copy(frame[2:], p)
+	if _, err := c.Conn.Write(frame); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (c *dnsTCPConn) Read(p []byte) (int, error) {
+	var head [2]byte
+	if _, err := io.ReadFull(c.r, head[:]); err != nil {
+		return 0, err
+	}
+	n := int(binary.BigEndian.Uint16(head[:]))
+	if n > len(p) {
+		return 0, io.ErrShortBuffer
+	}
+	return io.ReadFull(c.r, p[:n])
 }
 
 func (sess *udpgwSession) evictOldestLocked() {

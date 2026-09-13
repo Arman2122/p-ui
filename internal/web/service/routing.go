@@ -960,9 +960,14 @@ func (s *RoutingService) Exits(ctx context.Context) ([]routing.ResolvedExit, err
 		if hErr != nil || handleKind == core.ExitNone {
 			continue
 		}
-		out = append(out, routing.ResolvedExit{
-			ID: row.Id, Label: exitLabel(row), Kind: handleKind, Handle: handle,
-		})
+		resolved := routing.ResolvedExit{ID: row.Id, Label: exitLabel(row), Kind: handleKind, Handle: handle}
+		if handleKind == core.ExitDevice {
+			// The row says marked; only the host says caught. An uncaught mark
+			// leaves via main, so the planner contains it until the rule exists.
+			routed, mErr := egressManager.MarkedExit(ctx, row.Id)
+			resolved.Contained = mErr != nil || !routed.Routed()
+		}
+		out = append(out, resolved)
 	}
 	return out, nil
 }

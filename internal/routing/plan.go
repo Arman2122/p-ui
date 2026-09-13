@@ -104,6 +104,9 @@ type ResolvedExit struct {
 	Label  string
 	Kind   core.ExitHandleKind
 	Handle core.ExitHandle
+	// Contained: the host has no rule catching this exit's mark (or no route
+	// behind it), so a marked socket would leave via main. Read, never assumed.
+	Contained bool
 }
 
 /*
@@ -237,6 +240,9 @@ func Plan(in Input) Compiled {
 			if xrayRule != nil {
 				out.XrayRules = append(out.XrayRules, xrayRule)
 			}
+			if diag.MessageKey == KeyExitTCPNarrowed {
+				out.XrayRules = append(out.XrayRules, udpCompanion(xrayRule, blackholeTag(in, &out, emitted)))
+			}
 			if outbound == nil {
 				continue
 			}
@@ -270,6 +276,16 @@ func relaxScopeAll(in Input, out *Compiled) {
 			out.Diags[i].Severity = SeverityWarn
 		}
 	}
+}
+
+// udpCompanion is the narrowed rule's other half: the UDP it matched is dropped
+// here, never left to fall through to a rule the operator wrote for something else.
+func udpCompanion(narrowed json.RawMessage, blackhole string) json.RawMessage {
+	body := map[string]json.RawMessage{}
+	_ = json.Unmarshal(narrowed, &body)
+	body["network"] = json.RawMessage(`"udp"`)
+	body["outboundTag"] = mustJSON(blackhole)
+	return mustJSON(body)
 }
 
 // blackholeTag names the outbound a containment guard sends traffic to. The
@@ -400,12 +416,7 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 			this rule to stop blocking. A blackhole has no egress, so supplying one
 			cannot leak anything the refusal was protecting.
 		*/
-		if in.Blackhole == "" {
-			outbound = blackholeOutbound(synthBlockTag)
-			body["outboundTag"] = mustJSON(synthBlockTag)
-			break
-		}
-		body["outboundTag"] = mustJSON(in.Blackhole)
+		outbound = blockDest(in, body)
 	case DestExit:
 		exit, found := findExit(in.Exits, rule.Dest.ExitID)
 		if !found {
@@ -444,6 +455,12 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 				diag.Args = map[string]string{"exit": exit.Label}
 				return nil, diag, nil
 			}
+			if exit.Contained {
+				diag.Severity, diag.Pattern, diag.MessageKey = SeverityWarn, PatternMarked, KeyExitContained
+				diag.Args = map[string]string{"exit": exit.Label}
+				outbound = blockDest(in, body)
+				return mustJSON(body), diag, outbound
+			}
 			name := exitOutboundTag(exit.ID)
 			outbound = markedOutbound(name, egress.Mark(exit.ID))
 			body["outboundTag"] = mustJSON(name)
@@ -457,6 +474,17 @@ func compileRule(in Input, rule Rule, subject Subject, tag, pattern string) (jso
 		return nil, diag, nil
 	}
 	return mustJSON(body), diag, outbound
+}
+
+// blockDest points body at the template's blackhole, or at one synthesized for
+// a template that has none; the outbound to emit is returned, nil when none.
+func blockDest(in Input, body map[string]json.RawMessage) json.RawMessage {
+	if in.Blackhole != "" {
+		body["outboundTag"] = mustJSON(in.Blackhole)
+		return nil
+	}
+	body["outboundTag"] = mustJSON(synthBlockTag)
+	return blackholeOutbound(synthBlockTag)
 }
 
 // forbiddenCriterion reports the first criterion this subject cannot honour. The

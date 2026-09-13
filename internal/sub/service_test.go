@@ -747,9 +747,9 @@ func TestApplyExternalProxy_ECHPropagates(t *testing.T) {
 		stream := map[string]any{"security": "tls", "tlsSettings": map[string]any{}}
 		ep := map[string]any{"dest": "proxy.example.com", "echConfigList": ech}
 		applyExternalProxyTLSToStream(ep, stream, "tls")
-		settings, _ := stream["tlsSettings"].(map[string]any)["settings"].(map[string]any)
-		if settings["echConfigList"] != ech {
-			t.Fatalf("echConfigList = %v, want %q", settings["echConfigList"], ech)
+		tlsSettings := stream["tlsSettings"].(map[string]any)
+		if tlsSettings["echConfigList"] != ech {
+			t.Fatalf("echConfigList = %v, want %q at the top level, where xray reads it", tlsSettings["echConfigList"], ech)
 		}
 	})
 
@@ -864,10 +864,12 @@ func TestApplyExternalProxyTLSToStream_SetsPinnedPeerCert(t *testing.T) {
 	applyExternalProxyTLSToStream(ep, working, "tls")
 
 	ts := working["tlsSettings"].(map[string]any)
-	settings, _ := ts["settings"].(map[string]any)
-	pins, ok := settings["pinnedPeerCertSha256"].([]any)
+	if ts["pinnedPeerCertSha256"] != "aa11,bb22" {
+		t.Fatalf("pinnedPeerCertSha256 = %v, want \"aa11,bb22\" at the top level, as xray parses it", ts["pinnedPeerCertSha256"])
+	}
+	pins, ok := ts["pin-sha256"].([]any)
 	if !ok || len(pins) != 2 || pins[0] != "aa11" || pins[1] != "bb22" {
-		t.Fatalf("pinnedPeerCertSha256 = %v, want [aa11 bb22]", settings["pinnedPeerCertSha256"])
+		t.Fatalf("pin-sha256 = %v, want [aa11 bb22] for the Clash renderer", ts["pin-sha256"])
 	}
 }
 

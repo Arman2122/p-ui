@@ -92,7 +92,8 @@ type server struct {
 	udp       udpDialer
 	onFailure func(AuthFailure)
 	// admit asks the panel to decide a login against the client's cap; nil admits.
-	admit core.AdmitFunc
+	admit    core.AdmitFunc
+	throttle *loginThrottle
 
 	mu       sync.RWMutex
 	byUser   map[string]*credential
@@ -194,7 +195,8 @@ func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.S
 	}
 	return &server{
 		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure, admit: admit, opened: time.Now(),
-		byUser: map[string]*credential{}, byEmail: map[string]*credential{},
+		throttle: newLoginThrottle(),
+		byUser:   map[string]*credential{}, byEmail: map[string]*credential{},
 		conns: map[*conn]struct{}{}, traffic: map[string]*counters{},
 		limits: map[string]core.RateLimit{}, limiters: map[string]*limiterPair{},
 	}
@@ -248,10 +250,20 @@ func (s *server) config() *gossh.ServerConfig {
 		ServerVersion:    serverVersion,
 		PasswordCallback: s.authenticate,
 		AuthLogCallback: func(meta gossh.ConnMetadata, method string, err error) {
-			if err == nil || method == "none" || s.onFailure == nil {
+			if method == "none" {
 				return
 			}
-			s.onFailure(AuthFailure{InstanceID: s.instanceID, Username: meta.User(), IP: hostOf(meta.RemoteAddr()), Reason: err.Error()})
+			source := addrOf(meta.RemoteAddr())
+			if err == nil {
+				s.throttle.succeeded(source)
+				return
+			}
+			if s.throttle.failed(source) {
+				logger.Infof("ssh: inbound %d: %s is refused for %s after %d failed logins", s.instanceID, source, throttleBan, throttleFailures)
+			}
+			if s.onFailure != nil {
+				s.onFailure(AuthFailure{InstanceID: s.instanceID, Username: meta.User(), IP: hostOf(meta.RemoteAddr()), Reason: err.Error()})
+			}
 		},
 	}
 	for _, key := range s.hostKeys {
@@ -353,6 +365,10 @@ func (s *server) serve(ln net.Listener) {
 // handle runs one transport connection through the SSH handshake and its
 // channels; the transports hand it a net.Conn and never see SSH.
 func (s *server) handle(raw net.Conn) {
+	if s.throttle.banned(addrOf(raw.RemoteAddr())) {
+		_ = raw.Close()
+		return
+	}
 	// A peer that connects and never finishes logging in holds a goroutine and
 	// a descriptor for as long as it likes; the deadline is OpenSSH's grace time.
 	_ = raw.SetDeadline(time.Now().Add(handshakeTimeout))
