@@ -2962,3 +2962,29 @@ which must be released before the panel is. The GitHub account's anonymous 404 b
 download path the panel has, releases or not. The external-ips union (Unit 5) is not built; the
 panel's cross-node decision engine covers the cap, and the union would add a capability seam and
 node-sync wiring to globalise the sidecar's own second layer.
+
+### 12.5q The 2026-09-13 core review
+
+Seven read-only lanes over `d318cc5` (SSH, sing-box, ocserv + OpenVPN, routing
+and egress, Xray protocols and transports, core management, extensibility), the
+findings and what remains open in `docs/core-review-2026-09-13.md`. Nothing in
+the contract changed. What the review corrected that this document had claimed:
+
+- §7: the daemon user must traverse the core's own directory under
+  `/var/lib/p-ui`; the installer creates only the parent, and every core made
+  its intermediate root:root under the panel's umask (1a17718). A core that runs
+  as `p-ui-core` must make its state root traversable itself.
+- §12.5b: "a daemon that outlived the panel is adopted" was false — the unit was
+  asked about under inbound id 0 — and "connections survive" a reload is false:
+  sing-box rebuilds on SIGHUP (1a17718, cbb9238). `UserHotAdd` still means "no
+  process restart", which `bind.go` ties to implementing `UserProvisioner`.
+- §12.5l / §15: the MTProto installer now asks the candidate to run every live
+  config the way the sing-box one does, through the fork's `run --check`
+  (fork `8196ba8`; the v1.9.0 tag must carry it) (f0b6e6e).
+- §12.5f: a rule bound for a TCP-only exit that named no network is warned, not
+  narrowed silently, and warnings reach the rules list (3356f95).
+- §12.5f's bridge containment matched addresses only; a name that resolves to
+  loopback reached the host through a device exit. The marked outbound carries
+  the template direct's `finalRules`, and the bridge refuses the box's own
+  public addresses, which no private block covers (1a17718).
+
