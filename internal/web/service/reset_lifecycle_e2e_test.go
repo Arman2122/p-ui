@@ -19,14 +19,20 @@ import (
 	"github.com/Arman2122/p-ui/internal/xray"
 )
 
+// The kernel's ephemeral range covers the exit SOCKS band, which AddInbound refuses.
 func lifecycleFreePort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve a port: %v", err)
+	for {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("reserve a port: %v", err)
+		}
+		port := l.Addr().(*net.TCPAddr).Port
+		l.Close()
+		if !core.IsExitSocksPort(port) {
+			return port
+		}
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
 }
 
 func waitForPort(t *testing.T, port int) {
