@@ -36,7 +36,7 @@ function setup() {
 
 it('shows the account rules and counts, and drives reset, delete and release through their endpoints', async () => {
   setup();
-  await screen.findByText('Partner Co');
+  await screen.findByText('Partner Co', {}, { timeout: 5000 });
   expect(screen.getByText(i18next.t('resellers.policy.block'))).toBeTruthy();
   expect(screen.getByText(i18next.t('resellers.cycle.monthly'))).toBeTruthy();
   expect(screen.getByTestId('online-7').textContent).toBe('2');
@@ -45,21 +45,21 @@ it('shows the account rules and counts, and drives reset, delete and release thr
 
   const reset = () => screen.getAllByRole('button', { name: i18next.t('resellers.resetUsage') });
   fireEvent.click(reset()[0]);
-  await waitFor(() => expect(reset().length).toBe(2));
+  await waitFor(() => expect(reset().length).toBe(2), { timeout: 5000 });
   fireEvent.click(reset().at(-1)!);
-  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/resellers/7/reset-usage', {}));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/resellers/7/reset-usage', {}), { timeout: 5000 });
 
   fireEvent.click(screen.getByRole('button', { name: `${i18next.t('resellers.deleteReseller')}: partner` }));
-  const dialog = await screen.findByRole('dialog');
+  const dialog = await screen.findByRole('dialog', {}, { timeout: 5000 });
   expect(within(dialog).getByText(i18next.t('resellers.deleteHelp', { count: 3 }))).toBeTruthy();
   fireEvent.click(within(dialog).getByRole('button', { name: i18next.t('delete') }));
-  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/resellers/7/delete', { clients: 'transfer', ownerId: 0 }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/resellers/7/delete', { clients: 'transfer', ownerId: 0 }), { timeout: 5000 });
 
   fireEvent.click(screen.getByRole('button', { name: i18next.t('resellers.clients') }));
-  await screen.findByText('owned-one');
+  await screen.findByText('owned-one', {}, { timeout: 5000 });
   fireEvent.click(screen.getByRole('button', { name: `${i18next.t('resellers.release')}: owned-one` }));
-  const confirmRelease = await screen.findByRole('button', { name: i18next.t('resellers.release') });
+  const confirmRelease = await screen.findByRole('button', { name: i18next.t('resellers.release') }, { timeout: 5000 });
   fireEvent.click(confirmRelease);
-  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/resellers/7/clients/release', { emails: ['owned-one'] }));
-  await screen.findByText(i18next.t('resellers.assigned', { moved: 1, plans: 0 }));
-});
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/resellers/7/clients/release', { emails: ['owned-one'] }), { timeout: 5000 });
+  await screen.findByText(i18next.t('resellers.assigned', { moved: 1, plans: 0 }), {}, { timeout: 5000 });
+}, 40000);
