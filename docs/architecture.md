@@ -378,10 +378,10 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 |---|---|---|
 | `@every 1s` | `check_xray_running_job` | Restart Xray if it died (2 consecutive down checks) |
 | `@every 30s` | (inline func in `startTask`) | Debounced Xray restart — consumes the "need restart" flag (§5.1) |
-| `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay) |
+| `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay); run the reseller budget and group quota pass (`enforceProductQuotas`, §5.10) and cut the sessions of every client either switched off (`job/client_cut.go`) |
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation; push global usage and each client's resolved speed ladder to nodes |
-| `@every 10s` | `core_policy` | Run the plan cycle pass (scheduled traffic resets, depletion notices — §5.9); converge shaping and in-core rates; observe every core's sessions and every node's reported sightings, decide each client's IP cap, cut the over-cap device through the core that saw it or record a `client_bans` row, converge the panel's own nft ban set on the rows, and publish `client.device_limit` (`internal/web/job/core_policy.go`) |
+| `@every 10s` | `core_policy` | Run the plan cycle pass (scheduled traffic resets, depletion notices — §5.9) and the reseller budget pass (§5.10, cutting what it switched off); converge shaping and in-core rates; observe every core's sessions and every node's reported sightings, decide each client's IP cap, cut the over-cap device through the core that saw it or record a `client_bans` row, converge the panel's own nft ban set on the rows, and publish `client.device_limit` (`internal/web/job/core_policy.go`) |
 | `@every 10s` | `core_supervise` | Read every registered core's health, publishing `core.crash` once per outage and `core.up` on recovery, then reconcile it on its desired inbounds — a unit the backend reports down is started again (Xray excepted — the panel's own config build converges it; `internal/web/job/core_supervise.go`, `core_health.go`) |
 | `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
@@ -485,6 +485,57 @@ throttle` keeps a depleted client connected at 1 MiB/s by appending a rung to th
 core enforces a hard quota of its own. On a sub-node the ladder arrives pre-resolved from the
 master (`client_policies.resolved_tiers`, §5.2) and no plan row exists there.
 
+### 5.10 Reseller accounts
+
+A reseller is a `users` row with `role = 'reseller'` plus a `reseller_accounts` row
+(`model.ResellerAccount`) that carries the budget — traffic limit, client cap, term — the
+five permission flags, and the two rules: `on_depletion` (`disable` cuts the owned clients,
+`block` keeps them online and only refuses new provisioning, top-ups and re-enables) and
+`reset_cycle` (`none` / `weekly` / `monthly`, anchored on `period_started_at`, computed with
+the same `policy.NextReset` the plans use). A client belongs to a reseller through
+`clients.owner_user_id`; NULL is the administrator. Which inbounds a reseller may attach to
+is `reseller_inbound_grants`, enforced twice: in Go before every write, and by the
+`pui_reseller_*` triggers in `internal/database/reseller_constraints.sql` so no path around
+the service can attach an ungranted inbound or re-own a client whose inbounds the new owner
+lacks. `chk_reseller_no_global_group` keeps owned clients out of global groups.
+
+**Usage is counted by trigger, not by job** (`reseller_usage.sql`): every write to
+`client_traffics` or `client_global_traffics` for an owned email runs
+`pui_reseller_usage_observe`, which keeps a per-source cursor (`reseller_usage_sources`) and a
+per-client peak (`reseller_client_usages`) and adds only the growth to
+`reseller_accounts.traffic_used`. That is why a client reset or delete never refunds the
+account, why replicated traffic is not counted twice, and why an ownership change is
+prospective — the owner-changed trigger re-baselines the cursors so the old bytes stay with
+the old owner. `reseller_allocations` is an append-only ledger of quota handed out (the
+`pui_reseller_quota_allocated` trigger writes it on create, quota increase and re-own); the
+dashboard's "sales" chart is that ledger.
+
+**Enforcement is one level-triggered pass**, `ResellerService.EnforceBudgets`
+(`service/reseller_budget.go`), run from both `xray_traffic_job` (5 s) and `core_policy`
+(10 s); it takes the per-account advisory lock (`WithAccountLock`, `pg_advisory_xact_lock`)
+only for accounts that need it. Under the lock, `convergeBudgetLocked` runs a due cycle reset,
+flips `budget_blocked` first (the owner gate every re-enable reads, `ValidateClientOwnerEnable`),
+then pauses or restores clients through `ClientService.Update` — never a direct core call —
+remembering what it paused in `reseller_paused_clients` so a top-up restores exactly those.
+The emails it switched off come back to the job, which feeds them through
+`cutDisabledClients` (`job/client_cut.go`): the same `restartXrayOnClientDisable` gate as
+per-client depletion, forced because a hot user removal never closes an Xray tunnel that is
+already up. Only a traffic depletion honours `block`; a lapsed term and a suspension always
+cut. Every account transition — ninety percent of traffic, depletion, seven days before the
+term ends, expiry, restoration, a period reset — is announced once, by a conditional update on
+the `*_warned_at` stamps or the `budget_blocked` flip, into both the administrator and the
+reseller activity feeds and onto the bus as `reseller.budget` (Telegram and email templates
+under `tgbot.messages.eventReseller*`).
+
+**Lock discipline:** the lock transaction never holds a client row. Every write inside
+`WithAccountLock` runs on a fresh `database.GetDB()` connection, so the traffic writer's
+trigger path is never queued behind an account operation
+(`reseller_reservations_test.go` fails if this slips). Transfers between resellers
+(`service/reseller_transfer.go`) take both locks in ascending user id. Deleting an account
+deletes or re-owns its clients first (runtime-first, `BulkDelete`), then drops the private
+plans, the ledger, the account's activity and the login; a client the runtime cannot delete
+keeps the account for a retry.
+
 ---
 
 ## 6. Data model cheat-sheet
@@ -516,6 +567,10 @@ for AutoMigrate in `internal/database/db.go`.
 | `ApiToken` | REST API tokens | SHA-256 hash (plaintext shown once) |
 | `InboundFallback` | Fallback routing on a shared port | SNI/ALPN/path → dest |
 | `HistoryOfSeeders` | Seeder bookkeeping | prevents re-running one-off migrations |
+| `ResellerAccount` | One reseller's budget and rules (`reseller_accounts`, keyed by `users.id`) | `TrafficLimit`/`TrafficUsed`/`ClientCap`/`ExpiresAt`, `BudgetBlocked`, `OnDepletion`, `ResetCycle`, `PeriodStartedAt`, the `Allow*` flags, once-only notice stamps (§5.10) |
+| `ResellerInboundGrant` / `ResellerPausedClient` / `ResellerToken` | Which inbounds a reseller may use; which clients a block paused; the reseller's Bearer tokens | all cascade with the account; the grant is also enforced by trigger |
+| `ResellerAllocation` | Append-only ledger of quota handed to owned clients | written by trigger on create, quota increase and re-own; the dashboard's "sales" |
+| `ResellerUsageSource` / `ResellerClientUsage` | Per-source counter cursors and per-client peak behind `traffic_used` | why resets never refund and transfers are prospective (`reseller_usage.sql`) |
 
 ---
 
@@ -572,6 +627,10 @@ for AutoMigrate in `internal/database/db.go`.
 | **Frontend route / screen** | `frontend/src/pages/<area>/`, `frontend/src/routes.tsx` | `frontend/src/api/queries/` |
 | **Frontend ↔ backend type mismatch** | regenerate: `cd frontend && npm run gen` (`tools/openapigen`) | `frontend/src/generated/` |
 | **System status / CPU / metrics** | `service/server.go`, `service/xray_metrics.go`, `service/metric_history.go` | `controller/server.go`, gopsutil |
+| A **reseller's** client keeps its tunnel after the budget ran out, or comes back too early | `service/reseller_budget.go` (`convergeBudgetLocked`, `resellerNeedsPass`), `job/client_cut.go` | the account's `onDepletion`; `restartXrayOnClientDisable`; `reseller_paused_clients` |
+| Reseller **usage** looks wrong (refunded, double-counted, or a transfer moved old bytes) | `internal/database/reseller_usage.sql` (`pui_reseller_usage_observe`, `pui_reseller_owner_changed`) | `reseller_usage_sources` cursors; `reseller_stale_transfer_test.go` |
+| A reseller **notice** never arrived, or arrived on every tick | `service/reseller_budget.go` (`settleWarning`, the `budget_blocked` flip, `publish`) | `traffic_warned_at` / `expiry_warned_at`; the `reseller.budget` toggle in notification settings |
+| **Assigning or releasing** a reseller's client is refused, or a plan vanished with the move | `service/reseller_transfer.go` (`validateResellerIntake`, `transferClientsTx`) | `reseller_constraints.sql` triggers; `UnassignPlanTx` |
 
 ---
 
