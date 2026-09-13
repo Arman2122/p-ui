@@ -63,8 +63,10 @@ send traffic to the exit are compiled onto that port and narrowed to TCP: an SSH
 forward carries no UDP, so a rule asking for UDP alone is refused, and a rule
 that also matched UDP gets a companion rule that drops that UDP rather than
 letting it fall through to the next rule or the default route with the server's
-own address. To carry UDP elsewhere, put a rule matching network `udp` above
-the exit rule. **Test** on the Outbounds page probes through the port.
+own address. A client's DNS queries are UDP, so an "everything to the exit"
+rule with nothing above it drops them too: put a rule matching network `udp`
+above the exit rule to carry UDP, DNS included, somewhere that takes it.
+**Test** on the Outbounds page probes through the port.
 
 ### OpenVPN exit
 

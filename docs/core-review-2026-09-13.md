@@ -63,7 +63,8 @@ and the ranked list below them landed; the anchors are the same as before.
 
 1. **UDP toward a TCP-only exit is dropped, not left to fall through.** A
    companion `network: udp -> blackhole` rule follows the narrowed one; the
-   warning says a `udp` rule placed above carries UDP elsewhere. Chosen over
+   warning says a `udp` rule placed above carries UDP elsewhere. The default
+   template has no DNS rule, so client DNS (UDP) is what this catches first. Chosen over
    "warn only" because the fall-through left with the server's own address,
    which is the leak an exit rule exists to prevent.
 2. **Routed SSH udpgw DNS goes through the route as DNS over TCP**, to the
