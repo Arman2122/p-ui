@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
 func observeCoreHostRuntimes(ctx context.Context) map[string]*CoreHostRuntimeView {
@@ -32,7 +33,7 @@ func coreExecutablePaths() map[string][]string {
 		"singbox": {"sing-box", "sing-box-linux-" + runtime.GOARCH},
 		"openvpn": {"openvpn"},
 		"ocserv":  {"ocserv"},
-		"xray":    {"xray", "xray-linux-" + runtime.GOARCH},
+		"xray":    {"xray", xray.GetBinaryName()},
 	}
 	paths := make(map[string][]string, len(names))
 	for id, binaries := range names {

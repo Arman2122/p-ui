@@ -59,12 +59,14 @@ selector — internal, same as xray — and handed it all four.
 */
 func TestMtprotoIsOfferedAddressesOnly(t *testing.T) {
 	mask := criteriaMaskFor("mtproto")
-	for _, never := range []string{"user", "domain", "protocol", "attrs"} {
+	// The bridge's every connection comes from 127.0.0.1, so a source is as
+	// unmatched as a user.
+	for _, never := range []string{"user", "domain", "protocol", "attrs", "source", "sourcePort"} {
 		if slices.Contains(mask, never) {
 			t.Errorf("%q is offered on an mtproto subject; a rule using it saves and matches nothing: %v", never, mask)
 		}
 	}
-	for _, want := range []string{"ip", "port", "sourcePort", "network", "source"} {
+	for _, want := range []string{"ip", "port", "network"} {
 		if !slices.Contains(mask, want) {
 			t.Errorf("the mtproto mask lost %q, which its bridge can match on", want)
 		}

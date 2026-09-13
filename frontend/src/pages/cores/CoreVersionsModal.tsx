@@ -63,8 +63,9 @@ export function CoreVersionsPanel({ core, onInstalled, onRestart, restarting = f
       const parsed = CoreVersionsViewSchema.safeParse(msg.obj);
       if (!parsed.success) throw new Error('coreUpdates.invalidResponse');
       if (parsed.data.installed) setInstalledVersion(parsed.data.installed);
-      if (parsed.data.error) throw new Error(parsed.data.error);
       setView(parsed.data);
+      // A missing binary is an error beside a list, and the list is how it gets installed.
+      if (parsed.data.error && !parsed.data.available.length) throw new Error(parsed.data.error);
     } catch (cause) {
       if (active()) setRefreshError(cause instanceof Error ? cause.message : 'coreUpdates.refreshFailed');
     } finally {

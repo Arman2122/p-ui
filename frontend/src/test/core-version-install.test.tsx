@@ -36,6 +36,13 @@ describe('core version installation', () => {
     expect(post.mock.calls).toHaveLength(1);
   });
 
+  it('offers the release list when the binary is missing, which is how a missing daemon gets installed', async () => {
+    vi.spyOn(HttpUtil, 'get').mockResolvedValue(new Msg(true, '', { manageable: true, available: ['v1.9.0'], error: 'core: daemon not installed' }));
+    renderWithProviders(<CoreVersionsPanel core={core()} onInstalled={vi.fn()} />);
+    await screen.findByLabelText(installLabel('v1.9.0'));
+    expect(screen.queryByText(i18next.t('coreUpdates.refreshFailed'))).toBeNull();
+  });
+
   it('preserves the installed build and release list after a refused download', async () => {
     vi.spyOn(HttpUtil, 'get').mockResolvedValue(new Msg(true, '', versions));
     vi.spyOn(HttpUtil, 'post').mockResolvedValue(new Msg(false, 'checksum refused'));

@@ -52,7 +52,7 @@ describe('actual host core runtime', () => {
     expect(coreCanRestart(external)).toBe(false);
     expect(coreCanReadLogs(external)).toBe(false);
     expect(coreVersionContextKey(external)).toBe('coreRuntime.panelBinaryVersion');
-    expect(coreCanRestart(core({ id: 'xray', hostRuntime: host }))).toBe(false);
+    expect(coreCanRestart(core({ id: 'xray', hostRuntime: host }))).toBe(true);
     const managed = core({ pid: 321, instances: [{ instanceId: 7, tag: 'managed', state: 'stopped', ready: false, pid: 322 }], hostRuntime: { ...host, error: 'partial probe', processes: [
       ...host.processes, { pid: 322, executable: '/panel/openvpn', state: 'stopped' }, { pid: 323, executable: '/other/openvpn', state: 'running' },
     ] } });

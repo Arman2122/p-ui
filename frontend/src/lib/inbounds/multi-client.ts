@@ -1,12 +1,11 @@
+import { kindModule } from '@/lib/cores/kinds';
+
 /**
  * Protocols that hold more than one client per inbound, so every client picker
- * filters on the same list. The copies this replaced had already drifted: the
- * bulk-add modal was missing mtproto and silently hid those inbounds.
+ * filters on the same answer. A hand-kept list drifted twice (mtproto, then
+ * ocserv); the kind module is the one place a core says so.
  */
-const MULTI_CLIENT_PROTOCOLS = new Set([
-  'shadowsocks', 'vless', 'vmess', 'trojan', 'hysteria', 'wireguard', 'wgkernel', 'awgkernel', 'mtproto', 'ssh', 'tuic', 'anytls', 'openvpn',
-]);
-
 export function supportsMultipleClients(protocol?: string): boolean {
-  return MULTI_CLIENT_PROTOCOLS.has((protocol ?? '').toLowerCase());
+  const rule = kindModule((protocol ?? '').toLowerCase())?.multiUser ?? false;
+  return typeof rule === 'function' ? true : rule;
 }

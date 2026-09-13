@@ -69,7 +69,7 @@ export default function RealityForm({
         label="uTLS"
       >
         <Select
-          options={Object.values(UTLS_FINGERPRINT).map((fp) => ({ value: fp, label: fp }))}
+          options={Object.values(UTLS_FINGERPRINT).filter((fp) => fp !== UTLS_FINGERPRINT.UTLS_UNSAFE).map((fp) => ({ value: fp, label: fp }))}
         />
       </FormField>
       <Form.Item

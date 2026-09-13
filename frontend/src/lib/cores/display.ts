@@ -30,7 +30,8 @@ export function coreNeedsRestart(core: CoreStatusView): boolean {
 }
 
 export function coreHasManagedRuntime(core: CoreStatusView): boolean {
-  return !!core.pid || core.instances.length > 0 || (core.id === 'xray' && !coreHasOtherProcesses(core));
+  // The panel converges Xray itself: a failed start is exactly when Restart is needed.
+  return !!core.pid || core.instances.length > 0 || core.id === 'xray';
 }
 
 export function coreCanRestart(core: CoreStatusView): boolean { return core.available && coreHasManagedRuntime(core); }

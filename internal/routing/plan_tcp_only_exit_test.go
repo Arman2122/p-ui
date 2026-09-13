@@ -15,9 +15,9 @@ func tcpOnlyExit(id int) ResolvedExit {
 /*
 An SSH forward carries TCP only. Nothing said so, so a rule routing "everything"
 to it would have sent UDP into a SOCKS port that drops it, and the route looked
-healthy. The exit now declares TCPOnly and the compiler narrows: a rule with no
-network is pinned to TCP, one asking for both is narrowed and warned, one asking
-for UDP alone is refused. Roster contract gap 4, before the SSH core lands.
+healthy. The exit now declares TCPOnly and the compiler narrows: a rule with no network
+or asking for both is pinned to TCP and warned — the UDP it covered takes the
+next rule, which the operator must hear — and UDP alone is refused.
 */
 func TestTCPOnlyExitNarrowsRulesToTCP(t *testing.T) {
 	for _, tt := range []struct {
@@ -28,7 +28,7 @@ func TestTCPOnlyExitNarrowsRulesToTCP(t *testing.T) {
 		wantSev     string
 		wantKey     string
 	}{
-		{"no network", nil, "tcp", true, SeverityOK, ""},
+		{"no network", nil, "tcp", true, SeverityWarn, KeyExitTCPNarrowed},
 		{"tcp only", map[string]json.RawMessage{"network": json.RawMessage(`"tcp"`)}, "tcp", true, SeverityOK, ""},
 		{"both", map[string]json.RawMessage{"network": json.RawMessage(`"tcp,udp"`)}, "tcp", true, SeverityWarn, KeyExitTCPNarrowed},
 		{"udp alone", map[string]json.RawMessage{"network": json.RawMessage(`"udp"`)}, "", false, SeverityInert, KeyExitTCPOnly},

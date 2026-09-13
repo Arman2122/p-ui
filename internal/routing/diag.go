@@ -50,6 +50,18 @@ const (
 // Refusals returns the diags that must block a save. A preview shows every diag;
 // only these stop the write, because an inert rule that is merely advisory would
 // train an operator to ignore the one that matters.
+// Warnings are the diags of rules that apply with a limitation the operator
+// should see: a refusal blocks a save, a warning must still reach the list.
+func (c Compiled) Warnings() []Diag {
+	var out []Diag
+	for _, diag := range c.Diags {
+		if diag.Severity == SeverityWarn {
+			out = append(out, diag)
+		}
+	}
+	return out
+}
+
 func (c Compiled) Refusals() []Diag {
 	var out []Diag
 	for _, diag := range c.Diags {

@@ -34,16 +34,28 @@ func (c *Core) Transports(kind core.Kind, settings, streamSettings string) core.
 
 	out := core.Transports{}
 
-	network := ""
+	network, security := "", ""
+	var alpn []any
 	if streamSettings != "" {
 		var ss map[string]any
 		if json.Unmarshal([]byte(streamSettings), &ss) == nil {
 			network, _ = ss["network"].(string)
+			security, _ = ss["security"].(string)
+			if tls, ok := ss["tlsSettings"].(map[string]any); ok {
+				alpn, _ = tls["alpn"].([]any)
+			}
 		}
 	}
 	switch network {
 	case "kcp", "quic":
 		out.UDP = true
+	case "xhttp", "splithttp":
+		// Xray serves XHTTP over HTTP/3 alone, on QUIC, when TLS offers h3 only.
+		if security == "tls" && len(alpn) == 1 && alpn[0] == "h3" {
+			out.UDP = true
+		} else {
+			out.TCP = true
+		}
 	default:
 		out.TCP = true
 	}

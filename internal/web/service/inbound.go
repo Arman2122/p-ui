@@ -1618,6 +1618,11 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 	if inboundIsBridged(inbound) {
 		needRestart = true
 	}
+	// A rule on a kernel-selected inbound is realised by an Xray front the
+	// generator drops while the inbound is off; enabling it needs the front back.
+	if enable && egressIngressSelectable(inbound) && (&RoutingService{}).namesInbound(inbound.Id) {
+		needRestart = true
+	}
 
 	if !push {
 		return true, nil

@@ -2226,7 +2226,7 @@
           "noFront": "{{ .subject }} has no front device on this host, so its traffic never passes through Xray and this rule cannot match it. Nothing you can change on the rule fixes this."
         },
         "warn": {
-          "exitTcpNarrowed": "{{ .exit }} carries TCP only; this rule was narrowed to TCP, and the UDP it also matched keeps its previous route."
+          "exitTcpNarrowed": "{{ .exit }} carries TCP only, so this rule applies to TCP alone; the UDP it also matched is not covered here and takes the next matching rule or the default route."
         },
         "criterionUnavailable": "Not available on one of the selected inbounds, so it could never match.",
         "domainReadFromTraffic": "The name is read from the connection itself — the TLS SNI, the HTTP Host header, or QUIC. Traffic that carries no name, such as a plain IP connection, is matched by the IP rules instead. The panel turns this reading on for the inbounds this rule names, in the generated config only.",
@@ -2235,7 +2235,8 @@
         "unresolvedInbound": "{tags} — this rule names an inbound the panel cannot resolve right now. Saving it would widen the rule to every inbound, so nothing was saved. Reload the page, then check the rule's Inbound tags.",
         "l3Fronted": "Routing this inbound changes what it can carry",
         "l3FrontedDetail": "A kernel WireGuard inbound forwards every IP protocol until a rule names it. Once routed, its traffic is terminated inside Xray, which carries TCP, UDP and ICMP only — ESP, GRE, SCTP and anything else is dropped. Ping is answered locally, so it succeeds even for a destination that is unreachable. Test with a real request instead.",
-        "inertTitle": "This rule is switched on but is not being applied:"
+        "inertTitle": "This rule is switched on but is not being applied:",
+        "warnTitle": "This rule applies with a limitation:"
       },
       "ruleForm": {
         "sourceIps": "Source IPs",

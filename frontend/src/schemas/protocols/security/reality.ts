@@ -7,7 +7,8 @@ import { UtlsFingerprintSchema } from '@/schemas/protocols/security/tls';
 // `settings` even though it's the "client" half of Reality).
 export const RealityClientSettingsSchema = z.object({
   publicKey: z.string().default(''),
-  fingerprint: UtlsFingerprintSchema.default('chrome'),
+  // Xray's REALITY client refuses "unsafe"; a link carrying it connects nowhere.
+  fingerprint: UtlsFingerprintSchema.exclude(['unsafe']).default('chrome'),
   serverName: z.string().default(''),
   spiderX: z.string().default('/'),
   mldsa65Verify: z.string().default(''),

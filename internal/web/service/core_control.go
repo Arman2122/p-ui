@@ -60,7 +60,19 @@ func (s *ServerService) RestartCore(ctx context.Context, coreID string) error {
 	if err != nil {
 		return err
 	}
-	return bound.Supervise.Reconcile(ctx, desired)
+	if err := bound.Supervise.Reconcile(ctx, desired); err != nil {
+		return err
+	}
+	if bound.ExitSupervise == nil {
+		return nil
+	}
+	// StopAll took the core's exits down with its inbounds; a rule routing to one
+	// must not wait for the egress job's next pass to have it back.
+	rows, err := (&EgressService{}).GetAll()
+	if err != nil {
+		return err
+	}
+	return reconcileCoreExits(ctx, rows)
 }
 
 // coreByID finds a registered core by the id its descriptor declares.

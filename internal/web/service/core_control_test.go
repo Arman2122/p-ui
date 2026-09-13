@@ -31,8 +31,8 @@ func TestRestartCoreStopsThenReconciles(t *testing.T) {
 	if !probe.reconciled {
 		t.Error("the core was stopped and never brought back")
 	}
-	if probe.order != "stop,reconcile" {
-		t.Errorf("order = %q; converging before stopping leaves the old daemons running", probe.order)
+	if probe.order != "stop,reconcile,exits" {
+		t.Errorf("order = %q; converging before stopping leaves the old daemons running, and StopAll took the exits down too", probe.order)
 	}
 }
 
@@ -95,6 +95,13 @@ func (p *restartProbeCore) Describe() core.Descriptor {
 func (p *restartProbeCore) Kinds() []core.Kind { return []core.Kind{"restart-probe"} }
 
 func (p *restartProbeCore) Preflight(context.Context) error { return nil }
+
+func (p *restartProbeCore) ValidateExit(core.Exit) error { return nil }
+
+func (p *restartProbeCore) ReconcileExits(context.Context, []core.Exit) error {
+	p.order += ",exits"
+	return nil
+}
 
 func (p *restartProbeCore) StopAll(context.Context) error {
 	p.stopped = true

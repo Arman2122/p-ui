@@ -486,8 +486,12 @@ func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
 	if !slices.Contains(c.Kinds(), kind) {
 		return nil
 	}
-	return append(core.CriteriaByAddress(),
-		core.CriterionUser, core.CriterionDomain, core.CriterionProtocol, core.CriterionAttrs)
+	criteria := append(core.CriteriaByAddress(), core.CriterionDomain, core.CriterionProtocol, core.CriterionAttrs)
+	// A kind with no user list authenticates nobody, so a user rule on it matches nobody.
+	if c.ProvisionsUsers(kind) {
+		criteria = append(criteria, core.CriterionUser)
+	}
+	return criteria
 }
 
 // IngressHandle returns the tag this instance already answers to. An internal

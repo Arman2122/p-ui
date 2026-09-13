@@ -361,7 +361,8 @@ func (c *Core) IngressCriteria(kind core.Kind) []core.Criterion {
 	if kind != Kind {
 		return nil
 	}
-	return core.CriteriaByAddress()
+	// Every bridged connection arrives from 127.0.0.1, so a source matches nothing.
+	return []core.Criterion{core.CriterionIP, core.CriterionPort, core.CriterionNetwork}
 }
 
 /*

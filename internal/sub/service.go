@@ -701,9 +701,6 @@ its Host row exists to replace, and without the remark the link was named
 after the inbound's tag rather than the person holding it.
 */
 func (s *SubService) shareURI(inbound *model.Inbound, email string) string {
-	if !cores.SharesFile(core.Kind(inbound.Protocol)) {
-		return ""
-	}
 	client, ok := s.clientForLink(inbound, email)
 	if !ok {
 		return ""
@@ -714,7 +711,10 @@ func (s *SubService) shareURI(inbound *model.Inbound, email string) string {
 		if err != nil || !renders {
 			return ""
 		}
-		return share.URI
+		// The subscription names the link after the remark; a name the core
+		// gave it would otherwise sit in front as a second fragment.
+		uri, _, _ := strings.Cut(share.URI, "#")
+		return uri
 	}
 	endpoints := externalProxyEndpoints(unmarshalStreamSettings(inbound.StreamSettings))
 	if len(endpoints) == 0 {

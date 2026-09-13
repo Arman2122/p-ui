@@ -90,8 +90,12 @@ func (r Rule) NeedsInspection() bool {
 	if r.Inspect {
 		return true
 	}
-	_, hasDomain := r.Criteria[string(core.CriterionDomain)]
-	return hasDomain
+	for key := range r.Criteria {
+		if core.Criterion(key).NeedsInspection() {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolvedExit is one uplink with its core's handle already resolved.
@@ -242,7 +246,30 @@ func Plan(in Input) Compiled {
 			}
 		}
 	}
+	relaxScopeAll(in, &out)
 	return out
+}
+
+// relaxScopeAll: "every routable inbound" — once an all-rule compiled for one
+// subject, a subject that cannot carry it is a limitation shown, not a refusal.
+func relaxScopeAll(in Input, out *Compiled) {
+	all := map[int]bool{}
+	for _, rule := range in.Rules {
+		if rule.Scope == ScopeAll {
+			all[rule.ID] = true
+		}
+	}
+	compiled := map[int]bool{}
+	for _, diag := range out.Diags {
+		if all[diag.RuleID] && (diag.Severity == SeverityOK || diag.Severity == SeverityWarn) {
+			compiled[diag.RuleID] = true
+		}
+	}
+	for i, diag := range out.Diags {
+		if compiled[diag.RuleID] && (diag.Severity == SeverityInert || diag.Severity == SeverityBlocked) {
+			out.Diags[i].Severity = SeverityWarn
+		}
+	}
 }
 
 // blackholeTag names the outbound a containment guard sends traffic to. The
@@ -304,14 +331,14 @@ const (
 	narrowRefused
 )
 
-// narrowToTCP pins a rule bound for a TCP-only exit to network "tcp". A rule
-// that asked for UDP alone is refused; one that asked for both is narrowed and
-// the operator told, so no rule quietly sends UDP where it cannot go.
+// narrowToTCP pins a rule bound for a TCP-only exit to network "tcp". UDP alone
+// is refused; both, or nothing said, is narrowed and the operator told, so no
+// rule quietly leaves UDP to the next rule or the default route.
 func narrowToTCP(body map[string]json.RawMessage) narrowResult {
 	raw, ok := body["network"]
 	if !ok {
 		body["network"] = json.RawMessage(`"tcp"`)
-		return narrowSilent
+		return narrowWarned
 	}
 	var network string
 	if json.Unmarshal(raw, &network) != nil {

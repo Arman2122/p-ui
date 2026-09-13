@@ -287,6 +287,27 @@ func (s *RoutingService) reapFronts(keep map[int]int) error {
 	return nil
 }
 
+// namesInbound reports whether an enabled rule names inbound id, or every inbound.
+func (s *RoutingService) namesInbound(id int) bool {
+	rules, err := s.Rules()
+	if err != nil {
+		return false
+	}
+	for _, rule := range rules {
+		if !rule.Enable {
+			continue
+		}
+		if rule.IngressScope == model.RoutingScopeAll {
+			return true
+		}
+		var ids []int
+		if json.Unmarshal([]byte(rule.IngressIds), &ids) == nil && slices.Contains(ids, id) {
+			return true
+		}
+	}
+	return false
+}
+
 // ruleIngressIDs resolves a rule's subjects, expanding "all" against what is
 // routable right now rather than against what was routable when it was saved.
 func ruleIngressIDs(rule *model.RoutingRule, subjects []routing.Subject) []int {
@@ -379,7 +400,7 @@ func applyRoutingPlan(ctx context.Context, cfg *xray.Config, retireFronts bool) 
 		no response of its own to attach a warning to. Ledger L8.
 	*/
 	refusals := compiled.Refusals()
-	recordRoutingRefusals(refusals)
+	recordRoutingRefusals(append(refusals, compiled.Warnings()...))
 	for _, diag := range refusals {
 		logger.Warningf("routing: rule %d is inert for %s: %s %v",
 			diag.RuleID, diag.SubjectTag, diag.MessageKey, diag.Args)

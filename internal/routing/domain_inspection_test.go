@@ -88,6 +88,20 @@ func TestADomainRuleMarksAnInternalInboundForInspection(t *testing.T) {
 	}
 }
 
+// A protocol or attrs rule reads the payload exactly as a domain rule does: the
+// sniffer is what sets ctx protocol, so the rule matched nothing without it.
+func TestAProtocolRuleMarksAnInternalInboundForInspection(t *testing.T) {
+	for _, key := range []string{"protocol", "attrs"} {
+		rule := Rule{ID: 1, Enable: true, Scope: ScopeAll, Dest: Dest{Kind: DestBlock}, Criteria: map[string]json.RawMessage{key: json.RawMessage(`["bittorrent"]`)}}
+		subject := vlessSubject()
+		subject.CriteriaMask = append(subject.CriteriaMask, key)
+		out := planWith([]Rule{rule}, []Subject{subject})
+		if !slices.Contains(out.InspectTags, "vless-in") {
+			t.Fatalf("a %s rule did not ask its inbound to sniff (tags: %v); without the sniffer it never matches", key, out.InspectTags)
+		}
+	}
+}
+
 func TestAnAddressRuleLeavesAnInternalInboundAlone(t *testing.T) {
 	out := planWith([]Rule{addressRule(1)}, []Subject{vlessSubject()})
 	if len(out.InspectTags) != 0 {

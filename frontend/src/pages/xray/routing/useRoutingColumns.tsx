@@ -139,7 +139,7 @@ export function useRoutingColumns({
               <Tooltip
                 title={
                   <div>
-                    <div>{t('pages.xray.routing.inertTitle')}</div>
+                    <div>{t((_r.diags ?? []).every((diag) => diag.severity === 'warn') ? 'pages.xray.routing.warnTitle' : 'pages.xray.routing.inertTitle')}</div>
                     {(_r.diags ?? []).map((diag, i) => (
                       <div key={`${diag.subjectTag}-${i}`}>{t(diag.messageKey, diag.args)}</div>
                     ))}
