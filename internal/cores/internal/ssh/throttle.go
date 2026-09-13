@@ -26,8 +26,10 @@ type sourceRecord struct {
 	bannedUntil time.Time
 }
 
+var throttleClock = time.Now
+
 func newLoginThrottle() *loginThrottle {
-	return &loginThrottle{now: time.Now, by: map[netip.Addr]*sourceRecord{}}
+	return &loginThrottle{now: throttleClock, by: map[netip.Addr]*sourceRecord{}}
 }
 
 // banned reports whether a connection from addr is closed before its handshake.
