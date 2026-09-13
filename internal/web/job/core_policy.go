@@ -40,7 +40,7 @@ func (j *CorePolicyJob) Run() {
 	ctx := context.Background()
 	j.convergePlans(ctx, time.Now())
 	if disabled := enforceProductQuotas(ctx); len(disabled) > 0 {
-		cutDisabledClients(disabled, &j.settingService, &j.xrayService, &j.inboundService)
+		service.CutDisabledClients(disabled, &j.settingService, &j.xrayService, &j.inboundService)
 	}
 	j.convergeShaping(ctx)
 	j.convergeRates(ctx)

@@ -1,4 +1,4 @@
-package job
+package service
 
 import "testing"
 
@@ -23,8 +23,8 @@ func TestDepletedStillConnectedOnlyWhenADisabledClientIsOnline(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := depletedStillConnected(tc.disabled, tc.online); got != tc.want {
-				t.Fatalf("depletedStillConnected = %v, want %v", got, tc.want)
+			if got := ClientsStillConnected(tc.disabled, tc.online); got != tc.want {
+				t.Fatalf("ClientsStillConnected = %v, want %v", got, tc.want)
 			}
 		})
 	}

@@ -52,8 +52,8 @@ func TestResellerNoticesPostgres(t *testing.T) {
 	}
 	expectOnce := func(kind string) {
 		t.Helper()
-		if admins, own := count(kind, 0), count(kind, u.Id); admins != 1 || own != 1 {
-			t.Fatalf("%s recorded admin=%d reseller=%d, want one each", kind, admins, own)
+		if global, own := count(kind, 0), count(kind, u.Id); global != 0 || own != 1 {
+			t.Fatalf("%s recorded global=%d reseller=%d, want one in the reseller's feed only", kind, global, own)
 		}
 		select {
 		case e := <-published:
@@ -120,7 +120,7 @@ func TestResellerNoticesPostgres(t *testing.T) {
 		}
 		expectOnce("depleted")
 		var row model.ActivityEvent
-		if err := db.Where("kind = ? AND audience_user_id = 0", "reseller.depleted").First(&row).Error; err != nil {
+		if err := db.Where("kind = ? AND audience_user_id = ?", "reseller.depleted", u.Id).First(&row).Error; err != nil {
 			t.Fatal(err)
 		}
 		var params map[string]string
@@ -144,7 +144,7 @@ func TestResellerNoticesPostgres(t *testing.T) {
 		}
 		set("traffic_used", 1900)
 		pass()
-		if got := count("warning", 0); got != 2 {
+		if got := count("warning", u.Id); got != 2 {
 			t.Fatalf("re-armed warning count=%d", got)
 		}
 		if e := <-published; e.Data.(ResellerNotice).Kind != "warning" {

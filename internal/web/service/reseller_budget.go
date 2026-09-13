@@ -268,10 +268,8 @@ func (s *ResellerService) convergeBudgetLocked(id int, now time.Time) ([]string,
 	}
 	notices = append(notices, notice...)
 	s.publish(notices)
-	// Blocked under the soft policy: nothing new is cut and nothing paused comes back yet.
-	if !disable && blocked {
-		return nil, nil
-	}
+	// With no reason left to pause, what an earlier pass paused comes back even while the
+	// soft policy still blocks provisioning: block means the clients stay online.
 	var recs []model.ClientRecord
 	if err := db.Where("owner_user_id = ? AND id IN (?)", id, db.Model(&model.ResellerPausedClient{}).Select("client_id").Where("user_id = ?", id)).Find(&recs).Error; err != nil {
 		return nil, err
@@ -288,7 +286,12 @@ func (s *ResellerService) convergeBudgetLocked(id int, now time.Time) ([]string,
 		if !disable && (rec.ExpiryTime > 0 && rec.ExpiryTime <= ms) {
 			continue
 		}
-		nr, err := (&ClientService{}).Update(&InboundService{}, rec.Id, *c)
+		var nr bool
+		if disable {
+			nr, err = (&ClientService{}).Update(&InboundService{}, rec.Id, *c)
+		} else {
+			nr, err = (&ClientService{}).restoreOwned(&InboundService{}, rec.Id, *c)
+		}
 		resellerApplyPending(nr, false)
 		if err != nil {
 			return disabled, fmt.Errorf("reseller %d client %d requires retry: %w", id, rec.Id, err)
@@ -331,19 +334,17 @@ func (s *ResellerService) notice(a *model.ResellerAccount, kind string, paused i
 	}
 }
 
-// publish writes the transition to both audiences and hands it to the notifiers.
+// publish writes the transition to the reseller's feed, which administrators read as well,
+// and hands it to the notifiers.
 func (s *ResellerService) publish(notices []ResellerNotice) {
 	for _, n := range notices {
 		title, body, level := n.ActivityKeys()
 		if title == "" {
 			continue
 		}
-		params := n.ActivityParams()
-		for _, audience := range []int{0, n.UserID} {
-			row := model.ActivityEvent{AudienceUserID: audience, Kind: "reseller." + n.Kind, Level: level, TitleKey: title, MessageKey: body, CreatedAt: n.At}
-			if _, err := (ActivityService{}).Record(context.Background(), row, params); err != nil {
-				logger.Warning("persist reseller notice failed:", err)
-			}
+		row := model.ActivityEvent{AudienceUserID: n.UserID, Kind: "reseller." + n.Kind, Level: level, TitleKey: title, MessageKey: body, CreatedAt: n.At}
+		if _, err := (ActivityService{}).Record(context.Background(), row, n.ActivityParams()); err != nil {
+			logger.Warning("persist reseller notice failed:", err)
 		}
 		if eventBus != nil {
 			eventBus.Publish(eventbus.Event{Type: eventbus.EventResellerBudget, Source: n.Username, Timestamp: time.UnixMilli(n.At), Data: n})
@@ -355,7 +356,8 @@ func (s *ResellerService) Suspend(user *model.User, id int, suspended bool) erro
 	if !session.IsAdminUser(user) {
 		return ErrResellerForbidden
 	}
-	return s.WithAccountLock(id, func() error {
+	var disabled []string
+	err := s.WithAccountLock(id, func() error {
 		err := database.GetDB().Transaction(func(tx *gorm.DB) error {
 			var a model.ResellerAccount
 			if err := tx.First(&a, "user_id = ?", id).Error; err != nil {
@@ -369,7 +371,15 @@ func (s *ResellerService) Suspend(user *model.User, id int, suspended bool) erro
 		if err != nil {
 			return err
 		}
-		_, err = s.convergeBudgetLocked(id, time.Now())
+		disabled, err = s.convergeBudgetLocked(id, time.Now())
 		return err
 	})
+	if err != nil {
+		return err
+	}
+	// The cut runs outside the lock: a process restart must not hold every other account op.
+	if len(disabled) > 0 {
+		CutDisabledClients(disabled, &SettingService{}, &XrayService{}, &InboundService{})
+	}
+	return nil
 }

@@ -34,7 +34,7 @@ func TestOwnerBudgetPassReturnsDisconnectedClients(t *testing.T) {
 		t.Fatalf("second pass returned %v for an already paused client", got)
 	}
 	var events int64
-	if err := db.Model(&model.ActivityEvent{}).Where("kind = ? AND audience_user_id = 0", "reseller.depleted").Count(&events).Error; err != nil {
+	if err := db.Model(&model.ActivityEvent{}).Where("kind = ? AND audience_user_id = ?", "reseller.depleted", user.Id).Count(&events).Error; err != nil {
 		t.Fatal(err)
 	}
 	if events != 1 {

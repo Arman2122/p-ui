@@ -105,7 +105,7 @@ func (j *XrayTrafficJob) Run() {
 		logger.Warning("add outbound traffic failed:", err)
 	}
 	if clientsDisabled || len(ownerDisabled) > 0 {
-		cutDisabledClients(append(disabledEmails, ownerDisabled...), &j.settingService, &j.xrayService, &j.inboundService)
+		service.CutDisabledClients(append(disabledEmails, ownerDisabled...), &j.settingService, &j.xrayService, &j.inboundService)
 		websocket.BroadcastInvalidate(websocket.MessageTypeInbounds)
 		// The panel disabled these itself; say so, rather than leaving an operator
 		// to notice a client went quiet.
@@ -269,22 +269,4 @@ func (j *XrayTrafficJob) informTrafficToExternalAPI(inboundTraffics []*xray.Traf
 	if err := externalInformClient.DoTimeout(request, response, externalInformTimeout); err != nil {
 		logger.Warning("POST ExternalTrafficInformURI failed:", err)
 	}
-}
-
-// depletedStillConnected reports whether any client the pass switched off is
-// in the online set, the only case a forced restart buys anything.
-func depletedStillConnected(disabled, online []string) bool {
-	if len(disabled) == 0 || len(online) == 0 {
-		return false
-	}
-	on := make(map[string]struct{}, len(online))
-	for _, email := range online {
-		on[email] = struct{}{}
-	}
-	for _, email := range disabled {
-		if _, ok := on[email]; ok {
-			return true
-		}
-	}
-	return false
 }

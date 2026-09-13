@@ -336,6 +336,20 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			return false, err
 		}
 	}
+	return s.updateExisting(inboundSvc, id, existing, updated, inboundFilter...)
+}
+
+// restoreOwned re-enables a client the owner's budget pass paused. The pass already
+// decided the owner may run again, so the owner gate is not asked a second time.
+func (s *ClientService) restoreOwned(inboundSvc *InboundService, id int, updated model.Client) (bool, error) {
+	existing, err := s.GetByID(id)
+	if err != nil {
+		return false, err
+	}
+	return s.updateExisting(inboundSvc, id, existing, updated)
+}
+
+func (s *ClientService) updateExisting(inboundSvc *InboundService, id int, existing *model.ClientRecord, updated model.Client, inboundFilter ...int) (bool, error) {
 	if err := ValidateClientOwnerGroup(existing.Email, updated.Group); err != nil {
 		return false, err
 	}

@@ -98,6 +98,30 @@ func TestResellerCyclesAndDepletionPolicyPostgres(t *testing.T) {
 			t.Fatalf("top-up did not unblock the soft account: %+v", a)
 		}
 	})
+	t.Run("a suspension cuts and an unsuspend under the soft policy brings paused clients back", func(t *testing.T) {
+		u, rec := newAccount("soft-suspend", func(a *model.ResellerAccount) { a.OnDepletion = "block"; a.TrafficUsed = 1000 })
+		xs := &XrayService{}
+		xs.IsNeedRestartAndSetFalse()
+		if err := svc.Suspend(&admin, u.Id, true); err != nil {
+			t.Fatal(err)
+		}
+		if enabled(rec.Id) {
+			t.Fatal("suspension left the client enabled")
+		}
+		if !xs.IsNeedRestartAndSetFalse() {
+			t.Fatal("suspension did not arm the restart that cuts live sessions")
+		}
+		if err := svc.Suspend(&admin, u.Id, false); err != nil {
+			t.Fatal(err)
+		}
+		var paused int64
+		if err := db.Model(&model.ResellerPausedClient{}).Where("user_id = ?", u.Id).Count(&paused).Error; err != nil {
+			t.Fatal(err)
+		}
+		if a := account(u.Id); !enabled(rec.Id) || paused != 0 || !a.BudgetBlocked {
+			t.Fatalf("unsuspend under block: enabled=%v paused=%d blocked=%v", enabled(rec.Id), paused, a.BudgetBlocked)
+		}
+	})
 	t.Run("a due monthly cycle resets usage once and restores paused clients", func(t *testing.T) {
 		u, rec := newAccount("cycle-owner", func(a *model.ResellerAccount) {
 			a.ResetCycle, a.TrafficUsed, a.BudgetBlocked, a.PeriodStartedAt = "monthly", 1000, true, time.Now().UnixMilli()-40*day
@@ -142,8 +166,8 @@ func TestResellerCyclesAndDepletionPolicyPostgres(t *testing.T) {
 		if a := account(u.Id); a.TrafficUsed != 0 || a.BudgetBlocked || a.PeriodStartedAt == 0 || !enabled(rec.Id) {
 			t.Fatalf("manual reset left %+v enabled=%v", a, enabled(rec.Id))
 		}
-		if count("reset", 0) < 2 || count("restored", u.Id) != 1 {
-			t.Fatalf("manual reset notices: reset=%d restored=%d", count("reset", 0), count("restored", u.Id))
+		if count("reset", u.Id) != 1 || count("restored", u.Id) != 1 {
+			t.Fatalf("manual reset notices: reset=%d restored=%d", count("reset", u.Id), count("restored", u.Id))
 		}
 	})
 	t.Run("switching a cycle on anchors the period without forgiving usage", func(t *testing.T) {

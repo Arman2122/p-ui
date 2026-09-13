@@ -378,7 +378,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 |---|---|---|
 | `@every 1s` | `check_xray_running_job` | Restart Xray if it died (2 consecutive down checks) |
 | `@every 30s` | (inline func in `startTask`) | Debounced Xray restart — consumes the "need restart" flag (§5.1) |
-| `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay); run the reseller budget and group quota pass (`enforceProductQuotas`, §5.10) and cut the sessions of every client either switched off (`job/client_cut.go`) |
+| `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay); run the reseller budget and group quota pass (`enforceProductQuotas`, §5.10) and cut the sessions of every client either switched off (`service/client_cut.go`) |
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation; push global usage and each client's resolved speed ladder to nodes |
 | `@every 10s` | `core_policy` | Run the plan cycle pass (scheduled traffic resets, depletion notices — §5.9) and the reseller budget pass (§5.10, cutting what it switched off); converge shaping and in-core rates; observe every core's sessions and every node's reported sightings, decide each client's IP cap, cut the over-cap device through the core that saw it or record a `client_bans` row, converge the panel's own nft ban set on the rows, and publish `client.device_limit` (`internal/web/job/core_policy.go`) |
@@ -518,13 +518,15 @@ flips `budget_blocked` first (the owner gate every re-enable reads, `ValidateCli
 then pauses or restores clients through `ClientService.Update` — never a direct core call —
 remembering what it paused in `reseller_paused_clients` so a top-up restores exactly those.
 The emails it switched off come back to the job, which feeds them through
-`cutDisabledClients` (`job/client_cut.go`): the same `restartXrayOnClientDisable` gate as
-per-client depletion, forced because a hot user removal never closes an Xray tunnel that is
-already up. Only a traffic depletion honours `block`; a lapsed term and a suspension always
-cut. Every account transition — ninety percent of traffic, depletion, seven days before the
+`service.CutDisabledClients` (`service/client_cut.go`), and `Suspend` calls the same helper
+after releasing the lock: the same `restartXrayOnClientDisable` gate as per-client depletion,
+forced because a hot user removal never closes an Xray tunnel that is already up. Only a
+traffic depletion honours `block`; a lapsed term and a suspension always cut, and once the
+reason to pause is gone the paused clients come back even while `block` still refuses
+provisioning. Every account transition — ninety percent of traffic, depletion, seven days before the
 term ends, expiry, restoration, a period reset — is announced once, by a conditional update on
-the `*_warned_at` stamps or the `budget_blocked` flip, into both the administrator and the
-reseller activity feeds and onto the bus as `reseller.budget` (Telegram and email templates
+the `*_warned_at` stamps or the `budget_blocked` flip, into the reseller's activity feed
+(administrators read every audience) and onto the bus as `reseller.budget` (Telegram and email templates
 under `tgbot.messages.eventReseller*`).
 
 **Lock discipline:** the lock transaction never holds a client row. Every write inside
@@ -627,7 +629,7 @@ for AutoMigrate in `internal/database/db.go`.
 | **Frontend route / screen** | `frontend/src/pages/<area>/`, `frontend/src/routes.tsx` | `frontend/src/api/queries/` |
 | **Frontend ↔ backend type mismatch** | regenerate: `cd frontend && npm run gen` (`tools/openapigen`) | `frontend/src/generated/` |
 | **System status / CPU / metrics** | `service/server.go`, `service/xray_metrics.go`, `service/metric_history.go` | `controller/server.go`, gopsutil |
-| A **reseller's** client keeps its tunnel after the budget ran out, or comes back too early | `service/reseller_budget.go` (`convergeBudgetLocked`, `resellerNeedsPass`), `job/client_cut.go` | the account's `onDepletion`; `restartXrayOnClientDisable`; `reseller_paused_clients` |
+| A **reseller's** client keeps its tunnel after the budget ran out, or comes back too early | `service/reseller_budget.go` (`convergeBudgetLocked`, `resellerNeedsPass`, `Suspend`), `service/client_cut.go` | the account's `onDepletion`; `restartXrayOnClientDisable`; `reseller_paused_clients` |
 | Reseller **usage** looks wrong (refunded, double-counted, or a transfer moved old bytes) | `internal/database/reseller_usage.sql` (`pui_reseller_usage_observe`, `pui_reseller_owner_changed`) | `reseller_usage_sources` cursors; `reseller_stale_transfer_test.go` |
 | A reseller **notice** never arrived, or arrived on every tick | `service/reseller_budget.go` (`settleWarning`, the `budget_blocked` flip, `publish`) | `traffic_warned_at` / `expiry_warned_at`; the `reseller.budget` toggle in notification settings |
 | **Assigning or releasing** a reseller's client is refused, or a plan vanished with the move | `service/reseller_transfer.go` (`validateResellerIntake`, `transferClientsTx`) | `reseller_constraints.sql` triggers; `UnassignPlanTx` |
