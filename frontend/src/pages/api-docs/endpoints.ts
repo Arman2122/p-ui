@@ -2703,6 +2703,20 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       ]
     },
     {
+      method: 'POST',
+      path: '/panel/api/resellers/:id/reset-usage',
+      summary: 'Zero the actual usage counter and start a new usage period',
+      description: 'Clients paused by a traffic depletion come back. The allocation ledger and per-client counters are untouched; a configured reset cycle does the same on schedule.',
+      params: [
+        {
+          name: 'id',
+          in: 'path',
+          type: 'integer',
+          desc: 'Owned resource ID'
+        }
+      ]
+    },
+    {
       method: 'GET',
       path: '/panel/api/reseller/dashboard',
       summary: 'Read owned account usage, client attention, grants and quota allocation history',

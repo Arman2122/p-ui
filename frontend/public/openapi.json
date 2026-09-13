@@ -5389,6 +5389,21 @@
             "example": true,
             "type": "boolean"
           },
+          "onDepletion": {
+            "description": "Only the traffic axis is soft: block refuses new provisioning and keeps clients online.",
+            "example": "disable",
+            "type": "string"
+          },
+          "periodStartedAt": {
+            "description": "The cycle anchor: set when a cycle is switched on and at every usage reset.",
+            "example": 1790000000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "resetCycle": {
+            "example": "monthly",
+            "type": "string"
+          },
           "suspended": {
             "example": false,
             "type": "boolean"
@@ -5432,6 +5447,9 @@
           "expiresAt",
           "name",
           "notifyOnDepletion",
+          "onDepletion",
+          "periodStartedAt",
+          "resetCycle",
           "suspended",
           "trafficAllocated",
           "trafficLimit",
@@ -5745,8 +5763,16 @@
             "example": true,
             "type": "boolean"
           },
+          "onDepletion": {
+            "example": "disable",
+            "type": "string"
+          },
           "password": {
             "example": "use-a-unique-password",
+            "type": "string"
+          },
+          "resetCycle": {
+            "example": "none",
             "type": "string"
           },
           "trafficLimit": {
@@ -5772,7 +5798,9 @@
           "name",
           "note",
           "notifyOnDepletion",
+          "onDepletion",
           "password",
+          "resetCycle",
           "trafficLimit",
           "username"
         ],
@@ -5966,6 +5994,11 @@
             },
             "type": "array"
           },
+          "nextResetAt": {
+            "example": 1792000000000,
+            "format": "int64",
+            "type": "integer"
+          },
           "trafficUsed": {
             "example": 10737418240,
             "format": "int64",
@@ -5980,6 +6013,7 @@
           "account",
           "clients",
           "inboundIds",
+          "nextResetAt",
           "trafficUsed",
           "username"
         ],
@@ -23116,6 +23150,9 @@
                         "name": "Sina M.",
                         "note": "Partner account",
                         "notifyOnDepletion": true,
+                        "onDepletion": "disable",
+                        "periodStartedAt": 1790000000000,
+                        "resetCycle": "monthly",
                         "suspended": false,
                         "trafficAllocated": 107374182400,
                         "trafficLimit": 536870912000,
@@ -23128,6 +23165,7 @@
                         1,
                         2
                       ],
+                      "nextResetAt": 1792000000000,
                       "trafficUsed": 10737418240,
                       "username": "sina"
                     }
@@ -23216,8 +23254,16 @@
                     "example": true,
                     "type": "boolean"
                   },
+                  "onDepletion": {
+                    "example": "disable",
+                    "type": "string"
+                  },
                   "password": {
                     "example": "use-a-unique-password",
+                    "type": "string"
+                  },
+                  "resetCycle": {
+                    "example": "none",
                     "type": "string"
                   },
                   "trafficLimit": {
@@ -23254,7 +23300,9 @@
                 "name": "Sina M.",
                 "note": "Partner account",
                 "notifyOnDepletion": true,
+                "onDepletion": "disable",
                 "password": "use-a-unique-password",
+                "resetCycle": "none",
                 "trafficLimit": 536870912000,
                 "username": "sina"
               }
@@ -23297,6 +23345,9 @@
                       "name": "Sina M.",
                       "note": "Partner account",
                       "notifyOnDepletion": true,
+                      "onDepletion": "disable",
+                      "periodStartedAt": 1790000000000,
+                      "resetCycle": "monthly",
                       "suspended": false,
                       "trafficAllocated": 107374182400,
                       "trafficLimit": 536870912000,
@@ -23309,6 +23360,7 @@
                       1,
                       2
                     ],
+                    "nextResetAt": 1792000000000,
                     "trafficUsed": 10737418240,
                     "username": "sina"
                   }
@@ -23373,6 +23425,9 @@
                       "name": "Sina M.",
                       "note": "Partner account",
                       "notifyOnDepletion": true,
+                      "onDepletion": "disable",
+                      "periodStartedAt": 1790000000000,
+                      "resetCycle": "monthly",
                       "suspended": false,
                       "trafficAllocated": 107374182400,
                       "trafficLimit": 536870912000,
@@ -23385,6 +23440,7 @@
                       1,
                       2
                     ],
+                    "nextResetAt": 1792000000000,
                     "trafficUsed": 10737418240,
                     "username": "sina"
                   }
@@ -23557,8 +23613,16 @@
                     "example": true,
                     "type": "boolean"
                   },
+                  "onDepletion": {
+                    "example": "disable",
+                    "type": "string"
+                  },
                   "password": {
                     "example": "use-a-unique-password",
+                    "type": "string"
+                  },
+                  "resetCycle": {
+                    "example": "none",
                     "type": "string"
                   },
                   "trafficLimit": {
@@ -23594,7 +23658,9 @@
                 "name": "Sina M.",
                 "note": "Partner account",
                 "notifyOnDepletion": true,
+                "onDepletion": "disable",
                 "password": "use-a-unique-password",
+                "resetCycle": "none",
                 "trafficLimit": 536870912000,
                 "username": "sina"
               }
@@ -23637,6 +23703,9 @@
                       "name": "Sina M.",
                       "note": "Partner account",
                       "notifyOnDepletion": true,
+                      "onDepletion": "disable",
+                      "periodStartedAt": 1790000000000,
+                      "resetCycle": "monthly",
                       "suspended": false,
                       "trafficAllocated": 107374182400,
                       "trafficLimit": 536870912000,
@@ -23649,6 +23718,7 @@
                       1,
                       2
                     ],
+                    "nextResetAt": 1792000000000,
                     "trafficUsed": 10737418240,
                     "username": "sina"
                   }
@@ -23795,6 +23865,57 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/resellers/{id}/reset-usage": {
+      "post": {
+        "tags": [
+          "Resellers"
+        ],
+        "summary": "Zero the actual usage counter and start a new usage period",
+        "operationId": "post_panel_api_resellers_id_reset_usage",
+        "description": "Clients paused by a traffic depletion come back. The allocation ledger and per-client counters are untouched; a configured reset cycle does the same on schedule.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Owned resource ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response",

@@ -1263,6 +1263,9 @@ export const ResellerAccountSchema = z.object({
   name: z.string(),
   note: z.string().optional(),
   notifyOnDepletion: z.boolean(),
+  onDepletion: z.string(),
+  periodStartedAt: z.number().int(),
+  resetCycle: z.string(),
   suspended: z.boolean(),
   trafficAllocated: z.number().int(),
   trafficLimit: z.number().int(),
@@ -1340,7 +1343,9 @@ export const ResellerInputSchema = z.object({
   name: z.string(),
   note: z.string(),
   notifyOnDepletion: z.boolean(),
+  onDepletion: z.string(),
   password: z.string(),
+  resetCycle: z.string(),
   trafficLimit: z.number().int(),
   username: z.string(),
 });
@@ -1404,6 +1409,7 @@ export const ResellerViewSchema = z.object({
   account: z.lazy(() => ResellerAccountSchema),
   clients: z.number().int(),
   inboundIds: z.array(z.number().int()),
+  nextResetAt: z.number().int(),
   trafficUsed: z.number().int(),
   username: z.string(),
 });

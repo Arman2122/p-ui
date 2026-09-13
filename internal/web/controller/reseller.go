@@ -41,6 +41,7 @@ func NewResellerController(api *gin.RouterGroup) *ResellerController {
 	admin.POST("/:id/update", a.update)
 	admin.POST("/:id/suspend", a.suspend)
 	admin.POST("/:id/top-up", a.topUp)
+	admin.POST("/:id/reset-usage", a.resetUsage)
 	return a
 }
 
@@ -132,6 +133,10 @@ func (a *ResellerController) topUp(c *gin.Context) {
 		return
 	}
 	resellerResponse(c, nil, a.service.TopUp(session.GetLoginUser(c), resellerID(c), in.Traffic, in.Days, in.Clients))
+}
+
+func (a *ResellerController) resetUsage(c *gin.Context) {
+	resellerResponse(c, nil, a.service.ResetUsage(session.GetLoginUser(c), resellerID(c)))
 }
 
 func (a *ResellerController) dashboard(c *gin.Context) {

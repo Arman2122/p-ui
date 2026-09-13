@@ -1404,6 +1404,9 @@ export const EXAMPLES: Record<string, unknown> = {
     "name": "Sina M.",
     "note": "Partner account",
     "notifyOnDepletion": true,
+    "onDepletion": "disable",
+    "periodStartedAt": 1790000000000,
+    "resetCycle": "monthly",
     "suspended": false,
     "trafficAllocated": 107374182400,
     "trafficLimit": 536870912000,
@@ -1544,7 +1547,9 @@ export const EXAMPLES: Record<string, unknown> = {
     "name": "Sina M.",
     "note": "Partner account",
     "notifyOnDepletion": true,
+    "onDepletion": "disable",
     "password": "use-a-unique-password",
+    "resetCycle": "none",
     "trafficLimit": 536870912000,
     "username": "sina"
   },
@@ -1601,6 +1606,9 @@ export const EXAMPLES: Record<string, unknown> = {
       "name": "Sina M.",
       "note": "Partner account",
       "notifyOnDepletion": true,
+      "onDepletion": "disable",
+      "periodStartedAt": 1790000000000,
+      "resetCycle": "monthly",
       "suspended": false,
       "trafficAllocated": 107374182400,
       "trafficLimit": 536870912000,
@@ -1613,6 +1621,7 @@ export const EXAMPLES: Record<string, unknown> = {
       1,
       2
     ],
+    "nextResetAt": 1792000000000,
     "trafficUsed": 10737418240,
     "username": "sina"
   },

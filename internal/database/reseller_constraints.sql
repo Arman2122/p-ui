@@ -13,6 +13,8 @@ BEGIN
     ('clients','fk_client_reseller_owner','FOREIGN KEY (owner_user_id) REFERENCES reseller_accounts(user_id) ON DELETE RESTRICT'),
     ('clients','chk_reseller_no_global_group','CHECK (owner_user_id IS NULL OR COALESCE(group_name,'''') = '''')'),
     ('reseller_accounts','chk_reseller_budget','CHECK (traffic_limit >= 0 AND traffic_allocated >= 0 AND traffic_used >= 0 AND client_cap >= 0 AND expires_at >= 0)'),
+    ('reseller_accounts','chk_reseller_on_depletion','CHECK (on_depletion IN (''disable'',''block''))'),
+    ('reseller_accounts','chk_reseller_reset_cycle','CHECK (reset_cycle IN (''none'',''weekly'',''monthly''))'),
     ('reseller_inbound_grants','fk_reseller_grant_user','FOREIGN KEY (user_id) REFERENCES reseller_accounts(user_id) ON DELETE CASCADE'),
     ('reseller_inbound_grants','fk_reseller_grant_inbound','FOREIGN KEY (inbound_id) REFERENCES inbounds(id) ON DELETE CASCADE'),
     ('reseller_paused_clients','fk_reseller_paused_user','FOREIGN KEY (user_id) REFERENCES reseller_accounts(user_id) ON DELETE CASCADE'),

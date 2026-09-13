@@ -5341,6 +5341,21 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": true,
         "type": "boolean"
       },
+      "onDepletion": {
+        "description": "Only the traffic axis is soft: block refuses new provisioning and keeps clients online.",
+        "example": "disable",
+        "type": "string"
+      },
+      "periodStartedAt": {
+        "description": "The cycle anchor: set when a cycle is switched on and at every usage reset.",
+        "example": 1790000000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "resetCycle": {
+        "example": "monthly",
+        "type": "string"
+      },
       "suspended": {
         "example": false,
         "type": "boolean"
@@ -5384,6 +5399,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "expiresAt",
       "name",
       "notifyOnDepletion",
+      "onDepletion",
+      "periodStartedAt",
+      "resetCycle",
       "suspended",
       "trafficAllocated",
       "trafficLimit",
@@ -5697,8 +5715,16 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": true,
         "type": "boolean"
       },
+      "onDepletion": {
+        "example": "disable",
+        "type": "string"
+      },
       "password": {
         "example": "use-a-unique-password",
+        "type": "string"
+      },
+      "resetCycle": {
+        "example": "none",
         "type": "string"
       },
       "trafficLimit": {
@@ -5724,7 +5750,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "name",
       "note",
       "notifyOnDepletion",
+      "onDepletion",
       "password",
+      "resetCycle",
       "trafficLimit",
       "username"
     ],
@@ -5918,6 +5946,11 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "nextResetAt": {
+        "example": 1792000000000,
+        "format": "int64",
+        "type": "integer"
+      },
       "trafficUsed": {
         "example": 10737418240,
         "format": "int64",
@@ -5932,6 +5965,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "account",
       "clients",
       "inboundIds",
+      "nextResetAt",
       "trafficUsed",
       "username"
     ],

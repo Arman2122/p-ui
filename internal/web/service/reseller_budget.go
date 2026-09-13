@@ -15,6 +15,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/eventbus"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/policy"
 	"github.com/Arman2122/p-ui/internal/web/session"
 )
 
@@ -108,8 +109,57 @@ func resellerNeedsPass(a *model.ResellerAccount, now time.Time) bool {
 	ms := now.UnixMilli()
 	over := a.TrafficLimit > 0 && a.TrafficUsed >= a.TrafficLimit
 	expired := a.ExpiresAt > 0 && a.ExpiresAt <= ms
-	return a.Suspended || a.BudgetBlocked || over || expired ||
+	return a.Suspended || a.BudgetBlocked || over || expired || resellerResetDue(a, now) ||
 		resellerTrafficNear(a) != (a.TrafficWarnedAt > 0) || resellerExpiryNear(a, ms) != (a.ExpiryWarnedAt > 0)
+}
+
+func resellerNextReset(a *model.ResellerAccount) int64 {
+	anchor := a.PeriodStartedAt
+	if anchor == 0 {
+		anchor = a.CreatedAt
+	}
+	if a.ResetCycle == "none" || anchor == 0 {
+		return 0
+	}
+	next := policy.NextReset(time.UnixMilli(anchor), a.ResetCycle)
+	if next.IsZero() {
+		return 0
+	}
+	return next.UnixMilli()
+}
+
+func resellerResetDue(a *model.ResellerAccount, now time.Time) bool {
+	next := resellerNextReset(a)
+	return next > 0 && next <= now.UnixMilli()
+}
+
+// resetUsageLocked opens a new period: the counter is zeroed, the ledger and per-client cursors stay.
+func (s *ResellerService) resetUsageLocked(a *model.ResellerAccount, now time.Time) error {
+	updates := map[string]any{"traffic_used": 0, "period_started_at": now.UnixMilli(), "traffic_warned_at": 0}
+	if err := database.GetDB().Model(&model.ResellerAccount{}).Where("user_id = ?", a.UserID).Updates(updates).Error; err != nil {
+		return err
+	}
+	a.TrafficUsed, a.PeriodStartedAt, a.TrafficWarnedAt = 0, now.UnixMilli(), 0
+	s.publish([]ResellerNotice{s.notice(a, resellerNoticeReset, 0, now)})
+	return nil
+}
+
+func (s *ResellerService) ResetUsage(user *model.User, id int) error {
+	if !session.IsAdminUser(user) {
+		return ErrResellerForbidden
+	}
+	return s.WithAccountLock(id, func() error {
+		now := time.Now()
+		var a model.ResellerAccount
+		if err := database.GetDB().First(&a, "user_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := s.resetUsageLocked(&a, now); err != nil {
+			return err
+		}
+		_, err := s.convergeBudgetLocked(id, now)
+		return err
+	})
 }
 
 func resellerTrafficNear(a *model.ResellerAccount) bool {
@@ -158,11 +208,17 @@ func (s *ResellerService) convergeBudgetLocked(id int, now time.Time) ([]string,
 	if err := db.First(&a, "user_id = ?", id).Error; err != nil {
 		return nil, err
 	}
+	if resellerResetDue(&a, now) {
+		if err := s.resetUsageLocked(&a, now); err != nil {
+			return nil, err
+		}
+	}
 	ms := now.UnixMilli()
 	over := a.TrafficLimit > 0 && a.TrafficUsed >= a.TrafficLimit
 	expired := a.ExpiresAt > 0 && a.ExpiresAt <= ms
 	blocked := over || expired
-	disable := blocked || a.Suspended
+	// A lapsed term or a suspension always cuts; only a traffic depletion honours the soft policy.
+	disable := expired || a.Suspended || over && a.OnDepletion != "block"
 	if disable {
 		if err := db.Transaction(func(tx *gorm.DB) error {
 			var ids []int
@@ -212,6 +268,10 @@ func (s *ResellerService) convergeBudgetLocked(id int, now time.Time) ([]string,
 	}
 	notices = append(notices, notice...)
 	s.publish(notices)
+	// Blocked under the soft policy: nothing new is cut and nothing paused comes back yet.
+	if !disable && blocked {
+		return nil, nil
+	}
 	var recs []model.ClientRecord
 	if err := db.Where("owner_user_id = ? AND id IN (?)", id, db.Model(&model.ResellerPausedClient{}).Select("client_id").Where("user_id = ?", id)).Find(&recs).Error; err != nil {
 		return nil, err

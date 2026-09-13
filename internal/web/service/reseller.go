@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/mail"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +43,8 @@ type ResellerInput struct {
 	AllowSuspend      bool   `json:"allowSuspend" example:"true"`
 	AllowTopUp        bool   `json:"allowTopUp" example:"true"`
 	NotifyOnDepletion bool   `json:"notifyOnDepletion" example:"true"`
+	OnDepletion       string `json:"onDepletion" example:"disable"`
+	ResetCycle        string `json:"resetCycle" example:"none"`
 	Note              string `json:"note" example:"Partner account"`
 }
 
@@ -51,6 +54,7 @@ type ResellerView struct {
 	Clients     int64                 `json:"clients" example:"12"`
 	TrafficUsed int64                 `json:"trafficUsed" example:"10737418240"`
 	InboundIDs  []int                 `json:"inboundIds" example:"[1,2]"`
+	NextResetAt int64                 `json:"nextResetAt" example:"1792000000000"`
 }
 
 type ResellerPermissions struct {
@@ -161,6 +165,7 @@ func (s *ResellerService) Get(user *model.User, id int) (*ResellerView, error) {
 	if err := db.Model(&model.ResellerInboundGrant{}).Where("user_id = ?", id).Order("inbound_id").Pluck("inbound_id", &out.InboundIDs).Error; err != nil {
 		return nil, err
 	}
+	out.NextResetAt = resellerNextReset(&a)
 	return out, nil
 }
 
@@ -197,6 +202,15 @@ func validateResellerInput(in *ResellerInput, creating bool) error {
 		return fmt.Errorf("%w: password must contain 12 to 72 bytes", ErrResellerInvalid)
 	}
 	if in.ClientCap < 0 || in.TrafficLimit < 0 || in.ExpiresAt < 0 || in.ExpiresAt > 0 && in.ExpiresAt <= time.Now().UnixMilli() {
+		return ErrResellerInvalid
+	}
+	if in.OnDepletion == "" {
+		in.OnDepletion = "disable"
+	}
+	if in.ResetCycle == "" {
+		in.ResetCycle = "none"
+	}
+	if !slices.Contains([]string{"disable", "block"}, in.OnDepletion) || !slices.Contains([]string{"none", "weekly", "monthly"}, in.ResetCycle) {
 		return ErrResellerInvalid
 	}
 	return nil
@@ -279,7 +293,12 @@ func (s *ResellerService) Save(user *model.User, id int, in ResellerInput) (*Res
 			id = u.Id
 			a.UserID, a.Name, a.Email, a.TrafficLimit, a.ClientCap, a.ExpiresAt = id, in.Name, in.Email, in.TrafficLimit, in.ClientCap, in.ExpiresAt
 			a.AllowPlans, a.AllowReset, a.AllowExtend, a.AllowSuspend, a.AllowTopUp = in.AllowPlans, in.AllowReset, in.AllowExtend, in.AllowSuspend, in.AllowTopUp
-			a.NotifyOnDepletion, a.Note = in.NotifyOnDepletion, in.Note
+			a.NotifyOnDepletion, a.Note, a.OnDepletion = in.NotifyOnDepletion, in.Note, in.OnDepletion
+			// Switching a cycle on starts the period now; nothing already spent is forgiven.
+			if in.ResetCycle != a.ResetCycle && in.ResetCycle != "none" {
+				a.PeriodStartedAt = time.Now().UnixMilli()
+			}
+			a.ResetCycle = in.ResetCycle
 			if err := tx.Omit("TrafficUsed", "BudgetBlocked", "TrafficWarnedAt", "ExpiryWarnedAt").Save(&a).Error; err != nil {
 				return err
 			}

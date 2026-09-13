@@ -19,8 +19,13 @@ type ResellerAccount struct {
 	AllowTopUp        bool  `json:"allowTopUp" example:"true"`
 	NotifyOnDepletion bool  `json:"notifyOnDepletion" example:"true"`
 	// Threshold notices fire once: the stamp is cleared when the account leaves the band.
-	TrafficWarnedAt int64  `json:"-" gorm:"not null;default:0"`
-	ExpiryWarnedAt  int64  `json:"-" gorm:"not null;default:0"`
+	TrafficWarnedAt int64 `json:"-" gorm:"not null;default:0"`
+	ExpiryWarnedAt  int64 `json:"-" gorm:"not null;default:0"`
+	// Only the traffic axis is soft: block refuses new provisioning and keeps clients online.
+	OnDepletion string `json:"onDepletion" gorm:"not null;default:'disable'" example:"disable"`
+	ResetCycle  string `json:"resetCycle" gorm:"not null;default:'none'" example:"monthly"`
+	// The cycle anchor: set when a cycle is switched on and at every usage reset.
+	PeriodStartedAt int64  `json:"periodStartedAt" gorm:"not null;default:0" example:"1790000000000"`
 	Note            string `json:"note,omitempty" example:"Partner account"`
 	CreatedAt       int64  `json:"createdAt" gorm:"autoCreateTime:milli" example:"1790000000000"`
 	UpdatedAt       int64  `json:"updatedAt" gorm:"autoUpdateTime:milli" example:"1790000000000"`

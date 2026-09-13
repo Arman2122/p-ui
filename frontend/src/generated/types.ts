@@ -1181,6 +1181,9 @@ export interface ResellerAccount {
   name: string;
   note?: string;
   notifyOnDepletion: boolean;
+  onDepletion: string;
+  periodStartedAt: number;
+  resetCycle: string;
   suspended: boolean;
   trafficAllocated: number;
   trafficLimit: number;
@@ -1252,7 +1255,9 @@ export interface ResellerInput {
   name: string;
   note: string;
   notifyOnDepletion: boolean;
+  onDepletion: string;
   password: string;
+  resetCycle: string;
   trafficLimit: number;
   username: string;
 }
@@ -1307,6 +1312,7 @@ export interface ResellerView {
   account: ResellerAccount;
   clients: number;
   inboundIds: number[];
+  nextResetAt: number;
   trafficUsed: number;
   username: string;
 }
