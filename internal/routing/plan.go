@@ -331,9 +331,8 @@ const (
 	narrowRefused
 )
 
-// narrowToTCP pins a rule bound for a TCP-only exit to network "tcp". UDP alone
-// is refused; both, or nothing said, is narrowed and the operator told, so no
-// rule quietly leaves UDP to the next rule or the default route.
+// narrowToTCP pins a rule bound for a TCP-only exit to "tcp": UDP alone is
+// refused; both, or nothing said, is narrowed and the operator warned.
 func narrowToTCP(body map[string]json.RawMessage) narrowResult {
 	raw, ok := body["network"]
 	if !ok {

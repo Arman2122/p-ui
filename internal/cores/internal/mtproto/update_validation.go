@@ -38,8 +38,7 @@ func validateUpdateConfig(ctx context.Context, binary string) error {
 }
 
 // validateRunningConfigs asks the candidate about every file a sidecar runs off
-// now, its relay included, so an install never lands a binary that would take
-// a working inbound down at its next restart.
+// now, relay included, so an install never lands a binary a live inbound refuses.
 func validateRunningConfigs(ctx context.Context, binary string, configs []engine.RunningConfig) error {
 	for _, cfg := range configs {
 		if err := engine.CheckConfig(ctx, binary, cfg.Path); err != nil {

@@ -362,3 +362,24 @@ func selfSignedCert(t *testing.T, host string) (certFile, keyFile string) {
 	}
 	return certFile, keyFile
 }
+
+// The install dry-run against the real binary: every key the panel can write,
+// then the file a live inbound and its relay run off. A refusal here refuses
+// every install, so the check is pinned to the build the panel ships with.
+func TestRealBinaryAcceptsTheInstallDryRun(t *testing.T) {
+	binary := os.Getenv("MTG_E2E_BINARY")
+	if binary == "" {
+		t.Skip("MTG_E2E_BINARY not set")
+	}
+	if err := validateUpdateConfig(t.Context(), binary); err != nil {
+		t.Fatalf("the synthetic config was refused: %v", err)
+	}
+	c, _ := startRealWebInbound(t, 11, 24740)
+	running := c.mgr.RunningConfigs()
+	if len(running) != 1 || !running[0].WebRelay {
+		t.Fatalf("running configs = %+v; want the one inbound with its relay", running)
+	}
+	if err := validateRunningConfigs(t.Context(), binary, running); err != nil {
+		t.Fatalf("a live inbound's file was refused: %v", err)
+	}
+}

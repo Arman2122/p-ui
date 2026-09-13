@@ -124,9 +124,8 @@ func guardedDialer(next Dialer) Dialer {
 	}
 }
 
-// ownPublicRefused is the one answer Xray cannot give for a bridged forward: its
-// private block covers loopback and RFC 1918, but the box's public address is
-// no more private than any other, and dialling it lands on this host.
+// ownPublicRefused is the answer Xray's private block cannot give: the box's own
+// public address looks like any other, and dialling it lands on this host.
 func ownPublicRefused(addr netip.Addr) error {
 	addr = addr.Unmap()
 	for _, p := range reservedDestinations {

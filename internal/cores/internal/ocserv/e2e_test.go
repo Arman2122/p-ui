@@ -604,3 +604,41 @@ func freeUDPAddr(t *testing.T) string {
 	_ = conn.Close()
 	return addr
 }
+
+// "Redirect off" renders a route for the pool alone; the daemon, not the
+// renderer, is what says whether that file is one it runs.
+func TestRealDaemonAcceptsTheSplitRouteConfig(t *testing.T) {
+	daemon, ctl, _ := e2eGate(t)
+	c := newE2ECore(t, daemon, ctl)
+	raw, err := c.MintInstance(Kind, `{"subnet":"10.11.0.0/24","redirectGateway":false}`, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := parseSettings(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur := &instance{
+		inst:     core.Instance{ID: 7, Kind: Kind, Tag: "ocserv-7", Port: freeTCPPort(t), Settings: raw, Users: []core.User{e2eUser(1)}},
+		settings: settings,
+		ledger:   radius.NewLedger("ocserv-7"),
+		paths:    pathsIn(filepath.Join(c.stateDir(), "7")),
+	}
+	cur.userByName = usersByName(cur.inst.Users)
+	c.mu.Lock()
+	err = c.writeFilesLocked(cur)
+	c.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	conf, err := os.ReadFile(cur.paths.conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(conf), "route = 10.11.0.0/24\n") || strings.Contains(string(conf), "route = default") {
+		t.Fatalf("rendered routes:\n%s", conf)
+	}
+	if err := c.testConfig(context.Background(), cur.paths.conf); err != nil {
+		t.Fatalf("ocserv --test-config: %v", err)
+	}
+}
