@@ -45,15 +45,15 @@ _openapi:
         refused.
       url: '#the-installed-build-and-for-a-core-that-can-install-one-releases-published-by-its-channel-the-list-is-cached-for-15-minutes-and-a-stale-list-is-served-over-a-failed-refresh-embedded-ssh-reports-the-panel-build-and-compiled-ssh-library-version-it-updates-with-the-panel-and-has-no-independent-install-channel-a-core-without-version-reporting-is-refused'
     - depth: 2
-      title: 'Download, verify and install one listed release of this core’s daemon.
-        The binary is staged beside the installed one, checked (a digest or
-        checksum the channel publishes, and for Xray whether the new binary
-        loads this panel’s config), then renamed into place. Nothing is
-        restarted: the running daemon keeps the old binary until POST
-        /cores/:id/restart. A version the channel does not list is refused. Only
-        cores that manage their own releases accept this — Xray and MTProto
-        today.'
-      url: '#download-verify-and-install-one-listed-release-of-this-cores-daemon-the-binary-is-staged-beside-the-installed-one-checked-a-digest-or-checksum-the-channel-publishes-and-for-xray-whether-the-new-binary-loads-this-panels-config-then-renamed-into-place-nothing-is-restarted-the-running-daemon-keeps-the-old-binary-until-post-coresidrestart-a-version-the-channel-does-not-list-is-refused-only-cores-that-manage-their-own-releases-accept-this--xray-and-mtproto-today'
+      title: Download and stage a listed Xray, MTProto or compatible sing-box release.
+        The archive checksum and executable version must match; Xray validates
+        its current config, and sing-box validates its required features,
+        supported protocols and managed configs before atomic replacement.
+        Nothing is restarted automatically. Running managed instances use the
+        new binary after POST /cores/:id/restart; other host processes remain
+        outside this action. System and embedded cores do not accept independent
+        binary installation.
+      url: '#download-and-stage-a-listed-xray-mtproto-or-compatible-sing-box-release-the-archive-checksum-and-executable-version-must-match-xray-validates-its-current-config-and-sing-box-validates-its-required-features-supported-protocols-and-managed-configs-before-atomic-replacement-nothing-is-restarted-automatically-running-managed-instances-use-the-new-binary-after-post-coresidrestart-other-host-processes-remain-outside-this-action-system-and-embedded-cores-do-not-accept-independent-binary-installation'
     - depth: 2
       title: 'The last lines a core’s daemon wrote: the journal under systemd, the
         panel’s own ring under exec, kept across the restart that repairs a
@@ -256,15 +256,15 @@ _openapi:
           panel and has no independent install channel. A core without version
           reporting is refused.
         id: the-installed-build-and-for-a-core-that-can-install-one-releases-published-by-its-channel-the-list-is-cached-for-15-minutes-and-a-stale-list-is-served-over-a-failed-refresh-embedded-ssh-reports-the-panel-build-and-compiled-ssh-library-version-it-updates-with-the-panel-and-has-no-independent-install-channel-a-core-without-version-reporting-is-refused
-      - content: 'Download, verify and install one listed release of this core’s daemon.
-          The binary is staged beside the installed one, checked (a digest or
-          checksum the channel publishes, and for Xray whether the new binary
-          loads this panel’s config), then renamed into place. Nothing is
-          restarted: the running daemon keeps the old binary until POST
-          /cores/:id/restart. A version the channel does not list is refused.
-          Only cores that manage their own releases accept this — Xray and
-          MTProto today.'
-        id: download-verify-and-install-one-listed-release-of-this-cores-daemon-the-binary-is-staged-beside-the-installed-one-checked-a-digest-or-checksum-the-channel-publishes-and-for-xray-whether-the-new-binary-loads-this-panels-config-then-renamed-into-place-nothing-is-restarted-the-running-daemon-keeps-the-old-binary-until-post-coresidrestart-a-version-the-channel-does-not-list-is-refused-only-cores-that-manage-their-own-releases-accept-this--xray-and-mtproto-today
+      - content: Download and stage a listed Xray, MTProto or compatible sing-box
+          release. The archive checksum and executable version must match; Xray
+          validates its current config, and sing-box validates its required
+          features, supported protocols and managed configs before atomic
+          replacement. Nothing is restarted automatically. Running managed
+          instances use the new binary after POST /cores/:id/restart; other host
+          processes remain outside this action. System and embedded cores do not
+          accept independent binary installation.
+        id: download-and-stage-a-listed-xray-mtproto-or-compatible-sing-box-release-the-archive-checksum-and-executable-version-must-match-xray-validates-its-current-config-and-sing-box-validates-its-required-features-supported-protocols-and-managed-configs-before-atomic-replacement-nothing-is-restarted-automatically-running-managed-instances-use-the-new-binary-after-post-coresidrestart-other-host-processes-remain-outside-this-action-system-and-embedded-cores-do-not-accept-independent-binary-installation
       - content: 'The last lines a core’s daemon wrote: the journal under systemd, the
           panel’s own ring under exec, kept across the restart that repairs a
           crash. For a core that runs one daemon per inbound pass

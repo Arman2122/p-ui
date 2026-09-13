@@ -271,7 +271,7 @@ func Register(reg *core.Registry, deps Deps) error {
 	if err := reg.Register(ssh.New(sshDeps(deps))); err != nil {
 		return err
 	}
-	if err := reg.Register(singbox.New(singbox.Deps{Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup})); err != nil {
+	if err := reg.Register(singbox.New(singbox.Deps{Backend: deps.Supervisor, User: deps.DaemonUser, Group: deps.DaemonGroup, Platform: releasePlatform(), HTTPClient: deps.HTTPClient})); err != nil {
 		return err
 	}
 	if err := reg.Register(openvpn.New(openvpnDeps(deps))); err != nil {

@@ -25,6 +25,9 @@ export function coreHostProcesses(core: CoreStatusView) {
 }
 
 export function coreHasOtherProcesses(core: CoreStatusView): boolean { return coreHostProcesses(core).some((process) => !process.managed); }
+export function coreNeedsRestart(core: CoreStatusView): boolean {
+  return coreHostProcesses(core).some((process) => process.managed && process.binaryReplaced && process.state === 'running');
+}
 
 export function coreHasManagedRuntime(core: CoreStatusView): boolean {
   return !!core.pid || core.instances.length > 0 || (core.id === 'xray' && !coreHasOtherProcesses(core));

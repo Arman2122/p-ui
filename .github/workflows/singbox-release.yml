@@ -1,0 +1,75 @@
+name: Compatible sing-box release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable upstream tag in the panel's supported minor line (e.g. v1.14.0)
+        required: true
+        type: string
+      publish:
+        description: Publish the completed release (otherwise keep it as a draft)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: singbox-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [amd64, arm64, armv7, armv6, armv5, '386', s390x]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build verified upstream source with the panel's required features
+        env:
+          SINGBOX_VERSION: ${{ inputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        run: bash tools/build-singbox-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: singbox-${{ matrix.platform }}
+          path: core-release/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: singbox-*
+          path: core-release
+          merge-multiple: true
+      - name: Prepare complete core release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SINGBOX_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          [[ "$SINGBOX_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="singbox-${SINGBOX_VERSION}"
+          printf 'Compatible sing-box %s built from unmodified SagerNet source with the panel-required traffic accounting, QUIC, TLS, and control APIs.\n\nSource: https://github.com/SagerNet/sing-box/tree/%s\n\nInstall stages the binary; restart managed instances to apply it.\n' "$SINGBOX_VERSION" "$SINGBOX_VERSION" > core-release-notes.md
+          if gh release view "$tag" --json isDraft --jq '.isDraft' > release-draft.txt 2>/dev/null; then
+            [[ "$(cat release-draft.txt)" == true ]] || { echo 'Refusing to replace a published core release'; exit 1; }
+          else
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "sing-box ${SINGBOX_VERSION} for Penhoon" --notes-file core-release-notes.md
+          fi
+          gh release upload "$tag" core-release/* --clobber
+          if [[ "$PUBLISH" == true ]]; then
+            gh release edit "$tag" --draft=false --prerelease=false --latest=false
+          fi

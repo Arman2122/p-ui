@@ -50,7 +50,7 @@ func mtgTarball(t *testing.T, pkg, payload string) (archive []byte, sum string) 
 func channel(t *testing.T, tag string, archive []byte, sum string, olderTags ...string) *Core {
 	t.Helper()
 	bare := strings.TrimPrefix(tag, "v")
-	listed := fmt.Sprintf(`{"tag_name":%q},{"tag_name":"v0.0.1-rc1","prerelease":true}`, tag)
+	listed := fmt.Sprintf(`{"tag_name":%q},{"tag_name":"v0.0.1-rc1","prerelease":true},{"tag_name":"v9.9.8","draft":true},{"tag_name":"dev-2af4639"},{"tag_name":"v9.9.9-rc.1"}`, tag)
 	for _, older := range olderTags {
 		listed += fmt.Sprintf(`,{"tag_name":%q}`, older)
 	}
@@ -92,19 +92,93 @@ func TestAvailableListsReleasesAndInstallRefusesTheRest(t *testing.T) {
 	if err != nil || strings.Join(got, ",") != "v9.9.9" {
 		t.Fatalf("Available = %v, %v; want [v9.9.9] with the pre-release left out", got, err)
 	}
-	if err := c.Install(context.Background(), "v9.9.8"); !errors.Is(err, core.ErrUnknownVersion) {
-		t.Fatalf("Install(unlisted) = %v, want ErrUnknownVersion", err)
+	for _, version := range []string{"v9.9.8", "dev-2af4639", "v9.9.9-rc.1"} {
+		if err := c.Install(context.Background(), version); !errors.Is(err, core.ErrUnknownVersion) {
+			t.Fatalf("Install(%s) = %v, want ErrUnknownVersion", version, err)
+		}
 	}
 	if _, err := c.Installed(context.Background()); !errors.Is(err, core.ErrNotInstalled) {
 		t.Fatalf("Installed with no binary = %v, want ErrNotInstalled", err)
 	}
 }
 
-/*
-A failed install must not touch the installed binary: a checksum that does not
-match, or a build that does not know its platform, both return with the old
-sidecar still the one on disk and nothing staged beside it.
-*/
+func TestPublishedChecksumValidatesHex(t *testing.T) {
+	const asset = "mtg-proxy-9.9.9-linux-amd64.tar.gz"
+	for _, value := range []string{strings.Repeat("A", 64), strings.Repeat("z", 64), strings.Repeat("0", 63)} {
+		t.Run(value[:2]+fmt.Sprint(len(value)), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, "%s  %s\n", value, asset)
+			}))
+			defer srv.Close()
+			got, err := publishedSum(context.Background(), srv.Client(), srv.URL, asset)
+			if value == strings.Repeat("A", 64) {
+				if err != nil || got != strings.ToLower(value) {
+					t.Fatalf("publishedSum = %q, %v; want normalized hexadecimal checksum", got, err)
+				}
+				return
+			}
+			want := "mtproto: checksums: malformed entry for " + asset
+			if got != "" || err == nil || err.Error() != want {
+				t.Fatalf("publishedSum = %q, %v; want empty, %q", got, err, want)
+			}
+		})
+	}
+}
+
+func TestInstallRejectsDifferentReportedVersion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("staged shell binary requires a POSIX host")
+	}
+	for _, reported := range []string{"9.9.8", "10.0.0", "dev-2af4639"} {
+		t.Run(reported, func(t *testing.T) {
+			t.Setenv("PUI_BIN_FOLDER", t.TempDir())
+			installed := engine.GetBinaryPath()
+			if err := os.WriteFile(installed, []byte("known-good"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			payload := "#!/bin/sh\necho '" + reported + " (go1.26 test)'\n"
+			archive, sum := mtgTarball(t, "mtg-proxy-9.9.9-linux-amd64", payload)
+			c := channel(t, "v9.9.9", archive, sum)
+			err := c.Install(context.Background(), "v9.9.9")
+			if err == nil || !strings.Contains(err.Error(), "does not match requested v9.9.9") || !strings.Contains(err.Error(), reported) {
+				t.Fatalf("Install = %v; want requested/reported version mismatch", err)
+			}
+			if got, err := os.ReadFile(installed); err != nil || string(got) != "known-good" {
+				t.Fatalf("installed = %q, %v; version mismatch replaced good binary", got, err)
+			}
+			if staged, _ := filepath.Glob(filepath.Join(filepath.Dir(installed), ".mtg-*")); len(staged) != 0 {
+				t.Fatalf("refused install left staged binaries: %v", staged)
+			}
+		})
+	}
+}
+
+func TestAtomicReplacementRejectsCanceledInstall(t *testing.T) {
+	dir := t.TempDir()
+	installed, staged := filepath.Join(dir, "mtg"), filepath.Join(dir, ".mtg-staged")
+	if err := os.WriteFile(installed, []byte("known-good"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("verified-new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := replaceStagedBinary(ctx, staged, installed); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled replacement = %v; want context.Canceled", err)
+	}
+	if got, err := os.ReadFile(installed); err != nil || string(got) != "known-good" {
+		t.Fatalf("installed = %q, %v; canceled commit replaced good binary", got, err)
+	}
+	if err := replaceStagedBinary(context.Background(), staged, installed); err != nil {
+		t.Fatalf("uncanceled replacement: %v", err)
+	}
+	if got, err := os.ReadFile(installed); err != nil || string(got) != "verified-new" {
+		t.Fatalf("installed = %q, %v; want verified replacement", got, err)
+	}
+}
+
+// Failed checksum or platform validation leaves the installed binary intact and no staging files.
 func TestAFailedInstallLeavesTheInstalledBinaryAlone(t *testing.T) {
 	binDir := t.TempDir()
 	t.Setenv("PUI_BIN_FOLDER", binDir)
@@ -198,9 +272,8 @@ func TestInstallFromTheRealChannel(t *testing.T) {
 	}
 }
 
-// A release the panel refuses at boot is neither offered nor installed: the
-// list drops it, and a tarball whose binary reports such a version is refused
-// with the installed one left alone.
+// A release the panel refuses at boot is neither offered nor installed.
+// The installed binary survives even when the refused payload's archive checksum is correct.
 func TestTheInstallerRefusesAReleaseThePanelRefusesAtBoot(t *testing.T) {
 	binDir := t.TempDir()
 	t.Setenv("PUI_BIN_FOLDER", binDir)

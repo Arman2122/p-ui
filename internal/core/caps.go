@@ -559,10 +559,8 @@ replaces the binary on disk and refuses a version Available did not list. It
 does NOT restart the daemon: that is Supervisor's job, and keeping them separate
 is what lets the panel stage an upgrade and apply it when the traffic allows.
 
-Reporting and managing are two capabilities on purpose: ocserv and OpenVPN come
-from apt and sing-box is pinned to the release its adapter was written against,
-so all three can say what is installed and none may install — and a UI that
-hides the install control needs that as a fact, not as an error from Available.
+Reporting and managing are separate: system and embedded cores report versions,
+while downloadable engines validate compatible releases before installation.
 */
 type VersionManager interface {
 	VersionReporter

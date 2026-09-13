@@ -116,7 +116,7 @@ export default function CoreDetailModal({ core, onClose, onRestart, restarting, 
       { key: 'runtime', label: t('pages.cores.runtime'), children: runtime },
       { key: 'logging', label: t('pages.cores.logging'), children: coreCanReadLogs(core) ? <CoreLogsPanel core={core} /> : <Alert type="info" title={t(coreHasManagedRuntime(core) ? 'pages.cores.logsUnavailable' : 'coreRuntime.noManagedActions')} /> },
       { key: 'inbounds', label: t('menu.inbounds'), children: <CoreInbounds core={core} /> },
-      { key: 'version', label: t('pages.cores.columns.version'), children: <CoreVersionsPanel core={core} onInstalled={onInstalled} /> },
+      { key: 'version', label: t('pages.cores.columns.version'), children: <CoreVersionsPanel core={core} onInstalled={onInstalled} onRestart={onRestart} restarting={restarting} /> },
     ]} />
   </Modal>;
 }

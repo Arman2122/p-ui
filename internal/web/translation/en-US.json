@@ -3446,5 +3446,19 @@
     "unavailable": "Unavailable to the panel",
     "hostProcessScope": "Matching executable paths in this network namespace. Other host processes are observed only and remain outside panel control.",
     "noHostProcesses": "No matching process records."
+  },
+  "coreUpdates": {"installedOnDisk": "Installed on disk: {version}",
+    "installSucceeded": "Installed {version} on disk",
+    "installFailed": "Could not install {version}",
+    "refreshFailed": "Could not refresh versions",
+    "refreshAfterInstallFailed": "Installation succeeded; version refresh failed",
+    "invalidResponse": "The server returned an invalid version response.",
+    "runningNeedsRestart": "Installation updates files on disk. Running managed processes change build only when restarted.",
+    "nextStart": "No managed core is running. The installed binary will be used on the next managed start.",
+    "externalUnaffected": "Standalone host processes are unchanged and will not be restarted by the panel.",
+    "restartManaged": "Restart managed runtime",
+    "reinstall": "Reinstall",
+    "installingVersion": "Installing {version}",
+    "restartRequired": "Restart to apply installed binary"
   }
 }

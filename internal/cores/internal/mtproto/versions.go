@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -21,22 +22,12 @@ import (
 	engine "github.com/Arman2122/p-ui/internal/mtproto"
 )
 
-/*
-The release channel is Arman2122/mtg-proxy on GitHub, the fork the release
-workflow already bundles. Each release publishes mtg-proxy-<v>-linux-<platform>
-.tar.gz beside one checksums file of sha256 lines, and the platform label is
-the one release.yml builds the panel for — the panel is told it (Deps.Platform)
-rather than guessing from GOARCH, because 32-bit ARM is "arm" to Go and
-armv5/6/7 to the channel, and a v7 binary SIGILLs on a v5 board.
-
-Install stages the binary beside the installed one, asks it for its version
-(the one thing every mtg-proxy answers, so a corrupt or foreign file is caught
-before it is the installed one) and renames it into place. Running sidecars
-keep the old inode until they restart: that is Supervisor's, on purpose.
-*/
+// Stage a checksummed release for the build's explicit platform, then verify its identity.
+// Atomic replacement leaves running sidecars on their old inode until an operator restarts them.
 var (
-	releasesURL  = "https://api.github.com/repos/Arman2122/mtg-proxy/releases"
-	downloadBase = "https://github.com/Arman2122/mtg-proxy/releases/download"
+	releasesURL      = "https://api.github.com/repos/Arman2122/mtg-proxy/releases"
+	downloadBase     = "https://github.com/Arman2122/mtg-proxy/releases/download"
+	stableReleaseTag = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
 )
 
 const (
@@ -79,6 +70,7 @@ func (c *Core) Available(ctx context.Context) ([]string, error) {
 	var releases []struct {
 		TagName    string `json:"tag_name"`
 		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
 	}
 	if err := json.Unmarshal(body, &releases); err != nil {
 		return nil, err
@@ -87,7 +79,7 @@ func (c *Core) Available(ctx context.Context) ([]string, error) {
 	for _, r := range releases {
 		// A release the panel refuses at boot is not offered: installing it
 		// would take every MTProto inbound offline at the next restart.
-		if r.TagName != "" && !r.Prerelease && engine.CheckVersion(r.TagName) == nil {
+		if !r.Draft && !r.Prerelease && stableReleaseTag.MatchString(r.TagName) && engine.CheckVersion(r.TagName) == nil {
 			tags = append(tags, r.TagName)
 		}
 	}
@@ -131,7 +123,17 @@ func (c *Core) Install(ctx context.Context, version string) error {
 	if err := engine.CheckVersion(reported); err != nil {
 		return fmt.Errorf("mtproto: the downloaded %s reports a version the panel refuses at boot, so it was not installed: %w", pkg, err)
 	}
-	return os.Rename(staged, engine.GetBinaryPath())
+	if strings.TrimPrefix(reported, "v") != bare {
+		return fmt.Errorf("mtproto: downloaded %s reports %q, which does not match requested %s; it was not installed", pkg, reported, version)
+	}
+	return replaceStagedBinary(ctx, staged, engine.GetBinaryPath())
+}
+
+func replaceStagedBinary(ctx context.Context, staged, dest string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return os.Rename(staged, dest)
 }
 
 func (c *Core) httpClient(timeout time.Duration) *http.Client {
@@ -167,7 +169,8 @@ func parseChecksum(sums []byte, name string) (string, error) {
 	for line := range strings.SplitSeq(string(sums), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 2 && fields[1] == name {
-			if len(fields[0]) != 64 {
+			decoded, err := hex.DecodeString(fields[0])
+			if err != nil || len(decoded) != sha256.Size {
 				return "", fmt.Errorf("mtproto: checksums: malformed entry for %s", name)
 			}
 			return strings.ToLower(fields[0]), nil

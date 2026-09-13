@@ -2561,6 +2561,10 @@ export const SCHEMAS: Record<string, unknown> = {
   },
   "CoreHostProcessView": {
     "properties": {
+      "binaryReplaced": {
+        "example": true,
+        "type": "boolean"
+      },
       "executable": {
         "example": "/usr/sbin/openvpn",
         "type": "string"

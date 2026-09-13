@@ -69,6 +69,9 @@ func TestCoreHostRuntimeReadsActualProcessState(t *testing.T) {
 	if daemon.Processes[0].PID != 102 || daemon.Processes[0].Executable != "/usr/bin/proxy" || daemon.Processes[1].State != "stopped" {
 		t.Fatalf("processes = %+v, want sorted live/deleted-executable and suspended observations", daemon.Processes)
 	}
+	if !daemon.Processes[0].BinaryReplaced || daemon.Processes[1].BinaryReplaced {
+		t.Fatalf("processes = %+v, want only the replaced running executable flagged", daemon.Processes)
+	}
 	if views["paused"].State != "stopped" || views["unused"].State != "stopped" || views["unused"].Processes == nil {
 		t.Fatalf("paused=%+v unused=%+v, want stopped with a non-nil empty process list", views["paused"], views["unused"])
 	}

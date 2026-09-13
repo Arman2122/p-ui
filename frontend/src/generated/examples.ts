@@ -688,6 +688,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "titleKey": "cores.singbox.title"
   },
   "CoreHostProcessView": {
+    "binaryReplaced": true,
     "executable": "/usr/sbin/openvpn",
     "pid": 2046530,
     "state": "running"
@@ -696,6 +697,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "error": "",
     "processes": [
       {
+        "binaryReplaced": true,
         "executable": "/usr/sbin/openvpn",
         "pid": 2046530,
         "state": "running"

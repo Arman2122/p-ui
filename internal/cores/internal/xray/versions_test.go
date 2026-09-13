@@ -13,8 +13,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -113,7 +113,9 @@ func releaseServer(t *testing.T, tags []string, archive []byte, digest string) *
 	previousList, previousBase := releasesURL, downloadBase
 	releasesURL, downloadBase = srv.URL+"/releases", srv.URL
 	t.Cleanup(func() { releasesURL, downloadBase = previousList, previousBase })
-	return New(Deps{HTTPClient: func(time.Duration) *http.Client { return srv.Client() }})
+	c := New(Deps{HTTPClient: func(time.Duration) *http.Client { return srv.Client() }})
+	c.mgr = &engine.Manager{}
+	return c
 }
 
 /*
@@ -194,6 +196,7 @@ func TestAFailedInstallLeavesTheInstalledBinaryAlone(t *testing.T) {
 // A listed, verified release lands: the member is staged beside the binary and
 // renamed over it, and nothing is restarted. Installed then names the new one.
 func TestInstallLandsAVerifiedReleaseWithoutRestarting(t *testing.T) {
+	requirePosixHost(t)
 	binDir := t.TempDir()
 	t.Setenv("PUI_BIN_FOLDER", binDir)
 	installed := engine.GetBinaryPath()
@@ -210,9 +213,6 @@ func TestInstallLandsAVerifiedReleaseWithoutRestarting(t *testing.T) {
 	if err != nil || string(got) != payload {
 		t.Fatalf("installed binary = %q, %v; want the release's member", got, err)
 	}
-	if runtime.GOOS == "windows" {
-		return
-	}
 	if info, err := os.Stat(installed); err != nil || info.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("the installed binary is not executable: %v, %v", info, err)
 	}
@@ -226,5 +226,203 @@ func TestInstalledNamesAMissingBinary(t *testing.T) {
 	t.Setenv("PUI_BIN_FOLDER", t.TempDir())
 	if _, err := New(Deps{}).Installed(context.Background()); !errors.Is(err, core.ErrNotInstalled) {
 		t.Fatalf("Installed with no binary = %v, want ErrNotInstalled", err)
+	}
+}
+
+func TestXrayUpdaterAvailableStableOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `[
+			{"tag_name":"v27.0.0","draft":true},
+			{"tag_name":"v26.9.0","prerelease":true},
+			{"tag_name":"v27.-1.0"},{"tag_name":"v27.0.-1"},
+			{"tag_name":"v-27.0.0"},{"tag_name":"v+27.0.0"},
+			{"tag_name":"27.0.0"},{"tag_name":"v27.01.0"},
+			{"tag_name":"v27.0.0-rc1"},{"tag_name":"v27.0.0+build"},
+			{"tag_name":"v999999999999999999999999.0.0"},
+			{"tag_name":"v26.8.1"},{"tag_name":"v26.6.27"},{"tag_name":"v26.6.26"}
+		]`)
+	}))
+	t.Cleanup(srv.Close)
+	previous := releasesURL
+	releasesURL = srv.URL
+	t.Cleanup(func() { releasesURL = previous })
+	c := New(Deps{HTTPClient: func(time.Duration) *http.Client { return srv.Client() }})
+	versions, err := c.Available(t.Context())
+	if err != nil || strings.Join(versions, ",") != "v26.8.1,v26.6.27" {
+		t.Fatalf("Available = %v, %v; want only [v26.8.1 v26.6.27]", versions, err)
+	}
+}
+
+func TestXrayUpdaterRejectsUnstableInstallBeforeDownload(t *testing.T) {
+	for _, tag := range []string{"v27.-1.0", "v27.0.-1", "27.0.0", "v27.01.0"} {
+		t.Run(tag, func(t *testing.T) {
+			var downloads atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/releases" {
+					_, _ = fmt.Fprintf(w, `[{"tag_name":%q}]`, tag)
+					return
+				}
+				downloads.Add(1)
+				http.NotFound(w, r)
+			}))
+			t.Cleanup(srv.Close)
+			oldList, oldBase := releasesURL, downloadBase
+			releasesURL, downloadBase = srv.URL+"/releases", srv.URL
+			t.Cleanup(func() { releasesURL, downloadBase = oldList, oldBase })
+			c := New(Deps{HTTPClient: func(time.Duration) *http.Client { return srv.Client() }})
+			if err := c.Install(t.Context(), tag); !errors.Is(err, core.ErrUnknownVersion) {
+				t.Fatalf("Install(%q) = %v; want ErrUnknownVersion", tag, err)
+			}
+			if got := downloads.Load(); got != 0 {
+				t.Fatalf("download requests = %d; want none", got)
+			}
+		})
+	}
+}
+
+func assertXrayInstalledBytes(t *testing.T, original string) {
+	t.Helper()
+	got, err := os.ReadFile(engine.GetBinaryPath())
+	if err != nil || string(got) != original {
+		t.Fatalf("installed binary = %q, %v; want original %q", got, err, original)
+	}
+	staged, err := filepath.Glob(filepath.Join(filepath.Dir(engine.GetBinaryPath()), ".xray-*"))
+	if err != nil || len(staged) != 0 {
+		t.Fatalf("staged files = %v, %v; want none", staged, err)
+	}
+}
+
+func seedXrayBinary(t *testing.T, contents string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("PUI_BIN_FOLDER", dir)
+	t.Setenv("PUI_LOG_FOLDER", dir)
+	if err := os.WriteFile(engine.GetBinaryPath(), []byte(contents), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestXrayUpdaterCandidateValidationWithoutConfig(t *testing.T) {
+	requirePosixHost(t)
+	for _, tc := range []struct{ name, payload, want string }{
+		{"wrong-version", "#!/bin/sh\necho 'Xray 99.0.1 (test)'\n", "does not match"},
+		{"wrong-program", "#!/bin/sh\necho 'Other 99.0.0 (test)'\n", "unexpected answer"},
+		{"malformed-version", "#!/bin/sh\necho 'Xray 99.-1.0 (test)'\n", "unexpected answer"},
+		{"not-executable", "not an executable file", "executable validation"},
+		{"failed-version-command", "#!/bin/sh\necho 'Xray 99.0.0 (test)'\nexit 7\n", "executable validation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seedXrayBinary(t, "old installed bytes")
+			archive, digest := xrayZip(t, tc.payload)
+			c := releaseServer(t, []string{"v99.0.0"}, archive, digest)
+			err := c.Install(t.Context(), "v99.0.0")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Install = %v; want %q", err, tc.want)
+			}
+			assertXrayInstalledBytes(t, "old installed bytes")
+		})
+	}
+}
+
+func TestXrayUpdaterInstalledReadsDiskWhileRunning(t *testing.T) {
+	requirePosixHost(t)
+	seedXrayBinary(t, "#!/bin/sh\nif [ \"$1\" = '-version' ]; then echo 'Xray 26.7.28 (test)'; exit 0; fi\nexec sleep 60\n")
+	p := engine.NewTestProcess(&engine.Config{}, filepath.Join(filepath.Dir(engine.GetBinaryPath()), "test-running.json"))
+	if err := p.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Stop() })
+	if !p.IsRunning() || p.GetXrayVersion() != "26.7.28" {
+		t.Fatalf("running = %v, version = %q", p.IsRunning(), p.GetXrayVersion())
+	}
+	candidate := filepath.Join(filepath.Dir(engine.GetBinaryPath()), "replacement")
+	if err := os.WriteFile(candidate, []byte("#!/bin/sh\necho 'Xray 99.0.0 (test)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(candidate, engine.GetBinaryPath()); err != nil {
+		t.Fatal(err)
+	}
+	c := New(Deps{})
+	c.mgr = &engine.Manager{}
+	c.mgr.Replace(p)
+	if got, err := c.Installed(t.Context()); err != nil || got != "99.0.0" {
+		t.Fatalf("Installed = %q, %v; want on-disk 99.0.0", got, err)
+	}
+	if !p.IsRunning() || p.GetXrayVersion() != "26.7.28" {
+		t.Fatal("reporting the installed version changed the running process")
+	}
+}
+
+func TestXrayUpdaterPreservesActiveConfigValidation(t *testing.T) {
+	requirePosixHost(t)
+	seedXrayBinary(t, "old installed bytes")
+	payload := "#!/bin/sh\nif [ \"$1\" = '-version' ]; then echo 'Xray 99.0.0 (test)'; exit 0; fi\necho 'Failed to start: candidate rejects the active config'\nexit 23\n"
+	archive, digest := xrayZip(t, payload)
+	c := releaseServer(t, []string{"v99.0.0"}, archive, digest)
+	c.mgr.Replace(engine.NewProcess(&engine.Config{}))
+	if err := c.Install(t.Context(), "v99.0.0"); err == nil || !strings.Contains(err.Error(), "candidate rejects the active config") {
+		t.Fatalf("Install = %v; want active config refusal", err)
+	}
+	assertXrayInstalledBytes(t, "old installed bytes")
+}
+
+func waitForXrayValidation(t *testing.T, marker string, result <-chan error) {
+	t.Helper()
+	deadline := time.NewTimer(3 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			return
+		}
+		select {
+		case err := <-result:
+			t.Fatalf("Install finished before candidate validation: %v", err)
+		case <-deadline.C:
+			t.Fatal("candidate validation was not reached")
+		case <-tick.C:
+		}
+	}
+}
+
+func TestXrayUpdaterCancellationPreservesBinary(t *testing.T) {
+	requirePosixHost(t)
+	for _, configCheck := range []bool{false, true} {
+		t.Run(fmt.Sprintf("active-config=%v", configCheck), func(t *testing.T) {
+			seedXrayBinary(t, "old installed bytes")
+			dir := filepath.Dir(engine.GetBinaryPath())
+			marker, release := filepath.Join(dir, "checked"), filepath.Join(dir, "release")
+			t.Setenv("PUI_XRAY_TEST_MARKER", marker)
+			t.Setenv("PUI_XRAY_TEST_RELEASE", release)
+			payload := "#!/bin/sh\n: > \"$PUI_XRAY_TEST_MARKER\"\nexec sleep 60\n"
+			if configCheck {
+				payload = "#!/bin/sh\nif [ \"$1\" = '-version' ]; then echo 'Xray 99.0.0 (test)'; exit 0; fi\n: > \"$PUI_XRAY_TEST_MARKER\"\nwhile [ ! -f \"$PUI_XRAY_TEST_RELEASE\" ]; do sleep 0.01; done\nexit 0\n"
+			}
+			archive, digest := xrayZip(t, payload)
+			c := releaseServer(t, []string{"v99.0.0"}, archive, digest)
+			if configCheck {
+				c.mgr.Replace(engine.NewProcess(&engine.Config{}))
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			t.Cleanup(func() { _ = os.WriteFile(release, nil, 0o600) })
+			result := make(chan error, 1)
+			go func() { result <- c.Install(ctx, "v99.0.0") }()
+			waitForXrayValidation(t, marker, result)
+			cancel()
+			if err := os.WriteFile(release, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-result:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("Install = %v; want context.Canceled", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("cancelled Install did not finish")
+			}
+			assertXrayInstalledBytes(t, "old installed bytes")
+		})
 	}
 }

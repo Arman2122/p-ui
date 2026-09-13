@@ -119,6 +119,7 @@ func readCoreHostRuntimes(ctx context.Context, root string, paths map[string][]s
 			incomplete(err)
 			continue
 		}
+		replaced := strings.HasSuffix(executable, " (deleted)")
 		executable = strings.TrimSuffix(executable, " (deleted)")
 		id := owners[executable]
 		if id == "" {
@@ -173,7 +174,7 @@ func readCoreHostRuntimes(ctx context.Context, root string, paths map[string][]s
 			continue
 		}
 		view := views[id]
-		view.Processes = append(view.Processes, CoreHostProcessView{PID: pid, Executable: executable, State: state})
+		view.Processes = append(view.Processes, CoreHostProcessView{PID: pid, Executable: executable, State: state, BinaryReplaced: replaced || strings.HasSuffix(currentExe, " (deleted)")})
 		if state == "running" {
 			view.State = state
 		}

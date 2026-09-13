@@ -86,6 +86,7 @@ desktop.ini
 # Session scratch. Kept out of the module: a Go file here is compiled by
 # `go test ./...` and one `git add -A` would commit an audit probe.
 /scratchpad/
+/core-release/
 
 # The remediation audit and its appendix: internal working material, not part of
 # the shipped project. Kept out of the public repo deliberately -- the findings

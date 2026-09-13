@@ -23,18 +23,8 @@ import (
 	engine "github.com/Arman2122/p-ui/internal/xray"
 )
 
-/*
-The release channel is XTLS/Xray-core on GitHub, verified through the .dgst
-sidecar XTLS publishes beside each asset: TLS protects the transport, the digest
-the artifact. Both URLs are vars so a test can point them at an httptest server.
-
-Install stages the new binary beside the installed one and, when a process is
-running, asks the NEW binary whether it can load the config this box runs before
-anything is replaced (ledger L2): a download that verifies but cannot load must
-never become the installed binary, because every later restart would refuse
-too and nothing would put the old one back. It does not restart: that is
-Supervisor's, so an upgrade can be staged and applied when traffic allows.
-*/
+// Release URLs are replaceable by httptest; artifacts are digest-verified,
+// executed and config-checked before replacement. The supervisor owns restart.
 var (
 	releasesURL  = "https://api.github.com/repos/XTLS/Xray-core/releases"
 	downloadBase = "https://github.com/XTLS/Xray-core/releases/download"
@@ -53,29 +43,39 @@ const (
 )
 
 type release struct {
-	TagName string `json:"tag_name"`
+	TagName    string `json:"tag_name"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
 }
 
-// Installed is the running process's version, else what the binary on disk
-// says of itself; a binary that is not there is ErrNotInstalled.
+// Installed reports the binary on disk even while an older process is running.
 func (c *Core) Installed(ctx context.Context) (string, error) {
-	if p := c.mgr.Current(); p != nil && p.IsRunning() {
-		if v := p.GetXrayVersion(); v != "" && v != "Unknown" {
-			return v, nil
-		}
-	}
 	if _, err := os.Stat(engine.GetBinaryPath()); err != nil {
-		return "", core.ErrNotInstalled
+		if errors.Is(err, os.ErrNotExist) {
+			return "", core.ErrNotInstalled
+		}
+		return "", fmt.Errorf("xray: binary: %w", err)
 	}
+	return executableVersion(ctx, engine.GetBinaryPath())
+}
+
+func executableVersion(ctx context.Context, binary string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, engine.GetBinaryPath(), "-version").Output()
+	cmd := exec.CommandContext(ctx, binary, "-version")
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("xray: version: %w", ctx.Err())
+	}
 	if err != nil {
 		return "", fmt.Errorf("xray: version: %w", err)
 	}
-	// "Xray 26.7.28 (Xray, Penetrates Everything.) 5ca6f4b (go1.26.5 linux/amd64)"
 	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
+	if len(fields) < 2 || fields[0] != "Xray" {
+		return "", fmt.Errorf("xray: version: unexpected answer %q", strings.TrimSpace(string(out)))
+	}
+	if _, ok := parseVersion(fields[1]); !ok {
 		return "", fmt.Errorf("xray: version: unexpected answer %q", strings.TrimSpace(string(out)))
 	}
 	return fields[1], nil
@@ -116,7 +116,7 @@ func (c *Core) Available(ctx context.Context) ([]string, error) {
 	}
 	versions := make([]string, 0, len(releases))
 	for _, r := range releases {
-		if loadable(r.TagName) {
+		if !r.Draft && !r.Prerelease && loadable(r.TagName) {
 			versions = append(versions, r.TagName)
 		}
 	}
@@ -125,17 +125,10 @@ func (c *Core) Available(ctx context.Context) ([]string, error) {
 
 // loadable is the >= oldestOffered rule on a "vMAJOR.MINOR.PATCH" tag.
 func loadable(tag string) bool {
-	parts := strings.Split(strings.TrimPrefix(tag, "v"), ".")
-	if len(parts) != 3 {
+	version, tagged := strings.CutPrefix(tag, "v")
+	n, valid := parseVersion(version)
+	if !tagged || !valid {
 		return false
-	}
-	n := make([]int, 3)
-	for i, p := range parts {
-		v, err := strconv.Atoi(p)
-		if err != nil {
-			return false
-		}
-		n[i] = v
 	}
 	switch {
 	case n[0] != oldestMajor:
@@ -147,9 +140,35 @@ func loadable(tag string) bool {
 	}
 }
 
-// Install fetches, verifies, stages and lands one listed release. See the
-// package note for why it checks the config first and restarts nothing.
+func parseVersion(version string) ([3]int, bool) {
+	var result [3]int
+	parts := strings.Split(version, ".")
+	if len(parts) != len(result) {
+		return result, false
+	}
+	for i, part := range parts {
+		if part == "" || (len(part) > 1 && part[0] == '0') {
+			return result, false
+		}
+		for _, digit := range part {
+			if digit < '0' || digit > '9' {
+				return result, false
+			}
+		}
+		number, err := strconv.Atoi(part)
+		if err != nil {
+			return result, false
+		}
+		result[i] = number
+	}
+	return result, true
+}
+
+// Install validates a staged release before replacing the on-disk binary.
 func (c *Core) Install(ctx context.Context, version string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	versions, err := c.Available(ctx)
 	if err != nil {
 		return err
@@ -167,12 +186,22 @@ func (c *Core) Install(ctx context.Context, version string) error {
 		return err
 	}
 	defer func() { _ = os.Remove(staged) }()
+	reported, err := executableVersion(ctx, staged)
+	if err != nil {
+		return fmt.Errorf("xray %s failed executable validation: %w", version, err)
+	}
+	if "v"+reported != version {
+		return fmt.Errorf("xray: candidate version %q does not match requested %q", reported, version)
+	}
 	if p := c.mgr.Current(); p != nil && p.GetConfig() != nil {
 		if err := engine.TestConfigWith(staged, p.GetConfig()); err != nil {
 			return fmt.Errorf("xray %s cannot load this panel's config, so it was not installed: %w", version, err)
 		}
 	} else {
-		logger.Warning("xray update pre-flight skipped: no running config to test against")
+		logger.Warning("xray update config check skipped: no active config available")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	// Renaming over a running executable is fine on Linux: the old process
 	// keeps its inode until it exits.

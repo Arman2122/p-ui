@@ -50,9 +50,10 @@ type CoreStatusView struct {
 }
 
 type CoreHostProcessView struct {
-	PID        int    `json:"pid" example:"2046530"`
-	Executable string `json:"executable" example:"/usr/sbin/openvpn"`
-	State      string `json:"state" example:"running"`
+	PID            int    `json:"pid" example:"2046530"`
+	Executable     string `json:"executable" example:"/usr/sbin/openvpn"`
+	State          string `json:"state" example:"running"`
+	BinaryReplaced bool   `json:"binaryReplaced,omitempty" example:"true"`
 }
 
 type CoreHostRuntimeView struct {

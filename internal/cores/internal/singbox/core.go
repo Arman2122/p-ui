@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -39,6 +40,9 @@ type Deps struct {
 	StateDir string
 	// ApplyDelay overrides DefaultApplyDelay; tests set it to zero.
 	ApplyDelay time.Duration
+	// Platform is the release asset label; HTTPClient preserves the panel's proxy.
+	Platform   string
+	HTTPClient func(time.Duration) *http.Client
 }
 
 // Core is the sing-box adapter: one supervised process per inbound.
@@ -47,6 +51,7 @@ type Core struct {
 	backend supervisor.Backend
 
 	mu        sync.Mutex
+	updateMu  sync.Mutex
 	instances map[int]*instance
 	// pending holds deltas drained before a reload, handed out on the next
 	// CollectTraffic so a reload never loses what was already moved.

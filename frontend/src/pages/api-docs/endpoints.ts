@@ -332,7 +332,7 @@ export const sections: readonly Section[] = [
       {
         method: 'POST',
         path: '/panel/api/cores/:id/install/:version',
-        summary: 'Download, verify and install one listed release of this core’s daemon. The binary is staged beside the installed one, checked (a digest or checksum the channel publishes, and for Xray whether the new binary loads this panel’s config), then renamed into place. Nothing is restarted: the running daemon keeps the old binary until POST /cores/:id/restart. A version the channel does not list is refused. Only cores that manage their own releases accept this — Xray and MTProto today.',
+        summary: 'Download and stage a listed Xray, MTProto or compatible sing-box release. The archive checksum and executable version must match; Xray validates its current config, and sing-box validates its required features, supported protocols and managed configs before atomic replacement. Nothing is restarted automatically. Running managed instances use the new binary after POST /cores/:id/restart; other host processes remain outside this action. System and embedded cores do not accept independent binary installation.',
         params: [
           { name: 'id', in: 'path', type: 'string', desc: 'Core id from GET /panel/api/cores.' },
           { name: 'version', in: 'path', type: 'string', desc: 'A tag from GET /panel/api/cores/:id/versions, e.g. v26.7.28.' },
