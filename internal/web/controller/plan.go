@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/middleware"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/session"
 )
@@ -24,7 +25,7 @@ func RegisterPlanRoutes(g *gin.RouterGroup) {
 	g.POST("/archive/:id", a.archive)
 	g.POST("/duplicate/:id", a.duplicate)
 	g.POST("/apply", a.apply)
-	g.POST("/reapply/:id", a.reapply)
+	g.POST("/reapply/:id", middleware.LongRequest(), a.reapply)
 }
 
 // Reseller plans are private templates; budget-changing assignment stays in reseller client creation.

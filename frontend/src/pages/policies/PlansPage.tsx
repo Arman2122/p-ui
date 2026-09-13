@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 import { Alert, Button, Checkbox, Collapse, Dropdown, Input, Modal, Pagination, Space, Spin, Tag, Tooltip } from 'antd';
 import { CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined, FilterOutlined, SearchOutlined } from '@ant-design/icons';
 import { usePlanInboundOptions, usePlanMembersQuery, usePlanSummaryQuery, usePoliciesQuery } from '@/api/queries/usePoliciesQuery';
@@ -58,7 +59,13 @@ function RateAvailability() {
 
 export default function PlansPage({ reseller = false }: { reseller?: boolean }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const query = usePoliciesQuery({ reseller });
+  /* A real href so the link opens in a new tab; a plain click stays in the app. */
+  const clientsLink = (search: string) => ({
+    href: `${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/clients?${search}`,
+    onClick: (e: MouseEvent) => { e.preventDefault(); navigate(`/clients?${search}`); },
+  });
   const inbounds = usePlanInboundOptions(reseller);
   const summary = usePlanSummaryQuery(reseller);
   const { remove, archive, duplicate, reapply, saving } = usePolicyMutations(reseller);
@@ -130,7 +137,7 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
         <PanelCard pad={0}>
           <div className="p-plandetail-h">
             <div><div className="plans-detail-title"><h2 className="p-h1">{selected.name}</h2><StatusChip status={{ key: selected.archived ? 'archived' : 'active', label: selected.archived ? t('plans.archived') : t('plans.active'), color: selected.archived ? 'var(--p-text-2)' : 'var(--p-success)' }} /></div><p className="p-sub plans-description">{selected.description}</p></div>
-            <Space size={6} wrap><Button type="primary" disabled={selected.archived} icon={<PlusOutlined />} href={`${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/clients?${reseller ? `new=1&plan=${selected.id}` : `planId=${selected.id}&create=1`}`}>{t('plans.newClient')}</Button>
+            <Space size={6} wrap><Button type="primary" disabled={selected.archived} icon={<PlusOutlined />} {...clientsLink(reseller ? `new=1&plan=${selected.id}` : `planId=${selected.id}&create=1`)}>{t('plans.newClient')}</Button>
               <Button icon={<EditOutlined />} onClick={() => openForm(selected)}>{t('pages.policies.edit')}</Button>
               <Button icon={<CopyOutlined />} onClick={() => { setCopying(selected); setCopyName(`${selected.name} ${t('plans.copySuffix')}`); }}>{t('plans.duplicate')}</Button>
               <Button type="text" danger aria-label={t('remove')} icon={<DeleteOutlined />} onClick={() => setDeleting(selected)} /></Space>
@@ -166,7 +173,7 @@ export default function PlansPage({ reseller = false }: { reseller?: boolean }) 
           </PanelCard>
         </div>
         <PanelCard className="plans-clients" kicker={t('planParity.clientsOn', { name: selected.name, defaultValue: 'Clients on {name}' })} icon="users" pad={0}
-          extra={<Space size={6}><Button type="text" size="small" href={`${(window.PUI_BASE_PATH || '/').replace(/\/$/, '')}/panel/clients?${reseller ? 'plan' : 'planId'}=${selected.id}`}>{t('planParity.openClients', { defaultValue: 'Open in Clients' })}</Button>
+          extra={<Space size={6}><Button type="text" size="small" {...clientsLink(`${reseller ? 'plan' : 'planId'}=${selected.id}`)}>{t('planParity.openClients', { defaultValue: 'Open in Clients' })}</Button>
             {!reseller && <Button type="text" size="small" loading={saving} onClick={() => { setClearOverrides(false); setReapplying(true); }}>{t('plans.reapply')}</Button>}</Space>}>
           {(selected.pendingClients > 0 || applyReport) && <div className="plans-members-notices">
             {!!selected.pendingClients && <Alert type="warning" title={t('plans.pendingCount', { count: selected.pendingClients })} />}

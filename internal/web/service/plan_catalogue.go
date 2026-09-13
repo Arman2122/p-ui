@@ -228,6 +228,21 @@ func (s *PolicyService) ValidatePlanClientInbounds(email string, inboundIDs []in
 	return validatePlanInbounds(db, PlanScope{OwnerUserID: row.OwnerUserID}, &row, ids)
 }
 
+// Names are the only handle a picker shows, so two of them in one scope is a
+// refusal; the check is case-insensitive because the pickers sort that way.
+func refusePlanNameClash(tx *gorm.DB, scope PlanScope, row *model.Policy) error {
+	var clashes int64
+	err := planOwner(tx.Model(&model.Policy{}), scope, "owner_user_id").
+		Where("lower(name) = lower(?) AND id <> ?", row.Name, row.Id).Count(&clashes).Error
+	if err != nil {
+		return err
+	}
+	if clashes > 0 {
+		return fmt.Errorf("%w: %q", ErrPolicyNameTaken, row.Name)
+	}
+	return nil
+}
+
 func managedPlanEqual(a, b *model.Policy) bool {
 	return reflect.DeepEqual(a.QuotaBytes, b.QuotaBytes) && reflect.DeepEqual(a.DurationDays, b.DurationDays) && reflect.DeepEqual(a.LimitIP, b.LimitIP) && slices.Equal(a.InboundIDs, b.InboundIDs) && a.StartOnFirstUse == b.StartOnFirstUse && a.AutoRenewDays == b.AutoRenewDays && a.ResetCycle == b.ResetCycle && a.OnDepletion == b.OnDepletion
 }
@@ -263,10 +278,10 @@ func (s *PolicyService) SavePlan(scope PlanScope, row *model.Policy) (*model.Pol
 			row.CreatedAt = 0
 			row.UpdatedAt = 0
 		}
+		if err := refusePlanNameClash(tx, scope, row); err != nil {
+			return err
+		}
 		if err := tx.Save(row).Error; err != nil {
-			if errors.Is(err, gorm.ErrDuplicatedKey) {
-				return ErrPolicyNameTaken
-			}
 			return err
 		}
 		if err := tx.Where("policy_id = ?", row.Id).Delete(&model.PolicyInbound{}).Error; err != nil {

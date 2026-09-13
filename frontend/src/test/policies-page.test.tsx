@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 
 import PoliciesPage from '@/pages/policies/PoliciesPage';
 import { HttpUtil, Msg } from '@/utils';
@@ -42,7 +43,7 @@ function mockHost(plans: unknown[], cores: unknown[], reseller = false) {
 }
 
 async function renderPage(reseller = false, queryClient?: ReturnType<typeof makeTestQueryClient>) {
-  renderWithProviders(<PoliciesPage reseller={reseller} />, { queryClient });
+  renderWithProviders(<MemoryRouter><PoliciesPage reseller={reseller} /></MemoryRouter>, { queryClient });
   for (let i = 0; i < 6; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }

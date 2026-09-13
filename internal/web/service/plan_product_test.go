@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -313,5 +315,66 @@ func TestPlanProductScheduledReset(t *testing.T) {
 	out, err = s.ConvergePlanCycles(context.Background(), now)
 	if err != nil || out.Reset != 0 {
 		t.Fatalf("duplicate reset: %+v %v", out, err)
+	}
+}
+
+// The update handlers bind the body INTO the stored row, so a key the caller
+// leaves out must keep its value: an API rename must not empty the ladder.
+func TestPlanPartialUpdateKeepsTheLadder(t *testing.T) {
+	initTestDB(t)
+	s := &PolicyService{}
+	ladder := `[{"fromBytes":0,"upBps":1000000,"downBps":2000000}]`
+	p, err := s.SavePlan(PlanScope{}, &model.Policy{Name: "shaped", Tiers: ladder, QuotaBytes: planBytes(5000)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := s.GetPlan(PlanScope{}, p.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(`{"name":"renamed"}`), row); err != nil {
+		t.Fatal(err)
+	}
+	row.Id = p.Id
+	updated, err := s.SavePlan(PlanScope{}, row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := ParsePlan(ladder)
+	got, err := ParsePlan(updated.Tiers)
+	if err != nil || updated.Name != "renamed" || !slices.Equal(got.Tiers, want.Tiers) || updated.QuotaBytes == nil || *updated.QuotaBytes != 5000 {
+		t.Fatalf("partial update lost stored fields: %+v (%v)", updated, err)
+	}
+	if updated.Rev != p.Rev {
+		t.Fatalf("a rename bumped the managed revision: %d -> %d", p.Rev, updated.Rev)
+	}
+}
+
+func TestPlanNamesAreUniquePerOwner(t *testing.T) {
+	initTestDB(t)
+	s := &PolicyService{}
+	first, err := s.SavePlan(PlanScope{}, &model.Policy{Name: "Monthly", Tiers: "[]"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.SavePlan(PlanScope{}, &model.Policy{Name: "monthly ", Tiers: "[]"}); !errors.Is(err, ErrPolicyNameTaken) {
+		t.Fatalf("case variant accepted: %v", err)
+	}
+	if _, err = s.DuplicatePlan(PlanScope{}, first.Id, "Monthly"); !errors.Is(err, ErrPolicyNameTaken) {
+		t.Fatalf("duplicate into a taken name accepted: %v", err)
+	}
+	owner := &model.User{Username: "plan-owner", Role: "reseller"}
+	if err := database.GetDB().Create(owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Create(&model.ResellerAccount{UserID: owner.Id, Name: "plan-owner", AllowPlans: true}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.SavePlan(PlanScope{OwnerUserID: &owner.Id}, &model.Policy{Name: "Monthly", Tiers: "[]"}); err != nil {
+		t.Fatalf("another owner's scope refused the same name: %v", err)
+	}
+	first.Description = "renamed onto itself"
+	if _, err = s.SavePlan(PlanScope{}, first); err != nil {
+		t.Fatalf("editing a plan clashed with its own name: %v", err)
 	}
 }

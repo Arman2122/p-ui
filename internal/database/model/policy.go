@@ -58,8 +58,8 @@ func (p Policy) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON accepts tiers as an array or as JSON-encoded text. Without the
-// array branch every documented request body is rejected by the bind.
+// UnmarshalJSON accepts tiers as an array or as JSON-encoded text. An absent
+// key keeps the stored ladder, as every other field does on a partial update.
 func (p *Policy) UnmarshalJSON(data []byte) error {
 	type alias Policy
 	aux := struct {
@@ -71,7 +71,9 @@ func (p *Policy) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	p.Tiers = jsonStringFieldFromRaw(aux.Tiers)
+	if aux.Tiers != nil {
+		p.Tiers = jsonStringFieldFromRaw(aux.Tiers)
+	}
 	return nil
 }
 
