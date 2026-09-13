@@ -105,6 +105,18 @@ func (t *Tgbot) formatEventMessage(e eventbus.Event) string {
 	header := fmt.Sprintf("<b>📡 %s</b>\n", host)
 
 	switch e.Type {
+	case eventbus.EventResellerBudget:
+		data, ok := e.Data.(service.ResellerNotice)
+		if !ok || data.Username == "" {
+			return ""
+		}
+		key, params := data.BotMessage()
+		if key == "" {
+			return ""
+		}
+		return header + "👥 " + t.I18nBot("tgbot.messages.eventResellerTitle", "Name=="+data.Name, "Username=="+data.Username) + "\n" +
+			t.I18nBot(key, params...)
+
 	case eventbus.EventClientPlanDepleted:
 		data, ok := e.Data.(service.PlanDepletionNotice)
 		if !ok || data.Email == "" || data.QuotaBytes <= 0 {

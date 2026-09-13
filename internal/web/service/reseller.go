@@ -280,7 +280,7 @@ func (s *ResellerService) Save(user *model.User, id int, in ResellerInput) (*Res
 			a.UserID, a.Name, a.Email, a.TrafficLimit, a.ClientCap, a.ExpiresAt = id, in.Name, in.Email, in.TrafficLimit, in.ClientCap, in.ExpiresAt
 			a.AllowPlans, a.AllowReset, a.AllowExtend, a.AllowSuspend, a.AllowTopUp = in.AllowPlans, in.AllowReset, in.AllowExtend, in.AllowSuspend, in.AllowTopUp
 			a.NotifyOnDepletion, a.Note = in.NotifyOnDepletion, in.Note
-			if err := tx.Omit("TrafficUsed", "BudgetBlocked").Save(&a).Error; err != nil {
+			if err := tx.Omit("TrafficUsed", "BudgetBlocked", "TrafficWarnedAt", "ExpiryWarnedAt").Save(&a).Error; err != nil {
 				return err
 			}
 			if err := tx.Where("user_id = ? AND inbound_id NOT IN ?", id, in.InboundIDs).Delete(&model.ResellerInboundGrant{}).Error; err != nil {
@@ -348,6 +348,7 @@ func (s *ResellerService) TopUp(user *model.User, id int, traffic int64, days in
 		if err := database.GetDB().Model(&a).Updates(map[string]any{"traffic_limit": a.TrafficLimit, "client_cap": a.ClientCap, "expires_at": a.ExpiresAt}).Error; err != nil {
 			return err
 		}
-		return s.convergeBudgetLocked(id)
+		_, err := s.convergeBudgetLocked(id, time.Now())
+		return err
 	})
 }

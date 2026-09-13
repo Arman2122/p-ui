@@ -60,7 +60,7 @@ func TestResellerTransferUsesFreshBaselineAndRetainsCursors(t *testing.T) {
 			if canonical != tc.freshAfter {
 				t.Fatalf("canonical usage=%d, want %d", canonical, tc.freshAfter)
 			}
-			if err := (&ResellerService{}).EnforceBudgets(context.Background()); err != nil {
+			if _, err := (&ResellerService{}).EnforceBudgets(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			var account model.ResellerAccount

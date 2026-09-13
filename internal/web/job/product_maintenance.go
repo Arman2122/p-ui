@@ -29,11 +29,14 @@ func (j *GroupMembershipJob) Run() {
 }
 
 // Runtime mutations may enqueue traffic writes, so callers must release the writer first.
-func enforceProductQuotas(ctx context.Context) {
-	if err := (&service.ResellerService{}).EnforceBudgets(ctx); err != nil {
+// The clients an owner budget switched off come back so the caller can cut their sessions.
+func enforceProductQuotas(ctx context.Context) []string {
+	disabled, err := (&service.ResellerService{}).EnforceBudgets(ctx)
+	if err != nil {
 		logger.Warning("reseller budget enforcement failed:", err)
 	}
 	if err := (&service.ClientService{}).EnforceGroupQuotas(); err != nil {
 		logger.Warning("group quota enforcement failed:", err)
 	}
+	return disabled
 }

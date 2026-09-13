@@ -45,6 +45,9 @@ const (
 	// about it: cut by its core, dropped on a firewall, or reported alone.
 	EventClientDeviceLimit  EventType = "client.device_limit"
 	EventClientPlanDepleted EventType = "client.plan_depleted"
+	// EventResellerBudget is one reseller account crossing a budget, term or
+	// usage-period boundary; the payload is a service.ResellerNotice.
+	EventResellerBudget EventType = "reseller.budget"
 )
 
 // ClientDeviceLimitData carries one device over its cap. Action is "cut", "ban"

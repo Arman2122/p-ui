@@ -28,7 +28,10 @@ missed convergence, a core restart or an operator's own tc are all repaired on
 the next tick with no special case.
 */
 type CorePolicyJob struct {
-	policyService service.PolicyService
+	policyService  service.PolicyService
+	settingService service.SettingService
+	xrayService    service.XrayService
+	inboundService service.InboundService
 }
 
 func NewCorePolicyJob() *CorePolicyJob { return &CorePolicyJob{} }
@@ -36,7 +39,9 @@ func NewCorePolicyJob() *CorePolicyJob { return &CorePolicyJob{} }
 func (j *CorePolicyJob) Run() {
 	ctx := context.Background()
 	j.convergePlans(ctx, time.Now())
-	enforceProductQuotas(ctx)
+	if disabled := enforceProductQuotas(ctx); len(disabled) > 0 {
+		cutDisabledClients(disabled, &j.settingService, &j.xrayService, &j.inboundService)
+	}
 	j.convergeShaping(ctx)
 	j.convergeRates(ctx)
 	j.enforceIPLimits(ctx)

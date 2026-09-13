@@ -467,7 +467,7 @@ func TestResellerServicesPostgres(t *testing.T) {
 		if err := db.Model(&core.ClientTraffic{}).Where("email = ?", client.Email).Update("up", 1100).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := svc.EnforceBudgets(t.Context()); err != nil {
+		if _, err := svc.EnforceBudgets(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 		if err := db.First(&rec, rec.Id).Error; err != nil {
@@ -508,7 +508,7 @@ func TestResellerServicesPostgres(t *testing.T) {
 		if !dirty {
 			t.Fatal("offline suspension lost durable reconciliation marker")
 		}
-		if err := svc.EnforceBudgets(t.Context()); err != nil {
+		if _, err := svc.EnforceBudgets(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 		_, _, dirty, _, err = (&NodeService{}).NodeSyncState(nodeID)

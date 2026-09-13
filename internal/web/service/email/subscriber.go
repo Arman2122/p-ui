@@ -104,6 +104,19 @@ func (s *Subscriber) formatMessage(e eventbus.Event) (subject, body string) {
 	}
 
 	switch e.Type {
+	case eventbus.EventResellerBudget:
+		data, ok := e.Data.(service.ResellerNotice)
+		if !ok || data.Username == "" {
+			return "", ""
+		}
+		key, params := data.BotMessage()
+		if key == "" {
+			return "", ""
+		}
+		title := i18n("tgbot.messages.eventResellerTitle", "Name=="+data.Name, "Username=="+data.Username)
+		subject = host + " " + title
+		body = wrap(title, "<p>"+html.EscapeString(i18n(key, params...))+"</p>")
+
 	case eventbus.EventClientPlanDepleted:
 		data, ok := e.Data.(service.PlanDepletionNotice)
 		if !ok || data.Email == "" || data.QuotaBytes <= 0 {

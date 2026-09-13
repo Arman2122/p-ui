@@ -200,6 +200,30 @@
     "audit": {"title": "عملیات پنل",
       "body": "{actor} · {operation} · {resource} {target}"
     },
+    "resellerWarning": {
+      "title": "بودجه نماینده رو به اتمام است",
+      "body": "{name} (@{username}) {used} از {limit} گیبی‌بایت را مصرف کرده است."
+    },
+    "resellerDepleted": {
+      "title": "بودجه نماینده تمام شد",
+      "body": "{name} (@{username}) بودجه {limit} گیبی‌بایتی خود را مصرف کرد؛ {clients} کلاینت قطع شدند."
+    },
+    "resellerExpiring": {
+      "title": "پایان دوره نماینده نزدیک است",
+      "body": "{name} (@{username}) تا {days} روز دیگر منقضی می‌شود."
+    },
+    "resellerExpired": {
+      "title": "دوره نماینده منقضی شد",
+      "body": "{name} (@{username}) منقضی شد؛ {clients} کلاینت قطع شدند."
+    },
+    "resellerRestored": {
+      "title": "بودجه نماینده بازیابی شد",
+      "body": "{name} (@{username}) دوباره فعال است و کلاینت‌های متوقف‌شده‌اش فعال شدند."
+    },
+    "resellerReset": {
+      "title": "مصرف نماینده صفر شد",
+      "body": "{name} (@{username}) دوره مصرف جدیدی را آغاز می‌کند."
+    },
     "planDepleted": {"title": "سهمیه پلن تمام شده است",
       "body": "کلاینت {email} به سقف سهمیه پلن {plan} رسیده است."
     }
@@ -1909,6 +1933,7 @@
       "sectionDesc_time": "تقویم، منطقه زمانی و زبان",
       "sectionDesc_ldap": "احراز هویت و همگام‌سازی دایرکتوری",
       "sectionDesc_iplimit": "سقف دستگاه و مسدودی‌های فعال",
+      "eventResellerBudget": "تغییرات بودجه، دوره و بازه مصرف نماینده",
       "eventClientPlanDepleted": "اتمام حجم طرح"
     },
     "xray": {
@@ -2644,6 +2669,13 @@
       "deviceLimitClientCut": "اتصال شما از {{ .IP }} قطع شد.",
       "deviceLimitClientBan": "اتصال شما از {{ .IP }} تا {{ .Until }} مسدود است.",
       "eventPlanDepletedTitle": "اتمام حجم طرح",
+      "eventResellerTitle": "نماینده {{ .Name }} (@{{ .Username }})",
+      "eventResellerWarning": "بودجه رو به اتمام است: {{ .Used }} از {{ .Limit }} گیبی‌بایت.",
+      "eventResellerDepleted": "بودجه تمام شد: {{ .Used }} از {{ .Limit }} گیبی‌بایت مصرف شد؛ {{ .Clients }} کلاینت قطع شدند.",
+      "eventResellerExpiring": "دوره حساب تا {{ .Days }} روز دیگر پایان می‌یابد.",
+      "eventResellerExpired": "دوره حساب منقضی شد؛ {{ .Clients }} کلاینت قطع شدند.",
+      "eventResellerRestored": "بودجه بازیابی شد؛ کلاینت‌های متوقف‌شده دوباره فعال هستند.",
+      "eventResellerReset": "شمارنده مصرف برای دوره جدید صفر شد.",
       "eventPlanDepletedBody": "{{ .Email }} به سقف حجم طرح {{ .Plan }} رسید: {{ .Used }} از {{ .Quota }} بایت."
     },
     "buttons": {

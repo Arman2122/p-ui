@@ -99,30 +99,13 @@ func (j *XrayTrafficJob) Run() {
 	if err != nil {
 		logger.Warning("add inbound traffic failed:", err)
 	}
-	enforceProductQuotas(context.Background())
+	ownerDisabled := enforceProductQuotas(context.Background())
 	err, needRestart1 := j.outboundService.AddTraffic(traffics, clientTraffics)
 	if err != nil {
 		logger.Warning("add outbound traffic failed:", err)
 	}
-	if clientsDisabled {
-		restartOnDisable, settingErr := j.settingService.GetRestartXrayOnClientDisable()
-		if settingErr != nil {
-			logger.Warning("get RestartXrayOnClientDisable failed:", settingErr)
-		}
-		if restartOnDisable {
-			if depletedStillConnected(disabledEmails, j.inboundService.GetOnlineClients()) {
-				// Forced: a hot removal never closes a tunnel that is already up, and
-				// replacing the process is the only lever the core exposes.
-				if err := j.xrayService.RestartXray(true); err != nil {
-					logger.Warning("reconcile xray after disabling clients failed:", err)
-					j.xrayService.SetToNeedRestart()
-				}
-			} else {
-				// Nobody depleted is connected, so no tunnel needs cutting now; the
-				// flag lets the restart wait for the next reason.
-				j.xrayService.SetToNeedRestart()
-			}
-		}
+	if clientsDisabled || len(ownerDisabled) > 0 {
+		cutDisabledClients(append(disabledEmails, ownerDisabled...), &j.settingService, &j.xrayService, &j.inboundService)
 		websocket.BroadcastInvalidate(websocket.MessageTypeInbounds)
 		// The panel disabled these itself; say so, rather than leaving an operator
 		// to notice a client went quiet.

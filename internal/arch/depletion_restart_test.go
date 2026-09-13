@@ -24,7 +24,7 @@ to stop happening again.
 */
 func TestDepletionRestartIsForcedEverywhereItIsHonoured(t *testing.T) {
 	paths := []string{
-		"internal/web/job/xray_traffic_job.go",
+		"internal/web/job/client_cut.go",
 		"internal/web/job/node_traffic_sync_job.go",
 	}
 

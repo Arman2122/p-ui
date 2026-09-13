@@ -200,6 +200,30 @@
     "audit": {"title": "Panel operation",
       "body": "{actor} · {operation} · {resource} {target}"
     },
+    "resellerWarning": {
+      "title": "Reseller budget nearly used",
+      "body": "{name} (@{username}) has used {used} of {limit} GiB."
+    },
+    "resellerDepleted": {
+      "title": "Reseller budget depleted",
+      "body": "{name} (@{username}) used its {limit} GiB budget; {clients} clients were disconnected."
+    },
+    "resellerExpiring": {
+      "title": "Reseller term ending",
+      "body": "{name} (@{username}) expires in {days} days."
+    },
+    "resellerExpired": {
+      "title": "Reseller term expired",
+      "body": "{name} (@{username}) expired; {clients} clients were disconnected."
+    },
+    "resellerRestored": {
+      "title": "Reseller budget restored",
+      "body": "{name} (@{username}) is active again and its paused clients were re-enabled."
+    },
+    "resellerReset": {
+      "title": "Reseller usage reset",
+      "body": "{name} (@{username}) starts a new usage period."
+    },
     "planDepleted": {"title": "Plan quota depleted",
       "body": "{email} reached the quota of {plan}."
     }
@@ -2035,6 +2059,7 @@
       "sectionDesc_time": "Calendar, timezone and language",
       "sectionDesc_ldap": "Directory authentication and synchronisation",
       "sectionDesc_iplimit": "Device caps and active bans",
+      "eventResellerBudget": "Reseller budget, term and usage-period changes",
       "eventClientPlanDepleted": "Plan quota reached"
     },
     "xray": {
@@ -2644,6 +2669,13 @@
       "deviceLimitClientCut": "Your connection from {{ .IP }} was disconnected.",
       "deviceLimitClientBan": "Your connection from {{ .IP }} is blocked until {{ .Until }}.",
       "eventPlanDepletedTitle": "Plan quota reached",
+      "eventResellerTitle": "Reseller {{ .Name }} (@{{ .Username }})",
+      "eventResellerWarning": "Budget nearly used: {{ .Used }} of {{ .Limit }} GiB.",
+      "eventResellerDepleted": "Budget depleted: {{ .Used }} of {{ .Limit }} GiB used; {{ .Clients }} clients disconnected.",
+      "eventResellerExpiring": "Account term ends in {{ .Days }} days.",
+      "eventResellerExpired": "Account term expired; {{ .Clients }} clients disconnected.",
+      "eventResellerRestored": "Budget restored; paused clients are enabled again.",
+      "eventResellerReset": "Usage counter reset for a new period.",
       "eventPlanDepletedBody": "{{ .Email }} reached the quota for plan {{ .Plan }}: {{ .Used }} of {{ .Quota }} bytes."
     },
     "buttons": {
