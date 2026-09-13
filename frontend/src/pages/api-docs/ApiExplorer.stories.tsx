@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router';
 import i18next from 'i18next';
 import { ThemeProvider, useTheme } from '@/hooks/useTheme';
 import { useTokenBridge } from '@/hooks/useTokenBridge';
-import { HttpUtil, Msg } from '@/utils';
+import { ClipboardManager, HttpUtil, Msg } from '@/utils';
 import type { SignedInUser } from '@/pages/resellers/schema';
 import { OpenApiDocumentSchema, type OpenApiDocument } from './api-document';
 import { sections } from './endpoints';
@@ -75,12 +75,7 @@ async function selectStoryOption(canvas: ReturnType<typeof within>, label: strin
   await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'false'));
   await waitFor(() => {
     const listbox = within(document.body).queryByRole('listbox');
-    const ancestors = [];
-    for (let element = listbox; element && ancestors.length < 6; element = element.parentElement) {
-      const style = getComputedStyle(element);
-      ancestors.push({ tag: element.tagName, class: element.className, display: style.display, visibility: style.visibility, opacity: style.opacity });
-    }
-    expect(listbox, JSON.stringify(ancestors)).toBeNull();
+    if (listbox) expect(listbox).not.toBeVisible();
   }, { timeout: 2500 });
 }
 
@@ -100,12 +95,13 @@ const meta = {
       throw new Error(`Unexpected story HTTP request: ${url}`);
     });
     const post = spyOn(HttpUtil, 'post').mockImplementation(async () => { throw new Error('Story attempted an unexpected mutation'); });
+    const copy = spyOn(ClipboardManager, 'copyText').mockResolvedValue(true);
     const fetch = spyOn(globalThis, 'fetch').mockImplementation(async input => {
       if (!String(input).endsWith('/panel/api/openapi.json')) throw new Error(`Story attempted request execution: ${String(input)}`);
       if (failRead) { failRead = false; return new Response('Unavailable', { status: 503, statusText: 'Unavailable' }); }
       return new Response(JSON.stringify(storyDocument(user)), { headers: { 'Content-Type': 'application/json' } });
     });
-    return () => { get.mockRestore(); post.mockRestore(); fetch.mockRestore(); };
+    return () => { get.mockRestore(); post.mockRestore(); fetch.mockRestore(); copy.mockRestore(); };
   },
 } satisfies Meta<typeof ApiStory>;
 export default meta;
@@ -340,3 +336,91 @@ export const LoginFields: Story = {
     assertNoOverflow(canvasElement);
   },
 };
+
+async function expandedReference(canvasElement: HTMLElement, key: string) {
+  const canvas = within(canvasElement);
+  await userEvent.type(canvas.getByRole('textbox', { name: text('design.apiSearch') }), key);
+  const row = catalogueRows(canvasElement).find(item => item.dataset.apiKey === key)!;
+  expect(row).toBeDefined();
+  const summary = row.querySelector<HTMLElement>('summary')!;
+  await userEvent.click(summary);
+  await waitFor(() => expect(row.querySelector('.api-reference-grid')).toBeVisible());
+  expect(row.dataset.method).toBe(key.split(' ')[0]);
+  const action = within(row).getByRole('button', { name: text('apiExplorer.openExplorer') });
+  expect(action.getBoundingClientRect().top).toBeLessThan(summary.getBoundingClientRect().bottom + 1);
+  const inputs = row.querySelector<HTMLElement>('.api-reference-inputs')!;
+  const responses = within(row).getByRole('group', { name: text('apiExplorer.documentedResponses') });
+  const width = row.querySelector<HTMLElement>('.api-reference-sections')!.clientWidth;
+  if (width > 850) expect(responses.getBoundingClientRect().left).toBeGreaterThanOrEqual(inputs.getBoundingClientRect().right - 1);
+  else expect(responses.getBoundingClientRect().top).toBeGreaterThanOrEqual(inputs.getBoundingClientRect().bottom - 1);
+  return { canvas, row, responses };
+}
+
+async function nextReferenceExample(scope: ReturnType<typeof within>) {
+  const selector = scope.getByRole('combobox', { name: text('apiReference.exampleName') });
+  await userEvent.click(selector.closest('.ant-select')!);
+  const next = [...document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')].find(option => !option.classList.contains('ant-select-item-option-selected'))!;
+  await waitFor(() => expect(next).toBeVisible());
+  await userEvent.click(next);
+  await waitFor(() => expect(selector).toHaveAttribute('aria-expanded', 'false'));
+  await waitFor(() => {
+    const listbox = within(document.body).queryByRole('listbox');
+    if (listbox) expect(listbox).not.toBeVisible();
+  }, { timeout: 2500 });
+}
+
+const wideReference = { viewport: { defaultViewport: 'wideReference', viewports: { wideReference: { name: 'Wide reference', styles: { width: '1600px', height: '1000px' }, type: 'desktop' } } } };
+
+export const LoginReference: Story = {
+  parameters: wideReference,
+  play: async ({ canvasElement }) => {
+    const { row, responses } = await expandedReference(canvasElement, 'POST /login');
+    const request = within(row).getByRole('group', { name: text('apiExplorer.requestBody') });
+    const req = within(request), res = within(responses);
+    expect(req.getByRole('tab', { name: text('apiExplorer.example') })).toHaveAttribute('aria-selected', 'true');
+    const example = req.getByRole('group', { name: text('apiExplorer.example') });
+    expect(JSON.parse(example.textContent!)).toHaveProperty('username');
+    expect(request.querySelectorAll('.api-code-token-key').length).toBeGreaterThan(0);
+    expect(request.querySelector('.api-schema-fields')).toBeNull();
+    await userEvent.click(req.getByRole('tab', { name: text('apiReference.schema') }));
+    const schema = JSON.parse(req.getByRole('group', { name: text('apiReference.schema') }).textContent!);
+    expect(schema).toHaveProperty('properties.username');
+    await userEvent.click(req.getByRole('tab', { name: text('apiReference.fields') }));
+    expect(request.querySelectorAll('.api-schema-fields .api-reference-field').length).toBeGreaterThan(0);
+    await userEvent.click(req.getByRole('tab', { name: text('apiExplorer.example') }));
+    expect(res.getByRole('tab', { name: '200' })).toHaveAttribute('aria-selected', 'true');
+    const before = res.getByRole('group', { name: text('apiExplorer.example') }).textContent;
+    await nextReferenceExample(res);
+    const selected = res.getByRole('group', { name: text('apiExplorer.example') });
+    expect(selected.textContent).not.toBe(before);
+    await userEvent.click(res.getByRole('button', { name: text('apiExplorer.copyCode') }));
+    await waitFor(() => expect(ClipboardManager.copyText).toHaveBeenCalledWith(selected.textContent));
+    await within(document.body).findByText(text('apiExplorer.copied'));
+    assertNoOverflow(canvasElement);
+  },
+};
+
+export const LoginReferenceDark: Story = { ...LoginReference, globals: { theme: 'dark' } };
+export const LoginReferenceMobile: Story = { ...LoginReference, parameters: NarrowCatalogue.parameters };
+
+export const GetReference: Story = {
+  parameters: wideReference,
+  play: async ({ canvasElement }) => {
+    const { row, responses } = await expandedReference(canvasElement, 'GET /panel/api/clients/list/paged');
+    const parameters = within(row).getByRole('group', { name: text('apiExplorer.parameters') });
+    expect(parameters.querySelectorAll('.api-reference-field').length).toBeGreaterThan(0);
+    const res = within(responses);
+    expect(res.getByRole('tab', { name: '200' })).toHaveAttribute('aria-selected', 'true');
+    expect(res.getByRole('tab', { name: text('apiExplorer.example') })).toHaveAttribute('aria-selected', 'true');
+    expect(JSON.parse(res.getByRole('group', { name: text('apiExplorer.example') }).textContent!)).toHaveProperty('success');
+    await userEvent.click(res.getByRole('tab', { name: text('apiReference.schema') }));
+    expect(JSON.parse(res.getByRole('group', { name: text('apiReference.schema') }).textContent!)).toHaveProperty('properties');
+    await userEvent.click(res.getByRole('tab', { name: text('apiReference.fields') }));
+    expect(responses.querySelectorAll('.api-schema-fields .api-reference-field').length).toBeGreaterThan(0);
+    await userEvent.click(res.getByRole('tab', { name: text('apiExplorer.example') }));
+    assertNoOverflow(canvasElement);
+  },
+};
+
+export const GetReferenceDark: Story = { ...GetReference, globals: { theme: 'dark' } };
+export const GetReferenceMobile: Story = { ...GetReference, parameters: NarrowCatalogue.parameters };

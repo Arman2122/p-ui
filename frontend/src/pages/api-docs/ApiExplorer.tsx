@@ -11,6 +11,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useSignedInUser } from '@/pages/resellers/api';
 import type { SignedInUser } from '@/pages/resellers/schema';
 import { ClipboardManager } from '@/utils';
+import { setMessageInstance } from '@/utils/messageBus';
 import { OpenApiDocumentSchema, buildApiCatalogue, inlineDocText, normalizeApiPath, type ApiEntry, type OpenApiDocument } from './api-document';
 import { ApiReference, ApiEventReference, ApiMethod, DocText } from './ApiReference';
 import ApiRequestPanel from './ApiRequestPanel';
@@ -68,6 +69,7 @@ function AuthenticatedExplorer({ user }: { user: SignedInUser }) {
   const searchRef = useRef<InputRef>(null);
   const operationNav = useRef<HTMLElement>(null);
   const [messageApi, messageHolder] = message.useMessage();
+  useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
   const view = urlParams.get('view') === 'explorer' ? 'explorer' : 'catalogue';
   const chosen = urlParams.get('endpoint');
   const query = useQuery({ queryKey: ['openapi', user.id, user.role, user.permissions.plans], staleTime: 60_000,
@@ -227,7 +229,7 @@ function AuthenticatedExplorer({ user }: { user: SignedInUser }) {
             })}>{t(allExpanded ? 'apiExplorer.collapseAll' : 'apiExplorer.expandAll')}</Button></div>
             {groups.filter(([id]) => visible.some(entry => entry.groupId === id)).map(([id, name]) => <section className="api-reference-group" key={id} aria-label={name}>
               <div className="api-group-heading"><h2>{name}</h2><span className="p-sub">{visible.filter(entry => entry.groupId === id).length}</span></div>
-              {visible.filter(entry => entry.groupId === id).map(entry => <article className="p-card api-reference-card" key={entry.key} data-api-key={entry.key}>
+              {visible.filter(entry => entry.groupId === id).map(entry => <article className="p-card api-reference-card" key={entry.key} data-api-key={entry.key} data-method={entry.method}>
                 <details open={expanded.has(entry.key)} onToggle={event => setExpandedKey(entry.key, event.currentTarget.open)}>
                   <summary><div className="api-reference-summary"><ApiMethod method={entry.method} /><code dir="ltr">{entry.path}</code>
                     {entry.deprecated && <span className="api-deprecated">{t('apiExplorer.deprecated')}</span>}</div><p><DocText text={entry.summary} /></p></summary>

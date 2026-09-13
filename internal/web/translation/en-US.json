@@ -3258,7 +3258,7 @@
     "deprecated": "Deprecated",
     "copyLink": "Copy link",
     "viewEvent": "View event docs",
-    "openExplorer": "Open in explorer",
+    "openExplorer": "Try request",
     "subscriptionServer": "These URLs belong to your subscription server, which may use a different host, port and base path. Use the subscription URL from a client to call them; the panel session and API token are not required.",
     "reference": "Parameters, schemas and response examples",
     "referenceOnly": "This entry is reference only: this panel's API document does not advertise an executable operation for it.",
@@ -3273,7 +3273,7 @@
     "requestBody": "Request body",
     "documentedResponses": "Documented responses",
     "wsSession": "Connect with an administrator session cookie. The server upgrades the connection to WebSocket (101); bearer tokens and the HTTP request runner are not supported here.",
-    "copyCode": "Copy connection code",
+    "copyCode": "Copy code",
     "eventPayload": "Example event payload",
     "authentication": "Authentication",
     "public": "No authentication required",
@@ -3411,5 +3411,15 @@
     "snippetBrowserSession": "Runs in this panel’s browser session.",
     "snippetBearer": "Uses the token selected above.",
     "snippetFiles": "Uploads need the selected files available locally."
+  },
+  "apiCode": {"plainText": "Plain text"},
+  "apiReference": {"schema": "Schema",
+    "fields": "Fields",
+    "exampleName": "Example",
+    "externalExample": "This example is hosted externally. Its contents are not loaded here.",
+    "binaryExample": "This content is binary; there is no text example to display.",
+    "noExample": "No example is provided in the API document.",
+    "noBody": "No body is documented.",
+    "responseHeaders": "Response headers"
   }
 }

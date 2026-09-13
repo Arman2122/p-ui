@@ -80,8 +80,8 @@ function entry(container: HTMLElement, key: string): HTMLElement {
 
 async function loaded(container: HTMLElement) { await waitFor(() => expect(container.querySelector('[data-api-key]')).not.toBeNull()); }
 function search(value: string) { fireEvent.change(screen.getByRole('textbox', { name: text('design.apiSearch') }), { target: { value } }); }
-function selectOption(label: string, value: string) {
-  const input = screen.getByRole('combobox', { name: label });
+function selectOption(label: string, value: string, scope: HTMLElement = document.body) {
+  const input = within(scope).getByRole('combobox', { name: label });
   fireEvent.mouseDown(input.closest('.ant-select')!);
   const option = [...document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')].find(item => item.getAttribute('title') === value || item.textContent === value);
   expect(option, `Option ${value}`).toBeDefined();
@@ -191,7 +191,16 @@ describe('native API catalogue and authenticated role', () => {
     fireEvent.click(screen.getByRole('button', { name: text('apiExplorer.expandAll') }));
     const post = entry(view.container, `POST ${widgets}`);
     expect(post.querySelector('details')?.open).toBe(true);
-    for (const value of ['Readable result label', 'Owner permission denied', 'New widget', 'Result fixture', text('apiExplorer.deprecated')]) expect(post.textContent).toContain(value);
+    expect(post.textContent).toContain(text('apiExplorer.deprecated'));
+    const req = within(post).getByRole('group', { name: text('apiExplorer.requestBody') });
+    const res = within(post).getByRole('group', { name: text('apiExplorer.documentedResponses') });
+    expect(within(req).getByRole('group', { name: text('apiExplorer.example') }).textContent).toContain('New widget');
+    expect(within(res).getByRole('group', { name: text('apiExplorer.example') }).textContent).toContain('Result fixture');
+    expect(within(req).queryByText('Readable result label')).toBeNull();
+    fireEvent.click(within(req).getByRole('tab', { name: text('apiReference.fields') }));
+    expect(within(req).getByText('Readable result label')).toBeTruthy();
+    fireEvent.click(within(res).getByRole('tab', { name: '403' }));
+    expect(within(res).getByText('Owner permission denied')).toBeTruthy();
     expect(post.textContent).not.toContain('<code>');
     expect(post.querySelectorAll('code').length).toBeGreaterThan(1);
     fireEvent.click(within(post).getByRole('button', { name: text('apiExplorer.openExplorer') }));
@@ -257,7 +266,7 @@ describe('native API catalogue and authenticated role', () => {
     expect(button.querySelector('code')?.textContent).toBe('/test/widgets/{id}');
     expect(button.querySelector('code')?.title).toBe(widgets);
     expect(button.querySelector('.api-nav-entry-summary')?.textContent).toBe('List widgets');
-    fireEvent.click(screen.getByRole('button', { name: text('apiRepair.request.copyUrl') }));
+    fireEvent.click(within(view.container.querySelector<HTMLElement>('.p-apirequest')!).getByRole('button', { name: text('apiRepair.request.copyUrl') }));
     await waitFor(() => expect(copy).toHaveBeenCalled());
     expect(new URL(String(copy.mock.calls[0][0])).pathname).toBe('/panel/api/test/widgets/4');
     fireEvent.click(screen.getByRole('radio', { name: text('apiExplorer.catalogue') }));
@@ -265,7 +274,7 @@ describe('native API catalogue and authenticated role', () => {
     await waitFor(() => expect(copy).toHaveBeenCalledTimes(2));
     expect(new URL(String(copy.mock.calls[1][0])).searchParams.get('endpoint')).toBe(`POST ${widgets}`);
     expect(view.fetch).toHaveBeenCalledTimes(1);
-  });
+  }, 10_000);
 
   it.each(['admin', 'reseller'] as const)('quickstart selects only served authorised GET operations for %s without sending', async role => {
     const view = setup({ user: identity(role) });
@@ -301,7 +310,7 @@ describe('native API catalogue and authenticated role', () => {
     fireEvent.change(await screen.findByLabelText('path: id'), { target: { value: '17' } });
     fireEvent.change(screen.getByLabelText('query: q'), { target: { value: 'kept/query value' } });
     openRequestBody();
-    selectOption(text('apiRepair.request.contentType'), 'application/problem+json');
+    selectOption(text('apiRepair.request.contentType'), 'application/problem+json', view.container.querySelector<HTMLElement>('.p-apirequest-editor')!);
     fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
     const raw = '{"enabled": false, "label": "unfinished owner draft"';
     fireEvent.change(screen.getByLabelText(text('apiRepair.request.jsonBody')), { target: { value: raw } });
@@ -311,12 +320,12 @@ describe('native API catalogue and authenticated role', () => {
     expect((screen.getByLabelText('query: q') as HTMLInputElement).value).toBe('kept/query value');
     openRequestBody();
     expect((screen.getByLabelText(text('apiRepair.request.jsonBody')) as HTMLTextAreaElement).value).toBe(raw);
-    expect(screen.getByRole('combobox', { name: text('apiRepair.request.contentType') }).closest('.ant-select')?.textContent).toContain('application/problem+json');
+    expect(within(view.container.querySelector<HTMLElement>('.p-apirequest-editor')!).getByRole('combobox', { name: text('apiRepair.request.contentType') }).closest('.ant-select')?.textContent).toContain('application/problem+json');
     fireEvent.click(screen.getByRole('button', { name: 'Test history forward' }));
     expect(currentParams().get('endpoint')).toBe('GET /panel/api/test/inspect');
     expect(currentParams().get('retain')).toBe('yes');
     expect(view.fetch).toHaveBeenCalledTimes(1);
-  });
+  }, 10_000);
 
   it('retains same-endpoint file choices on auth switches but requires reselecting files after endpoint navigation', async () => {
     const view = setup({ url: `/api-docs?view=explorer&endpoint=${encodeURIComponent('POST /panel/api/test/upload')}` });

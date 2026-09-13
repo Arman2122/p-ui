@@ -1,0 +1,78 @@
+.api-code-block {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--p-border, #d9d9d9);
+  border-radius: 8px;
+  background: var(--p-surface, #fff);
+  color: var(--p-text, #141414);
+}
+.api-code-block .api-code-block-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 10px 6px 12px;
+  border-bottom: 1px solid var(--p-border, #d9d9d9);
+}
+.api-code-block .api-code-block-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 600;
+}
+.api-code-block .api-code-block-language {
+  min-width: 0;
+  max-width: 40%;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--p-fill-q, #f5f5f5);
+}
+.api-code-block .api-code-block-header > .ant-btn {
+  flex: 0 0 auto;
+  color: var(--p-text, #141414);
+}
+.api-code-block .api-code-block-pre {
+  box-sizing: border-box;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--p-bg, #fafafa) 65%, var(--p-surface, #fff));
+  color: var(--p-text, #141414);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  unicode-bidi: isolate;
+}
+.api-code-block .api-code-block-pre:focus-visible {
+  outline: 2px solid var(--p-primary, #1677ff);
+  outline-offset: -2px;
+}
+.api-code-block .api-code-block-pre > code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: inherit;
+  overflow-wrap: inherit;
+}
+.api-code-block .api-code-token-key { color: color-mix(in srgb, var(--p-primary, #1677ff) 45%, var(--p-ink, #111)); }
+.api-code-block .api-code-token-string { color: color-mix(in srgb, var(--p-success, #389e0d) 45%, var(--p-ink, #111)); }
+.api-code-block .api-code-token-number { color: color-mix(in srgb, var(--p-warning, #d48806) 45%, var(--p-ink, #111)); }
+.api-code-block .api-code-token-literal { color: color-mix(in srgb, var(--p-error, #d9363e) 45%, var(--p-ink, #111)); }
+@media print {
+  .api-code-block .api-code-block-pre { max-height: none; overflow: visible; }
+  .api-code-block .api-code-block-header > .ant-btn { display: none; }
+}
