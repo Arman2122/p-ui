@@ -5535,19 +5535,19 @@
       },
       "ResellerClientSelection": {
         "properties": {
-          "clientIds": {
+          "emails": {
             "example": [
-              1,
-              2
+              "alice",
+              "bob"
             ],
             "items": {
-              "type": "integer"
+              "type": "string"
             },
             "type": "array"
           }
         },
         "required": [
-          "clientIds"
+          "emails"
         ],
         "type": "object"
       },
@@ -24148,9 +24148,9 @@
                 "$ref": "#/components/schemas/ResellerClientSelection"
               },
               "example": {
-                "clientIds": [
-                  1,
-                  2
+                "emails": [
+                  "alice",
+                  "bob"
                 ]
               }
             }
@@ -24224,9 +24224,9 @@
                 "$ref": "#/components/schemas/ResellerClientSelection"
               },
               "example": {
-                "clientIds": [
-                  1,
-                  2
+                "emails": [
+                  "alice",
+                  "bob"
                 ]
               }
             }

@@ -1455,9 +1455,9 @@ export const EXAMPLES: Record<string, unknown> = {
     "total": 12
   },
   "ResellerClientSelection": {
-    "clientIds": [
-      1,
-      2
+    "emails": [
+      "alice",
+      "bob"
     ]
   },
   "ResellerClientView": {

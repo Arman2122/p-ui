@@ -77,26 +77,26 @@ func TestResellerTransferAndDeletePostgres(t *testing.T) {
 	x := newClient("transfer-x", granted.Id, noop)
 
 	t.Run("assignment is refused outside the grants, the term, the budget shape and the cap", func(t *testing.T) {
-		if _, err := svc.AssignClients(a, a.Id, []int{x.Id}); !errors.Is(err, ErrResellerForbidden) {
+		if _, err := svc.AssignClients(a, a.Id, []string{x.Email}); !errors.Is(err, ErrResellerForbidden) {
 			t.Fatalf("reseller assigned clients to itself: %v", err)
 		}
 		ungranted := newClient("transfer-ungranted", foreign.Id, noop)
-		if _, err := svc.AssignClients(&admin, a.Id, []int{ungranted.Id}); !errors.Is(err, ErrResellerForbidden) {
+		if _, err := svc.AssignClients(&admin, a.Id, []string{ungranted.Email}); !errors.Is(err, ErrResellerForbidden) {
 			t.Fatalf("ungranted inbound accepted: %v", err)
 		}
 		endless := newClient("transfer-endless", granted.Id, func(r *model.ClientRecord) { r.ExpiryTime = 0 })
-		if _, err := svc.AssignClients(&admin, a.Id, []int{endless.Id}); !errors.Is(err, ErrResellerBudget) {
+		if _, err := svc.AssignClients(&admin, a.Id, []string{endless.Email}); !errors.Is(err, ErrResellerBudget) {
 			t.Fatalf("client outliving the term accepted: %v", err)
 		}
 		unlimited := newClient("transfer-unlimited", granted.Id, func(r *model.ClientRecord) { r.TotalGB = 0 })
-		if _, err := svc.AssignClients(&admin, a.Id, []int{unlimited.Id}); !errors.Is(err, ErrResellerBudget) {
+		if _, err := svc.AssignClients(&admin, a.Id, []string{unlimited.Email}); !errors.Is(err, ErrResellerBudget) {
 			t.Fatalf("unlimited quota under a finite budget accepted: %v", err)
 		}
 		grouped := newClient("transfer-grouped", granted.Id, func(r *model.ClientRecord) { r.Group = "pool" })
-		if _, err := svc.AssignClients(&admin, a.Id, []int{grouped.Id}); !errors.Is(err, ErrResellerInvalid) {
+		if _, err := svc.AssignClients(&admin, a.Id, []string{grouped.Email}); !errors.Is(err, ErrResellerInvalid) {
 			t.Fatalf("grouped client accepted: %v", err)
 		}
-		if _, err := svc.AssignClients(&admin, a.Id, []int{x.Id, 987654}); !errors.Is(err, ErrResellerInvalid) {
+		if _, err := svc.AssignClients(&admin, a.Id, []string{x.Email, "transfer-nobody"}); !errors.Is(err, ErrResellerInvalid) {
 			t.Fatalf("unknown client accepted: %v", err)
 		}
 		for _, id := range []int{ungranted.Id, endless.Id, unlimited.Id, grouped.Id, x.Id} {
@@ -116,7 +116,7 @@ func TestResellerTransferAndDeletePostgres(t *testing.T) {
 		if err := db.Model(&core.ClientTraffic{}).Where("email = ?", x.Email).Update("down", 500).Error; err != nil {
 			t.Fatal(err)
 		}
-		res, err := svc.AssignClients(&admin, a.Id, []int{x.Id})
+		res, err := svc.AssignClients(&admin, a.Id, []string{x.Email})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -136,20 +136,20 @@ func TestResellerTransferAndDeletePostgres(t *testing.T) {
 	})
 	t.Run("a move between resellers respects the target cap", func(t *testing.T) {
 		newClient("transfer-b-existing", granted.Id, func(r *model.ClientRecord) { r.OwnerUserID = &b.Id })
-		if _, err := svc.AssignClients(&admin, b.Id, []int{x.Id}); !errors.Is(err, ErrResellerBudget) {
+		if _, err := svc.AssignClients(&admin, b.Id, []string{x.Email}); !errors.Is(err, ErrResellerBudget) {
 			t.Fatalf("cap ignored: %v", err)
 		}
 		if err := db.Model(&model.ResellerAccount{}).Where("user_id = ?", b.Id).Update("client_cap", 5).Error; err != nil {
 			t.Fatal(err)
 		}
-		res, err := svc.AssignClients(&admin, b.Id, []int{x.Id})
+		res, err := svc.AssignClients(&admin, b.Id, []string{x.Email})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if res.Moved != 1 || owner(x.Id) != b.Id {
 			t.Fatalf("move between resellers: %+v owner=%d", res, owner(x.Id))
 		}
-		if res, err := svc.AssignClients(&admin, b.Id, []int{x.Id}); err != nil || res.Moved != 0 {
+		if res, err := svc.AssignClients(&admin, b.Id, []string{x.Email}); err != nil || res.Moved != 0 {
 			t.Fatalf("re-assigning an owned client: %+v %v", res, err)
 		}
 	})
@@ -161,10 +161,10 @@ func TestResellerTransferAndDeletePostgres(t *testing.T) {
 		if err := db.Create(&model.ClientPolicy{Email: x.Email, PolicyId: &private.Id}).Error; err != nil {
 			t.Fatal(err)
 		}
-		if _, err := svc.ReleaseClients(&admin, a.Id, []int{x.Id}); !errors.Is(err, ErrResellerForbidden) {
+		if _, err := svc.ReleaseClients(&admin, a.Id, []string{x.Email}); !errors.Is(err, ErrResellerForbidden) {
 			t.Fatalf("released a client another reseller owns: %v", err)
 		}
-		res, err := svc.ReleaseClients(&admin, b.Id, []int{x.Id})
+		res, err := svc.ReleaseClients(&admin, b.Id, []string{x.Email})
 		if err != nil {
 			t.Fatal(err)
 		}

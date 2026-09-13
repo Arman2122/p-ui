@@ -63,7 +63,7 @@ func (a *ResellerController) assignClients(c *gin.Context) {
 		resellerResponse(c, nil, service.ErrResellerInvalid)
 		return
 	}
-	obj, err := a.service.AssignClients(session.GetLoginUser(c), resellerID(c), in.ClientIDs)
+	obj, err := a.service.AssignClients(session.GetLoginUser(c), resellerID(c), in.Emails)
 	resellerResponse(c, obj, err)
 }
 
@@ -73,7 +73,7 @@ func (a *ResellerController) releaseClients(c *gin.Context) {
 		resellerResponse(c, nil, service.ErrResellerInvalid)
 		return
 	}
-	obj, err := a.service.ReleaseClients(session.GetLoginUser(c), resellerID(c), in.ClientIDs)
+	obj, err := a.service.ReleaseClients(session.GetLoginUser(c), resellerID(c), in.Emails)
 	resellerResponse(c, obj, err)
 }
 

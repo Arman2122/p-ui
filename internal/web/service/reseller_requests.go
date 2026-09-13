@@ -27,7 +27,7 @@ type ResellerDeleteRequest struct {
 }
 
 type ResellerClientSelection struct {
-	ClientIDs []int `json:"clientIds" example:"[1,2]"`
+	Emails []string `json:"emails" example:"[\"alice\",\"bob\"]"`
 }
 
 type ResellerTransferResult struct {

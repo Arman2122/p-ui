@@ -1294,7 +1294,7 @@ export const ResellerClientPageSchema = z.object({
 export type ResellerClientPage = z.infer<typeof ResellerClientPageSchema>;
 
 export const ResellerClientSelectionSchema = z.object({
-  clientIds: z.array(z.number().int()),
+  emails: z.array(z.string()),
 });
 export type ResellerClientSelection = z.infer<typeof ResellerClientSelectionSchema>;
 

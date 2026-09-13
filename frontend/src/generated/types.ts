@@ -1209,7 +1209,7 @@ export interface ResellerClientPage {
 }
 
 export interface ResellerClientSelection {
-  clientIds: number[];
+  emails: string[];
 }
 
 export interface ResellerClientView {

@@ -5487,19 +5487,19 @@ export const SCHEMAS: Record<string, unknown> = {
   },
   "ResellerClientSelection": {
     "properties": {
-      "clientIds": {
+      "emails": {
         "example": [
-          1,
-          2
+          "alice",
+          "bob"
         ],
         "items": {
-          "type": "integer"
+          "type": "string"
         },
         "type": "array"
       }
     },
     "required": [
-      "clientIds"
+      "emails"
     ],
     "type": "object"
   },

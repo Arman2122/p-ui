@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -30,17 +31,23 @@ func (s *ResellerService) withAccountLocks(ids []int, fn func() error) error {
 	return run(0)
 }
 
-func uniqueClientIDs(ids []int) ([]int, error) {
-	out := slices.Compact(slices.Sorted(slices.Values(ids)))
-	if len(out) == 0 || len(out) > 1000 || out[0] <= 0 {
+func uniqueClientEmails(emails []string) ([]string, error) {
+	out := make([]string, 0, len(emails))
+	for _, email := range emails {
+		if email = strings.TrimSpace(email); email != "" {
+			out = append(out, email)
+		}
+	}
+	out = slices.Compact(slices.Sorted(slices.Values(out)))
+	if len(out) == 0 || len(out) > 1000 {
 		return nil, ErrResellerInvalid
 	}
 	return out, nil
 }
 
-func clientOwnerIDs(ids []int) ([]int, error) {
+func clientOwnerIDs(emails []string) ([]int, error) {
 	var owners []int
-	err := database.GetDB().Model(&model.ClientRecord{}).Where("id IN ? AND owner_user_id IS NOT NULL", ids).Distinct().Pluck("owner_user_id", &owners).Error
+	err := database.GetDB().Model(&model.ClientRecord{}).Where("email IN ? AND owner_user_id IS NOT NULL", emails).Distinct().Pluck("owner_user_id", &owners).Error
 	return owners, err
 }
 
@@ -52,15 +59,15 @@ func resellerAccepting(a *model.ResellerAccount) error {
 }
 
 // AssignClients moves clients under a reseller from the administrator or another reseller.
-func (s *ResellerService) AssignClients(user *model.User, id int, clientIDs []int) (*ResellerTransferResult, error) {
+func (s *ResellerService) AssignClients(user *model.User, id int, emails []string) (*ResellerTransferResult, error) {
 	if !session.IsAdminUser(user) {
 		return nil, ErrResellerForbidden
 	}
-	ids, err := uniqueClientIDs(clientIDs)
+	emails, err := uniqueClientEmails(emails)
 	if err != nil {
 		return nil, err
 	}
-	owners, err := clientOwnerIDs(ids)
+	owners, err := clientOwnerIDs(emails)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +82,7 @@ func (s *ResellerService) AssignClients(user *model.User, id int, clientIDs []in
 		}
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
 			var err error
-			out, err = transferClientsTx(tx, ids, &a)
+			out, err = transferClientsTx(tx, emails, &a)
 			return err
 		})
 	})
@@ -83,11 +90,11 @@ func (s *ResellerService) AssignClients(user *model.User, id int, clientIDs []in
 }
 
 // ReleaseClients hands owned clients back to the administrator.
-func (s *ResellerService) ReleaseClients(user *model.User, id int, clientIDs []int) (*ResellerTransferResult, error) {
+func (s *ResellerService) ReleaseClients(user *model.User, id int, emails []string) (*ResellerTransferResult, error) {
 	if !session.IsAdminUser(user) {
 		return nil, ErrResellerForbidden
 	}
-	ids, err := uniqueClientIDs(clientIDs)
+	emails, err := uniqueClientEmails(emails)
 	if err != nil {
 		return nil, err
 	}
@@ -95,14 +102,14 @@ func (s *ResellerService) ReleaseClients(user *model.User, id int, clientIDs []i
 	err = s.WithAccountLock(id, func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
 			var owned int64
-			if err := tx.Model(&model.ClientRecord{}).Where("id IN ? AND owner_user_id = ?", ids, id).Count(&owned).Error; err != nil {
+			if err := tx.Model(&model.ClientRecord{}).Where("email IN ? AND owner_user_id = ?", emails, id).Count(&owned).Error; err != nil {
 				return err
 			}
-			if owned != int64(len(ids)) {
+			if owned != int64(len(emails)) {
 				return ErrResellerForbidden
 			}
 			var err error
-			out, err = transferClientsTx(tx, ids, nil)
+			out, err = transferClientsTx(tx, emails, nil)
 			return err
 		})
 	})
@@ -111,12 +118,12 @@ func (s *ResellerService) ReleaseClients(user *model.User, id int, clientIDs []i
 
 // transferClientsTx re-owns the rows; the database triggers keep the spent traffic with the old owner.
 // A nil target is the administrator. Plan assignments the new owner cannot see are cleared.
-func transferClientsTx(tx *gorm.DB, ids []int, target *model.ResellerAccount) (*ResellerTransferResult, error) {
+func transferClientsTx(tx *gorm.DB, emails []string, target *model.ResellerAccount) (*ResellerTransferResult, error) {
 	var recs []model.ClientRecord
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id IN ?", ids).Order("id").Find(&recs).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("email IN ?", emails).Order("id").Find(&recs).Error; err != nil {
 		return nil, err
 	}
-	if len(recs) != len(ids) {
+	if len(recs) != len(emails) {
 		return nil, fmt.Errorf("%w: unknown client", ErrResellerInvalid)
 	}
 	out := &ResellerTransferResult{}
@@ -134,18 +141,18 @@ func transferClientsTx(tx *gorm.DB, ids []int, target *model.ResellerAccount) (*
 		}
 		out.Moved++
 	}
-	if err := tx.Model(&model.ClientRecord{}).Where("id IN ?", ids).Update("owner_user_id", owner).Error; err != nil {
+	if err := tx.Model(&model.ClientRecord{}).Where("email IN ?", emails).Update("owner_user_id", owner).Error; err != nil {
 		return nil, err
 	}
-	if err := tx.Where("client_id IN ?", ids).Delete(&model.ResellerPausedClient{}).Error; err != nil {
+	if err := tx.Where("client_id IN (?)", tx.Model(&model.ClientRecord{}).Select("id").Where("email IN ?", emails)).Delete(&model.ResellerPausedClient{}).Error; err != nil {
 		return nil, err
 	}
-	var emails []string
-	if err := tx.Table("client_policies cp").Joins("JOIN policies p ON p.id = cp.policy_id").Joins("JOIN clients c ON c.email = cp.email").
-		Where("c.id IN ? AND p.owner_user_id IS DISTINCT FROM ?", ids, owner).Order("cp.email").Pluck("cp.email", &emails).Error; err != nil {
+	var cleared []string
+	if err := tx.Table("client_policies cp").Joins("JOIN policies p ON p.id = cp.policy_id").
+		Where("cp.email IN ? AND p.owner_user_id IS DISTINCT FROM ?", emails, owner).Order("cp.email").Pluck("cp.email", &cleared).Error; err != nil {
 		return nil, err
 	}
-	for _, email := range emails {
+	for _, email := range cleared {
 		if err := (&PolicyService{}).UnassignPlanTx(tx, scope, email); err != nil {
 			return nil, err
 		}
@@ -208,15 +215,9 @@ func (s *ResellerService) Delete(user *model.User, id int, in ResellerDeleteRequ
 		if err := db.First(&a, "user_id = ?", id).Error; err != nil {
 			return err
 		}
-		var owned []model.ClientRecord
-		if err := db.Select("id", "email").Where("owner_user_id = ?", id).Order("id").Find(&owned).Error; err != nil {
+		var emails []string
+		if err := db.Model(&model.ClientRecord{}).Where("owner_user_id = ?", id).Order("id").Pluck("email", &emails).Error; err != nil {
 			return err
-		}
-		ids := make([]int, 0, len(owned))
-		emails := make([]string, 0, len(owned))
-		for _, rec := range owned {
-			ids = append(ids, rec.Id)
-			emails = append(emails, rec.Email)
 		}
 		if in.Clients == "delete" && len(emails) > 0 {
 			result, nr, err := (&ClientService{}).BulkDelete(&InboundService{}, emails, false)
@@ -230,7 +231,7 @@ func (s *ResellerService) Delete(user *model.User, id int, in ResellerDeleteRequ
 			}
 		}
 		return db.Transaction(func(tx *gorm.DB) error {
-			if in.Clients == "transfer" && len(ids) > 0 {
+			if in.Clients == "transfer" && len(emails) > 0 {
 				var target *model.ResellerAccount
 				if in.OwnerID > 0 {
 					target = &model.ResellerAccount{}
@@ -244,7 +245,7 @@ func (s *ResellerService) Delete(user *model.User, id int, in ResellerDeleteRequ
 						return err
 					}
 				}
-				if _, err := transferClientsTx(tx, ids, target); err != nil {
+				if _, err := transferClientsTx(tx, emails, target); err != nil {
 					return err
 				}
 			}
