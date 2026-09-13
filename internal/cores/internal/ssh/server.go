@@ -94,6 +94,8 @@ type server struct {
 	// admit asks the panel to decide a login against the client's cap; nil admits.
 	admit    core.AdmitFunc
 	throttle *loginThrottle
+	// banner is what a shell is shown; swapped on edit, so no session drops for it.
+	banner atomic.Pointer[string]
 
 	mu       sync.RWMutex
 	byUser   map[string]*credential
@@ -193,14 +195,18 @@ func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.S
 	if dial == nil {
 		dial = directDialer()
 	}
-	return &server{
+	s := &server{
 		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure, admit: admit, opened: time.Now(),
 		throttle: newLoginThrottle(),
 		byUser:   map[string]*credential{}, byEmail: map[string]*credential{},
 		conns: map[*conn]struct{}{}, traffic: map[string]*counters{},
 		limits: map[string]core.RateLimit{}, limiters: map[string]*limiterPair{},
 	}
+	s.setBanner(settings.Banner)
+	return s
 }
+
+func (s *server) setBanner(banner string) { s.banner.Store(&banner) }
 
 // setUsers replaces the credential set. A client no longer present, or now
 // disabled, has every live connection closed: that is what a revocation means.
@@ -283,11 +289,13 @@ func (s *server) authenticate(meta gossh.ConnMetadata, password []byte) (*gossh.
 	if !ok || subtle.ConstantTimeCompare([]byte(cred.password), password) != 1 {
 		return nil, errDenied
 	}
+	// Told to the client as a banner: the app shows it, where "permission
+	// denied" alone sends the user to the operator. A wrong password stays bare.
 	if !cred.enable {
-		return nil, errors.New("client is disabled")
+		return nil, &gossh.BannerError{Err: errors.New("client is disabled"), Message: "This account is disabled."}
 	}
 	if cred.expiry > 0 && time.Now().UnixMilli() > cred.expiry {
-		return nil, errors.New("client has expired")
+		return nil, &gossh.BannerError{Err: errors.New("client has expired"), Message: "This account has expired."}
 	}
 	source := addrOf(meta.RemoteAddr())
 	if s.admit != nil && cred.limitIP > 0 {
@@ -296,7 +304,7 @@ func (s *server) authenticate(meta gossh.ConnMetadata, password []byte) (*gossh.
 			Source: source, Held: core.HeldSources(s.sessions(), cred.email), LimitIP: cred.limitIP,
 		}
 		if err := s.admit(context.Background(), admission); err != nil {
-			return nil, err
+			return nil, &gossh.BannerError{Err: err, Message: "Too many devices are connected to this account."}
 		}
 	}
 	return &gossh.Permissions{Extensions: map[string]string{"email": cred.email}}, nil
@@ -439,8 +447,8 @@ func (s *server) session(nc gossh.NewChannel) {
 				if req.WantReply {
 					_ = req.Reply(true, nil)
 				}
-				if s.settings.Banner != "" {
-					_, _ = io.WriteString(ch, s.settings.Banner+"\r\n")
+				if banner := *s.banner.Load(); banner != "" {
+					_, _ = io.WriteString(ch, banner+"\r\n")
 				}
 			default:
 				if req.WantReply {

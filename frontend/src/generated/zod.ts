@@ -633,6 +633,7 @@ export type CoreConfigView = z.infer<typeof CoreConfigViewSchema>;
 export const CoreHostProcessViewSchema = z.object({
   binaryReplaced: z.boolean().optional(),
   executable: z.string(),
+  parentPid: z.number().int().optional(),
   pid: z.number().int(),
   state: z.string(),
 });

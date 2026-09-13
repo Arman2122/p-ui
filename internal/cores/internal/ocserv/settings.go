@@ -16,6 +16,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -144,7 +145,15 @@ func (c *Core) MintInstance(kind core.Kind, raw, previous string) (string, error
 	}
 	cert, _ := doc["serverCert"].(string)
 	key, _ := doc["serverKey"].(string)
-	if cert == "" || key == "" {
+	if (cert == "") != (key == "") {
+		return "", errors.New("ocserv: a server certificate and its key are set together; leave both empty to keep the minted identity")
+	}
+	if cert != "" {
+		if _, err := tls.X509KeyPair([]byte(cert), []byte(key)); err != nil {
+			return "", fmt.Errorf("ocserv: the server certificate and key are not a pair: %w", err)
+		}
+	}
+	if cert == "" {
 		certPEM, keyPEM, err := mintServerIdentity()
 		if err != nil {
 			return "", err

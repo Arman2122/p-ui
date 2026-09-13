@@ -52,6 +52,10 @@ export default function OcservExitFields() {
       <FormField label={t('pages.xray.egress.ocGroup')} name="ocGroup" tooltip={t('pages.xray.egress.ocGroupHint')}>
         <Input id="ocGroup" autoComplete="off" />
       </FormField>
+
+      <FormField label={t('pages.xray.egress.ocCamouflage')} name="ocCamouflageSecret" tooltip={t('pages.xray.egress.ocCamouflageHint')}>
+        <Input id="ocCamouflageSecret" autoComplete="off" />
+      </FormField>
     </>
   );
 }

@@ -596,6 +596,7 @@ export interface CoreConfigView {
 export interface CoreHostProcessView {
   binaryReplaced?: boolean;
   executable: string;
+  parentPid?: number;
   pid: number;
   state: string;
 }

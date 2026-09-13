@@ -690,6 +690,7 @@ export const EXAMPLES: Record<string, unknown> = {
   "CoreHostProcessView": {
     "binaryReplaced": true,
     "executable": "/usr/sbin/openvpn",
+    "parentPid": 2046529,
     "pid": 2046530,
     "state": "running"
   },
@@ -699,6 +700,7 @@ export const EXAMPLES: Record<string, unknown> = {
       {
         "binaryReplaced": true,
         "executable": "/usr/sbin/openvpn",
+        "parentPid": 2046529,
         "pid": 2046530,
         "state": "running"
       }

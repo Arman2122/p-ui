@@ -53,6 +53,7 @@ type CoreHostProcessView struct {
 	PID            int    `json:"pid" example:"2046530"`
 	Executable     string `json:"executable" example:"/usr/sbin/openvpn"`
 	State          string `json:"state" example:"running"`
+	ParentPID      int    `json:"parentPid,omitempty" example:"2046529"`
 	BinaryReplaced bool   `json:"binaryReplaced,omitempty" example:"true"`
 }
 

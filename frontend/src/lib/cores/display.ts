@@ -21,7 +21,9 @@ export function coreStateTone(core: CoreStatusView) {
 
 export function coreHostProcesses(core: CoreStatusView) {
   const managed = new Set([core.pid, ...core.instances.map((instance) => instance.pid)].filter((pid) => pid !== undefined && pid > 0));
-  return isBuiltinCore(core) ? [] : (core.hostRuntime?.processes ?? []).map((process) => ({ ...process, managed: managed.has(process.pid) }));
+  // A relay or a worker is a child of a managed daemon, and restarts with it.
+  const isManaged = (process: { pid: number; parentPid?: number }) => managed.has(process.pid) || (process.parentPid !== undefined && managed.has(process.parentPid));
+  return isBuiltinCore(core) ? [] : (core.hostRuntime?.processes ?? []).map((process) => ({ ...process, managed: isManaged(process) }));
 }
 
 export function coreHasOtherProcesses(core: CoreStatusView): boolean { return coreHostProcesses(core).some((process) => !process.managed); }

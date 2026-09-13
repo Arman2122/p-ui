@@ -99,7 +99,7 @@ func fingerprint(inst core.Instance, s Settings) string {
 	// The bridge fields are in here so flipping the switch rebuilds the
 	// listener: the dialer is chosen when the server is built, and a hot apply
 	// would leave live forwards on the old one.
-	parts := []string{inst.Listen, fmt.Sprint(inst.Port), s.Transport, s.Path, s.CertFile, s.KeyFile, s.Banner}
+	parts := []string{inst.Listen, fmt.Sprint(inst.Port), s.Transport, s.Path, s.CertFile, s.KeyFile}
 	parts = append(parts, fmt.Sprint(s.RouteThroughXray), fmt.Sprint(s.RouteXrayPort), fmt.Sprint(s.UDPGW), fmt.Sprint(s.UDPGWPort))
 	for _, part := range parts {
 		h.Write([]byte(part))

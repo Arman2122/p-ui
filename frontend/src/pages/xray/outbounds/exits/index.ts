@@ -118,7 +118,7 @@ function ocservFromRecord(row: EgressRecord): EgressFormValues {
     const parsed = OcservExitSettingsSchema.safeParse(JSON.parse(row.settings));
     if (!parsed.success) return base;
     const s = parsed.data;
-    return { ...base, id: row.id, ocServer: s.server, ocUser: s.username, ocPassword: s.password, ocPin: s.serverCertPin, ocGroup: s.group };
+    return { ...base, id: row.id, ocServer: s.server, ocUser: s.username, ocPassword: s.password, ocPin: s.serverCertPin, ocGroup: s.group, ocCamouflageSecret: s.camouflageSecret };
   } catch {
     return base;
   }

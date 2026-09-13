@@ -179,7 +179,8 @@ func (c *Core) ensureLocked(d core.Instance) error {
 	fp := fingerprint(d, settings)
 	if cur, ok := c.instances[d.ID]; ok {
 		if cur.fingerprint == fp {
-			cur.inst = d
+			cur.inst, cur.settings = d, settings
+			cur.srv.setBanner(settings.Banner)
 			return cur.srv.setUsers(d.Users)
 		}
 		cur.srv.stop()
@@ -270,7 +271,7 @@ func (c *Core) PlanChange(before, after core.Instance) core.Action {
 		return core.ActionRestart
 	case fingerprint(before, bs) != fingerprint(after, as):
 		return core.ActionRestart
-	case usersFingerprint(before.Users) != usersFingerprint(after.Users):
+	case usersFingerprint(before.Users) != usersFingerprint(after.Users), bs.Banner != as.Banner:
 		return core.ActionHotApply
 	}
 	return core.ActionNoop

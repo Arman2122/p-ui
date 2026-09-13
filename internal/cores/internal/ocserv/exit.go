@@ -40,6 +40,9 @@ type ExitSettings struct {
 	ServerCertPin string `json:"serverCertPin"`
 	// Group answers a server that offers several; empty answers none.
 	Group string `json:"group"`
+	// CamouflageSecret is what a camouflaged ocserv expects after "?" in the
+	// URL; the client is pointed at https://server/?secret.
+	CamouflageSecret string `json:"camouflageSecret"`
 }
 
 // ExitDevicePrefix names an exit's tun: pcx<id>, apart from the inbounds' poc.
@@ -85,6 +88,8 @@ func parseExitSettings(raw string) (ExitSettings, error) {
 		return s, errors.New("ocserv exit: the password cannot contain a line break")
 	case s.ServerCertPin != "" && !strings.HasPrefix(s.ServerCertPin, "pin-sha256:"):
 		return s, errors.New("ocserv exit: the certificate pin must be the pin-sha256:... openconnect prints")
+	case strings.ContainsAny(s.CamouflageSecret, " \t\r\n/?#"):
+		return s, errors.New("ocserv exit: the camouflage secret rides in the URL and cannot contain spaces, /, ? or #")
 	}
 	if strings.Contains(s.Server, ":") {
 		if _, port, err := net.SplitHostPort(s.Server); err != nil {
@@ -259,6 +264,9 @@ func (c *Core) exitArgs(id int, cur *exitState) []string {
 	}
 	if s.Group != "" {
 		args = append(args, "--authgroup="+s.Group)
+	}
+	if s.CamouflageSecret != "" {
+		return append(args, "https://"+s.Server+"/?"+s.CamouflageSecret)
 	}
 	return append(args, s.Server)
 }

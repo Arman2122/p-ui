@@ -212,6 +212,14 @@ func (ex *exitClient) clientConfig() (*gossh.ClientConfig, error) {
 	}
 	if ex.settings.Password != "" {
 		auth = append(auth, gossh.Password(ex.settings.Password))
+		// PAM's default offers keyboard-interactive alone; every prompt gets the password.
+		auth = append(auth, gossh.KeyboardInteractive(func(_, _ string, questions []string, _ []bool) ([]string, error) {
+			answers := make([]string, len(questions))
+			for i := range answers {
+				answers[i] = ex.settings.Password
+			}
+			return answers, nil
+		}))
 	}
 	want := ex.settings.HostKeyFingerprint
 	return &gossh.ClientConfig{

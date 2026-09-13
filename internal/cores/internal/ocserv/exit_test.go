@@ -116,6 +116,28 @@ the password on stdin from a file rather than on the command line, a script
 that addresses the tunnel and touches nothing else, and the pin the operator
 gave. Stopping the exit takes the password with it.
 */
+// A camouflaged ocserv answers only a URL carrying its secret after "?"; the
+// exit had no field for one, so such a server could not be dialled at all.
+func TestACamouflagedServerIsDialledWithItsSecret(t *testing.T) {
+	ledger := newUnitLedger()
+	c := New(Deps{Backend: ledger, Openconnect: "/usr/sbin/openconnect", StateDir: t.TempDir()})
+	exit := core.Exit{ID: 6, Kind: Kind, Enable: true, Settings: `{"server":"vpn.example.net:8443","username":"alice","password":"pw","camouflageSecret":"s3cr3tkey"}`}
+	if err := c.ReconcileExits(context.Background(), []core.Exit{exit}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.ReconcileExits(context.Background(), nil) })
+	exec := ledger.units[exitUnitName(6)].Exec
+	if last := exec[len(exec)-1]; last != "https://vpn.example.net:8443/?s3cr3tkey" {
+		t.Fatalf("the server argument is %q; want the camouflage URL", last)
+	}
+	for _, bad := range []string{"has space", "a/b", "q?x", "h#1"} {
+		raw := `{"server":"vpn.example.net","username":"alice","password":"pw","camouflageSecret":"` + bad + `"}`
+		if err := c.ValidateExit(core.Exit{ID: 7, Kind: Kind, Enable: true, Settings: raw}); err == nil || !strings.Contains(err.Error(), "camouflage secret") {
+			t.Errorf("secret %q was accepted: %v", bad, err)
+		}
+	}
+}
+
 func TestExitClientIsRunUnderPanelControl(t *testing.T) {
 	ledger := newUnitLedger()
 	c := New(Deps{Backend: ledger, Openconnect: "/usr/sbin/openconnect", StateDir: t.TempDir()})

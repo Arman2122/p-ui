@@ -101,6 +101,7 @@ export const EgressFormFields = z.object({
   ocPassword: z.string().default(''),
   ocPin: z.string().trim().default(''),
   ocGroup: z.string().trim().default(''),
+  ocCamouflageSecret: z.string().trim().default(''),
 });
 
 /* Which fields are required depends on the type, so it is refined rather than
@@ -253,6 +254,7 @@ export const OcservExitSettingsSchema = z.object({
   password: z.string().default(''),
   serverCertPin: z.string().trim().default(''),
   group: z.string().trim().default(''),
+  camouflageSecret: z.string().trim().default(''),
 });
 
 export function ocservPayload(form: EgressFormValues, remark: string): EgressPayload {
@@ -270,6 +272,7 @@ export function ocservPayload(form: EgressFormValues, remark: string): EgressPay
       password: form.ocPassword,
       serverCertPin: form.ocPin,
       group: form.ocGroup,
+      camouflageSecret: form.ocCamouflageSecret,
     }),
   };
 }

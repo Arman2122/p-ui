@@ -35,6 +35,12 @@ export default function OcservFields() {
       <FormField name={['settings', 'camouflage']} label={t('pages.inbounds.form.ocservCamouflage')} tooltip={t('pages.inbounds.form.ocservCamouflageHint')}>
         <Switch checked={camouflage === true} onChange={(v) => setValue('settings.camouflage', v, { shouldDirty: true })} />
       </FormField>
+      <FormField name={['settings', 'serverCert']} label={t('pages.inbounds.form.ocservServerCert')} tooltip={t('pages.inbounds.form.ocservServerCertHint')}>
+        <Input.TextArea rows={4} autoComplete="off" spellCheck={false} placeholder="-----BEGIN CERTIFICATE-----" />
+      </FormField>
+      <FormField name={['settings', 'serverKey']} label={t('pages.inbounds.form.ocservServerKey')} tooltip={t('pages.inbounds.form.ocservServerKeyHint')}>
+        <Input.TextArea rows={4} autoComplete="off" spellCheck={false} placeholder="-----BEGIN EC PRIVATE KEY-----" />
+      </FormField>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Alert
           type="info"

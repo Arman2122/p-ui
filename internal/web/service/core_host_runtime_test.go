@@ -29,6 +29,11 @@ func hostProcRoot(t *testing.T) string {
 
 func hostProc(t *testing.T, root string, pid int, executable, namespace, state string) {
 	t.Helper()
+	hostProcUnder(t, root, pid, 1, executable, namespace, state)
+}
+
+func hostProcUnder(t *testing.T, root string, pid, ppid int, executable, namespace, state string) {
+	t.Helper()
 	dir := filepath.Join(root, strconv.Itoa(pid))
 	if err := os.MkdirAll(filepath.Join(dir, "ns"), 0o700); err != nil {
 		t.Fatal(err)
@@ -38,12 +43,24 @@ func hostProc(t *testing.T, root string, pid int, executable, namespace, state s
 			t.Fatal(err)
 		}
 	}
-	stat := strconv.Itoa(pid) + " (process ) title) " + state + strings.Repeat(" 0", 19)
+	stat := strconv.Itoa(pid) + " (process ) title) " + state + " " + strconv.Itoa(ppid) + strings.Repeat(" 0", 18)
 	if err := os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte(executable+"\x00run\x00"), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A relay or a worker is a child of the managed daemon; the parent pid is what
+// lets the page count it managed instead of "another process on the host".
+func TestCoreHostRuntimeReportsTheParentPID(t *testing.T) {
+	root := hostProcRoot(t)
+	hostProc(t, root, 321, "/usr/local/p-ui/bin/mtg-proxy", "net:[10]", "S")
+	hostProcUnder(t, root, 322, 321, "/usr/local/p-ui/bin/mtg-proxy", "net:[10]", "S")
+	got := readCoreHostRuntimes(context.Background(), root, map[string][]string{"mtproto": {"/usr/local/p-ui/bin/mtg-proxy"}})["mtproto"].Processes
+	if len(got) != 2 || got[0].PID != 321 || got[1].PID != 322 || got[1].ParentPID != 321 {
+		t.Fatalf("processes = %+v; want the child reported under its parent", got)
 	}
 }
 

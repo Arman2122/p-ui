@@ -2569,6 +2569,10 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": "/usr/sbin/openvpn",
         "type": "string"
       },
+      "parentPid": {
+        "example": 2046529,
+        "type": "integer"
+      },
       "pid": {
         "example": 2046530,
         "type": "integer"

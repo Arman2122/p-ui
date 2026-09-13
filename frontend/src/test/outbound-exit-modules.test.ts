@@ -159,7 +159,7 @@ describe('the openvpn and ocserv modules round-trip a row', () => {
   } as EgressRecord;
   const ocs: EgressRecord = {
     id: 12, type: 'ocserv', enable: true, remark: 'office', target: '',
-    settings: JSON.stringify({ server: 'vpn.example.net:8443', username: 'bob', password: 'pw2', serverCertPin: 'pin-sha256:AAAA', group: 'staff' }),
+    settings: JSON.stringify({ server: 'vpn.example.net:8443', username: 'bob', password: 'pw2', serverCertPin: 'pin-sha256:AAAA', group: 'staff', camouflageSecret: 'hidden' }),
     createdAt: 0, updatedAt: 0,
   } as EgressRecord;
 
@@ -177,7 +177,7 @@ describe('the openvpn and ocserv modules round-trip a row', () => {
     const payload = module.toPayload(EgressFormFields.parse(module.fromRecord(ocs)), 'office');
     expect(payload.type).toBe('ocserv');
     expect(JSON.parse(payload.settings)).toEqual({
-      server: 'vpn.example.net:8443', username: 'bob', password: 'pw2', serverCertPin: 'pin-sha256:AAAA', group: 'staff',
+      server: 'vpn.example.net:8443', username: 'bob', password: 'pw2', serverCertPin: 'pin-sha256:AAAA', group: 'staff', camouflageSecret: 'hidden',
     });
   });
 

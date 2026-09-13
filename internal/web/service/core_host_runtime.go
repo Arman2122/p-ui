@@ -175,7 +175,9 @@ func readCoreHostRuntimes(ctx context.Context, root string, paths map[string][]s
 			continue
 		}
 		view := views[id]
-		view.Processes = append(view.Processes, CoreHostProcessView{PID: pid, Executable: executable, State: state, BinaryReplaced: replaced || strings.HasSuffix(currentExe, " (deleted)")})
+		// The parent is what tells a relay or a worker apart from a stray daemon.
+		ppid, _ := strconv.Atoi(fields[1])
+		view.Processes = append(view.Processes, CoreHostProcessView{PID: pid, Executable: executable, State: state, ParentPID: ppid, BinaryReplaced: replaced || strings.HasSuffix(currentExe, " (deleted)")})
 		if state == "running" {
 			view.State = state
 		}

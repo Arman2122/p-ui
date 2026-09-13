@@ -41,6 +41,13 @@ describe('actual host core runtime', () => {
     expect(summarizeCores(cores)).toMatchObject({ total: 8, running: 7, healthy: 4 });
   });
 
+  it('counts a child of a managed daemon, a relay or a worker, as managed', () => {
+    const withChildren = core({ pid: 321, hostRuntime: { ...host, processes: [
+      ...host.processes, { pid: 330, parentPid: 321, executable: '/usr/sbin/openvpn', state: 'running' }, { pid: 331, parentPid: 1, executable: '/usr/sbin/openvpn', state: 'running' },
+    ] } });
+    expect(coreHostProcesses(withChildren).map((process) => [process.pid, process.managed])).toEqual([[321, true], [330, true], [331, false]]);
+  });
+
   it('keeps reported SSH build versions attached to panel maintenance', () => {
     const ssh = core({ id: 'ssh', version: { reported: true, manageable: false, installed: 'Penhoon SSH v1.5.3 (golang.org/x/crypto v0.42.0)' } });
     expect(isBuiltinCore(ssh)).toBe(true);
