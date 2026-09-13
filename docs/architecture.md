@@ -381,7 +381,7 @@ All registered in `web.go` → `startTask()`. Each is a struct with a `Run()` me
 | `@every 5s` | `xray_traffic_job` | Pull traffic stats from Xray (5s start delay) |
 | `@every 5s` | `node_heartbeat_job` | Probe child nodes (online/offline) |
 | `@every 5s` | `node_traffic_sync_job` | Pull + merge node traffic; push reconciliation; push global usage and each client's resolved speed ladder to nodes |
-| `@every 10s` | `core_policy` | Converge shaping and in-core rates; observe every core's sessions and every node's reported sightings, decide each client's IP cap, cut the over-cap device through the core that saw it or record a `client_bans` row, converge the panel's own nft ban set on the rows, and publish `client.device_limit` (`internal/web/job/core_policy.go`) |
+| `@every 10s` | `core_policy` | Run the plan cycle pass (scheduled traffic resets, depletion notices — §5.9); converge shaping and in-core rates; observe every core's sessions and every node's reported sightings, decide each client's IP cap, cut the over-cap device through the core that saw it or record a `client_bans` row, converge the panel's own nft ban set on the rows, and publish `client.device_limit` (`internal/web/job/core_policy.go`) |
 | `@every 10s` | `core_supervise` | Read every registered core's health, publishing `core.crash` once per outage and `core.up` on recovery, then reconcile it on its desired inbounds — a unit the backend reports down is started again (Xray excepted — the panel's own config build converges it; `internal/web/job/core_supervise.go`, `core_health.go`) |
 | `@every 10s` | `egress_reconcile` | Drift repair for the egress band (`ip rule`, private table, blackhole). Also runs once synchronously at the top of `startTask()`, before any core is started, so containment exists before any device can carry a packet |
 | `@every 5m` | `outbound_subscription_job` | Refresh outbound provider configs |
@@ -446,6 +446,45 @@ unreachable. It periodically probes an HTTP URL (default: Cloudflare trace endpo
 the tunnel; after N successive failures (default 3) it fires a recovery callback wired to an
 Xray restart.
 
+### 5.9 Plans (policies)
+
+A plan (`model.Policy`, table `policies`) is a reusable client template: a speed ladder
+(`tiers`), and four *managed* fields — quota, duration, IP limit, inbound set — each of which
+is NULL when the plan does not manage it and `0` when it manages it as unlimited. Both states
+are needed: the first edit of a ladder-only plan would otherwise read `0` and wipe every
+member's quota. Admin plans have `owner_user_id IS NULL`; a reseller's are scoped to their id
+and are refused `startOnFirstUse` / `autoRenewDays` (`service/plan_catalogue.go`, `SavePlan`).
+Names are unique per owner, case-insensitively — that is what every plan picker shows.
+
+**Assignment is a separate row, keyed by email** (`model.ClientPolicy`, `client_policies`), so
+it survives the delete-and-recreate a node re-sync performs; a rename moves it by hand
+(`movePolicyAssignment`), a client delete drops it (`releasePolicyAssignments`). The FK to the
+plan is `ON DELETE SET NULL`, so a deleted plan leaves its members visible as **unresolved**
+rather than silently unlimited. The four `override_*` bits record explicit operator intent to
+keep the client's own value for that field; the value itself lives on the client.
+
+**Applying is copying, not linking.** `ApplyPlan` (`service/plan_assignment.go`) copies the
+managed fields onto `clients` / `client_traffics`, attaches or detaches the plan's inbounds,
+pushes native quotas through the runtime, and only then stamps `applied_rev = policies.rev`.
+`rev` bumps only when a managed field or the inbound set changes (`managedPlanEqual`), so
+editing the ladder alone lights no **pending** badge: the ladder is evaluated live on every
+policy pass (`service/policy.go`, `factsFor`), whereas quota/duration/IP edits wait for
+**Reapply**, which preserves overrides unless told to clear them and keeps the original term
+start (`planExpiry`). Client creation with a plan (`CreateWithPlan`) writes the prepared client
+and its assignment in one transaction before any runtime call, and rolls the identity back on
+provisioning failure.
+
+**The cycle pass** (`ConvergePlanCycles`, `service/plan_cycles.go`, from `core_policy` every
+10 s) reads every assignment on a reset cycle or a `notify` plan in a few chunked queries,
+resets traffic when `policy.NextReset` from the last reset (or the term start) has passed, and
+emits one `client.plan_depleted` notice per depletion, re-armed once usage drops under quota.
+A client reset in a pass is not judged for depletion until the next one. `onDepletion:
+throttle` keeps a depleted client connected at 1 MiB/s by appending a rung to their ladder
+(`policy.DepletionLadder`) and is excluded from the quota-disable predicate
+(`PlanQuotaDisableSQL`); both continuation modes are refused at save time on inbounds whose
+core enforces a hard quota of its own. On a sub-node the ladder arrives pre-resolved from the
+master (`client_policies.resolved_tiers`, §5.2) and no plan row exists there.
+
 ---
 
 ## 6. Data model cheat-sheet
@@ -467,6 +506,8 @@ for AutoMigrate in `internal/database/db.go`.
 | `NodeClientIp` | Per-node client IP attribution | `NodeGuid`, `Email`, `Ips` |
 | `ClientGlobalTraffic` | Cross-master usage totals | `MasterGuid`, `Email`, `Up`, `Down` |
 | `xray.ClientTraffic` | Per-client counters (`client_traffics`) | `Email`, `Up`, `Down`, `Total`, `ExpiryTime`, `LastOnline` |
+| `Policy` / `PolicyInbound` | A plan template and its inbound set (`policies`, `policy_inbounds`) | `Tiers` (jsonb ladder), nullable `QuotaBytes`/`DurationDays`/`LimitIP`, `Rev`, `OwnerUserID`, `Archived`, `ResetCycle`, `OnDepletion` (§5.9) |
+| `ClientPolicy` | A client's plan assignment (`client_policies`, keyed by email) | nullable `PolicyId` (FK `SET NULL`), `override_*` bits, `AppliedRev`, `LastResetAt`, `DepletionNotifiedAt`, `ResolvedTiers` (node side) |
 | `InboundClientIps` | IP set per client email | drives IP-limit enforcement |
 | `ClientBan` | one banned (client, source) per host with ports and deadline | the re-ban memory and the source of the nft ban set (`internal/banset/`) |
 | `OutboundTraffics` | Outbound counters | per outbound tag |
@@ -496,6 +537,8 @@ for AutoMigrate in `internal/database/db.go`.
 | Xray **restarts when it shouldn't** (kills connections) | `xray/hot_diff.go` (diff not classified as hot) | `service/xray.go` |
 | **Traffic** counts wrong / reset behavior | `service/inbound_traffic.go`, `job/xray_traffic_job.go` | `service/traffic_writer.go`, `job/periodic_traffic_reset_job.go` |
 | **Node** operation not propagating | `runtime/remote.go`, `runtime/manager.go` | `service/inbound_node.go` |
+| A **plan edit** did not change a member's quota, term or IP cap | `service/plan_assignment.go` (`ApplyPlan`, `ReapplyPlan`) — managed edits wait for Reapply; `applied_rev < rev` is the pending badge | `service/plan_catalogue.go` (`managedPlanEqual`), `client_policies.override_*` |
+| A **scheduled plan reset** or **depletion notice** never fires | `service/plan_cycles.go` (`ConvergePlanCycles`) | `job/core_policy.go` (`convergePlans`), `policy/cycle.go` (`NextReset`) |
 | A **speed plan** does nothing on a sub-node | `service/policy.go` (`AcceptAssignments`, `factsFor`) | `job/node_traffic_sync_job.go` (the push), `runtime/remote.go` |
 | An **OpenConnect** client's limit does not change mid-session | `cores/internal/ocserv/core.go` (`ShapingTargets`) | `shaping/namespaces.go` (families), `service/policy.go` (`ShapingWants`) |
 | The plan panel says **not enforced yet** for an SSH client | `service/policy.go` (`EnforcedFor`) | `cores/internal/ssh/server.go` (`enforcedRates`) |
