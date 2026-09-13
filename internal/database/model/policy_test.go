@@ -85,12 +85,20 @@ func TestPolicyUnmarshalJSONAcceptsBothShapes(t *testing.T) {
 	}
 }
 
-func TestPolicyUnmarshalJSONAbsentLadderStaysEmpty(t *testing.T) {
+// The update handlers bind the body into the stored row, so an absent key is
+// "unchanged" for every field; only an explicit null clears the ladder.
+func TestPolicyUnmarshalJSONAbsentLadderKeepsTheStoredOne(t *testing.T) {
 	row := Policy{Tiers: `[{"fromBytes":0}]`}
 	if err := json.Unmarshal([]byte(`{"name":"renamed"}`), &row); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
+	if row.Tiers != `[{"fromBytes":0}]` {
+		t.Errorf("tiers = %q, want the stored ladder: a rename must not wipe it", row.Tiers)
+	}
+	if err := json.Unmarshal([]byte(`{"tiers":null}`), &row); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
 	if row.Tiers != "" {
-		t.Errorf("tiers = %q, want empty: a body without a ladder must not keep a stale one", row.Tiers)
+		t.Errorf("tiers = %q, want empty after an explicit null", row.Tiers)
 	}
 }

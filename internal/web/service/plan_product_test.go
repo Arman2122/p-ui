@@ -286,10 +286,13 @@ func TestPlanProductQuotaContinuationConstraints(t *testing.T) {
 	}
 }
 
+// The client is attached to an inbound so the reset must take the per-inbound
+// path, which stamps the inbound; the by-email fallback would leave it at zero.
 func TestPlanProductScheduledReset(t *testing.T) {
 	initTestDB(t)
 	s := &PolicyService{}
-	createPlanClient(t, "cycle", nil)
+	inbound := seedPolicyInbound(t, "vless", "plan-cycle", 49906, "cycle")
+	seedClientRow(t, "cycle", inbound.Id, 123, 456, 9000)
 	p, err := s.SavePlan(PlanScope{}, &model.Policy{Name: "weekly", Tiers: "[]", ResetCycle: "weekly", QuotaBytes: planBytes(9000)})
 	if err != nil {
 		t.Fatal(err)
@@ -311,6 +314,13 @@ func TestPlanProductScheduledReset(t *testing.T) {
 	}
 	if traffic.Up != 0 || traffic.Down != 0 {
 		t.Fatalf("reset kept traffic: %+v", traffic)
+	}
+	var stamped model.Inbound
+	if err = database.GetDB().First(&stamped, inbound.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stamped.LastTrafficResetTime == 0 {
+		t.Fatal("the reset skipped the client's inbound")
 	}
 	out, err = s.ConvergePlanCycles(context.Background(), now)
 	if err != nil || out.Reset != 0 {
