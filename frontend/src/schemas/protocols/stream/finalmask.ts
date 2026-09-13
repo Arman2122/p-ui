@@ -28,6 +28,7 @@ export const UdpMaskTypeSchema = z.enum([
   'noise',
   'sudoku',
   'realm',
+  'udphop',
 ]);
 export type UdpMaskType = z.infer<typeof UdpMaskTypeSchema>;
 
@@ -43,10 +44,10 @@ export type QuicCongestion = z.infer<typeof QuicCongestionSchema>;
 export const BbrProfileSchema = z.enum(['conservative', 'standard', 'aggressive']);
 export type BbrProfile = z.infer<typeof BbrProfileSchema>;
 
-// udpHop randomizes the QUIC port between a range every `interval` seconds
-// to dodge port-based blocking. Both fields are dash-range strings on the
-// wire (e.g. '20000-50000', '5-10'). preprocess coerces legacy DB rows
-// where interval was stored as a number (UI bug — see B19 in commit history).
+// quicParams.udpHop is what an inbound advertises to clients as the hop range
+// (`mport` in links); the core itself hops through the `udphop` UDP mask since
+// v26.9.9. Both fields are dash-range strings on the wire (e.g. '20000-50000',
+// '5-10'); preprocess coerces rows where interval was stored as a number (B19).
 const StringRangeSchema = z.preprocess(
   (v) => (typeof v === 'number' ? String(v) : v),
   z.string(),

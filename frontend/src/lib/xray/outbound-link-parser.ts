@@ -1,4 +1,5 @@
 import { Base64 } from '@/utils';
+import { migrateQuicUdpHop } from '@/lib/xray/finalmask-migrate';
 
 // Focused share-link parser for the OutboundFormModal's link-import
 // helper. Each parser returns a wire-shape outbound record (the same
@@ -224,6 +225,7 @@ function applyFinalMaskParam(stream: Raw, params: URLSearchParams): void {
     const parsed = JSON.parse(fm) as Record<string, unknown>;
     if (parsed && typeof parsed === 'object') {
       sanitizeFinalMaskQuicParams(parsed);
+      migrateQuicUdpHop(parsed);
       stream.finalmask = parsed;
     }
   } catch {

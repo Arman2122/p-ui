@@ -83,3 +83,68 @@ func TestMigrateOutboundProxySettings_MovesTagToDialerProxy(t *testing.T) {
 		t.Fatalf("direct: an outbound the core accepts was rewritten:\n got %s\nwant %s", gotJSON, wantJSON)
 	}
 }
+
+/*
+TestMigrateOutboundUdpHop_MovesItOntoTheMask covers the other v26.9.9 change to
+a stored outbound: finalmask.quicParams.udpHop is no longer read, so a Hysteria
+outbound the panel dials would silently stop hopping. Startup moves it onto the
+udphop UDP mask with the modes that reproduce the old behaviour, keeps the rest
+of quicParams, and leaves an outbound without the key untouched.
+*/
+func TestMigrateOutboundUdpHop_MovesItOntoTheMask(t *testing.T) {
+	initTestDB(t)
+
+	template := `{"outbounds":[` +
+		`{"tag":"hop","protocol":"hysteria","settings":{},"streamSettings":{"network":"hysteria","finalmask":{"udp":[{"type":"salamander","settings":{"password":"p"}}],"quicParams":{"congestion":"bbr","udpHop":{"ports":"20000-50000","interval":5}}}}},` +
+		`{"tag":"plain","protocol":"freedom","settings":{},"streamSettings":{"finalmask":{"quicParams":{"congestion":"bbr"}}}}` +
+		`]}`
+	if err := db.Create(&model.Setting{Key: "xrayTemplateConfig", Value: template}).Error; err != nil {
+		t.Fatalf("seed template: %v", err)
+	}
+
+	if err := migrateOutboundUdpHop(); err != nil {
+		t.Fatalf("migrateOutboundUdpHop: %v", err)
+	}
+
+	var setting model.Setting
+	if err := db.Where("key = ?", "xrayTemplateConfig").First(&setting).Error; err != nil {
+		t.Fatalf("reload template: %v", err)
+	}
+	var cfg struct {
+		Outbounds []map[string]any `json:"outbounds"`
+	}
+	if err := json.Unmarshal([]byte(setting.Value), &cfg); err != nil {
+		t.Fatalf("parse rewritten template: %v", err)
+	}
+	finalmaskOf := func(ob map[string]any) map[string]any {
+		stream, _ := ob["streamSettings"].(map[string]any)
+		finalmask, _ := stream["finalmask"].(map[string]any)
+		return finalmask
+	}
+
+	hop := finalmaskOf(cfg.Outbounds[0])
+	qp, _ := hop["quicParams"].(map[string]any)
+	if _, still := qp["udpHop"]; still || qp["congestion"] != "bbr" {
+		t.Fatalf("hop: quicParams must lose udpHop and keep congestion, got %v", qp)
+	}
+	udp, _ := hop["udp"].([]any)
+	if len(udp) != 2 {
+		t.Fatalf("hop: udp masks = %v, want salamander then udphop", udp)
+	}
+	mask, _ := udp[1].(map[string]any)
+	settings, _ := mask["settings"].(map[string]any)
+	if mask["type"] != "udphop" || settings["mode"] != "intervalLocal,intervalRemote" ||
+		settings["remotePorts"] != "20000-50000" || settings["interval"] != "5" {
+		t.Fatalf("hop: udphop mask = %v, want the legacy range and a numeric interval as a string", mask)
+	}
+
+	var wantPlain map[string]any
+	if err := json.Unmarshal([]byte(`{"tag":"plain","protocol":"freedom","settings":{},"streamSettings":{"finalmask":{"quicParams":{"congestion":"bbr"}}}}`), &wantPlain); err != nil {
+		t.Fatal(err)
+	}
+	gotJSON, _ := json.Marshal(cfg.Outbounds[1])
+	wantJSON, _ := json.Marshal(wantPlain)
+	if string(gotJSON) != string(wantJSON) {
+		t.Fatalf("plain: an outbound without udpHop was rewritten:\n got %s\nwant %s", gotJSON, wantJSON)
+	}
+}

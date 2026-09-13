@@ -10,11 +10,12 @@ interface FinalMaskFieldProps {
   network: string;
   protocol: string;
   showAll?: boolean;
+  udpHopMask?: boolean;
 }
 
 const EMPTY: FinalMaskStreamSettings = { tcp: [], udp: [] };
 
-export default function FinalMaskField({ value, onChange, network, protocol, showAll }: FinalMaskFieldProps) {
+export default function FinalMaskField({ value, onChange, network, protocol, showAll, udpHopMask }: FinalMaskFieldProps) {
   const [form] = Form.useForm();
   const [initial] = useState(() => value ?? EMPTY);
   const onChangeRef = useRef(onChange);
@@ -41,7 +42,7 @@ export default function FinalMaskField({ value, onChange, network, protocol, sho
       labelWrap
       initialValues={{ finalmask: initial }}
     >
-      <FinalMaskForm name="finalmask" network={network} protocol={protocol} form={form} showAll={showAll} />
+      <FinalMaskForm name="finalmask" network={network} protocol={protocol} form={form} showAll={showAll} udpHopMask={udpHopMask} />
     </Form>
   );
 }

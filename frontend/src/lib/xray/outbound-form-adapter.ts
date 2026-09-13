@@ -5,6 +5,7 @@ import { Wireguard } from '@/utils';
 import type { Sniffing, SniffingDest } from '@/schemas/primitives';
 import type { OutboundDomainStrategy } from '@/schemas/protocols/outbound';
 import { canEnableStream } from './protocol-capabilities';
+import { migrateQuicUdpHop } from './finalmask-migrate';
 
 import type {
   DnsOutboundFormSettings,
@@ -431,6 +432,14 @@ function foldProxySettings(raw: RawOutboundRow): Raw | undefined {
   return { ...stream, sockopt: { ...sockopt, dialerProxy: legacyTag } };
 }
 
+/* The startup seeder's udpHop move, for a row it has not seen; the row's own object stays untouched. */
+function foldQuicUdpHop(stream: Raw): Raw {
+  const finalmask = stream.finalmask;
+  if (!finalmask || typeof finalmask !== 'object' || Array.isArray(finalmask)) return stream;
+  const copy = JSON.parse(JSON.stringify(finalmask)) as Record<string, unknown>;
+  return migrateQuicUdpHop(copy) ? { ...stream, finalmask: copy } : stream;
+}
+
 export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues {
   const protocol = asString(raw.protocol, 'vless');
   const settings = asObject(raw.settings);
@@ -439,7 +448,7 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
   const targetStrategy = targetStrategyFromWire(raw.targetStrategy);
   const mux = muxFromWire(raw.mux);
   const stream = foldProxySettings(raw);
-  const streamSettings = stream ? hydrateStreamForm(stream) : undefined;
+  const streamSettings = stream ? hydrateStreamForm(foldQuicUdpHop(stream)) : undefined;
 
   let typed: OutboundFormSettings;
   switch (protocol) {

@@ -766,6 +766,9 @@ func applyFinalMask(stream map[string]any, p url.Values) {
 		var parsed any
 		if json.Unmarshal([]byte(fm), &parsed) == nil {
 			sanitizeFinalMaskQuicParams(parsed)
+			if finalmask, ok := parsed.(map[string]any); ok {
+				MigrateQuicUdpHop(finalmask)
+			}
 			stream["finalmask"] = parsed
 		}
 	}

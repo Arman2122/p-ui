@@ -684,3 +684,41 @@ describe('a wireguard outbound with UDP masks', () => {
     expect(stream.sockopt).toMatchObject({ tcpFastOpen: true });
   });
 });
+
+/*
+finalmask.quicParams.udpHop stopped being read by xray-core v26.9.9, which hops
+through a udphop UDP mask instead; a stored outbound that still carries the old
+key would silently never hop. Opening such a row performs the seeder's move so
+the first edit is the migration, without touching the row object itself.
+*/
+describe('finalmask.quicParams.udpHop, moved upstream', () => {
+  const row = {
+    protocol: 'hysteria',
+    tag: 'hop',
+    settings: { address: 'a.example', port: 443, version: 2 },
+    streamSettings: {
+      network: 'hysteria',
+      security: 'tls',
+      finalmask: {
+        udp: [{ type: 'salamander', settings: { password: 'p' } }],
+        quicParams: { congestion: 'bbr', udpHop: { ports: '20000-50000', interval: 5 } },
+      },
+    },
+  };
+
+  it('opens with a udphop mask in place of the key and keeps the rest of quicParams', () => {
+    const back = formValuesToWirePayload(rawOutboundToFormValues(row));
+    const finalmask = (back.streamSettings as Record<string, Record<string, unknown>>).finalmask;
+    expect(finalmask.quicParams).toEqual({ congestion: 'bbr' });
+    expect(finalmask.udp).toEqual([
+      { type: 'salamander', settings: { password: 'p' } },
+      { type: 'udphop', settings: { mode: 'intervalLocal,intervalRemote', remotePorts: '20000-50000', interval: '5' } },
+    ]);
+  });
+
+  it('leaves the raw row untouched', () => {
+    rawOutboundToFormValues(row);
+    expect(row.streamSettings.finalmask.quicParams.udpHop).toEqual({ ports: '20000-50000', interval: 5 });
+    expect(row.streamSettings.finalmask.udp).toHaveLength(1);
+  });
+});

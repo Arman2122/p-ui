@@ -49,7 +49,7 @@ export default function HostFinalMaskForm({ value = '', onChange }: { value?: st
       labelWrap
       initialValues={{ finalmask: initial }}
     >
-      <FinalMaskForm name="finalmask" network="" protocol="" form={form} showAll />
+      <FinalMaskForm name="finalmask" network="" protocol="" form={form} showAll udpHopMask />
     </Form>
   );
 }

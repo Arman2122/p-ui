@@ -126,11 +126,15 @@ TLS. Masks are configured per direction:
   stream as Minecraft protocol traffic; requires a password, with optional
   hostname and player usernames).
 - **UDP masks** — `salamander`, `mkcp-legacy`, `header-custom`, `xdns`, `xicmp`,
-  `noise`, `sudoku`, `realm`. (`mkcp-legacy` reproduces the old mKCP header
+  `noise`, `sudoku`, `realm`, and `udphop` for a client-side config: port hopping
+  across `remotePorts` in the `intervalLocal`, `intervalRemote` and
+  `perConnRemote` modes. (`mkcp-legacy` reproduces the old mKCP header
   obfuscation.)
 - **QUIC params** — congestion control (`reno`, `bbr`, `brutal`, `force-brutal`),
-  Brutal up/down rates, `udpHop` (rotate the QUIC port across a range to dodge
-  port blocking), and receive-window tuning.
+  Brutal up/down rates, receive-window tuning, and on an inbound the hop range
+  advertised to clients as `mport` (`udpHop`). Since Xray v26.9.9 the core itself
+  hops through the `udphop` UDP mask, so an outbound's old `quicParams.udpHop` is
+  moved there at startup.
 
 FinalMask replaces the per-transport `header`/`seed` obfuscation that older Xray
 builds exposed.

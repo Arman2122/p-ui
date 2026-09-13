@@ -18,6 +18,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/crypto"
+	"github.com/Arman2122/p-ui/internal/util/link"
 	"github.com/Arman2122/p-ui/internal/util/random"
 
 	"gorm.io/driver/postgres"
@@ -1436,7 +1437,7 @@ func runSeeders(isUsersEmpty bool) error {
 	}
 
 	if priorSeeders == 0 && isUsersEmpty {
-		seeders := []string{"UserPasswordHash", "ClientsTable", "InboundClientsArrayFix", "InboundClientTgIdFix2", "InboundClientSubIdFix", "FreedomFinalRulesReverseFix", "FreedomFinalRulesPrivateEgressBlock", "InboundRealityFinalmaskTcpStrip", "OutboundProxySettingsToDialerProxy", "ApiTokensHash", "LegacyProxySettingsCleanup", "WireguardPeersToClients", "MtprotoSecretsToClients", "NodeInboundsAdopted", "ResetIpLimitNoFail2ban"}
+		seeders := []string{"UserPasswordHash", "ClientsTable", "InboundClientsArrayFix", "InboundClientTgIdFix2", "InboundClientSubIdFix", "FreedomFinalRulesReverseFix", "FreedomFinalRulesPrivateEgressBlock", "InboundRealityFinalmaskTcpStrip", "OutboundProxySettingsToDialerProxy", "OutboundQuicUdpHopToMask", "ApiTokensHash", "LegacyProxySettingsCleanup", "WireguardPeersToClients", "MtprotoSecretsToClients", "NodeInboundsAdopted", "ResetIpLimitNoFail2ban"}
 		for _, name := range seeders {
 			if err := db.Create(&model.HistoryOfSeeders{SeederName: name}).Error; err != nil {
 				return err
@@ -1537,6 +1538,12 @@ func runSeeders(isUsersEmpty bool) error {
 
 	if !slices.Contains(seedersHistory, "OutboundProxySettingsToDialerProxy") {
 		if err := migrateOutboundProxySettings(); err != nil {
+			return err
+		}
+	}
+
+	if !slices.Contains(seedersHistory, "OutboundQuicUdpHopToMask") {
+		if err := migrateOutboundUdpHop(); err != nil {
 			return err
 		}
 	}
@@ -2005,19 +2012,39 @@ func rewriteFreedomFinalRulesPrivateEgress(raw string) (string, bool, error) {
 // migrateOutboundProxySettings rewrites the template's outbounds for xray-core
 // v26.9.9, which refuses "proxySettings" and a freedom "addressPortStrategy".
 func migrateOutboundProxySettings() error {
+	return migrateTemplateOutbounds("OutboundProxySettingsToDialerProxy", rewriteOutboundProxySettings)
+}
+
+// migrateOutboundUdpHop moves each template outbound's finalmask.quicParams.udpHop,
+// which xray-core v26.9.9 no longer reads, onto the "udphop" UDP mask.
+func migrateOutboundUdpHop() error {
+	return migrateTemplateOutbounds("OutboundQuicUdpHopToMask", func(obj map[string]any) bool {
+		stream, _ := obj["streamSettings"].(map[string]any)
+		finalmask, _ := stream["finalmask"].(map[string]any)
+		if !link.MigrateQuicUdpHop(finalmask) {
+			return false
+		}
+		log.Printf("OutboundQuicUdpHopToMask: outbound %q: finalmask.quicParams.udpHop moved to a udphop UDP mask", obj["tag"])
+		return true
+	})
+}
+
+// migrateTemplateOutbounds runs rewrite over every xrayTemplateConfig outbound
+// once, under the seeder's name; a template that does not parse is left alone.
+func migrateTemplateOutbounds(seeder string, rewrite func(obj map[string]any) bool) error {
 	var setting model.Setting
 	err := db.Model(model.Setting{}).Where("key = ?", "xrayTemplateConfig").First(&setting).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return db.Create(&model.HistoryOfSeeders{SeederName: "OutboundProxySettingsToDialerProxy"}).Error
+		return db.Create(&model.HistoryOfSeeders{SeederName: seeder}).Error
 	}
 	if err != nil {
 		return err
 	}
 
-	updated, changed, rErr := rewriteOutboundProxySettings(setting.Value)
+	updated, changed, rErr := rewriteTemplateOutbounds(setting.Value, rewrite)
 	if rErr != nil {
-		log.Printf("OutboundProxySettingsToDialerProxy: skip (invalid xrayTemplateConfig json): %v", rErr)
-		return db.Create(&model.HistoryOfSeeders{SeederName: "OutboundProxySettingsToDialerProxy"}).Error
+		log.Printf("%s: skip (invalid xrayTemplateConfig json): %v", seeder, rErr)
+		return db.Create(&model.HistoryOfSeeders{SeederName: seeder}).Error
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -2027,13 +2054,11 @@ func migrateOutboundProxySettings() error {
 				return err
 			}
 		}
-		return tx.Create(&model.HistoryOfSeeders{SeederName: "OutboundProxySettingsToDialerProxy"}).Error
+		return tx.Create(&model.HistoryOfSeeders{SeederName: seeder}).Error
 	})
 }
 
-// rewriteOutboundProxySettings moves proxySettings.tag onto sockopt.dialerProxy
-// unless one is set, drops the key either way, and strips the freedom strategy.
-func rewriteOutboundProxySettings(raw string) (string, bool, error) {
+func rewriteTemplateOutbounds(raw string, rewrite func(obj map[string]any) bool) (string, bool, error) {
 	if strings.TrimSpace(raw) == "" {
 		return raw, false, nil
 	}
@@ -2047,46 +2072,8 @@ func rewriteOutboundProxySettings(raw string) (string, bool, error) {
 	}
 	changed := false
 	for _, ob := range outbounds {
-		obj, ok := ob.(map[string]any)
-		if !ok {
-			continue
-		}
-		tag, _ := obj["tag"].(string)
-		if legacy, present := obj["proxySettings"]; present {
-			delete(obj, "proxySettings")
+		if obj, ok := ob.(map[string]any); ok && rewrite(obj) {
 			changed = true
-			settings, _ := legacy.(map[string]any)
-			proxyTag, _ := settings["tag"].(string)
-			stream, _ := obj["streamSettings"].(map[string]any)
-			sockopt, _ := stream["sockopt"].(map[string]any)
-			current, _ := sockopt["dialerProxy"].(string)
-			switch {
-			case proxyTag == "":
-				log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: dropped a proxySettings without a tag", tag)
-			case current != "":
-				log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: dropped proxySettings.tag %q, sockopt.dialerProxy %q stays", tag, proxyTag, current)
-			default:
-				if stream == nil {
-					stream = map[string]any{}
-					obj["streamSettings"] = stream
-				}
-				if sockopt == nil {
-					sockopt = map[string]any{}
-					stream["sockopt"] = sockopt
-				}
-				sockopt["dialerProxy"] = proxyTag
-				log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: proxySettings.tag %q moved to sockopt.dialerProxy", tag, proxyTag)
-			}
-		}
-		if proto, _ := obj["protocol"].(string); proto != "freedom" {
-			continue
-		}
-		stream, _ := obj["streamSettings"].(map[string]any)
-		sockopt, _ := stream["sockopt"].(map[string]any)
-		if strategy, _ := sockopt["addressPortStrategy"].(string); strategy != "" && strategy != "none" {
-			delete(sockopt, "addressPortStrategy")
-			changed = true
-			log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: dropped sockopt.addressPortStrategy %q, which freedom refuses", tag, strategy)
 		}
 	}
 	if !changed {
@@ -2097,6 +2084,50 @@ func rewriteOutboundProxySettings(raw string) (string, bool, error) {
 		return raw, false, err
 	}
 	return string(out), true, nil
+}
+
+// rewriteOutboundProxySettings moves proxySettings.tag onto sockopt.dialerProxy
+// unless one is set, drops the key either way, and strips the freedom strategy.
+func rewriteOutboundProxySettings(obj map[string]any) bool {
+	changed := false
+	tag, _ := obj["tag"].(string)
+	if legacy, present := obj["proxySettings"]; present {
+		delete(obj, "proxySettings")
+		changed = true
+		settings, _ := legacy.(map[string]any)
+		proxyTag, _ := settings["tag"].(string)
+		stream, _ := obj["streamSettings"].(map[string]any)
+		sockopt, _ := stream["sockopt"].(map[string]any)
+		current, _ := sockopt["dialerProxy"].(string)
+		switch {
+		case proxyTag == "":
+			log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: dropped a proxySettings without a tag", tag)
+		case current != "":
+			log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: dropped proxySettings.tag %q, sockopt.dialerProxy %q stays", tag, proxyTag, current)
+		default:
+			if stream == nil {
+				stream = map[string]any{}
+				obj["streamSettings"] = stream
+			}
+			if sockopt == nil {
+				sockopt = map[string]any{}
+				stream["sockopt"] = sockopt
+			}
+			sockopt["dialerProxy"] = proxyTag
+			log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: proxySettings.tag %q moved to sockopt.dialerProxy", tag, proxyTag)
+		}
+	}
+	if proto, _ := obj["protocol"].(string); proto != "freedom" {
+		return changed
+	}
+	stream, _ := obj["streamSettings"].(map[string]any)
+	sockopt, _ := stream["sockopt"].(map[string]any)
+	if strategy, _ := sockopt["addressPortStrategy"].(string); strategy != "" && strategy != "none" {
+		delete(sockopt, "addressPortStrategy")
+		changed = true
+		log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: dropped sockopt.addressPortStrategy %q, which freedom refuses", tag, strategy)
+	}
+	return changed
 }
 
 func stripRealityFinalmaskTcp() error {

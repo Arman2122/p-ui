@@ -20,6 +20,9 @@ export interface FinalMaskFormProps {
   // network/protocol. Used by the global sub-JSON finalmask editor where
   // the masks apply to every stream rather than one specific transport.
   showAll?: boolean;
+  // Offer the udphop UDP mask: a client-side config hops, an inbound only
+  // advertises the range (quicParams.udpHop → mport) and must never hop itself.
+  udpHopMask?: boolean;
 }
 
 const TCP_NETWORKS = ['raw', 'tcp', 'httpupgrade', 'ws', 'grpc', 'xhttp'];
@@ -157,6 +160,8 @@ function defaultUdpMaskSettings(type: string): Record<string, unknown> {
       return { dgram: false, ips: [] };
     case 'realm':
       return { url: '', stunServers: [] };
+    case 'udphop':
+      return { mode: 'intervalLocal,intervalRemote', interval: '5-10', remotePorts: '20000-50000', remoteIPs: [] };
     case 'header-custom':
       return { client: [], server: [] };
     case 'noise':
@@ -199,7 +204,7 @@ function defaultUdpHop(): Record<string, unknown> {
   return { ports: '20000-50000', interval: '5-10' };
 }
 
-export default function FinalMaskForm({ name, network, protocol, form, showAll = false }: FinalMaskFormProps) {
+export default function FinalMaskForm({ name, network, protocol, form, showAll = false, udpHopMask = false }: FinalMaskFormProps) {
   const base = asPath(name);
 
   // Migrate legacy TCP mask shapes once on mount so configs saved before
@@ -244,7 +249,7 @@ export default function FinalMaskForm({ name, network, protocol, form, showAll =
   return (
     <>
       {showTcp && <TcpMasksList base={base} form={form} />}
-      {showUdp && <UdpMasksList base={base} form={form} isHysteria={isHysteria} isWireguard={isWireguard} network={network} />}
+      {showUdp && <UdpMasksList base={base} form={form} isHysteria={isHysteria} isWireguard={isWireguard} network={network} udpHopMask={udpHopMask} />}
       {showQuic && (
         <>
           <Form.Item label="QUIC Params">
@@ -255,7 +260,7 @@ export default function FinalMaskForm({ name, network, protocol, form, showAll =
               }}
             />
           </Form.Item>
-          {hasQuicParams && <QuicParamsForm base={[...base, 'quicParams']} form={form} />}
+          {hasQuicParams && <QuicParamsForm base={[...base, 'quicParams']} form={form} advertiseHop={!udpHopMask} />}
         </>
       )}
     </>
@@ -714,8 +719,8 @@ function HeaderCustomGroups({
 }
 
 function UdpMasksList({
-  base, form, isHysteria, isWireguard, network,
-}: { base: (string | number)[]; form: FormInstance; isHysteria: boolean; isWireguard: boolean; network: string }) {
+  base, form, isHysteria, isWireguard, network, udpHopMask,
+}: { base: (string | number)[]; form: FormInstance; isHysteria: boolean; isWireguard: boolean; network: string; udpHopMask: boolean }) {
   const { t } = useTranslation();
   return (
     <Form.List name={[...base, 'udp']}>
@@ -743,6 +748,7 @@ function UdpMasksList({
               isHysteria={isHysteria}
               isWireguard={isWireguard}
               network={network}
+              udpHopMask={udpHopMask}
               onRemove={() => remove(field.name)}
             />
           ))}
@@ -753,7 +759,7 @@ function UdpMasksList({
 }
 
 function UdpMaskItem({
-  fieldName, displayIndex, form, listPath, isHysteria, isWireguard, network, onRemove,
+  fieldName, displayIndex, form, listPath, isHysteria, isWireguard, network, udpHopMask, onRemove,
 }: {
   fieldName: number;
   displayIndex: number;
@@ -762,6 +768,7 @@ function UdpMaskItem({
   isHysteria: boolean;
   isWireguard: boolean;
   network: string;
+  udpHopMask: boolean;
   onRemove: () => void;
 }) {
   const absolutePath = [...listPath, fieldName];
@@ -775,8 +782,9 @@ function UdpMaskItem({
     }
   };
 
+  const udpHopOption = udpHopMask ? [{ value: 'udphop', label: 'UDP Hop (port hopping)' }] : [];
   const options = isHysteria
-    ? [{ value: 'salamander', label: 'Salamander (Hysteria2)' }]
+    ? [{ value: 'salamander', label: 'Salamander (Hysteria2)' }, ...udpHopOption]
     : [
       // Salamander is the mask xray-core's own wireguard finalmask example
       // uses; it stays hysteria-only elsewhere to keep legacy parity.
@@ -787,6 +795,7 @@ function UdpMaskItem({
       { value: 'realm', label: 'Realm' },
       { value: 'header-custom', label: 'Header Custom' },
       { value: 'noise', label: 'Noise' },
+      ...udpHopOption,
     ];
 
   return (
@@ -894,6 +903,37 @@ function UdpMaskItem({
                   valuePropName="checked"
                 >
                   <Switch />
+                </Form.Item>
+              </>
+            );
+          }
+          if (type === 'udphop') {
+            return (
+              <>
+                <Form.Item
+                  label="Mode"
+                  name={[fieldName, 'settings', 'mode']}
+                  getValueProps={(v: unknown) => ({ value: typeof v === 'string' && v !== '' ? v.split(',') : [] })}
+                  normalize={(v: string[]) => v.join(',')}
+                >
+                  <Select
+                    mode="multiple"
+                    style={{ width: '100%' }}
+                    options={[
+                      { value: 'intervalLocal', label: 'intervalLocal (re-bind the local socket on an interval)' },
+                      { value: 'intervalRemote', label: 'intervalRemote (change the remote port on an interval)' },
+                      { value: 'perConnRemote', label: 'perConnRemote (a new remote port per connection)' },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item label="Interval (s)" name={[fieldName, 'settings', 'interval']}>
+                  <Input placeholder="e.g. 5-10" />
+                </Form.Item>
+                <Form.Item label="Remote Ports" name={[fieldName, 'settings', 'remotePorts']}>
+                  <Input placeholder="e.g. 20000-50000" />
+                </Form.Item>
+                <Form.Item label="Remote IPs" name={[fieldName, 'settings', 'remoteIPs']}>
+                  <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',']} placeholder="optional: addresses or prefixes to hop between" />
                 </Form.Item>
               </>
             );
@@ -1245,7 +1285,7 @@ function ItemEditor({
   );
 }
 
-function QuicParamsForm({ base, form }: { base: (string | number)[]; form: FormInstance }) {
+function QuicParamsForm({ base, form, advertiseHop }: { base: (string | number)[]; form: FormInstance; advertiseHop: boolean }) {
   const congestion = Form.useWatch([...base, 'congestion'], form) as string | undefined;
   const udpHop = Form.useWatch([...base, 'udpHop'], { form, preserve: true }) as Record<string, unknown> | undefined;
   const hasUdpHop = udpHop != null;
@@ -1290,22 +1330,29 @@ function QuicParamsForm({ base, form }: { base: (string | number)[]; form: FormI
         </>
       )}
 
-      <Form.Item label="UDP Hop">
-        <Switch
-          checked={hasUdpHop}
-          onChange={(v) => {
-            form.setFieldValue([...base, 'udpHop'], v ? defaultUdpHop() : undefined);
-          }}
-        />
-      </Form.Item>
-      {hasUdpHop && (
+      {advertiseHop && (
         <>
-          <Form.Item label="Hop Ports" name={[...base, 'udpHop', 'ports']}>
-            <Input placeholder="e.g. 20000-50000" />
+          <Form.Item
+            label="Hop Ports (mport)"
+            tooltip="Advertised to clients in their links and configs; the core itself hops through the udphop UDP mask on the client side."
+          >
+            <Switch
+              checked={hasUdpHop}
+              onChange={(v) => {
+                form.setFieldValue([...base, 'udpHop'], v ? defaultUdpHop() : undefined);
+              }}
+            />
           </Form.Item>
-          <Form.Item label="Hop Interval (s)" name={[...base, 'udpHop', 'interval']}>
-            <Input placeholder="e.g. 5-10" />
-          </Form.Item>
+          {hasUdpHop && (
+            <>
+              <Form.Item label="Hop Ports" name={[...base, 'udpHop', 'ports']}>
+                <Input placeholder="e.g. 20000-50000" />
+              </Form.Item>
+              <Form.Item label="Hop Interval (s)" name={[...base, 'udpHop', 'interval']}>
+                <Input placeholder="e.g. 5-10" />
+              </Form.Item>
+            </>
+          )}
         </>
       )}
 

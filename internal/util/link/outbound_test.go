@@ -255,3 +255,33 @@ func TestSlugAndSuggest(t *testing.T) {
 		t.Errorf("unicode suggest tag got %q", got)
 	}
 }
+
+// A share link's fm blob is the inbound's finalmask verbatim, so it carries the
+// quicParams.udpHop xray-core v26.9.9 stopped reading; the import must land it
+// on the udphop UDP mask or the imported outbound silently never hops.
+func TestParseHysteria2Link_LegacyQuicUdpHopBecomesTheMask(t *testing.T) {
+	fm := url.QueryEscape(`{"quicParams":{"congestion":"bbr","udpHop":{"ports":"20000-50000","interval":"5-10"}},"udp":[{"type":"salamander","settings":{"password":"p"}}]}`)
+	res, err := ParseLink("hysteria2://auth@1.2.3.4:443?security=tls&sni=a.example&fm=" + fm + "#hop")
+	if err != nil {
+		t.Fatalf("parse hysteria2 with fm: %v", err)
+	}
+	stream, _ := res.Outbound["streamSettings"].(map[string]any)
+	finalmask, ok := stream["finalmask"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing finalmask: %v", stream)
+	}
+	qp, _ := finalmask["quicParams"].(map[string]any)
+	if _, still := qp["udpHop"]; still || qp["congestion"] != "bbr" {
+		t.Fatalf("quicParams must lose udpHop and keep the rest, got %v", qp)
+	}
+	udp, _ := finalmask["udp"].([]any)
+	if len(udp) != 2 {
+		t.Fatalf("udp masks = %v, want salamander then udphop", udp)
+	}
+	hop, _ := udp[1].(map[string]any)
+	settings, _ := hop["settings"].(map[string]any)
+	if hop["type"] != "udphop" || settings["mode"] != "intervalLocal,intervalRemote" ||
+		settings["remotePorts"] != "20000-50000" || settings["interval"] != "5-10" {
+		t.Fatalf("udphop mask = %v, want the legacy ports and interval under the old behaviour's modes", hop)
+	}
+}

@@ -650,6 +650,7 @@ export default function OutboundFormModal({
                             onChange={field.onChange}
                             network={network}
                             protocol={protocol}
+                            udpHopMask
                           />
                         )}
                       />

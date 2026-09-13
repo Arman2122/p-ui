@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
 
+import { migrateQuicUdpHop } from '@/lib/xray/finalmask-migrate';
 import { migrateXmcSettings, parseGeckoPacketSize } from '@/lib/xray/forms/transport/FinalMaskForm';
 import { FinalMaskStreamSettingsSchema } from '@/schemas/protocols/stream';
 
@@ -86,5 +87,21 @@ describe('parseGeckoPacketSize', () => {
     // exceeds xray-core's gecko buffer (max 2048)
     expect(parseGeckoPacketSize('512-2049')).toBeNull();
     expect(parseGeckoPacketSize('512-9999')).toBeNull();
+  });
+});
+
+describe('migrateQuicUdpHop', () => {
+  it('drops an empty quicParams once udpHop leaves it', () => {
+    const finalmask: Record<string, unknown> = { quicParams: { udpHop: { ports: '1000-2000', interval: '5-10' } } };
+    expect(migrateQuicUdpHop(finalmask)).toBe(true);
+    expect(finalmask).toEqual({
+      udp: [{ type: 'udphop', settings: { mode: 'intervalLocal,intervalRemote', remotePorts: '1000-2000', interval: '5-10' } }],
+    });
+  });
+
+  it('is a no-op without the key', () => {
+    const finalmask: Record<string, unknown> = { quicParams: { congestion: 'bbr' }, udp: [] };
+    expect(migrateQuicUdpHop(finalmask)).toBe(false);
+    expect(finalmask).toEqual({ quicParams: { congestion: 'bbr' }, udp: [] });
   });
 });

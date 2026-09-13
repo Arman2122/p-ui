@@ -433,11 +433,10 @@ describe('parseVlessLink — extra / fm / x_padding_bytes (B20)', () => {
 
     const finalmask = stream.finalmask as Record<string, unknown>;
     expect(finalmask).toBeDefined();
-    const quicParams = finalmask.quicParams as Record<string, unknown>;
-    expect(quicParams.congestion).toBe('bbr');
-    expect(quicParams.maxIdleTimeout).toBe(30);
-    expect((quicParams.udpHop as Record<string, unknown>).interval).toBe('5-10');
-    expect((quicParams.udpHop as Record<string, unknown>).ports).toBe('20000-50000');
+    expect(finalmask.quicParams).toEqual({ congestion: 'bbr', maxIdleTimeout: 30 });
+    expect(finalmask.udp).toEqual([
+      { type: 'udphop', settings: { mode: 'intervalLocal,intervalRemote', remotePorts: '20000-50000', interval: '5-10' } },
+    ]);
   });
 
   it('falls back to x_padding_bytes when extra has no xPaddingBytes', () => {
@@ -600,5 +599,23 @@ describe('uplinkChunkSize is a range, not a number', () => {
     expect(unset.uplinkChunkSize).toBe('');
     const ranged = XHttpStreamSettingsSchema.parse({ uplinkChunkSize: '64-128' });
     expect(ranged.uplinkChunkSize).toBe('64-128');
+  });
+});
+
+describe('fm with the pre-v26.9.9 quicParams.udpHop', () => {
+  it('imports it as a udphop UDP mask so the outbound still hops on the new core', () => {
+    const fm = encodeURIComponent(JSON.stringify({
+      udp: [{ type: 'salamander', settings: { password: 'p' } }],
+      quicParams: { congestion: 'bbr', udpHop: { ports: '20000-50000', interval: '5-10' } },
+    }));
+    const link = `hysteria2://78e7795a209c4c099f896a816fc8448f@news.domain.org:8443?security=tls&sni=news.domain.org&fm=${fm}#hy2-hop`;
+    const out = parseHysteria2Link(link);
+    expect(out).not.toBeNull();
+    const finalmask = (out!.streamSettings as Record<string, unknown>).finalmask as Record<string, unknown>;
+    expect(finalmask.quicParams).toEqual({ congestion: 'bbr' });
+    expect(finalmask.udp).toEqual([
+      { type: 'salamander', settings: { password: 'p' } },
+      { type: 'udphop', settings: { mode: 'intervalLocal,intervalRemote', remotePorts: '20000-50000', interval: '5-10' } },
+    ]);
   });
 });

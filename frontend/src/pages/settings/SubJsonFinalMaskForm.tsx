@@ -47,7 +47,7 @@ export default function SubJsonFinalMaskForm({ value, onChange }: SubJsonFinalMa
       colon={false}
       initialValues={{ finalmask: initial }}
     >
-      <FinalMaskForm name="finalmask" network="" protocol="" form={form} showAll />
+      <FinalMaskForm name="finalmask" network="" protocol="" form={form} showAll udpHopMask />
     </Form>
   );
 }
