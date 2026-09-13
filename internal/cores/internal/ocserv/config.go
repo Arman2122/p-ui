@@ -69,6 +69,10 @@ func renderServer(inst core.Instance, s Settings, p paths, user string, interimS
 	}
 	if s.RedirectGateway {
 		b.WriteString("route = default\ntunnel-all-dns = true\n")
+	} else {
+		// With no route at all ocserv pushes a default one; the split the form
+		// promises is the tunnel subnet alone.
+		fmt.Fprintf(&b, "route = %s\n", pool.Masked())
 	}
 	b.WriteString("cisco-client-compat = true\ndtls-legacy = true\n")
 	return b.String()

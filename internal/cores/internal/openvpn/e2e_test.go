@@ -304,7 +304,8 @@ func TestRealTrafficUnderSystemd(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = srv.Close() })
-	c := New(Deps{Radius: srv, Binary: bin, StateDir: dir, Backend: backend, User: daemon.Username, Group: gid})
+	// The core's own root under the traversable parent: what a stock install has.
+	c := New(Deps{Radius: srv, Binary: bin, StateDir: filepath.Join(dir, "openvpn"), Backend: backend, User: daemon.Username, Group: gid})
 	t.Cleanup(func() {
 		if t.Failed() {
 			t.Log(shellOut("journalctl -u " + supervisor.UnitName(string(ID), 2) + " --no-pager -n 40 2>&1"))

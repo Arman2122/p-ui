@@ -53,7 +53,7 @@ func TestExitProfileIsRenderedUnderPanelControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conf := renderExitConfig(7, profile, "/var/lib/p-ui/openvpn/exit-7/auth")
+	conf := renderExitConfig(7, profile, "/var/lib/p-ui/openvpn/exit-7/auth", true)
 	for _, want := range []string{
 		"\nremote vpn.example.net 1194\n", "\nremote-cert-tls server\n", "<ca>\n-----BEGIN CERTIFICATE-----\nMIIB\n", "</tls-crypt>\n",
 		"\ndev pvx7\n", "\ndev-type tun\n", "\nroute-nopull\n", "\nnobind\n", "\ndisable-dco\n",
@@ -107,7 +107,7 @@ func TestExitLoginIsResolvedOnce(t *testing.T) {
 	if user, pass, _ := settings.exitLogin(profile); user != "alice" || pass != "secret" {
 		t.Fatalf("login = %q/%q; want the inline block's", user, pass)
 	}
-	if conf := renderExitConfig(1, profile, "/x/auth"); strings.Contains(conf, "<auth-user-pass>") || strings.Contains(conf, "alice") {
+	if conf := renderExitConfig(1, profile, "/x/auth", true); strings.Contains(conf, "<auth-user-pass>") || strings.Contains(conf, "alice") {
 		t.Fatalf("the inline login was rendered into the config instead of the credentials file:\n%s", conf)
 	}
 	settings, profile, err = parseExitSettings(`{"profile":` + jsonString(inline) + `,"username":"bob","password":"pw"}`)

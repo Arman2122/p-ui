@@ -56,6 +56,8 @@ type Deps struct {
 // Core is the OpenVPN adapter: one supervised daemon per inbound, its users
 // answered by a RADIUS sink, its bytes and sessions read from a ledger.
 type Core struct {
+	dcoOnce sync.Once
+	dco     bool
 	deps    Deps
 	backend supervisor.Backend
 
@@ -293,6 +295,9 @@ func usersByName(users []core.User) map[string]core.User {
 // the daemon writes into, all readable by the daemon user and no one else.
 func (c *Core) writeFilesLocked(cur *instance) error {
 	p := cur.paths
+	if err := c.ensureStateRoot(); err != nil {
+		return err
+	}
 	for _, dir := range []string{p.dir, p.ccd, p.tmp} {
 		if err := os.MkdirAll(dir, 0o770); err != nil {
 			return err
@@ -320,7 +325,7 @@ func (c *Core) writeFilesLocked(cur *instance) error {
 		p.key:    cur.settings.ServerKey,
 		p.tc2:    cur.settings.TLSCryptV2ServerKey,
 		p.plugin: pluginCnf,
-		p.conf:   renderServer(cur.inst, cur.settings, p, PluginPath),
+		p.conf:   renderServer(cur.inst, cur.settings, p, PluginPath, c.hasDCO()),
 	} {
 		if err := c.writeFile(path, []byte(body)); err != nil {
 			return err
@@ -328,9 +333,48 @@ func (c *Core) writeFilesLocked(cur *instance) error {
 	}
 	// The unit carries the rendered config's hash: OpenVPN cannot reload, so a
 	// changed file must change the spec, which is what restarts the daemon.
-	sum := sha256.Sum256([]byte(renderServer(cur.inst, cur.settings, p, PluginPath) + cur.settings.ServerCert + cur.settings.TLSCryptV2ServerKey))
+	sum := sha256.Sum256([]byte(renderServer(cur.inst, cur.settings, p, PluginPath, c.hasDCO()) + cur.settings.ServerCert + cur.settings.TLSCryptV2ServerKey))
 	cur.configHash = hex.EncodeToString(sum[:8])
 	return nil
+}
+
+// ensureStateRoot makes the core's directory traversable by the daemon group;
+// MkdirAll would leave it root:root under the panel's umask, out of reach.
+func (c *Core) ensureStateRoot() error {
+	root := c.stateDir()
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		return err
+	}
+	if err := os.Chmod(root, 0o750); err != nil {
+		return err
+	}
+	return c.chgrp(root)
+}
+
+// hasDCO says whether the daemon knows disable-dco (2.6+). Asked once: the
+// probe execs the binary, and an unknown version keeps today's directive.
+func (c *Core) hasDCO() bool {
+	c.dcoOnce.Do(func() {
+		version, err := c.Installed(context.Background())
+		c.dco = err != nil || versionAtLeast(version, 2, 6)
+	})
+	return c.dco
+}
+
+func versionAtLeast(version string, major, minor int) bool {
+	parts := strings.SplitN(version, ".", 3)
+	if len(parts) < 2 {
+		return false
+	}
+	got, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false
+	}
+	gotMinor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false
+	}
+	return got > major || (got == major && gotMinor >= minor)
 }
 
 func (c *Core) chgrp(path string) error {

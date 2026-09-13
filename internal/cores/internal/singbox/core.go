@@ -191,7 +191,7 @@ func (c *Core) wantLocked(ctx context.Context, d core.Instance) error {
 	}
 	cur, ok := c.instances[d.ID]
 	if !ok {
-		cur = &instance{dir: c.instanceDir(d.ID), counter: core.NewCounter()}
+		cur = &instance{inst: d, dir: c.instanceDir(d.ID), counter: core.NewCounter()}
 		cur.cfgPath = filepath.Join(cur.dir, "config.json")
 		// A daemon that outlived the panel keeps the ports and secret its file
 		// names; a new one gets two free loopback ports and a fresh secret.

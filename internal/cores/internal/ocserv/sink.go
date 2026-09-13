@@ -104,7 +104,7 @@ func allocate(settings Settings, email string, live []core.Session) (netip.Addr,
 		raw := uint32(base[0])<<24 | uint32(base[1])<<16 | uint32(base[2])<<8 | uint32(base[3])
 		raw += uint32(offset)
 		addr := netip.AddrFrom4([4]byte{byte(raw >> 24), byte(raw >> 16), byte(raw >> 8), byte(raw)})
-		if owner, held := taken[addr]; !held || owner == email {
+		if _, held := taken[addr]; !held {
 			return addr, nil
 		}
 	}

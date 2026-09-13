@@ -205,7 +205,7 @@ func (c *Core) dialerFor(settings Settings) Dialer {
 	if settings.RouteXrayPort <= 0 {
 		return refusingDialer(errors.New("ssh: this inbound routes through Xray and has no bridge port yet; save it again"))
 	}
-	return bridgeDialer(settings.RouteXrayPort)
+	return literalGuard(bridgeDialer(settings.RouteXrayPort))
 }
 
 /*
@@ -220,7 +220,7 @@ func (c *Core) udpDialerFor(settings Settings) udpDialer {
 		if settings.RouteXrayPort <= 0 {
 			return nil
 		}
-		return bridgeUDPDialer(settings.RouteXrayPort)
+		return guardedUDP(bridgeUDPDialer(settings.RouteXrayPort))
 	}
 	dial := c.deps.Dial
 	if dial == nil {

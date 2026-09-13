@@ -219,6 +219,9 @@ exit 0
 // writeExitFilesLocked lands the password and the script, readable by the
 // client's user and no one else; the script must also be runnable by it.
 func (c *Core) writeExitFilesLocked(cur *exitState) error {
+	if err := c.ensureStateRoot(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(cur.dir, 0o770); err != nil {
 		return err
 	}

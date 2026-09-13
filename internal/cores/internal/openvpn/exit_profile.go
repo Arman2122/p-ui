@@ -170,7 +170,7 @@ the panel's own block last so it wins. route-nopull keeps the pushed address
 and drops the pushed routes and DNS; the table the plane fills is the only way
 into this device, and nothing on the host is redirected.
 */
-func renderExitConfig(id int, p exitProfile, authPath string) string {
+func renderExitConfig(id int, p exitProfile, authPath string, dco bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Penhoon UI openvpn exit %d, rendered from the operator's profile. Edit the exit, not this file.\n", id)
 	for _, line := range p.kept {
@@ -179,7 +179,11 @@ func renderExitConfig(id int, p exitProfile, authPath string) string {
 	if !p.isClient {
 		b.WriteString("client\n")
 	}
-	fmt.Fprintf(&b, "dev %s\ndev-type tun\ndisable-dco\nnobind\npersist-tun\npersist-key\nroute-nopull\n", exitDeviceName(id))
+	fmt.Fprintf(&b, "dev %s\ndev-type tun\n", exitDeviceName(id))
+	if dco {
+		b.WriteString("disable-dco\n")
+	}
+	b.WriteString("nobind\npersist-tun\npersist-key\nroute-nopull\n")
 	if authPath != "" {
 		fmt.Fprintf(&b, "auth-user-pass %s\n", authPath)
 	}

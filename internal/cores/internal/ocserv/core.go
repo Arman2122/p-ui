@@ -314,6 +314,9 @@ MkdirAll alone is subject to the panel's umask.
 */
 func (c *Core) writeFilesLocked(cur *instance) error {
 	p := cur.paths
+	if err := c.ensureStateRoot(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(p.dir, 0o770); err != nil {
 		return err
 	}
@@ -359,6 +362,19 @@ func (c *Core) daemonUser() string {
 		return ""
 	}
 	return c.deps.User
+}
+
+// ensureStateRoot makes the core's directory traversable by the daemon group;
+// MkdirAll would leave it root:root under the panel's umask, out of reach.
+func (c *Core) ensureStateRoot() error {
+	root := c.stateDir()
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		return err
+	}
+	if err := os.Chmod(root, 0o750); err != nil {
+		return err
+	}
+	return c.chgrp(root)
 }
 
 func (c *Core) chgrp(path string) error {

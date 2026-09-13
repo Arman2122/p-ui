@@ -34,7 +34,7 @@ them. DCO stays off: the 2.6 line's counters under it are not to be trusted.
 duplicate-cn is on because the device cap is the sink's: without it OpenVPN
 disconnects a client's first device the moment its second connects.
 */
-func renderServer(inst core.Instance, s Settings, p paths, pluginSO string) string {
+func renderServer(inst core.Instance, s Settings, p paths, pluginSO string, dco bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "port %d\nproto %s\n", inst.Port, s.Proto)
 	if inst.Listen != "" {
@@ -65,7 +65,11 @@ func renderServer(inst core.Instance, s Settings, p paths, pluginSO string) stri
 	// The status file is the plugin's interim byte source and it reads only the
 	// version-1 layout; the panel itself never parses it.
 	fmt.Fprintf(&b, "management %s unix\nstatus %s 10\n", p.mgmt, p.status)
-	b.WriteString("disable-dco\ndata-ciphers AES-256-GCM:CHACHA20-POLY1305\nauth SHA256\ntls-version-min 1.2\n")
+	// A 2.5 daemon has no DCO and refuses the directive; 2.6 must be told.
+	if dco {
+		b.WriteString("disable-dco\n")
+	}
+	b.WriteString("data-ciphers AES-256-GCM:CHACHA20-POLY1305\nauth SHA256\ntls-version-min 1.2\n")
 	b.WriteString("keepalive 10 60\npersist-key\npersist-tun\nmax-clients 1024\nduplicate-cn\n")
 	if s.Proto == ProtoUDP {
 		b.WriteString("explicit-exit-notify 1\n")

@@ -504,7 +504,15 @@ func markedOutbound(tag string, mark uint32) json.RawMessage {
 	return mustJSON(map[string]any{
 		"tag":      tag,
 		"protocol": "freedom",
-		"settings": map[string]any{},
+		// The template direct's finalRules: freedom resolves a name before an ip
+		// rule, so "localhost" from a bridge is blocked here rather than dialled.
+		"settings": map[string]any{
+			"domainStrategy": "AsIs",
+			"finalRules": []map[string]any{
+				{"action": "block", "ip": []string{"geoip:private"}},
+				{"action": "allow"},
+			},
+		},
 		"streamSettings": map[string]any{
 			"sockopt": map[string]any{"mark": mark},
 		},

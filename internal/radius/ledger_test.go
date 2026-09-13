@@ -69,6 +69,32 @@ func TestLedgerBillsEachByteOnce(t *testing.T) {
 	}
 }
 
+/*
+A tunnel that is up but idle keeps sending interims with the same totals. Those
+kept nothing alive: the session was dropped after Stale, its address re-issued
+to the next login and its first bytes after waking baselined away. An idle
+session stays listed while the NAS reports it; last-seen still moves with bytes.
+*/
+func TestIdleInterimsKeepASessionListed(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	l := NewLedger("ovpn-1")
+	l.now = func() time.Time { return now }
+	l.Stale = 5 * time.Minute
+	l.Apply(ev(Start, "s1", "bob", 0, 0))
+	opened := now
+	for range 15 {
+		now = now.Add(time.Minute)
+		l.Apply(ev(Interim, "s1", "bob", 0, 0))
+	}
+	if s := l.Sessions(); len(s) != 1 || s[0].LastSeenUnixMilli != opened.UnixMilli() {
+		t.Fatalf("after 15 idle interims: %+v; want the session listed with last-seen at its open", s)
+	}
+	now = now.Add(6 * time.Minute)
+	if s := l.Sessions(); len(s) != 0 {
+		t.Fatalf("a session the NAS stopped reporting is still listed: %+v", s)
+	}
+}
+
 // A session's last-seen moves only with bytes; one that stops reporting is
 // dropped after Stale, so a dead tunnel does not sit in the IP-limit count.
 func TestLedgerSessionsGoStale(t *testing.T) {

@@ -32,6 +32,9 @@ type session struct {
 	peer     Peer
 	in, out  int64
 	lastSeen time.Time
+	// lastRecord is the last record of any kind: what says the NAS still has
+	// the session, where lastSeen says only whether bytes moved.
+	lastRecord time.Time
 	// started is when this session opened, for the cap's arrival order. A session
 	// adopted mid-flight (a panel restart) has no earlier record, so it is now.
 	started time.Time
@@ -72,7 +75,7 @@ func (l *Ledger) Apply(ev Event) {
 		ev.Username = cur.username
 	}
 	if !ok {
-		cur = &session{username: ev.Username, peer: ev.Peer, started: l.now()}
+		cur = &session{username: ev.Username, peer: ev.Peer, started: l.now(), lastRecord: l.now()}
 		l.sessions[ev.SessionID] = cur
 		// A session first heard of mid-flight (a panel restart adopted it) is
 		// baselined: its earlier bytes were billed by the previous process or are
@@ -86,6 +89,7 @@ func (l *Ledger) Apply(ev Event) {
 			return
 		}
 	}
+	cur.lastRecord = l.now()
 	if ev.Peer.Source.IsValid() {
 		cur.peer.Source = ev.Peer.Source
 	}
@@ -134,15 +138,15 @@ func (l *Ledger) Drain() []core.TrafficDelta {
 	return out
 }
 
-// Sessions lists the open sessions, dropping any past Stale, with last-seen
-// the time of the last record that moved bytes or opened the session.
+// Sessions lists the open sessions, dropping any the NAS stopped reporting for
+// Stale; last-seen is still the last record that moved bytes or opened it.
 func (l *Ledger) Sessions() []core.Session {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
 	ids := make([]string, 0, len(l.sessions))
 	for id, cur := range l.sessions {
-		if l.Stale > 0 && now.Sub(cur.lastSeen) > l.Stale {
+		if l.Stale > 0 && now.Sub(cur.lastRecord) > l.Stale {
 			delete(l.sessions, id)
 			continue
 		}

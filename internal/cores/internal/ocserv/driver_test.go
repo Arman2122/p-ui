@@ -192,9 +192,11 @@ func TestAllocateIsStableAndNeverCollides(t *testing.T) {
 	if err != nil || moved == first {
 		t.Fatalf("alice got %s while bob holds it (%v)", moved, err)
 	}
+	// Her own second device must not be handed the first one's address either:
+	// the daemon refuses it (ocserv) or reroutes the first device (OpenVPN).
 	own := []core.Session{{Email: "alice@x", Local: []netip.Addr{first}}}
-	if kept, _ := allocate(s, "alice@x", own); kept != first {
-		t.Fatalf("alice reconnecting got %s instead of her own %s", kept, first)
+	if second, _ := allocate(s, "alice@x", own); second == first {
+		t.Fatalf("alice's second device got %s, which her first device holds", second)
 	}
 	seen := map[netip.Addr]bool{}
 	var live []core.Session
@@ -241,8 +243,13 @@ func TestRenderServerCarriesTheDesign(t *testing.T) {
 		t.Fatalf("the device prefix has no separator:\n%s", conf)
 	}
 	off, _ := parseSettings(`{"subnet":"10.11.0.0/24"}`)
-	if plain := renderServer(inst, off, pathsIn("/state/4"), "", 20); strings.Contains(plain, "camouflage") || strings.Contains(plain, "run-as-user") || strings.Contains(plain, "route = default") {
+	plain := renderServer(inst, off, pathsIn("/state/4"), "", 20)
+	if strings.Contains(plain, "camouflage") || strings.Contains(plain, "run-as-user") || strings.Contains(plain, "route = default") {
 		t.Fatalf("an inbound with no camouflage, no daemon user and no redirect carries one anyway:\n%s", plain)
+	}
+	// ocserv treats no route as a default route; redirect off is the subnet alone.
+	if !strings.Contains(plain, "route = 10.11.0.0/24\n") {
+		t.Fatalf("redirect off did not route the tunnel subnet alone:\n%s", plain)
 	}
 }
 

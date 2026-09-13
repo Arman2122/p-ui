@@ -124,6 +124,49 @@ func guardedDialer(next Dialer) Dialer {
 	}
 }
 
+// ownPublicRefused is the one answer Xray cannot give for a bridged forward: its
+// private block covers loopback and RFC 1918, but the box's public address is
+// no more private than any other, and dialling it lands on this host.
+func ownPublicRefused(addr netip.Addr) error {
+	addr = addr.Unmap()
+	for _, p := range reservedDestinations {
+		if p.Contains(addr) {
+			return nil
+		}
+	}
+	if _, own := ownAddresses()[addr]; own {
+		return fmt.Errorf("%w: %s is this server's own address", errDestinationRefused, addr)
+	}
+	return nil
+}
+
+// literalGuard refuses the server's own public address before the bridge; a
+// name travels unresolved, for the domain rules and the outbounds' own block.
+func literalGuard(next Dialer) Dialer {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		if addr, err := netip.ParseAddr(host); err == nil {
+			if err := ownPublicRefused(addr); err != nil {
+				return nil, err
+			}
+		}
+		return next(ctx, network, address)
+	}
+}
+
+// guardedUDP is literalGuard for a datagram conversation.
+func guardedUDP(next udpDialer) udpDialer {
+	return func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
+		if err := ownPublicRefused(dst.Addr()); err != nil {
+			return nil, err
+		}
+		return next(ctx, dst)
+	}
+}
+
 func resolveDestination(ctx context.Context, host string) ([]netip.Addr, error) {
 	if addr, err := netip.ParseAddr(host); err == nil {
 		return []netip.Addr{addr}, nil

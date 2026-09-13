@@ -185,6 +185,9 @@ func (c *Core) ensureExitLocked(ctx context.Context, exit core.Exit) error {
 // writeExitFilesLocked lands the config and, when the profile logs in, the
 // credentials file, readable by the daemon user and no one else.
 func (c *Core) writeExitFilesLocked(id int, cur *exitState, profile exitProfile) error {
+	if err := c.ensureStateRoot(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(cur.dir, 0o770); err != nil {
 		return err
 	}
@@ -207,7 +210,7 @@ func (c *Core) writeExitFilesLocked(id int, cur *exitState, profile exitProfile)
 	} else if err := os.Remove(cur.auth); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	conf := renderExitConfig(id, profile, authPath)
+	conf := renderExitConfig(id, profile, authPath, c.hasDCO())
 	if err := c.writeFile(cur.conf, []byte(conf)); err != nil {
 		return err
 	}

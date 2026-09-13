@@ -46,13 +46,21 @@ func (c *Core) instanceDir(id int) string {
 	return filepath.Join(c.stateDir(), strconv.Itoa(id))
 }
 
-// ensureDir makes the instance directory root-owned and group-readable by the
-// daemon user, the way the installer made /var/lib/p-ui.
+// ensureDir makes the instance directory and the state root above it, both
+// traversable by the daemon group: MkdirAll alone leaves the root root:root.
 func (c *Core) ensureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
+	for _, path := range []string{c.stateDir(), dir} {
+		if err := os.MkdirAll(path, 0o750); err != nil {
+			return err
+		}
+		if err := os.Chmod(path, 0o750); err != nil {
+			return err
+		}
+		if err := c.chgrp(path); err != nil {
+			return err
+		}
 	}
-	return c.chgrp(dir)
+	return nil
 }
 
 func (c *Core) chgrp(path string) error {

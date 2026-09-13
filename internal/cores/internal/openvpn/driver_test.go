@@ -125,9 +125,11 @@ func TestAllocateIsStableAndNeverCollides(t *testing.T) {
 	if err != nil || moved == first {
 		t.Fatalf("alice got %s while bob holds it (%v)", moved, err)
 	}
+	// Her own second device must not be handed the first one's address either:
+	// the daemon refuses it (ocserv) or reroutes the first device (OpenVPN).
 	own := []core.Session{{Email: "alice@x", Local: []netip.Addr{first}}}
-	if kept, _ := allocate(s, "alice@x", own); kept != first {
-		t.Fatalf("alice reconnecting got %s instead of her own %s", kept, first)
+	if second, _ := allocate(s, "alice@x", own); second == first {
+		t.Fatalf("alice's second device got %s, which her first device holds", second)
 	}
 	seen := map[netip.Addr]bool{}
 	var live []core.Session
@@ -169,7 +171,7 @@ func TestRenderPluginRefusesAFiveDigitPort(t *testing.T) {
 func TestRenderServerCarriesTheDesign(t *testing.T) {
 	s, _ := parseSettings(`{"proto":"tcp","subnet":"10.9.0.0/24","dns":["1.1.1.1"],"redirectGateway":true}`)
 	inst := core.Instance{ID: 4, Tag: "ovpn-4", Port: 1194, Listen: ""}
-	conf := renderServer(inst, s, pathsIn("/state/4"), PluginPath)
+	conf := renderServer(inst, s, pathsIn("/state/4"), PluginPath, true)
 	for _, want := range []string{
 		"port 1194", "proto tcp", "dev pov4", "topology subnet", "server 10.9.0.0 255.255.255.0",
 		"verify-client-cert none", "username-as-common-name", "ca " + filepath.Join("/state/4", "server.crt"), "tls-crypt-v2 " + filepath.Join("/state/4", "tc2-server.key"),
@@ -191,7 +193,7 @@ func TestRenderServerCarriesTheDesign(t *testing.T) {
 		t.Fatalf("the daemon is told to log to a file nothing rotates:\n%s", conf)
 	}
 	split, _ := parseSettings(`{"proto":"tcp","subnet":"10.9.0.0/24","dns":["1.1.1.1"],"redirectGateway":false}`)
-	if conf := renderServer(inst, split, pathsIn("/state/4"), PluginPath); strings.Contains(conf, "block-outside-dns") {
+	if conf := renderServer(inst, split, pathsIn("/state/4"), PluginPath, true); strings.Contains(conf, "block-outside-dns") {
 		t.Fatalf("a split tunnel must leave the client's own resolver alone:\n%s", conf)
 	}
 }
