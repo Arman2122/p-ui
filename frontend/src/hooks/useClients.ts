@@ -86,6 +86,8 @@ export interface ClientQueryParams {
   hasTgId?: 'yes' | 'no' | '';
   hasComment?: 'yes' | 'no' | '';
   group?: string;
+  // CSV of plan ids; 0 is "no plan".
+  policyId?: string;
 }
 
 const DEFAULT_QUERY: ClientQueryParams = { page: 1, pageSize: 25 };
@@ -210,6 +212,7 @@ function buildQS(p: ClientQueryParams): string {
   if (p.hasTgId) sp.set('hasTgId', p.hasTgId);
   if (p.hasComment) sp.set('hasComment', p.hasComment);
   if (p.group) sp.set('group', p.group);
+  if (p.policyId) sp.set('policyId', p.policyId);
   return sp.toString();
 }
 
@@ -276,6 +279,7 @@ export function useClients(options: UseClientsOptions = {}) {
         && (prev.hasTgId ?? '') === (next.hasTgId ?? '')
         && (prev.hasComment ?? '') === (next.hasComment ?? '')
         && (prev.group ?? '') === (next.group ?? '')
+        && (prev.policyId ?? '') === (next.policyId ?? '')
       ) return prev;
       return next;
     });

@@ -207,12 +207,12 @@ func TestResellerPageAndReservationsPostgres(t *testing.T) {
 			_ = db.Callback().Query().Remove("reseller-page-count")
 			_ = db.Callback().Row().Remove("reseller-page-count")
 		})
-		small, err := svc.Clients(u, u.Id, 1, 1, "")
+		small, err := svc.Clients(u, u.Id, 1, 1, "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		smallQueries := queries.Swap(0)
-		large, err := svc.Clients(u, u.Id, 1, 200, "")
+		large, err := svc.Clients(u, u.Id, 1, 200, "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}

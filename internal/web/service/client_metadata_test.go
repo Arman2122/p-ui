@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -375,6 +377,57 @@ func TestGroupQuotaDisablesOnlyExhaustedMembers(t *testing.T) {
 	for _, group := range groups {
 		if group.Name == "destination" && group.TrafficUsed != 10 {
 			t.Fatalf("leaving group erased its consumed bytes: %+v", group)
+		}
+	}
+}
+
+// The Clients page filters by plan the way it filters by group; 0 selects the
+// clients on no plan by the same definition the plan summary counts them with.
+func TestClientPageFiltersByPlan(t *testing.T) {
+	initTestDB(t)
+	db := database.GetDB()
+	plan := model.Policy{Name: "Filtered", Tiers: "[]", Rev: 1}
+	if err := db.Create(&plan).Error; err != nil {
+		t.Fatal(err)
+	}
+	other := model.Policy{Name: "Other", Tiers: "[]", Rev: 1}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, email := range []string{"on-plan", "on-other", "custom", "orphaned"} {
+		if err := db.Create(&model.ClientRecord{Email: email, Enable: true}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for email, id := range map[string]*int{"on-plan": &plan.Id, "on-other": &other.Id, "orphaned": nil} {
+		if err := db.Create(&model.ClientPolicy{Email: email, PolicyId: id}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	emails := func(policyID string) []string {
+		t.Helper()
+		page, err := (&ClientService{}).ListPaged(&InboundService{}, nil, ClientPageParams{PolicyID: policyID, Sort: "email"})
+		if err != nil {
+			t.Fatalf("policyId=%q: %v", policyID, err)
+		}
+		out := make([]string, 0, len(page.Items))
+		for _, item := range page.Items {
+			out = append(out, item.Email)
+		}
+		return out
+	}
+	cases := []struct {
+		policyID string
+		want     []string
+	}{
+		{fmt.Sprint(plan.Id), []string{"on-plan"}},
+		{"0", []string{"custom", "orphaned"}},
+		{fmt.Sprintf("0,%d", other.Id), []string{"custom", "on-other", "orphaned"}},
+		{"", []string{"custom", "on-other", "on-plan", "orphaned"}},
+	}
+	for _, c := range cases {
+		if got := emails(c.policyID); !slices.Equal(got, c.want) {
+			t.Fatalf("policyId=%q: got %v, want %v", c.policyID, got, c.want)
 		}
 	}
 }

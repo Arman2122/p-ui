@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormProvider, useWatch } from 'react-hook-form';
 import { useSearchParams } from 'react-router';
-import { Alert, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tooltip, Typography } from 'antd';
+import { Alert, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import dayjs from 'dayjs';
@@ -32,10 +32,11 @@ export default function ResellerClientsPage() {
   const [params, setParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState(params.get('search') || '');
+  const [planFilter, setPlanFilter] = useState(() => params.get('new') === '1' ? 0 : Number(params.get('plan')) || 0);
   const [editing, setEditing] = useState<ResellerClient | null | false>(false);
   const [links, setLinks] = useState<string[]>();
   const form = useZodForm(ResellerClientFormSchema, { defaultValues: blank() });
-  const query = useQuery({ queryKey: [...resellerKeys, 'my-clients', page, search], queryFn: () => resellerGet('/reseller/clients', ResellerClientPageSchema, { page, size: 50, search }), refetchInterval: 30_000 });
+  const query = useQuery({ queryKey: [...resellerKeys, 'my-clients', page, search, planFilter], queryFn: () => resellerGet('/reseller/clients', ResellerClientPageSchema, { page, size: 50, search, ...(planFilter ? { planId: planFilter } : {}) }), refetchInterval: 30_000 });
   const inbounds = useQuery({ queryKey: [...resellerKeys, 'my-inbounds'], queryFn: () => resellerGet('/reseller/inbounds', z.array(ResellerInboundSchema)) });
   const granted = useMemo(() => Object.fromEntries((inbounds.data || []).map((ib) => [ib.id, { id: ib.id, remark: ib.remark, protocol: ib.protocol }])), [inbounds.data]);
   const plans = useQuery({ queryKey: [...resellerKeys, 'my-provisioning-plans'], queryFn: () => resellerGet('/reseller/plans/list', PlanChoices), enabled: !!me?.permissions.plans });
@@ -53,7 +54,10 @@ export default function ResellerClientsPage() {
   const linkMutation = useMutation({ mutationFn: (id: number) => resellerGet(`/reseller/clients/${id}/links`, z.array(z.string())), onSuccess: setLinks });
   const exportMutation = useMutation({ mutationFn: exportOwnedClients });
   useEffect(() => {
-    if (params.get('new') !== '1') return;
+    if (params.get('new') !== '1') {
+      if (params.has('plan')) setParams({}, { replace: true });
+      return;
+    }
     form.reset({ ...blank(), planId: Number(params.get('plan')) || 0, inboundIds: params.get('inbound') ? [Number(params.get('inbound'))] : [] }); setEditing(null); setParams({}, { replace: true });
   }, [params, setParams, form]);
   const edit = (row: ResellerClient | null) => { form.reset(row ? { ...row, trafficGB: row.totalGB / GiB, inboundIds: row.inboundIds || [], planId: 0 } : blank()); setEditing(row); };
@@ -64,7 +68,8 @@ export default function ResellerClientsPage() {
     <PageHeader title={t('resellers.clients')} sub={t('resellers.ownedClients')} actions={<Space><Button loading={exportMutation.isPending} onClick={() => exportMutation.mutate()}>{t('resellers.export')}</Button><Button type="primary" icon={<Icon name="plus" size={15} />} onClick={() => edit(null)}>{t('resellers.newClient')}</Button></Space>} />
     {err && <Alert type="error" title={t(err.message)} showIcon />}
     {pending && <Alert type="warning" title={t('resellers.pending')} showIcon closable />}
-    <Input.Search value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder={t('resellers.search')} allowClear style={{ maxWidth: 360 }} />
+    <Space wrap><Input.Search value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder={t('resellers.search')} allowClear style={{ maxWidth: 360 }} />
+      {planFilter > 0 && <Tag closable color="blue" onClose={() => { setPlanFilter(0); setPage(1); }}>{t('telemetry.plan')}: {plans.data?.find((p) => p.id === planFilter)?.name ?? `#${planFilter}`}</Tag>}</Space>
     <Table className="p-reseller-clients-table" size="small" tableLayout="fixed" rowKey="id" loading={query.isPending} dataSource={query.data?.items} scroll={{ x: 965 }} pagination={{ current: page, pageSize: 50, total: query.data?.total, showSizeChanger: false, onChange: setPage }} columns={[
       { title: t('pages.clients.client'), key: 'client', width: 250, render: (_, r) => {
         const ended = r.expiryTime > 0 && r.expiryTime <= Date.now() || r.totalGB > 0 && r.trafficUsed >= r.totalGB;

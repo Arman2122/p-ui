@@ -186,7 +186,8 @@ func (a *ResellerController) adminClients(c *gin.Context) { a.clientPage(c, rese
 func (a *ResellerController) clientPage(c *gin.Context, id int) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "50"))
-	obj, err := a.service.Clients(session.GetLoginUser(c), id, page, size, c.Query("search"))
+	planID, _ := strconv.Atoi(c.DefaultQuery("planId", "0"))
+	obj, err := a.service.Clients(session.GetLoginUser(c), id, page, size, c.Query("search"), planID)
 	resellerResponse(c, obj, err)
 }
 

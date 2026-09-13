@@ -17,9 +17,9 @@ function Surface({ dark, mobile }: { dark: boolean; mobile: boolean }) {
   useEffect(() => { if (isDark !== dark) toggleTheme(); }, [dark, isDark, toggleTheme]);
   return <div className="p-page" style={mobile ? { width: 390, maxWidth: '100%' } : undefined}><ClientsPage /></div>;
 }
-function ClientsWorkbench({ dark = false, mobile = false, fromPlan = false }: { dark?: boolean; mobile?: boolean; fromPlan?: boolean }) {
+function ClientsWorkbench({ dark = false, mobile = false, fromPlan = false, planFilter = false }: { dark?: boolean; mobile?: boolean; fromPlan?: boolean; planFilter?: boolean }) {
   const [cache] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } }));
-  return <MemoryRouter initialEntries={[fromPlan ? '/clients?create=1&planId=1' : '/clients']}>
+  return <MemoryRouter initialEntries={[fromPlan ? '/clients?create=1&planId=1' : planFilter ? '/clients?planId=1' : '/clients']}>
     <QueryClientProvider client={cache}><ThemeProvider><ConfigProvider theme={{ token: { motion: false } }}><Surface dark={dark} mobile={mobile} /></ConfigProvider></ThemeProvider></QueryClientProvider>
   </MemoryRouter>;
 }
@@ -142,3 +142,12 @@ export const EditAndSave: Story = { play: async (context) => {
   expect(HttpUtil.post).toHaveBeenCalledWith('/panel/api/clients/roham/externalLinks', { externalLinks: parityExternalLinks }, expect.anything());
   await waitFor(() => expect(body.queryByRole('dialog')).not.toBeInTheDocument(), { timeout: 5000 });
 } };
+export const PlanFilterFromLink: Story = {
+  args: { planFilter: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Plan: Standard 50');
+    const reads = (HttpUtil.get as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    await waitFor(() => expect(reads.some(([url]) => String(url).includes('policyId=1'))).toBe(true));
+  },
+};

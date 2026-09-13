@@ -103,7 +103,7 @@ func (s *ResellerService) OwnedClient(user *model.User, id int) (*model.ClientRe
 	return &rec, err
 }
 
-func (s *ResellerService) Clients(user *model.User, ownerID, page, size int, search string) (*ResellerClientPage, error) {
+func (s *ResellerService) Clients(user *model.User, ownerID, page, size int, search string, planID int) (*ResellerClientPage, error) {
 	if !session.IsAdminUser(user) {
 		if err := s.CheckAccess(user); err != nil {
 			return nil, err
@@ -121,6 +121,9 @@ func (s *ResellerService) Clients(user *model.User, ownerID, page, size int, sea
 	q := db.Table("clients c").Where("c.owner_user_id = ?", ownerID)
 	if search != "" {
 		q = q.Where("c.email ILIKE ? OR c.comment ILIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+	if planID > 0 {
+		q = q.Where("EXISTS (SELECT 1 FROM client_policies cp WHERE cp.email = c.email AND cp.policy_id = ?)", planID)
 	}
 	out := &ResellerClientPage{Items: []ResellerClientView{}}
 	if err := q.Count(&out.Total).Error; err != nil {

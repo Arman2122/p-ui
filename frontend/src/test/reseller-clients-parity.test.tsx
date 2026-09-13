@@ -61,3 +61,20 @@ it('renders the compact owned-client composition with real metadata and scoped a
   fireEvent.click(screen.getByRole('switch', { name: `${i18next.t('pages.clients.enabled')}: owned-client` }));
   await waitFor(() => expect(api.post).toHaveBeenCalledWith('/reseller/clients/5/update', expect.objectContaining({ email: 'owned-client', enable: false })));
 });
+
+it('opens a plan page link as a plan filter the reseller can clear', async () => {
+  setDatepicker('gregorian');
+  const calls: unknown[] = [];
+  api.get.mockImplementation(async (path: string, _schema: unknown, params?: unknown) => {
+    if (path === '/reseller/clients') { calls.push(params); return { items: [], total: 0 }; }
+    if (path === '/reseller/inbounds') return [];
+    if (path === '/reseller/plans/list') return [{ id: 7, name: 'Private monthly' }];
+    throw new Error(`Unexpected unscoped request: ${path}`);
+  });
+  renderWithProviders(<MemoryRouter initialEntries={['/clients?plan=7']}><ResellerClientsPage /></MemoryRouter>);
+
+  const chip = await screen.findByText(`${i18next.t('telemetry.plan')}: Private monthly`);
+  await waitFor(() => expect(calls).toContainEqual({ page: 1, size: 50, search: '', planId: 7 }));
+  fireEvent.click(chip.closest('.ant-tag')!.querySelector('.ant-tag-close-icon')!);
+  await waitFor(() => expect(calls.at(-1)).toEqual({ page: 1, size: 50, search: '' }));
+});

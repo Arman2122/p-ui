@@ -10785,6 +10785,15 @@
             }
           },
           {
+            "name": "policyId",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated plan ids; 0 selects the clients on no plan.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": true,
@@ -24400,6 +24409,44 @@
         ],
         "summary": "Page through owned clients",
         "operationId": "get_panel_api_reseller_clients",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "1-indexed page number. Defaults to 1.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "Rows per page. Defaults to 50, capped at 200.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring match on email or comment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "query",
+            "required": false,
+            "description": "Only clients on this plan of the reseller; 0 or absent lists all.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response",

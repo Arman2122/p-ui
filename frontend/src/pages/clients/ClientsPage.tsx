@@ -201,6 +201,7 @@ function readFilterState(): PersistedFilterState {
         inboundIds: Array.isArray(fromRaw.inboundIds) ? fromRaw.inboundIds : [],
         nodeIds: Array.isArray(fromRaw.nodeIds) ? fromRaw.nodeIds : [],
         groups: Array.isArray(fromRaw.groups) ? fromRaw.groups : [],
+        policyIds: Array.isArray(fromRaw.policyIds) ? fromRaw.policyIds : [],
       },
       sort: typeof raw.sort === 'string' ? raw.sort : '',
       pageSize: typeof raw.pageSize === 'number' && raw.pageSize > 0 ? raw.pageSize : null,
@@ -297,7 +298,6 @@ export default function ClientsPage() {
   const [bulkSetOpen, setBulkSetOpen] = useState(false);
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [bulkRotateOpen, setBulkRotateOpen] = useState(false);
-  const { data: policies = [] } = usePoliciesQuery({ enabled: bulkSetOpen });
   const [subLinksOpen, setSubLinksOpen] = useState(false);
   const [bulkGroupOpen, setBulkGroupOpen] = useState(false);
   const [bulkAttachOpen, setBulkAttachOpen] = useState(false);
@@ -324,6 +324,18 @@ export default function ClientsPage() {
   const [searchKey, setSearchKey] = useState(initial.searchKey);
   const [filters, setFilters] = useState<ClientFilters>(initial.filters);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const { data: policies = [] } = usePoliciesQuery({ enabled: bulkSetOpen || filterDrawerOpen || filters.policyIds.length > 0 });
+  const planOptions = useMemo(() => policies.map((p) => ({ id: p.id, name: p.name })), [policies]);
+  const planLabel = useCallback((id: number) => id === 0 ? t('telemetry.customPlan') : (policies.find((p) => p.id === id)?.name ?? `#${id}`), [policies, t]);
+  /* A plan page link carries the plan alone; with create=1 it seeds the form instead. */
+  useEffect(() => {
+    if (!searchParams.has('planId') || searchParams.get('create') === '1') return;
+    const planId = Number(searchParams.get('planId'));
+    if (Number.isInteger(planId) && planId > 0) setFilters((current) => ({ ...current, policyIds: [planId] }));
+    const next = new URLSearchParams(searchParams);
+    next.delete('planId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const initialSort = SORT_OPTIONS.find((o) => o.value === initial.sort) ?? DEFAULT_SORT;
   const [sortColumn, setSortColumn] = useState<string | null>(initialSort.column);
@@ -403,6 +415,7 @@ export default function ClientsPage() {
       hasTgId: filters.hasTgId || undefined,
       hasComment: filters.hasComment || undefined,
       group: filters.groups.join(',') || undefined,
+      policyId: filters.policyIds.join(',') || undefined,
       sort: sortColumn || undefined,
       order: sortOrder || undefined,
     };
@@ -968,7 +981,7 @@ export default function ClientsPage() {
         record.plan?.name,
         record.plan?.pending ? t('telemetry.planPending') : '',
         record.plan?.overridden ? t('telemetry.planOverride') : '',
-      ].filter(Boolean).join(' · ')}><ClientPlanCell client={record} /></div>,
+      ].filter(Boolean).join(' · ')}><button className="p-text-action" onClick={() => setFilters({ ...filters, policyIds: [record.plan?.policyId ?? 0] })}><ClientPlanCell client={record} /></button></div>,
     },
     {
       title: t('pages.clients.traffic'), key: 'traffic', width: twoLine ? 240 : 172,
@@ -1388,7 +1401,7 @@ export default function ClientsPage() {
                             <Tag
                               key={`i-${id}`}
                               closable
-                              color="cyan"
+                              color="blue"
                               onClose={() => setFilters({ ...filters, inboundIds: filters.inboundIds.filter((x) => x !== id) })}
                             >
                               {inboundLabel(id)}
@@ -1402,6 +1415,16 @@ export default function ClientsPage() {
                               onClose={() => setFilters({ ...filters, groups: filters.groups.filter((x) => x !== g) })}
                             >
                               {t('pages.clients.group')}: {g}
+                            </Tag>
+                          ))}
+                          {filters.policyIds.map((id) => (
+                            <Tag
+                              key={`p-${id}`}
+                              closable
+                              color="blue"
+                              onClose={() => setFilters({ ...filters, policyIds: filters.policyIds.filter((x) => x !== id) })}
+                            >
+                              {t('telemetry.plan')}: {planLabel(id)}
                             </Tag>
                           ))}
                           {(filters.expiryFrom || filters.expiryTo) && (
@@ -1804,6 +1827,7 @@ export default function ClientsPage() {
             inbounds={inbounds}
             protocols={protocolOptions}
             groups={groupOptions}
+            plans={planOptions}
             nodes={nodes}
           />
         </LazyMount>

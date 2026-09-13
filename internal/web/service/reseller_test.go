@@ -80,15 +80,28 @@ func TestResellerServicesPostgres(t *testing.T) {
 		if _, err := svc.ClientLinks(other, created.ClientID, "localhost"); !errors.Is(err, ErrResellerForbidden) {
 			t.Fatalf("cross links=%v", err)
 		}
-		if _, err := svc.Clients(other, user.Id, 1, 50, ""); !errors.Is(err, ErrResellerForbidden) {
+		if _, err := svc.Clients(other, user.Id, 1, 50, "", 0); !errors.Is(err, ErrResellerForbidden) {
 			t.Fatalf("cross listing=%v", err)
 		}
-		page, err := svc.Clients(user, user.Id, 1, 50, "")
+		page, err := svc.Clients(user, user.Id, 1, 50, "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if page.Total != 1 || page.Items[0].ID != created.ClientID {
 			t.Fatalf("owned page=%+v", page)
+		}
+		private := model.Policy{Name: "Reseller filter", OwnerUserID: &user.Id, Tiers: "[]", Rev: 1}
+		if err := database.GetDB().Create(&private).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := database.GetDB().Create(&model.ClientPolicy{Email: input.Email, PolicyId: &private.Id}).Error; err != nil {
+			t.Fatal(err)
+		}
+		if onPlan, err := svc.Clients(user, user.Id, 1, 50, "", private.Id); err != nil || onPlan.Total != 1 {
+			t.Fatalf("plan filter page=%+v err=%v", onPlan, err)
+		}
+		if offPlan, err := svc.Clients(user, user.Id, 1, 50, "", private.Id+1000); err != nil || offPlan.Total != 0 {
+			t.Fatalf("unknown plan filter page=%+v err=%v", offPlan, err)
 		}
 		bad := input
 		bad.Email = "ungranted"

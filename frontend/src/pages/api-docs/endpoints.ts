@@ -675,6 +675,7 @@ params: [
           { name: 'search', in: 'query', type: 'string', desc: 'Case-insensitive substring match on email / subId / comment.' },
           { name: 'filter', in: 'query', type: 'string', desc: 'Status bucket: online | active | deactive | depleted | expiring.' },
           { name: 'protocol', in: 'query', type: 'string', desc: 'Match clients attached to at least one inbound of this protocol (vless, vmess, trojan, shadowsocks, ...).' },
+          { name: 'policyId', in: 'query', type: 'string', optional: true, desc: 'Comma-separated plan ids; 0 selects the clients on no plan.' },
           { name: 'sort', in: 'query', type: 'string', desc: 'Sort key: enable | email | inboundIds | traffic | remaining | expiryTime.' },
           { name: 'order', in: 'query', type: 'string', desc: 'ascend or descend.' },
         ],
@@ -2787,7 +2788,12 @@ errorResponse: '{\n  "success": false,\n  "msg": "a token with that name already
       summary: 'Page through owned clients',
       responseSchema: 'ResellerClientPage',
       responseSchemaArray: false,
-      params: []
+      params: [
+        { name: 'page', in: 'query', type: 'number', optional: true, desc: '1-indexed page number. Defaults to 1.' },
+        { name: 'size', in: 'query', type: 'number', optional: true, desc: 'Rows per page. Defaults to 50, capped at 200.' },
+        { name: 'search', in: 'query', type: 'string', optional: true, desc: 'Case-insensitive substring match on email or comment.' },
+        { name: 'planId', in: 'query', type: 'number', optional: true, desc: 'Only clients on this plan of the reseller; 0 or absent lists all.' },
+      ]
     },
     {
       method: 'POST',

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,6 +64,8 @@ type ClientPageParams struct {
 	HasTgID    string `form:"hasTgId" json:"hasTgId"`
 	HasComment string `form:"hasComment" json:"hasComment"`
 	Group      string `form:"group" json:"group"`
+	// PolicyID is a CSV of plan ids; 0 selects the clients on no plan.
+	PolicyID string `form:"policyId" json:"policyId"`
 }
 
 // ClientPageResponse is the shape returned by ListPaged. `Total` is the
@@ -263,7 +266,30 @@ func (q clientQuery) applyParams(tx *gorm.DB, params ClientPageParams, onlines [
 	if groups := parseCSVStrings(params.Group); len(groups) > 0 {
 		where("LOWER(TRIM(COALESCE(c.group_name, ''))) IN ?", groups)
 	}
+	if cond, args, ok := planCond(params.PolicyID); ok {
+		where(cond, args...)
+	}
 	return tx, narrowed
+}
+
+// planCond matches clients on any of the named plans; a 0 names those on none,
+// by the same definition PlanSummary counts them with.
+func planCond(raw string) (string, []any, bool) {
+	const assigned = "EXISTS (SELECT 1 FROM client_policies cp JOIN policies p ON p.id = cp.policy_id" +
+		" WHERE cp.email = c.email AND cp.policy_id IN ?)"
+	const none = "NOT EXISTS (SELECT 1 FROM client_policies cp JOIN policies p ON p.id = cp.policy_id" +
+		" WHERE cp.email = c.email)"
+	named := parseCSVInts(raw)
+	unplanned := slices.Contains(parseCSVStrings(raw), "0")
+	switch {
+	case len(named) == 0 && !unplanned:
+		return "", nil, false
+	case len(named) == 0:
+		return none, nil, true
+	case !unplanned:
+		return assigned, []any{named}, true
+	}
+	return "(" + assigned + " OR " + none + ")", []any{named}, true
 }
 
 func (q clientQuery) bucketCond(buckets, onlines []string) (string, []any) {

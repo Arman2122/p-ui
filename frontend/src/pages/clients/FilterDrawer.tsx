@@ -30,6 +30,7 @@ interface FilterDrawerProps {
   inbounds: InboundOption[];
   protocols: string[];
   groups: string[];
+  plans: { id: number; name: string }[];
   nodes: NodeRecord[];
 }
 
@@ -43,6 +44,7 @@ export default function FilterDrawer({
   inbounds,
   protocols,
   groups,
+  plans,
   nodes,
 }: FilterDrawerProps) {
   const { t } = useTranslation();
@@ -67,6 +69,11 @@ export default function FilterDrawer({
   const groupOptions = useMemo(
     () => groups.map((g) => ({ value: g, label: g })),
     [groups],
+  );
+
+  const planOptions = useMemo(
+    () => [{ value: 0, label: t('telemetry.customPlan') }, ...plans.map((p) => ({ value: p.id, label: p.name }))],
+    [plans, t],
   );
 
   // 0 is the "local panel" sentinel (inbounds without a nodeId) — see
@@ -167,6 +174,20 @@ export default function FilterDrawer({
             onChange={(v) => patch('groups', v as string[])}
             options={groupOptions}
             placeholder={t('pages.clients.groupPlaceholder')}
+            maxTagCount="responsive"
+            allowClear
+            showSearch={{ optionFilterProp: 'label' }}
+            listHeight={220}
+          />
+        </Form.Item>
+
+        <Form.Item label={t('telemetry.plan')}>
+          <Select
+            mode="multiple"
+            value={filters.policyIds}
+            onChange={(v) => patch('policyIds', v as number[])}
+            options={planOptions}
+            placeholder={t('telemetry.plan')}
             maxTagCount="responsive"
             allowClear
             showSearch={{ optionFilterProp: 'label' }}
