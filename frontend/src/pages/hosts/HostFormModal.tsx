@@ -88,8 +88,8 @@ export default function HostFormModal({ open, mode, host, inboundOptions, existi
   const [loading, setLoading] = useState(false);
 
   const security = (useWatch({ control: methods.control, name: 'security' }) ?? 'same') as string;
-  const showTls = security === 'tls' || security === 'reality';
-  const showTlsExtras = security === 'tls';
+  const showTls = security === 'tls' || security === 'reality' || security === 'same';
+  const showTlsExtras = security === 'tls' || security === 'same';
 
   useEffect(() => {
     if (open) {

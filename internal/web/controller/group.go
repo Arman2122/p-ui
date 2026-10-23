@@ -180,7 +180,6 @@ func (a *GroupController) bulkAdd(c *gin.Context) {
 		return
 	}
 	jsonObj(c, result, nil)
-	a.xrayService.SetToNeedRestart()
 	notifyClientsChanged()
 }
 
@@ -205,6 +204,5 @@ func (a *GroupController) bulkRemove(c *gin.Context) {
 		return
 	}
 	jsonObj(c, result, nil)
-	a.xrayService.SetToNeedRestart()
 	notifyClientsChanged()
 }

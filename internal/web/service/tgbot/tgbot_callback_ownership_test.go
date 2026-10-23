@@ -7,13 +7,14 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/mymmrac/telego"
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/sub"
+	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
 const (
@@ -99,32 +100,41 @@ func TestOwnsEmailIsScopedToTheCallersTelegramId(t *testing.T) {
 	}
 }
 
-/*
-The end-to-end half. sendClientIndividualLinks fetches the subscription page over
-HTTP to render the per-client URIs, so a forged callback that got through would
-leave a request for the victim's subId in the sub server's log. Nothing arriving
-there is the assertion.
-*/
+// Ownership is checked before rendering local subscription links or sending a Telegram message.
 func TestForgedCallbackFetchesNothingForAnotherClient(t *testing.T) {
 	initTgbotDB(t)
 	seedClient(t, 31003, "in-victim", "victim@example.com", "victimsub12345678", victimTgID)
 	seedClient(t, 31004, "in-attacker", "attacker@example.com", "attackersub123456", attackerTgID)
 
+	requests := captureBotRequests(t)
+	service.RegisterSubLinkProvider(sub.NewLinkProvider())
+	t.Cleanup(func() { service.RegisterSubLinkProvider(nil) })
+	for _, entry := range []struct {
+		email, subID, tag string
+		tgID              int64
+	}{
+		{"victim@example.com", "victimsub12345678", "in-victim", victimTgID},
+		{"attacker@example.com", "attackersub123456", "in-attacker", attackerTgID},
+	} {
+		var inbound model.Inbound
+		if err := database.GetDB().Where("tag = ?", entry.tag).First(&inbound).Error; err != nil {
+			t.Fatal(err)
+		}
+		client := model.ClientRecord{Email: entry.email, SubID: entry.subID, UUID: "11111111-2222-4333-8444-555555555555", Enable: true, TgID: entry.tgID}
+		if err := database.GetDB().Create(&client).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := database.GetDB().Create(&model.ClientInbound{ClientId: client.Id, InboundId: inbound.Id}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
 	var served atomic.Int64
-	var paths []string
 	sub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		served.Add(1)
-		paths = append(paths, r.URL.Path)
 		_, _ = w.Write([]byte("vless://11111111-2222-3333-4444-555555555555@host:443\n"))
 	}))
 	defer sub.Close()
 	setSetting(t, "subURI", sub.URL+"/sub/")
-
-	// The real client the fetch path uses; the bot start that normally builds it
-	// has not run here, and a nil one would fail the served path for the wrong
-	// reason.
-	optimizedHTTPClient = &http.Client{Timeout: 5 * time.Second}
-	t.Cleanup(func() { optimizedHTTPClient = nil })
 
 	tg := &Tgbot{}
 	forged := &telego.CallbackQuery{
@@ -136,7 +146,7 @@ func TestForgedCallbackFetchesNothingForAnotherClient(t *testing.T) {
 	tg.answerCallback(forged, false)
 
 	if n := served.Load(); n != 0 {
-		t.Fatalf("the sub server served %d request(s) %v for a client the caller does not own", n, paths)
+		t.Fatalf("the sub server served %d request(s) for a client the caller does not own", n)
 	}
 
 	// The same call for the caller's OWN client must still be served, or the
@@ -149,10 +159,16 @@ func TestForgedCallbackFetchesNothingForAnotherClient(t *testing.T) {
 	}
 	tg.answerCallback(own, false)
 
-	if n := served.Load(); n != 1 {
-		t.Fatalf("the sub server served %d request(s) for the caller's own client, want 1", n)
+	if n := served.Load(); n != 0 {
+		t.Fatalf("local link rendering fetched the public URL %d times", n)
 	}
-	if len(paths) != 1 || !strings.Contains(paths[0], "attackersub123456") {
-		t.Fatalf("served paths = %v, want one carrying the caller's own subId", paths)
+	var links []string
+	for _, request := range requests() {
+		if request.Method == "sendMessage" {
+			links = append(links, request.Text)
+		}
+	}
+	if len(links) != 1 || !strings.Contains(links[0], ":31004") || strings.Contains(links[0], ":31003") {
+		t.Fatalf("owned link delivery = %q, want only caller's inbound", links)
 	}
 }

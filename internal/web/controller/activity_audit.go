@@ -23,7 +23,10 @@ func auditOperation(path string) (string, string) {
 	}
 	parts := strings.Split(route, "/")
 	switch route {
-	case "resellers", "reseller/clients", "reseller/tokens":
+	case "fleet/network/defaults", "fleet/network/nodes/:id", "fleet/network/nodes/:id/assets", "fleet/network/publish",
+		"fleet/placement/nodes/:id", "fleet/placement/rules", "fleet/placement/default", "fleet/placement/clients/:id", "fleet/clients/:id/reset-schedule", "fleet/clients/:id/reset-schedule/cancel":
+		return "fleet", "update"
+	case "resellers", "reseller/clients", "reseller/tokens", "fleet/clients":
 		return parts[0], "create"
 	case "reseller/password", "backups/schedule":
 		return parts[0], "update"

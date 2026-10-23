@@ -9,6 +9,7 @@ import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { useNodeMutations } from '@/api/queries/useNodeMutations';
 import NodeList from './NodeFleet';
 import NodeFormModal from './NodeFormModal';
+import HeadlessFleet from './HeadlessFleet';
 import { setMessageInstance } from '@/utils/messageBus';
 import { HttpUtil } from '@/utils';
 import type { PanelUpdateInfo } from '../index/PanelUpdateModal';
@@ -220,6 +221,7 @@ export default function NodesPage() {
 
         <Layout className="content-shell">
           <Layout.Content id="content-layout" className="content-area">
+            <HeadlessFleet />
             <Spin spinning={!fetched} delay={200} description={t('loading')} size="large">
               {!fetched ? (
                 <div className="loading-spacer" />

@@ -100,6 +100,10 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 		}
 	}
 	for _, ext := range externalLinks {
+		seenEmails[ext.Email] = struct{}{}
+		if !ext.Active {
+			continue
+		}
 		for _, el := range expandEntry(ext) {
 			outbound := parsedExternalOutbound(el.Link)
 			if outbound == nil {
@@ -121,7 +125,7 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 		}
 	}
 
-	if len(configArray) == 0 {
+	if len(configArray) == 0 && len(externalLinks) == 0 {
 		return "", "", nil
 	}
 
@@ -130,6 +134,9 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 		emails = append(emails, e)
 	}
 	traffic, _ := subReq.AggregateTrafficByEmails(emails)
+	if len(configArray) == 0 {
+		return "", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", traffic.Up, traffic.Down, traffic.Total, traffic.ExpiryTime/1000), nil
+	}
 
 	var finalJson []byte
 	if len(configArray) == 1 && !alwaysReturnArray {
@@ -338,6 +345,9 @@ func (s *SubJsonService) tlsData(tData map[string]any) map[string]any {
 
 	tlsData["serverName"] = tData["serverName"]
 	tlsData["alpn"] = tData["alpn"]
+	if suites, _ := tData["cipherSuites"].(string); suites != "" {
+		tlsData["cipherSuites"] = suites
+	}
 	if fingerprint, ok := tlsClientSettings["fingerprint"].(string); ok {
 		tlsData["fingerprint"] = fingerprint
 	}
@@ -444,6 +454,7 @@ func (s *SubJsonService) genVless(subReq *SubService, inbound *model.Inbound, st
 	}
 	if client.Flow != "" {
 		settings["flow"] = client.Flow
+		outbound.Mux = muxWithoutTCP(mux)
 	}
 	outbound.Settings = settings
 	result, _ := json.MarshalIndent(outbound, "", "  ")
@@ -658,4 +669,20 @@ type ServerSetting struct {
 	Port     int    `json:"port"`
 	Flow     string `json:"flow,omitempty"`
 	Method   string `json:"method,omitempty"`
+}
+
+func muxWithoutTCP(mux string) json_util.RawMessage {
+	if mux == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(mux), &m); err != nil || m == nil {
+		return nil
+	}
+	m["concurrency"] = -1
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	return json_util.RawMessage(out)
 }

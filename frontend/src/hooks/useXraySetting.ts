@@ -31,8 +31,8 @@ function normalizeOutboundTestUrl(url: string) {
 
 export function isUdpOutbound(outbound: unknown): boolean {
   const o = outbound as { protocol?: string; streamSettings?: { network?: string } } | null | undefined;
-  const p = o?.protocol;
-  const n = o?.streamSettings?.network;
+  const p = typeof o?.protocol === 'string' ? o.protocol.toLowerCase() : '';
+  const n = typeof o?.streamSettings?.network === 'string' ? o.streamSettings.network.toLowerCase() : '';
   return p === 'wireguard' || p === 'hysteria' || n === 'hysteria' || n === 'kcp' || n === 'quic';
 }
 
@@ -434,7 +434,7 @@ export function useXraySetting(): UseXraySettingResult {
       const httpTplQueue: { index: number; outbound: unknown; request: number }[] = [];
       const httpSubQueue: { tag: string; outbound: unknown; request: number }[] = [];
       const enqueue = (ob: { tag?: string; protocol?: string }, kind: 'tpl' | 'sub', index: number, tag: string) => {
-        const proto = ob?.protocol;
+        const proto = ob?.protocol?.toLowerCase();
         if (proto === 'blackhole' || proto === 'loopback' || ob?.tag === 'blocked') return;
         // freedom ("direct") and dns aren't proxies — skip them in every mode.
         if (proto === 'freedom' || proto === 'dns') return;

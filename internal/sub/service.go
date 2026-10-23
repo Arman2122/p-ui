@@ -1,16 +1,11 @@
 package sub
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
 	"net"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +21,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/link"
-	"github.com/Arman2122/p-ui/internal/util/random"
+	"github.com/Arman2122/p-ui/internal/util/sharelink"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -139,9 +134,7 @@ func (s *SubService) primeLinkClients(inboundId int, clients []model.Client, com
 	}
 }
 
-// clientForLink resolves one client of an inbound by email for link
-// generation: from the per-request cache when primed, otherwise by parsing
-// the settings JSON once and caching every client from it.
+// Resolve current credentials once per request, keeping inbound-specific peer identities.
 func (s *SubService) clientForLink(inbound *model.Inbound, email string) (model.Client, bool) {
 	if m, ok := s.clientsByInbound[inbound.Id]; ok {
 		if c, hit := m[email]; hit {
@@ -151,7 +144,7 @@ func (s *SubService) clientForLink(inbound *model.Inbound, email string) (model.
 			return model.Client{}, false
 		}
 	}
-	clients, err := s.inboundService.GetClients(inbound)
+	clients, err := s.currentLinkClients(inbound)
 	if err != nil {
 		return model.Client{}, false
 	}
@@ -276,6 +269,11 @@ func (s *SubService) matchingClients(inbound *model.Inbound, subId string) []mod
 		seen[key] = struct{}{}
 		out = append(out, client)
 	}
+	out, err = s.inboundTunnelIdentities(inbound, out)
+	if err != nil {
+		logger.Warningf("subscription: inbound %d peer identities: %v", inbound.Id, err)
+		return nil
+	}
 	s.primeLinkClients(inbound.Id, out, false)
 	return out
 }
@@ -349,6 +347,13 @@ func (s *SubService) getSubs(subId string) ([]string, []string, []int, int64, xr
 		if ext.Enable {
 			hasEnabledClient = true
 		}
+		seenEmails[ext.Email] = struct{}{}
+		if !ext.Active {
+			if result == nil {
+				result = []string{}
+			}
+			continue
+		}
 		for _, el := range expandEntry(ext) {
 			if link := applyRemarkToLink(el.Link, el.Name); link != "" {
 				result = append(result, link)
@@ -384,7 +389,7 @@ must not disagree about the same client. Anything it cannot resolve falls back
 to the pre-host behaviour rather than to no link at all.
 */
 func (s *SubService) linkForEmail(inbound *model.Inbound, email string) string {
-	clients, err := s.inboundService.GetClients(inbound)
+	clients, err := s.currentLinkClients(inbound)
 	if err == nil {
 		s.primeLinkClients(inbound.Id, clients, true)
 	}
@@ -400,7 +405,7 @@ func (s *SubService) linkForEmail(inbound *model.Inbound, email string) string {
 }
 
 func (s *SubService) inboundLinks(inbound *model.Inbound) []string {
-	clients, err := s.inboundService.GetClients(inbound)
+	clients, err := s.currentLinkClients(inbound)
 	if err != nil {
 		return nil
 	}
@@ -824,12 +829,8 @@ func externalProxyEndpoints(stream map[string]any) []map[string]any {
 	return out
 }
 
-// genMtprotoLink builds a per-client Telegram proxy deep link for an mtproto
-// inbound: the server/port pair plus the client's own FakeTLS secret. The link
-// carries no remark fragment — Telegram proxy deep links have no name field, and
-// a trailing "#remark" is appended to the last query value by lenient parsers,
-// corrupting the server address. The remark is shown separately in the panel UI.
-// Returns "" when the client has no secret.
+// Telegram links omit fragments because lenient clients append them to the
+// final query value. Host and WEB delivery policy stay outside the core encoder.
 func (s *SubService) genMtprotoLink(inbound *model.Inbound, email string) string {
 	if inbound.Protocol != model.MTProto {
 		return ""
@@ -844,18 +845,10 @@ func (s *SubService) genMtprotoLink(inbound *model.Inbound, email string) string
 		for _, ep := range endpoints {
 			dest, _ := ep["dest"].(string)
 			port, _ := ep["port"].(float64)
-			links = append(links, buildLinkWithParams("tg://proxy", map[string]string{
-				"server": dest,
-				"port":   fmt.Sprintf("%d", int(port)),
-				"secret": resolved.Secret,
-			}, ""))
+			links = append(links, sharelink.MTProto(dest, int(port), resolved.Secret))
 		}
 	} else {
-		links = append(links, buildLinkWithParams("tg://proxy", map[string]string{
-			"server": s.resolveInboundAddress(inbound),
-			"port":   fmt.Sprintf("%d", inbound.Port),
-			"secret": resolved.Secret,
-		}, ""))
+		links = append(links, sharelink.MTProto(s.resolveInboundAddress(inbound), inbound.Port, resolved.Secret))
 	}
 	if web := mtprotoWebLink(inbound, resolved.Secret); web != "" {
 		links = append(links, web)
@@ -891,58 +884,24 @@ func mtprotoWebLink(inbound *model.Inbound, secret string) string {
 	return buildLinkWithParams("tg://webproxy", map[string]string{"server": settings.WebHost, "secret": dd}, "")
 }
 
-// Protocol link generators are intentionally ordered as:
-// vmess -> vless -> trojan -> shadowsocks -> hysteria.
 func (s *SubService) genVmessLink(inbound *model.Inbound, email string) string {
 	if inbound.Protocol != model.VMESS {
 		return ""
 	}
-	address := s.resolveInboundAddress(inbound)
-	obj := map[string]any{
-		"v":    "2",
-		"add":  address,
-		"port": inbound.Port,
-		"type": "none",
-	}
-	stream := unmarshalStreamSettings(inbound.StreamSettings)
-	network, _ := stream["network"].(string)
-	applyVmessNetworkParams(stream, network, obj)
-	if finalmask, ok := stream["finalmask"].(map[string]any); ok {
-		applyFinalMaskObj(finalmask, obj)
-	}
-	security, _ := stream["security"].(string)
-	obj["tls"] = security
-	if security == "tls" {
-		applyVmessTLSParams(stream, obj)
-	}
-
-	client, ok := s.clientForLink(inbound, email)
+	template, _, ok := s.xrayShareTemplate(inbound, email)
 	if !ok {
 		return ""
 	}
-	obj["id"] = client.ID
-	obj["scy"] = normalizeVmessSecurity(client.Security)
-
-	externalProxies, _ := stream["externalProxy"].([]any)
-
-	if len(externalProxies) > 0 {
-		return s.buildVmessExternalProxyLinks(externalProxies, obj, inbound, email, network)
+	stream := unmarshalStreamSettings(inbound.StreamSettings)
+	proxies, _ := stream["externalProxy"].([]any)
+	if len(proxies) > 0 {
+		return s.buildVmessExternalProxyLinks(proxies, template.Object, inbound, email, template.Network)
 	}
-
-	obj["ps"] = s.genRemark(inbound, email, "", network)
-	return buildVmessLink(obj)
+	return template.Render(s.resolveInboundAddress(inbound), inbound.Port, s.genRemark(inbound, email, "", template.Network))
 }
 
-// normalizeVmessSecurity maps the vmess security values xray-core v26.7.11
-// removed ("none"/"zero"), plus the legacy empty string, to "auto" so links
-// and subscriptions stop advertising values the upgraded server rejects on
-// the wire.
 func normalizeVmessSecurity(security string) string {
-	switch security {
-	case "", "none", "zero":
-		return "auto"
-	}
-	return security
+	return sharelink.NormalizeVmessSecurity(security)
 }
 
 // tlsFlowAllowed reports whether a client's XTLS Vision flow belongs in
@@ -960,311 +919,107 @@ func (s *SubService) genVlessLink(inbound *model.Inbound, email string) string {
 	if inbound.Protocol != model.VLESS {
 		return ""
 	}
-	address := s.resolveInboundAddress(inbound)
-	stream := unmarshalStreamSettings(inbound.StreamSettings)
-	client, ok := s.clientForLink(inbound, email)
+	template, _, ok := s.xrayShareTemplate(inbound, email)
 	if !ok {
 		return ""
 	}
-	uuid := client.ID
-	port := inbound.Port
-	streamNetwork, _ := stream["network"].(string)
-	params := make(map[string]string)
-	params["type"] = streamNetwork
-
-	// Add encryption parameter for VLESS from inbound settings
-	settings := s.linkSettings(inbound)
-	if encryption, ok := settings["encryption"].(string); ok {
-		params["encryption"] = encryption
-	}
-
-	applyShareNetworkParams(stream, streamNetwork, params)
-	if finalmask, ok := stream["finalmask"].(map[string]any); ok {
-		applyFinalMaskParams(finalmask, params)
-	}
-	security, _ := stream["security"].(string)
-	switch security {
-	case "tls":
-		applyShareTLSParams(stream, params)
-	case "reality":
-		applyShareRealityParams(stream, params, subKey(client))
-	default:
-		params["security"] = "none"
-	}
-	if len(client.Flow) > 0 && tlsFlowAllowed(inbound.Protocol, streamNetwork, security, settings) {
-		params["flow"] = client.Flow
-	}
-
-	externalProxies, _ := stream["externalProxy"].([]any)
-
-	if len(externalProxies) > 0 {
-		return s.buildExternalProxyURLLinks(
-			externalProxies,
-			params,
-			security,
+	stream := unmarshalStreamSettings(inbound.StreamSettings)
+	proxies, _ := stream["externalProxy"].([]any)
+	if len(proxies) > 0 {
+		return s.buildExternalProxyURLLinks(proxies, template.Params, template.Security,
 			func(ep map[string]any, dest string, port int) string {
-				return fmt.Sprintf("vless://%s@%s", applyVlessRoute(uuid, hostVlessRoute(ep)), joinHostPort(dest, port))
+				return fmt.Sprintf("vless://%s@%s", applyVlessRoute(template.UserInfo, hostVlessRoute(ep)), joinHostPort(dest, port))
 			},
-			func(ep map[string]any) string {
-				return s.endpointRemark(inbound, email, ep, streamNetwork)
-			},
-		)
+			func(ep map[string]any) string { return s.endpointRemark(inbound, email, ep, template.Network) })
 	}
-
-	link := fmt.Sprintf("vless://%s@%s", uuid, joinHostPort(address, port))
-	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", streamNetwork))
+	return template.Render(s.resolveInboundAddress(inbound), inbound.Port, s.genRemark(inbound, email, "", template.Network))
 }
 
 func (s *SubService) genTrojanLink(inbound *model.Inbound, email string) string {
 	if inbound.Protocol != model.Trojan {
 		return ""
 	}
-	address := s.resolveInboundAddress(inbound)
-	stream := unmarshalStreamSettings(inbound.StreamSettings)
-	client, ok := s.clientForLink(inbound, email)
+	template, _, ok := s.xrayShareTemplate(inbound, email)
 	if !ok {
 		return ""
 	}
-	password := encodeUserinfo(client.Password)
-	port := inbound.Port
-	streamNetwork, _ := stream["network"].(string)
-	params := make(map[string]string)
-	params["type"] = streamNetwork
-
-	applyShareNetworkParams(stream, streamNetwork, params)
-	if finalmask, ok := stream["finalmask"].(map[string]any); ok {
-		applyFinalMaskParams(finalmask, params)
-	}
-	security, _ := stream["security"].(string)
-	switch security {
-	case "tls":
-		applyShareTLSParams(stream, params)
-	case "reality":
-		applyShareRealityParams(stream, params, subKey(client))
-		// Asked of the capability table rather than re-derived: it is what the
-		// VLESS generator asks, and Trojan flow is removed from the core. F323.
-		if len(client.Flow) > 0 && tlsFlowAllowed(inbound.Protocol, streamNetwork, security, s.linkSettings(inbound)) {
-			params["flow"] = client.Flow
-		}
-	default:
-		params["security"] = "none"
-	}
-
-	externalProxies, _ := stream["externalProxy"].([]any)
-
-	if len(externalProxies) > 0 {
-		return s.buildExternalProxyURLLinks(
-			externalProxies,
-			params,
-			security,
+	stream := unmarshalStreamSettings(inbound.StreamSettings)
+	proxies, _ := stream["externalProxy"].([]any)
+	if len(proxies) > 0 {
+		return s.buildExternalProxyURLLinks(proxies, template.Params, template.Security,
 			func(_ map[string]any, dest string, port int) string {
-				return fmt.Sprintf("trojan://%s@%s", password, joinHostPort(dest, port))
+				return fmt.Sprintf("trojan://%s@%s", template.UserInfo, joinHostPort(dest, port))
 			},
-			func(ep map[string]any) string {
-				return s.endpointRemark(inbound, email, ep, streamNetwork)
-			},
-		)
+			func(ep map[string]any) string { return s.endpointRemark(inbound, email, ep, template.Network) })
 	}
-
-	link := fmt.Sprintf("trojan://%s@%s", password, joinHostPort(address, port))
-	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", streamNetwork))
+	return template.Render(s.resolveInboundAddress(inbound), inbound.Port, s.genRemark(inbound, email, "", template.Network))
 }
 
-// encodeUserinfo percent-encodes a userinfo (password/auth) value so it
-// can be safely embedded in a `scheme://<value>@host:port` URL. RFC 3986
-// allows `=` in userinfo as a sub-delim, but several Trojan and Hysteria
-// clients reject share-links where the password contains literal `/`
-// or `=` (notably the common base64-with-padding shape produced by the
-// panel). Encode them too — this matches encodeURIComponent() on the
-// frontend and round-trips cleanly through net/url's parser.
 func encodeUserinfo(s string) string {
-	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+	return sharelink.EncodeUserinfo(s)
 }
 
-// joinHostPort wraps an IPv6 host in square brackets the way RFC 3986
-// requires for URI authorities, while leaving IPv4 addresses and hostnames
-// untouched. It also strips any brackets already present on the input so
-// callers don't have to normalize upstream.
 func joinHostPort(host string, port int) string {
-	host = strings.Trim(host, "[]")
-	return net.JoinHostPort(host, strconv.Itoa(port))
+	return sharelink.JoinHostPort(host, port)
 }
 
 func (s *SubService) genShadowsocksLink(inbound *model.Inbound, email string) string {
 	if inbound.Protocol != model.Shadowsocks {
 		return ""
 	}
-	address := s.resolveInboundAddress(inbound)
-	stream := unmarshalStreamSettings(inbound.StreamSettings)
-	client, ok := s.clientForLink(inbound, email)
+	template, _, ok := s.xrayShareTemplate(inbound, email)
 	if !ok {
 		return ""
 	}
-
-	settings := s.linkSettings(inbound)
-	inboundPassword, _ := settings["password"].(string)
-	method, _ := settings["method"].(string)
-	streamNetwork, _ := stream["network"].(string)
-	params := make(map[string]string)
-	params["type"] = streamNetwork
-
-	applyShareNetworkParams(stream, streamNetwork, params)
-	if finalmask, ok := stream["finalmask"].(map[string]any); ok {
-		applyFinalMaskParams(finalmask, params)
-	}
-
-	security, _ := stream["security"].(string)
-	if security == "tls" {
-		applyShareTLSParams(stream, params)
-	}
-
-	// SIP002 clients (v2rayN) ignore the xray-native type/headerType/host/path
-	// params and only read `plugin`. Re-encode a TCP http header as obfs-local so
-	// they build a matching tcp/http outbound (v2rayN forces request path "/").
-	if streamNetwork == "tcp" && params["headerType"] == "http" {
-		host := params["host"]
-		delete(params, "type")
-		delete(params, "headerType")
-		delete(params, "host")
-		delete(params, "path")
-		params["plugin"] = "obfs-local;obfs=http;obfs-host=" + host
-	}
-
-	// SIP002 userinfo is base64(method:password). For SIP022 (2022-blake3-*) the
-	// userinfo MUST NOT be base64-encoded; method and password are percent-encoded.
-	var userInfo string
-	if strings.HasPrefix(method, "2022") {
-		userInfo = fmt.Sprintf("%s:%s:%s",
-			url.QueryEscape(method),
-			url.QueryEscape(inboundPassword),
-			url.QueryEscape(client.Password))
-	} else {
-		userInfo = base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, "%s:%s", method, client.Password))
-	}
-
-	externalProxies, _ := stream["externalProxy"].([]any)
-
-	if len(externalProxies) > 0 {
-		proxyParams := cloneStringMap(params)
-		proxyParams["security"] = security
-		return s.buildExternalProxyURLLinks(
-			externalProxies,
-			proxyParams,
-			security,
+	stream := unmarshalStreamSettings(inbound.StreamSettings)
+	proxies, _ := stream["externalProxy"].([]any)
+	if len(proxies) > 0 {
+		template.Params["security"] = template.Security
+		return s.buildExternalProxyURLLinks(proxies, template.Params, template.Security,
 			func(_ map[string]any, dest string, port int) string {
-				return fmt.Sprintf("ss://%s@%s", userInfo, joinHostPort(dest, port))
+				return fmt.Sprintf("ss://%s@%s", template.UserInfo, joinHostPort(dest, port))
 			},
-			func(ep map[string]any) string {
-				return s.endpointRemark(inbound, email, ep, streamNetwork)
-			},
-		)
+			func(ep map[string]any) string { return s.endpointRemark(inbound, email, ep, template.Network) })
 	}
-
-	link := fmt.Sprintf("ss://%s@%s", userInfo, joinHostPort(address, inbound.Port))
-	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", streamNetwork))
+	return template.Render(s.resolveInboundAddress(inbound), inbound.Port, s.genRemark(inbound, email, "", template.Network))
 }
 
 func (s *SubService) genHysteriaLink(inbound *model.Inbound, email string) string {
 	if inbound.Protocol != model.Hysteria {
 		return ""
 	}
-	var stream map[string]any
-	_ = json.Unmarshal([]byte(inbound.StreamSettings), &stream)
-	client, ok := s.clientForLink(inbound, email)
+	template, _, ok := s.xrayShareTemplate(inbound, email)
 	if !ok {
 		return ""
 	}
-	auth := encodeUserinfo(client.Auth)
-	params := make(map[string]string)
-
-	params["security"] = "tls"
-	tlsSetting, _ := stream["tlsSettings"].(map[string]any)
-	alpns, _ := tlsSetting["alpn"].([]any)
-	var alpn []string
-	for _, a := range alpns {
-		if s, ok := a.(string); ok {
-			alpn = append(alpn, s)
-		}
-	}
-	if len(alpn) > 0 {
-		params["alpn"] = strings.Join(alpn, ",")
-	}
-	if sniValue, ok := searchKey(tlsSetting, "serverName"); ok {
-		params["sni"], _ = sniValue.(string)
-	}
-
-	tlsSettings, _ := searchKey(tlsSetting, "settings")
-	if tlsSetting != nil {
-		if fpValue, ok := searchKey(tlsSettings, "fingerprint"); ok {
-			params["fp"], _ = fpValue.(string)
-		}
-		if echValue, ok := searchKey(tlsSettings, "echConfigList"); ok {
-			if ech, _ := echValue.(string); ech != "" {
-				params["ech"] = ech
-			}
-		}
-		if vcn, ok := verifyPeerCertByNameValue(tlsSettings); ok {
-			params["vcn"] = vcn
-		}
-		if pins, ok := pinnedSha256List(tlsSettings); ok {
-			params["pinSHA256"] = strings.Join(pins, ",")
-		}
-	}
-
-	// salamander obfs (Hysteria2). Emit only the standard URI fields; the
-	// non-standard fm=<json> finalmask dump breaks mihomo and other Hysteria2
-	// clients that reject unknown query params.
-	applySalamanderParams(stream, params)
-
-	settings := s.linkSettings(inbound)
-	version, _ := settings["version"].(float64)
-	protocol := "hysteria2"
-	if int(version) == 1 {
-		protocol = "hysteria"
-	}
-
-	// Fan out one link per External Proxy entry if any. Previously this
-	// generator ignored `externalProxy` entirely, so the link kept the
-	// server's own IP/port even when the admin configured an alternate
-	// endpoint (e.g. a CDN hostname + port that forwards to the node).
-	// Matches the behaviour of genVlessLink / genTrojanLink / ….
-	externalProxies, _ := stream["externalProxy"].([]any)
-	if len(externalProxies) > 0 {
-		links := make([]string, 0, len(externalProxies))
-		for _, externalProxy := range externalProxies {
-			ep, ok := externalProxy.(map[string]any)
+	stream := unmarshalStreamSettings(inbound.StreamSettings)
+	proxies, _ := stream["externalProxy"].([]any)
+	if len(proxies) > 0 {
+		delete(template.Params, "mport")
+		var links []string
+		for _, raw := range proxies {
+			ep, ok := raw.(map[string]any)
 			if !ok {
 				continue
 			}
 			dest, _ := ep["dest"].(string)
-			portF, okPort := ep["port"].(float64)
-			if dest == "" || !okPort {
+			port, ok := ep["port"].(float64)
+			if dest == "" || !ok {
 				continue
 			}
-			epParams := cloneStringMap(params)
-			applyExternalProxyHysteriaParams(ep, epParams)
-			// Port hopping was applied only on the no-host tail, so adding a Host
-			// to a Hysteria2 inbound silently turned it off for clients. F138.
-			// The obfs password comes from the same merged masks. Ledger L18.
+			params := cloneStringMap(template.Params)
+			applyExternalProxyHysteriaParams(ep, params)
 			endpointStream := endpointFinalMaskStream(stream, ep)
-			if hopPorts := hysteriaHopPorts(endpointStream); hopPorts != "" {
-				epParams["mport"] = hopPorts
+			if hop := hysteriaHopPorts(endpointStream); hop != "" {
+				params["mport"] = hop
 			}
-			applySalamanderParams(endpointStream, epParams)
-
-			link := fmt.Sprintf("%s://%s@%s", protocol, auth, joinHostPort(dest, int(portF)))
-			links = append(links, buildLinkWithParams(link, epParams, s.endpointRemark(inbound, email, ep, "quic")))
+			applySalamanderParams(endpointStream, params)
+			link := fmt.Sprintf("%s://%s@%s", template.Scheme, template.UserInfo, joinHostPort(dest, int(port)))
+			links = append(links, buildLinkWithParams(link, params, s.endpointRemark(inbound, email, ep, "quic")))
 		}
 		return strings.Join(links, "\n")
 	}
-
-	// No external proxy configured — use the inbound's resolved address so
-	// node-managed inbounds get the node's host instead of the central panel's.
-	if hopPorts := hysteriaHopPorts(stream); hopPorts != "" {
-		params["mport"] = hopPorts
-	}
-	link := fmt.Sprintf("%s://%s@%s", protocol, auth, joinHostPort(s.resolveInboundAddress(inbound), inbound.Port))
-	return buildLinkWithParams(link, params, s.genRemark(inbound, email, "", "quic"))
+	return template.Render(s.resolveInboundAddress(inbound), inbound.Port, s.genRemark(inbound, email, "", "quic"))
 }
 
 // endpointFinalMaskStream returns the stream one endpoint reads its masks from:
@@ -1282,54 +1037,16 @@ func endpointFinalMaskStream(stream, ep map[string]any) map[string]any {
 	return map[string]any{"finalmask": mergeFinalMask(stream["finalmask"], masks)}
 }
 
-/*
-salamanderPassword returns the Hysteria2 obfs password a stream's masks declare.
-
-The LAST match wins, not the first. mergeFinalMask appends a host's udp masks
-after the inbound's, so a host that declares its own salamander produces a list
-with two, and stopping at the first handed back the inbound's -- leaving the
-host's field inert. Every other host override wins; this one now does too.
-Ledger L18.
-*/
 func salamanderPassword(stream map[string]any) string {
-	finalmask, _ := stream["finalmask"].(map[string]any)
-	udpMasks, _ := finalmask["udp"].([]any)
-	password := ""
-	for _, m := range udpMasks {
-		mask, _ := m.(map[string]any)
-		if mask == nil || mask["type"] != "salamander" {
-			continue
-		}
-		settings, _ := mask["settings"].(map[string]any)
-		if pw, _ := settings["password"].(string); pw != "" {
-			password = pw
-		}
-	}
-	return password
+	return sharelink.SalamanderPassword(stream)
 }
 
-// applySalamanderParams writes the obfs pair, or removes it when the masks
-// carry none -- an endpoint inherits params cloned from the inbound.
 func applySalamanderParams(stream map[string]any, params map[string]string) {
-	if pw := salamanderPassword(stream); pw != "" {
-		params["obfs"] = "salamander"
-		params["obfs-password"] = pw
-		return
-	}
-	delete(params, "obfs")
-	delete(params, "obfs-password")
+	sharelink.ApplySalamanderParams(stream, params)
 }
 
-// hysteriaHopPorts returns the configured Hysteria2 UDP port-hopping range
-// (finalmask.quicParams.udpHop.ports), or "" when port hopping is off. The
-// range is emitted as the v2rayN-compatible `mport` query param; the URL port
-// field stays numeric so .NET-Uri-based importers (v2rayN) can parse the link.
 func hysteriaHopPorts(stream map[string]any) string {
-	finalmask, _ := stream["finalmask"].(map[string]any)
-	quicParams, _ := finalmask["quicParams"].(map[string]any)
-	udpHop, _ := quicParams["udpHop"].(map[string]any)
-	ports, _ := udpHop["ports"].(string)
-	return strings.TrimSpace(ports)
+	return sharelink.HysteriaHopPorts(stream)
 }
 
 // loadNodes refreshes nodesByID from the DB. Called once per request so
@@ -1407,305 +1124,19 @@ func findClientIndex(clients []model.Client, email string) int {
 }
 
 func unmarshalStreamSettings(streamSettings string) map[string]any {
-	var stream map[string]any
-	_ = json.Unmarshal([]byte(streamSettings), &stream)
-	return stream
+	return sharelink.UnmarshalStreamSettings(streamSettings)
 }
 
 func applyPathAndHostParams(settings map[string]any, params map[string]string) {
-	params["path"], _ = settings["path"].(string)
-	if host, ok := settings["host"].(string); ok && len(host) > 0 {
-		params["host"] = host
-	} else {
-		headers, _ := settings["headers"].(map[string]any)
-		params["host"] = searchHost(headers)
-	}
+	sharelink.ApplyPathAndHostParams(settings, params)
 }
 
-func applyPathAndHostObj(settings map[string]any, obj map[string]any) {
-	obj["path"], _ = settings["path"].(string)
-	if host, ok := settings["host"].(string); ok && len(host) > 0 {
-		obj["host"] = host
-	} else {
-		headers, _ := settings["headers"].(map[string]any)
-		obj["host"] = searchHost(headers)
-	}
-}
-
-func applyShareNetworkParams(stream map[string]any, streamNetwork string, params map[string]string) {
-	switch streamNetwork {
-	case "tcp":
-		tcp, _ := stream["tcpSettings"].(map[string]any)
-		header, _ := tcp["header"].(map[string]any)
-		typeStr, _ := header["type"].(string)
-		if typeStr == "http" {
-			request, _ := header["request"].(map[string]any)
-			requestPath, _ := request["path"].([]any)
-			if len(requestPath) > 0 {
-				params["path"], _ = requestPath[0].(string)
-			}
-			host := ""
-			if response, ok := header["response"].(map[string]any); ok {
-				if respHeaders, ok := response["headers"].(map[string]any); ok {
-					host = searchHost(respHeaders)
-				}
-			}
-			if host == "" {
-				headers, _ := request["headers"].(map[string]any)
-				host = searchHost(headers)
-			}
-			params["host"] = host
-			params["headerType"] = "http"
-		}
-	case "kcp":
-		applyKcpShareParams(stream, params)
-	case "ws":
-		ws, _ := stream["wsSettings"].(map[string]any)
-		applyPathAndHostParams(ws, params)
-	case "grpc":
-		grpc, _ := stream["grpcSettings"].(map[string]any)
-		params["serviceName"], _ = grpc["serviceName"].(string)
-		params["authority"], _ = grpc["authority"].(string)
-		if mm, _ := grpc["multiMode"].(bool); mm {
-			params["mode"] = "multi"
-		}
-	case "httpupgrade":
-		httpupgrade, _ := stream["httpupgradeSettings"].(map[string]any)
-		applyPathAndHostParams(httpupgrade, params)
-	case "xhttp":
-		xhttp, _ := stream["xhttpSettings"].(map[string]any)
-		applyXhttpExtraParams(xhttp, params)
-	}
-}
-
-// applyXhttpExtraObj copies the bidirectional xhttp settings into the
-// VMess base64 JSON link object. VMess supports arbitrary keys, so we
-// flatten the SplitHTTPConfig "extra" fields directly onto obj.
-func applyXhttpExtraObj(xhttp map[string]any, obj map[string]any) {
-	if xpb, ok := xhttp["xPaddingBytes"].(string); ok && len(xpb) > 0 {
-		obj["x_padding_bytes"] = xpb
-	}
-	maps.Copy(obj, buildXhttpExtra(xhttp))
-}
-
-func applyVmessNetworkParams(stream map[string]any, network string, obj map[string]any) {
-	obj["net"] = network
-	switch network {
-	case "tcp":
-		tcp, _ := stream["tcpSettings"].(map[string]any)
-		header, _ := tcp["header"].(map[string]any)
-		typeStr, _ := header["type"].(string)
-		obj["type"] = typeStr
-		if typeStr == "http" {
-			request, _ := header["request"].(map[string]any)
-			requestPath, _ := request["path"].([]any)
-			if len(requestPath) > 0 {
-				obj["path"], _ = requestPath[0].(string)
-			}
-			host := ""
-			if response, ok := header["response"].(map[string]any); ok {
-				if respHeaders, ok := response["headers"].(map[string]any); ok {
-					host = searchHost(respHeaders)
-				}
-			}
-			if host == "" {
-				headers, _ := request["headers"].(map[string]any)
-				host = searchHost(headers)
-			}
-			obj["host"] = host
-		}
-	case "kcp":
-		applyKcpShareObj(stream, obj)
-	case "ws":
-		ws, _ := stream["wsSettings"].(map[string]any)
-		applyPathAndHostObj(ws, obj)
-	case "grpc":
-		grpc, _ := stream["grpcSettings"].(map[string]any)
-		obj["path"], _ = grpc["serviceName"].(string)
-		obj["authority"], _ = grpc["authority"].(string)
-		if mm, _ := grpc["multiMode"].(bool); mm {
-			obj["type"] = "multi"
-		}
-	case "httpupgrade":
-		httpupgrade, _ := stream["httpupgradeSettings"].(map[string]any)
-		applyPathAndHostObj(httpupgrade, obj)
-	case "xhttp":
-		xhttp, _ := stream["xhttpSettings"].(map[string]any)
-		applyPathAndHostObj(xhttp, obj)
-		if mode, ok := xhttp["mode"].(string); ok {
-			obj["mode"] = mode
-			// v2rayN reads the XHTTP mode from "type", the header-type slot.
-			if mode != "" {
-				obj["type"] = mode
-			}
-		}
-		applyXhttpExtraObj(xhttp, obj)
-	}
-}
-
-func applyShareTLSParams(stream map[string]any, params map[string]string) {
-	params["security"] = "tls"
-	tlsSetting, _ := stream["tlsSettings"].(map[string]any)
-	alpns, _ := tlsSetting["alpn"].([]any)
-	var alpn []string
-	for _, a := range alpns {
-		if s, ok := a.(string); ok {
-			alpn = append(alpn, s)
-		}
-	}
-	if len(alpn) > 0 {
-		params["alpn"] = strings.Join(alpn, ",")
-	}
-	if sniValue, ok := searchKey(tlsSetting, "serverName"); ok {
-		params["sni"], _ = sniValue.(string)
-	}
-
-	tlsSettings, _ := searchKey(tlsSetting, "settings")
-	if tlsSetting != nil {
-		if fpValue, ok := searchKey(tlsSettings, "fingerprint"); ok {
-			params["fp"], _ = fpValue.(string)
-		}
-		if echValue, ok := searchKey(tlsSettings, "echConfigList"); ok {
-			if ech, _ := echValue.(string); ech != "" {
-				params["ech"] = ech
-			}
-		}
-		if vcn, ok := verifyPeerCertByNameValue(tlsSettings); ok {
-			params["vcn"] = vcn
-		}
-		if pins, ok := pinnedSha256List(tlsSettings); ok {
-			params["pcs"] = strings.Join(pins, ",")
-		}
-	}
-}
-
-func applyVmessTLSParams(stream map[string]any, obj map[string]any) {
-	tlsSetting, _ := stream["tlsSettings"].(map[string]any)
-	alpns, _ := tlsSetting["alpn"].([]any)
-	if len(alpns) > 0 {
-		var alpn []string
-		for _, a := range alpns {
-			if s, ok := a.(string); ok {
-				alpn = append(alpn, s)
-			}
-		}
-		obj["alpn"] = strings.Join(alpn, ",")
-	}
-	if sniValue, ok := searchKey(tlsSetting, "serverName"); ok {
-		obj["sni"], _ = sniValue.(string)
-	}
-
-	tlsSettings, _ := searchKey(tlsSetting, "settings")
-	if tlsSetting != nil {
-		if fpValue, ok := searchKey(tlsSettings, "fingerprint"); ok {
-			obj["fp"], _ = fpValue.(string)
-		}
-		if echValue, ok := searchKey(tlsSettings, "echConfigList"); ok {
-			if ech, _ := echValue.(string); ech != "" {
-				obj["ech"] = ech
-			}
-		}
-		if vcn, ok := verifyPeerCertByNameValue(tlsSettings); ok {
-			obj["vcn"] = vcn
-		}
-		if pins, ok := pinnedSha256List(tlsSettings); ok {
-			obj["pcs"] = strings.Join(pins, ",")
-		}
-	}
-}
-
-// verifyPeerCertByNameValue extracts tlsSettings.settings.verifyPeerCertByName
-// (the v2rayN `vcn` param) as a trimmed string. Like pinnedPeerCertSha256 it is
-// panel-only and flows into share links so clients verify the server
-// certificate by this name — the replacement for the removed allowInsecure.
 func verifyPeerCertByNameValue(tlsClientSettings any) (string, bool) {
-	raw, ok := searchKey(tlsClientSettings, "verifyPeerCertByName")
-	if !ok {
-		return "", false
-	}
-	s, ok := raw.(string)
-	if !ok {
-		return "", false
-	}
-	if s = strings.TrimSpace(s); s == "" {
-		return "", false
-	}
-	return s, true
+	return sharelink.VerifyPeerCertByNameValue(tlsClientSettings)
 }
 
-// pinnedSha256List extracts tlsSettings.settings.pinnedPeerCertSha256 as a
-// []string. The field is panel-only (stripped before the run-config reaches
-// xray-core via internal/web/service/xray.go) but flows into share links so clients
-// can pin the server's certificate hash.
 func pinnedSha256List(tlsClientSettings any) ([]string, bool) {
-	raw, ok := searchKey(tlsClientSettings, "pinnedPeerCertSha256")
-	if !ok {
-		return nil, false
-	}
-	arr, ok := raw.([]any)
-	if !ok || len(arr) == 0 {
-		return nil, false
-	}
-	out := make([]string, 0, len(arr))
-	for _, v := range arr {
-		s, ok := v.(string)
-		if !ok || s == "" {
-			continue
-		}
-		// Rendered in the one form the core reads. Hysteria already did this and
-		// nothing else did, so the same paste worked there and nowhere else.
-		// Ledger L21.
-		out = append(out, link.NormalizePinHex(s))
-	}
-	if len(out) == 0 {
-		return nil, false
-	}
-	return out, true
-}
-
-func applyShareRealityParams(stream map[string]any, params map[string]string, clientKey string) {
-	params["security"] = "reality"
-	realitySetting, _ := stream["realitySettings"].(map[string]any)
-	realitySettings, _ := searchKey(realitySetting, "settings")
-	if realitySetting != nil {
-		// A pinned settings.serverName wins; unpinned, the list is picked from
-		// deterministically per client. F023, and ledger L17 for the pick.
-		if pinned, ok := searchKey(realitySettings, "serverName"); ok {
-			if name, _ := pinned.(string); name != "" {
-				params["sni"] = name
-			}
-		}
-		if _, pinned := params["sni"]; !pinned {
-			if sniValue, ok := searchKey(realitySetting, "serverNames"); ok {
-				if sNames, _ := sniValue.([]any); len(sNames) > 0 {
-					params["sni"], _ = sNames[deriveListIndex("sni", clientKey, len(sNames))].(string)
-				}
-			}
-		}
-		if pbkValue, ok := searchKey(realitySettings, "publicKey"); ok {
-			params["pbk"], _ = pbkValue.(string)
-		}
-		if sidValue, ok := searchKey(realitySetting, "shortIds"); ok {
-			if shortIds, _ := sidValue.([]any); len(shortIds) > 0 {
-				params["sid"], _ = shortIds[deriveListIndex("sid", clientKey, len(shortIds))].(string)
-			}
-		}
-		if fpValue, ok := searchKey(realitySettings, "fingerprint"); ok {
-			if fp, ok := fpValue.(string); ok && len(fp) > 0 {
-				params["fp"] = fp
-			}
-		}
-		if pqvValue, ok := searchKey(realitySettings, "mldsa65Verify"); ok {
-			if pqv, ok := pqvValue.(string); ok && len(pqv) > 0 {
-				params["pqv"] = pqv
-			}
-		}
-		seed := ""
-		if spxValue, ok := searchKey(realitySettings, "spiderX"); ok {
-			seed, _ = spxValue.(string)
-		}
-		params["spx"] = deriveSpiderX(seed, clientKey)
-	}
+	return sharelink.PinnedSha256List(tlsClientSettings)
 }
 
 // subKey returns a stable per-client identity for deterministic derivations,
@@ -1717,44 +1148,16 @@ func subKey(c model.Client) string {
 	return c.Email
 }
 
-// deriveSpiderX maps the inbound's spiderX seed plus a stable client key to a
-// deterministic per-client "/path"; frontend/src/lib/xray/spider-x.ts mirrors it.
 func deriveSpiderX(seed, clientKey string) string {
-	if seed == "" && clientKey == "" {
-		return "/" + random.Seq(15)
-	}
-	sum := sha256.Sum256([]byte(seed + "|" + clientKey))
-	return "/" + hex.EncodeToString(sum[:])[:15]
+	return sharelink.DeriveSpiderX(seed, clientKey)
 }
 
-/*
-deriveListIndex picks one member of a REALITY list for a client, and picks the
-same one every time.
-
-A client link carries one sni and one sid, but the inbound declares lists. This
-used to be a fresh crypto/rand draw per render, so a client polling its
-subscription got a different link every time with nothing having changed --
-which no consumer can diff, cache or support, and which is the same reasoning
-that already moved spiderX to deriveSpiderX. Ledger L17.
-
-field separates the two picks: without it a client would land on the same index
-in both lists and the pairs would only ever be the diagonal.
-
-The index is computed against the CURRENT list, never stored, so editing the
-list re-derives everyone onto a valid member on their next fetch, exactly as the
-random pick did. frontend/src/lib/xray/spider-x.ts mirrors this byte for byte.
-*/
 func deriveListIndex(field, clientKey string, n int) int {
-	if n <= 1 {
-		return 0
-	}
-	sum := sha256.Sum256([]byte(field + "|" + clientKey))
-	return int(binary.BigEndian.Uint64(sum[:8]) % uint64(n))
+	return sharelink.DeriveListIndex(field, clientKey, n)
 }
 
 func buildVmessLink(obj map[string]any) string {
-	jsonStr, _ := json.MarshalIndent(obj, "", "  ")
-	return "vmess://" + base64.StdEncoding.EncodeToString(jsonStr)
+	return sharelink.BuildVmessLink(obj)
 }
 
 func cloneVmessShareObj(baseObj map[string]any, newSecurity string) map[string]any {
@@ -2069,58 +1472,12 @@ func (s *SubService) buildVmessExternalProxyLinks(externalProxies []any, baseObj
 	return s.buildEndpointVmessLinks(eps, baseObj, inbound, email, transport)
 }
 
-// buildLinkWithParams appends ?query and #fragment to a pre-built
-// scheme://userinfo@host:port string without re-parsing it. The caller
-// has already escaped userinfo via encodeUserinfo (or chosen a base64
-// alphabet with no reserved chars); a url.Parse + .String() round-trip
-// would silently decode that escaping because Go's userinfo emitter
-// leaves sub-delims (=, +, ;) literal, which breaks Trojan/Hysteria/SS
-// clients that reject those chars in the password.
 func buildLinkWithParams(link string, params map[string]string, fragment string) string {
-	return appendQueryAndFragment(link, params, fragment, "", false)
+	return sharelink.BuildLinkWithParams(link, params, fragment)
 }
 
-// buildLinkWithParamsAndSecurity is buildLinkWithParams plus an
-// external-proxy override: the `security` key in params is replaced with
-// the supplied value, and TLS hint fields (alpn/sni/fp/pcs) are stripped
-// when the override is `none`.
 func buildLinkWithParamsAndSecurity(link string, params map[string]string, fragment, security string, omitTLSFields bool) string {
-	return appendQueryAndFragment(link, params, fragment, security, omitTLSFields)
-}
-
-func appendQueryAndFragment(link string, params map[string]string, fragment, securityOverride string, omitTLSFields bool) string {
-	var sb strings.Builder
-	sb.WriteString(link)
-
-	if len(params) > 0 {
-		q := url.Values{}
-		for k, v := range params {
-			if securityOverride != "" && k == "security" {
-				v = securityOverride
-			}
-			if omitTLSFields && (k == "alpn" || k == "sni" || k == "fp" || k == "pcs") {
-				continue
-			}
-			q.Set(k, v)
-		}
-		encoded := q.Encode()
-		if encoded != "" {
-			if strings.Contains(link, "?") {
-				sb.WriteByte('&')
-			} else {
-				sb.WriteByte('?')
-			}
-			sb.WriteString(encoded)
-		}
-	}
-
-	if fragment != "" {
-		sb.WriteByte('#')
-		// Match the frontend's encodeURIComponent(remark): spaces become
-		// %20 (not + as in query strings).
-		sb.WriteString(strings.ReplaceAll(url.QueryEscape(fragment), "+", "%20"))
-	}
-	return sb.String()
+	return sharelink.BuildLinkWithParamsAndSecurity(link, params, fragment, security, omitTLSFields)
 }
 
 // buildExternalProxyURLLinks is a thin adapter: it maps the legacy externalProxy
@@ -2210,264 +1567,15 @@ func (s *SubService) statsByEmailFromDB(email string) (xray.ClientTraffic, bool)
 }
 
 func searchKey(data any, key string) (any, bool) {
-	switch val := data.(type) {
-	case map[string]any:
-		for k, v := range val {
-			if k == key {
-				return v, true
-			}
-			if result, ok := searchKey(v, key); ok {
-				return result, true
-			}
-		}
-	case []any:
-		for _, v := range val {
-			if result, ok := searchKey(v, key); ok {
-				return result, true
-			}
-		}
-	}
-	return nil, false
+	return sharelink.SearchKey(data, key)
 }
 
-// buildXhttpExtra walks an xhttpSettings map and returns the JSON blob
-// that goes into the URL's `extra` param (or, for VMess, the link
-// object). Carries ONLY the bidirectional fields from xray-core's
-// SplitHTTPConfig — i.e. the ones the server enforces and the client
-// must match. Strictly one-sided fields are excluded:
-//
-//   - server-only (noSSEHeader, scMaxBufferedPosts, scStreamUpServerSecs,
-//     serverMaxHeaderBytes) — client wouldn't read them, so emitting
-//     them just bloats the URL.
-//   - client-only values are included only when present in the inbound
-//     JSON. Some deployments/imported configs carry them there, and the
-//     subscription link is the only place clients can receive them.
-//
-// Truthy-only guards keep default inbounds emitting the same compact URL
-// they did before this helper grew.
 func buildXhttpExtra(xhttp map[string]any) map[string]any {
-	if xhttp == nil {
-		return nil
-	}
-	extra := map[string]any{}
-
-	if mode, ok := xhttp["mode"].(string); ok && len(mode) > 0 {
-		extra["mode"] = mode
-	}
-
-	if xpb, ok := xhttp["xPaddingBytes"].(string); ok && len(xpb) > 0 {
-		extra["xPaddingBytes"] = xpb
-	}
-	if obfs, ok := xhttp["xPaddingObfsMode"].(bool); ok && obfs {
-		extra["xPaddingObfsMode"] = true
-		for _, field := range []string{"xPaddingKey", "xPaddingHeader", "xPaddingPlacement", "xPaddingMethod"} {
-			if v, ok := xhttp[field].(string); ok && len(v) > 0 {
-				extra[field] = v
-			}
-		}
-	}
-
-	stringFields := []string{
-		"uplinkHTTPMethod",
-		"sessionIDPlacement", "sessionIDKey", "sessionIDTable", "sessionIDLength",
-		"seqPlacement", "seqKey",
-		"uplinkDataPlacement", "uplinkDataKey",
-		"scMaxEachPostBytes", "scMinPostsIntervalMs",
-	}
-	// Values matching xray-core's own defaults are redundant on the wire and
-	// the literal scMinPostsIntervalMs=30 is a known DPI fingerprint (#5141).
-	// Old panels seeded these defaults into every xhttp inbound, so filter
-	// them here instead of requiring every stored config to be re-saved.
-	coreDefaults := map[string]string{
-		"scMaxEachPostBytes":   "1000000",
-		"scMinPostsIntervalMs": "30",
-	}
-	for _, field := range stringFields {
-		if v, ok := xhttp[field].(string); ok && len(v) > 0 && v != coreDefaults[field] {
-			extra[field] = v
-		}
-	}
-
-	// Legacy inbounds (pre xray-core #6258) stored sessionPlacement/sessionKey.
-	// Lift them onto the renamed keys so links from not-yet-resaved configs
-	// still carry the session settings. Mirrors the frontend migration.
-	for legacy, renamed := range map[string]string{
-		"sessionPlacement": "sessionIDPlacement",
-		"sessionKey":       "sessionIDKey",
-	} {
-		if _, exists := extra[renamed]; !exists {
-			if v, ok := xhttp[legacy].(string); ok && len(v) > 0 {
-				extra[renamed] = v
-			}
-		}
-	}
-	// Older clients still read the pre-#6258 names from the subscription
-	// extra JSON. Emit aliases after lifting legacy inputs so both old and
-	// new clients can consume the same link.
-	if v, ok := extra["sessionIDPlacement"].(string); ok && len(v) > 0 {
-		extra["sessionPlacement"] = v
-	}
-	if v, ok := extra["sessionIDKey"].(string); ok && len(v) > 0 {
-		extra["sessionKey"] = v
-	}
-
-	for _, field := range []string{"uplinkChunkSize"} {
-		if v, ok := nonZeroShareValue(xhttp[field]); ok {
-			extra[field] = v
-		}
-	}
-
-	for _, field := range []string{"noGRPCHeader"} {
-		if v, ok := xhttp[field].(bool); ok && v {
-			extra[field] = v
-		}
-	}
-
-	for _, field := range []string{"xmux", "downloadSettings"} {
-		v, ok := nonEmptyShareObject(xhttp[field])
-		if !ok {
-			continue
-		}
-		// A split download endpoint in stream-one is a config xray-core refuses
-		// to start on, so a link carrying it would break the client rather than
-		// degrade. The panel strips the pair on save; an older row or a direct
-		// API write can still reach here.
-		if field == "downloadSettings" && extra["mode"] == "stream-one" {
-			continue
-		}
-		extra[field] = v
-	}
-
-	// Headers — emitted as the {name: value} map upstream's struct
-	// expects. The server runtime ignores this field, but the client
-	// (consuming the share link) honors it. Drop any "host" entry —
-	// host already wins as a top-level URL param.
-	if rawHeaders, ok := xhttp["headers"].(map[string]any); ok && len(rawHeaders) > 0 {
-		out := map[string]any{}
-		for k, v := range rawHeaders {
-			if strings.EqualFold(k, "host") {
-				continue
-			}
-			out[k] = v
-		}
-		if len(out) > 0 {
-			extra["headers"] = out
-		}
-	}
-
-	if len(extra) == 0 {
-		return nil
-	}
-	return extra
+	return sharelink.BuildXhttpExtra(xhttp)
 }
 
 func nonZeroShareValue(v any) (any, bool) {
-	switch value := v.(type) {
-	case string:
-		return value, value != ""
-	case int:
-		return value, value != 0
-	case int32:
-		return value, value != 0
-	case int64:
-		return value, value != 0
-	case float32:
-		return value, value != 0
-	case float64:
-		return value, value != 0
-	default:
-		return nil, false
-	}
-}
-
-func nonEmptyShareObject(v any) (any, bool) {
-	switch value := v.(type) {
-	case map[string]any:
-		return value, len(value) > 0
-	case map[string]string:
-		return value, len(value) > 0
-	case []any:
-		return value, len(value) > 0
-	default:
-		return nil, false
-	}
-}
-
-// applyXhttpExtraParams emits the full xhttp config into the URL query
-// params of a vless:// / trojan:// / ss:// link. Sets path/host/mode at
-// top level (xray's Build() always lets these win over `extra`) and packs
-// everything else into a JSON `extra` param. Also writes the flat
-// `x_padding_bytes` param sing-box-family clients understand.
-//
-// Without this, the admin's custom xPaddingBytes / sessionKey / etc. never
-// reach the client and handshakes are silently rejected with
-// `invalid padding (...) length: 0` — the client-visible symptom is
-// "xhttp doesn't connect" on OpenWRT / sing-box.
-//
-// Two encodings are written so every popular client can read at least one:
-//
-//   - x_padding_bytes=<range>  — flat param, understood by sing-box and its
-//     derivatives (Podkop, OpenWRT sing-box, Karing, NekoBox, …).
-//   - extra=<url-encoded-json> — full xhttp settings blob, which is how
-//     xray-core clients (v2rayNG, Happ, Furious, Exclave, …) pick up the
-//     bidirectional fields beyond path/host/mode.
-func applyXhttpExtraParams(xhttp map[string]any, params map[string]string) {
-	if xhttp == nil {
-		return
-	}
-	applyPathAndHostParams(xhttp, params)
-	if mode, ok := xhttp["mode"].(string); ok {
-		params["mode"] = mode
-	}
-
-	if xpb, ok := xhttp["xPaddingBytes"].(string); ok && len(xpb) > 0 {
-		params["x_padding_bytes"] = xpb
-	}
-
-	extra := buildXhttpExtra(xhttp)
-	if extra != nil {
-		if b, err := json.Marshal(extra); err == nil {
-			params["extra"] = string(b)
-		}
-	}
-}
-
-var kcpMaskToHeaderType = map[string]string{
-	"dns":       "dns",
-	"dtls":      "dtls",
-	"srtp":      "srtp",
-	"utp":       "utp",
-	"wechat":    "wechat-video",
-	"wireguard": "wireguard",
-}
-
-var validFinalMaskUDPTypes = map[string]struct{}{
-	"salamander":    {},
-	"mkcp-legacy":   {},
-	"xdns":          {},
-	"xicmp":         {},
-	"noise":         {},
-	"header-custom": {},
-	"realm":         {},
-}
-
-var validFinalMaskTCPTypes = map[string]struct{}{
-	"header-custom": {},
-	"fragment":      {},
-	"sudoku":        {},
-	"xmc":           {},
-}
-
-// applyKcpShareParams reconstructs legacy KCP share-link fields from either
-// the historical kcpSettings.header/seed shape or the current finalmask model.
-// This keeps subscription output compatible while avoiding panics when older
-// keys are absent from modern inbounds.
-func applyKcpShareParams(stream map[string]any, params map[string]string) {
-	extractKcpShareFields(stream).applyToParams(params)
-}
-
-func applyKcpShareObj(stream map[string]any, obj map[string]any) {
-	extractKcpShareFields(stream).applyToObj(obj)
+	return sharelink.NonZeroShareValue(v)
 }
 
 type kcpShareFields struct {
@@ -2478,274 +1586,44 @@ type kcpShareFields struct {
 }
 
 func (f kcpShareFields) applyToParams(params map[string]string) {
-	if f.headerType != "" && f.headerType != "none" {
-		params["headerType"] = f.headerType
-	}
-	setStringParam(params, "seed", f.seed)
-	setIntParam(params, "mtu", f.mtu)
-	setIntParam(params, "tti", f.tti)
-}
-
-func (f kcpShareFields) applyToObj(obj map[string]any) {
-	if f.headerType != "" && f.headerType != "none" {
-		obj["type"] = f.headerType
-	}
-	setStringField(obj, "path", f.seed)
-	setIntField(obj, "mtu", f.mtu)
-	setIntField(obj, "tti", f.tti)
+	sharelink.KcpShareFields{HeaderType: f.headerType, Seed: f.seed, MTU: f.mtu, TTI: f.tti}.ApplyToParams(params)
 }
 
 func extractKcpShareFields(stream map[string]any) kcpShareFields {
-	fields := kcpShareFields{headerType: "none"}
-
-	if kcp, ok := stream["kcpSettings"].(map[string]any); ok {
-		if header, ok := kcp["header"].(map[string]any); ok {
-			if value, ok := header["type"].(string); ok && value != "" {
-				fields.headerType = value
-			}
-		}
-		if value, ok := kcp["seed"].(string); ok && value != "" {
-			fields.seed = value
-		}
-		if value, ok := readPositiveInt(kcp["mtu"]); ok {
-			fields.mtu = value
-		}
-		if value, ok := readPositiveInt(kcp["tti"]); ok {
-			fields.tti = value
-		}
-	}
-
-	for _, rawMask := range normalizedFinalMaskUDPMasks(stream["finalmask"]) {
-		mask, _ := rawMask.(map[string]any)
-		if mask == nil {
-			continue
-		}
-		if maskType, _ := mask["type"].(string); maskType != "mkcp-legacy" {
-			continue
-		}
-
-		settings, _ := mask["settings"].(map[string]any)
-		header, _ := settings["header"].(string)
-		value, _ := settings["value"].(string)
-		if header == "" {
-			fields.seed = value
-			continue
-		}
-		if mapped, ok := kcpMaskToHeaderType[header]; ok {
-			fields.headerType = mapped
-		}
-	}
-
-	return fields
+	value := sharelink.ExtractKcpShareFields(stream)
+	return kcpShareFields{headerType: value.HeaderType, seed: value.Seed, mtu: value.MTU, tti: value.TTI}
 }
 
 func readPositiveInt(value any) (int, bool) {
-	switch number := value.(type) {
-	case int:
-		return number, number > 0
-	case int32:
-		return int(number), number > 0
-	case int64:
-		return int(number), number > 0
-	case float32:
-		parsed := int(number)
-		return parsed, parsed > 0
-	case float64:
-		parsed := int(number)
-		return parsed, parsed > 0
-	default:
-		return 0, false
-	}
+	return sharelink.ReadPositiveInt(value)
 }
 
 func setStringParam(params map[string]string, key, value string) {
-	if value == "" {
-		delete(params, key)
-		return
-	}
-	params[key] = value
+	sharelink.SetStringParam(params, key, value)
 }
 
 func setIntParam(params map[string]string, key string, value int) {
-	if value <= 0 {
-		delete(params, key)
-		return
-	}
-	params[key] = fmt.Sprintf("%d", value)
+	sharelink.SetIntParam(params, key, value)
 }
 
 func setStringField(obj map[string]any, key, value string) {
-	if value == "" {
-		delete(obj, key)
-		return
-	}
-	obj[key] = value
+	sharelink.SetStringField(obj, key, value)
 }
 
 func setIntField(obj map[string]any, key string, value int) {
-	if value <= 0 {
-		delete(obj, key)
-		return
-	}
-	obj[key] = value
-}
-
-// applyFinalMaskParams exports the finalmask payload as the compact
-// `fm=<json>` share-link field used by v2rayN-compatible clients.
-func applyFinalMaskParams(finalmask map[string]any, params map[string]string) {
-	if fm, ok := marshalFinalMask(finalmask); ok {
-		params["fm"] = fm
-	}
-}
-
-func applyFinalMaskObj(finalmask map[string]any, obj map[string]any) {
-	if fm, ok := marshalFinalMask(finalmask); ok {
-		obj["fm"] = fm
-	}
+	sharelink.SetIntField(obj, key, value)
 }
 
 func marshalFinalMask(finalmask map[string]any) (string, bool) {
-	normalized := normalizeFinalMask(finalmask)
-	if !hasFinalMaskContent(normalized) {
-		return "", false
-	}
-	b, err := json.Marshal(normalized)
-	if err != nil || len(b) == 0 || string(b) == "null" {
-		return "", false
-	}
-	return string(b), true
-}
-
-func normalizeFinalMask(finalmask map[string]any) map[string]any {
-	tcpMasks := normalizedFinalMaskTCPMasks(finalmask)
-	udpMasks := normalizedFinalMaskUDPMasks(finalmask)
-	quicParams, hasQuicParams := finalmask["quicParams"].(map[string]any)
-
-	if len(tcpMasks) == 0 && len(udpMasks) == 0 && !hasQuicParams {
-		return nil
-	}
-
-	result := map[string]any{}
-	if len(tcpMasks) > 0 {
-		result["tcp"] = tcpMasks
-	}
-	if len(udpMasks) > 0 {
-		result["udp"] = udpMasks
-	}
-	if hasQuicParams && len(quicParams) > 0 {
-		result["quicParams"] = quicParams
-	}
-	return result
-}
-
-func normalizedFinalMaskTCPMasks(value any) []any {
-	finalmask, _ := value.(map[string]any)
-	if finalmask == nil {
-		return nil
-	}
-	rawMasks, _ := finalmask["tcp"].([]any)
-	if len(rawMasks) == 0 {
-		return nil
-	}
-
-	normalized := make([]any, 0, len(rawMasks))
-	for _, rawMask := range rawMasks {
-		mask, _ := rawMask.(map[string]any)
-		if mask == nil {
-			continue
-		}
-		maskType, _ := mask["type"].(string)
-		if _, ok := validFinalMaskTCPTypes[maskType]; !ok || maskType == "" {
-			continue
-		}
-
-		normalizedMask := map[string]any{"type": maskType}
-		if settings, ok := mask["settings"].(map[string]any); ok && len(settings) > 0 {
-			normalizedMask["settings"] = settings
-		}
-		normalized = append(normalized, normalizedMask)
-	}
-
-	if len(normalized) == 0 {
-		return nil
-	}
-	return normalized
-}
-
-func normalizedFinalMaskUDPMasks(value any) []any {
-	finalmask, _ := value.(map[string]any)
-	if finalmask == nil {
-		return nil
-	}
-	rawMasks, _ := finalmask["udp"].([]any)
-	if len(rawMasks) == 0 {
-		return nil
-	}
-
-	normalized := make([]any, 0, len(rawMasks))
-	for _, rawMask := range rawMasks {
-		mask, _ := rawMask.(map[string]any)
-		if mask == nil {
-			continue
-		}
-		maskType, _ := mask["type"].(string)
-		if _, ok := validFinalMaskUDPTypes[maskType]; !ok || maskType == "" {
-			continue
-		}
-
-		normalizedMask := map[string]any{"type": maskType}
-		if settings, ok := mask["settings"].(map[string]any); ok && len(settings) > 0 {
-			normalizedMask["settings"] = settings
-		}
-		normalized = append(normalized, normalizedMask)
-	}
-
-	if len(normalized) == 0 {
-		return nil
-	}
-	return normalized
+	return sharelink.MarshalFinalMask(finalmask)
 }
 
 func hasFinalMaskContent(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return false
-	case string:
-		return len(v) > 0
-	case map[string]any:
-		for _, item := range v {
-			if hasFinalMaskContent(item) {
-				return true
-			}
-		}
-		return false
-	case []any:
-		return slices.ContainsFunc(v, hasFinalMaskContent)
-	default:
-		return true
-	}
+	return sharelink.HasFinalMaskContent(value)
 }
 
 func searchHost(headers any) string {
-	data, _ := headers.(map[string]any)
-	for k, v := range data {
-		if strings.EqualFold(k, "host") {
-			switch v.(type) {
-			case []any:
-				hosts, _ := v.([]any)
-				if len(hosts) > 0 {
-					h, _ := hosts[0].(string)
-					return h
-				}
-				return ""
-			case any:
-				h, _ := v.(string)
-				return h
-			}
-		}
-	}
-
-	return ""
+	return sharelink.SearchHost(headers)
 }
 
 // PageData is a view model for subpage.html
@@ -2813,9 +1691,6 @@ func (s *SubService) ResolveRequest(c *gin.Context) (scheme string, host string,
 		host = h
 	}
 	if host == "" {
-		host = forwarded("X-Real-IP")
-	}
-	if host == "" {
 		var err error
 		host, _, err = net.SplitHostPort(c.Request.Host)
 		if err != nil {
@@ -2834,9 +1709,6 @@ func (s *SubService) ResolveRequest(c *gin.Context) (scheme string, host string,
 
 	// header display host
 	hostHeader = forwarded("X-Forwarded-Host")
-	if hostHeader == "" {
-		hostHeader = forwarded("X-Real-IP")
-	}
 	if hostHeader == "" {
 		hostHeader = host
 	}
@@ -3035,4 +1907,16 @@ func getHostFromXFH(s string) (string, error) {
 		return realHost, nil
 	}
 	return s, nil
+}
+
+func (s *SubService) xrayShareTemplate(inbound *model.Inbound, email string) (sharelink.XrayTemplate, model.Client, bool) {
+	client, ok := s.clientForLink(inbound, email)
+	if !ok {
+		return sharelink.XrayTemplate{}, client, false
+	}
+	instance := instanceForShare(inbound)
+	settings, _ := json.Marshal(s.linkSettings(inbound))
+	instance.Settings = string(settings)
+	template, err := sharelink.PrepareXray(instance, userForShare(client), subKey(client))
+	return template, client, err == nil
 }

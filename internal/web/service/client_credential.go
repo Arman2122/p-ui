@@ -193,4 +193,7 @@ func applyCoreCredentials(c *model.Client, byKey map[string]string) {
 	c.AdTag = byKey[model.CredentialAdTag]
 	c.Username = byKey[model.CredentialUsername]
 	c.TLSCryptV2 = byKey[model.CredentialTLSCryptV2]
+	for name, value := range byKey {
+		setClientCredential(c, name, value)
+	}
 }

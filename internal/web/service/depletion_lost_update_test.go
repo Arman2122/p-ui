@@ -89,7 +89,7 @@ func TestAResetDuringTheDeferredSyncIsNotUndone(t *testing.T) {
 	initTestDB(t)
 	inbound := seedDepletableClient(t, 24802, "reset-window-in", "resettable@x")
 
-	pending := pendingClientDisable{
+	pending := pendingTrafficApply{
 		local: map[int]map[string]struct{}{
 			inbound.Id: {"resettable@x": {}},
 		},

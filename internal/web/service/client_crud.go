@@ -79,6 +79,9 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 }
 
 func (s *ClientService) create(inboundSvc *InboundService, payload *ClientCreatePayload) (bool, error) {
+	if err := requireLegacyClientCreation(payload); err != nil {
+		return false, err
+	}
 	if payload == nil {
 		return false, common.NewError("empty payload")
 	}
@@ -208,6 +211,7 @@ func (s *ClientService) create(inboundSvc *InboundService, payload *ClientCreate
 			needRestart = true
 		}
 	}
+	withdrawClientTombstones(client.Email)
 	return needRestart, nil
 }
 
@@ -362,6 +366,7 @@ func (s *ClientService) updateExisting(inboundSvc *InboundService, id int, exist
 	if err := (&PolicyService{}).ValidatePlanClientInbounds(existing.Email, inboundIds); err != nil {
 		return false, err
 	}
+	attachedInboundIDs := append([]int(nil), inboundIds...)
 	if len(inboundFilter) > 0 {
 		allow := make(map[int]struct{}, len(inboundFilter))
 		for _, fid := range inboundFilter {
@@ -490,6 +495,10 @@ func (s *ClientService) updateExisting(inboundSvc *InboundService, id int, exist
 		if subCollision > 0 {
 			return false, common.NewError("Duplicate subId:", updated.SubID)
 		}
+	}
+
+	if err := markClientNodesDirty(attachedInboundIDs); err != nil {
+		return false, err
 	}
 
 	needRestart := false

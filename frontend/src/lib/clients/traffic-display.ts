@@ -1,4 +1,14 @@
 import { ColorUtils } from '@/utils';
+import type { ClientRecord } from '@/schemas/client';
+
+export function clientTrafficPolicy(client: ClientRecord) {
+  const fleet = client.traffic?.accounting?.source === 'fleet';
+  return {
+    total: fleet ? client.traffic?.total : client.totalGB,
+    expiryTime: fleet ? client.traffic?.expiryTime : client.expiryTime,
+    enabled: fleet ? client.traffic?.enable : client.enable,
+  };
+}
 
 export interface TrafficDisplayInput {
   up: number;

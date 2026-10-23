@@ -1,5 +1,33 @@
 import type { XraySettingsValue } from '@/hooks/useXraySetting';
+import { freedomDomainStrategyFromWire } from '@/lib/xray/outbound-form-adapter';
 import { blockedSettings, directSettings } from './constants';
+
+export function directFreedomStrategy(t: XraySettingsValue | null): string {
+  const outbound = t?.outbounds?.find((o) => o?.protocol?.toLowerCase() === 'freedom' && o.tag === 'direct');
+  return outbound ? freedomDomainStrategyFromWire(outbound) || 'AsIs' : 'AsIs';
+}
+
+export function setDirectFreedomStrategy(t: XraySettingsValue, next: string): void {
+  if (!Array.isArray(t.outbounds)) t.outbounds = [];
+  let outbound = t.outbounds.find((o) => o?.protocol?.toLowerCase() === 'freedom' && o.tag === 'direct');
+  if (!outbound) {
+    outbound = { protocol: 'freedom', tag: 'direct', settings: {} };
+    t.outbounds.push(outbound);
+  }
+  delete outbound.targetStrategy;
+  const settings = { ...(outbound.settings as Record<string, unknown> | undefined) };
+  delete settings.domainStrategy;
+  delete settings.targetStrategy;
+  outbound.settings = settings;
+  const stream = { ...(outbound.streamSettings as Record<string, unknown> | undefined) };
+  const sockopt = { ...(stream.sockopt as Record<string, unknown> | undefined) };
+  if (next === 'AsIs') delete sockopt.domainStrategy;
+  else sockopt.domainStrategy = next;
+  if (Object.keys(sockopt).length > 0) stream.sockopt = sockopt;
+  else delete stream.sockopt;
+  if (Object.keys(stream).length > 0) outbound.streamSettings = stream;
+  else delete outbound.streamSettings;
+}
 
 export function ruleGetter(t: XraySettingsValue | null, outboundTag: string, property: string): string[] {
   if (!t?.routing?.rules) return [];

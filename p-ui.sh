@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if [[ -f /etc/penhoon/role.json ]]; then
+    exec /usr/local/lib/penhoon-install/role-menu.sh "$@"
+fi
+if [[ -n "${PUI_ROLE:-}" ]]; then
+    echo "No matching role installation exists. Use deploy/install.py with the selected role." >&2
+    exit 1
+fi
+
 red='\033[0;31m'
 green='\033[0;32m'
 blue='\033[0;34m'
@@ -221,26 +229,12 @@ update_dev() {
 }
 
 replace_pui_script() {
-    local url="$1"
-    local use_if_modified_since="$2"
     local temp_file="/usr/bin/p-ui-temp.$$"
 
     rm -f "$temp_file"
-    if [[ "$use_if_modified_since" == "true" ]]; then
-        curl -fLRo "$temp_file" -z /usr/bin/p-ui "$url"
-    else
-        curl -fLRo "$temp_file" "$url"
-    fi
-    if [[ $? != 0 ]]; then
+    # The archive's menu matches the installed binary, including dev builds.
+    if ! cp "${pui_folder}/p-ui.sh" "$temp_file" || [[ ! -s "$temp_file" ]] || ! bash -n "$temp_file"; then
         rm -f "$temp_file"
-        return 1
-    fi
-
-    if [[ ! -s "$temp_file" ]]; then
-        rm -f "$temp_file"
-        # -z above means "not modified since /usr/bin/p-ui" rather than a
-        # real failure, so an empty download here is success, not an error.
-        [[ "$use_if_modified_since" == "true" ]] && return 0
         return 1
     fi
 
@@ -257,7 +251,7 @@ replace_pui_script() {
 
 update_menu() {
     echo -e "${yellow}Updating Menu${plain}"
-    confirm "This function will update the menu to the latest changes." "y"
+    confirm "This function will restore the menu matching the installed panel." "y"
     if [[ $? != 0 ]]; then
         LOGE "Cancelled"
         if [[ $# == 0 ]]; then
@@ -266,9 +260,8 @@ update_menu() {
         return 0
     fi
 
-    if replace_pui_script "https://raw.githubusercontent.com/Arman2122/p-ui/main/p-ui.sh" "false"; then
-        chmod +x ${pui_folder}/p-ui.sh
-        echo -e "${green}Update successful. The panel has automatically restarted.${plain}"
+    if replace_pui_script; then
+        echo -e "${green}The menu now matches the installed panel.${plain}"
         exit 0
     else
         echo -e "${red}Failed to update the menu.${plain}"
@@ -756,12 +749,12 @@ enable_bbr() {
 }
 
 update_shell() {
-    if replace_pui_script "https://github.com/Arman2122/p-ui/raw/main/p-ui.sh" "true"; then
-        LOGI "Upgrade script succeeded, Please rerun the script"
+    if replace_pui_script; then
+        LOGI "Menu restored from the installed release. Please rerun the script"
         before_show_menu
     else
         echo ""
-        LOGE "Failed to download script, Please check whether the machine can connect Github"
+        LOGE "Failed to restore the menu from the installed release"
         before_show_menu
     fi
 }
@@ -771,7 +764,7 @@ check_status() {
     if [[ ! -f ${pui_service}/p-ui.service ]]; then
         return 2
     fi
-    temp=$(systemctl status p-ui | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
+    temp=$(systemctl show --property=SubState --value p-ui)
     if [[ "${temp}" == "running" ]]; then
         return 0
     else

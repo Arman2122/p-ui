@@ -112,3 +112,12 @@ func (c *Core) ClientIdentity(kind core.Kind) string {
 		return core.CredUUID
 	}
 }
+
+func UsesAccountUsernames(kind core.Kind) bool {
+	switch kind {
+	case "http", "mixed", "socks":
+		return true
+	default:
+		return false
+	}
+}

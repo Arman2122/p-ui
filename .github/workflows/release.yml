@@ -11,6 +11,7 @@ on:
       - "**.go"
       - "go.mod"
       - "go.sum"
+      - "core-runtimes/xray/**"
       - "**.sh"
       - "frontend/**"
       - "p-ui.service.debian"
@@ -20,6 +21,7 @@ on:
       - "**.go"
       - "go.mod"
       - "go.sum"
+      - "core-runtimes/xray/**"
       - "**.sh"
       - "frontend/**"
       - "p-ui.service.debian"
@@ -106,7 +108,8 @@ jobs:
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             LDFLAGS="$LDFLAGS -X github.com/Arman2122/p-ui/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/Arman2122/p-ui/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
-          go build -ldflags "$LDFLAGS" -o pui-release -v .
+          CGO_ENABLED=0 GOOS="$(go env GOHOSTOS)" GOARCH="$(go env GOHOSTARCH)" go build -o "$RUNNER_TEMP/nodecore" ./tools/nodecore
+          "$RUNNER_TEMP/nodecore" -core xray -go build -- -ldflags "$LDFLAGS" -o pui-release -v .
           file pui-release
 
           mkdir p-ui

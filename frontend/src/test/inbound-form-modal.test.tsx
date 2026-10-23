@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, act, render, cleanup } from '@testing-library/react';
+import { screen, act, render, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 
 import InboundFormModal from '@/pages/inbounds/form/InboundFormModal';
@@ -28,6 +28,20 @@ function renderModal() {
 }
 
 describe('InboundFormModal', () => {
+  it('opens the security section when a saved Reality target has no port', async () => {
+    const inbound = new DBInbound({ id: 42, port: 41234, protocol: 'vless', enable: true,
+      settings: { clients: [], decryption: 'none', encryption: 'none' },
+      streamSettings: { network: 'tcp', tcpSettings: { header: { type: 'none' } }, security: 'reality',
+        realitySettings: { target: 'example.com', serverNames: ['example.com'], privateKey: 'test-private-key', shortIds: ['abcd'], settings: { publicKey: 'test-public-key', fingerprint: 'chrome', spiderX: '/' } },
+      }, sniffing: { enabled: false },
+    });
+    renderWithProviders(<InboundFormModal open mode="edit" dbInbound={inbound} dbInbounds={[inbound]} availableNodes={[]} onClose={() => {}} onSaved={() => {}} />);
+    const submit = document.querySelector('.ant-modal-footer .ant-btn-primary');
+    if (!submit) throw new Error('Submit button not rendered');
+    fireEvent.click(submit);
+    await waitFor(() => expect(document.querySelector('section[aria-label="Security"]')?.hasAttribute('hidden')).toBe(false));
+  });
+
   it('renders add mode without crashing', () => {
     renderModal();
     expect(document.querySelector('.ant-modal')).toBeTruthy();

@@ -1,0 +1,196 @@
+# AGENTS.md
+
+Operational guide for AI agents working in this repo. Long-form human docs:
+`CONTRIBUTING.md` (setup, testing philosophy) and `frontend/README.md`.
+Read those before large changes. This file is the short, must-follow version.
+For a deep navigation map (request lifecycle, cron-job table, symptom → file
+index, layering rules), read `docs/architecture.md` on demand — do not guess
+file locations when it can answer in one hop.
+
+## Stack
+- Backend: Go 1.26 (`module github.com/Arman2122/p-ui`), Gin, GORM.
+  Runs Xray-core as a managed child process (`internal/xray/process.go`) and
+  imports `github.com/xtls/xray-core` for config types + gRPC stats/handler/router
+  API. The go.mod pin is the pseudo-version of the upstream commit whose
+  release tag `release.yml` downloads (`Xray_URL`, v26.7.28 today) — bump both
+  together; `internal/arch/xray_pin_test.go` fails when their dates differ.
+  MTProto inbounds run a second managed child — the `mtg-proxy` binary
+  (a multi-secret mtg fork — NOT a Go dependency; its prebuilt release binary is
+  fetched at release build time by `release.yml`,
+  panel-side code in `internal/mtproto/`) — outside Xray, one process per inbound
+  serving each
+  client's FakeTLS secret via the fork's `[secrets]` section (plus per-client
+  ad-tags via `[secret-ad-tags]` and per-client quota / expiry / `speed-up` /
+  `speed-down` / `ip-limit` via `[secret-limits]`; the speeds come from the
+  panel's plan ladder through `RateEnforcer`, in bits per second, and are
+  divided by 8 for the sidecar). Client and limit edits are hot-applied through
+  the fork's management API (`PUT /secrets`, bearer-token guarded) so connections
+  survive. The core reports sessions from `connected_ips` (+ per-address
+  activity), cuts through `POST /secrets/{name}/kick`, and reads rates back from
+  the daemon. `mtg-proxy` **1.9.0+** is required (preflight refuses older; the
+  contract test for the rendered file is `internal/config/panel_contract_test.go`
+  in the fork). An inbound may also run the fork's WEB relay (Telegram Desktop's
+  WEB proxy) as a second managed process off the same file (`internal/mtproto/web_relay.go`).
+  A client's panel-side traffic reset also calls `POST /secrets/{name}/reset-quota`.
+- Platform: Linux only — systemd + iptables. Ubuntu 22.04/24.04/26.04 and
+  Debian 12+ are the VERIFIED targets: `install.sh` and `update.sh` are apt-only,
+  and that is what CI and the test VM exercise. No Windows, no Docker.
+  The one exception is `awg-dkms.sh`, which detects the host's package manager
+  (apt / dnf / yum / pacman / zypper / apk) so the AmneziaWG module can build on
+  a host the installer itself does not yet target. Alpine is refused by name —
+  musl ships no DKMS-capable kernel tree, so naming that beats a failed install.
+- Storage: PostgreSQL only. `PUI_DB_DSN` is REQUIRED; the panel fails fast at
+  startup without it. No SQLite, no `PUI_DB_TYPE`. Builds are pure Go —
+  `CGO_ENABLED=0`, statically linked, no C toolchain.
+- Frontend: React 19 + Ant Design 6 + Vite 8 + TypeScript in `frontend/`,
+  built into `internal/web/dist/` (gitignored) and embedded via `embed.FS`.
+
+## Repo map
+- `main.go` — entry point + `p-ui` CLI (run, migrate, setting, cert).
+- `internal/config/` — env parsing (PUI_DEBUG, PUI_LOG_LEVEL, PUI_LOG_FOLDER,
+  PUI_BIN_FOLDER, PUI_SKIP_HSTS, PUI_PORT, PUI_DB_DSN, PUI_DB_MAX_*_CONNS,
+  PUI_SUPERVISOR).
+- `internal/database/` + `internal/database/model/` — GORM schema (~24 models;
+  Inbound, Client, Setting, User are the core), inbound Protocol enum,
+  AutoMigrate + hand-written migrations in `db.go`.
+- `internal/xray/` — Xray child-process lifecycle, config generation, gRPC API.
+- `internal/mtproto/` — MTProto inbounds via the bundled `mtg-proxy` binary.
+- `internal/core/` — the multi-core contract: `Core` (3 methods) + optional
+  capability interfaces in `caps.go`, resolved once by `bind.go` into `Bound`;
+  `Counter` (the ONE cumulative→delta engine); `capability.go` (the ONE table
+  answering "may this inbound do X"); `coretest/` (the conformance suite every
+  core adapter must pass). Design: `docs/multi-core-architecture.md`.
+- `internal/cores/` — wiring only; one `Register` line per core in `cores.go`.
+  Concrete cores live in `internal/cores/internal/<name>/` so the **compiler**
+  stops the service layer importing one. `internal/mtproto` is ported (P2).
+- `internal/egress/` — policy-routed egress for L3 inbounds: the `ip rule`,
+  private table and blackhole the panel owns, all derived from the egress id
+  (`alloc.go`), converged by `manager.go` over the `Plane` seam. One driver per
+  egress type in `drivers/`. Design: `docs/multi-core-architecture.md` §5.
+- `internal/arch/` — architecture guards. No runtime code: each file parses the
+  repo and fails on erosion (dispatch ratchet, import fences, frozen columns).
+- `internal/sub/` — subscription server (raw / JSON / Clash).
+- `internal/eventbus/` — in-process pub/sub (outbound/node health, xray.crash,
+  cpu.high, memory.high, login.attempt).
+- `internal/logger/`, `internal/util/` (link, crypto, sys, ldap, …),
+  `internal/tunnelmonitor/` — shared infrastructure.
+- `internal/web/` — Gin server (embeds `dist/` + `translation/`).
+  - `controller/` — panel + REST API handlers; OpenAPI at /panel/api/openapi.json.
+  - `service/` — business logic (InboundService, SettingService, XrayService,
+    node sync); subpackages tgbot/, email/, outbound/, panel/, integration/.
+  - `job/` — 18 cron jobs (traffic, fail2ban IP-limit, node heartbeat/sync, LDAP,
+    CPU/memory watchdogs, …); full table in `docs/architecture.md` §5.4.
+  - `middleware/`, `entity/`, `global/`, `session/` (CSRF), `network/`,
+    `runtime/` (master/sub-node over mTLS), `websocket/`.
+  - `locale/` + `translation/` — i18n, 2 embedded locale JSON files
+    (`en-US`, `fa-IR`).
+- `frontend/` — React + TS source (see `frontend/AGENTS.md`).
+- `tools/openapigen/` — Go generator that emits frontend types + Zod/JSON schemas
+  into `frontend/src/generated/` from Go structs. The OpenAPI doc itself
+  (`frontend/public/openapi.json`) is assembled from those + `endpoints.ts` by
+  `frontend/scripts/build-openapi.mjs`.
+- `docs/` — separate Next.js/Fumadocs site (pnpm, own CI in `docs-ci.yml`,
+  outside `make verify`). Holds a THIRD independent implementation of
+  link/subscription generation in `docs/lib/xray/` — check it whenever
+  share-link or install-command output changes.
+
+## Hard rules (non-negotiable)
+- Fix size must match bug size. Find the root cause, then make the SMALLEST
+  change that removes it — a one-line guard beats a new subsystem. A small bug
+  does not earn new columns, jobs, abstractions, config knobs or helper layers.
+  If a fix genuinely needs new architecture, say so and get agreement first;
+  never ship it unasked next to the fix.
+- Comments in committed Go/TS: 2 lines MAX per comment block. Make the name
+  carry the meaning first and rename rather than annotate; spend the 2 lines on
+  the *why* a name cannot hold — an invariant, an issue number, a non-obvious
+  constraint. Exempt: `//go:build`, `//go:generate`, and other directives.
+  HTML `<!-- -->` is fine. (A linter cannot enforce this — you must.)
+- New `g.POST`/`g.GET` in `internal/web/controller/` REQUIRES a matching entry
+  in `frontend/src/pages/api-docs/endpoints.ts`, then `make gen` (or
+  `cd frontend && npm run gen`). Hand-maintained but pinned both ways by
+  `TestRouteRegistryContract` (`internal/web/routes_contract_test.go`): a missing
+  OR stale entry fails CI's live-Postgres job, and `make test-go` only when
+  `PUI_DB_DSN` names a database — the contract builds the real router, so
+  without one it SKIPS and a green local run proves nothing here. Scope:
+  `/panel/api/*` + a few session routes; sub-server routes are exempt.
+- Response examples come from Go struct `example:` tags via `tools/openapigen` —
+  never hand-write them. A new struct must be added to openapigen's `StructAllow`
+  allowlist (`tools/openapigen/main.go`) or it is silently omitted from
+  schemas/examples (and `build-openapi.mjs` then fails on the missing schema).
+- A new or renamed endpoint has a FOURTH step nothing checks: copy
+  `frontend/public/openapi.json` → `docs/public/openapi.json`, then
+  `cd docs && pnpm gen:api` to refresh the MDX under
+  `docs/content/docs/en/reference/api/`. `docs-ci.yml` fires only on `docs/**`.
+- A new English i18n key goes in EVERY locale JSON in `internal/web/translation/`
+  (2 files: `en-US`, `fa-IR`) AND must be referenced from `frontend/src` or Go in
+  the SAME commit —
+  `frontend/src/test/i18n-dead-keys.test.ts` fails both ways. It is a frontend
+  test, so run `npm test`, not just `make test-go`. At runtime the frontend falls
+  back to en-US; Go (`internal/web/locale/`) returns "" for an unknown key.
+- DB / model changes require a migration in `internal/database/db.go`.
+- Every state-changing inbound/client op dispatches through `runtime.Runtime`
+  (`internal/web/runtime/`) — never straight to `internal/xray/api.go`, never from
+  a controller or cron job. A direct call passes every local test and silently
+  breaks every multi-node deployment. Other layering rules: `docs/architecture.md` §8.
+- Conventional commits: `type(area): short imperative summary`, then a body
+  explaining the why. Types in use: `fix`, `feat`, `chore`, `refactor`, `perf`,
+  `docs`, `style`.
+
+## Go conventions
+- Stdlib `testing` only (no testify). Table-driven, `t.Run` subtests,
+  `t.Helper()` on helpers. Assert the exact value / typed error / emitted
+  string, never just `err != nil`. Prefer real deps over mocks: a throwaway
+  Postgres database paired with `t.Cleanup(func() { _ = database.CloseDB() })`;
+  `httptest` for HTTP. `internal/sub`'s `initSubDB(t)` is the template.
+- A test must fail without its fix. Write it, revert the fix, watch it go red,
+  restore. A test that passes either way is worse than no test: it certifies
+  nothing and then gets cited as proof the fix works.
+- Test what can actually break. No test for a getter, a constant, a rename, a
+  pure map lookup, or inputs the function can never receive. One real test that
+  drives the bug through the actual code path beats five that restate the code.
+- Code must pass `golangci-lint run` (gofumpt + goimports formatting): `make lint`.
+- DB and xray-gRPC-e2e tests `t.Skip` unless `PUI_DB_DSN` or `XRAY_E2E_BINARY`
+  is set — a green `go test ./...` on a box with no PostgreSQL does not mean
+  those paths ran. Scale tests have **no env gate**: they skip only without
+  `PUI_DB_DSN`, and CI excludes them with `-skip 'Scale$'` (`ci.yml:90`). Run the
+  suite the same way, or `TestAddDelClientPostgresScale/N=200000` blows Go's
+  10-minute default timeout on a small box.
+
+## Frontend conventions (summary; full version in frontend/AGENTS.md)
+- Ant Design 6 only — no Tailwind/shadcn. Targeted tweaks, not rewrites.
+- TS strict; `@typescript-eslint/no-explicit-any` is an error. Zod schemas in
+  `src/schemas/` are the source of truth; infer types with `z.infer`, never
+  hand-write. Do not edit `src/generated/`.
+- Node 24 (`.nvmrc`) — `make gen` imports `.ts` directly and needs its type
+  stripping; Node 22 dies with `ERR_UNKNOWN_FILE_EXTENSION`. `npm test` includes
+  a headless-Chromium Storybook project, so run
+  `npx playwright install --with-deps chromium` once or `make verify` fails.
+- Editing `frontend/src` does NOT change what users see until the Vite build is
+  regenerated into `internal/web/dist/`. In `PUI_DEBUG=true`, HTML is served from
+  the frozen embedded FS but JS/CSS off disk — after `npm run build` you MUST
+  restart `go run .` or you get a blank page with 404s.
+- After touching share-link logic (`src/lib/xray/`), run `npm run test` (golden
+  fixtures); regenerate snapshots (`npx vitest run -u`) only for intentional
+  output changes, never to make a red test green.
+
+## Build, test, verify
+A fresh clone has no `internal/web/dist/`, so a bare `go build ./...` dies with
+`pattern all:dist: no matching files found` while ~35 other packages pass — it
+reads as a broken repo, not a missing step. Run `make dist-stub` once; every
+`make` Go target already depends on it, which is why `make test-go` beats
+`go test ./...`. Run `make help` for all targets. The local gate:
+
+    make verify   # gen-check + lint + typecheck + test + build + build-storybook
+
+That is the *fast* gate, not all of CI. `ci.yml` also runs `make race`,
+`make vulncheck`, a live-Postgres job (where a SKIP counts as a failure) and a
+30s fuzz smoke on `FuzzParseLink`/`FuzzDecodeCertPin` — run those locally when
+you touch DB/dialect or parser code.
+
+Common targets: `make gen` (regenerate Zod/OpenAPI), `make lint` (Go + frontend),
+`make test` (Go `-shuffle=on` + frontend), `make race`, `make build`. See `Makefile`.
+
+## Definition of done (before opening a PR)
+1. `make verify` passes — its `gen-check` already runs `make gen` and fails on a
+   dirty `frontend/src/generated` / `frontend/public/openapi.json`.
+2. Diff is focused; refactors are separate from feature work.

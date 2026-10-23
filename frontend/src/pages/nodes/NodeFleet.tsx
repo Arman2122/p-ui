@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, Dropdown, Input, Modal, Segmented, Space, Tag, Tooltip } from 'antd';
 import { useNavigate } from 'react-router';
@@ -42,7 +42,8 @@ export default function NodeFleet(props: NodeListProps) {
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const keyOf = (node: NodeRecord) => node.transitive ? `t-${node.guid}` : String(node.id);
   const detail = props.nodes.find(node => keyOf(node) === detailKey);
-  const nodes = props.nodes.filter(node => `${node.name ?? ''} ${node.address ?? ''} ${node.remark ?? ''}`.toLowerCase().includes(search.toLowerCase()));
+  const nodes = useMemo(() => props.nodes.filter(node => `${node.name ?? ''} ${node.address ?? ''} ${node.remark ?? ''}`.toLowerCase().includes(search.toLowerCase())), [props.nodes, search]);
+  const showDetails = useCallback((node: NodeRecord) => setDetailKey(node.transitive ? `t-${node.guid}` : String(node.id)), []);
   const health = (node: NodeRecord) => {
     const state = node.xrayState?.trim().toLowerCase();
     const failed = node.status === 'online' && ['stop', 'error', 'stopped', 'failed'].includes(state ?? '');
@@ -98,7 +99,7 @@ export default function NodeFleet(props: NodeListProps) {
     <section className="p-card node-fleet-list">
       <Toolbar left={<Input type="search" prefix={<Icon name="search" size={15} />} value={search} onChange={event => setSearch(event.target.value)} allowClear aria-label={t('design.searchNodes')} placeholder={t('design.searchNodes')} />}
         right={<><span className="p-sub">{nodes.length} / {props.nodes.length}</span>{!!props.selectedIds.length && <Button size="small" onClick={props.onUpdateSelected}>{t('pages.nodes.updateSelected', { count: props.selectedIds.length })}</Button>}</>} />
-      {view === 'table' && <NodeList {...props} nodes={nodes} isMobile={false} hideToolbar onDetails={node => setDetailKey(keyOf(node))} />}
+      {view === 'table' && <NodeList {...props} nodes={nodes} isMobile={false} hideToolbar onDetails={showDetails} />}
     </section>
     {view === 'cards' && <div className="p-groupgrid">
       {nodes.map(node => <PanelCard key={keyOf(node)} className="node-fleet-card" pad={0} title={<div className="node-card-heading">

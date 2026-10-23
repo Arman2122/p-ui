@@ -534,7 +534,7 @@ export default function RoutingTab({
       { key: 'export', icon: <ExportOutlined />, label: t('pages.xray.exportRules'), disabled: rulesUnavailable || exportableRules.length === 0, onClick: exportRules },
     ] }}><Button icon={<MoreOutlined />}>{t('more')}</Button></Dropdown>
   </Space>;
-  const blockingTags = new Set(['blocked', ...(templateSettings?.outbounds ?? []).filter((outbound) => outbound.protocol === 'blackhole').map((outbound) => outbound.tag ?? '')]);
+  const blockingTags = new Set(['blocked', ...(templateSettings?.outbounds ?? []).filter((outbound) => outbound.protocol?.toLowerCase() === 'blackhole').map((outbound) => outbound.tag ?? '')]);
   const exitLabels = new Map(exits.map((exit) => [`exit:${exit.id}`, exit.label]));
 
   return (

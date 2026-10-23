@@ -537,6 +537,7 @@ export default function InboundFormModal({
     }
     if (!(await methods.trigger())) {
       const section = methods.getFieldState('settings').invalid ? 'protocol'
+        : methods.getFieldState('streamSettings.realitySettings').invalid || methods.getFieldState('streamSettings.tlsSettings').invalid || methods.getFieldState('streamSettings.security').invalid ? 'security'
         : methods.getFieldState('streamSettings').invalid ? 'stream'
         : methods.getFieldState('sniffing').invalid ? 'sniffing' : 'basic';
       setActiveSection(section);

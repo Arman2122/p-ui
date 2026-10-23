@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -116,8 +117,11 @@ func EmbeddedDist() embed.FS {
 
 // Server represents the main web server for the Penhoon UI panel with controllers, services, and scheduled jobs.
 type Server struct {
-	httpServer *http.Server
-	listener   net.Listener
+	role                config.Role
+	fleetServices       *FleetRoleServices
+	localRuntimeStarted bool
+	httpServer          *http.Server
+	listener            net.Listener
 
 	index *controller.IndexController
 	panel *controller.PUIController
@@ -159,12 +163,13 @@ type Server struct {
 }
 
 // NewServer creates a new web server instance with a cancellable context.
-func NewServer() *Server {
+func NewServer(options ...ServerOption) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{
-		ctx:    ctx,
-		cancel: cancel,
+	s := &Server{ctx: ctx, cancel: cancel}
+	for _, option := range options {
+		option(s)
 	}
+	return s
 }
 
 func (s *Server) isDirectHTTPSConfigured() bool {
@@ -504,7 +509,7 @@ func (s *Server) rescheduleSettingJobs() {
 		if err != nil || spec == "" {
 			spec = defaultLdapSyncCron
 		}
-		s.ldapSyncJob = scheduleLdapSync(s.cron, spec, job.NewLdapSyncJob())
+		s.ldapSyncJob = scheduleLdapSync(s.cron, spec, s.ldapJob())
 	}
 
 	// CPU and memory monitors publish cpu.high / memory.high; scheduled whenever
@@ -529,9 +534,9 @@ func (s *Server) rescheduleSettingJobs() {
 		runtime = "@daily"
 	}
 	logger.Infof("Telegram stats notify runs at %s", runtime)
-	if s.statsJob, err = s.cron.AddJob(runtime, job.NewStatsNotifyJob()); err != nil {
+	if s.statsJob, err = s.cron.AddJob(runtime, s.statsNotifyJob()); err != nil {
 		logger.Warningf("stats notify: %q is not a valid schedule (%v); falling back to @daily", runtime, err)
-		s.statsJob, _ = s.cron.AddJob("@daily", job.NewStatsNotifyJob())
+		s.statsJob, _ = s.cron.AddJob("@daily", s.statsNotifyJob())
 	}
 	s.checkHashJob, _ = s.cron.AddJob(cadenceCheckHash, job.NewCheckHashStorageJob())
 }
@@ -607,6 +612,9 @@ func (s *Server) StartPanelOnly() (err error) {
 }
 
 func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
+	if err = s.prepareRole(); err != nil {
+		return err
+	}
 	// This is an anonymous function, no function name
 	defer func() {
 		if err != nil {
@@ -618,7 +626,10 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	if err != nil {
 		return err
 	}
-	service.StartTrafficWriter()
+	if !s.role.ManagementOnly() {
+		service.StartTrafficWriter()
+		s.localRuntimeStarted = true
+	}
 
 	// Every boot, at Error: an inbound whose credentials the core would never
 	// check is an open proxy, and the save-time refusal only protects new
@@ -641,62 +652,11 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	)
 	s.cron.Start()
 
-	// Wire the inbound-runtime manager once so InboundService can route
-	// add/update/delete to either the local xray or a remote node panel.
-	// The closures bridge into XrayService (which owns the running xray
-	// process state) without forcing the runtime package to import service.
-	backend, err := supervisor.Select(context.Background())
-	if err != nil {
-		return err
-	}
-	s.supervisor = backend
-	daemonUser, daemonGroup := daemonIdentity(backend)
-	registry, err := cores.Default(cores.Deps{
-		Supervisor:        backend,
-		DaemonUser:        daemonUser,
-		DaemonGroup:       daemonGroup,
-		XrayBaseConfig:    s.xrayService.GetXrayBaseConfig,
-		SSHHostKey:        s.settingService.GetSSHHostKey,
-		StoreSSHHostKey:   s.settingService.SetSSHHostKey,
-		RadiusSecret:      s.settingService.GetRadiusSecret,
-		StoreRadiusSecret: s.settingService.SetRadiusSecret,
-		CoreAuthFailure:   s.publishCoreAuthFailure,
-		AdmitClient:       (&service.PolicyService{}).AdmitLogin,
-		// The egress proxy is hosted BY xray, so it is gone exactly while xray is
-		// down: a core must download while the old core still serves, never after a stop.
-		HTTPClient: s.settingService.NewProxiedHTTPClient,
-	})
-	if err != nil {
-		return err
-	}
-	for _, ns := range cores.DeviceNamespaces() {
-		if err := service.RegisterShapingNamespace(ns); err != nil {
+	if !s.role.ManagementOnly() {
+		if err := s.startLocalRuntime(); err != nil {
 			return err
 		}
 	}
-	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{
-		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },
-		Cores:          registry,
-		LoadInbound:    (&service.InboundService{}).GetInbound,
-		RenderInbound:  (&service.InboundService{}).RenderForRuntime,
-	}))
-	// The facade answers from THIS registry from here on — the same adapter
-	// instances the jobs drive. These two lines are one wiring: setting a
-	// manager without pointing the facade re-arms the two-registries split.
-	cores.Use(registry)
-	// The traffic and supervision jobs both work off this one registry.
-	s.cores = registry
-	job.Cores = registry
-	runtime.GetManager().SetNodeEgressResolver(&s.settingService)
-	// Supply the master client certificate for nodes in mtls mode. Issued lazily
-	// from the node CA on first use; runtime stays free of a service import.
-	runtime.SetMasterClientCertProvider(func() (tls.Certificate, error) {
-		ck, err := s.settingService.EnsureMasterClientCert()
-		if err != nil {
-			return tls.Certificate{}, err
-		}
-		return tls.X509KeyPair(ck.CertPEM, ck.KeyPEM)
-	})
 
 	engine, err := s.initRouter()
 	if err != nil {
@@ -741,9 +701,13 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 			// Opt-in node mTLS: when a trust CA is configured, request and verify
 			// client certs (VerifyClientCertIfGiven keeps browsers working). With
 			// no CA the listener is unchanged.
-			if pool, perr := s.settingService.NodeMtlsClientCAPool(); perr != nil {
-				logger.Warning("node mTLS: failed to build client CA trust pool:", perr)
-			} else if pool != nil {
+			pool, perr := s.settingService.NodeMtlsClientCAPool()
+			switch {
+			case errors.Is(perr, service.ErrNodeMtlsTrustBundleInvalid):
+				logger.Error("Node mTLS is configured but its trust bundle will not parse, so client certificates are not accepted:", perr)
+			case perr != nil:
+				logger.Error("Node mTLS trust bundle could not be read, so client certificates are not accepted:", perr)
+			case pool != nil:
 				applyNodeMtls(c, pool)
 				logger.Info("Node mTLS enabled: verifying client certificates for the node API")
 			}
@@ -773,9 +737,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	go func() {
-		_ = s.httpServer.Serve(listener)
-	}()
+	go network.ServeHTTP(s.httpServer, listener, "Web server")
 
 	// Create event bus before startTask so jobs can use it
 	s.bus = eventbus.New(eventbus.DefaultBufferSize)
@@ -785,15 +747,17 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	service.SetBackupArchiveSender(tgbot.SendBackupArchive)
 
 	// Wire xray crash callback BEFORE startTask so it's ready
-	xray.OnCrash = func(err error) {
-		if s.bus != nil {
-			s.bus.Publish(eventbus.Event{
-				Type: eventbus.EventXrayCrash,
-				Data: err.Error(),
-			})
+	if !s.role.ManagementOnly() {
+		xray.OnCrash = func(err error) {
+			if s.bus != nil {
+				s.bus.Publish(eventbus.Event{
+					Type: eventbus.EventXrayCrash,
+					Data: err.Error(),
+				})
+			}
+			// The bus reaches email and Telegram; this is what reaches an open panel.
+			websocket.BroadcastXrayState("error", err.Error())
 		}
-		// The bus reaches email and Telegram; this is what reaches an open panel.
-		websocket.BroadcastXrayState("error", err.Error())
 	}
 	// Every other core's death is the supervise pass's to report (job.CoreSuperviseJob).
 
@@ -844,7 +808,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 
 	controller.SetRescheduleSettingJobsFunc(s.rescheduleSettingJobs)
 
-	s.startTask(restartXray, loc)
+	s.startRoleTasks(restartXray, loc)
 
 	if startTgBot {
 		isTgbotenabled, err := s.settingService.GetTgbotEnabled()
@@ -943,7 +907,7 @@ func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	// The supervise job reconciles every 10s and relaunches a core it finds
 	// stopped, so the scheduler has to be quiet before the cores go down. F262.
 	s.stopCron()
-	if stopXray {
+	if stopXray && s.localRuntimeStarted {
 		_ = s.xrayService.StopXray()
 		s.stopCores()
 	}
@@ -953,7 +917,7 @@ func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	if err := service.PersistSystemMetrics(); err != nil {
 		logger.Warning("persist system metrics on shutdown failed:", err)
 	}
-	if stopXray {
+	if stopXray && s.localRuntimeStarted {
 		service.StopTrafficWriter()
 	}
 	if stopTgBot && s.tgbotService.IsRunning() {
@@ -992,5 +956,69 @@ func (s *Server) GetWSHub() any {
 }
 
 func (s *Server) RestartXray() error {
+	if s.role.ManagementOnly() {
+		return errors.New("fleet roles manage core restarts through node operations")
+	}
 	return s.xrayService.RestartXray(true)
+}
+
+func (s *Server) startLocalRuntime() error {
+	// Wire the inbound-runtime manager once so InboundService can route
+	// add/update/delete to either the local xray or a remote node panel.
+	// The closures bridge into XrayService (which owns the running xray
+	// process state) without forcing the runtime package to import service.
+	backend, err := supervisor.Select(context.Background())
+	if err != nil {
+		return err
+	}
+	s.supervisor = backend
+	daemonUser, daemonGroup := daemonIdentity(backend)
+	registry, err := cores.Default(cores.Deps{
+		Supervisor:        backend,
+		DaemonUser:        daemonUser,
+		DaemonGroup:       daemonGroup,
+		XrayBaseConfig:    s.xrayService.GetXrayBaseConfig,
+		SSHHostKey:        s.settingService.GetSSHHostKey,
+		StoreSSHHostKey:   s.settingService.SetSSHHostKey,
+		RadiusSecret:      s.settingService.GetRadiusSecret,
+		StoreRadiusSecret: s.settingService.SetRadiusSecret,
+		CoreAuthFailure:   s.publishCoreAuthFailure,
+		AdmitClient:       (&service.PolicyService{}).AdmitLogin,
+		// The egress proxy is hosted BY xray, so it is gone exactly while xray is
+		// down: a core must download while the old core still serves, never after a stop.
+		HTTPClient: s.settingService.NewProxiedHTTPClient,
+	})
+	if err != nil {
+		return err
+	}
+	for _, ns := range cores.DeviceNamespaces() {
+		if err := service.RegisterShapingNamespace(ns); err != nil {
+			return err
+		}
+	}
+	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{
+		SetNeedRestart: func() { s.xrayService.SetToNeedRestart() },
+		Cores:          registry,
+		LoadInbound:    (&service.InboundService{}).GetInbound,
+		RenderInbound:  (&service.InboundService{}).RenderForRuntime,
+	}))
+	// The facade answers from THIS registry from here on — the same adapter
+	// instances the jobs drive. These two lines are one wiring: setting a
+	// manager without pointing the facade re-arms the two-registries split.
+	cores.Use(registry)
+	// The traffic and supervision jobs both work off this one registry.
+	s.cores = registry
+	job.Cores = registry
+	runtime.GetManager().SetNodeEgressResolver(&s.settingService)
+	// Supply the master client certificate for nodes in mtls mode. Issued lazily
+	// from the node CA on first use; runtime stays free of a service import.
+	runtime.SetMasterClientCertProvider(func() (tls.Certificate, error) {
+		ck, err := s.settingService.EnsureMasterClientCert()
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+		return tls.X509KeyPair(ck.CertPEM, ck.KeyPEM)
+	})
+
+	return nil
 }

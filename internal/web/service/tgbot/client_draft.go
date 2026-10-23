@@ -5,20 +5,7 @@ import (
 	"time"
 )
 
-/*
-clientDraft is the client one admin is midway through adding.
-
-Every field of it used to be a package-level variable, so there was exactly one
-draft on the whole panel: two admins running the wizard at the same time wrote
-into it in turn, and whichever pressed Submit first saved a mix of both — the
-other's email, limits and inbound set, under their own name. F290.
-
-Keyed by chat, the same key userStateMgr uses, and it has to be the same one:
-the state machine decides which field the next message fills and the draft is
-what it fills. Two admins sharing one GROUP chat still share a draft, because
-they already share the state machine that drives it; each admin in their own
-chat with the bot — which is how the wizard is used — is now isolated.
-*/
+// A draft belongs to one administrator in one chat, never to every member of a group.
 type clientDraft struct {
 	inboundID  int
 	inboundIDs []int
@@ -41,39 +28,27 @@ type draftEntry struct {
 	draft clientDraft
 }
 
-/*
-clientDraftStore holds one draft per chat.
-
-Telego runs every update in its own goroutine, so two updates from one chat
-overlap — which is why a handler takes that chat's lock rather than a snapshot.
-The lock is per chat, so one admin's wizard never waits on another's.
-*/
+// Each administrator holds a separate lock for the complete wizard step.
 type clientDraftStore struct {
 	mu        sync.Mutex
-	drafts    map[int64]*draftEntry
+	drafts    map[chatUser]*draftEntry
 	lastPrune time.Time
 }
 
-var clientDraftMgr = &clientDraftStore{drafts: make(map[int64]*draftEntry)}
+var clientDraftMgr = &clientDraftStore{drafts: make(map[chatUser]*draftEntry)}
 
 // draftIdleLife is how long an untouched draft survives. Longer than
 // userStateMgr's hour: the state is cleared after every answered prompt, while
 // the draft has to outlive the gaps between them.
 const draftIdleLife = 6 * time.Hour
 
-/*
-begin returns this chat's draft with its lock held, and the release to defer.
-
-Held for the whole handler on purpose: a caller that reads a field, decides on
-it and writes it back is the normal shape here, and a snapshot would let the
-concurrent update win the decision and lose the write.
-*/
-func (s *clientDraftStore) begin(chatID int64) (*clientDraft, func()) {
+// Hold the draft lock across each read-modify-write step so concurrent updates cannot interleave.
+func (s *clientDraftStore) begin(actor chatUser) (*clientDraft, func()) {
 	s.mu.Lock()
-	entry, known := s.drafts[chatID]
+	entry, known := s.drafts[actor]
 	if !known {
 		entry = &draftEntry{}
-		s.drafts[chatID] = entry
+		s.drafts[actor] = entry
 	}
 	// Refreshed before the prune, so an entry in use is never a stale one.
 	entry.at = time.Now()

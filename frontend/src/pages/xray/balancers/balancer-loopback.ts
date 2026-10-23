@@ -203,7 +203,7 @@ export function cleanupOrphanedBalancerLoopbacks(settings: XraySettingsValue): v
 
   const orphanedTags: string[] = [];
   for (const o of settings.outbounds as Array<{ tag?: string; protocol?: string }>) {
-    if (o.protocol !== 'loopback' || !o.tag || !isBalancerLoopbackTag(o.tag)) continue;
+    if (o.protocol?.toLowerCase() !== 'loopback' || !o.tag || !isBalancerLoopbackTag(o.tag)) continue;
     const targetTag = balancerTagFromLoopback(o.tag);
     if (targetTag && countLoopbackRefs(settings, targetTag) === 0) {
       orphanedTags.push(targetTag);

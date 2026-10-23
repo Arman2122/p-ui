@@ -1,12 +1,137 @@
 ---
 title: Nodes
-description: Manage remote Penhoon UI panels acting as nodes for a central
-  panel. All endpoints under /panel/api/nodes.
+description: Enroll and configure headless nodes, inspect deployment state, and
+  manage node networking resources.
 full: true
 _openapi:
   preload:
     - ./public/openapi.json
   toc:
+    - depth: 2
+      title: Read headless-node control-plane readiness, public endpoints, certificate
+        expiry, and recovery status.
+      url: '#read-headless-node-control-plane-readiness-public-endpoints-certificate-expiry-and-recovery-status'
+    - depth: 2
+      title: Read the authenticated actor ID and whether the selected runtime
+        implements atomic owned client creation. This is not node forwarding
+        readiness.
+      url: '#read-the-authenticated-actor-id-and-whether-the-selected-runtime-implements-atomic-owned-client-creation-this-is-not-node-forwarding-readiness'
+    - depth: 2
+      title: Atomically create an owned client, plan assignment, explicit template
+        memberships, scoped credentials, external links, and placement intent.
+        Reuse the operation UUID only with the exact original request; retries
+        return the original receipt without creating another identity or billing
+        term. Requires a configuration administrator.
+      url: '#atomically-create-an-owned-client-plan-assignment-explicit-template-memberships-scoped-credentials-external-links-and-placement-intent-reuse-the-operation-uuid-only-with-the-exact-original-request-retries-return-the-original-receipt-without-creating-another-identity-or-billing-term-requires-a-configuration-administrator'
+    - depth: 2
+      title: Recover a committed creation receipt for the same current administrator.
+        Returns metadata only, never credentials; pending is the original
+        durable intent result, not live forwarding status.
+      url: '#recover-a-committed-creation-receipt-for-the-same-current-administrator-returns-metadata-only-never-credentials-pending-is-the-original-durable-intent-result-not-live-forwarding-status'
+    - depth: 2
+      title: Read one coherent source revision with common credentials, scoped binding
+        overrides, explicit and inherited templates, plan overrides, links and
+        pending source work. Requires configuration administrator access. This
+        is source state, not proof of applied node configuration. Unknown
+        membership is explicit and effectiveInboundIds is null.
+      url: '#read-one-coherent-source-revision-with-common-credentials-scoped-binding-overrides-explicit-and-inherited-templates-plan-overrides-links-and-pending-source-work-requires-configuration-administrator-access-this-is-source-state-not-proof-of-applied-node-configuration-unknown-membership-is-explicit-and-effectiveinboundids-is-null'
+    - depth: 2
+      title: List enrolled and pending headless nodes with their applied and desired
+        configuration revisions.
+      url: '#list-enrolled-and-pending-headless-nodes-with-their-applied-and-desired-configuration-revisions'
+    - depth: 2
+      title: Create a private ten-minute enrollment package for a headless node. Store
+        the returned package securely.
+      url: '#create-a-private-ten-minute-enrollment-package-for-a-headless-node-store-the-returned-package-securely'
+    - depth: 2
+      title: Read the shared plan/client reset policy and any pending operation.
+        nextDueUnixMilli is the original cadence; nextAttemptUnixMilli is worker
+        eligibility. Pending stops preserve old reservations and do not
+        authorize the next allowance.
+      url: '#read-the-shared-planclient-reset-policy-and-any-pending-operation-nextdueunixmilli-is-the-original-cadence-nextattemptunixmilli-is-worker-eligibility-pending-stops-preserve-old-reservations-and-do-not-authorize-the-next-allowance'
+    - depth: 2
+      title: Configure one shared reset schedule through the fleet runtime. Inherit
+        the applied plan or override with none/hourly/daily/weekly/monthly.
+        Cadence is anchored in UTC, monthly dates clamp without drifting, and
+        saving policy does not reset quota. Pending transitions must complete or
+        be explicitly resolved first.
+      url: '#configure-one-shared-reset-schedule-through-the-fleet-runtime-inherit-the-applied-plan-or-override-with-nonehourlydailyweeklymonthly-cadence-is-anchored-in-utc-monthly-dates-clamp-without-drifting-and-saving-policy-does-not-reset-quota-pending-transitions-must-complete-or-be-explicitly-resolved-first'
+    - depth: 2
+      title: Cancel the exact pending scheduled reset through the owned runtime. Keeps
+        the existing term, used and reserved credit, skips missed reset
+        intervals, and preserves required node stops before service can resume.
+        Does not replenish quota or adopt changed credentials.
+      url: '#cancel-the-exact-pending-scheduled-reset-through-the-owned-runtime-keeps-the-existing-term-used-and-reserved-credit-skips-missed-reset-intervals-and-preserves-required-node-stops-before-service-can-resume-does-not-replenish-quota-or-adopt-changed-credentials'
+    - depth: 2
+      title: Read the current immutable fleet networking defaults. Requires
+        configuration administrator access.
+      url: '#read-the-current-immutable-fleet-networking-defaults-requires-configuration-administrator-access'
+    - depth: 2
+      title: Approve a new networking default revision using optimistic concurrency.
+        Following nodes become pending.
+      url: '#approve-a-new-networking-default-revision-using-optimistic-concurrency-following-nodes-become-pending'
+    - depth: 2
+      title: Read master-owned node labels and explicitly eligible inbound templates.
+        Node observations cannot change placement eligibility.
+      url: '#read-master-owned-node-labels-and-explicitly-eligible-inbound-templates-node-observations-cannot-change-placement-eligibility'
+    - depth: 2
+      title: Revise master-owned node placement policy and durably queue reevaluation.
+        An empty template set permits no targets.
+      url: '#revise-master-owned-node-placement-policy-and-durably-queue-reevaluation-an-empty-template-set-permits-no-targets'
+    - depth: 2
+      title: List explicit plan or single-group placement rules in UUID order.
+        Matching targets are combined and intersected with current restrictions.
+      url: '#list-explicit-plan-or-single-group-placement-rules-in-uuid-order-matching-targets-are-combined-and-intersected-with-current-restrictions'
+    - depth: 2
+      title: Create or revise a placement rule with explicit node IDs or master label
+        selectors. Rule scope is immutable; disable a rule to retire its derived
+        targets.
+      url: '#create-or-revise-a-placement-rule-with-explicit-node-ids-or-master-label-selectors-rule-scope-is-immutable-disable-a-rule-to-retire-its-derived-targets'
+    - depth: 2
+      title: Read the explicit standalone placement default. A null node leaves
+        unplanned, ungrouped clients unplaced.
+      url: '#read-the-explicit-standalone-placement-default-a-null-node-leaves-unplanned-ungrouped-clients-unplaced'
+    - depth: 2
+      title: Choose an already enrolled and policy-approved node installation for
+        standalone clients, or clear the default. Explicit manual targets take
+        precedence.
+      url: '#choose-an-already-enrolled-and-policy-approved-node-installation-for-standalone-clients-or-clear-the-default-explicit-manual-targets-take-precedence'
+    - depth: 2
+      title: Preview deterministic placement targets and application diagnostics from
+        current policy. This read allocates no quota and starts no billing term.
+      url: '#preview-deterministic-placement-targets-and-application-diagnostics-from-current-policy-this-read-allocates-no-quota-and-starts-no-billing-term'
+    - depth: 2
+      title: Commit an owned client restriction, explicit target attachment, or scoped
+        suppression through the fleet runtime. restrict accepts null to inherit
+        or [] to deny all; attach/detach require nodeId and nonempty template
+        IDs. Pending never means remote stop is already applied.
+      url: '#commit-an-owned-client-restriction-explicit-target-attachment-or-scoped-suppression-through-the-fleet-runtime-restrict-accepts-null-to-inherit-or--to-deny-all-attachdetach-require-nodeid-and-nonempty-template-ids-pending-never-means-remote-stop-is-already-applied'
+    - depth: 2
+      title: Compile a pinned node networking preview with resource claims and
+        readiness diagnostics. Creates no traffic authority or billing
+        activation.
+      url: '#compile-a-pinned-node-networking-preview-with-resource-claims-and-readiness-diagnostics-creates-no-traffic-authority-or-billing-activation'
+    - depth: 2
+      title: Publish a previously reviewed compilation after revalidating its sources
+        and existing settled authority. Networking input cannot choose quota or
+        rate funding.
+      url: '#publish-a-previously-reviewed-compilation-after-revalidating-its-sources-and-existing-settled-authority-networking-input-cannot-choose-quota-or-rate-funding'
+    - depth: 2
+      title: Read a node’s networking overrides, resolved settings, pinned defaults
+        and inheritance origins.
+      url: '#read-a-nodes-networking-overrides-resolved-settings-pinned-defaults-and-inheritance-origins'
+    - depth: 2
+      title: Create a node networking revision with explicit replace, reset or removal
+        operations.
+      url: '#create-a-node-networking-revision-with-explicit-replace-reset-or-removal-operations'
+    - depth: 2
+      title: List node-scoped asset metadata and digests without returning secret
+        contents.
+      url: '#list-node-scoped-asset-metadata-and-digests-without-returning-secret-contents'
+    - depth: 2
+      title: Store an immutable asset revision bound to one node and installation.
+        Data is base64-encoded; the response contains metadata only.
+      url: '#store-an-immutable-asset-revision-bound-to-one-node-and-installation-data-is-base64-encoded-the-response-contains-metadata-only'
     - depth: 2
       title: List every configured node with its connection details, health, and last
         heartbeat patch.
@@ -77,6 +202,107 @@ _openapi:
       url: '#aggregated-metric-history-for-a-node--same-shape-as-serverhistory-scoped-to-one-node'
   structuredData:
     headings:
+      - content: Read headless-node control-plane readiness, public endpoints,
+          certificate expiry, and recovery status.
+        id: read-headless-node-control-plane-readiness-public-endpoints-certificate-expiry-and-recovery-status
+      - content: Read the authenticated actor ID and whether the selected runtime
+          implements atomic owned client creation. This is not node forwarding
+          readiness.
+        id: read-the-authenticated-actor-id-and-whether-the-selected-runtime-implements-atomic-owned-client-creation-this-is-not-node-forwarding-readiness
+      - content: Atomically create an owned client, plan assignment, explicit template
+          memberships, scoped credentials, external links, and placement intent.
+          Reuse the operation UUID only with the exact original request; retries
+          return the original receipt without creating another identity or
+          billing term. Requires a configuration administrator.
+        id: atomically-create-an-owned-client-plan-assignment-explicit-template-memberships-scoped-credentials-external-links-and-placement-intent-reuse-the-operation-uuid-only-with-the-exact-original-request-retries-return-the-original-receipt-without-creating-another-identity-or-billing-term-requires-a-configuration-administrator
+      - content: Recover a committed creation receipt for the same current
+          administrator. Returns metadata only, never credentials; pending is
+          the original durable intent result, not live forwarding status.
+        id: recover-a-committed-creation-receipt-for-the-same-current-administrator-returns-metadata-only-never-credentials-pending-is-the-original-durable-intent-result-not-live-forwarding-status
+      - content: Read one coherent source revision with common credentials, scoped
+          binding overrides, explicit and inherited templates, plan overrides,
+          links and pending source work. Requires configuration administrator
+          access. This is source state, not proof of applied node configuration.
+          Unknown membership is explicit and effectiveInboundIds is null.
+        id: read-one-coherent-source-revision-with-common-credentials-scoped-binding-overrides-explicit-and-inherited-templates-plan-overrides-links-and-pending-source-work-requires-configuration-administrator-access-this-is-source-state-not-proof-of-applied-node-configuration-unknown-membership-is-explicit-and-effectiveinboundids-is-null
+      - content: List enrolled and pending headless nodes with their applied and desired
+          configuration revisions.
+        id: list-enrolled-and-pending-headless-nodes-with-their-applied-and-desired-configuration-revisions
+      - content: Create a private ten-minute enrollment package for a headless node.
+          Store the returned package securely.
+        id: create-a-private-ten-minute-enrollment-package-for-a-headless-node-store-the-returned-package-securely
+      - content: Read the shared plan/client reset policy and any pending operation.
+          nextDueUnixMilli is the original cadence; nextAttemptUnixMilli is
+          worker eligibility. Pending stops preserve old reservations and do not
+          authorize the next allowance.
+        id: read-the-shared-planclient-reset-policy-and-any-pending-operation-nextdueunixmilli-is-the-original-cadence-nextattemptunixmilli-is-worker-eligibility-pending-stops-preserve-old-reservations-and-do-not-authorize-the-next-allowance
+      - content: Configure one shared reset schedule through the fleet runtime. Inherit
+          the applied plan or override with none/hourly/daily/weekly/monthly.
+          Cadence is anchored in UTC, monthly dates clamp without drifting, and
+          saving policy does not reset quota. Pending transitions must complete
+          or be explicitly resolved first.
+        id: configure-one-shared-reset-schedule-through-the-fleet-runtime-inherit-the-applied-plan-or-override-with-nonehourlydailyweeklymonthly-cadence-is-anchored-in-utc-monthly-dates-clamp-without-drifting-and-saving-policy-does-not-reset-quota-pending-transitions-must-complete-or-be-explicitly-resolved-first
+      - content: Cancel the exact pending scheduled reset through the owned runtime.
+          Keeps the existing term, used and reserved credit, skips missed reset
+          intervals, and preserves required node stops before service can
+          resume. Does not replenish quota or adopt changed credentials.
+        id: cancel-the-exact-pending-scheduled-reset-through-the-owned-runtime-keeps-the-existing-term-used-and-reserved-credit-skips-missed-reset-intervals-and-preserves-required-node-stops-before-service-can-resume-does-not-replenish-quota-or-adopt-changed-credentials
+      - content: Read the current immutable fleet networking defaults. Requires
+          configuration administrator access.
+        id: read-the-current-immutable-fleet-networking-defaults-requires-configuration-administrator-access
+      - content: Approve a new networking default revision using optimistic concurrency.
+          Following nodes become pending.
+        id: approve-a-new-networking-default-revision-using-optimistic-concurrency-following-nodes-become-pending
+      - content: Read master-owned node labels and explicitly eligible inbound
+          templates. Node observations cannot change placement eligibility.
+        id: read-master-owned-node-labels-and-explicitly-eligible-inbound-templates-node-observations-cannot-change-placement-eligibility
+      - content: Revise master-owned node placement policy and durably queue
+          reevaluation. An empty template set permits no targets.
+        id: revise-master-owned-node-placement-policy-and-durably-queue-reevaluation-an-empty-template-set-permits-no-targets
+      - content: List explicit plan or single-group placement rules in UUID order.
+          Matching targets are combined and intersected with current
+          restrictions.
+        id: list-explicit-plan-or-single-group-placement-rules-in-uuid-order-matching-targets-are-combined-and-intersected-with-current-restrictions
+      - content: Create or revise a placement rule with explicit node IDs or master
+          label selectors. Rule scope is immutable; disable a rule to retire its
+          derived targets.
+        id: create-or-revise-a-placement-rule-with-explicit-node-ids-or-master-label-selectors-rule-scope-is-immutable-disable-a-rule-to-retire-its-derived-targets
+      - content: Read the explicit standalone placement default. A null node leaves
+          unplanned, ungrouped clients unplaced.
+        id: read-the-explicit-standalone-placement-default-a-null-node-leaves-unplanned-ungrouped-clients-unplaced
+      - content: Choose an already enrolled and policy-approved node installation for
+          standalone clients, or clear the default. Explicit manual targets take
+          precedence.
+        id: choose-an-already-enrolled-and-policy-approved-node-installation-for-standalone-clients-or-clear-the-default-explicit-manual-targets-take-precedence
+      - content: Preview deterministic placement targets and application diagnostics
+          from current policy. This read allocates no quota and starts no
+          billing term.
+        id: preview-deterministic-placement-targets-and-application-diagnostics-from-current-policy-this-read-allocates-no-quota-and-starts-no-billing-term
+      - content: Commit an owned client restriction, explicit target attachment, or
+          scoped suppression through the fleet runtime. restrict accepts null to
+          inherit or [] to deny all; attach/detach require nodeId and nonempty
+          template IDs. Pending never means remote stop is already applied.
+        id: commit-an-owned-client-restriction-explicit-target-attachment-or-scoped-suppression-through-the-fleet-runtime-restrict-accepts-null-to-inherit-or--to-deny-all-attachdetach-require-nodeid-and-nonempty-template-ids-pending-never-means-remote-stop-is-already-applied
+      - content: Compile a pinned node networking preview with resource claims and
+          readiness diagnostics. Creates no traffic authority or billing
+          activation.
+        id: compile-a-pinned-node-networking-preview-with-resource-claims-and-readiness-diagnostics-creates-no-traffic-authority-or-billing-activation
+      - content: Publish a previously reviewed compilation after revalidating its
+          sources and existing settled authority. Networking input cannot choose
+          quota or rate funding.
+        id: publish-a-previously-reviewed-compilation-after-revalidating-its-sources-and-existing-settled-authority-networking-input-cannot-choose-quota-or-rate-funding
+      - content: Read a node’s networking overrides, resolved settings, pinned defaults
+          and inheritance origins.
+        id: read-a-nodes-networking-overrides-resolved-settings-pinned-defaults-and-inheritance-origins
+      - content: Create a node networking revision with explicit replace, reset or
+          removal operations.
+        id: create-a-node-networking-revision-with-explicit-replace-reset-or-removal-operations
+      - content: List node-scoped asset metadata and digests without returning secret
+          contents.
+        id: list-node-scoped-asset-metadata-and-digests-without-returning-secret-contents
+      - content: Store an immutable asset revision bound to one node and installation.
+          Data is base64-encoded; the response contains metadata only.
+        id: store-an-immutable-asset-revision-bound-to-one-node-and-installation-data-is-base64-encoded-the-response-contains-metadata-only
       - content: List every configured node with its connection details, health, and
           last heartbeat patch.
         id: list-every-configured-node-with-its-connection-details-health-and-last-heartbeat-patch
@@ -142,7 +368,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/nodes/list","method":"get"},{"path":"/panel/api/nodes/mtls/ca","method":"post"},{"path":"/panel/api/nodes/mtls/trustCA","method":"post"},{"path":"/panel/api/nodes/get/{id}","method":"get"},{"path":"/panel/api/nodes/webCert/{id}","method":"get"},{"path":"/panel/api/nodes/add","method":"post"},{"path":"/panel/api/nodes/update/{id}","method":"post"},{"path":"/panel/api/nodes/del/{id}","method":"post"},{"path":"/panel/api/nodes/setEnable/{id}","method":"post"},{"path":"/panel/api/nodes/test","method":"post"},{"path":"/panel/api/nodes/certFingerprint","method":"post"},{"path":"/panel/api/nodes/inbounds","method":"post"},{"path":"/panel/api/nodes/probe/{id}","method":"post"},{"path":"/panel/api/nodes/updatePanel","method":"post"},{"path":"/panel/api/nodes/history/{id}/{metric}/{bucket}","method":"get"}]} showTitle />
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/panel/api/fleet/status","method":"get"},{"path":"/panel/api/fleet/clients/capabilities","method":"get"},{"path":"/panel/api/fleet/clients","method":"post"},{"path":"/panel/api/fleet/clients/creation/{operationId}","method":"get"},{"path":"/panel/api/fleet/clients/{id}/source","method":"get"},{"path":"/panel/api/fleet/nodes","method":"get"},{"path":"/panel/api/fleet/enroll","method":"post"},{"path":"/panel/api/fleet/clients/{id}/reset-schedule","method":"get"},{"path":"/panel/api/fleet/clients/{id}/reset-schedule","method":"post"},{"path":"/panel/api/fleet/clients/{id}/reset-schedule/cancel","method":"post"},{"path":"/panel/api/fleet/network/defaults","method":"get"},{"path":"/panel/api/fleet/network/defaults","method":"post"},{"path":"/panel/api/fleet/placement/nodes/{id}","method":"get"},{"path":"/panel/api/fleet/placement/nodes/{id}","method":"post"},{"path":"/panel/api/fleet/placement/rules","method":"get"},{"path":"/panel/api/fleet/placement/rules","method":"post"},{"path":"/panel/api/fleet/placement/default","method":"get"},{"path":"/panel/api/fleet/placement/default","method":"post"},{"path":"/panel/api/fleet/placement/clients/{id}","method":"get"},{"path":"/panel/api/fleet/placement/clients/{id}","method":"post"},{"path":"/panel/api/fleet/network/preview","method":"post"},{"path":"/panel/api/fleet/network/publish","method":"post"},{"path":"/panel/api/fleet/network/nodes/{id}","method":"get"},{"path":"/panel/api/fleet/network/nodes/{id}","method":"post"},{"path":"/panel/api/fleet/network/nodes/{id}/assets","method":"get"},{"path":"/panel/api/fleet/network/nodes/{id}/assets","method":"post"},{"path":"/panel/api/nodes/list","method":"get"},{"path":"/panel/api/nodes/mtls/ca","method":"post"},{"path":"/panel/api/nodes/mtls/trustCA","method":"post"},{"path":"/panel/api/nodes/get/{id}","method":"get"},{"path":"/panel/api/nodes/webCert/{id}","method":"get"},{"path":"/panel/api/nodes/add","method":"post"},{"path":"/panel/api/nodes/update/{id}","method":"post"},{"path":"/panel/api/nodes/del/{id}","method":"post"},{"path":"/panel/api/nodes/setEnable/{id}","method":"post"},{"path":"/panel/api/nodes/test","method":"post"},{"path":"/panel/api/nodes/certFingerprint","method":"post"},{"path":"/panel/api/nodes/inbounds","method":"post"},{"path":"/panel/api/nodes/probe/{id}","method":"post"},{"path":"/panel/api/nodes/updatePanel","method":"post"},{"path":"/panel/api/nodes/history/{id}/{metric}/{bucket}","method":"get"}]} showTitle />
     </>
   );
 }

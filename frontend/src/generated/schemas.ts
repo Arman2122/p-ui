@@ -1405,6 +1405,97 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "BulkOutcome": {
+    "description": "BulkOutcome is the per-row account every bulk endpoint returns beside its\nlegacy counts: who it changed, who it left alone, who it could not change.",
+    "properties": {
+      "failed": {
+        "items": {
+          "$ref": "#/components/schemas/BulkRow"
+        },
+        "type": "array"
+      },
+      "ok": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "skipped": {
+        "items": {
+          "$ref": "#/components/schemas/BulkRow"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "failed",
+      "ok",
+      "skipped"
+    ],
+    "type": "object"
+  },
+  "BulkRow": {
+    "description": "BulkRow is one client a bulk operation did not carry out, and why.",
+    "properties": {
+      "email": {
+        "example": "user1",
+        "type": "string"
+      },
+      "reason": {
+        "example": "client not found",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email",
+      "reason"
+    ],
+    "type": "object"
+  },
+  "BulkSetEnableReport": {
+    "properties": {
+      "email": {
+        "example": "carol",
+        "type": "string"
+      },
+      "reason": {
+        "example": "client not found",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email",
+      "reason"
+    ],
+    "type": "object"
+  },
+  "BulkSetEnableResult": {
+    "properties": {
+      "changed": {
+        "example": 2,
+        "type": "integer"
+      },
+      "outcome": {
+        "$ref": "#/components/schemas/BulkOutcome"
+      },
+      "pending": {
+        "example": 1,
+        "type": "integer"
+      },
+      "skipped": {
+        "items": {
+          "$ref": "#/components/schemas/BulkSetEnableReport"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "changed",
+      "outcome",
+      "pending"
+    ],
+    "type": "object"
+  },
   "Capabilities": {
     "description": "Capabilities is what a core claims it can do. Every field is a *bool because\nnil means UNKNOWN, which is a normal state: a master talking to a node one\nrelease behind cannot distinguish \"cannot\" from \"was never asked\".",
     "properties": {
@@ -1635,40 +1726,17 @@ export const SCHEMAS: Record<string, unknown> = {
   },
   "ClientCreatePayload": {
     "properties": {
-      "adTag": {
-        "example": "0123456789abcdef0123456789abcdef",
-        "type": "string"
+      "client": {
+        "$ref": "#/components/schemas/Client"
       },
-      "allowedIPs": {
+      "credentialBindings": {
         "items": {
-          "type": "string"
+          "$ref": "#/components/schemas/ClientCredentialBindingInput"
         },
         "type": "array"
       },
-      "auth": {
-        "description": "Auth password (Hysteria)",
-        "type": "string"
-      },
-      "comment": {
-        "description": "Client comment",
-        "type": "string"
-      },
-      "created_at": {
-        "description": "Creation timestamp",
-        "format": "int64",
-        "type": "integer"
-      },
-      "email": {
-        "description": "Client email identifier",
-        "type": "string"
-      },
-      "enable": {
-        "description": "Whether the client is enabled",
-        "type": "boolean"
-      },
-      "expiryTime": {
-        "description": "Expiration timestamp",
-        "format": "int64",
+      "expectedActorId": {
+        "example": 1,
         "type": "integer"
       },
       "externalLinks": {
@@ -1677,33 +1745,17 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
-      "flow": {
-        "description": "Flow control (XTLS)",
-        "type": "string"
-      },
-      "group": {
-        "description": "Logical grouping label",
-        "type": "string"
-      },
-      "id": {
-        "description": "Unique client identifier",
-        "type": "string"
-      },
       "inboundIds": {
+        "example": [
+          1
+        ],
         "items": {
           "type": "integer"
         },
         "type": "array"
       },
-      "keepAlive": {
-        "type": "integer"
-      },
-      "limitIp": {
-        "description": "IP limit for this client",
-        "type": "integer"
-      },
-      "password": {
-        "description": "Client password",
+      "operationId": {
+        "example": "11111111-1111-4111-8111-111111111111",
         "type": "string"
       },
       "planOverrides": {
@@ -1718,79 +1770,30 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": 1,
         "nullable": true,
         "type": "integer"
-      },
-      "preSharedKey": {
-        "description": "Omit to keep the stored key, send empty to clear it",
-        "nullable": true,
-        "type": "string"
-      },
-      "privateKey": {
-        "type": "string"
-      },
-      "publicKey": {
-        "type": "string"
-      },
-      "reset": {
-        "description": "Reset period in days",
-        "type": "integer"
-      },
-      "reverse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ClientReverse"
-          }
-        ],
-        "description": "VLESS simple reverse proxy settings",
-        "nullable": true
-      },
-      "secret": {
-        "example": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
-        "type": "string"
-      },
-      "security": {
-        "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
-        "type": "string"
-      },
-      "subId": {
-        "description": "Subscription identifier",
-        "type": "string"
-      },
-      "tgId": {
-        "description": "Telegram user ID for notifications",
-        "format": "int64",
-        "type": "integer"
-      },
-      "tlsCryptV2": {
-        "description": "OpenVPN wrapped client key, per inbound",
-        "type": "string"
-      },
-      "totalGB": {
-        "description": "Total traffic limit in GB",
-        "format": "int64",
-        "type": "integer"
-      },
-      "updated_at": {
-        "description": "Last update timestamp",
-        "format": "int64",
-        "type": "integer"
-      },
-      "username": {
-        "description": "Login name for a core that takes one (SSH)",
-        "type": "string"
       }
     },
     "required": [
-      "comment",
-      "email",
-      "enable",
-      "expiryTime",
-      "inboundIds",
-      "limitIp",
-      "reset",
-      "security",
-      "subId",
-      "tgId",
-      "totalGB"
+      "client",
+      "inboundIds"
+    ],
+    "type": "object"
+  },
+  "ClientCredentialBindingInput": {
+    "properties": {
+      "inboundId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "values": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      }
+    },
+    "required": [
+      "inboundId",
+      "values"
     ],
     "type": "object"
   },
@@ -2288,6 +2291,14 @@ export const SCHEMAS: Record<string, unknown> = {
   "ClientTraffic": {
     "description": "ClientTraffic is the per-client usage row. It is keyed by email and shared by\nevery inbound a client uses, which is what makes one quota span every core.",
     "properties": {
+      "accounting": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TrafficAccounting"
+          }
+        ],
+        "nullable": true
+      },
       "down": {
         "example": 2097152,
         "format": "int64",
@@ -2321,6 +2332,13 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "reset": {
         "example": 0,
+        "type": "integer"
+      },
+      "resetCount": {
+        "description": "Nil exists only on legacy node payloads; persisted rows always advertise a generation.",
+        "example": 0,
+        "format": "int64",
+        "nullable": true,
         "type": "integer"
       },
       "subId": {
@@ -3057,7 +3075,6 @@ export const SCHEMAS: Record<string, unknown> = {
     "type": "object"
   },
   "ExternalLinkInput": {
-    "description": "ExternalLinkInput is one row from the client form's Links tab.",
     "properties": {
       "kind": {
         "type": "string"
@@ -3088,6 +3105,2174 @@ export const SCHEMAS: Record<string, unknown> = {
     },
     "required": [
       "masterId"
+    ],
+    "type": "object"
+  },
+  "FleetAssetReference": {
+    "properties": {
+      "assetId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "assetId",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetClientCreateCapabilities": {
+    "properties": {
+      "actorId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "supported": {
+        "example": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "actorId",
+      "supported"
+    ],
+    "type": "object"
+  },
+  "FleetClientCreateResult": {
+    "properties": {
+      "actorId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "clientId": {
+        "example": "22222222-2222-4222-8222-222222222222",
+        "type": "string"
+      },
+      "nodeDerived": {
+        "items": {
+          "$ref": "#/components/schemas/SourceClientCredentialRequirement"
+        },
+        "type": "array"
+      },
+      "panelClientId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "pending": {
+        "example": true,
+        "type": "boolean"
+      },
+      "revision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "actorId",
+      "clientId",
+      "nodeDerived",
+      "panelClientId",
+      "pending",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetClientSourceBinding": {
+    "properties": {
+      "flowOverride": {
+        "example": "xtls-rprx-vision",
+        "type": "string"
+      },
+      "inboundId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "scope": {
+        "example": "effective",
+        "type": "string"
+      },
+      "values": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      }
+    },
+    "required": [
+      "flowOverride",
+      "inboundId",
+      "scope",
+      "values"
+    ],
+    "type": "object"
+  },
+  "FleetClientSourceView": {
+    "properties": {
+      "actorId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "client": {
+        "$ref": "#/components/schemas/Client"
+      },
+      "clientId": {
+        "example": "22222222-2222-4222-8222-222222222222",
+        "type": "string"
+      },
+      "credentialBindings": {
+        "items": {
+          "$ref": "#/components/schemas/FleetClientSourceBinding"
+        },
+        "type": "array"
+      },
+      "dependencyDiagnostic": {
+        "type": "string"
+      },
+      "effectiveInboundIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "nullable": true,
+        "type": "array"
+      },
+      "effectiveScopeKnown": {
+        "example": true,
+        "type": "boolean"
+      },
+      "explicitInboundIds": {
+        "example": [
+          1
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "externalLinks": {
+        "items": {
+          "$ref": "#/components/schemas/ExternalLinkInput"
+        },
+        "type": "array"
+      },
+      "panelClientId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "pending": {
+        "example": true,
+        "type": "boolean"
+      },
+      "planOverrides": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PlanOverrides"
+          }
+        ],
+        "nullable": true
+      },
+      "policyId": {
+        "example": 1,
+        "nullable": true,
+        "type": "integer"
+      },
+      "revision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "actorId",
+      "client",
+      "clientId",
+      "credentialBindings",
+      "dependencyDiagnostic",
+      "effectiveScopeKnown",
+      "explicitInboundIds",
+      "externalLinks",
+      "panelClientId",
+      "pending",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetEnrollmentRequest": {
+    "properties": {
+      "name": {
+        "example": "fra-1",
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "type": "object"
+  },
+  "FleetEnrollmentView": {
+    "properties": {
+      "expiresUnixMilli": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "packageJson": {
+        "example": "{}",
+        "type": "string"
+      }
+    },
+    "required": [
+      "expiresUnixMilli",
+      "nodeId",
+      "packageJson"
+    ],
+    "type": "object"
+  },
+  "FleetInboundNetwork": {
+    "properties": {
+      "addresses": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "assets": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "bridgeId": {
+        "type": "string"
+      },
+      "egressMode": {
+        "type": "string"
+      },
+      "listen": {
+        "nullable": true,
+        "type": "string"
+      },
+      "mtproto": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetMTProtoBinding"
+          }
+        ],
+        "nullable": true
+      },
+      "mtu": {
+        "type": "integer"
+      },
+      "port": {
+        "nullable": true,
+        "type": "integer"
+      },
+      "settings": {
+        "nullable": true
+      },
+      "sniffing": {
+        "nullable": true
+      },
+      "streamSettings": {
+        "nullable": true
+      },
+      "subnet": {
+        "type": "string"
+      },
+      "targetId": {
+        "type": "integer"
+      },
+      "targetTag": {
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "FleetMTProtoBinding": {
+    "properties": {
+      "trustedProxies": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "web": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetMTProtoWEBBinding"
+          }
+        ],
+        "nullable": true
+      }
+    },
+    "type": "object"
+  },
+  "FleetMTProtoWEBBinding": {
+    "properties": {
+      "listen": {
+        "type": "string"
+      },
+      "port": {
+        "type": "integer"
+      },
+      "publicPort": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "listen",
+      "port",
+      "publicPort"
+    ],
+    "type": "object"
+  },
+  "FleetNativeBindingPin": {
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "inboundInstanceId": {
+        "type": "string"
+      },
+      "maxSessions": {
+        "type": "integer"
+      },
+      "placementId": {
+        "type": "string"
+      },
+      "poolSha256": {
+        "type": "string"
+      },
+      "prefix": {
+        "type": "string"
+      },
+      "targetId": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "clientId",
+      "id",
+      "inboundInstanceId",
+      "maxSessions",
+      "placementId",
+      "poolSha256",
+      "prefix",
+      "targetId"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkAssetPage": {
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkAssetView"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "items",
+      "nextCursor"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkAssetPin": {
+    "properties": {
+      "assetId": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "slot": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "assetId",
+      "kind",
+      "revision",
+      "sha256",
+      "slot"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkAssetRequest": {
+    "properties": {
+      "assetId": {
+        "example": "17f763c4-6530-41f7-8a88-534560d4397e",
+        "type": "string"
+      },
+      "data": {
+        "example": "AQ==",
+        "type": "string"
+      },
+      "expectedRevision": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "type": "string"
+      },
+      "kind": {
+        "example": "tls-certificate",
+        "type": "string"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      }
+    },
+    "required": [
+      "assetId",
+      "data",
+      "expectedRevision",
+      "installationId",
+      "kind",
+      "nodeId"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkAssetView": {
+    "properties": {
+      "assetId": {
+        "type": "string"
+      },
+      "createdUnixMilli": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "size": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "assetId",
+      "createdUnixMilli",
+      "installationId",
+      "kind",
+      "nodeId",
+      "revision",
+      "sha256",
+      "size"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkAuthorityIdentity": {
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "credentialGeneration": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "inboundInstanceIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "inboundTags": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "placementId": {
+        "type": "string"
+      },
+      "placementRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "runtimeId": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "termId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId",
+      "credentialGeneration",
+      "inboundInstanceIds",
+      "inboundTags",
+      "placementId",
+      "placementRevision",
+      "runtimeId",
+      "state"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkBridge": {
+    "properties": {
+      "core": {
+        "type": "string"
+      },
+      "endpoint": {
+        "type": "string"
+      },
+      "runtimeId": {
+        "type": "string"
+      },
+      "udp": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "core",
+      "endpoint",
+      "runtimeId",
+      "udp"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkDefaultsRequest": {
+    "properties": {
+      "expectedRevision": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "specification": {
+        "$ref": "#/components/schemas/FleetNetworkSpec"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "specification"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkDefaultsView": {
+    "properties": {
+      "revision": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      },
+      "specification": {
+        "$ref": "#/components/schemas/FleetNetworkSpec"
+      }
+    },
+    "required": [
+      "revision",
+      "specification"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkDiagnostic": {
+    "properties": {
+      "assetSlot": {
+        "type": "string"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "code": {
+        "type": "string"
+      },
+      "inboundId": {
+        "type": "integer"
+      },
+      "placementId": {
+        "type": "string"
+      },
+      "runtimeId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "code"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkListenerView": {
+    "properties": {
+      "address": {
+        "type": "string"
+      },
+      "inboundId": {
+        "type": "integer"
+      },
+      "port": {
+        "type": "integer"
+      },
+      "protocol": {
+        "type": "string"
+      },
+      "role": {
+        "type": "string"
+      },
+      "runtimeId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "address",
+      "inboundId",
+      "port",
+      "protocol",
+      "role",
+      "runtimeId"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkManifest": {
+    "properties": {
+      "assets": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkAssetPin"
+        },
+        "type": "array"
+      },
+      "baseDeploymentRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "defaultsRevisionId": {
+        "type": "string"
+      },
+      "identities": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkAuthorityIdentity"
+        },
+        "type": "array"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "nativeBindings": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNativeBindingPin"
+        },
+        "type": "array"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "nodeRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "nodeRevisionId": {
+        "type": "string"
+      },
+      "placements": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkPlacementPin"
+        },
+        "type": "array"
+      },
+      "providers": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkProviderPin"
+        },
+        "type": "array"
+      },
+      "version": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "assets",
+      "baseDeploymentRevision",
+      "defaultsRevisionId",
+      "identities",
+      "installationId",
+      "nodeId",
+      "nodeRevision",
+      "nodeRevisionId",
+      "placements",
+      "version"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkOperation": {
+    "properties": {
+      "asset": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetAssetReference"
+          }
+        ],
+        "nullable": true
+      },
+      "assetKind": {
+        "nullable": true,
+        "type": "string"
+      },
+      "base": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetRuntimeBase"
+          }
+        ],
+        "nullable": true
+      },
+      "bridge": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetNetworkBridge"
+          }
+        ],
+        "nullable": true
+      },
+      "inbound": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetInboundNetwork"
+          }
+        ],
+        "nullable": true
+      },
+      "inboundId": {
+        "type": "integer"
+      },
+      "key": {
+        "type": "string"
+      },
+      "nativeNetwork": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NetworkBinding"
+          }
+        ],
+        "nullable": true
+      },
+      "operation": {
+        "type": "string"
+      },
+      "section": {
+        "type": "string"
+      },
+      "sshHostKeys": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetSSHHostKeys"
+          }
+        ],
+        "nullable": true
+      }
+    },
+    "required": [
+      "operation",
+      "section"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkOverrides": {
+    "properties": {
+      "assetBindings": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetAssetReference"
+        },
+        "type": "object"
+      },
+      "assetSlots": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "bases": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetRuntimeBase"
+        },
+        "type": "object"
+      },
+      "bridges": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetNetworkBridge"
+        },
+        "type": "object"
+      },
+      "followDefaults": {
+        "type": "boolean"
+      },
+      "inbounds": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetInboundNetwork"
+        },
+        "type": "object"
+      },
+      "nativeNetwork": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NetworkBinding"
+          }
+        ],
+        "nullable": true
+      },
+      "pinnedDefaultsId": {
+        "type": "string"
+      },
+      "removedAssetSlots": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "removedBases": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "removedBridges": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "sshHostKeys": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetSSHHostKeys"
+          }
+        ],
+        "nullable": true
+      },
+      "version": {
+        "example": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "followDefaults",
+      "version"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkPlacementPin": {
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "credentialGeneration": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "credentialSha256": {
+        "type": "string"
+      },
+      "definitionSha256": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "graphSha256": {
+        "type": "string"
+      },
+      "owned": {
+        "type": "boolean"
+      },
+      "placementId": {
+        "type": "string"
+      },
+      "policySha256": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "termId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId",
+      "credentialGeneration",
+      "credentialSha256",
+      "definitionSha256",
+      "enabled",
+      "graphSha256",
+      "owned",
+      "placementId",
+      "policySha256",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkPreview": {
+    "properties": {
+      "assets": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkAssetPin"
+        },
+        "type": "array"
+      },
+      "defaults": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      },
+      "diagnostics": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkDiagnostic"
+        },
+        "type": "array"
+      },
+      "id": {
+        "type": "string"
+      },
+      "identities": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkAuthorityIdentity"
+        },
+        "type": "array"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "listeners": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkListenerView"
+        },
+        "type": "array"
+      },
+      "nativeBindings": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNativeBindingPin"
+        },
+        "type": "array"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "nodeRevision": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      },
+      "origins": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "ready": {
+        "type": "boolean"
+      },
+      "runtimes": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkRuntimeView"
+        },
+        "type": "array"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "assets",
+      "defaults",
+      "diagnostics",
+      "id",
+      "identities",
+      "installationId",
+      "listeners",
+      "nodeId",
+      "nodeRevision",
+      "origins",
+      "ready",
+      "runtimes",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkPreviewRequest": {
+    "properties": {
+      "expectedDefaultsId": {
+        "example": "87cb0f1e-6f1f-466a-91d3-8a8dd983b458",
+        "type": "string"
+      },
+      "expectedRevision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      },
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "type": "string"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedDefaultsId",
+      "expectedRevision",
+      "installationId",
+      "nodeId"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkProviderPin": {
+    "properties": {
+      "configurationRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "followLatest": {
+        "type": "boolean"
+      },
+      "providerId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "runtimeId": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "configurationRevision",
+      "followLatest",
+      "providerId",
+      "revision",
+      "runtimeId",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkPublicationView": {
+    "properties": {
+      "compilationId": {
+        "type": "string"
+      },
+      "deploymentRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "replayed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "compilationId",
+      "deploymentRevision",
+      "nodeId",
+      "replayed"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkPublishRequest": {
+    "properties": {
+      "compilationId": {
+        "example": "70966504-cde8-478b-9f3a-1ca59d52131a",
+        "type": "string"
+      },
+      "operationId": {
+        "example": "e8c5a425-11b1-4f3a-9718-a60251d6810e",
+        "type": "string"
+      }
+    },
+    "required": [
+      "compilationId",
+      "operationId"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkRevisionView": {
+    "properties": {
+      "createdUnixMilli": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "createdUnixMilli",
+      "id",
+      "revision",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkRuntimeView": {
+    "properties": {
+      "clients": {
+        "type": "integer"
+      },
+      "core": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clients",
+      "core",
+      "id",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetNetworkSpec": {
+    "properties": {
+      "assetSlots": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "bases": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetRuntimeBase"
+        },
+        "type": "object"
+      },
+      "bridges": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetNetworkBridge"
+        },
+        "type": "object"
+      },
+      "inbounds": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FleetInboundNetwork"
+        },
+        "type": "object"
+      },
+      "nativeNetwork": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NetworkBinding"
+          }
+        ],
+        "nullable": true
+      },
+      "sshHostKeys": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FleetSSHHostKeys"
+          }
+        ],
+        "nullable": true
+      },
+      "version": {
+        "example": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "version"
+    ],
+    "type": "object"
+  },
+  "FleetNodeNetworkRequest": {
+    "properties": {
+      "expectedRevision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      },
+      "followDefaults": {
+        "example": true,
+        "nullable": true,
+        "type": "boolean"
+      },
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "type": "string"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "operations": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkOperation"
+        },
+        "type": "array"
+      },
+      "pinnedDefaultsId": {
+        "example": "b84cf341-f5e1-4dc6-b520-63a7d0e4b970",
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "installationId",
+      "nodeId",
+      "operations"
+    ],
+    "type": "object"
+  },
+  "FleetNodeNetworkStateView": {
+    "properties": {
+      "configured": {
+        "type": "boolean"
+      },
+      "defaults": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      },
+      "diagnostics": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNetworkDiagnostic"
+        },
+        "type": "array"
+      },
+      "effective": {
+        "$ref": "#/components/schemas/FleetNetworkSpec"
+      },
+      "followDefaults": {
+        "type": "boolean"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "origins": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "overrides": {
+        "$ref": "#/components/schemas/FleetNetworkOverrides"
+      },
+      "pending": {
+        "type": "boolean"
+      },
+      "revision": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      }
+    },
+    "required": [
+      "configured",
+      "defaults",
+      "effective",
+      "followDefaults",
+      "installationId",
+      "nodeId",
+      "origins",
+      "overrides",
+      "pending",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetNodeNetworkView": {
+    "properties": {
+      "defaults": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      },
+      "followDefaults": {
+        "type": "boolean"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "origins": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "pending": {
+        "type": "boolean"
+      },
+      "revision": {
+        "$ref": "#/components/schemas/FleetNetworkRevisionView"
+      }
+    },
+    "required": [
+      "defaults",
+      "followDefaults",
+      "installationId",
+      "nodeId",
+      "origins",
+      "pending",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetNodePage": {
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/components/schemas/FleetNodeView"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "items",
+      "nextCursor"
+    ],
+    "type": "object"
+  },
+  "FleetNodePlacementRequest": {
+    "properties": {
+      "enabled": {
+        "example": true,
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "inboundIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "type": "string"
+      },
+      "labels": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "example": {
+          "region": "eu"
+        },
+        "type": "object"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "expectedRevision",
+      "inboundIds",
+      "installationId",
+      "labels",
+      "nodeId"
+    ],
+    "type": "object"
+  },
+  "FleetNodePlacementView": {
+    "properties": {
+      "enabled": {
+        "example": true,
+        "type": "boolean"
+      },
+      "inboundIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "type": "string"
+      },
+      "labels": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "example": {
+          "region": "eu"
+        },
+        "type": "object"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "pending": {
+        "example": true,
+        "type": "boolean"
+      },
+      "revision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      },
+      "sha256": {
+        "example": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "inboundIds",
+      "installationId",
+      "labels",
+      "nodeId",
+      "pending",
+      "revision",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetNodeView": {
+    "properties": {
+      "appliedRevision": {
+        "example": 4,
+        "format": "int64",
+        "type": "integer"
+      },
+      "deploymentState": {
+        "example": "applied",
+        "type": "string"
+      },
+      "desiredRevision": {
+        "example": 4,
+        "format": "int64",
+        "type": "integer"
+      },
+      "enrolled": {
+        "example": true,
+        "type": "boolean"
+      },
+      "id": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "lastSeenUnixMilli": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "name": {
+        "example": "fra-1",
+        "type": "string"
+      },
+      "online": {
+        "example": true,
+        "type": "boolean"
+      },
+      "runtimeConditions": {
+        "items": {
+          "$ref": "#/components/schemas/FleetRuntimeConditionView"
+        },
+        "type": "array"
+      },
+      "runtimeObservedAt": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "runtimeState": {
+        "example": "ready",
+        "type": "string"
+      }
+    },
+    "required": [
+      "appliedRevision",
+      "deploymentState",
+      "desiredRevision",
+      "enrolled",
+      "id",
+      "lastSeenUnixMilli",
+      "name",
+      "online",
+      "runtimeConditions",
+      "runtimeObservedAt",
+      "runtimeState"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementDefaultRequest": {
+    "properties": {
+      "expectedRevision": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "nullable": true,
+        "type": "string"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "nullable": true,
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementDefaultView": {
+    "properties": {
+      "installationId": {
+        "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+        "nullable": true,
+        "type": "string"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "nullable": true,
+        "type": "string"
+      },
+      "pending": {
+        "example": true,
+        "type": "boolean"
+      },
+      "revision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "pending",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementProjection": {
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "credentialGeneration": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "sourceRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "targets": {
+        "items": {
+          "$ref": "#/components/schemas/FleetPlacementTarget"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "clientId",
+      "credentialGeneration",
+      "sourceRevision",
+      "targets"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementRulePin": {
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementRuleRequest": {
+    "properties": {
+      "enabled": {
+        "example": true,
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "groupId": {
+        "example": 0,
+        "nullable": true,
+        "type": "integer"
+      },
+      "id": {
+        "example": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+        "type": "string"
+      },
+      "inboundIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "labels": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "example": {
+          "region": "eu"
+        },
+        "type": "object"
+      },
+      "nodeIds": {
+        "example": [
+          "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "planId": {
+        "example": 1,
+        "nullable": true,
+        "type": "integer"
+      },
+      "scope": {
+        "example": "plan",
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "expectedRevision",
+      "id",
+      "inboundIds",
+      "labels",
+      "nodeIds",
+      "scope"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementRuleView": {
+    "properties": {
+      "enabled": {
+        "example": true,
+        "type": "boolean"
+      },
+      "groupId": {
+        "example": 0,
+        "nullable": true,
+        "type": "integer"
+      },
+      "id": {
+        "example": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+        "type": "string"
+      },
+      "inboundIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "labels": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "example": {
+          "region": "eu"
+        },
+        "type": "object"
+      },
+      "nodeIds": {
+        "example": [
+          "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "pending": {
+        "example": true,
+        "type": "boolean"
+      },
+      "planId": {
+        "example": 1,
+        "nullable": true,
+        "type": "integer"
+      },
+      "revision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      },
+      "scope": {
+        "example": "plan",
+        "type": "string"
+      },
+      "sha256": {
+        "example": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "id",
+      "inboundIds",
+      "labels",
+      "nodeIds",
+      "pending",
+      "revision",
+      "scope",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetPlacementTarget": {
+    "properties": {
+      "applicationEligible": {
+        "type": "boolean"
+      },
+      "capabilityRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "coreId": {
+        "type": "string"
+      },
+      "defaultRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "diagnostic": {
+        "type": "string"
+      },
+      "inboundIds": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "manualInboundIds": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "nodePolicyRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "rules": {
+        "items": {
+          "$ref": "#/components/schemas/FleetPlacementRulePin"
+        },
+        "type": "array"
+      },
+      "runtimeId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "applicationEligible",
+      "capabilityRevision",
+      "coreId",
+      "defaultRevision",
+      "inboundIds",
+      "installationId",
+      "manualInboundIds",
+      "nodeId",
+      "nodePolicyRevision",
+      "rules",
+      "runtimeId"
+    ],
+    "type": "object"
+  },
+  "FleetProviderBinding": {
+    "properties": {
+      "followLatest": {
+        "type": "boolean"
+      },
+      "providerId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "followLatest",
+      "providerId",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "FleetProviderFetchSpec": {
+    "properties": {
+      "allowInsecure": {
+        "type": "boolean"
+      },
+      "allowPrivate": {
+        "type": "boolean"
+      },
+      "format": {
+        "example": "auto",
+        "type": "string"
+      },
+      "hwid": {
+        "type": "string"
+      },
+      "intervalSeconds": {
+        "example": 60,
+        "type": "integer"
+      },
+      "tagPrefix": {
+        "type": "string"
+      },
+      "url": {
+        "example": "https://provider.example/feed",
+        "type": "string"
+      },
+      "version": {
+        "example": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "allowInsecure",
+      "allowPrivate",
+      "format",
+      "intervalSeconds",
+      "url",
+      "version"
+    ],
+    "type": "object"
+  },
+  "FleetProviderRefreshRequest": {
+    "properties": {
+      "expectedRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "providerId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "operationId",
+      "providerId"
+    ],
+    "type": "object"
+  },
+  "FleetProviderRefreshResult": {
+    "properties": {
+      "cachedRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "changed": {
+        "type": "boolean"
+      },
+      "configurationRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "entries": {
+        "type": "integer"
+      },
+      "providerId": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cachedRevision",
+      "changed",
+      "configurationRevision",
+      "entries",
+      "providerId",
+      "sha256"
+    ],
+    "type": "object"
+  },
+  "FleetProviderRequest": {
+    "properties": {
+      "coreId": {
+        "type": "string"
+      },
+      "expectedRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "fetch": {
+        "$ref": "#/components/schemas/FleetProviderFetchSpec"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "providerId": {
+        "type": "string"
+      },
+      "refreshEnabled": {
+        "type": "boolean"
+      },
+      "scope": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "coreId",
+      "expectedRevision",
+      "fetch",
+      "name",
+      "operationId",
+      "providerId",
+      "refreshEnabled",
+      "scope"
+    ],
+    "type": "object"
+  },
+  "FleetProviderView": {
+    "properties": {
+      "cachedRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "configurationRevision": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "coreId": {
+        "type": "string"
+      },
+      "diagnostic": {
+        "type": "string"
+      },
+      "installationId": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "providerId": {
+        "type": "string"
+      },
+      "refreshEnabled": {
+        "type": "boolean"
+      },
+      "scope": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cachedRevision",
+      "configurationRevision",
+      "coreId",
+      "name",
+      "providerId",
+      "refreshEnabled",
+      "scope"
+    ],
+    "type": "object"
+  },
+  "FleetRuntimeBase": {
+    "properties": {
+      "assets": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "configuration": {},
+      "core": {
+        "type": "string"
+      },
+      "providers": {
+        "example": [],
+        "items": {
+          "$ref": "#/components/schemas/FleetProviderBinding"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "configuration",
+      "core"
+    ],
+    "type": "object"
+  },
+  "FleetRuntimeConditionView": {
+    "properties": {
+      "condition": {
+        "example": "CONFIGURATION_APPLIED",
+        "type": "string"
+      },
+      "ready": {
+        "example": true,
+        "type": "boolean"
+      },
+      "resourceId": {
+        "example": "xray",
+        "type": "string"
+      }
+    },
+    "required": [
+      "condition",
+      "ready",
+      "resourceId"
+    ],
+    "type": "object"
+  },
+  "FleetSSHHostKeys": {
+    "properties": {
+      "assetSlot": {
+        "type": "string"
+      },
+      "generateLocally": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "generateLocally"
+    ],
+    "type": "object"
+  },
+  "FleetStatusView": {
+    "properties": {
+      "certificateExpiresUnixMilli": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "controlAddress": {
+        "example": "control.example.com:7443",
+        "type": "string"
+      },
+      "controlPlaneId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "enrollmentUrl": {
+        "example": "https://control.example.com:7444/enroll",
+        "type": "string"
+      },
+      "error": {
+        "type": "string"
+      },
+      "ready": {
+        "example": true,
+        "type": "boolean"
+      },
+      "recoveryReason": {
+        "type": "string"
+      },
+      "recoveryRequired": {
+        "type": "boolean"
+      },
+      "rootSha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "certificateExpiresUnixMilli",
+      "controlAddress",
+      "controlPlaneId",
+      "enrollmentUrl",
+      "error",
+      "ready",
+      "recoveryReason",
+      "recoveryRequired",
+      "rootSha256"
     ],
     "type": "object"
   },
@@ -4097,6 +6282,21 @@ export const SCHEMAS: Record<string, unknown> = {
       "msg",
       "obj",
       "success"
+    ],
+    "type": "object"
+  },
+  "NetworkBinding": {
+    "properties": {
+      "gatewayIPv4": {
+        "type": "string"
+      },
+      "peerIPv4": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "gatewayIPv4",
+      "peerIPv4"
     ],
     "type": "object"
   },
@@ -6047,6 +8247,129 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ResetScheduleCancelRequest": {
+    "properties": {
+      "clientId": {
+        "example": "22222222-2222-4222-8222-222222222222",
+        "type": "string"
+      },
+      "expectedRevision": {
+        "example": 1,
+        "exclusiveMinimum": true,
+        "format": "int64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "example": "11111111-1111-4111-8111-111111111111",
+        "type": "string"
+      },
+      "pendingOperationId": {
+        "example": "33333333-3333-4333-8333-333333333333",
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId",
+      "expectedRevision",
+      "operationId",
+      "pendingOperationId"
+    ],
+    "type": "object"
+  },
+  "ResetScheduleRequest": {
+    "properties": {
+      "clientId": {
+        "example": "22222222-2222-4222-8222-222222222222",
+        "type": "string"
+      },
+      "cycle": {
+        "enum": [
+          "none",
+          "hourly",
+          "daily",
+          "weekly",
+          "monthly"
+        ],
+        "example": "monthly",
+        "type": "string"
+      },
+      "expectedRevision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      },
+      "operationId": {
+        "example": "11111111-1111-4111-8111-111111111111",
+        "type": "string"
+      },
+      "override": {
+        "example": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "clientId",
+      "expectedRevision",
+      "operationId",
+      "override"
+    ],
+    "type": "object"
+  },
+  "ResetScheduleView": {
+    "properties": {
+      "anchorUnixMilli": {
+        "example": 1792353600000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "clientId": {
+        "example": "22222222-2222-4222-8222-222222222222",
+        "type": "string"
+      },
+      "cycle": {
+        "example": "monthly",
+        "type": "string"
+      },
+      "diagnostic": {
+        "example": "WAITING_FOR_STOP",
+        "type": "string"
+      },
+      "inherited": {
+        "example": false,
+        "type": "boolean"
+      },
+      "nextAttemptUnixMilli": {
+        "example": 1795032000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "nextDueUnixMilli": {
+        "example": 1795032000000,
+        "format": "int64",
+        "type": "integer"
+      },
+      "pendingOperationId": {
+        "example": "33333333-3333-4333-8333-333333333333",
+        "type": "string"
+      },
+      "revision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "anchorUnixMilli",
+      "clientId",
+      "cycle",
+      "inherited",
+      "nextAttemptUnixMilli",
+      "nextDueUnixMilli",
+      "revision"
+    ],
+    "type": "object"
+  },
   "RoutingExitView": {
     "description": "/*\nRoutingExitView is one uplink as the rule editor offers it.\n\nThe handle is deliberately not here: which device or port realises an exit is\nthe compile's business, and an editor that showed it would invite an operator to\ndepend on it.\n*/",
     "properties": {
@@ -6426,6 +8749,94 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "SourceClientCredentialRequirement": {
+    "properties": {
+      "fields": {
+        "example": [
+          "tlsCryptV2"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "inboundId": {
+        "example": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "fields",
+      "inboundId"
+    ],
+    "type": "object"
+  },
+  "SourcePlacementRequest": {
+    "properties": {
+      "action": {
+        "example": "restrict",
+        "type": "string"
+      },
+      "clientId": {
+        "example": "70924ba1-e366-4638-801c-b1055cabcd77",
+        "type": "string"
+      },
+      "expectedRevision": {
+        "example": 1,
+        "format": "int64",
+        "type": "integer"
+      },
+      "inboundIds": {
+        "example": [
+          1,
+          2
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "nullable": true,
+        "type": "array"
+      },
+      "nodeId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "operationId": {
+        "example": "39226ea4-a89b-4377-8c2a-c32c977ead47",
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "clientId",
+      "expectedRevision",
+      "operationId"
+    ],
+    "type": "object"
+  },
+  "SourcePlacementResult": {
+    "properties": {
+      "clientId": {
+        "example": "70924ba1-e366-4638-801c-b1055cabcd77",
+        "type": "string"
+      },
+      "pending": {
+        "example": true,
+        "type": "boolean"
+      },
+      "revision": {
+        "example": 2,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "clientId",
+      "pending",
+      "revision"
+    ],
+    "type": "object"
+  },
   "Status": {
     "description": "Status represents comprehensive system and application status information.\nIt includes CPU, memory, disk, network statistics, and Xray process status.",
     "properties": {
@@ -6513,6 +8924,89 @@ export const SCHEMAS: Record<string, unknown> = {
       "unavailable",
       "uptime",
       "xray"
+    ],
+    "type": "object"
+  },
+  "TrafficAccounting": {
+    "properties": {
+      "clientId": {
+        "example": "22222222-2222-4222-8222-222222222222",
+        "type": "string"
+      },
+      "historyBasis": {
+        "example": "reported",
+        "type": "string"
+      },
+      "historyGranularity": {
+        "example": "day",
+        "type": "string"
+      },
+      "measuredDownloaded": {
+        "example": 2097152,
+        "format": "int64",
+        "type": "integer"
+      },
+      "measuredUploaded": {
+        "example": 1048576,
+        "format": "int64",
+        "type": "integer"
+      },
+      "observedUnixMilli": {
+        "example": 1791498431342,
+        "format": "int64",
+        "type": "integer"
+      },
+      "openingDownloaded": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "openingUploaded": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "reportedUnixMilli": {
+        "example": 1791498431342,
+        "format": "int64",
+        "type": "integer"
+      },
+      "reservedBytes": {
+        "example": 8388608,
+        "format": "int64",
+        "nullable": true,
+        "type": "integer"
+      },
+      "source": {
+        "example": "fleet",
+        "type": "string"
+      },
+      "state": {
+        "example": "active",
+        "type": "string"
+      },
+      "termId": {
+        "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "type": "string"
+      },
+      "uncertainBytes": {
+        "format": "int64",
+        "nullable": true,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "historyBasis",
+      "historyGranularity",
+      "measuredDownloaded",
+      "measuredUploaded",
+      "observedUnixMilli",
+      "openingDownloaded",
+      "openingUploaded",
+      "reportedUnixMilli",
+      "source",
+      "state",
+      "termId"
     ],
     "type": "object"
   },

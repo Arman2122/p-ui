@@ -40,6 +40,46 @@ func (s *InboundService) enrichClientStats(db *gorm.DB, inbounds []*model.Inboun
 			}
 		}
 	}
+	ids := make([]int, 0, len(inbounds))
+	byID := make(map[int]*model.Inbound, len(inbounds))
+	for _, inbound := range inbounds {
+		if len(inbound.ClientStats) == 0 {
+			continue
+		}
+		ids = append(ids, inbound.Id)
+		byID[inbound.Id] = inbound
+	}
+	if len(ids) == 0 {
+		return
+	}
+	for _, batch := range chunkInts(ids, sqlInChunk) {
+		var identities []struct {
+			InboundID int
+			Email     string
+			UUID      string
+			SubID     string
+		}
+		if err := db.Table("clients c").Select("ci.inbound_id, c.email, c.uuid, c.sub_id").
+			Joins("JOIN client_inbounds ci ON ci.client_id = c.id").Where("ci.inbound_id IN ?", batch).
+			Scan(&identities).Error; err != nil {
+			logger.Warning("read current inbound client identities:", err)
+			continue
+		}
+		byEmail := make(map[int]map[string]int)
+		for _, id := range batch {
+			indexes := make(map[string]int, len(byID[id].ClientStats))
+			for i, stats := range byID[id].ClientStats {
+				indexes[strings.ToLower(stats.Email)] = i
+			}
+			byEmail[id] = indexes
+		}
+		for _, identity := range identities {
+			if i, found := byEmail[identity.InboundID][strings.ToLower(identity.Email)]; found {
+				stats := &byID[identity.InboundID].ClientStats[i]
+				stats.UUID, stats.SubId = identity.UUID, identity.SubID
+			}
+		}
+	}
 }
 
 // backfillClientStats tops up each inbound's preloaded ClientStats with rows

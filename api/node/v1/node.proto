@@ -1,0 +1,245 @@
+syntax = "proto3";
+
+package penhoon.node.v1;
+option go_package = "github.com/Arman2122/p-ui/api/node/v1;nodev1";
+
+service ControlService {
+  rpc Connect(stream NodeMessage) returns (stream MasterMessage);
+}
+
+service AccountingService {
+  rpc Report(stream UsageBatch) returns (stream UsageReceipt);
+}
+
+service IdentityService {
+  rpc Renew(RenewRequest) returns (EnrollResponse);
+}
+
+service AuthorityService {
+  rpc RegisterJournals(JournalRegistration) returns (JournalRegistrationReceipt);
+  rpc Report(AuthorityReport) returns (AuthorityReceipt);
+}
+
+message RuntimeJournalIdentity {
+  string runtime_id = 1;
+  string core_id = 2;
+  string state_journal_id = 3;
+  string credit_journal_id = 4;
+}
+
+message JournalRegistration {
+  string node_id = 1;
+  string installation_id = 2;
+  string agent_state_journal_id = 3;
+  repeated RuntimeJournalIdentity runtimes = 4;
+}
+
+message JournalRegistrationReceipt {
+  string agent_state_journal_id = 1;
+  bytes registration_sha256 = 2;
+}
+
+message GrantAuthority {
+  string grant_id = 1;
+  string client_id = 2;
+  string term_id = 3;
+  uint64 policy_revision = 4;
+  uint64 credit_ceiling = 5;
+  bool quota_unlimited = 6;
+  uint64 reserved_high_water = 7;
+  uint64 admission_high_water = 8;
+  bool admission_known = 9;
+  uint64 spendable_bytes = 10;
+  bool spendable_known = 11;
+  bool authorization_active = 12;
+  uint64 burned_high_water = 13;
+  uint64 authority_revision = 14;
+}
+
+message AuthorityReport {
+  string node_id = 1;
+  string installation_id = 2;
+  string agent_state_journal_id = 3;
+  string runtime_id = 4;
+  string state_journal_id = 5;
+  string credit_journal_id = 6;
+  uint64 sequence = 7;
+  int64 observed_unix_milli = 8;
+  bool runtime_ready = 9;
+  repeated GrantAuthority grants = 10;
+}
+
+message AuthorityReceipt {
+  string runtime_id = 1;
+  string state_journal_id = 2;
+  string credit_journal_id = 3;
+  uint64 sequence = 4;
+}
+
+message RenewRequest {
+  string request_id = 1;
+  bytes certificate_request_pem = 2;
+}
+
+message EnrollRequest {
+  string request_id = 1;
+  string ticket = 2;
+  bytes certificate_request_pem = 3;
+  string installation_id = 4;
+}
+
+message EnrollResponse {
+  string node_id = 1;
+  string control_plane_id = 2;
+  bytes certificate_chain_pem = 3;
+  bytes trust_bundle_pem = 4;
+  uint32 protocol_version = 5;
+}
+
+message RecoveryChallengeRequest {
+  string node_id = 1;
+  string installation_id = 2;
+}
+
+message RecoveryChallenge {
+  string challenge_id = 1;
+  bytes nonce = 2;
+  bytes current_key_digest = 3;
+  int64 expires_unix_milli = 4;
+}
+
+message RecoveryRequest {
+  string node_id = 1;
+  string installation_id = 2;
+  string challenge_id = 3;
+  string request_id = 4;
+  bytes certificate_request_pem = 5;
+  bytes proof = 6;
+}
+
+message NodeHello {
+  string node_id = 1;
+  string installation_id = 2;
+  uint32 protocol_version = 3;
+  uint64 authority_generation = 4;
+  uint64 applied_revision = 5;
+  repeated CoreCapability capabilities = 6;
+  uint64 durable_usage_sequence = 7;
+  uint64 desired_revision = 8;
+  string agent_state_journal_id = 9;
+}
+
+message CoreCapability {
+  string core_id = 1;
+  string version = 2;
+  repeated string protocols = 3;
+  bool client_rate_enforcement = 4;
+  bool client_quota_enforcement = 5;
+  bool activation_admission = 6;
+}
+
+message NodeMessage {
+  oneof payload {
+    NodeHello hello = 1;
+    ApplyResult result = 2;
+    Heartbeat heartbeat = 3;
+    ActivationRequest activation = 4;
+  }
+}
+
+message MasterMessage {
+  oneof payload {
+    Deployment deployment = 1;
+    ActivationResult activation = 2;
+    SessionAuthority authority = 3;
+  }
+}
+
+message SessionAuthority {
+  string node_id = 1;
+  string control_plane_id = 2;
+  uint64 generation = 3;
+  uint32 protocol_version = 4;
+}
+
+message Deployment {
+  string node_id = 1;
+  string control_plane_id = 2;
+  uint64 authority_generation = 3;
+  uint64 revision = 4;
+  bytes payload_sha256 = 5;
+  bytes payload = 6;
+}
+
+enum ApplyStage {
+  APPLY_STAGE_UNSPECIFIED = 0;
+  APPLY_STAGE_RECEIVED = 1;
+  APPLY_STAGE_APPLIED = 2;
+  APPLY_STAGE_REJECTED = 3;
+}
+
+message ApplyResult {
+  uint64 authority_generation = 1;
+  uint64 revision = 2;
+  ApplyStage stage = 3;
+  bytes payload_sha256 = 4;
+  string error_code = 5;
+  string error_message = 6;
+  bytes asset_manifest_sha256 = 7;
+}
+
+message Heartbeat {
+  int64 observed_unix_milli = 1;
+  uint64 applied_revision = 2;
+  repeated RuntimeCondition conditions = 3;
+}
+
+message RuntimeCondition {
+  string resource_id = 1;
+  string condition = 2;
+  bool ready = 3;
+  string detail = 4;
+}
+
+message ActivationRequest {
+  string request_id = 1;
+  string client_id = 2;
+  uint64 credential_generation = 3;
+  int64 deadline_unix_milli = 4;
+  string runtime_id = 5;
+  uint64 deployment_revision = 6;
+  string placement_id = 7;
+  uint64 placement_revision = 8;
+  string inbound_instance_id = 9;
+}
+
+message ActivationResult {
+  string request_id = 1;
+  string client_id = 2;
+  string term_id = 3;
+  int64 expires_unix_milli = 4;
+  string error_code = 5;
+}
+
+message UsageBatch {
+  string node_id = 1;
+  string installation_id = 2;
+  uint64 sequence = 3;
+  repeated UsageCheckpoint checkpoints = 4;
+}
+
+message UsageCheckpoint {
+  string client_id = 1;
+  string term_id = 2;
+  string meter_id = 3;
+  string meter_incarnation = 4;
+  uint64 uploaded = 5;
+  uint64 downloaded = 6;
+  int64 observed_unix_milli = 7;
+  string grant_id = 8;
+}
+
+message UsageReceipt {
+  uint64 durable_sequence = 1;
+  uint64 accounted_sequence = 2;
+}

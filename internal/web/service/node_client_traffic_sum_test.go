@@ -281,9 +281,8 @@ func TestCentralReset_NoReAdd(t *testing.T) {
 	assertUpDown(t, readTraffic(t, db, email), 15, 15, "after central reset only increments accrue")
 }
 
-// A real reset (ResetClientTrafficByEmail) must clear the per-node baseline so
-// the node's pre-reset cumulative — including traffic it counted but had not yet
-// synced — cannot leak back onto the master after the reset (#5476, #5390).
+// The first sample after a reset establishes bytes without charging them;
+// persisted renewal evidence must survive that reset (#5476, #5390).
 func TestCentralResetClearsNodeBaseline_NoLeak(t *testing.T) {
 	db := initTrafficTestDB(t)
 	createNodeInbound(t, db, 1, "n1-in", 41001)
@@ -300,12 +299,12 @@ func TestCentralResetClearsNodeBaseline_NoLeak(t *testing.T) {
 	}
 	assertUpDown(t, readTraffic(t, db, email), 0, 0, "right after reset")
 
-	var baselines int64
-	if err := db.Model(&model.NodeClientTraffic{}).Where("email = ?", email).Count(&baselines).Error; err != nil {
-		t.Fatalf("count baselines: %v", err)
+	var baseline model.NodeClientTraffic
+	if err := db.Where("email = ?", email).First(&baseline).Error; err != nil {
+		t.Fatalf("read baseline: %v", err)
 	}
-	if baselines != 0 {
-		t.Fatalf("reset must clear node baseline rows, found %d", baselines)
+	if !baseline.ResetPending {
+		t.Fatal("reset must mark the byte baseline pending")
 	}
 
 	// Node still reports its pre-reset cumulative (340 > last synced 300: usage it
@@ -322,6 +321,7 @@ func TestInboundRemoval_KeepsSharedEmailRow(t *testing.T) {
 	db := initTrafficTestDB(t)
 	createNodeInboundWithClient(t, db, 1, "n1-in", 41001, "shared")
 	createNodeInboundWithClient(t, db, 2, "n2-in", 41002, "shared")
+	attachNodeFixtureClients(t, db, "n1-in", "n2-in")
 	svc := &InboundService{}
 
 	const email = "shared"
@@ -352,6 +352,7 @@ func TestClientGoneFromOneNode_KeepsSharedEmailRow(t *testing.T) {
 	db := initTrafficTestDB(t)
 	createNodeInboundWithClient(t, db, 1, "n1-in", 41001, "shared")
 	createNodeInboundWithClient(t, db, 2, "n2-in", 41002, "shared")
+	attachNodeFixtureClients(t, db, "n1-in", "n2-in")
 	svc := &InboundService{}
 
 	const email = "shared"
@@ -368,6 +369,20 @@ func TestClientGoneFromOneNode_KeepsSharedEmailRow(t *testing.T) {
 	// Node 2 delta: 240-200=40 → accrues to 40.
 	syncNodeWithSettings(t, svc, 2, "n2-in", settings, xray.ClientTraffic{Email: email, Up: 240, Down: 240, Enable: true})
 	assertUpDown(t, readTraffic(t, db, email), 40, 40, "node 2 keeps accruing")
+}
+
+func attachNodeFixtureClients(t *testing.T, db *gorm.DB, tags ...string) {
+	t.Helper()
+	for _, tag := range tags {
+		inbound := loadInboundByTag(t, tag)
+		clients, err := (&InboundService{}).GetClients(inbound)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := (&ClientService{}).SyncInbound(db, inbound.Id, clients); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // TestStatsUnderSiblingInbound_KeepsNodeBaseline reproduces the recurring

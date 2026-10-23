@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Badge,
@@ -154,7 +154,7 @@ function formatUptime(secs?: number): string {
 
 function useRelativeTime() {
   const { t } = useTranslation();
-  return (unixSeconds?: number) => {
+  return useCallback((unixSeconds?: number) => {
     if (!unixSeconds) return t('pages.nodes.never');
     const diffSec = Math.max(0, Math.floor(Date.now() / 1000 - unixSeconds));
     if (diffSec < 5) return t('pages.nodes.justNow');
@@ -162,7 +162,7 @@ function useRelativeTime() {
     if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
     if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
     return `${Math.floor(diffSec / 86400)}d`;
-  };
+  }, [t]);
 }
 
 export default function NodeList({
@@ -452,6 +452,45 @@ export default function NodeList({
     },
   ], [t, showAddress, relativeTime, latestVersion, onToggleEnable, onProbe, onEdit, onDelete, onUpdateNode, nameByGuid]);
 
+  const nodeTable = useMemo(() => (
+    <Table<NodeRow>
+      className="p-table"
+      dataSource={dataSource}
+      columns={[
+        ...columns.filter((column) => column.dataIndex === 'name'),
+        ...columns.filter((column) => column.dataIndex === 'url'),
+        ...columns.filter((column) => column.dataIndex === 'xrayVersion'),
+        ...columns.filter((column) => column.dataIndex === 'cpuPct'),
+        ...columns.filter((column) => column.title === t('clients') || column.title === t('telemetry.inboundTraffic')),
+        ...columns.filter((column) => column.dataIndex === 'latencyMs' || column.dataIndex === 'lastHeartbeat'),
+        ...columns.filter((column) => column.title === t('pages.nodes.actions') || column.key === 'actions'),
+        ...(onDetails ? [{ title: '', key: 'details', width: 76, render: (_value: unknown, record: NodeRow) => <Button type="text" size="small" onClick={() => onDetails(record)}>{t('pages.cores.columns.detail')}</Button> }] : []),
+      ]}
+      pagination={false}
+      loading={loading}
+      scroll={{ x: 'max-content' }}
+      size="middle"
+      rowKey="key"
+      rowSelection={dataSource.length > 1 ? {
+        selectedRowKeys: selectedIds,
+        onChange: (keys) => onSelectionChange(keys.filter((k) => typeof k === 'number') as number[]),
+        getCheckboxProps: (record) => ({ disabled: !!record.transitive || !isUpdateEligible(record) }),
+      } : undefined}
+      locale={{
+        emptyText: (
+          <div className="card-empty">
+            <ClusterOutlined style={{ fontSize: 32, marginBottom: 8 }} />
+            <div>{t('noData')}</div>
+          </div>
+        ),
+      }}
+      expandable={{
+        expandedRowRender: (record) => <NodeHistoryPanel node={record} />,
+        rowExpandable: (record) => !record.transitive,
+      }}
+    />
+  ), [dataSource, columns, loading, selectedIds, onSelectionChange, onDetails, t]);
+
   return (
     <Card size="small" className="node-table-card">
       {!hideToolbar && <div className="toolbar">
@@ -665,42 +704,7 @@ export default function NodeList({
           </Modal>
         </>
       ) : (
-        <Table<NodeRow>
-          className="p-table"
-          dataSource={dataSource}
-          columns={[
-            ...columns.filter((column) => column.dataIndex === 'name'),
-            ...columns.filter((column) => column.dataIndex === 'url'),
-            ...columns.filter((column) => column.dataIndex === 'xrayVersion'),
-            ...columns.filter((column) => column.dataIndex === 'cpuPct'),
-            ...columns.filter((column) => column.title === t('clients') || column.title === t('telemetry.inboundTraffic')),
-            ...columns.filter((column) => column.dataIndex === 'latencyMs' || column.dataIndex === 'lastHeartbeat'),
-            ...columns.filter((column) => column.title === t('pages.nodes.actions') || column.key === 'actions'),
-            ...(onDetails ? [{ title: '', key: 'details', width: 76, render: (_value: unknown, record: NodeRow) => <Button type="text" size="small" onClick={() => onDetails(record)}>{t('pages.cores.columns.detail')}</Button> }] : []),
-          ]}
-          pagination={false}
-          loading={loading}
-          scroll={{ x: 'max-content' }}
-          size="middle"
-          rowKey="key"
-          rowSelection={dataSource.length > 1 ? {
-            selectedRowKeys: selectedIds,
-            onChange: (keys) => onSelectionChange(keys.filter((k) => typeof k === 'number') as number[]),
-            getCheckboxProps: (record) => ({ disabled: !!record.transitive || !isUpdateEligible(record) }),
-          } : undefined}
-          locale={{
-            emptyText: (
-              <div className="card-empty">
-                <ClusterOutlined style={{ fontSize: 32, marginBottom: 8 }} />
-                <div>{t('noData')}</div>
-              </div>
-            ),
-          }}
-          expandable={{
-            expandedRowRender: (record) => <NodeHistoryPanel node={record} />,
-            rowExpandable: (record) => !record.transitive,
-          }}
-        />
+        nodeTable
       )}
     </Card>
   );

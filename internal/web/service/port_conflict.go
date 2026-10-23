@@ -59,10 +59,7 @@ func inboundTransports(protocol model.Protocol, streamSettings, settings string)
 }
 
 func listenOverlaps(a, b string) bool {
-	if isAnyListen(a) || isAnyListen(b) {
-		return true
-	}
-	return a == b
+	return bindListenOverlaps(bindAddr{listen: a}, bindAddr{listen: b})
 }
 
 func isAnyListen(s string) bool {
@@ -169,7 +166,7 @@ func panelListenerConflict(inbound *model.Inbound, bits transportBits) (*portCon
 	if err != nil {
 		return nil, err
 	}
-	if inbound.Port == webPort && listenOverlaps(webListen, inbound.Listen) {
+	if inbound.Port == webPort && bindListenOverlaps(bindAddr{listen: webListen}, inboundBindAddr(inbound)) {
 		return &portConflictDetail{
 			Tag: "panel", Listen: webListen, Port: inbound.Port, Transports: transportTCP,
 		}, nil
@@ -190,7 +187,7 @@ func panelListenerConflict(inbound *model.Inbound, bits transportBits) (*portCon
 	if err != nil {
 		return nil, err
 	}
-	if inbound.Port == subPort && listenOverlaps(subListen, inbound.Listen) {
+	if inbound.Port == subPort && bindListenOverlaps(bindAddr{listen: subListen}, inboundBindAddr(inbound)) {
 		return &portConflictDetail{
 			Tag: "subscription", Listen: subListen, Port: inbound.Port, Transports: transportTCP,
 		}, nil
@@ -206,7 +203,7 @@ func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int)
 	// port twice (#5304). Nodes run their own Xray, so this only applies to
 	// the local panel.
 	if inbound.NodeID == nil && inbound.Port == reservedAPIPort() &&
-		newBits&transportTCP != 0 && listenOverlaps("127.0.0.1", inbound.Listen) {
+		newBits&transportTCP != 0 && bindListenOverlaps(bindAddr{listen: "127.0.0.1"}, inboundBindAddr(inbound)) {
 		return &portConflictDetail{
 			Tag:        "api",
 			Listen:     "127.0.0.1",
@@ -217,7 +214,7 @@ func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int)
 
 	// The band core-owned exits serve their SOCKS ports in, loopback TCP.
 	if inbound.NodeID == nil && core.IsExitSocksPort(inbound.Port) &&
-		newBits&transportTCP != 0 && listenOverlaps("127.0.0.1", inbound.Listen) {
+		newBits&transportTCP != 0 && bindListenOverlaps(bindAddr{listen: "127.0.0.1"}, inboundBindAddr(inbound)) {
 		return &portConflictDetail{
 			Tag:        "exit-socks",
 			Listen:     "127.0.0.1",
@@ -244,7 +241,7 @@ func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int)
 		if !sameNode(c.NodeID, inbound.NodeID) {
 			continue
 		}
-		if !listenOverlaps(c.Listen, inbound.Listen) {
+		if !bindListenOverlaps(inboundBindAddr(c), inboundBindAddr(inbound)) {
 			continue
 		}
 		existingBits := inboundTransports(c.Protocol, c.StreamSettings, c.Settings)

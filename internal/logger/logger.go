@@ -29,6 +29,8 @@ const (
 )
 
 var (
+	loggerMu sync.RWMutex
+
 	// Initialized to a usable default so logging never nil-derefs before InitLogger
 	// runs — the "migrate" and "setting" CLI subcommands log without calling it.
 	logger     = logging.MustGetLogger("p-ui")
@@ -47,6 +49,9 @@ var (
 // InitLogger initializes dual logging backends: console/syslog and file.
 // Console logging uses the specified level, file logging always uses DEBUG level.
 func InitLogger(level logging.Level) {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+
 	newLogger := logging.MustGetLogger("p-ui")
 	backends := make([]logging.Backend, 0, 2)
 
@@ -95,6 +100,12 @@ func initFileBackend() logging.Backend {
 	}
 
 	logPath := filepath.Join(logDir, logFileName)
+	if fileRotate != nil && fileRotate.Filename == logPath {
+		return logging.NewBackendFormatter(logging.NewLogBackend(fileRotate, "", 0), newFormatter(true))
+	}
+	if fileRotate != nil {
+		_ = fileRotate.Close()
+	}
 	fileRotate = &lumberjack.Logger{
 		Filename:   logPath,
 		MaxSize:    maxLogFileMB,
@@ -120,6 +131,10 @@ func newFormatter(withTime bool) logging.Formatter {
 // CloseLogger closes the rotating log writer and cleans up resources.
 // Should be called during application shutdown.
 func CloseLogger() {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+	// Detach the writer so later log calls cannot reopen a retired rotator.
+	logger = logging.MustGetLogger("p-ui")
 	if fileRotate != nil {
 		_ = fileRotate.Close()
 		fileRotate = nil
@@ -128,62 +143,92 @@ func CloseLogger() {
 
 // Debug logs a debug message and adds it to the log buffer.
 func Debug(args ...any) {
-	logger.Debug(args...)
-	addToBuffer("DEBUG", fmt.Sprint(args...))
+	message := fmt.Sprint(args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Debug(message)
+	addToBuffer("DEBUG", message)
 }
 
 // Debugf logs a formatted debug message and adds it to the log buffer.
 func Debugf(format string, args ...any) {
-	logger.Debugf(format, args...)
-	addToBuffer("DEBUG", fmt.Sprintf(format, args...))
+	message := fmt.Sprintf(format, args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Debug(message)
+	addToBuffer("DEBUG", message)
 }
 
 // Info logs an info message and adds it to the log buffer.
 func Info(args ...any) {
-	logger.Info(args...)
-	addToBuffer("INFO", fmt.Sprint(args...))
+	message := fmt.Sprint(args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Info(message)
+	addToBuffer("INFO", message)
 }
 
 // Infof logs a formatted info message and adds it to the log buffer.
 func Infof(format string, args ...any) {
-	logger.Infof(format, args...)
-	addToBuffer("INFO", fmt.Sprintf(format, args...))
+	message := fmt.Sprintf(format, args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Info(message)
+	addToBuffer("INFO", message)
 }
 
 // Notice logs a notice message and adds it to the log buffer.
 func Notice(args ...any) {
-	logger.Notice(args...)
-	addToBuffer("NOTICE", fmt.Sprint(args...))
+	message := fmt.Sprint(args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Notice(message)
+	addToBuffer("NOTICE", message)
 }
 
 // Noticef logs a formatted notice message and adds it to the log buffer.
 func Noticef(format string, args ...any) {
-	logger.Noticef(format, args...)
-	addToBuffer("NOTICE", fmt.Sprintf(format, args...))
+	message := fmt.Sprintf(format, args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Notice(message)
+	addToBuffer("NOTICE", message)
 }
 
 // Warning logs a warning message and adds it to the log buffer.
 func Warning(args ...any) {
-	logger.Warning(args...)
-	addToBuffer("WARNING", fmt.Sprint(args...))
+	message := fmt.Sprint(args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Warning(message)
+	addToBuffer("WARNING", message)
 }
 
 // Warningf logs a formatted warning message and adds it to the log buffer.
 func Warningf(format string, args ...any) {
-	logger.Warningf(format, args...)
-	addToBuffer("WARNING", fmt.Sprintf(format, args...))
+	message := fmt.Sprintf(format, args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Warning(message)
+	addToBuffer("WARNING", message)
 }
 
 // Error logs an error message and adds it to the log buffer.
 func Error(args ...any) {
-	logger.Error(args...)
-	addToBuffer("ERROR", fmt.Sprint(args...))
+	message := fmt.Sprint(args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Error(message)
+	addToBuffer("ERROR", message)
 }
 
 // Errorf logs a formatted error message and adds it to the log buffer.
 func Errorf(format string, args ...any) {
-	logger.Errorf(format, args...)
-	addToBuffer("ERROR", fmt.Sprintf(format, args...))
+	message := fmt.Sprintf(format, args...)
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	logger.Error(message)
+	addToBuffer("ERROR", message)
 }
 
 // addToBuffer adds a log entry to the in-memory ring buffer for web UI retrieval.

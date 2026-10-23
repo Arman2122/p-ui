@@ -16,6 +16,8 @@ import (
 
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/time/rate"
+
+	"github.com/Arman2122/p-ui/internal/node/limits"
 )
 
 /*
@@ -74,13 +76,15 @@ func isUDPGWTarget(host string) bool {
 }
 
 type udpgwSession struct {
-	s    *server
-	c    *conn
-	ch   gossh.Channel
-	dial udpDialer
-	up   *atomic.Int64
-	down *atomic.Int64
-	lim  *limiterPair
+	ctx    context.Context
+	cancel context.CancelFunc
+	s      *server
+	c      *conn
+	ch     gossh.Channel
+	dial   udpDialer
+	up     *atomic.Int64
+	down   *atomic.Int64
+	lim    *limiterPair
 
 	wmu sync.Mutex
 	mu  sync.Mutex
@@ -112,6 +116,7 @@ func (s *server) udpgw(c *conn, nc gossh.NewChannel) {
 		s: s, c: c, ch: ch, dial: s.udp, up: up, down: down, lim: s.limiterFor(c.email),
 		conns: map[uint16]*udpgwConn{}, done: make(chan struct{}),
 	}
+	sess.ctx, sess.cancel = context.WithCancel(c.context())
 	sess.run()
 }
 
@@ -161,7 +166,7 @@ func (sess *udpgwSession) handle(frame []byte) error {
 		rest = rest[6:]
 	}
 	payload := rest
-	if !sess.allow(sess.lim.up, len(payload)) {
+	if !sess.allow(limits.Upload, sess.lim.up, len(payload)) {
 		return nil
 	}
 	sess.up.Add(int64(len(payload)))
@@ -173,7 +178,11 @@ func (sess *udpgwSession) handle(frame []byte) error {
 		return nil
 	}
 	_ = con.pc.SetWriteDeadline(time.Now().Add(time.Second))
-	if _, err := con.pc.Write(payload); err != nil {
+	n, err := con.pc.Write(payload)
+	if sess.c.account != nil {
+		sess.c.account.Record(limits.Upload, n)
+	}
+	if err != nil {
 		sess.remove(con)
 	}
 	return nil
@@ -313,13 +322,16 @@ func (sess *udpgwSession) pump(con *udpgwConn) {
 			return
 		}
 		con.lastUsed.Store(time.Now().UnixMilli())
-		if !sess.allow(sess.lim.down, n) {
+		if !sess.allow(limits.Download, sess.lim.down, n) {
 			continue
 		}
 		sess.down.Add(int64(n))
 		sess.c.lastSeen.Store(time.Now().UnixMilli())
 		if err := sess.reply(con, buf[:n]); err != nil {
 			return
+		}
+		if sess.c.account != nil {
+			sess.c.account.Record(limits.Download, n)
 		}
 	}
 }
@@ -349,13 +361,26 @@ func (sess *udpgwSession) reply(con *udpgwConn, payload []byte) error {
 	copy(frame[7+len(ip):], payload)
 	sess.wmu.Lock()
 	defer sess.wmu.Unlock()
-	_, err := sess.ch.Write(frame)
+	nWritten, err := sess.ch.Write(frame)
+	if err == nil && nWritten != len(frame) {
+		return io.ErrShortWrite
+	}
 	return err
 }
 
 // allow is the rate limit for one datagram: waited for when it fits the
 // burst, dropped when it never could, as a router would drop it.
-func (sess *udpgwSession) allow(lim *rate.Limiter, n int) bool {
+func (sess *udpgwSession) allow(direction limits.Direction, lim *rate.Limiter, n int) bool {
+	if n == 0 {
+		return true
+	}
+	if sess.c.account != nil {
+		ctx := sess.ctx
+		if ctx == nil {
+			ctx = sess.c.context()
+		}
+		return sess.c.account.Take(ctx, direction, n) == nil
+	}
 	if lim.Limit() == rate.Inf {
 		return true
 	}
@@ -390,6 +415,9 @@ func (sess *udpgwSession) sweep() {
 }
 
 func (sess *udpgwSession) close() {
+	if sess.cancel != nil {
+		sess.cancel()
+	}
 	close(sess.done)
 	sess.mu.Lock()
 	conns := make([]*udpgwConn, 0, len(sess.conns))

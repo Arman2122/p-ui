@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package penhoon.node.v1;
+option go_package = "github.com/Arman2122/p-ui/api/node/v1;nodev1";
+
+service TimeService {
+  rpc Synchronize(TimeRequest) returns (TimeResponse);
+}
+
+message TimeRequest {
+  string node_id = 1;
+  string installation_id = 2;
+  string nonce = 3;
+}
+
+message TimeResponse {
+  string node_id = 1;
+  string installation_id = 2;
+  string nonce = 3;
+  int64 server_unix_milli = 4;
+}

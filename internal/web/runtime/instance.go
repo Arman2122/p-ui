@@ -118,3 +118,6 @@ func userOf(client map[string]json.RawMessage) core.User {
 	}
 	return user
 }
+
+// ProjectUser shares the normalized credential projection without healing a full inbound configuration.
+func ProjectUser(client map[string]json.RawMessage) core.User { return userOf(client) }

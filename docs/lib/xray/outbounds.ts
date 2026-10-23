@@ -140,7 +140,7 @@ function buildSettings(o: OutboundInput): Record<string, unknown> {
   const s = o.server;
   switch (o.kind) {
     case 'freedom':
-      return o.domainStrategy ? { domainStrategy: o.domainStrategy } : {};
+      return {};
     case 'blackhole':
       return {};
     case 'vless':
@@ -223,6 +223,9 @@ export function buildOutbound(o: OutboundInput): Record<string, unknown> {
   };
   if (o.stream && STREAM_KINDS.has(o.kind)) {
     ob.streamSettings = buildStreamSettings(o.stream);
+  }
+  if (o.kind === 'freedom' && o.domainStrategy && o.domainStrategy !== 'AsIs') {
+    ob.streamSettings = { sockopt: { domainStrategy: o.domainStrategy } };
   }
   return ob;
 }

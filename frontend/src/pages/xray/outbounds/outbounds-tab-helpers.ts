@@ -11,8 +11,8 @@ import type { XraySettingsValue } from '@/hooks/useXraySetting';
 import type { RoutingRuleRecord } from '@/schemas/api/routing';
 
 export function isBuiltinOutbound(row: OutboundRow): boolean {
-  return !row.egress && ((row.tag === 'direct' && row.protocol === Protocols.Freedom)
-    || (row.tag === 'blocked' && row.protocol === Protocols.Blackhole) || row.tag === 'api');
+  return !row.egress && ((row.tag === 'direct' && row.protocol?.toLowerCase() === Protocols.Freedom)
+    || (row.tag === 'blocked' && row.protocol?.toLowerCase() === Protocols.Blackhole) || row.tag === 'api');
 }
 
 export function observedTraffic(traffic: OutboundTrafficRow[], row: OutboundRow): OutboundTrafficRow | undefined {
@@ -86,7 +86,7 @@ export function outboundAddresses(o: OutboundRow): string[] {
     return where ? [where] : [];
   }
   const settings = o.settings as Record<string, unknown> | undefined;
-  switch (o.protocol) {
+  switch (o.protocol?.toLowerCase()) {
     case Protocols.VMess: {
       const serverObj = settings?.vnext as Array<{ address: string; port: number }> | undefined;
       return serverObj ? serverObj.map((s) => `${s.address}:${s.port}`) : [];
@@ -122,11 +122,11 @@ export function isUntestable(o: OutboundRow): boolean {
   // A disabled exit installs nothing, and a front is measured by testing the
   // outbound it targets — the backend refuses both rather than timing them.
   if (o.egress) return !o.egress.enable || o.egress.type === EGRESS_TYPE;
-  if (o.protocol === Protocols.Blackhole || o.protocol === Protocols.Loopback || o.tag === 'blocked') return true;
+  if (o.protocol?.toLowerCase() === Protocols.Blackhole || o.protocol?.toLowerCase() === Protocols.Loopback || o.tag === 'blocked') return true;
   // freedom ("direct") and dns aren't proxies — a TCP dial has no endpoint and
   // an HTTP probe would only measure the host's own direct reachability, so
   // they're untestable in every mode.
-  if (o.protocol === Protocols.Freedom || o.protocol === Protocols.DNS) return true;
+  if (o.protocol?.toLowerCase() === Protocols.Freedom || o.protocol?.toLowerCase() === Protocols.DNS) return true;
   return false;
 }
 

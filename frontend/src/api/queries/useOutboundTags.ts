@@ -18,7 +18,7 @@ export function useOutboundTags(opts?: { excludeBlackhole?: boolean }) {
       for (const o of data?.xraySetting?.outbounds ?? []) {
         const ob = o as { tag?: string; protocol?: string } | null;
         if (!ob?.tag) continue;
-        if (excludeBlackhole && ob.protocol === 'blackhole') continue;
+        if (excludeBlackhole && ob.protocol?.toLowerCase() === 'blackhole') continue;
         tags.add(ob.tag);
       }
       for (const t of data?.subscriptionOutboundTags ?? []) {
@@ -54,7 +54,7 @@ export function useOutboundTagGroups(opts?: { excludeBlackhole?: boolean }) {
       for (const o of data?.xraySetting?.outbounds ?? []) {
         const ob = o as { tag?: string; protocol?: string } | null;
         if (!ob?.tag) continue;
-        if (excludeBlackhole && ob.protocol === 'blackhole') continue;
+        if (excludeBlackhole && ob.protocol?.toLowerCase() === 'blackhole') continue;
         outbounds.add(ob.tag);
       }
       for (const t of data?.subscriptionOutboundTags ?? []) {

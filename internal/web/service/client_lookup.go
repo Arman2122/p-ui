@@ -179,6 +179,9 @@ func (s *ClientService) List() ([]ClientWithAttachments, error) {
 		}
 	}
 
+	if err := projectFleetTraffic(db, emails, trafficByEmail); err != nil {
+		return nil, err
+	}
 	out := make([]ClientWithAttachments, 0, len(rows))
 	for i := range rows {
 		out = append(out, ClientWithAttachments{

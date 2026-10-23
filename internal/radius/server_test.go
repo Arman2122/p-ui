@@ -63,6 +63,21 @@ func freeUDP(t *testing.T) string {
 	return addr
 }
 
+func TestEphemeralListenerCanAuthenticate(t *testing.T) {
+	srv, err := New("ephemeral-test-secret", "127.0.0.1:0", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close() })
+	if err := srv.Register("node-ocserv", &recordingSink{password: "test-password"}); err != nil {
+		t.Fatal(err)
+	}
+	response := exchange(t, srv.AuthAddr(), accessRequest(srv.Secret(), "node-ocserv", "alice", "test-password"))
+	if response.Code != radius.CodeAccessAccept {
+		t.Fatalf("ephemeral RADIUS returned %s", response.Code)
+	}
+}
+
 // The Rejected hook is installed before Register opens the listener: the
 // server reads it from its own goroutine, and a later write is a race.
 func newTestServer(t *testing.T, rejected func(nasID, username string, peer Peer, reason string)) (*Server, *recordingSink) {

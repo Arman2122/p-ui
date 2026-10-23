@@ -33,17 +33,13 @@ func (s *InboundService) MigrationRemoveOrphanedTraffics() {
 	}
 }
 
-func (s *InboundService) MigrationRequirements() {
+func (s *InboundService) MigrationRequirements() (err error) {
 	db := database.GetDB()
 	tx := db.Begin()
-	var err error
-	defer func() {
-		if err == nil {
-			tx.Commit()
-		} else {
-			tx.Rollback()
-		}
-	}()
+	if err = tx.Error; err != nil {
+		return
+	}
+	defer func() { _ = tx.Rollback().Error }()
 
 	if tx.Migrator().HasColumn(&model.Inbound{}, "all_time") {
 		if err = tx.Migrator().DropColumn(&model.Inbound{}, "all_time"); err != nil {
@@ -67,8 +63,8 @@ func (s *InboundService) MigrationRequirements() {
 	// when inbounds are updated via the public API (incl. ones carrying
 	// externalProxy in streamSettings).
 	// Use DO block so it is idempotent and doesn't fail if already boolean.
-	normalizeBool := func(table, col string) {
-		tx.Exec(fmt.Sprintf(`
+	normalizeBool := func(table, col string) error {
+		return tx.Exec(fmt.Sprintf(`
 			DO $$
 			BEGIN
 				IF EXISTS (
@@ -79,14 +75,13 @@ func (s *InboundService) MigrationRequirements() {
 					ALTER TABLE %s ALTER COLUMN %s
 						TYPE boolean USING (CASE WHEN %s::text IN ('1','true','t','yes') THEN true ELSE false END);
 				END IF;
-			END $$;`, table, col, table, col, col))
+			END $$;`, table, col, table, col, col)).Error
 	}
-	normalizeBool("inbounds", "enable")
-	normalizeBool("client_traffics", "enable")
-	normalizeBool("nodes", "enable")
-	normalizeBool("clients", "enable")
-	normalizeBool("api_tokens", "enabled")
-	normalizeBool("outbound_subscriptions", "enabled")
+	for _, column := range [][2]string{{"inbounds", "enable"}, {"client_traffics", "enable"}, {"nodes", "enable"}, {"clients", "enable"}, {"api_tokens", "enabled"}, {"outbound_subscriptions", "enabled"}} {
+		if err = normalizeBool(column[0], column[1]); err != nil {
+			return
+		}
+	}
 
 	// Fix inbounds based problems
 	var inbounds []*model.Inbound
@@ -164,9 +159,8 @@ func (s *InboundService) MigrationRequirements() {
 				delete(settings, "testseed")
 			}
 
-			// Assigned, not declared: the deferred commit/rollback reads the
-			// function-scoped err, so a := here returns with it still nil and
-			// COMMITS a half-migrated set of inbounds. F382.
+			// Bare returns must carry the parse error so startup reports why
+			// this transaction rolled back. F382.
 			var modifiedSettings []byte
 			modifiedSettings, err = json.MarshalIndent(settings, "", "  ")
 			if err != nil {
@@ -185,17 +179,21 @@ func (s *InboundService) MigrationRequirements() {
 		for _, modelClient := range modelClients {
 			if len(modelClient.Email) > 0 {
 				var count int64
-				tx.Model(xray.ClientTraffic{}).Where("email = ?", modelClient.Email).Count(&count)
+				if err = tx.Model(xray.ClientTraffic{}).Where("email = ?", modelClient.Email).Count(&count).Error; err != nil {
+					return
+				}
 				if count == 0 {
-					_ = s.AddClientStat(tx, inbounds[inbound_index].Id, &modelClient)
+					if err = s.AddClientStat(tx, inbounds[inbound_index].Id, &modelClient); err != nil {
+						return
+					}
 				}
 			}
 		}
 
 		// Heal clients table for installs where the one-shot seeder
 		// skipped clients due to a tgId-string unmarshal error.
-		if syncErr := s.clientService.SyncInbound(tx, inbounds[inbound_index].Id, modelClients); syncErr != nil {
-			logger.Warning("MigrationRequirements sync clients failed:", syncErr)
+		if err = s.clientService.SyncInbound(tx, inbounds[inbound_index].Id, modelClients); err != nil {
+			return
 		}
 	}
 	// Checked, and only when there is something to save: GORM refuses an empty
@@ -208,7 +206,9 @@ func (s *InboundService) MigrationRequirements() {
 	}
 
 	// Remove orphaned traffics
-	tx.Where("inbound_id = 0").Delete(xray.ClientTraffic{})
+	if err = tx.Where("inbound_id = 0").Delete(xray.ClientTraffic{}).Error; err != nil {
+		return
+	}
 
 	// Migrate old MultiDomain to External Proxy
 	var externalProxy []struct {
@@ -247,22 +247,36 @@ func (s *InboundService) MigrationRequirements() {
 			}
 		}
 		stream["externalProxy"] = reverses
-		newStream, _ := json.MarshalIndent(stream, " ", "  ")
-		tx.Model(model.Inbound{}).Where("id = ?", ep.Id).Update("stream_settings", newStream)
+		var newStream []byte
+		newStream, err = json.MarshalIndent(stream, " ", "  ")
+		if err != nil {
+			return
+		}
+		if err = tx.Model(model.Inbound{}).Where("id = ?", ep.Id).Update("stream_settings", newStream).Error; err != nil {
+			return
+		}
 	}
 
 	// Legacy tag cleanup for old auto-generated tags (e.g. "0.0.0.0:443-...").
-	tagCleanup := `UPDATE inbounds
+	tagCleanup := `UPDATE inbounds AS i
 		SET tag = REPLACE(tag, '0.0.0.0:', '')
-		WHERE position('0.0.0.0:' in tag) > 0;`
+		WHERE position('0.0.0.0:' in tag) > 0
+		AND NOT EXISTS (
+			SELECT 1 FROM inbounds AS other WHERE other.id <> i.id
+			AND REPLACE(other.tag, '0.0.0.0:', '') = REPLACE(i.tag, '0.0.0.0:', '')
+		);`
 	err = tx.Exec(tagCleanup).Error
 	if err != nil {
 		return
 	}
+	return tx.Commit().Error
 }
 
 func (s *InboundService) MigrateDB() {
-	s.MigrationRequirements()
+	if err := s.MigrationRequirements(); err != nil {
+		logger.Error("MigrationRequirements failed: ", err)
+		return
+	}
 	s.MigrationRemoveOrphanedTraffics()
 	s.MigrationRegateVisionFlow()
 }

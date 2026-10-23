@@ -361,7 +361,7 @@ func usagePercentage(st xray.ClientTraffic) string {
 	if pct > 100 {
 		pct = 100 // clamp over-quota usage, consistent with TRAFFIC_LEFT
 	}
-	return fmt.Sprintf("%.1f%%", pct)
+	return fmt.Sprintf("%.1f％", pct)
 }
 
 // timeLeftLabel renders remaining time as "Xd Xh Xm" (or shorter when days/hours
@@ -607,19 +607,23 @@ func appendKeptRun(runs []string, run string, leftRemoved, rightRemoved bool) []
 	return runs
 }
 
-func (s *SubService) effectiveTemplate(email string) string {
+func (s *SubService) effectiveTemplate(client model.Client) string {
 	translated := translateUISingleBrackets(s.remarkTemplate)
 	if s.usageShown == nil {
 		s.usageShown = map[string]bool{}
 	}
-	if s.usageShown[email] {
+	key := "email:" + client.Email
+	if client.SubID != "" {
+		key = "sub:" + client.SubID
+	}
+	if s.usageShown[key] {
 		remove := firstLinkOnlyBodyTokens
 		if s.showIdentityOnAllLinks {
 			remove = usageInfoTokens
 		}
 		return filterRemarkTemplate(translated, remove)
 	}
-	s.usageShown[email] = true
+	s.usageShown[key] = true
 	return translated
 }
 
@@ -646,7 +650,7 @@ func (s *SubService) genTemplatedRemark(inbound *model.Inbound, client model.Cli
 	}
 	var tmpl string
 	if s.subscriptionBody {
-		tmpl = s.effectiveTemplate(client.Email)
+		tmpl = s.effectiveTemplate(client)
 	} else {
 		tmpl = filterRemarkTemplate(translateUISingleBrackets(s.remarkTemplate), displayRemoveTokens)
 	}

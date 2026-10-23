@@ -1,0 +1,45 @@
+[Unit]
+Description=Penhoon native network runtime
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=root
+Group=penhoon-agent
+EnvironmentFile=/etc/penhoon/node.env
+StateDirectory=penhoon-native
+StateDirectoryMode=0700
+RuntimeDirectory=penhoon-native penhoon-openvpn penhoon-ocserv
+RuntimeDirectoryMode=0750
+WorkingDirectory=/var/lib/penhoon-native
+ExecStart=/usr/local/lib/penhoon/current/penhoon-native --id native --state-dir /var/lib/penhoon-native --socket /run/penhoon-native/control.sock --config /etc/penhoon/node.json --agent-uid ${PENHOON_AGENT_UID}
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_CHOWN CAP_SETUID CAP_SETGID
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+PrivateTmp=true
+PrivateDevices=true
+BindPaths=/dev/net/tun
+DevicePolicy=closed
+DeviceAllow=/dev/net/tun rw
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

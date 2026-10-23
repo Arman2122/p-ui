@@ -1,0 +1,32 @@
+package nodeweb
+
+import (
+	"net/http"
+
+	"github.com/Arman2122/mtg-proxy/internal/webrelay"
+	"github.com/Arman2122/mtg-proxy/internal/webrelay/frame"
+	"github.com/Arman2122/mtg-proxy/mtglib"
+)
+
+type Origin = webrelay.Origin
+type Options = webrelay.OriginOptions
+type Signer = webrelay.Signer
+type Capability = webrelay.Capability
+type Frame = frame.Frame
+type Limits = frame.Limits
+
+const (
+	ClientToRelay = frame.ClientToRelay
+	RelayToClient = frame.RelayToClient
+	TypeHello = frame.TypeHello
+	TypeOpen = frame.TypeOpen
+	TypeData = frame.TypeData
+	TypeWindow = frame.TypeWindow
+	TypeClose = frame.TypeClose
+)
+
+func New(opts Options) (*Origin, error) { return webrelay.NewOrigin(opts) }
+func NewSigner(key []byte) (*Signer, error) { return webrelay.NewSigner(key) }
+func CanonicalHost(host string) (string, error) { return webrelay.CanonicalHost(host) }
+func UpstreamCover(target string) (http.Handler, error) { return webrelay.NewUpstreamCover(target) }
+func Derive(secret mtglib.Secret, host string) (Capability, error) { return webrelay.Derive(webrelay.WebSecret(secret), host) }

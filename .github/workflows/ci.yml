@@ -15,8 +15,10 @@ on:
       - "**.go"
       - "go.mod"
       - "go.sum"
+      - "core-runtimes/xray/**"
       - "frontend/**"
       - ".nvmrc"
+      - "Makefile"
       # The share-link corpus is data, not code: both harnesses read it, so a
       # fixture edit must run CI or it lands unchecked in either renderer.
       - "testdata/sharelink/**"
@@ -33,8 +35,10 @@ on:
       - "**.go"
       - "go.mod"
       - "go.sum"
+      - "core-runtimes/xray/**"
       - "frontend/**"
       - ".nvmrc"
+      - "Makefile"
       # The share-link corpus is data, not code: both harnesses read it, so a
       # fixture edit must run CI or it lands unchecked in either renderer.
       - "testdata/sharelink/**"
@@ -110,7 +114,7 @@ jobs:
           # -timeout, for the reason the race job states: Go's default is 10
           # minutes PER PACKAGE and internal/web/service measures ~600s, so a
           # slow run and a hang produce the same red. Ledger L16.
-          go test -shuffle=on -count=1 -timeout 30m -skip 'Scale$' $(cat /tmp/go-packages.txt)
+          go run ./tools/nodecore -core xray -go test -- -shuffle=on -count=1 -timeout 30m -skip 'Scale$' $(cat /tmp/go-packages.txt)
 
   # Fails the build on SKIP, so this commit-failure coverage can never go quiet
   # the way the whole DB-backed suite above did.
@@ -142,8 +146,10 @@ jobs:
         run: |
           set -o pipefail
           PUI_DB_DSN="postgres://postgres:postgres@127.0.0.1:5432/pui_durable?sslmode=disable" \
-            go test ./internal/web/service -run 'PostgresCommitFailure' -count=1 -v | tee /tmp/postgres-durable-first.log
-          if grep -q -- '--- SKIP' /tmp/postgres-durable-first.log; then
+            go run ./tools/nodecore -core xray -go test -- ./internal/web/service -run 'PostgresCommitFailure' -count=1 -v | tee /tmp/postgres-durable-first.log
+          passed=$(grep -c -- '^--- PASS' /tmp/postgres-durable-first.log || true)
+          if [[ "$passed" -lt 1 ]] || grep -q -- '--- SKIP' /tmp/postgres-durable-first.log; then
+            echo "expected passing durable-first tests without skips, got $passed passes" >&2
             exit 1
           fi
 
@@ -177,7 +183,7 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: govulncheck ./...
+        run: go run ./tools/nodecore -core xray -tool govulncheck
 
   # Race + shuffle hygiene gate: data races and order-dependent tests fail the build.
   # It gets its own PostgreSQL for the same reason go-test does — the concurrent
@@ -230,7 +236,7 @@ jobs:
           # race-instrumented service suite sits right on it: a real hang still
           # gets a stack dump, well before the job's own 45-minute cap.
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
-          go test -race -shuffle=on -count=1 -timeout 30m -skip 'Scale$' $(cat /tmp/go-packages.txt)
+          go run ./tools/nodecore -core xray -go test -- -race -shuffle=on -count=1 -timeout 30m -skip 'Scale$' $(cat /tmp/go-packages.txt)
 
   # Brief native-fuzz smoke on the security-/parser-critical decoders. Each runs the
   # generated corpus plus 30s of exploration; a crash here is a real input-handling bug.
@@ -246,8 +252,8 @@ jobs:
         run: mkdir -p internal/web/dist && touch internal/web/dist/.gitkeep
       - name: Fuzz critical parsers (smoke)
         run: |
-          go test -run '^$' -fuzz 'FuzzParseLink$' -fuzztime=30s ./internal/util/link/
-          go test -run '^$' -fuzz 'FuzzDecodeCertPin$' -fuzztime=30s ./internal/web/runtime/
+          go run ./tools/nodecore -core xray -go test -- -run '^$' -fuzz 'FuzzParseLink$' -fuzztime=30s ./internal/util/link/
+          go run ./tools/nodecore -core xray -go test -- -run '^$' -fuzz 'FuzzDecodeCertPin$' -fuzztime=30s ./internal/web/runtime/
 
   golangci:
     runs-on: ubuntu-latest
@@ -259,9 +265,8 @@ jobs:
           cache: true
       - name: Stub internal/web/dist for go:embed
         run: mkdir -p internal/web/dist && touch internal/web/dist/.gitkeep
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
+      - name: Install pinned golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
           # Pinned, not latest. "latest" once shipped a staticcheck release
           # candidate whose nilness analyzer PANICS on a recover() builtin: the
           # linter crashed on internal/util/common and took the job to its
@@ -275,7 +280,8 @@ jobs:
           # targeted Go version". Nothing to do with the tree. v2.13.1 is built
           # with go1.27.0 and was run over this exact commit before the pin
           # moved -- no panic, and only the two SA1019s .golangci.yml excludes.
-          version: v2.13.1
+      - name: Lint with pinned Xray patch
+        run: go run ./tools/nodecore -core xray -lint
 
   frontend:
     runs-on: ubuntu-latest
@@ -288,6 +294,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci
+        working-directory: frontend
+      - name: Verify the MSW worker matches its installed runtime
+        run: cmp public/mockServiceWorker.js node_modules/msw/lib/mockServiceWorker.js
         working-directory: frontend
       - name: Lint
         run: npm run lint

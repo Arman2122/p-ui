@@ -190,7 +190,7 @@ func TestATrafficResetClearsTheDaemonCounterThroughTheRegistry(t *testing.T) {
 
 	t.Run("panelWide", func(t *testing.T) {
 		fake.forget()
-		if err := inboundSvc.ResetAllTraffics(); err != nil {
+		if _, err := svc.ResetAllTraffics(inboundSvc); err != nil {
 			t.Fatalf("ResetAllTraffics: %v", err)
 		}
 		if got := fake.resetsSeen(); !slices.Contains(got, "quota@x") {

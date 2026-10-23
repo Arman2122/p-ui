@@ -206,7 +206,13 @@ func (s *ClientService) ImportClients(inboundSvc *InboundService, items []Client
 		}
 		client.UpdatedAt = now
 
-		if err := db.Create(client.ToRecord()).Error; err != nil {
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			record := client.ToRecord()
+			if err := tx.Create(record).Error; err != nil {
+				return err
+			}
+			return applyStagedOff(tx, &model.ClientRecord{}, "enable", client.Enable, record.Id)
+		}); err != nil {
 			skip(email, err.Error())
 			continue
 		}

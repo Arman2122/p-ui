@@ -210,3 +210,13 @@ func (s *Set) ClearNodeTree(nodeID int) {
 	defer s.mu.Unlock()
 	delete(s.nodeTrees, nodeID)
 }
+
+func (s *Set) RetainNodeTrees(keep map[int]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for nodeID := range s.nodeTrees {
+		if !keep[nodeID] {
+			delete(s.nodeTrees, nodeID)
+		}
+	}
+}

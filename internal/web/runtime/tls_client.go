@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/database/model"
@@ -25,6 +26,7 @@ type MasterClientCertProvider func() (tls.Certificate, error)
 var (
 	masterClientCertMu sync.RWMutex
 	masterClientCert   MasterClientCertProvider
+	masterCertEpoch    atomic.Uint64
 )
 
 // SetMasterClientCertProvider installs the provider used to obtain the master
@@ -33,6 +35,13 @@ func SetMasterClientCertProvider(p MasterClientCertProvider) {
 	masterClientCertMu.Lock()
 	defer masterClientCertMu.Unlock()
 	masterClientCert = p
+	InvalidateMasterClientConnections()
+}
+
+// InvalidateMasterClientConnections refreshes cached mTLS pools before their
+// next request without interrupting requests already using the old transport.
+func InvalidateMasterClientConnections() {
+	masterCertEpoch.Add(1)
 }
 
 func getMasterClientCert() (tls.Certificate, error) {
@@ -57,6 +66,76 @@ var defaultNodeHTTPClient = &http.Client{
 }
 
 func HTTPClientForNode(n *model.Node, proxyURL string) (*http.Client, error) {
+	if n.TlsVerifyMode != "mtls" || n.Scheme == "http" {
+		return nodeHTTPClient(n, proxyURL)
+	}
+	node := *n
+	transport := &credentialRotatingTransport{build: func() (*http.Transport, error) {
+		client, err := nodeHTTPClient(&node, proxyURL)
+		if err != nil {
+			return nil, err
+		}
+		underlying, ok := client.Transport.(*http.Transport)
+		if !ok {
+			return nil, common.NewError("mTLS client transport cannot refresh credentials")
+		}
+		return underlying, nil
+	}}
+	if _, err := transport.active(); err != nil {
+		return nil, err
+	}
+	client := &http.Client{Transport: transport}
+	if proxyURL != "" {
+		client.Timeout = remoteHTTPTimeout
+	}
+	return client, nil
+}
+
+type credentialRotatingTransport struct {
+	mu         sync.Mutex
+	generation uint64
+	current    *http.Transport
+	build      func() (*http.Transport, error)
+}
+
+func (t *credentialRotatingTransport) active() (*http.Transport, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for t.current == nil || t.generation != masterCertEpoch.Load() {
+		generation := masterCertEpoch.Load()
+		next, err := t.build()
+		if err != nil {
+			return nil, err
+		}
+		if generation != masterCertEpoch.Load() {
+			next.CloseIdleConnections()
+			continue
+		}
+		if t.current != nil {
+			t.current.CloseIdleConnections()
+		}
+		t.current, t.generation = next, generation
+	}
+	return t.current, nil
+}
+
+func (t *credentialRotatingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	current, err := t.active()
+	if err != nil {
+		return nil, err
+	}
+	return current.RoundTrip(req)
+}
+
+func (t *credentialRotatingTransport) CloseIdleConnections() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.current != nil {
+		t.current.CloseIdleConnections()
+	}
+}
+
+func nodeHTTPClient(n *model.Node, proxyURL string) (*http.Client, error) {
 	mode := n.TlsVerifyMode
 	if mode == "" {
 		mode = "verify"

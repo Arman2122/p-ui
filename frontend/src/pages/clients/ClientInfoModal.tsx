@@ -6,6 +6,8 @@ import { CopyOutlined, DownloadOutlined, EyeOutlined, QrcodeOutlined, ReloadOutl
 import { ClipboardManager, FileManager, HttpUtil, IntlUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
+import { clientTrafficPolicy } from '@/lib/clients/traffic-display';
+import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import { ClientBansBlock } from '@/components/clients/ClientBansBlock';
 import type { ClientLocalAddress } from '@/generated/types';
 import { formatIpLimit } from '@/lib/policies/labels';
@@ -16,6 +18,7 @@ import { LinkTags, linkMetaText, parseLinkParts } from '@/lib/xray/link-label';
 import { QrPanel } from '@/pages/inbounds/qr';
 import ConfigBlock from '@/components/clients/ConfigBlock';
 import { findWireguardInbounds, useWireguardClientConfig } from './wireguardConfig';
+import FleetResetSchedule from './FleetResetSchedule';
 import './ClientInfoModal.css';
 
 const TUNNEL_TAG_STYLE = {
@@ -132,7 +135,8 @@ export default function ClientInfoModal({
   }, [open, client?.subId]);
 
   const traffic = client?.traffic || null;
-  const totalBytes = client?.totalGB || 0;
+  const policy = client ? clientTrafficPolicy(client) : null;
+  const totalBytes = policy?.total ?? 0;
   const used = (traffic?.up || 0) + (traffic?.down || 0);
   const remaining = useMemo(() => {
     if (totalBytes <= 0) return -1;
@@ -222,6 +226,7 @@ export default function ClientInfoModal({
       {messageContextHolder}
       <Modal
         open={open}
+        className="client-info-modal"
         title={client ? `${t('pages.clients.clientInfo')} — ${client.email}` : t('pages.clients.clientInfo')}
         footer={null}
         width={640}
@@ -234,7 +239,7 @@ export default function ClientInfoModal({
                 <tr>
                   <td>{t('pages.clients.online')}</td>
                   <td>
-                    {client.enable && isOnline
+                    {policy?.enabled && isOnline
                       ? <Tag color="green">{t('pages.clients.online')}</Tag>
                       : <Tag>{t('pages.clients.offline')}</Tag>}
                     <span className="hint">{t('lastOnline')}: {dateLabel(traffic?.lastOnline)}</span>
@@ -243,8 +248,8 @@ export default function ClientInfoModal({
                 <tr>
                   <td>{t('status')}</td>
                   <td>
-                    <Tag color={client.enable ? 'green' : 'default'}>
-                      {client.enable ? t('enabled') : t('disabled')}
+                    <Tag color={policy?.enabled ? 'green' : 'default'}>
+                      {policy?.enabled ? t('enabled') : t('disabled')}
                     </Tag>
                   </td>
                 </tr>
@@ -301,19 +306,20 @@ export default function ClientInfoModal({
                 <tr>
                   <td>{t('pages.inbounds.traffic')}</td>
                   <td>
-                    <Tag>
+                    {traffic?.accounting?.source === 'fleet' ? <ClientTrafficCell up={traffic.up} down={traffic.down} total={policy?.total} enabled={policy?.enabled} accounting={traffic.accounting} /> : <><Tag>
                       ↑ {SizeFormatter.sizeFormat(traffic?.up || 0)}
                       {' '}/ ↓ {SizeFormatter.sizeFormat(traffic?.down || 0)}
                     </Tag>
                     <span className="hint">
                       {SizeFormatter.sizeFormat(used)} / {totalBytes > 0 ? SizeFormatter.sizeFormat(totalBytes) : '∞'}
                     </span>
+                    </>}
                   </td>
                 </tr>
                 <tr>
                   <td>{t('remained')}</td>
                   <td>
-                    {remaining < 0
+                    {traffic?.accounting?.source === 'fleet' && policy?.total == null ? t('pages.clients.accounting.unknown') : remaining < 0
                       ? <Tag color="purple">∞</Tag>
                       : <Tag color={remaining > 0 ? '' : 'red'}>{SizeFormatter.sizeFormat(remaining)}</Tag>}
                   </td>
@@ -321,11 +327,11 @@ export default function ClientInfoModal({
                 <tr>
                   <td>{t('pages.inbounds.expireDate')}</td>
                   <td>
-                    {!client.expiryTime
+                    {traffic?.accounting?.source === 'fleet' && policy?.expiryTime == null ? t('pages.clients.accounting.unknown') : !policy?.expiryTime
                       ? <Tag color="purple">∞</Tag>
-                      : <Tag color={client.expiryTime < 0 ? 'blue' : undefined}>{expiryLabel(client.expiryTime)}</Tag>}
-                    {(client.expiryTime ?? 0) > 0 && (
-                      <span className="hint">{IntlUtil.formatRelativeTime(client.expiryTime)}</span>
+                      : <Tag color={policy.expiryTime < 0 ? 'blue' : undefined}>{expiryLabel(policy.expiryTime)}</Tag>}
+                    {(policy?.expiryTime ?? 0) > 0 && (
+                      <span className="hint">{IntlUtil.formatRelativeTime(policy?.expiryTime ?? 0)}</span>
                     )}
                   </td>
                 </tr>
@@ -405,6 +411,8 @@ export default function ClientInfoModal({
                 </tr>
               </tbody>
             </table>
+
+            {open && traffic?.accounting?.source === 'fleet' && traffic.accounting.clientId && <FleetResetSchedule clientId={traffic.accounting.clientId} />}
 
             {showSubscription && subLink && (
               <>

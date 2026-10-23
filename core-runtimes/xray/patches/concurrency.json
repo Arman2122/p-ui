@@ -1,0 +1,365 @@
+{
+  "Module": "github.com/xtls/xray-core",
+  "Version": "v1.260327.1-0.20260908222543-52a412d9e2f5",
+  "Files": [
+    {
+      "Path": "common/singbridge/packet.go",
+      "Reason": "Serialize cached packet ownership and interrupt the reader before closing its buffers.",
+      "Replacements": [
+        {
+          "From": "\"context\"\n",
+          "To": "\"context\"\n\t\"io\"\n\t\"sync\"\n"
+        },
+        {
+          "From": "type PacketConnWrapper struct {",
+          "To": "const PenhoonPatchLevel = 7\n\ntype PacketConnWrapper struct {\n\tmu sync.Mutex\n\tclosed bool"
+        },
+        {
+          "From": "func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {",
+          "To": "func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {\n\tw.mu.Lock()\n\tdefer w.mu.Unlock()\n\tif w.closed { return M.Socksaddr{}, io.ErrClosedPipe }"
+        },
+        {
+          "From": "func (w *PacketConnWrapper) Close() error {\n\tbuf.ReleaseMulti(w.cached)\n\treturn nil\n}",
+          "To": "func (w *PacketConnWrapper) Close() error {\n\t_ = common.Interrupt(w.Reader)\n\tw.mu.Lock()\n\tdefer w.mu.Unlock()\n\tw.closed = true\n\tw.cached = buf.ReleaseMulti(w.cached)\n\treturn nil\n}"
+        }
+      ],
+      "SHA256": "ed69b6c9be65d9b29a31e6bb3e9eecf43976e9514027c439f2d15c4e5b0da178"
+    },
+    {
+      "Path": "transport/internet/hysteria/conn.go",
+      "Reason": "Synchronize connection closure and manager shutdown during concurrent UDP send and cleanup.",
+      "Replacements": [
+        {
+          "From": "\"sync\"\n",
+          "To": "\"sync\"\n\t\"sync/atomic\"\n"
+        },
+        {
+          "From": "\tmutex  sync.Mutex\n\tclosed bool",
+          "To": "\tmutex  sync.Mutex\n\tclosed atomic.Bool"
+        },
+        {
+          "From": "if c.closed {",
+          "To": "if c.closed.Load() {"
+        },
+        {
+          "From": "\tif !udpConn.closed {\n\t\tudpConn.closed = true",
+          "To": "\tif udpConn.closed.CompareAndSwap(false, true) {"
+        },
+        {
+          "From": "\tfor range ticker.C {\n\t\tif m.closed {\n\t\t\treturn\n\t\t}\n\n\t\tm.RLock()",
+          "To": "\tfor range ticker.C {\n\t\tm.RLock()\n\t\tif m.closed {\n\t\t\tm.RUnlock()\n\t\t\treturn\n\t\t}"
+        }
+      ],
+      "SHA256": "eb63ebfa129add02bdf54b58f593382ff30e19b3a2e0f250b4ae8d8ad23a5aa1"
+    },
+    {
+      "Path": "proxy/vless/inbound/inbound.go",
+      "Reason": "Keep Vision connection pointers visible to the garbage collector and validate reflected buffer layout before pointer arithmetic.",
+      "Replacements": [
+        {
+          "From": "var p uintptr",
+          "To": "var p unsafe.Pointer"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(commonConn))",
+          "To": "p = unsafe.Pointer(commonConn)"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(tlsConn.Conn))",
+          "To": "p = unsafe.Pointer(tlsConn.Conn)"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(realityConn.Conn))",
+          "To": "p = unsafe.Pointer(realityConn.Conn)"
+        },
+        {
+          "From": "\t\t\t\ti, _ := t.FieldByName(\"input\")\n\t\t\t\tr, _ := t.FieldByName(\"rawInput\")",
+          "To": "\t\t\t\ti, inputOK := t.FieldByName(\"input\")\n\t\t\t\tr, rawOK := t.FieldByName(\"rawInput\")\n\t\t\t\tif !inputOK || !rawOK || len(i.Index) != 1 || len(r.Index) != 1 || i.Type != reflect.TypeOf(bytes.Reader{}) || r.Type != reflect.TypeOf(bytes.Buffer{}) {\n\t\t\t\t\treturn errors.New(\"unsupported Vision connection buffer layout\")\n\t\t\t\t}"
+        },
+        {
+          "From": "input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))",
+          "To": "input = (*bytes.Reader)(unsafe.Add(p, i.Offset))"
+        },
+        {
+          "From": "rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))",
+          "To": "rawInput = (*bytes.Buffer)(unsafe.Add(p, r.Offset))"
+        }
+      ],
+      "SHA256": "9108a2292f8e1d1cbf506a44836f54103ad3fcfb3769c4f815f726e93acb9e32"
+    },
+    {
+      "Path": "proxy/vless/outbound/outbound.go",
+      "Reason": "Keep Vision connection pointers visible to the garbage collector and validate reflected buffer layout before pointer arithmetic.",
+      "Replacements": [
+        {
+          "From": "var p uintptr",
+          "To": "var p unsafe.Pointer"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(commonConn))",
+          "To": "p = unsafe.Pointer(commonConn)"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(tlsConn.Conn))",
+          "To": "p = unsafe.Pointer(tlsConn.Conn)"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(utlsConn.Conn))",
+          "To": "p = unsafe.Pointer(utlsConn.Conn)"
+        },
+        {
+          "From": "p = uintptr(unsafe.Pointer(realityConn.Conn))",
+          "To": "p = unsafe.Pointer(realityConn.Conn)"
+        },
+        {
+          "From": "\t\t\ti, _ := t.FieldByName(\"input\")\n\t\t\tr, _ := t.FieldByName(\"rawInput\")",
+          "To": "\t\t\ti, inputOK := t.FieldByName(\"input\")\n\t\t\tr, rawOK := t.FieldByName(\"rawInput\")\n\t\t\tif !inputOK || !rawOK || len(i.Index) != 1 || len(r.Index) != 1 || i.Type != reflect.TypeOf(bytes.Reader{}) || r.Type != reflect.TypeOf(bytes.Buffer{}) {\n\t\t\t\treturn errors.New(\"unsupported Vision connection buffer layout\")\n\t\t\t}"
+        },
+        {
+          "From": "input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))",
+          "To": "input = (*bytes.Reader)(unsafe.Add(p, i.Offset))"
+        },
+        {
+          "From": "rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))",
+          "To": "rawInput = (*bytes.Buffer)(unsafe.Add(p, r.Offset))"
+        }
+      ],
+      "SHA256": "c6d927ec0241f4270ca350a994dc4ac721ad248b45bb8d8fc568ab1fdff9b924"
+    },
+    {
+      "Path": "proxy/http/config.go",
+      "Reason": "Preserve immutable authenticated credential pointers across synchronized hot user changes; empty governed user lists remain authenticated.",
+      "SHA256": "099f4cf6c66526d694276132ddc04d51a89ef882e4d99d463f393b89cc7d9b0b",
+      "Replacements": [
+        {
+          "From": "import (",
+          "To": "import (\n \"context\"\n \"errors\"\n \"sync\""
+        },
+        {
+          "From": "func (a *Account) Equals",
+          "To": "\ntype CredentialStore struct {\n mu sync.RWMutex\n users map[string]*protocol.MemoryUser\n required bool\n}\n\nfunc NewCredentialStore(accounts map[string]string, level uint32) *CredentialStore {\n s := &CredentialStore{users: make(map[string]*protocol.MemoryUser), required: len(accounts) != 0}\n for name, password := range accounts {\n  s.users[name] = &protocol.MemoryUser{Email: name, Level: level, Account: &Account{Username: name, Password: password}}\n }\n return s\n}\n\nfunc (s *CredentialStore) RequireAuthentication() { s.mu.Lock(); s.required = true; s.mu.Unlock() }\nfunc (s *CredentialStore) AuthenticationRequired() bool { s.mu.RLock(); defer s.mu.RUnlock(); return s.required }\nfunc (s *CredentialStore) Authenticate(name, password string) *protocol.MemoryUser {\n s.mu.RLock()\n defer s.mu.RUnlock()\n user := s.users[name]\n if user == nil || user.Account.(*Account).Password != password { return nil }\n return user\n}\nfunc (s *CredentialStore) AddUser(_ context.Context, user *protocol.MemoryUser) error {\n account, ok := user.Account.(*Account)\n if !ok || user.Email == \"\" || account.Username != user.Email { return errors.New(\"invalid immutable proxy credential\") }\n s.mu.Lock()\n defer s.mu.Unlock()\n if s.users[user.Email] != nil { return errors.New(\"proxy user already exists\") }\n s.users[user.Email] = user\n return nil\n}\nfunc (s *CredentialStore) RemoveUser(_ context.Context, name string) error {\n s.mu.Lock()\n defer s.mu.Unlock()\n if s.users[name] == nil { return errors.New(\"proxy user not found\") }\n delete(s.users, name)\n return nil\n}\nfunc (s *CredentialStore) GetUser(_ context.Context, name string) *protocol.MemoryUser {\n s.mu.RLock(); defer s.mu.RUnlock(); return s.users[name]\n}\nfunc (s *CredentialStore) GetUsers(context.Context) []*protocol.MemoryUser {\n s.mu.RLock(); defer s.mu.RUnlock()\n users := make([]*protocol.MemoryUser, 0, len(s.users))\n for _, user := range s.users { users = append(users, user) }\n return users\n}\nfunc (s *CredentialStore) GetUsersCount(context.Context) int64 {\n s.mu.RLock(); defer s.mu.RUnlock(); return int64(len(s.users))\n}\n\nfunc (a *Account) Equals"
+        }
+      ]
+    },
+    {
+      "Path": "proxy/http/server.go",
+      "Reason": "Preserve immutable authenticated credential pointers across synchronized hot user changes; empty governed user lists remain authenticated.",
+      "SHA256": "c50be613cc597e85ab0ad96318a30d8cef7b3892b515504ec37d69cebd26a2ed",
+      "Replacements": [
+        {
+          "From": "type Server struct {",
+          "To": "type Server struct {\n *CredentialStore"
+        },
+        {
+          "From": "config:        config,",
+          "To": "config:        config,\n CredentialStore: NewCredentialStore(config.Accounts, config.UserLevel),"
+        },
+        {
+          "From": "if len(s.config.Accounts) > 0 {",
+          "To": "if s.AuthenticationRequired() {"
+        },
+        {
+          "From": "if !ok || !s.config.HasAccount(user, pass) {",
+          "To": "credential := s.Authenticate(user, pass)\n if !ok || credential == nil {"
+        },
+        {
+          "From": "inbound.User.Email = user",
+          "To": "inbound.User = credential"
+        }
+      ]
+    },
+    {
+      "Path": "proxy/socks/server.go",
+      "Reason": "Preserve immutable authenticated credential pointers across synchronized hot user changes; empty governed user lists remain authenticated.",
+      "SHA256": "2410aa82f9cdd4da94b9647e35242479e23dbb1a0b207499717db6a950021aa1",
+      "Replacements": [
+        {
+          "From": "type Server struct {",
+          "To": "type Server struct {\n *http.CredentialStore"
+        },
+        {
+          "From": "s.httpServer, _ = http.NewServer(ctx, httpConfig)",
+          "To": "s.httpServer, _ = http.NewServer(ctx, httpConfig)\n s.CredentialStore = s.httpServer.CredentialStore\n if config.AuthType == AuthType_PASSWORD { s.RequireAuthentication() }"
+        },
+        {
+          "From": "config:       s.config,",
+          "To": "config:       s.config,\n credentials: s.CredentialStore,"
+        },
+        {
+          "From": "inbound.User.Email = request.User.Email",
+          "To": "inbound.User = request.User"
+        }
+      ]
+    },
+    {
+      "Path": "proxy/socks/protocol.go",
+      "Reason": "Preserve immutable authenticated credential pointers across synchronized hot user changes; empty governed user lists remain authenticated.",
+      "SHA256": "40f68c35d50c64662121180f315e84d3713e079b64e8b0944c91c4bce1c848b4",
+      "Replacements": [
+        {
+          "From": "\"github.com/xtls/xray-core/transport/internet\"",
+          "To": "\"github.com/xtls/xray-core/transport/internet\"\n \"github.com/xtls/xray-core/proxy/http\""
+        },
+        {
+          "From": "type ServerSession struct {",
+          "To": "type ServerSession struct {\n credentials *http.CredentialStore\n authenticated *protocol.MemoryUser"
+        },
+        {
+          "From": "if !s.config.HasAccount(username, password) {",
+          "To": "var authenticated *protocol.MemoryUser\n if s.credentials != nil { authenticated = s.credentials.Authenticate(username, password) } else if s.config.HasAccount(username, password) { authenticated = &protocol.MemoryUser{Email: username} }\n if authenticated == nil {"
+        },
+        {
+          "From": "return username, nil",
+          "To": "s.authenticated = authenticated\n return username, nil"
+        },
+        {
+          "From": "request.User = &protocol.MemoryUser{Email: username}",
+          "To": "request.User = s.authenticated"
+        }
+      ]
+    },
+    {
+      "Path": "proxy/hysteria/account/config.go",
+      "Reason": "Retain the actual immutable authenticated user when deriving per-session UUID route metadata.",
+      "SHA256": "6ed5770219dcdd378bb4ab1e21bb2666101ca4a013f86865a3f6dff487f3dc2c",
+      "Replacements": [
+        {
+          "From": "type MemoryAccount struct {",
+          "To": "type MemoryAccount struct {\n authenticated *protocol.MemoryUser"
+        },
+        {
+          "From": "func (a *MemoryAccount) Equals",
+          "To": "func (a *MemoryAccount) AuthenticatedUser() *protocol.MemoryUser { return a.authenticated }\n\nfunc (a *MemoryAccount) Equals"
+        },
+        {
+          "From": "Account: &MemoryAccount{\n\t\t\t\t\t\tAuth: auth,",
+          "To": "Account: &MemoryAccount{\n authenticated: user,\n\t\t\t\t\t\tAuth: auth,"
+        }
+      ]
+    },
+    {
+      "Path": "proxy/shadowsocks_2022/inbound_multi.go",
+      "Reason": "Carry the actual immutable authenticated user instead of a mutable slice index and publish checked user updates.",
+      "SHA256": "afa6e42d6349ad0d72b36076d8ec3a422fb027b0668f16bd85e65a5b15528ce1",
+      "Replacements": [
+        {
+          "From": "service  *shadowaead_2022.MultiService[int]",
+          "To": "service *shadowaead_2022.MultiService[*protocol.MemoryUser]"
+        },
+        {
+          "From": "shadowaead_2022.NewMultiService[int]",
+          "To": "shadowaead_2022.NewMultiService[*protocol.MemoryUser]"
+        },
+        {
+          "From": "C.MapIndexed(memUsers, func(index int, it *protocol.MemoryUser) int { return index })",
+          "To": "memUsers"
+        },
+        {
+          "From": "func (i *MultiUserInbound) AddUser(ctx context.Context, u *protocol.MemoryUser) error {\n\ti.Lock()\n\tdefer i.Unlock()\n\n\tif u.Email != \"\" {\n\t\tfor idx := range i.users {\n\t\t\tif i.users[idx].Email == u.Email {\n\t\t\t\treturn errors.New(\"User \", u.Email, \" already exists.\")\n\t\t\t}\n\t\t}\n\t}\n\ti.users = append(i.users, u)\n\n\t// sync to multi service\n\t// Considering implements shadowsocks2022 in xray-core may have better performance.\n\ti.service.UpdateUsersWithPasswords(\n\t\tC.MapIndexed(i.users, func(index int, it *protocol.MemoryUser) int { return index }),\n\t\tC.Map(i.users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key }),\n\t)\n\n\treturn nil\n}",
+          "To": "func (i *MultiUserInbound) AddUser(ctx context.Context, u *protocol.MemoryUser) error {\n i.Lock()\n defer i.Unlock()\n for _, user := range i.users {\n  if strings.EqualFold(user.Email, u.Email) { return errors.New(\"User \", u.Email, \" already exists.\") }\n }\n users := append(append([]*protocol.MemoryUser(nil), i.users...), u)\n if err := i.service.UpdateUsersWithPasswords(users, C.Map(users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key })); err != nil { return err }\n i.users = users\n return nil\n}"
+        },
+        {
+          "From": "func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {\n\tif email == \"\" {\n\t\treturn errors.New(\"Email must not be empty.\")\n\t}\n\n\ti.Lock()\n\tdefer i.Unlock()\n\n\tidx := -1\n\tfor ii, u := range i.users {\n\t\tif strings.EqualFold(u.Email, email) {\n\t\t\tidx = ii\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif idx == -1 {\n\t\treturn errors.New(\"User \", email, \" not found.\")\n\t}\n\n\tulen := len(i.users)\n\n\ti.users[idx] = i.users[ulen-1]\n\ti.users[ulen-1] = nil\n\ti.users = i.users[:ulen-1]\n\n\t// sync to multi service\n\t// Considering implements shadowsocks2022 in xray-core may have better performance.\n\ti.service.UpdateUsersWithPasswords(\n\t\tC.MapIndexed(i.users, func(index int, it *protocol.MemoryUser) int { return index }),\n\t\tC.Map(i.users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key }),\n\t)\n\n\treturn nil\n}",
+          "To": "func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {\n if email == \"\" { return errors.New(\"Email must not be empty.\") }\n i.Lock()\n defer i.Unlock()\n users := make([]*protocol.MemoryUser, 0, len(i.users))\n for _, user := range i.users { if !strings.EqualFold(user.Email, email) { users = append(users, user) } }\n if len(users) == len(i.users) { return errors.New(\"User \", email, \" not found.\") }\n if err := i.service.UpdateUsersWithPasswords(users, C.Map(users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key })); err != nil { return err }\n i.users = users\n return nil\n}"
+        },
+        {
+          "From": "func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {\n\tinbound := session.InboundFromContext(ctx)\n\tuserInt, _ := A.UserFromContext[int](ctx)\n\tuser := i.users[userInt]\n",
+          "To": "func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {\n\tinbound := session.InboundFromContext(ctx)\n\tuser, ok := A.UserFromContext[*protocol.MemoryUser](ctx)\n if !ok || user == nil { return errors.New(\"missing immutable authenticated user\") }\n"
+        },
+        {
+          "From": "func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {\n\tinbound := session.InboundFromContext(ctx)\n\tuserInt, _ := A.UserFromContext[int](ctx)\n\tuser := i.users[userInt]\n",
+          "To": "func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {\n\tinbound := session.InboundFromContext(ctx)\n\tuser, ok := A.UserFromContext[*protocol.MemoryUser](ctx)\n if !ok || user == nil { return errors.New(\"missing immutable authenticated user\") }\n"
+        }
+      ]
+    },
+    {
+      "Path": "infra/conf/shadowsocks.go",
+      "Reason": "Keep an explicitly empty multi-user Shadowsocks 2022 list authenticated instead of switching to the server-key single-user mode.",
+      "SHA256": "a8a6a77c4a2d1f8cc372fb3fa4f824cfbe82c4b083b38af37bef98c163b9fca6",
+      "Replacements": [
+        {
+          "From": "if len(v.Users) == 0 {",
+          "To": "if v.Users == nil {"
+        },
+        {
+          "From": "if v.Users[0].Address == nil {",
+          "To": "if len(v.Users) == 0 || v.Users[0].Address == nil {"
+        }
+      ]
+    },
+    {
+      "Path": "common/singbridge/pipe.go",
+      "Reason": "Interrupt the raw transport before joining copy tasks, then release buffered protocol state after all I/O finishes.",
+      "SHA256": "e79c9921fbd68321fae5940f59aa1f27e5392c68a7e79979825e804cb6aafe9a",
+      "Replacements": [
+        {
+          "From": "func CopyConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, serverConn net.Conn) error {",
+          "To": "type copyTransportConn struct {\n net.Conn\n raw net.Conn\n}\n\nfunc (c *copyTransportConn) Close() error { return c.raw.Close() }\n\nfunc (c *copyTransportConn) CloseWrite() error {\n if writer, ok := c.raw.(interface{ CloseWrite() error }); ok { return writer.CloseWrite() }\n return c.raw.Close()\n}\n\nfunc CopyConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, serverConn net.Conn) error {\n if upstream, ok := serverConn.(interface { Upstream() any }); ok {\n  if raw, ok := upstream.Upstream().(net.Conn); ok {\n   defer serverConn.Close()\n   serverConn = &copyTransportConn{Conn: serverConn, raw: raw}\n  }\n }"
+        },
+        {
+          "From": "conn := &PipeConnWrapper{\n",
+          "To": "conn := &PipeConnWrapper{\n interrupt: func() { _ = common.Interrupt(link.Reader); _ = common.Interrupt(link.Writer) },\n"
+        },
+        {
+          "From": "type PipeConnWrapper struct {\n",
+          "To": "type PipeConnWrapper struct {\n interrupt func()\n"
+        },
+        {
+          "From": "func (w *PipeConnWrapper) Close() error {\n\treturn nil\n}",
+          "To": "func (w *PipeConnWrapper) Close() error {\n if w.interrupt != nil { w.interrupt() }\n return nil\n}\n\nfunc (w *PipeConnWrapper) CloseWrite() error { return common.Close(w.W) }"
+        }
+      ]
+    }
+  ],
+  "Dependencies": [
+    {
+      "Module": "github.com/sagernet/sing-shadowsocks",
+      "Version": "v0.2.9",
+      "Files": [
+        {
+          "Path": "shadowaead_2022/service_multi.go",
+          "Reason": "Publish key, identity and response-cipher maps as one immutable snapshot, retained across each authenticated TCP or UDP request.",
+          "SHA256": "779c74946806e5fb9afcebfe4786023c41d22433a081488fbd2e746750bb2382",
+          "Replacements": [
+            {
+              "From": "\"os\"",
+              "To": "\"os\"\n \"sync/atomic\""
+            },
+            {
+              "From": "type MultiService[U comparable] struct {",
+              "To": "type userSnapshot[U comparable] struct {\n uPSK map[U][]byte\n uPSKHash map[[aes.BlockSize]byte]U\n uCipher map[U]cipher.Block\n}\n\nconst PenhoonAuthenticationPatchLevel = 1\n\ntype MultiService[U comparable] struct {"
+            },
+            {
+              "From": "uPSK     map[U][]byte\n\tuPSKHash map[[aes.BlockSize]byte]U\n\tuCipher  map[U]cipher.Block",
+              "To": "users atomic.Pointer[userSnapshot[U]]"
+            },
+            {
+              "From": "\n\t\tuPSK:     make(map[U][]byte),\n\t\tuPSKHash: make(map[[aes.BlockSize]byte]U),",
+              "To": ""
+            },
+            {
+              "From": "\n\treturn s, nil\n}",
+              "To": "\n s.users.Store(&userSnapshot[U]{uPSK: make(map[U][]byte), uPSKHash: make(map[[aes.BlockSize]byte]U), uCipher: make(map[U]cipher.Block)})\n\treturn s, nil\n}"
+            },
+            {
+              "From": "s.uPSK = uPSK\n\ts.uPSKHash = uPSKHash\n\ts.uCipher = uCipher",
+              "To": "s.users.Store(&userSnapshot[U]{uPSK: uPSK, uPSKHash: uPSKHash, uCipher: uCipher})"
+            },
+            {
+              "From": "if u, loaded := s.uPSKHash[_eiHeader]; loaded {\n\t\tuser = u\n\t\tuPSK = s.uPSK[u]\n\t} else {\n\t\treturn ErrInvalidRequest\n\t}",
+              "To": "users := s.users.Load()\n if u, loaded := users.uPSKHash[_eiHeader]; loaded { user = u; uPSK = users.uPSK[u] } else { return ErrInvalidRequest }"
+            },
+            {
+              "From": "if u, loaded := s.uPSKHash[_eiHeader]; loaded {\n\t\tuser = u\n\t\tuPSK = s.uPSK[u]\n\t} else {\n\t\treturn E.New(\"invalid request\")\n\t}",
+              "To": "users := s.users.Load()\n if u, loaded := users.uPSKHash[_eiHeader]; loaded { user = u; uPSK = users.uPSK[u] } else { return E.New(\"invalid request\") }"
+            },
+            {
+              "From": "s.uCipher[user]",
+              "To": "users.uCipher[user]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

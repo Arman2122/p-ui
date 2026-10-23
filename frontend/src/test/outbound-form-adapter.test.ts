@@ -274,7 +274,6 @@ describe('outbound-form-adapter: round-trip', () => {
       settings: {},
     }));
     expect(empty.settings).toEqual({
-      domainStrategy: undefined,
       redirect: undefined,
       fragment: undefined,
       noises: undefined,
@@ -293,13 +292,13 @@ describe('outbound-form-adapter: round-trip', () => {
       },
     }));
     expect(filled.settings).toMatchObject({
-      domainStrategy: 'UseIPv4',
       redirect: '1.1.1.1',
       userLevel: 3,
       proxyProtocol: 2,
       fragment: { packets: 'tlshello', length: '100-200' },
       noises: [{ type: 'rand', packet: '10-20', delay: '10-16', applyTo: 'ipv4' }],
     });
+    expect(filled.streamSettings).toMatchObject({ sockopt: { domainStrategy: 'UseIPv4' } });
   });
 
   it('freedom tolerates settings without a fragment object (issue #4686)', () => {
@@ -436,7 +435,7 @@ describe('outbound-form-adapter: targetStrategy', () => {
       settings: {},
       targetStrategy: 'useipv4v6',
     });
-    expect(form.targetStrategy).toBe('UseIPv4v6');
+    expect(form.settings).toMatchObject({ domainStrategy: 'UseIPv4v6' });
   });
 
   it('omits targetStrategy when unset and drops unknown values', () => {
@@ -454,7 +453,7 @@ describe('outbound-form-adapter: targetStrategy', () => {
     expect(invalid).not.toHaveProperty('targetStrategy');
   });
 
-  it('freedom prefers settings.targetStrategy over domainStrategy and emits the legacy key', () => {
+  it('freedom prefers settings.targetStrategy over domainStrategy and emits sockopt', () => {
     const form = rawOutboundToFormValues({
       protocol: 'freedom',
       settings: { targetStrategy: 'UseIPv6', domainStrategy: 'UseIPv4' },
@@ -463,7 +462,7 @@ describe('outbound-form-adapter: targetStrategy', () => {
       expect(form.settings.domainStrategy).toBe('UseIPv6');
     }
     const back = formValuesToWirePayload(form);
-    expect(back.settings).toMatchObject({ domainStrategy: 'UseIPv6' });
+    expect(back.streamSettings).toMatchObject({ sockopt: { domainStrategy: 'UseIPv6' } });
     expect(back.settings).not.toHaveProperty('targetStrategy');
   });
 });

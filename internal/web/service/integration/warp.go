@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -192,8 +193,9 @@ func (s *WarpService) ChangeWarpIP() (string, error) {
 	}
 
 	var parsed struct {
-		Data   map[string]string `json:"data"`
-		Config map[string]any    `json:"config"`
+		Data    map[string]string `json:"data"`
+		Config  map[string]any    `json:"config"`
+		Warning string            `json:"warning,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		return "", err
@@ -204,9 +206,9 @@ func (s *WarpService) ChangeWarpIP() (string, error) {
 	if license, ok := warpDataMap["license_key"]; ok && len(license) >= 26 {
 		parsed.Data["license_key"] = license
 		if restored, mErr := json.MarshalIndent(parsed.Data, "", "  "); mErr != nil {
-			logger.Error("ChangeWarpIP: could not keep the stored WARP license: ", mErr)
+			return "", fmt.Errorf("preserve WARP license: %w", mErr)
 		} else if sErr := s.SetWarp(string(restored)); sErr != nil {
-			logger.Error("ChangeWarpIP: could not keep the stored WARP license: ", sErr)
+			return "", fmt.Errorf("preserve WARP license: %w", sErr)
 		}
 	}
 
@@ -217,11 +219,16 @@ func (s *WarpService) ChangeWarpIP() (string, error) {
 
 	if license, ok := warpDataMap["license_key"]; ok && len(license) >= 26 {
 		if _, licErr := s.SetWarpLicense(license); licErr != nil {
-			logger.Warning("ChangeWarpIP: failed to re-apply WARP license: ", licErr)
+			parsed.Warning = "failed to re-apply WARP license: " + strings.TrimSpace(licErr.Error())
+			logger.Warning("ChangeWarpIP: WARP license remains stored but its upgrade failed: ", licErr)
 		}
 	}
 
-	return result, nil
+	final, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(final), nil
 }
 
 // loadWarpCreds reads the stored warp JSON and ensures access_token + device_id are set.

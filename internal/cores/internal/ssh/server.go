@@ -19,6 +19,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/node/limits"
 )
 
 // AuthFailure is one refused login, handed to the panel so it can alert and
@@ -92,14 +93,17 @@ type server struct {
 	udp       udpDialer
 	onFailure func(AuthFailure)
 	// admit asks the panel to decide a login against the client's cap; nil admits.
-	admit    core.AdmitFunc
-	throttle *loginThrottle
+	admit         core.AdmitFunc
+	governor      func(string) (*limits.Account, bool)
+	demand        func(context.Context, string, string) error
+	demandContext context.Context
+	throttle      *loginThrottle
 	// banner is what a shell is shown; swapped on edit, so no session drops for it.
 	banner atomic.Pointer[string]
 
 	mu       sync.RWMutex
-	byUser   map[string]*credential
-	byEmail  map[string]*credential
+	byUser   map[string]*authentication
+	byEmail  map[string]*authentication
 	conns    map[*conn]struct{}
 	traffic  map[string]*counters
 	limits   map[string]core.RateLimit
@@ -133,20 +137,34 @@ var (
 
 // conn is one authenticated SSH connection.
 type conn struct {
-	sc       *gossh.ServerConn
-	email    string
-	source   netip.Addr
-	opened   int64
-	lastSeen atomic.Int64
-	forwards atomic.Int32
-	done     chan struct{}
+	authentication *authentication
+	ctx            context.Context
+	cancel         context.CancelFunc
+	account        *limits.Account
+	sc             *gossh.ServerConn
+	email          string
+	source         netip.Addr
+	opened         int64
+	lastSeen       atomic.Int64
+	forwards       atomic.Int32
+	done           chan struct{}
 }
 
 // close tolerates a session the tests put there without a transport behind it.
 func (c *conn) close() {
+	if c.cancel != nil {
+		c.cancel()
+	}
 	if c.sc != nil {
 		_ = c.sc.Close()
 	}
+}
+
+func (c *conn) context() context.Context {
+	if c.ctx != nil {
+		return c.ctx
+	}
+	return context.Background()
 }
 
 /*
@@ -198,7 +216,7 @@ func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.S
 	s := &server{
 		instanceID: instanceID, tag: tag, settings: settings, hostKeys: hostKeys, dial: dial, onFailure: onFailure, admit: admit, opened: time.Now(),
 		throttle: newLoginThrottle(),
-		byUser:   map[string]*credential{}, byEmail: map[string]*credential{},
+		byUser:   map[string]*authentication{}, byEmail: map[string]*authentication{},
 		conns: map[*conn]struct{}{}, traffic: map[string]*counters{},
 		limits: map[string]core.RateLimit{}, limiters: map[string]*limiterPair{},
 	}
@@ -207,38 +225,6 @@ func newServer(instanceID int, tag string, settings Settings, hostKeys []gossh.S
 }
 
 func (s *server) setBanner(banner string) { s.banner.Store(&banner) }
-
-// setUsers replaces the credential set. A client no longer present, or now
-// disabled, has every live connection closed: that is what a revocation means.
-func (s *server) setUsers(users []core.User) error {
-	next := map[string]*credential{}
-	nextEmail := map[string]*credential{}
-	var failures []error
-	for _, u := range users {
-		c, err := credentialOf(u)
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		cred := c
-		next[cred.username] = &cred
-		nextEmail[cred.email] = &cred
-	}
-	s.mu.Lock()
-	s.byUser, s.byEmail = next, nextEmail
-	var doomed []*conn
-	for c := range s.conns {
-		cred, ok := nextEmail[c.email]
-		if !ok || !cred.enable {
-			doomed = append(doomed, c)
-		}
-	}
-	s.mu.Unlock()
-	for _, c := range doomed {
-		c.close()
-	}
-	return errors.Join(failures...)
-}
 
 func (s *server) servedEmails() []string {
 	s.mu.RLock()
@@ -256,7 +242,7 @@ func (s *server) config() *gossh.ServerConfig {
 		ServerVersion:    serverVersion,
 		PasswordCallback: s.authenticate,
 		AuthLogCallback: func(meta gossh.ConnMetadata, method string, err error) {
-			if method == "none" {
+			if method == "none" || errors.Is(err, errAuthorizationDenied) {
 				return
 			}
 			source := addrOf(meta.RemoteAddr())
@@ -278,7 +264,10 @@ func (s *server) config() *gossh.ServerConfig {
 	return cfg
 }
 
-var errDenied = errors.New("permission denied")
+var (
+	errDenied              = errors.New("permission denied")
+	errAuthorizationDenied = errors.New("client forwarding authorization is unavailable")
+)
 
 // authenticate is the one gate: the password, the client's own enable and
 // expiry, and its device cap counted as distinct source addresses.
@@ -297,7 +286,25 @@ func (s *server) authenticate(meta gossh.ConnMetadata, password []byte) (*gossh.
 	if cred.expiry > 0 && time.Now().UnixMilli() > cred.expiry {
 		return nil, &gossh.BannerError{Err: errors.New("client has expired"), Message: "This account has expired."}
 	}
+	if !cred.current() {
+		return nil, errAuthorizationDenied
+	}
 	source := addrOf(meta.RemoteAddr())
+	if s.governor != nil {
+		account, ok := s.governor(cred.email)
+		if !ok || account == nil || account.Check() != nil {
+			if cred.scoped {
+				_ = cred.proof.Request(context.Background())
+			} else if s.demand != nil {
+				ctx := s.demandContext
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				_ = s.demand(ctx, cred.email, s.tag)
+			}
+			return nil, errAuthorizationDenied
+		}
+	}
 	if s.admit != nil && cred.limitIP > 0 {
 		admission := core.Admission{
 			Kind: Kind, InstanceID: s.instanceID, Email: cred.email,
@@ -307,7 +314,7 @@ func (s *server) authenticate(meta gossh.ConnMetadata, password []byte) (*gossh.
 			return nil, &gossh.BannerError{Err: err, Message: "Too many devices are connected to this account."}
 		}
 	}
-	return &gossh.Permissions{Extensions: map[string]string{"email": cred.email}}, nil
+	return &gossh.Permissions{Extensions: map[string]string{"email": cred.email, "authentication": cred.token}}, nil
 }
 
 /*
@@ -388,15 +395,27 @@ func (s *server) handle(raw net.Conn) {
 	_ = raw.SetDeadline(time.Time{})
 	now := time.Now().UnixMilli()
 	c := &conn{sc: sc, email: sc.Permissions.Extensions["email"], source: addrOf(sc.RemoteAddr()), opened: now, done: make(chan struct{})}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+	defer c.cancel()
+	if s.governor != nil {
+		var ok bool
+		c.account, ok = s.governor(c.email)
+		if !ok || c.account == nil || c.account.Check() != nil {
+			_ = sc.Close()
+			return
+		}
+	}
 	c.lastSeen.Store(now)
 	s.mu.Lock()
 	// stop() snapshots conns after it flips closed: a login that finished after
 	// the snapshot would be served on a stopped server, and wg.Wait never returns.
-	if s.closed.Load() {
+	record := s.byUser[sc.User()]
+	if s.closed.Load() || record == nil || record.email != c.email || record.token != sc.Permissions.Extensions["authentication"] || !record.current() {
 		s.mu.Unlock()
 		_ = sc.Close()
 		return
 	}
+	c.authentication = record
 	s.conns[c] = struct{}{}
 	s.mu.Unlock()
 	defer func() {
@@ -406,7 +425,7 @@ func (s *server) handle(raw net.Conn) {
 		s.mu.Unlock()
 		_ = sc.Close()
 	}()
-	go s.keepAlive(c)
+	s.wg.Go(func() { s.keepAlive(c) })
 	go func() {
 		// Keepalives are answered; a reverse forward (tcpip-forward) is not a
 		// service this core offers, so every other request is refused.
@@ -473,7 +492,7 @@ func (s *server) forward(c *conn, nc gossh.NewChannel) {
 		_ = nc.Reject(gossh.ConnectionFailed, "bad direct-tcpip payload")
 		return
 	}
-	if !s.stillServed(c.email) {
+	if !c.authentication.current() || !s.stillServed(c.email) {
 		_ = nc.Reject(gossh.Prohibited, "client is no longer served")
 		return
 	}
@@ -504,14 +523,20 @@ func (s *server) forward(c *conn, nc gossh.NewChannel) {
 	go gossh.DiscardRequests(reqs)
 	up, down := s.countersFor(c.email)
 	lim := s.limiterFor(c.email)
+	forwardCtx, cancelForward := context.WithCancel(c.context())
 	var once sync.Once
-	closeBoth := func() { once.Do(func() { _ = ch.Close(); _ = dst.Close() }) }
+	closeBoth := func() { once.Do(func() { cancelForward(); _ = ch.Close(); _ = dst.Close() }) }
+	var upload, download io.Writer = dst, ch
+	if c.account != nil {
+		upload = limits.Writer{Context: forwardCtx, Writer: dst, Account: c.account, Direction: limits.Upload}
+		download = limits.Writer{Context: forwardCtx, Writer: ch, Account: c.account, Direction: limits.Download}
+	}
 	go func() {
 		defer closeBoth()
-		_, _ = io.Copy(&countingWriter{w: dst, n: up, lim: lim.up, seen: &c.lastSeen}, ch)
+		_, _ = io.Copy(&countingWriter{w: upload, n: up, lim: lim.up, seen: &c.lastSeen}, ch)
 	}()
 	defer closeBoth()
-	_, _ = io.Copy(&countingWriter{w: ch, n: down, lim: lim.down, seen: &c.lastSeen}, dst)
+	_, _ = io.Copy(&countingWriter{w: download, n: down, lim: lim.down, seen: &c.lastSeen}, dst)
 }
 
 func (s *server) stillServed(email string) bool {

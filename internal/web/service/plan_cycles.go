@@ -58,6 +58,7 @@ func planCycleSubjects(db *gorm.DB, emails []string, now time.Time) (map[string]
 			Select("clients.id, clients.email, clients.enable, clients.expiry_time, clients.total_gb, "+
 				used+" AS used_bytes, "+ResellerClientEnabledSQL()+" AS owner_allowed", args...).
 			Joins("JOIN client_traffics ON client_traffics.email = clients.email").
+			Where(legacyTrafficOwnerSQL).
 			Where("clients.email IN ?", batch).
 			Scan(&rows).Error
 		if err != nil {

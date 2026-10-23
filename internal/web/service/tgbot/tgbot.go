@@ -7,7 +7,6 @@ import (
 	"html"
 	"math/big"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -51,8 +50,7 @@ var (
 	EventBus *eventbus.Bus
 
 	// Performance improvements
-	messageWorkerPool   chan struct{} // Semaphore for limiting concurrent message processing
-	optimizedHTTPClient *http.Client  // HTTP client with connection pooling and timeouts
+	messageWorkerPool chan struct{} // Semaphore for limiting concurrent message processing
 
 	// Simple cache for frequently accessed data
 	statusCache struct {
@@ -68,14 +66,24 @@ var (
 	}
 )
 
-// userStateStore guards the per-chat conversation states. The Telegram command
-// and callback handlers run on a worker-pool goroutine while the message handler
-// runs on the dispatch goroutine, so a bare map would be a concurrent-map-write
-// crash. It also expires abandoned conversations so a user who starts a flow and
-// goes silent doesn't leave an entry forever.
+// Wizard state belongs to one admin in one chat, including shared group chats.
+type chatUser struct {
+	chatID int64
+	userID int64
+}
+
+func messageActor(message telego.Message) chatUser {
+	sender, _ := messageSender(&message)
+	return chatUser{chatID: message.Chat.ID, userID: sender.ID}
+}
+
+func callbackActor(query *telego.CallbackQuery) chatUser {
+	return chatUser{chatID: query.Message.GetChat().ID, userID: query.From.ID}
+}
+
 type userStateStore struct {
 	mu        sync.Mutex
-	states    map[int64]userStateEntry
+	states    map[chatUser]userStateEntry
 	lastPrune time.Time
 }
 
@@ -84,30 +92,30 @@ type userStateEntry struct {
 	at    time.Time
 }
 
-var userStateMgr = &userStateStore{states: make(map[int64]userStateEntry)}
+var userStateMgr = &userStateStore{states: make(map[chatUser]userStateEntry)}
 
-func (s *userStateStore) set(chatID int64, state string) {
+func (s *userStateStore) set(actor chatUser, state string) {
 	s.mu.Lock()
-	s.states[chatID] = userStateEntry{state: state, at: time.Now()}
+	s.states[actor] = userStateEntry{state: state, at: time.Now()}
 	s.mu.Unlock()
 }
 
-func (s *userStateStore) get(chatID int64) (string, bool) {
+func (s *userStateStore) get(actor chatUser) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.states[chatID]
+	e, ok := s.states[actor]
 	return e.state, ok
 }
 
-func (s *userStateStore) clear(chatID int64) {
+func (s *userStateStore) clear(actor chatUser) {
 	s.mu.Lock()
-	delete(s.states, chatID)
+	delete(s.states, actor)
 	s.mu.Unlock()
 }
 
 func (s *userStateStore) reset() {
 	s.mu.Lock()
-	s.states = make(map[int64]userStateEntry)
+	s.states = make(map[chatUser]userStateEntry)
 	s.mu.Unlock()
 }
 
@@ -258,17 +266,6 @@ func (t *Tgbot) Start(i18nFS embed.FS) error {
 
 	// Initialize worker pool for concurrent message processing (max 10 concurrent handlers)
 	messageWorkerPool = make(chan struct{}, 10)
-
-	// Initialize optimized HTTP client with connection pooling
-	optimizedHTTPClient = &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
-		},
-	}
 
 	t.SetHostname()
 

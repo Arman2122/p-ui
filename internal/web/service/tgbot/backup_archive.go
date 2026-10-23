@@ -12,6 +12,10 @@ import (
 
 // Only this bot's configured administrator chats receive the exact stored archive.
 func SendBackupArchive(ctx context.Context, file *os.File, filename string) error {
+	return sendBackupArchive(ctx, file, filename, nil)
+}
+
+func sendBackupArchive(ctx context.Context, file *os.File, filename string, check func() error) error {
 	tgBotMutex.Lock()
 	sender, running := bot, isRunning
 	chats := append([]int64(nil), adminIds...)
@@ -28,6 +32,11 @@ func SendBackupArchive(ctx context.Context, file *os.File, filename string) erro
 	}
 	var failed bool
 	for _, chat := range chats {
+		if check != nil {
+			if err := check(); err != nil {
+				return err
+			}
+		}
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}

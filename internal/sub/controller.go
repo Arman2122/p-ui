@@ -345,7 +345,7 @@ func (a *SUBController) buildSubPageData(c *gin.Context) (PageData, bool) {
 	subReq := a.subService.ForRequest(host)
 	subReq.subscriptionBody = false
 	subs, emails, fileIds, lastOnline, traffic, err := subReq.getSubs(subId)
-	if err != nil || len(subs) == 0 {
+	if err != nil || subs == nil {
 		writeSubError(c, err)
 		return PageData{}, false
 	}
@@ -427,7 +427,7 @@ func (a *SUBController) subs(c *gin.Context) {
 	subReq := a.subService.ForRequest(host)
 	subReq.subscriptionBody = true
 	subs, _, _, _, traffic, err := subReq.getSubs(subId)
-	if err != nil || len(subs) == 0 {
+	if err != nil || subs == nil {
 		writeSubError(c, err)
 	} else {
 		var result strings.Builder
@@ -706,7 +706,7 @@ func (a *SUBController) serveJsonBody(c *gin.Context, alwaysReturnArray bool, co
 		writeSubError(c, err)
 		return true
 	}
-	if len(jsonSub) == 0 {
+	if len(jsonSub) == 0 && header == "" {
 		return false
 	}
 	profileUrl := a.subProfileUrl
@@ -745,7 +745,7 @@ func (a *SUBController) serveClashBody(c *gin.Context, rawDownload bool) bool {
 		writeSubError(c, err)
 		return true
 	}
-	if len(clashSub) == 0 {
+	if len(clashSub) == 0 && header == "" {
 		return false
 	}
 	profileUrl := a.subProfileUrl

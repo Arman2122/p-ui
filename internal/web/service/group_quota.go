@@ -12,6 +12,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/presence"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -36,24 +37,38 @@ func (s *ClientService) SetGroupQuota(req GroupQuotaRequest) error {
 	if req.Name == "" || req.QuotaBytes < 0 {
 		return errors.New("group name and a nonnegative quota are required")
 	}
-	db := database.GetDB()
-	var group model.ClientGroup
-	if err := db.Where("name = ?", req.Name).First(&group).Error; err != nil {
-		return err
-	}
 	if req.InboundIDs != nil {
-		if err := s.setGroupInbounds(req.Name, *req.InboundIDs); err != nil {
+		if err := s.setGroupInbounds(req.Name, *req.InboundIDs, req.QuotaBytes); err != nil {
 			return err
 		}
-	}
-	if err := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "name"}},
-		DoUpdates: clause.AssignmentColumns([]string{"quota_bytes"}),
-	}).
-		Create(&model.GroupQuota{Name: req.Name, QuotaBytes: req.QuotaBytes}).Error; err != nil {
+	} else if err := database.GetDB().Transaction(func(tx *gorm.DB) error {
+		if err := requireLegacyGroupEditTx(tx, req.Name); err != nil {
+			return err
+		}
+		return saveLegacyGroupQuotaTx(tx, req.Name, req.QuotaBytes)
+	}); err != nil {
 		return err
 	}
 	return s.EnforceGroupQuotas()
+}
+
+func requireLegacyGroupEditTx(tx *gorm.DB, name string) error {
+	var group model.ClientGroup
+	if err := tx.Where("name = ?", name).First(&group).Error; err != nil {
+		return err
+	}
+	if err := lockLegacyGroupMutationTx(tx, nil, []string{name}, ""); err != nil {
+		return err
+	}
+	return tx.Where("id = ? AND name = ?", group.Id, name).First(&model.ClientGroup{}).Error
+}
+
+func saveLegacyGroupQuotaTx(tx *gorm.DB, name string, quotaBytes int64) error {
+	return tx.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"quota_bytes"}),
+	}).
+		Create(&model.GroupQuota{Name: name, QuotaBytes: quotaBytes}).Error
 }
 
 func (s *ClientService) ListGroupDetails() ([]GroupDetails, error) {
@@ -129,9 +144,15 @@ func (s *ClientService) ListGroupDetails() ([]GroupDetails, error) {
 		ClientHistoryPoint `gorm:"embedded"`
 	}
 	since := now.Unix()/86400*86400 - 13*86400
-	err = db.Raw(`SELECT c.group_name, h.t / 86400 * 86400 AS t, SUM(h.up) AS up, SUM(h.down) AS down
-		FROM client_traffic_samples h JOIN clients c ON c.email = h.email
-		WHERE c.group_name <> '' AND c.owner_user_id IS NULL AND h.t >= ? GROUP BY c.group_name, h.t / 86400 ORDER BY t`, since).Scan(&history).Error
+	err = db.Raw(`WITH reported AS (
+SELECT c.group_name,h.t/86400*86400 AS t,h.up,h.down FROM client_traffic_samples h JOIN clients c ON c.email=h.email
+WHERE c.group_name<>'' AND c.owner_user_id IS NULL AND h.t>=?
+AND NOT EXISTS (SELECT 1 FROM fleet_clients fc WHERE fc.panel_client_id=c.id AND fc.owned)
+UNION ALL
+SELECT g.name,h.day,h.uploaded,h.downloaded FROM fleet_term_usage_days h
+JOIN fleet_term_groups p ON p.term_id=h.term_id JOIN client_groups g ON g.id=p.group_id
+JOIN fleet_terms t ON t.id=h.term_id JOIN fleet_clients fc ON fc.id=t.client_id AND fc.owned WHERE h.day>=?
+) SELECT group_name,t,SUM(up) AS up,SUM(down) AS down FROM reported GROUP BY group_name,t ORDER BY t`, since, since).Scan(&history).Error
 	if err != nil {
 		return nil, err
 	}
@@ -193,18 +214,5 @@ func (s *ClientService) EnforceGroupQuotas() error {
 }
 
 func listManagedGroupSummaries() ([]GroupSummary, error) {
-	rows := []GroupSummary{}
-	err := database.GetDB().Raw(`WITH names AS (
-		SELECT name FROM client_groups UNION SELECT group_name FROM clients WHERE group_name <> '' AND owner_user_id IS NULL
-	) SELECT names.name, COUNT(c.id) AS client_count,
-	GREATEST(COALESCE(SUM(ct.up), 0) - COALESCE(g.reset_up, 0), 0) AS up,
-	GREATEST(COALESCE(SUM(ct.down), 0) - COALESCE(g.reset_down, 0), 0) AS down
-	FROM names LEFT JOIN client_groups g ON g.name = names.name
-	LEFT JOIN clients c ON c.group_name = names.name AND c.owner_user_id IS NULL
-	LEFT JOIN client_traffics ct ON ct.email = c.email
-	GROUP BY names.name, g.reset_up, g.reset_down ORDER BY LOWER(names.name)`).Scan(&rows).Error
-	for i := range rows {
-		rows[i].TrafficUsed = rows[i].Up + rows[i].Down
-	}
-	return rows, err
+	return readFleetGroupSummaries(database.GetDB(), true)
 }

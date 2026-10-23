@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package penhoon.node.v1;
+option go_package = "github.com/Arman2122/p-ui/api/node/v1;nodev1";
+
+service CreditService {
+  rpc Fetch(CreditDeliveryRequest) returns (CreditUpdateBatch);
+  rpc Acknowledge(CreditUpdateBatch) returns (CreditUpdateReceipt);
+}
+
+message CreditDeliveryRequest {
+  string node_id = 1;
+  string installation_id = 2;
+  string agent_state_journal_id = 3;
+  string runtime_id = 4;
+  string state_journal_id = 5;
+  string credit_journal_id = 6;
+}
+
+message CreditUpdate {
+  string grant_id = 1;
+  string client_id = 2;
+  string term_id = 3;
+  uint64 credit_revision = 4;
+  uint64 credit_ceiling = 5;
+}
+
+message CreditUpdateBatch {
+  string node_id = 1;
+  string installation_id = 2;
+  string agent_state_journal_id = 3;
+  string runtime_id = 4;
+  string state_journal_id = 5;
+  string credit_journal_id = 6;
+  uint64 base_configuration_revision = 7;
+  repeated CreditUpdate updates = 8;
+}
+
+message CreditUpdateReceipt {
+  bytes payload_sha256 = 1;
+}

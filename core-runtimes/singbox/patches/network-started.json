@@ -1,0 +1,200 @@
+{
+  "Module": "github.com/sagernet/sing-box",
+  "Version": "v1.14.0",
+  "Files": [
+    {
+      "module": "github.com/sagernet/sing-box",
+      "version": "v1.14.0",
+      "path": "route/network.go",
+      "sha256": "71b789e7451e1bdf41cbff34e310859d5001c310c83b1e1d80fd317e19d20618",
+      "reason": "NetworkManager.Start writes started while the interface-monitor callback reads it.",
+      "replacements": [
+        {
+          "from": "\t\"sync\"\n",
+          "to": "\t\"sync\"\n\t\"sync/atomic\"\n"
+        },
+        {
+          "from": "\tstarted                  bool\n",
+          "to": "\tstarted                  atomic.Bool\n"
+        },
+        {
+          "from": "\t\tr.started = true\n",
+          "to": "\t\tr.started.Store(true)\n"
+        },
+        {
+          "from": "\tif !r.started {\n",
+          "to": "\tif !r.started.Load() {\n"
+        }
+      ]
+    },
+    {
+      "Path": "protocol/tuic/inbound.go",
+      "Reason": "Capture immutable authenticated handles and synchronize complete credential snapshots during hot updates.",
+      "SHA256": "fa7647b3b7f93523c871e5b64c0da1bd4632306729f9f328cc8c0ebd48114b72",
+      "Replacements": [
+        {
+          "From": "\"net\"",
+          "To": "\"net\"\n \"sync\""
+        },
+        {
+          "From": "server       *tuic.Service[int]\n\tuserNameList []string",
+          "To": "server *tuic.Service[*option.TUICUser]\n usersMu sync.RWMutex\n users []*option.TUICUser"
+        },
+        {
+          "From": "tuic.NewService[int]",
+          "To": "tuic.NewService[*option.TUICUser]"
+        },
+        {
+          "From": "var userList []int\n\tvar userNameList []string",
+          "To": "var userList []*option.TUICUser"
+        },
+        {
+          "From": "userList = append(userList, index)\n\t\tuserNameList = append(userNameList, user.Name)",
+          "To": "record := user\n userList = append(userList, &record)"
+        },
+        {
+          "From": "inbound.userNameList = userNameList",
+          "To": "inbound.users = userList"
+        },
+        {
+          "From": "func (h *Inbound) NewConnectionEx",
+          "To": "\nfunc (h *Inbound) AuthenticationUsers() []*option.TUICUser {\n h.usersMu.RLock(); defer h.usersMu.RUnlock()\n return append([]*option.TUICUser(nil), h.users...)\n}\n\nfunc (h *Inbound) SetAuthenticatedUsers(users []*option.TUICUser) error {\n ids := make([][16]byte, 0, len(users))\n passwords := make([]string, 0, len(users))\n seen := make(map[[16]byte]bool, len(users))\n for _, user := range users {\n  if user == nil || user.Name == \"\" { return E.New(\"missing authenticated user\") }\n  id, err := uuid.FromString(user.UUID)\n  if err != nil || seen[id] { return E.New(\"invalid or duplicate authenticated UUID\") }\n  seen[id] = true\n  ids, passwords = append(ids, id), append(passwords, user.Password)\n }\n h.usersMu.Lock()\n defer h.usersMu.Unlock()\n h.server.UpdateUsers(users, ids, passwords)\n h.users = append([]*option.TUICUser(nil), users...)\n return nil\n}\n\nfunc (h *Inbound) NewConnectionEx"
+        },
+        {
+          "From": "userID, _ := auth.UserFromContext[int](ctx)\n\tif userName := h.userNameList[userID]; userName != \"\" {\n\t\tmetadata.User = userName\n\t\th.logger.InfoContext(ctx, \"[\", userName, \"] inbound connection to \", metadata.Destination)",
+          "To": "user, _ := auth.UserFromContext[*option.TUICUser](ctx)\n if user != nil && user.Name != \"\" {\n metadata.User = user.Name\n h.logger.InfoContext(ctx, \"[\", user.Name, \"] inbound connection to \", metadata.Destination)"
+        },
+        {
+          "From": "userID, _ := auth.UserFromContext[int](ctx)\n\tif userName := h.userNameList[userID]; userName != \"\" {\n\t\tmetadata.User = userName\n\t\th.logger.InfoContext(ctx, \"[\", userName, \"] inbound packet connection to \", metadata.Destination)",
+          "To": "user, _ := auth.UserFromContext[*option.TUICUser](ctx)\n if user != nil && user.Name != \"\" {\n metadata.User = user.Name\n h.logger.InfoContext(ctx, \"[\", user.Name, \"] inbound packet connection to \", metadata.Destination)"
+        }
+      ]
+    },
+    {
+      "Path": "protocol/anytls/inbound.go",
+      "Reason": "Capture immutable authenticated handles and synchronize complete credential snapshots during hot updates.",
+      "SHA256": "bce224ce39fd69504fed58c6b2d93e62ff7ae795441ca9cf18747763aeb634d1",
+      "Replacements": [
+        {
+          "From": "func (h *Inbound) Start",
+          "To": "func (h *Inbound) AuthenticationUsers() []*anytls.User { return h.service.AuthenticationUsers() }\nfunc (h *Inbound) SetAuthenticatedUsers(users []*anytls.User) error { return h.service.SetAuthenticatedUsers(users) }\n\nfunc (h *Inbound) Start"
+        },
+        {
+          "From": "if userName, _ := auth.UserFromContext[string](ctx); userName != \"\" {\n\t\tmetadata.User = userName\n\t\th.logger.InfoContext(ctx, \"[\", userName, \"] inbound connection to \", metadata.Destination)",
+          "To": "if user, _ := auth.UserFromContext[*anytls.User](ctx); user != nil && user.Name != \"\" {\n metadata.User = user.Name\n h.logger.InfoContext(ctx, \"[\", user.Name, \"] inbound connection to \", metadata.Destination)"
+        }
+      ]
+    }
+  ],
+  "Dependencies": [
+    {
+      "Module": "github.com/sagernet/sing-quic",
+      "Version": "v0.7.0-beta.4",
+      "Files": [
+        {
+          "Path": "tuic/service.go",
+          "Reason": "Capture immutable authenticated handles and synchronize complete credential snapshots during hot updates.",
+          "SHA256": "1b66f7e3c6a787f9468c0b687fd257b0b2dafc6386b3567f20121b00388c8f87",
+          "Replacements": [
+            {
+              "From": "type ServiceOptions struct {",
+              "To": "const PenhoonAuthenticationPatchLevel = 1\n\ntype ServiceOptions struct {"
+            },
+            {
+              "From": "userMap           map[[16]byte]U",
+              "To": "usersAccess sync.RWMutex\n userMap map[[16]byte]U"
+            },
+            {
+              "From": "s.userMap = userMap\n\ts.passwordMap = passwordMap",
+              "To": "s.usersAccess.Lock()\n s.userMap = userMap\n s.passwordMap = passwordMap\n s.usersAccess.Unlock()"
+            },
+            {
+              "From": "user, loaded := s.userMap[userUUID]",
+              "To": "s.usersAccess.RLock()\n user, loaded := s.userMap[userUUID]\n password := s.passwordMap[user]\n s.usersAccess.RUnlock()"
+            },
+            {
+              "From": "[]byte(s.passwordMap[user])",
+              "To": "[]byte(password)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Module": "github.com/anytls/sing-anytls",
+      "Version": "v0.0.11",
+      "Files": [
+        {
+          "Path": "service.go",
+          "Reason": "Capture immutable authenticated handles and synchronize complete credential snapshots during hot updates.",
+          "SHA256": "eab7bd2b780ece06bef1711e59f84d64f3d85a0f3de7db10186da0392ce47837",
+          "Replacements": [
+            {
+              "From": "\"os\"",
+              "To": "\"os\"\n \"sync\""
+            },
+            {
+              "From": "type Service struct {",
+              "To": "const PenhoonAuthenticationPatchLevel = 1\n\ntype Service struct {\n usersAccess sync.RWMutex"
+            },
+            {
+              "From": "users           map[[32]byte]string",
+              "To": "users map[[32]byte]*User"
+            },
+            {
+              "From": "users:           make(map[[32]byte]string)",
+              "To": "users: make(map[[32]byte]*User)"
+            },
+            {
+              "From": "service.users[sha256.Sum256([]byte(user.Password))] = user.Name",
+              "To": "record := user\n service.users[sha256.Sum256([]byte(user.Password))] = &record"
+            },
+            {
+              "From": "func (s *Service) UpdateUsers(users []User) {\n\tu := make(map[[32]byte]string)\n\tfor _, user := range users {\n\t\tu[sha256.Sum256([]byte(user.Password))] = user.Name\n\t}\n\ts.users = u\n}",
+              "To": "func (s *Service) UpdateUsers(users []User) {\n records := make([]*User, 0, len(users))\n for _, user := range users { record := user; records = append(records, &record) }\n _ = s.SetAuthenticatedUsers(records)\n}\n\nfunc (s *Service) SetAuthenticatedUsers(users []*User) error {\n next := make(map[[32]byte]*User, len(users))\n names := make(map[string]bool, len(users))\n for _, user := range users {\n  if user == nil || user.Name == \"\" || names[user.Name] { return errors.New(\"invalid authenticated user\") }\n  key := sha256.Sum256([]byte(user.Password))\n  if next[key] != nil { return errors.New(\"duplicate authenticated password\") }\n  names[user.Name], next[key] = true, user\n }\n s.usersAccess.Lock(); s.users = next; s.usersAccess.Unlock()\n return nil\n}\n\nfunc (s *Service) AuthenticationUsers() []*User {\n s.usersAccess.RLock(); defer s.usersAccess.RUnlock()\n users := make([]*User, 0, len(s.users))\n for _, user := range s.users { users = append(users, user) }\n return users\n}"
+            },
+            {
+              "From": "if user, ok := s.users[passwordSha256]; ok {",
+              "To": "s.usersAccess.RLock()\n user, ok := s.users[passwordSha256]\n s.usersAccess.RUnlock()\n if ok {"
+            }
+          ]
+        },
+        {
+          "Path": "session/stream.go",
+          "Reason": "Synchronize stream terminal errors when selective retirement races an existing carrier opening or writing a stream.",
+          "SHA256": "1f7ebfeb99ab5b0857d007dfedf664a667ef513aa3c95637ee58e86569a972d3",
+          "Replacements": [
+            {
+              "From": "dieErr  error",
+              "To": "dieErr error\n dieErrMu sync.RWMutex"
+            },
+            {
+              "From": "if n == 0 && s.dieErr != nil {\n\t\terr = s.dieErr\n\t}",
+              "To": "if terminal := s.closedError(); n == 0 && terminal != nil { err = terminal }"
+            },
+            {
+              "From": "if s.dieErr != nil {\n\t\treturn 0, s.dieErr\n\t}",
+              "To": "if terminal := s.closedError(); terminal != nil { return 0, terminal }"
+            },
+            {
+              "From": "s.dieErr = net.ErrClosed",
+              "To": "s.dieErrMu.Lock(); s.dieErr = net.ErrClosed; s.dieErrMu.Unlock()"
+            },
+            {
+              "From": "s.dieErr = err",
+              "To": "s.dieErrMu.Lock(); s.dieErr = err; s.dieErrMu.Unlock()"
+            },
+            {
+              "From": "return s.dieErr",
+              "To": "return s.closedError()"
+            },
+            {
+              "From": "func (s *Stream) SetReadDeadline",
+              "To": "func (s *Stream) closedError() error { s.dieErrMu.RLock(); defer s.dieErrMu.RUnlock(); return s.dieErr }\n\nfunc (s *Stream) SetReadDeadline"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

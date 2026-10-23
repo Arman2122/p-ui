@@ -45,9 +45,10 @@ const (
 // Verdict is an authenticator's answer. Reason is logged and handed to the
 // auth-failure event; ReplyMessage is what the client may be shown.
 type Verdict struct {
-	Accept       bool
-	Reason       string
-	ReplyMessage string
+	Accept        bool
+	Authenticated bool
+	Reason        string
+	ReplyMessage  string
 	// FramedIP, when set, is pushed to the NAS as the client's tunnel address.
 	FramedIP netip.Addr
 	// InterimSeconds asks the NAS for an accounting record this often; 0 leaves
@@ -139,8 +140,8 @@ func New(secret string, authAddr, acctAddr string) (*Server, error) {
 }
 
 // AuthAddr and AcctAddr are what a core writes into its daemon's config.
-func (s *Server) AuthAddr() string { return s.authAddr }
-func (s *Server) AcctAddr() string { return s.acctAddr }
+func (s *Server) AuthAddr() string { s.mu.Lock(); defer s.mu.Unlock(); return s.authAddr }
+func (s *Server) AcctAddr() string { s.mu.Lock(); defer s.mu.Unlock(); return s.acctAddr }
 
 // Secret is the host secret a core writes into its daemon's config.
 func (s *Server) Secret() string { return string(s.secret) }
@@ -194,6 +195,7 @@ func (s *Server) listenLocked() error {
 		_ = authConn.Close()
 		return fmt.Errorf("radius: listen %s: %w", s.acctAddr, err)
 	}
+	s.authAddr, s.acctAddr = authConn.LocalAddr().String(), acctConn.LocalAddr().String()
 	s.auth = &radius.PacketServer{SecretSource: radius.StaticSecretSource(s.secret), Handler: radius.HandlerFunc(s.handleAuth), ErrorLog: log.New(warnWriter{}, "", 0)}
 	s.acct = &radius.PacketServer{SecretSource: radius.StaticSecretSource(s.secret), Handler: radius.HandlerFunc(s.handleAcct), ErrorLog: log.New(warnWriter{}, "", 0)}
 	go func() {
@@ -264,12 +266,12 @@ func (s *Server) handleAuth(w radius.ResponseWriter, r *radius.Request) {
 	}
 	password := rfc2865.UserPassword_GetString(r.Packet)
 	if password == "" {
-		s.reject(w, r, nasID, username, peer, "no PAP password: only PAP is served")
+		s.reject(w, r, nasID, username, peer, "no PAP password: only PAP is served", true)
 		return
 	}
 	verdict := sink.Authenticate(r.Context(), username, password, peer)
 	if !verdict.Accept {
-		s.reject(w, r, nasID, username, peer, verdict.Reason)
+		s.reject(w, r, nasID, username, peer, verdict.Reason, !verdict.Authenticated)
 		return
 	}
 	resp := r.Response(radius.CodeAccessAccept)
@@ -329,8 +331,8 @@ func setVendorInt(p *radius.Packet, vendor uint32, vendorType byte, value uint32
 	p.Add(rfc2865.VendorSpecific_Type, radius.Attribute(buf))
 }
 
-func (s *Server) reject(w radius.ResponseWriter, r *radius.Request, nasID, username string, peer Peer, reason string) {
-	if s.Rejected != nil {
+func (s *Server) reject(w radius.ResponseWriter, r *radius.Request, nasID, username string, peer Peer, reason string, authenticationFailure bool) {
+	if authenticationFailure && s.Rejected != nil {
 		s.Rejected(nasID, username, peer, reason)
 	}
 	resp := r.Response(radius.CodeAccessReject)

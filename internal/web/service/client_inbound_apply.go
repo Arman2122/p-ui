@@ -22,6 +22,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// Removing an Xray credential leaves its established streams alive.
+func droppedClientNeedsRestart(inbound *model.Inbound) bool {
+	if inbound == nil || !inbound.Enable || inbound.NodeID != nil || !inboundServedByXray(inbound) {
+		return false
+	}
+	enabled, err := (&SettingService{}).GetRestartXrayOnClientDisable()
+	if err != nil {
+		logger.Warning("get RestartXrayOnClientDisable failed:", err)
+	}
+	return enabled
+}
+
 func sameClientConfigExceptUpdatedAt(a, b map[string]any) bool {
 	aa := maps.Clone(a)
 	bb := maps.Clone(b)
@@ -32,16 +44,18 @@ func sameClientConfigExceptUpdatedAt(a, b map[string]any) bool {
 	return aerr == nil && berr == nil && string(an) == string(bn)
 }
 
-// advancePushedInbound advances the node's reconcile-skip fingerprint from the
-// pre-edit settings to the saved ones after every per-client push succeeded.
-func advancePushedInbound(rt runtime.Runtime, prevSettings string, ib *model.Inbound) {
+// The fingerprint describes delivered changes, excluding a concurrent renewal
+// merged into storage that the per-client push did not send.
+func advancePushedInbound(rt runtime.Runtime, prevSettings, pushedSettings string, ib *model.Inbound) {
 	rem, ok := rt.(*runtime.Remote)
 	if !ok {
 		return
 	}
 	prev := *ib
 	prev.Settings = prevSettings
-	rem.AdvancePushedInbound(&prev, ib)
+	pushed := *ib
+	pushed.Settings = pushedSettings
+	rem.AdvancePushedInbound(&prev, &pushed)
 }
 
 // delInboundClients removes several clients from a single inbound in one pass:
@@ -162,6 +176,9 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 	// Persist the batch deletion atomically, serialized against the traffic poll
 	// to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if err := lockLegacyInboundMutationTx(tx, inboundId, nil); err != nil {
+			return err
+		}
 		for _, t := range targets {
 			if t.emailShared || keepTraffic {
 				continue
@@ -177,7 +194,7 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 				}
 			}
 		}
-		if e := tx.Save(oldInbound).Error; e != nil {
+		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}
 		finalClients, gcErr := inboundSvc.GetClients(oldInbound)
@@ -213,11 +230,17 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 	// Apply runtime deletes after commit — outside the serialized writer so a
 	// slow node call can't stall traffic accounting.
 	nodePushFailed := false
+	restartOnDrop := droppedClientNeedsRestart(oldInbound)
 	for _, t := range targets {
 		if len(t.email) == 0 {
 			continue
 		}
 		if oldInbound.NodeID == nil {
+			if t.needApiDel && restartOnDrop {
+				queueXraySessionDrop()
+				needRestart = true
+				restartOnDrop = false
+			}
 			if t.needApiDel && t.notDepleted {
 				rt, rterr := inboundSvc.runtimeFor(oldInbound)
 				if rterr != nil {
@@ -236,7 +259,7 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 		}
 	}
 	if nodePush && !nodePushFailed {
-		advancePushedInbound(nodeRt, prevSettings, oldInbound)
+		advancePushedInbound(nodeRt, prevSettings, string(newSettings), oldInbound)
 	}
 
 	return needRestart, nil
@@ -425,6 +448,9 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if err := lockLegacyInboundMutationTx(tx, oldInbound.Id, clients); err != nil {
+			return err
+		}
 		for i := range clients {
 			if len(clients[i].Email) == 0 {
 				continue
@@ -433,7 +459,7 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 				return e
 			}
 		}
-		if e := tx.Save(oldInbound).Error; e != nil {
+		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}
 		finalClients, gcErr := inboundSvc.GetClients(oldInbound)
@@ -495,7 +521,7 @@ func (s *ClientService) addInboundClient(inboundSvc *InboundService, data *model
 			}
 		}
 		if push {
-			advancePushedInbound(rt, prevSettings, oldInbound)
+			advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
 		}
 	}
 
@@ -762,6 +788,19 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if err := commitInboundClientSettings(tx, oldInbound, prevSettings, [2]string{oldEmail, clients[0].Email}); err != nil {
+			return err
+		}
+		mergedClients, err := inboundSvc.GetClients(oldInbound)
+		if err != nil {
+			return err
+		}
+		for _, merged := range mergedClients {
+			if merged.Email == clients[0].Email {
+				clients[0] = merged
+				break
+			}
+		}
 		if len(clients[0].Email) > 0 {
 			if len(oldEmail) > 0 {
 				emailUnchanged := strings.EqualFold(oldEmail, clients[0].Email)
@@ -818,9 +857,6 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			}
 		}
 
-		if e := tx.Save(oldInbound).Error; e != nil {
-			return e
-		}
 		// Rename the client record in the same transaction as the settings JSON
 		// so no concurrent SyncInbound can see one renamed without the other.
 		// Byte-level compare (not EqualFold): case-only edits must rename too,
@@ -862,12 +898,16 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 				needRestart = true
 			} else {
 				logger.Debug("Client edited on", rt.Name(), ":", clients[0].Email)
+				if oldClients[clientIndex].Enable && (!clients[0].Enable || oldEmail != clients[0].Email) && droppedClientNeedsRestart(oldInbound) {
+					queueXraySessionDrop()
+					needRestart = true
+				}
 			}
 		} else if push {
 			if err1 := rt.UpdateUser(context.Background(), oldInbound, oldEmail, clients[0]); err1 != nil {
 				logger.Warning("Error in updating client on", rt.Name(), ":", err1)
 			} else {
-				advancePushedInbound(rt, prevSettings, oldInbound)
+				advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
 			}
 		}
 	} else {
@@ -977,7 +1017,7 @@ func (s *ClientService) DelInboundClientByEmail(inboundSvc *InboundService, inbo
 				return e
 			}
 		}
-		if e := tx.Save(oldInbound).Error; e != nil {
+		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}
 		finalClients, gcErr := inboundSvc.GetClients(oldInbound)
@@ -1002,13 +1042,16 @@ func (s *ClientService) DelInboundClientByEmail(inboundSvc *InboundService, inbo
 	if len(email) > 0 {
 		if oldInbound.NodeID == nil {
 			if needApiDel {
+				needRestart = droppedClientNeedsRestart(oldInbound)
+				if needRestart {
+					queueXraySessionDrop()
+				}
 				// A disabled client is on no core, so only a live one (needApiDel)
 				// needs a runtime removal.
 				if !push {
 					needRestart = true
 				} else if err1 := rt.RemoveUser(context.Background(), oldInbound, email); err1 == nil {
 					logger.Debug("Client deleted on", rt.Name(), ":", email)
-					needRestart = false
 				} else if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", email)) {
 					logger.Debug("User is already deleted. Nothing to do more...")
 				} else {
@@ -1032,7 +1075,7 @@ func (s *ClientService) DelInboundClientByEmail(inboundSvc *InboundService, inbo
 				if err1 != nil {
 					logger.Warning("Error in deleting client on", rt.Name(), ":", err1)
 				} else {
-					advancePushedInbound(rt, prevSettings, oldInbound)
+					advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
 				}
 			}
 		}

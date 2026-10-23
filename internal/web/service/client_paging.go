@@ -135,6 +135,9 @@ type clientQuery struct {
 	db               *gorm.DB
 	joins            []clientQueryJoin
 	usedExpr         string
+	quotaExpr        string
+	expiryExpr       string
+	lastOnlineExpr   string
 	nowMs            int64
 	expireDiffMs     int64
 	trafficDiffBytes int64
@@ -154,18 +157,27 @@ func newClientQuery(db *gorm.DB, nowMs, expireDiffMs, trafficDiffBytes int64) cl
 		joins:            []clientQueryJoin{{sql: "LEFT JOIN client_traffics ct ON ct.email = c.email"}},
 		usedExpr:         "(COALESCE(ct.up, 0) + COALESCE(ct.down, 0))",
 	}
-	if !crossPanelTrafficIsLive(db) {
-		return q
+	if crossPanelTrafficIsLive(db) {
+		freshSince := globalTrafficFreshSince()
+		// One master's combined total matches UsedBytesExpr; mixing directions from
+		// distinct snapshots invents usage no source reported.
+		q.joins = append(q.joins, clientQueryJoin{
+			sql: "LEFT JOIN (SELECT email, MAX(up + down) AS used FROM client_global_traffics" +
+				" WHERE updated_at >= ? GROUP BY email) g ON g.email = c.email",
+			args: []any{freshSince},
+		})
+		q.usedExpr = "GREATEST(" + q.usedExpr + ", COALESCE(g.used, 0))"
 	}
-	freshSince := globalTrafficFreshSince()
-	// One master's combined total matches UsedBytesExpr; mixing directions from
-	// distinct snapshots invents usage no source reported.
-	q.joins = append(q.joins, clientQueryJoin{
-		sql: "LEFT JOIN (SELECT email, MAX(up + down) AS used FROM client_global_traffics" +
-			" WHERE updated_at >= ? GROUP BY email) g ON g.email = c.email",
-		args: []any{freshSince},
-	})
-	q.usedExpr = "GREATEST(" + q.usedExpr + ", COALESCE(g.used, 0))"
+	q.joins = append(q.joins,
+		clientQueryJoin{sql: "LEFT JOIN fleet_clients fleet_c ON fleet_c.panel_client_id = c.id AND fleet_c.owned"},
+		clientQueryJoin{sql: "LEFT JOIN fleet_terms fleet_t ON fleet_t.id = fleet_c.current_term_id"},
+		clientQueryJoin{sql: "LEFT JOIN fleet_term_usages fleet_u ON fleet_u.term_id = fleet_t.id"},
+		clientQueryJoin{sql: "LEFT JOIN fleet_budgets fleet_b ON fleet_b.id = fleet_t.budget_id"})
+	freshFleet := "fleet_c.credential_claims_version=1 AND fleet_c.current_term_id IS NULL AND fleet_c.pending_term_id IS NULL AND NOT EXISTS (SELECT 1 FROM fleet_terms history WHERE history.client_id=fleet_c.id)"
+	q.usedExpr = "CASE WHEN " + freshFleet + " THEN 0 WHEN fleet_c.current_term_id IS NOT NULL THEN fleet_t.opening_uploaded + fleet_t.opening_downloaded + fleet_u.uploaded + fleet_u.downloaded WHEN fleet_c.id IS NOT NULL THEN COALESCE(ct.up, 0) + COALESCE(ct.down, 0) ELSE " + q.usedExpr + " END"
+	q.quotaExpr = "(CASE WHEN fleet_c.current_term_id IS NOT NULL THEN CASE WHEN fleet_b.unlimited THEN 0 ELSE fleet_b.limit_bytes END ELSE c.total_gb END)"
+	q.expiryExpr = "(CASE WHEN fleet_c.current_term_id IS NOT NULL THEN fleet_t.expires_unix_milli ELSE c.expiry_time END)"
+	q.lastOnlineExpr = "(CASE WHEN " + freshFleet + " THEN 0 WHEN fleet_c.current_term_id IS NOT NULL THEN COALESCE(fleet_u.observed_unix_milli, 0) ELSE COALESCE(ct.last_online, 0) END)"
 	return q
 }
 
@@ -178,13 +190,13 @@ func (q clientQuery) from() *gorm.DB {
 }
 
 func (q clientQuery) depletedExpr() string {
-	return "((c.total_gb > 0 AND " + q.usedExpr + " >= c.total_gb)" +
-		" OR (c.expiry_time > 0 AND c.expiry_time <= " + sqlInt(q.nowMs) + "))"
+	return "((" + q.quotaExpr + " > 0 AND " + q.usedExpr + " >= " + q.quotaExpr + ")" +
+		" OR (" + q.expiryExpr + " > 0 AND " + q.expiryExpr + " <= " + sqlInt(q.nowMs) + "))"
 }
 
 func (q clientQuery) nearDepletionExpr() string {
-	return "((c.expiry_time > 0 AND c.expiry_time - " + sqlInt(q.nowMs) + " < " + sqlInt(q.expireDiffMs) + ")" +
-		" OR (c.total_gb > 0 AND c.total_gb - " + q.usedExpr + " < " + sqlInt(q.trafficDiffBytes) + "))"
+	return "((" + q.expiryExpr + " > 0 AND " + q.expiryExpr + " - " + sqlInt(q.nowMs) + " < " + sqlInt(q.expireDiffMs) + ")" +
+		" OR (" + q.quotaExpr + " > 0 AND " + q.quotaExpr + " - " + q.usedExpr + " < " + sqlInt(q.trafficDiffBytes) + "))"
 }
 
 func (q clientQuery) expiringExpr() string {
@@ -231,12 +243,12 @@ func (q clientQuery) applyParams(tx *gorm.DB, params ClientPageParams, onlines [
 	if params.ExpiryFrom > 0 || params.ExpiryTo > 0 {
 		// 0 means "never expires" and a negative value is the delayed-start
 		// sentinel; both sit outside any bounded range.
-		where("c.expiry_time > 0")
+		where(q.expiryExpr + " > 0")
 		if params.ExpiryFrom > 0 {
-			where("c.expiry_time >= ?", params.ExpiryFrom)
+			where(q.expiryExpr+" >= ?", params.ExpiryFrom)
 		}
 		if params.ExpiryTo > 0 {
-			where("c.expiry_time <= ?", params.ExpiryTo)
+			where(q.expiryExpr+" <= ?", params.ExpiryTo)
 		}
 	}
 	if params.UsageFrom > 0 {
@@ -339,15 +351,15 @@ func (q clientQuery) applyOrder(tx *gorm.DB, sortKey, order string) *gorm.DB {
 	case "traffic":
 		expr = q.usedExpr
 	case "remaining":
-		expr = "CASE WHEN c.total_gb > 0 THEN c.total_gb - " + q.usedExpr + " ELSE " + sqlNeverSentinel + " END"
+		expr = "CASE WHEN " + q.quotaExpr + " > 0 THEN " + q.quotaExpr + " - " + q.usedExpr + " ELSE " + sqlNeverSentinel + " END"
 	case "expiryTime":
-		expr = "CASE WHEN c.expiry_time > 0 THEN c.expiry_time ELSE " + sqlNeverSentinel + " END"
+		expr = "CASE WHEN " + q.expiryExpr + " > 0 THEN " + q.expiryExpr + " ELSE " + sqlNeverSentinel + " END"
 	case "createdAt":
 		expr, tieDir = "c.created_at", dir
 	case "updatedAt":
 		expr, tieDir = "c.updated_at", dir
 	case "lastOnline":
-		expr, tieDir = "COALESCE(ct.last_online, 0)", dir
+		expr, tieDir = q.lastOnlineExpr, dir
 	default:
 		return tx.Order("c.id ASC")
 	}
@@ -494,6 +506,9 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 		}
 	}
 
+	if err := projectFleetTraffic(q.db, emails, trafficByEmail); err != nil {
+		return nil, err
+	}
 	plans, err := readClientPlans(q.db, emails)
 	if err != nil {
 		return nil, err

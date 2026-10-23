@@ -58,7 +58,7 @@ export const TlsCertSchema = z.union([TlsCertFileSchema, TlsCertInlineSchema]);
 export type TlsCert = z.infer<typeof TlsCertSchema>;
 
 export const TlsClientSettingsSchema = z.object({
-  fingerprint: TlsFingerprintSchema.default('chrome'),
+  fingerprint: TlsFingerprintSchema.default(''),
   echConfigList: z.string().default(''),
   pinnedPeerCertSha256: z.array(z.string()).default([]),
   // Panel-only client directive (v2rayN `vcn`): verify the server certificate
@@ -88,6 +88,6 @@ export const TlsStreamSettingsSchema = z.object({
   curvePreferences: z.array(z.string()).optional(),
   masterKeyLog: z.string().optional(),
   echSockopt: SockoptStreamSettingsSchema.optional(),
-  settings: TlsClientSettingsSchema.default({ fingerprint: 'chrome', echConfigList: '', pinnedPeerCertSha256: [], verifyPeerCertByName: '' }),
+  settings: TlsClientSettingsSchema.default({ fingerprint: '', echConfigList: '', pinnedPeerCertSha256: [], verifyPeerCertByName: '' }),
 });
 export type TlsStreamSettings = z.infer<typeof TlsStreamSettingsSchema>;

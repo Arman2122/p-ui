@@ -20,9 +20,8 @@ import (
 
 // The third result counts the depleted inbounds XRAY serves. Only those can
 // be left listening by a failed drop, so only those may force a core restart.
-func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, int64, error) {
+func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) ([]*model.Inbound, int64, int64, error) {
 	now := time.Now().Unix() * 1000
-	needRestart := false
 
 	/*
 		Dropped through runtime.Runtime, which resolves the core that serves each
@@ -42,7 +41,7 @@ func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, int64
 	if err := tx.Model(model.Inbound{}).
 		Where("((total > 0 and up + down >= total) or (expiry_time > 0 and expiry_time <= ?)) and enable = ? and node_id IS NULL", now, true).
 		Find(&doomed).Error; err != nil {
-		return false, 0, 0, err
+		return nil, 0, 0, err
 	}
 	xrayServed := int64(0)
 	for _, ib := range doomed {
@@ -51,18 +50,6 @@ func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, int64
 		if cores.ServedByXray(core.Kind(ib.Protocol)) {
 			xrayServed++
 		}
-		rt, rtErr := s.runtimeFor(ib)
-		if rtErr != nil {
-			logger.Debug("Error resolving the runtime for inbound:", ib.Tag, rtErr)
-			needRestart = true
-			continue
-		}
-		if dropErr := rt.DelInbound(context.Background(), ib); dropErr != nil {
-			logger.Debug("Error in disabling inbound by api:", dropErr)
-			needRestart = true
-			continue
-		}
-		logger.Debug("Inbound disabled by api:", ib.Tag)
 	}
 
 	result := tx.Model(model.Inbound{}).
@@ -70,7 +57,7 @@ func (s *InboundService) disableInvalidInbounds(tx *gorm.DB) (bool, int64, int64
 		Update("enable", false)
 	err := result.Error
 	count := result.RowsAffected
-	return needRestart, count, xrayServed, err
+	return doomed, count, xrayServed, err
 }
 
 const globalTrafficFreshWindow = 24 * time.Hour
@@ -141,13 +128,14 @@ func depletedCond(tx *gorm.DB) (string, []any) {
 	return depletedCondFrom(used), append(args, time.Now().UnixMilli())
 }
 
-func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, pendingClientDisable, error) {
-	var pending pendingClientDisable
+func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, pendingTrafficApply, error) {
+	var pending pendingTrafficApply
 	needRestart := false
 	cond, condArgs := depletedCond(tx)
 
 	var depletedRows []xray.ClientTraffic
 	err := tx.Model(xray.ClientTraffic{}).
+		Where(legacyTrafficOwnerSQL).
 		Where(cond+" AND enable = ?", append(condArgs, true)...).
 		Find(&depletedRows).Error
 	if err != nil {
@@ -186,12 +174,10 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, pendin
 		}
 	}
 
-	var localTargets []target
 	localByInbound := make(map[int]map[string]struct{})
 	remoteByInbound := make(map[int][]target)
 	for _, t := range targets {
 		if t.NodeID == nil {
-			localTargets = append(localTargets, t)
 			if localByInbound[t.InboundID] == nil {
 				localByInbound[t.InboundID] = make(map[string]struct{})
 			}
@@ -210,29 +196,6 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB) (bool, int64, pendin
 		The local/remote split above is untouched and is why this is safe: remote
 		targets never reach here, they go through disableRemoteClients below.
 	*/
-	for _, t := range localTargets {
-		ib, getErr := s.GetInbound(t.InboundID)
-		if getErr != nil {
-			logger.Debug("Error loading the inbound to revoke on:", t.InboundID, getErr)
-			needRestart = true
-			continue
-		}
-		rt, rtErr := s.runtimeFor(ib)
-		if rtErr != nil {
-			logger.Debug("Error resolving the runtime for inbound:", ib.Tag, rtErr)
-			needRestart = true
-			continue
-		}
-		err1 := rt.RemoveUser(context.Background(), ib, t.Email)
-		if err1 == nil {
-			logger.Debug("Client disabled by api:", t.Email)
-		} else if restartCannotFix(err1, t.Email) {
-			logger.Debug("Nothing for xray to remove:", err1)
-		} else {
-			logger.Debug("Error in disabling client by api:", err1)
-			needRestart = true
-		}
-	}
 
 	/*
 		The settings-JSON writes do NOT happen here. They are handed to the caller,

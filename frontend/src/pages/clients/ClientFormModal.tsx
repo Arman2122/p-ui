@@ -48,6 +48,8 @@ import './ClientFormModal.css';
 import ClientPlanPanel, { POLICY_NONE, POLICY_UNLOADED } from './ClientPlanPanel';
 import { TLS_FLOW_CONTROL } from '@/schemas/primitives';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
+import { FleetClientCreationStatus } from './FleetClientCreationStatus';
+import type { FleetClientCreation } from './useFleetClientCreation';
 import { useIpLimitStatusQuery, getLimitIpNotice } from '@/api/queries/useIpLimitStatusQuery';
 import { useCoresQuery } from '@/api/queries/useCoresQuery';
 import { ClientFormSchema, ClientCreateFormSchema, type ClientFormValues } from '@/schemas/client';
@@ -98,6 +100,7 @@ interface SaveCreatePayload {
 }
 
 interface ClientFormModalProps {
+  creation?: FleetClientCreation;
   subSettings?: ClientSavedLinksProps['subSettings'];
   initialPolicyId?: number;
   open: boolean;
@@ -194,6 +197,7 @@ export function resolveTotalBytes(originalBytes: number | null | undefined, disp
 }
 
 export default function ClientFormModal({
+  creation,
   subSettings,
   initialPolicyId = 0,
   open,
@@ -211,8 +215,13 @@ export default function ClientFormModal({
   const { t } = useTranslation();
   const [messageApi, messageContextHolder] = message.useMessage();
   const isEdit = mode === 'edit';
+  const fleetCreate = !isEdit && !!creation && creation.mode !== 'legacy';
+  const createPending = !isEdit && !!creation?.activeOperationId;
+  const createUnavailable = !isEdit && !!creation && (creation.mode === 'unavailable' || creation.busy);
 
   const methods = useForm<Values>({ defaultValues: EMPTY });
+  const pendingDraft = useRef<Values | null>(null);
+  const ownedInitialized = useRef(false);
   const planSeeded = useRef(false);
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
   const delayedStart = useWatch({ control: methods.control, name: 'delayedStart' });
@@ -293,6 +302,7 @@ export default function ClientFormModal({
 
   useEffect(() => {
     if (!open) return;
+    ownedInitialized.current = false;
     setIpsModalOpen(false);
     setActiveTab('basic');
     planSeeded.current = false;
@@ -364,6 +374,12 @@ export default function ClientFormModal({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit]);
+
+  useEffect(() => {
+    if (!open || isEdit || creation?.mode !== 'fleet' || creation.activeOperationId || ownedInitialized.current) return;
+    ownedInitialized.current = true;
+    for (const name of ['password', 'auth', 'secret', 'username'] as const) methods.setValue(name, '');
+  }, [open, isEdit, creation?.mode, creation?.activeOperationId, methods]);
 
   useEffect(() => {
     if (!open || isEdit || planSeeded.current || !plans.data) return;
@@ -487,18 +503,18 @@ export default function ClientFormModal({
   }, [showReverseTag, reverseTag, methods]);
 
   useEffect(() => {
-    if (!ss2022Method) return;
+    if (fleetCreate || !ss2022Method) return;
     const current = methods.getValues('password');
     if (!RandomUtil.isShadowsocks2022Password(current, ss2022Method)) {
       methods.setValue('password', RandomUtil.randomShadowsocksPassword(ss2022Method));
     }
-  }, [ss2022Method, methods]);
+  }, [ss2022Method, methods, fleetCreate]);
 
   useEffect(() => {
-    if (showMtproto && !secret) {
+    if (!fleetCreate && showMtproto && !secret) {
       methods.setValue('secret', generateMtprotoSecret(mtprotoDomain));
     }
-  }, [showMtproto, secret, mtprotoDomain, methods]);
+  }, [showMtproto, secret, mtprotoDomain, methods, fleetCreate]);
 
   const inboundOptions = useMemo(
     () => (inbounds || [])
@@ -576,6 +592,7 @@ export default function ClientFormModal({
   }
 
   async function onSubmit() {
+    if (createPending || createUnavailable) return;
     const values = methods.getValues();
     if (values.policyId > 0 && (!selectedPlan || (!isEdit && selectedPlan.archived))) {
       messageApi.error(t('telemetry.planUnavailable'));
@@ -667,6 +684,8 @@ export default function ClientFormModal({
        other protocol's client without one. */
     if (showSecurity) {
       clientPayload.security = values.security || 'auto';
+    } else if (fleetCreate) {
+      clientPayload.security = '';
     }
     if (showWireguard) {
       clientPayload.privateKey = values.wgPrivateKey;
@@ -735,6 +754,7 @@ export default function ClientFormModal({
           policyId: plan,
         });
       } else {
+        pendingDraft.current = structuredClone(values);
         msg = await save(
           { client: clientPayload, inboundIds: values.inboundIds },
           { isEdit: false, email: clientPayload.email as string, externalLinks, policyId: plan, planOverrides },
@@ -764,7 +784,7 @@ export default function ClientFormModal({
         footer={
           <div className="client-form-footer">
             <Space size={8}>
-              <Switch size="small" aria-label={t('enable')} checked={enable} onChange={(v) => methods.setValue('enable', v)} />
+              <Switch size="small" aria-label={t('enable')} disabled={createPending || createUnavailable} checked={enable} onChange={(v) => methods.setValue('enable', v)} />
               <span>{t('pages.clients.design.enabledOnSave', { defaultValue: 'Enabled on save' })}</span>
             </Space>
             {isEdit && resetTraffic && (
@@ -785,7 +805,7 @@ export default function ClientFormModal({
               <Button onClick={close}>{t('cancel')}</Button>
               {/* Saving without the manifest omits every field the form guessed away, so it offers a retry instead. */}
               {cores ? (
-                <Button type="primary" loading={submitting} onClick={onSubmit}>
+                <Button type="primary" disabled={createPending || createUnavailable} loading={submitting} onClick={onSubmit}>
                   {isEdit ? t('save') : t('create')}
                 </Button>
               ) : (
@@ -801,6 +821,13 @@ export default function ClientFormModal({
           </div>
         }
       >
+        {!isEdit && creation && <FleetClientCreationStatus creation={creation} onComplete={close} onStartNew={() => {
+          if (creation.startNew() && pendingDraft.current) {
+            ownedInitialized.current = true;
+            methods.reset(pendingDraft.current);
+          }
+        }} />}
+        <div hidden={createPending} inert={createUnavailable}>
         <FormProvider {...methods}>
           <Form layout="vertical">
             <div className="client-form-mode">
@@ -896,7 +923,7 @@ export default function ClientFormModal({
                         {delayedStart ? <FormField name="delayedDays" label={t('pages.clients.expireDays')} transform={{ output: (v) => Number(v) || 0 }}>
                           <InputNumber disabled={expiryManaged} min={0} style={{ width: '100%' }} />
                         </FormField> : <Form.Item label={t('pages.clients.expiryTime')}>
-                          <DateTimePicker disabled={expiryManaged} value={expiryDayjs} onChange={(d) => methods.setValue('expiryDate', d ? d.valueOf() : 0)} />
+                          <DateTimePicker aria-label={t('pages.clients.expiryTime')} disabled={expiryManaged} value={expiryDayjs} onChange={(d) => methods.setValue('expiryDate', d ? d.valueOf() : 0)} />
                         </Form.Item>}
                       </Col>
                     </Row>
@@ -937,6 +964,7 @@ export default function ClientFormModal({
                     </div>
                   ) : (
                     <>
+                      {fleetCreate && <Alert type="info" showIcon title={t('pages.clients.creation.credentialsHint')} style={{ marginBottom: 16 }} />}
                       {credentials.has('uuid') && (
                         <Form.Item label={t('pages.clients.uuid')}>
                           <Space.Compact style={{ display: 'flex' }}>
@@ -958,7 +986,7 @@ export default function ClientFormModal({
                       {credentials.has('password') && (
                         <Form.Item label={t('pages.clients.password')} tooltip={t('pages.clients.passwordDesc')}>
                           <Space.Compact style={{ display: 'flex' }}>
-                            <Input value={password} style={{ flex: 1 }} onChange={(e) => methods.setValue('password', e.target.value)} />
+                            <Input aria-label={t('pages.clients.password')} value={password} style={{ flex: 1 }} onChange={(e) => methods.setValue('password', e.target.value)} />
                             <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={regeneratePassword} />
                           </Space.Compact>
                         </Form.Item>
@@ -967,7 +995,7 @@ export default function ClientFormModal({
                       {/* subId is the subscription link's identifier, not a credential of any core, so every client has one. */}
                       <Form.Item label={t('pages.clients.subId')} {...fieldError('subId')}>
                         <Space.Compact style={{ display: 'flex' }}>
-                          <Input value={subId} style={{ flex: 1 }} onChange={(e) => methods.setValue('subId', e.target.value)} />
+                          <Input aria-label={t('pages.clients.subId')} value={subId} style={{ flex: 1 }} onChange={(e) => methods.setValue('subId', e.target.value)} />
                           <Button aria-label={t('regenerate')} icon={<ReloadOutlined />} onClick={() => methods.setValue('subId', RandomUtil.randomLowerAndNum(16))} />
                         </Space.Compact>
                       </Form.Item>
@@ -1021,9 +1049,13 @@ export default function ClientFormModal({
                         </>
                       )}
                       {credentials.has('preSharedKey') && (
-                        <FormField name="wgPreSharedKey" label={t('pages.clients.wireguardPreSharedKey')}>
-                          <Input />
-                        </FormField>
+                        <Form.Item label={t('pages.clients.wireguardPreSharedKey')} htmlFor="client-wg-preshared-key">
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <FormField name="wgPreSharedKey" noStyle><Input id="client-wg-preshared-key" /></FormField>
+                            <Button aria-label={t('regenerate')} icon={<ReloadOutlined />}
+                              onClick={() => methods.setValue('wgPreSharedKey', Wireguard.keyToBase64(Wireguard.generatePresharedKey()), { shouldDirty: true })} />
+                          </Space.Compact>
+                        </Form.Item>
                       )}
                       {credentials.has('allowedIPs') && (
                         <FormField
@@ -1129,6 +1161,7 @@ export default function ClientFormModal({
             />
           </Form>
         </FormProvider>
+        </div>
       </Modal>
 
       <Modal

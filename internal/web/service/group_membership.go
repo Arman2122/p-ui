@@ -18,6 +18,9 @@ var groupMembershipMu sync.Mutex
 // Moving membership preserves the old pool's consumption and excludes bytes
 // carried into the new pool from before the client joined it.
 func preserveGroupTransfer(tx *gorm.DB, emails []string, target string) error {
+	if err := requireLegacyClientLifecycle(tx, emails); err != nil {
+		return err
+	}
 	var up, down int64
 	for _, batch := range chunkStrings(emails, sqlInChunk) {
 		var changed []string
@@ -45,10 +48,13 @@ func preserveGroupTransfer(tx *gorm.DB, emails []string, target string) error {
 	})}).Create(&model.ClientGroup{Name: target, ResetUp: up, ResetDown: down}).Error
 }
 
-func (s *ClientService) setGroupInbounds(name string, ids []int) error {
+func (s *ClientService) setGroupInbounds(name string, ids []int, quotaBytes int64) error {
 	groupMembershipMu.Lock()
 	defer groupMembershipMu.Unlock()
 	db := database.GetDB()
+	if err := db.Transaction(func(tx *gorm.DB) error { return requireLegacyGroupEditTx(tx, name) }); err != nil {
+		return err
+	}
 	ids = slices.Clone(ids)
 	slices.Sort(ids)
 	ids = slices.Compact(ids)
@@ -100,6 +106,9 @@ func (s *ClientService) setGroupInbounds(name string, ids []int) error {
 		}
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
+		if err := requireLegacyGroupEditTx(tx, name); err != nil {
+			return err
+		}
 		if err := tx.Where("name = ?", name).Delete(&model.GroupInbound{}).Error; err != nil {
 			return err
 		}
@@ -107,10 +116,12 @@ func (s *ClientService) setGroupInbounds(name string, ids []int) error {
 		for _, id := range ids {
 			rows = append(rows, model.GroupInbound{Name: name, InboundID: id})
 		}
-		if len(rows) == 0 {
-			return nil
+		if len(rows) != 0 {
+			if err := tx.Create(&rows).Error; err != nil {
+				return err
+			}
 		}
-		return tx.Create(&rows).Error
+		return saveLegacyGroupQuotaTx(tx, name, quotaBytes)
 	})
 }
 

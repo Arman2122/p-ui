@@ -18,14 +18,19 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/node/admission"
+	"github.com/Arman2122/p-ui/internal/node/limits"
 )
 
 // Deps are the panel-side facts the core cannot hold itself: where the host
 // key lives across restarts, and who wants to hear about a refused login.
 type Deps struct {
-	LoadHostKey  func() (string, error)
-	StoreHostKey func(pem string) error
-	AuthFailure  func(AuthFailure)
+	Governor      func(string) (*limits.Account, bool)
+	Demand        func(context.Context, string, string) error
+	DemandContext context.Context
+	LoadHostKey   func() (string, error)
+	StoreHostKey  func(pem string) error
+	AuthFailure   func(AuthFailure)
 	// Admit asks the panel to decide a login against the client's cap; nil admits
 	// every login, which is what a core built without a panel does.
 	Admit core.AdmitFunc
@@ -145,7 +150,7 @@ func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
 	var failures []error
 	for _, d := range desired {
 		want[d.ID] = struct{}{}
-		if err := c.ensureLocked(d); err != nil {
+		if err := c.ensureLocked(ctx, d); err != nil {
 			failures = append(failures, err)
 		}
 	}
@@ -163,7 +168,7 @@ func (c *Core) Reconcile(ctx context.Context, desired []core.Instance) error {
 	return errors.Join(failures...)
 }
 
-func (c *Core) ensureLocked(d core.Instance) error {
+func (c *Core) ensureLocked(ctx context.Context, d core.Instance) error {
 	if !d.Enable {
 		if cur, ok := c.instances[d.ID]; ok {
 			cur.srv.stop()
@@ -181,14 +186,16 @@ func (c *Core) ensureLocked(d core.Instance) error {
 		if cur.fingerprint == fp {
 			cur.inst, cur.settings = d, settings
 			cur.srv.setBanner(settings.Banner)
-			return cur.srv.setUsers(d.Users)
+			return cur.srv.setAuthentication(d.Users, admission.BindingFromContext(ctx), d.Tag)
 		}
 		cur.srv.stop()
 		delete(c.instances, d.ID)
 	}
 	srv := newServer(d.ID, d.Tag, settings, c.hostKeys, c.dialerFor(settings), c.deps.AuthFailure, c.deps.Admit)
+	srv.governor = c.deps.Governor
+	srv.demand, srv.demandContext = c.deps.Demand, c.deps.DemandContext
 	srv.udp = c.udpDialerFor(settings)
-	userErr := srv.setUsers(d.Users)
+	userErr := srv.setAuthentication(d.Users, admission.BindingFromContext(ctx), d.Tag)
 	if _, err := listen(listenSpec{listen: d.Listen, port: d.Port}, srv); err != nil {
 		c.failed[d.ID] = bindFailure{tag: d.Tag, err: err}
 		return fmt.Errorf("ssh: inbound %d: listen: %w", d.ID, err)
@@ -292,7 +299,7 @@ func (c *Core) ApplyInstance(ctx context.Context, inst core.Instance) error {
 	if err := c.ensureHostKeyLocked(); err != nil {
 		return err
 	}
-	return c.ensureLocked(inst)
+	return c.ensureLocked(ctx, inst)
 }
 
 func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {

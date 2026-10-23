@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -131,10 +132,19 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 	oldTgToken, _ := a.settingService.GetTgBotToken()
 	oldTgChatId, _ := a.settingService.GetTgBotChatId()
 	oldTgAPIServer, _ := a.settingService.GetTgBotAPIServer()
-	if twoFactorErr == nil && oldTwoFactor && !allSetting.TwoFactorEnable {
-		if err := a.settingService.VerifyTwoFactorCode(form.TwoFactorCode); err != nil {
+	if twoFactorErr == nil && oldTwoFactor {
+		submittedToken := strings.TrimSpace(allSetting.TwoFactorToken)
+		allSetting.TwoFactorToken = submittedToken
+		storedToken, err := a.settingService.GetTwoFactorToken()
+		if err != nil {
 			jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 			return
+		}
+		if !allSetting.TwoFactorEnable || (submittedToken != "" && submittedToken != storedToken) {
+			if err := a.settingService.VerifyTwoFactorCode(form.TwoFactorCode); err != nil {
+				jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+				return
+			}
 		}
 	}
 	err := a.settingService.UpdateAllSetting(allSetting, service.SecretClears{

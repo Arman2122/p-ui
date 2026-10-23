@@ -116,19 +116,14 @@ func TestResellerAuthorizationPostgres(t *testing.T) {
 			t.Fatalf("role=%s want%s", body.Obj.Role, want)
 		}
 	}
-	t.Run("mtls never inherits first reseller", func(t *testing.T) {
+	t.Run("mtls cannot become panel administrator", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/panel/api/me", nil)
 		r.TLS = &tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{{}}}}
+		r.Header.Set("X-Requested-With", "XMLHttpRequest")
 		w := httptest.NewRecorder()
 		engine.ServeHTTP(w, r)
-		var body struct {
-			Obj service.SignedInUser `json:"obj"`
-		}
-		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-			t.Fatal(err)
-		}
-		if body.Obj.Role != "admin" || body.Obj.ID != admin.Id {
-			t.Fatalf("mTLS role=%q user=%d want admin%d", body.Obj.Role, body.Obj.ID, admin.Id)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("certificate-only panel access status=%d", w.Code)
 		}
 	})
 	t.Run("OpenAPI exposes only permitted operations", func(t *testing.T) { testResellerOpenAPIAuthorization(t, reseller.Id, token.Token, jar) })

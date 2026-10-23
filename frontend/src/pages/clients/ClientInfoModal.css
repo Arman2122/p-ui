@@ -3,6 +3,14 @@
   border-collapse: collapse;
 }
 
+.client-info-modal .ant-tag.ant-tag-filled.ant-tag-green {
+  color: color-mix(in srgb, #389e0d 72%, var(--p-ink, #111));
+}
+
+.client-info-modal .ant-tag.ant-tag-filled.ant-tag-orange {
+  color: color-mix(in srgb, #d46b08 72%, var(--p-ink, #111));
+}
+
 .info-table.block {
   margin-bottom: 10px;
 }

@@ -1,7 +1,7 @@
 import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { Button, ConfigProvider, Layout, Modal, Result, Space, Spin, message } from 'antd';
+import { Alert, Button, ConfigProvider, Layout, Modal, Result, Space, Spin, message } from 'antd';
 import { CopyOutlined, CloudDownloadOutlined } from '@ant-design/icons';
 
 import { HttpUtil, ClipboardManager, FileManager } from '@/utils';
@@ -209,6 +209,14 @@ export default function IndexPage() {
                     </div>
                   )}
 
+                  {status.xray.errorMsg && (
+                    <Alert
+                      type={status.xray.state === 'running' ? 'warning' : 'error'}
+                      showIcon
+                      title={t('activity.alerts.core.title')}
+                      description={`Xray: ${status.xray.errorMsg}`}
+                    />
+                  )}
 
                   <VitalsBand
                     status={status}

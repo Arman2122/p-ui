@@ -2,13 +2,11 @@ package tgbot
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
-	"io"
-	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -253,83 +251,49 @@ func (t *Tgbot) sendClientSubLinks(chatId int64, email string) {
 	t.SendMsgToTgbot(chatId, msg, inlineKeyboard)
 }
 
-// sendClientIndividualLinks fetches the subscription content (individual links) and sends it to the user
+func (t *Tgbot) clientSubLinks(email, subURL string) ([]string, error) {
+	parsed, err := url.Parse(subURL)
+	if err != nil {
+		return nil, err
+	}
+	_, client, err := t.inboundService.GetClientByEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if client == nil {
+		return nil, errors.New("client not found")
+	}
+	return t.inboundService.GetSubLinks(parsed.Hostname(), client.SubID)
+}
+
 func (t *Tgbot) sendClientIndividualLinks(chatId int64, email string) {
-	// Build the HTML sub page URL; we'll call it with header Accept to get raw content
 	subURL, _, err := t.buildSubscriptionURLs(email)
 	if err != nil {
 		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.errorOperation")+"\r\n"+err.Error())
 		return
 	}
-
-	// Try to fetch raw subscription links. Prefer plain text response.
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, subURL, nil)
+	links, err := t.clientSubLinks(email, subURL)
 	if err != nil {
 		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.errorOperation")+"\r\n"+err.Error())
 		return
 	}
-	// Force plain text to avoid HTML page; controller respects Accept header
-	req.Header.Set("Accept", "text/plain, */*;q=0.1")
-
-	// Use optimized client with connection pooling
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-
-	resp, err := optimizedHTTPClient.Do(req)
-	if err != nil {
-		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.errorOperation")+"\r\n"+err.Error())
-		return
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.errorOperation")+"\r\n"+err.Error())
-		return
-	}
-
-	// If service is configured to encode (Base64), decode it
-	encoded, _ := t.settingService.GetSubEncrypt()
-	var content string
-	if encoded {
-		decoded, err := base64.StdEncoding.DecodeString(string(bodyBytes))
-		if err != nil {
-			// fallback to raw text
-			content = string(bodyBytes)
-		} else {
-			content = string(decoded)
-		}
-	} else {
-		content = string(bodyBytes)
-	}
-
-	// Normalize line endings and trim
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	var cleaned []string
-	for _, l := range lines {
-		l = strings.TrimSpace(l)
-		if l != "" {
-			cleaned = append(cleaned, l)
-		}
-	}
-	if len(cleaned) == 0 {
+	if len(links) == 0 {
 		t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.noResult"))
 		return
 	}
 
 	// Send in chunks to respect message length; use monospace formatting
 	const maxPerMessage = 50
-	for i := 0; i < len(cleaned); i += maxPerMessage {
-		j := min(i+maxPerMessage, len(cleaned))
-		chunk := cleaned[i:j]
+	for i := 0; i < len(links); i += maxPerMessage {
+		j := min(i+maxPerMessage, len(links))
+		chunk := links[i:j]
 		var msg strings.Builder
 		msg.WriteString(t.I18nBot("subscription.individualLinks"))
 		msg.WriteString(":\r\n")
 		for _, link := range chunk {
 			// wrap each link in <code>
 			msg.WriteString("<code>")
-			msg.WriteString(link)
+			msg.WriteString(html.EscapeString(link))
 			msg.WriteString("</code>\r\n")
 		}
 		t.SendMsgToTgbot(chatId, msg.String())
@@ -353,7 +317,7 @@ func (t *Tgbot) sendClientQRLinks(chatId int64, email string) {
 	}
 
 	// Inform user
-	t.SendMsgToTgbot(chatId, "QRCode for client "+email+":")
+	t.SendMsgToTgbot(chatId, t.I18nBot("tgbot.answers.qrCodeForClient", "Email=="+email))
 
 	// Send sub URL QR (filename: sub.png)
 	if png, err := createQR(subURL, 320); err == nil {
@@ -379,53 +343,11 @@ func (t *Tgbot) sendClientQRLinks(chatId int64, email string) {
 		}
 	}
 
-	// Also generate a few individual links' QRs (first up to 5)
-	subPageURL := subURL
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, subPageURL, nil)
-	if err == nil {
-		req.Header.Set("Accept", "text/plain, */*;q=0.1")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		req = req.WithContext(ctx)
-		if resp, err := optimizedHTTPClient.Do(req); err == nil {
-			body, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			encoded, _ := t.settingService.GetSubEncrypt()
-			var content string
-			if encoded {
-				if dec, err := base64.StdEncoding.DecodeString(string(body)); err == nil {
-					content = string(dec)
-				} else {
-					content = string(body)
-				}
-			} else {
-				content = string(body)
-			}
-			lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-			var cleaned []string
-			for _, l := range lines {
-				l = strings.TrimSpace(l)
-				if l != "" {
-					cleaned = append(cleaned, l)
-				}
-			}
-			if len(cleaned) > 0 {
-				max := min(len(cleaned), 5)
-				for i := range max {
-					if png, err := createQR(cleaned[i], 320); err == nil {
-						// Use the email as filename for individual link QR
-						filename := email + ".png"
-						document := tu.Document(
-							tu.ID(chatId),
-							tu.FileFromBytes(png, filename),
-						)
-						_, _ = bot.SendDocument(context.Background(), document)
-						// Reduced delay for better performance
-						if i < max-1 { // Only delay between documents, not after the last one
-							time.Sleep(50 * time.Millisecond)
-						}
-					}
-				}
+	if links, err := t.clientSubLinks(email, subURL); err == nil {
+		for i := range min(len(links), 5) {
+			if png, err := createQR(links[i], 320); err == nil {
+				document := tu.Document(tu.ID(chatId), tu.FileFromBytes(png, email+".png"))
+				_, _ = bot.SendDocument(context.Background(), document)
 			}
 		}
 	}
@@ -447,6 +369,9 @@ func (t *Tgbot) clientInfoMsg(
 	diff := traffic.ExpiryTime/1000 - now
 	if traffic.ExpiryTime == 0 {
 		expiryTime = t.I18nBot("tgbot.unlimited")
+	} else if traffic.ExpiryTime < 0 {
+		expiryTime = fmt.Sprintf("%d %s", traffic.ExpiryTime/-86400000, t.I18nBot("tgbot.days"))
+		flag = true
 	} else if diff > 172800 || !traffic.Enable {
 		expiryTime = time.Unix((traffic.ExpiryTime / 1000), 0).Format("2006-01-02 15:04:05")
 		if diff > 0 {
@@ -465,9 +390,6 @@ func (t *Tgbot) clientInfoMsg(
 			}
 			expiryTime += fmt.Sprintf(" (%s)", remainingTime)
 		}
-	} else if traffic.ExpiryTime < 0 {
-		expiryTime = fmt.Sprintf("%d %s", traffic.ExpiryTime/-86400000, t.I18nBot("tgbot.days"))
-		flag = true
 	} else {
 		expiryTime = fmt.Sprintf("%d %s", diff/3600, t.I18nBot("tgbot.hours"))
 		flag = true

@@ -168,25 +168,21 @@ _openapi:
         carries outcome: per-row ok, skipped and failed lists with reasons."
       url: '#rotate-many-clients-at-once-credentials-mints-a-fresh-uuid-password-key-or-secret-for-every-kind-the-client-is-attached-to-a-kind-whose-credential-the-panel-cannot-mint-such-as-a-wireguard-keypair-is-skipped-with-a-reason-subid-gives-the-client-a-new-subscription-id-every-share-link-and-subscription-url-of-the-selection-stops-working-handing-out-the-new-ones-is-the-operators-job-applied-with-one-read-modify-write-per-inbound-a-local-xray-inbound-is-flagged-for-restart-a-local-mtproto-sidecar-is-hot-applied-a-node-is-reconciled-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
     - depth: 2
-      title: 'Enable many clients in one call. Emails are grouped by inbound and
-        applied with a single read-modify-write per inbound; the running Xray
-        (local or remote node) is updated to add each user. Note that enabling a
-        client whose quota is exhausted or whose expiry has passed only flips
-        the flag — the traffic loop will disable it again on the next tick.
-        Returns the changed count and per-email skip reasons. Instead of emails,
-        pass filter (the same query object /list/paged takes) to act on every
-        matching client, capped at 20000. The response also carries outcome:
-        per-row ok, skipped and failed lists with reasons.'
-      url: '#enable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-add-each-user-note-that-enabling-a-client-whose-quota-is-exhausted-or-whose-expiry-has-passed-only-flips-the-flag--the-traffic-loop-will-disable-it-again-on-the-next-tick-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
+      title: Record the desired enable state for many clients. Owned fleet clients
+        atomically queue per-placement work; pending counts clients awaiting
+        applied node convergence and does not promise an immediate remote
+        change. Other clients retain their inbound and runtime update behavior.
+        Returns changed, pending, per-email skip reasons and outcome lists.
+        Accepts emails or the /list/paged filter, capped at 20000 clients.
+      url: '#record-the-desired-enable-state-for-many-clients-owned-fleet-clients-atomically-queue-per-placement-work-pending-counts-clients-awaiting-applied-node-convergence-and-does-not-promise-an-immediate-remote-change-other-clients-retain-their-inbound-and-runtime-update-behavior-returns-changed-pending-per-email-skip-reasons-and-outcome-lists-accepts-emails-or-the-listpaged-filter-capped-at-20000-clients'
     - depth: 2
-      title: 'Disable many clients in one call. Emails are grouped by inbound and
-        applied with a single read-modify-write per inbound; the running Xray
-        (local or remote node) is updated to remove each user. Returns the
-        changed count and per-email skip reasons. Instead of emails, pass filter
-        (the same query object /list/paged takes) to act on every matching
-        client, capped at 20000. The response also carries outcome: per-row ok,
-        skipped and failed lists with reasons.'
-      url: '#disable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-remove-each-user-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons'
+      title: Record the desired disable state for many clients. Owned fleet clients
+        atomically queue per-placement work; pending counts clients awaiting
+        applied node convergence and does not promise an immediate remote
+        change. Other clients retain their inbound and runtime update behavior.
+        Returns changed, pending, per-email skip reasons and outcome lists.
+        Accepts emails or the /list/paged filter, capped at 20000 clients.
+      url: '#record-the-desired-disable-state-for-many-clients-owned-fleet-clients-atomically-queue-per-placement-work-pending-counts-clients-awaiting-applied-node-convergence-and-does-not-promise-an-immediate-remote-change-other-clients-retain-their-inbound-and-runtime-update-behavior-returns-changed-pending-per-email-skip-reasons-and-outcome-lists-accepts-emails-or-the-listpaged-filter-capped-at-20000-clients'
     - depth: 2
       title: 'Delete many clients in one call. The server processes the list
         sequentially so each delete sees the committed state of the previous one
@@ -521,24 +517,22 @@ _openapi:
           also carries outcome: per-row ok, skipped and failed lists with
           reasons."
         id: rotate-many-clients-at-once-credentials-mints-a-fresh-uuid-password-key-or-secret-for-every-kind-the-client-is-attached-to-a-kind-whose-credential-the-panel-cannot-mint-such-as-a-wireguard-keypair-is-skipped-with-a-reason-subid-gives-the-client-a-new-subscription-id-every-share-link-and-subscription-url-of-the-selection-stops-working-handing-out-the-new-ones-is-the-operators-job-applied-with-one-read-modify-write-per-inbound-a-local-xray-inbound-is-flagged-for-restart-a-local-mtproto-sidecar-is-hot-applied-a-node-is-reconciled-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
-      - content: 'Enable many clients in one call. Emails are grouped by inbound and
-          applied with a single read-modify-write per inbound; the running Xray
-          (local or remote node) is updated to add each user. Note that enabling
-          a client whose quota is exhausted or whose expiry has passed only
-          flips the flag — the traffic loop will disable it again on the next
-          tick. Returns the changed count and per-email skip reasons. Instead of
-          emails, pass filter (the same query object /list/paged takes) to act
-          on every matching client, capped at 20000. The response also carries
-          outcome: per-row ok, skipped and failed lists with reasons.'
-        id: enable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-add-each-user-note-that-enabling-a-client-whose-quota-is-exhausted-or-whose-expiry-has-passed-only-flips-the-flag--the-traffic-loop-will-disable-it-again-on-the-next-tick-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
-      - content: 'Disable many clients in one call. Emails are grouped by inbound and
-          applied with a single read-modify-write per inbound; the running Xray
-          (local or remote node) is updated to remove each user. Returns the
-          changed count and per-email skip reasons. Instead of emails, pass
-          filter (the same query object /list/paged takes) to act on every
-          matching client, capped at 20000. The response also carries outcome:
-          per-row ok, skipped and failed lists with reasons.'
-        id: disable-many-clients-in-one-call-emails-are-grouped-by-inbound-and-applied-with-a-single-read-modify-write-per-inbound-the-running-xray-local-or-remote-node-is-updated-to-remove-each-user-returns-the-changed-count-and-per-email-skip-reasons-instead-of-emails-pass-filter-the-same-query-object-listpaged-takes-to-act-on-every-matching-client-capped-at-20000-the-response-also-carries-outcome-per-row-ok-skipped-and-failed-lists-with-reasons
+      - content: Record the desired enable state for many clients. Owned fleet clients
+          atomically queue per-placement work; pending counts clients awaiting
+          applied node convergence and does not promise an immediate remote
+          change. Other clients retain their inbound and runtime update
+          behavior. Returns changed, pending, per-email skip reasons and outcome
+          lists. Accepts emails or the /list/paged filter, capped at 20000
+          clients.
+        id: record-the-desired-enable-state-for-many-clients-owned-fleet-clients-atomically-queue-per-placement-work-pending-counts-clients-awaiting-applied-node-convergence-and-does-not-promise-an-immediate-remote-change-other-clients-retain-their-inbound-and-runtime-update-behavior-returns-changed-pending-per-email-skip-reasons-and-outcome-lists-accepts-emails-or-the-listpaged-filter-capped-at-20000-clients
+      - content: Record the desired disable state for many clients. Owned fleet clients
+          atomically queue per-placement work; pending counts clients awaiting
+          applied node convergence and does not promise an immediate remote
+          change. Other clients retain their inbound and runtime update
+          behavior. Returns changed, pending, per-email skip reasons and outcome
+          lists. Accepts emails or the /list/paged filter, capped at 20000
+          clients.
+        id: record-the-desired-disable-state-for-many-clients-owned-fleet-clients-atomically-queue-per-placement-work-pending-counts-clients-awaiting-applied-node-convergence-and-does-not-promise-an-immediate-remote-change-other-clients-retain-their-inbound-and-runtime-update-behavior-returns-changed-pending-per-email-skip-reasons-and-outcome-lists-accepts-emails-or-the-listpaged-filter-capped-at-20000-clients
       - content: 'Delete many clients in one call. The server processes the list
           sequentially so each delete sees the committed state of the previous
           one — avoids the race the per-email fan-out had on the panel side.

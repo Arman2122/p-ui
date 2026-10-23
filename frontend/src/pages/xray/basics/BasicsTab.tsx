@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { onNumber } from '@/utils/onNumber';
 import { useTranslation } from 'react-i18next';
+import { directFreedomStrategy, setDirectFreedomStrategy } from './helpers';
 import { Alert, Button, Input, InputNumber, Modal, Select, Space, Switch, Tabs } from 'antd';
 import {
   BarChartOutlined,
@@ -103,13 +104,10 @@ export default function BasicsTab({
     });
   }
 
-  const freedomStrategy =
-    (templateSettings?.outbounds?.find((o) => o?.protocol === 'freedom' && o?.tag === 'direct')?.settings as
-      | { domainStrategy?: string }
-      | undefined)?.domainStrategy ?? 'AsIs';
+  const freedomStrategy = directFreedomStrategy(templateSettings);
 
   const directFreedomOutbound = templateSettings?.outbounds?.find(
-    (o) => o?.protocol === 'freedom' && o?.tag === 'direct',
+    (o) => o?.protocol?.toLowerCase() === 'freedom' && o?.tag === 'direct',
   );
   const directHappyEyeballs = (() => {
     const sockopt = (directFreedomOutbound?.streamSettings as { sockopt?: { happyEyeballs?: unknown } } | undefined)
@@ -124,7 +122,7 @@ export default function BasicsTab({
     (next: ReturnType<typeof HappyEyeballsSchema.parse> | null) => {
       mutate((tt) => {
         if (!tt.outbounds) tt.outbounds = [];
-        let idx = tt.outbounds.findIndex((o) => o?.protocol === 'freedom' && o?.tag === 'direct');
+        let idx = tt.outbounds.findIndex((o) => o?.protocol?.toLowerCase() === 'freedom' && o?.tag === 'direct');
         if (idx < 0) {
           tt.outbounds.push({ protocol: 'freedom', tag: 'direct', settings: {} });
           idx = tt.outbounds.length - 1;
@@ -178,17 +176,7 @@ export default function BasicsTab({
                 value={freedomStrategy}
                 style={{ width: '100%' }}
                 options={OutboundDomainStrategies.map((s) => ({ value: s, label: s }))}
-                onChange={(next) => mutate((tt) => {
-                  if (!tt.outbounds) tt.outbounds = [];
-                  const idx = tt.outbounds.findIndex((o) => o?.protocol === 'freedom' && o?.tag === 'direct');
-                  if (idx < 0) {
-                    tt.outbounds.push({ protocol: 'freedom', tag: 'direct', settings: { domainStrategy: next } });
-                  } else {
-                    const ob = tt.outbounds[idx];
-                    ob.settings = (ob.settings || {}) as Record<string, unknown>;
-                    (ob.settings as Record<string, unknown>).domainStrategy = next;
-                  }
-                })}
+                onChange={(next) => mutate((tt) => setDirectFreedomStrategy(tt, next))}
               />
             }
           />

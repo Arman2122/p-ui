@@ -1,0 +1,21 @@
+# Isolated systemd qualification on a shared kernel
+
+This harness runs an actual systemd PID 1 and the real node service units inside systemd-nspawn namespaces. It shares the test-host kernel, so a successful result is **not** VM boot, bare-metal, native networking, or distribution-matrix qualification. Native remains disabled.
+
+The tested host is Ubuntu 24.04, kernel 6.8, systemd 255.4-1ubuntu8.17, with cgroup v2 `cpu`, `memory` and `pids` controllers available. The matching `systemd-container` package is extracted into the workspace, never installed on the host. Its Ubuntu archive SHA-256 is `89bdc9d28c9db11802e643ad25be30a4dac2e0b6fe218b8c60a195781d6d143d`; the existing host `libsystemd-shared` must match. The executable belongs at `scratchpad/node-v2/namespace-tools/extracted/usr/bin/systemd-nspawn`.
+
+The root filesystem is the [authenticated Ubuntu 24.04 minimal root archive from 2026-10-08](https://cloud-images.ubuntu.com/minimal/releases/noble/release-20261008/), `ubuntu-24.04-minimal-cloudimg-amd64-root.tar.xz`, SHA-256 `e322e57b71859d444258e18118e48550c243b68cb28befca629ea2573ef47ee6`. Verify its checksum manifest's Ubuntu cloud-image signature as described by the [VM harness](../vm/README.md), then retain the archive under `scratchpad/node-v2/vm-images`. Extraction creates ordinary files before links, rejects escaping paths, and skips volatile `/dev` special nodes; nspawn provides private API filesystems. No loop or existing block devices are used.
+
+```sh
+python3 tools/nodekernel/namespace/host.py "$PWD/scratchpad/node-v2/release-bundle-systemd-20261009"
+```
+
+Before running, authorize exactly one temporary `/sys/fs/cgroup/penhoon-node-v2-qualification-<random>` subtree. The launcher sets one CPU, 768 MiB memory, no swap and 512 process limits; only its own child enters it. It validates an unused shifted UID/GID range, gives the container private user/PID/mount/network/IPC/UTS/cgroup namespaces, and uses loopback networking without veth devices. An outer private `/run` prevents host runtime sockets and locks from being exposed. `--register=no --keep-unit --settings=no --link-journal=no` prevent host registration or scope allocation. There are no host accounts, services, network, firewall or package changes.
+
+The guest root and fixture are independent workspace copies; shifting their ownership cannot modify the original binaries. Only unrelated guest boot/cloud/SSH/update units are masked in the disposable copy. The production node service units are copied unchanged. The test validates real systemd users/capabilities/no-new-privileges, socket peer-UID rejection, state permissions, mTLS enrollment/control, signed update/rollback, bad-runtime recovery, and retained node state.
+
+The launcher reads only the guest's persistent journal and requires `PENHOON_SYSTEMD_NAMESPACE_RESULT PASS` plus a successful nspawn exit. nspawn pipe-console mode may omit service messages from stdout; absence of stdout alone is not the test result. `guest-journal.log` and `qualification-evidence.json` retain the evidence. Cleanup kills only remaining descendants of the owned cgroup, waits until it is empty, then removes only that subtree. All root files and logs remain in the workspace.
+
+On 9 October 2026 the isolated systemd gate passed with five nonroot services, one enrollment, five mTLS sessions, retained credential/journal files, signed update, intentional rollback and recovery from a failing signed Xray binary. The qualification service reported a 586.6 MiB memory peak and 26.36 seconds of CPU time. The separate TCG VM runs did not qualify boot or installation; their failures remain documented separately.
+
+A subsequent candidate on the same date also required the new journal, authority, authenticated-time, and credit protocols: four bound runtime journals, 24 authority reports, 20 time synchronizations, and 180 idle credit polls passed with the same update/recovery checks. Its qualification service peaked at 416.4 MiB and used 27.77 CPU seconds. Evidence is retained in `scratchpad/node-v2/systemd-namespace-da0241jr`; binary hashes/build metadata and scoped source fingerprints are in `scratchpad/node-v2/candidate-source-evidence.json`. This candidate predates the subsequent activation-scope and shared MTProto DTO changes and does not certify those later changes or native networking.

@@ -9,15 +9,8 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/common"
 )
 
-/*
-The one table joining the credential vocabulary to model.Client's fields.
-
-Vocabulary names are the client RECORD's JSON names, which diverge from the
-settings-JSON in exactly one place: the vocabulary says "uuid", the settings
-blob says "id". Nothing reads uuid out of a settings-derived Credentials map
-today, so the divergence is named here and nowhere else. allowedIPs is absent
-on purpose — it is a list, and no mint, validation or identity reads it.
-*/
+// The vocabulary uses uuid where settings use id; list values use comma-separated
+// prefixes so source validation and per-binding projection share one conversion.
 func clientCredentialValues(c *model.Client) map[string]string {
 	return map[string]string{
 		core.CredUUID:         c.ID,
@@ -31,6 +24,7 @@ func clientCredentialValues(c *model.Client) map[string]string {
 		core.CredPrivateKey:   c.PrivateKey,
 		core.CredPublicKey:    c.PublicKey,
 		core.CredPreSharedKey: c.PSK(),
+		core.CredAllowedIPs:   strings.Join(c.AllowedIPs, ","),
 	}
 }
 
@@ -58,6 +52,14 @@ func setClientCredential(c *model.Client, name, value string) {
 		c.PublicKey = value
 	case core.CredPreSharedKey:
 		c.PreSharedKey = &value
+	case core.CredAllowedIPs:
+		c.AllowedIPs = nil
+		if value != "" {
+			c.AllowedIPs = strings.Split(value, ",")
+			for i := range c.AllowedIPs {
+				c.AllowedIPs[i] = strings.TrimSpace(c.AllowedIPs[i])
+			}
+		}
 	}
 }
 

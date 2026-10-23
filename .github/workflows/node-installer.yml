@@ -1,0 +1,72 @@
+name: Headless node installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - deploy/node/**
+      - internal/node/release/**
+      - cmd/penhoon-release/**
+      - internal/node/privatefile/**
+      - tools/noderelease/**
+      - tools/nodeguest/**
+      - tools/nodekernel/vm/**
+      - tools/nodekernel/namespace/**
+      - tools/nodekernel/install*.sh
+      - tools/nodekernel/tuf-negative.sh
+      - go.mod
+      - go.sum
+      - .github/workflows/node-installer.yml
+  push:
+    branches: [main]
+    paths:
+      - deploy/node/**
+      - internal/node/release/**
+      - cmd/penhoon-release/**
+      - internal/node/privatefile/**
+      - tools/noderelease/**
+      - tools/nodeguest/**
+      - tools/nodekernel/vm/**
+      - tools/nodekernel/namespace/**
+      - tools/nodekernel/install*.sh
+      - tools/nodekernel/tuf-negative.sh
+      - go.mod
+      - go.sum
+      - .github/workflows/node-installer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      GOMAXPROCS: "2"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install isolated test prerequisites
+        run: sudo apt-get update && sudo apt-get install -y nftables iproute2 openssl
+      - name: Race-check signed release verification
+        run: go test -race -count=1 ./internal/node/release ./cmd/penhoon-release ./tools/noderelease ./tools/nodeguest
+      - name: Check qualification harness syntax
+        run: |
+          for script in tools/nodekernel/vm/*.sh tools/nodekernel/namespace/*.sh; do bash -n "$script"; done
+          python3 -c "import ast,pathlib; [ast.parse(pathlib.Path(path).read_text()) for path in ['deploy/node/install-node.py','tools/nodekernel/namespace/host.py']]"
+      - name: Build statically linked TUF verifier
+        run: CGO_ENABLED=0 go build -o /tmp/penhoon-release ./cmd/penhoon-release
+      - name: Prove delegated artifact-set binding
+        run: bash tools/nodekernel/tuf-negative.sh
+      - name: Verify signed and tampered bundles
+        run: bash tools/nodekernel/install-test.sh
+      - name: Inject activation, rollback, disk, and crash failures
+        run: sudo env PATH="$PATH" GOMAXPROCS=2 unshare --mount --propagation private bash tools/nodekernel/install-activation-test.sh
+      - name: Prove downgrade and interrupted-commit regression tests
+        run: sudo env PATH="$PATH" GOMAXPROCS=2 bash tools/nodekernel/install-negative.sh

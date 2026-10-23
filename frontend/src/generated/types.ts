@@ -326,6 +326,29 @@ export interface BanView {
   until: number;
 }
 
+export interface BulkOutcome {
+  failed: BulkRow[];
+  ok: string[];
+  skipped: BulkRow[];
+}
+
+export interface BulkRow {
+  email: string;
+  reason: string;
+}
+
+export interface BulkSetEnableReport {
+  email: string;
+  reason: string;
+}
+
+export interface BulkSetEnableResult {
+  changed: number;
+  outcome: BulkOutcome;
+  pending: number;
+  skipped?: BulkSetEnableReport[];
+}
+
 export interface Capabilities {
   onlineUsers?: boolean | null;
   perUserStats?: boolean | null;
@@ -382,37 +405,19 @@ export interface ClientConfigFile {
 }
 
 export interface ClientCreatePayload {
-  adTag?: string;
-  allowedIPs?: string[];
-  auth?: string;
-  comment: string;
-  created_at?: number;
-  email: string;
-  enable: boolean;
-  expiryTime: number;
+  client: Client;
+  credentialBindings?: ClientCredentialBindingInput[];
+  expectedActorId?: number;
   externalLinks?: ExternalLinkInput[];
-  flow?: string;
-  group?: string;
-  id?: string;
   inboundIds: number[];
-  keepAlive?: number;
-  limitIp: number;
-  password?: string;
+  operationId?: string;
   planOverrides?: PlanOverrides | null;
   policyId?: number | null;
-  preSharedKey?: string | null;
-  privateKey?: string;
-  publicKey?: string;
-  reset: number;
-  reverse?: ClientReverse | null;
-  secret?: string;
-  security: string;
-  subId: string;
-  tgId: number;
-  tlsCryptV2?: string;
-  totalGB: number;
-  updated_at?: number;
-  username?: string;
+}
+
+export interface ClientCredentialBindingInput {
+  inboundId: number;
+  values: Record<string, string>;
 }
 
 export interface ClientGroup {
@@ -533,6 +538,7 @@ export interface ClientSlim {
 }
 
 export interface ClientTraffic {
+  accounting?: TrafficAccounting | null;
   down: number;
   email: string;
   enable: boolean;
@@ -541,6 +547,7 @@ export interface ClientTraffic {
   inboundId: number;
   lastOnline: number;
   reset: number;
+  resetCount?: number | null;
   subId: string;
   total: number;
   up: number;
@@ -697,6 +704,532 @@ export interface ExternalLinkInput {
 export interface FallbackParentInfo {
   masterId: number;
   path?: string;
+}
+
+export interface FleetAssetReference {
+  assetId: string;
+  revision: number;
+}
+
+export interface FleetClientCreateCapabilities {
+  actorId: number;
+  supported: boolean;
+}
+
+export interface FleetClientCreateResult {
+  actorId: number;
+  clientId: string;
+  nodeDerived: SourceClientCredentialRequirement[];
+  panelClientId: number;
+  pending: boolean;
+  revision: number;
+}
+
+export interface FleetClientSourceBinding {
+  flowOverride: string;
+  inboundId: number;
+  scope: string;
+  values: Record<string, string>;
+}
+
+export interface FleetClientSourceView {
+  actorId: number;
+  client: Client;
+  clientId: string;
+  credentialBindings: FleetClientSourceBinding[];
+  dependencyDiagnostic: string;
+  effectiveInboundIds?: number[] | null;
+  effectiveScopeKnown: boolean;
+  explicitInboundIds: number[];
+  externalLinks: ExternalLinkInput[];
+  panelClientId: number;
+  pending: boolean;
+  planOverrides?: PlanOverrides | null;
+  policyId?: number | null;
+  revision: number;
+}
+
+export interface FleetEnrollmentRequest {
+  name: string;
+}
+
+export interface FleetEnrollmentView {
+  expiresUnixMilli: number;
+  nodeId: string;
+  packageJson: string;
+}
+
+export interface FleetInboundNetwork {
+  addresses?: string[];
+  assets?: Record<string, string>;
+  bridgeId?: string;
+  egressMode?: string;
+  listen?: string | null;
+  mtproto?: FleetMTProtoBinding | null;
+  mtu?: number;
+  port?: number | null;
+  settings?: unknown | null;
+  sniffing?: unknown | null;
+  streamSettings?: unknown | null;
+  subnet?: string;
+  targetId?: number;
+  targetTag?: string;
+}
+
+export interface FleetMTProtoBinding {
+  trustedProxies?: string[];
+  web?: FleetMTProtoWEBBinding | null;
+}
+
+export interface FleetMTProtoWEBBinding {
+  listen: string;
+  port: number;
+  publicPort: number;
+}
+
+export interface FleetNativeBindingPin {
+  clientId: string;
+  id: string;
+  inboundInstanceId: string;
+  maxSessions: number;
+  placementId: string;
+  poolSha256: string;
+  prefix: string;
+  targetId: number;
+}
+
+export interface FleetNetworkAssetPage {
+  items: FleetNetworkAssetView[];
+  nextCursor: string;
+}
+
+export interface FleetNetworkAssetPin {
+  assetId: string;
+  kind: string;
+  revision: number;
+  sha256: string;
+  slot: string;
+}
+
+export interface FleetNetworkAssetRequest {
+  assetId: string;
+  data: string;
+  expectedRevision: number;
+  installationId: string;
+  kind: string;
+  nodeId: string;
+}
+
+export interface FleetNetworkAssetView {
+  assetId: string;
+  createdUnixMilli: number;
+  installationId: string;
+  kind: string;
+  nodeId: string;
+  revision: number;
+  sha256: string;
+  size: number;
+}
+
+export interface FleetNetworkAuthorityIdentity {
+  clientId: string;
+  credentialGeneration: number;
+  inboundInstanceIds: string[];
+  inboundTags: Record<string, string>;
+  placementId: string;
+  placementRevision: number;
+  runtimeId: string;
+  state: string;
+  termId?: string;
+}
+
+export interface FleetNetworkBridge {
+  core: string;
+  endpoint: string;
+  runtimeId: string;
+  udp: boolean;
+}
+
+export interface FleetNetworkDefaultsRequest {
+  expectedRevision: number;
+  specification: FleetNetworkSpec;
+}
+
+export interface FleetNetworkDefaultsView {
+  revision: FleetNetworkRevisionView;
+  specification: FleetNetworkSpec;
+}
+
+export interface FleetNetworkDiagnostic {
+  assetSlot?: string;
+  clientId?: string;
+  code: string;
+  inboundId?: number;
+  placementId?: string;
+  runtimeId?: string;
+}
+
+export interface FleetNetworkListenerView {
+  address: string;
+  inboundId: number;
+  port: number;
+  protocol: string;
+  role: string;
+  runtimeId: string;
+}
+
+export interface FleetNetworkManifest {
+  assets: FleetNetworkAssetPin[];
+  baseDeploymentRevision: number;
+  defaultsRevisionId: string;
+  identities: FleetNetworkAuthorityIdentity[];
+  installationId: string;
+  nativeBindings?: FleetNativeBindingPin[];
+  nodeId: string;
+  nodeRevision: number;
+  nodeRevisionId: string;
+  placements: FleetNetworkPlacementPin[];
+  providers?: FleetNetworkProviderPin[];
+  version: number;
+}
+
+export interface FleetNetworkOperation {
+  asset?: FleetAssetReference | null;
+  assetKind?: string | null;
+  base?: FleetRuntimeBase | null;
+  bridge?: FleetNetworkBridge | null;
+  inbound?: FleetInboundNetwork | null;
+  inboundId?: number;
+  key?: string;
+  nativeNetwork?: NetworkBinding | null;
+  operation: string;
+  section: string;
+  sshHostKeys?: FleetSSHHostKeys | null;
+}
+
+export interface FleetNetworkOverrides {
+  assetBindings?: Record<string, FleetAssetReference>;
+  assetSlots?: Record<string, string>;
+  bases?: Record<string, FleetRuntimeBase>;
+  bridges?: Record<string, FleetNetworkBridge>;
+  followDefaults: boolean;
+  inbounds?: Record<string, FleetInboundNetwork>;
+  nativeNetwork?: NetworkBinding | null;
+  pinnedDefaultsId?: string;
+  removedAssetSlots?: string[];
+  removedBases?: string[];
+  removedBridges?: string[];
+  sshHostKeys?: FleetSSHHostKeys | null;
+  version: number;
+}
+
+export interface FleetNetworkPlacementPin {
+  clientId: string;
+  credentialGeneration: number;
+  credentialSha256: string;
+  definitionSha256: string;
+  enabled: boolean;
+  graphSha256: string;
+  owned: boolean;
+  placementId: string;
+  policySha256: string;
+  revision: number;
+  termId?: string;
+}
+
+export interface FleetNetworkPreview {
+  assets: FleetNetworkAssetPin[];
+  defaults: FleetNetworkRevisionView;
+  diagnostics: FleetNetworkDiagnostic[];
+  id: string;
+  identities: FleetNetworkAuthorityIdentity[];
+  installationId: string;
+  listeners: FleetNetworkListenerView[];
+  nativeBindings?: FleetNativeBindingPin[];
+  nodeId: string;
+  nodeRevision: FleetNetworkRevisionView;
+  origins: Record<string, string>;
+  ready: boolean;
+  runtimes: FleetNetworkRuntimeView[];
+  sha256: string;
+}
+
+export interface FleetNetworkPreviewRequest {
+  expectedDefaultsId: string;
+  expectedRevision: number;
+  installationId: string;
+  nodeId: string;
+}
+
+export interface FleetNetworkProviderPin {
+  configurationRevision: number;
+  followLatest: boolean;
+  providerId: string;
+  revision: number;
+  runtimeId: string;
+  sha256: string;
+}
+
+export interface FleetNetworkPublicationView {
+  compilationId: string;
+  deploymentRevision: number;
+  nodeId: string;
+  replayed: boolean;
+}
+
+export interface FleetNetworkPublishRequest {
+  compilationId: string;
+  operationId: string;
+}
+
+export interface FleetNetworkRevisionView {
+  createdUnixMilli: number;
+  id: string;
+  revision: number;
+  sha256: string;
+}
+
+export interface FleetNetworkRuntimeView {
+  clients: number;
+  core: string;
+  id: string;
+  sha256: string;
+}
+
+export interface FleetNetworkSpec {
+  assetSlots?: Record<string, string>;
+  bases?: Record<string, FleetRuntimeBase>;
+  bridges?: Record<string, FleetNetworkBridge>;
+  inbounds?: Record<string, FleetInboundNetwork>;
+  nativeNetwork?: NetworkBinding | null;
+  sshHostKeys?: FleetSSHHostKeys | null;
+  version: number;
+}
+
+export interface FleetNodeNetworkRequest {
+  expectedRevision: number;
+  followDefaults?: boolean | null;
+  installationId: string;
+  nodeId: string;
+  operations: FleetNetworkOperation[];
+  pinnedDefaultsId?: string;
+}
+
+export interface FleetNodeNetworkStateView {
+  configured: boolean;
+  defaults: FleetNetworkRevisionView;
+  diagnostics?: FleetNetworkDiagnostic[];
+  effective: FleetNetworkSpec;
+  followDefaults: boolean;
+  installationId: string;
+  nodeId: string;
+  origins: Record<string, string>;
+  overrides: FleetNetworkOverrides;
+  pending: boolean;
+  revision: FleetNetworkRevisionView;
+}
+
+export interface FleetNodeNetworkView {
+  defaults: FleetNetworkRevisionView;
+  followDefaults: boolean;
+  installationId: string;
+  nodeId: string;
+  origins: Record<string, string>;
+  pending: boolean;
+  revision: FleetNetworkRevisionView;
+}
+
+export interface FleetNodePage {
+  items: FleetNodeView[];
+  nextCursor: string;
+}
+
+export interface FleetNodePlacementRequest {
+  enabled: boolean;
+  expectedRevision: number;
+  inboundIds: number[];
+  installationId: string;
+  labels: Record<string, string>;
+  nodeId: string;
+}
+
+export interface FleetNodePlacementView {
+  enabled: boolean;
+  inboundIds: number[];
+  installationId: string;
+  labels: Record<string, string>;
+  nodeId: string;
+  pending: boolean;
+  revision: number;
+  sha256: string;
+}
+
+export interface FleetNodeView {
+  appliedRevision: number;
+  deploymentState: string;
+  desiredRevision: number;
+  enrolled: boolean;
+  id: string;
+  lastSeenUnixMilli: number;
+  name: string;
+  online: boolean;
+  runtimeConditions: FleetRuntimeConditionView[];
+  runtimeObservedAt: number;
+  runtimeState: string;
+}
+
+export interface FleetPlacementDefaultRequest {
+  expectedRevision: number;
+  installationId?: string | null;
+  nodeId?: string | null;
+}
+
+export interface FleetPlacementDefaultView {
+  installationId?: string | null;
+  nodeId?: string | null;
+  pending: boolean;
+  revision: number;
+}
+
+export interface FleetPlacementProjection {
+  clientId: string;
+  credentialGeneration: number;
+  sourceRevision: number;
+  targets: FleetPlacementTarget[];
+}
+
+export interface FleetPlacementRulePin {
+  id: string;
+  revision: number;
+}
+
+export interface FleetPlacementRuleRequest {
+  enabled: boolean;
+  expectedRevision: number;
+  groupId?: number | null;
+  id: string;
+  inboundIds: number[];
+  labels: Record<string, string>;
+  nodeIds: string[];
+  planId?: number | null;
+  scope: string;
+}
+
+export interface FleetPlacementRuleView {
+  enabled: boolean;
+  groupId?: number | null;
+  id: string;
+  inboundIds: number[];
+  labels: Record<string, string>;
+  nodeIds: string[];
+  pending: boolean;
+  planId?: number | null;
+  revision: number;
+  scope: string;
+  sha256: string;
+}
+
+export interface FleetPlacementTarget {
+  applicationEligible: boolean;
+  capabilityRevision: number;
+  coreId: string;
+  defaultRevision: number;
+  diagnostic?: string;
+  inboundIds: number[];
+  installationId: string;
+  manualInboundIds: number[];
+  nodeId: string;
+  nodePolicyRevision: number;
+  rules: FleetPlacementRulePin[];
+  runtimeId: string;
+}
+
+export interface FleetProviderBinding {
+  followLatest: boolean;
+  providerId: string;
+  revision: number;
+}
+
+export interface FleetProviderFetchSpec {
+  allowInsecure: boolean;
+  allowPrivate: boolean;
+  format: string;
+  hwid?: string;
+  intervalSeconds: number;
+  tagPrefix?: string;
+  url: string;
+  version: number;
+}
+
+export interface FleetProviderRefreshRequest {
+  expectedRevision: number;
+  operationId: string;
+  providerId: string;
+}
+
+export interface FleetProviderRefreshResult {
+  cachedRevision: number;
+  changed: boolean;
+  configurationRevision: number;
+  entries: number;
+  providerId: string;
+  sha256: string;
+}
+
+export interface FleetProviderRequest {
+  coreId: string;
+  expectedRevision: number;
+  fetch: FleetProviderFetchSpec;
+  installationId?: string;
+  name: string;
+  nodeId?: string;
+  operationId: string;
+  providerId: string;
+  refreshEnabled: boolean;
+  scope: string;
+}
+
+export interface FleetProviderView {
+  cachedRevision: number;
+  configurationRevision: number;
+  coreId: string;
+  diagnostic?: string;
+  installationId?: string;
+  name: string;
+  nodeId?: string;
+  providerId: string;
+  refreshEnabled: boolean;
+  scope: string;
+}
+
+export interface FleetRuntimeBase {
+  assets?: Record<string, string>;
+  configuration: unknown;
+  core: string;
+  providers?: FleetProviderBinding[];
+}
+
+export interface FleetRuntimeConditionView {
+  condition: string;
+  ready: boolean;
+  resourceId: string;
+}
+
+export interface FleetSSHHostKeys {
+  assetSlot?: string;
+  generateLocally: boolean;
+}
+
+export interface FleetStatusView {
+  certificateExpiresUnixMilli: number;
+  controlAddress: string;
+  controlPlaneId: string;
+  enrollmentUrl: string;
+  error: string;
+  ready: boolean;
+  recoveryReason: string;
+  recoveryRequired: boolean;
+  rootSha256: string;
 }
 
 export interface GroupDetails {
@@ -912,6 +1445,11 @@ export interface Msg {
   obj: unknown;
   success: boolean;
   warning?: string;
+}
+
+export interface NetworkBinding {
+  gatewayIPv4: string;
+  peerIPv4: string;
 }
 
 export interface Node {
@@ -1335,6 +1873,33 @@ export interface ResellerView {
   username: string;
 }
 
+export interface ResetScheduleCancelRequest {
+  clientId: string;
+  expectedRevision: number;
+  operationId: string;
+  pendingOperationId: string;
+}
+
+export interface ResetScheduleRequest {
+  clientId: string;
+  cycle?: string;
+  expectedRevision: number;
+  operationId: string;
+  override: boolean;
+}
+
+export interface ResetScheduleView {
+  anchorUnixMilli: number;
+  clientId: string;
+  cycle: string;
+  diagnostic?: string;
+  inherited: boolean;
+  nextAttemptUnixMilli: number;
+  nextDueUnixMilli: number;
+  pendingOperationId?: string;
+  revision: number;
+}
+
 export interface RoutingExitView {
   id: number;
   label: string;
@@ -1421,6 +1986,26 @@ export interface SignedInUser {
   username: string;
 }
 
+export interface SourceClientCredentialRequirement {
+  fields: string[];
+  inboundId: number;
+}
+
+export interface SourcePlacementRequest {
+  action: string;
+  clientId: string;
+  expectedRevision: number;
+  inboundIds?: number[] | null;
+  nodeId?: string;
+  operationId: string;
+}
+
+export interface SourcePlacementResult {
+  clientId: string;
+  pending: boolean;
+  revision: number;
+}
+
 export interface Status {
   appStats: unknown;
   cpu: number;
@@ -1445,6 +2030,23 @@ export interface Status {
   unavailable: string[];
   uptime: number;
   xray: unknown;
+}
+
+export interface TrafficAccounting {
+  clientId?: string;
+  historyBasis: string;
+  historyGranularity: string;
+  measuredDownloaded: number;
+  measuredUploaded: number;
+  observedUnixMilli: number;
+  openingDownloaded: number;
+  openingUploaded: number;
+  reportedUnixMilli: number;
+  reservedBytes?: number | null;
+  source: string;
+  state: string;
+  termId: string;
+  uncertainBytes?: number | null;
 }
 
 export interface User {

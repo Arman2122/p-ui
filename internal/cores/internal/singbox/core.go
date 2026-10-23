@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/cores/internal/unithealth"
 	"github.com/Arman2122/p-ui/internal/logger"
@@ -397,7 +399,7 @@ func fileHash(path string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func newEpoch() string { return strconv.FormatInt(time.Now().UnixNano(), 36) }
+func newEpoch() string { return uuid.NewString() }
 
 // drainLocked bills what the daemon counted so far, so the reload that
 // zeroes its counters costs nothing.

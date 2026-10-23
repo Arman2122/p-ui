@@ -137,6 +137,7 @@ type ServerService struct {
 	cachedIPv4         string
 	cachedIPv6         string
 	noIPv6             bool
+	resolvingIPs       bool
 	mu                 sync.Mutex
 	lastCPUTimes       cpu.TimesStat
 	hasLastCPUSample   bool
@@ -147,6 +148,7 @@ type ServerService struct {
 
 	lastStatusMu sync.RWMutex
 	lastStatus   *Status
+	statusMu     sync.Mutex
 }
 
 // allowedHistoryBuckets is the bucket-second whitelist for time-series
@@ -179,6 +181,19 @@ func (s *ServerService) LastStatus() *Status {
 	s.lastStatusMu.RLock()
 	defer s.lastStatusMu.RUnlock()
 	return s.lastStatus
+}
+
+// CurrentStatus supplies the initial sample before the background ticker runs.
+func (s *ServerService) CurrentStatus() *Status {
+	if status := s.LastStatus(); status != nil {
+		return status
+	}
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
+	if status := s.LastStatus(); status != nil {
+		return status
+	}
+	return s.refreshStatusLocked()
 }
 
 /*
@@ -230,7 +245,13 @@ func (s *ServerService) GetIpLimitStatus() IpLimitStatus {
 // be nil if collection failed). Called by the background ticker; the caller is
 // responsible for any side effects (websocket broadcast, xray metrics sample).
 func (s *ServerService) RefreshStatus() *Status {
-	next := s.GetStatus(s.LastStatus())
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
+	return s.refreshStatusLocked()
+}
+
+func (s *ServerService) refreshStatusLocked() *Status {
+	next := s.getStatus(s.LastStatus())
 	if next == nil {
 		return nil
 	}
@@ -368,37 +389,69 @@ var publicIPv6Services = []string{
 	"https://6.ident.me",
 }
 
-// resolvePublicIPs caches the public IPv4/IPv6 addresses on first use. Guarded
-// by s.mu because the bot's ServerService may call it from sendBackup while a
-// status report runs concurrently.
+// The cache lock never spans HTTP: CPU sampling shares it with IP discovery.
 func (s *ServerService) resolvePublicIPs() {
 	s.mu.Lock()
+	want4, want6 := s.cachedIPv4 == "", s.cachedIPv6 == "" && !s.noIPv6
+	s.mu.Unlock()
+	var ipv4, ipv6 string
+	if want4 {
+		ipv4 = firstPublicIP(publicIPv4Services)
+	}
+	if want6 {
+		ipv6 = firstPublicIP(publicIPv6Services)
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.cachedIPv4 == "" {
-		for _, ip4Service := range publicIPv4Services {
-			s.cachedIPv4 = getPublicIP(ip4Service)
-			if s.cachedIPv4 != "N/A" {
-				break
-			}
-		}
+	if want4 && s.cachedIPv4 == "" {
+		s.cachedIPv4 = ipv4
 	}
-
-	if s.cachedIPv6 == "" && !s.noIPv6 {
-		for _, ip6Service := range publicIPv6Services {
-			s.cachedIPv6 = getPublicIP(ip6Service)
-			if s.cachedIPv6 != "N/A" {
-				break
-			}
-		}
+	if want6 && s.cachedIPv6 == "" {
+		s.cachedIPv6 = ipv6
 	}
-
 	if s.cachedIPv6 == "N/A" {
 		s.noIPv6 = true
 	}
 }
 
+func firstPublicIP(services []string) string {
+	for _, service := range services {
+		if ip := getPublicIP(service); ip != "N/A" {
+			return ip
+		}
+	}
+	return "N/A"
+}
+
+func (s *ServerService) resolvePublicIPsInBackground() {
+	s.mu.Lock()
+	if s.resolvingIPs || s.cachedIPv4 != "" && (s.cachedIPv6 != "" || s.noIPv6) {
+		s.mu.Unlock()
+		return
+	}
+	s.resolvingIPs = true
+	s.mu.Unlock()
+	go func() {
+		s.resolvePublicIPs()
+		s.mu.Lock()
+		s.resolvingIPs = false
+		s.mu.Unlock()
+	}()
+}
+
+func (s *ServerService) publicIPs() (string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cachedIPv4, s.cachedIPv6
+}
+
 func (s *ServerService) GetStatus(lastStatus *Status) *Status {
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
+	return s.getStatus(lastStatus)
+}
+
+func (s *ServerService) getStatus(lastStatus *Status) *Status {
 	now := time.Now()
 	status := &Status{
 		T: now, ObservedAt: now.UnixMilli(), Unavailable: []string{},
@@ -425,23 +478,27 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 
 	if status.CpuSpeedMhz = s.cachedCpuSpeedMhz; s.cachedCpuSpeedMhz == 0 && time.Since(s.lastCpuInfoAttempt) > 5*time.Minute {
 		s.lastCpuInfoAttempt = time.Now()
-		done := make(chan struct{})
+		type cpuInfoResult struct {
+			mhz float64
+			err error
+		}
+		done := make(chan cpuInfoResult, 1)
 		go func() {
-			defer close(done)
 			cpuInfos, err := cpu.Info()
-			if err != nil {
-				logger.Warning("get cpu info failed:", err)
-				return
-			}
+			var mhz float64
 			if len(cpuInfos) > 0 {
-				s.cachedCpuSpeedMhz = cpuInfos[0].Mhz
-				status.CpuSpeedMhz = s.cachedCpuSpeedMhz
-			} else {
-				logger.Warning("could not find cpu info")
+				mhz = cpuInfos[0].Mhz
 			}
+			done <- cpuInfoResult{mhz: mhz, err: err}
 		}()
 		select {
-		case <-done:
+		case result := <-done:
+			if result.err != nil {
+				logger.Warning("get cpu info failed:", result.err)
+			} else {
+				s.cachedCpuSpeedMhz = result.mhz
+				status.CpuSpeedMhz = result.mhz
+			}
 		case <-time.After(1500 * time.Millisecond):
 			logger.Warning("cpu info query timed out; will retry later")
 		}
@@ -573,14 +630,13 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 		status.Unavailable = append(status.Unavailable, "udpCount")
 	}
 
-	s.resolvePublicIPs()
-	status.PublicIP.IPv4 = s.cachedIPv4
-	status.PublicIP.IPv6 = s.cachedIPv6
+	s.resolvePublicIPsInBackground()
+	status.PublicIP.IPv4, status.PublicIP.IPv6 = s.publicIPs()
 
 	// Xray status
 	if s.xrayService.IsXrayRunning() {
 		status.Xray.State = Running
-		status.Xray.ErrorMsg = ""
+		status.Xray.ErrorMsg = s.xrayService.GetXrayResult()
 	} else {
 		err := s.xrayService.GetXrayErr()
 		if err != nil {
@@ -1045,6 +1101,10 @@ func (s *ServerService) GetDb() (*DumpFile, error) {
 	return s.exportPostgresDB()
 }
 
+func (s *ServerService) GetDbContext(ctx context.Context) (*DumpFile, error) {
+	return s.exportPostgresDBContext(ctx)
+}
+
 // pgDumpTimeout is generous on purpose: memory is bounded now, and a large
 // panel's dump on a slow disk must not be cut off by a short deadline.
 const pgDumpTimeout = 30 * time.Minute
@@ -1132,9 +1192,10 @@ func (s *ServerService) backupHost(requestHost string) string {
 	}
 	if host == "" {
 		s.resolvePublicIPs()
-		if ip := s.cachedIPv4; ip != "" && ip != "N/A" {
+		ipv4, ipv6 := s.publicIPs()
+		if ip := ipv4; ip != "" && ip != "N/A" {
 			host = ip
-		} else if ip := s.cachedIPv6; ip != "" && ip != "N/A" {
+		} else if ip := ipv6; ip != "" && ip != "N/A" {
 			host = ip
 		}
 	}
@@ -1239,6 +1300,10 @@ func pgConnEnv(dsn string) (env []string, dbname string, err error) {
 }
 
 func (s *ServerService) exportPostgresDB() (*DumpFile, error) {
+	return s.exportPostgresDBContext(context.Background())
+}
+
+func (s *ServerService) exportPostgresDBContext(parent context.Context) (*DumpFile, error) {
 	bin, err := exec.LookPath("pg_dump")
 	if err != nil {
 		return nil, common.NewError("pg_dump not found on the server; install the postgresql-client package to back up a PostgreSQL database")
@@ -1255,7 +1320,7 @@ func (s *ServerService) exportPostgresDB() (*DumpFile, error) {
 		_ = spool.Close()
 		_ = os.Remove(spool.Name())
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), pgDumpTimeout)
+	ctx, cancel := context.WithTimeout(parent, pgDumpTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "--format=custom", "--no-owner", "--no-privileges", "--dbname", dbname)
 	cmd.Env = env
@@ -1266,6 +1331,9 @@ func (s *ServerService) exportPostgresDB() (*DumpFile, error) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		discard()
+		if err := parent.Err(); err != nil {
+			return nil, err
+		}
 		return nil, common.NewErrorf("pg_dump failed: %v: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	info, err := spool.Stat()
@@ -1365,6 +1433,9 @@ func isPgDumpUpload(file multipart.File) (bool, error) {
 }
 
 func (s *ServerService) restorePostgresDump(file multipart.File) error {
+	if err := requireLegacyDatabaseRestore(context.Background(), database.GetDB()); err != nil {
+		return err
+	}
 	bin, err := exec.LookPath("pg_restore")
 	if err != nil {
 		return common.NewError("pg_restore not found on the server; install the postgresql-client package to restore a PostgreSQL database")
@@ -1515,99 +1586,14 @@ func (s *ServerService) UpdateGeofile(fileName string) error {
 	// targets, and a zero timeout has no deadline of any kind, body read included.
 	client := s.settingService.NewProxiedHTTPClient(5 * time.Minute)
 
+	installed := 0
 	downloadFile := func(url, destPath string) error {
-		var req *http.Request
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-		if err != nil {
-			return common.NewErrorf("Failed to create HTTP request for %s: %v", url, err)
+		changed, err := downloadGeofile(client, url, destPath)
+		if changed {
+			installed++
 		}
-
-		var localFileModTime time.Time
-		if fileInfo, err := os.Stat(destPath); err == nil {
-			localFileModTime = fileInfo.ModTime()
-			if !localFileModTime.IsZero() {
-				req.Header.Set("If-Modified-Since", localFileModTime.UTC().Format(http.TimeFormat))
-			}
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return common.NewErrorf("Failed to download Geofile from %s: %v", url, err)
-		}
-		defer resp.Body.Close()
-
-		// Parse Last-Modified header from server
-		var serverModTime time.Time
-		serverModTimeStr := resp.Header.Get("Last-Modified")
-		if serverModTimeStr != "" {
-			parsedTime, err := time.Parse(http.TimeFormat, serverModTimeStr)
-			if err != nil {
-				logger.Warningf("Failed to parse Last-Modified header for %s: %v", url, err)
-			} else {
-				serverModTime = parsedTime
-			}
-		}
-
-		// Function to update local file's modification time
-		updateFileModTime := func() {
-			if !serverModTime.IsZero() {
-				if err := os.Chtimes(destPath, serverModTime, serverModTime); err != nil {
-					logger.Warningf("Failed to update modification time for %s: %v", destPath, err)
-				}
-			}
-		}
-
-		// Handle 304 Not Modified
-		if resp.StatusCode == http.StatusNotModified {
-			updateFileModTime()
-			return nil
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return common.NewErrorf("Failed to download Geofile from %s: received status code %d", url, resp.StatusCode)
-		}
-
-		/*
-			Same shape as copyZipFile above: a temp file beside the destination, so
-			the rename is same-filesystem and atomic, and the live .dat is never the
-			thing being written into. os.Create truncated it to zero before a single
-			body byte had arrived, so a connection dropped mid-copy left a corrupt
-			geofile on disk and the panel then restarted Xray onto it.
-		*/
-		tmpFile, err := os.CreateTemp(filepath.Dir(destPath), ".geo-*")
-		if err != nil {
-			return common.NewErrorf("Failed to create a temporary Geofile beside %s: %v", destPath, err)
-		}
-		tmpPath := tmpFile.Name()
-		ok := false
-		defer func() {
-			_ = tmpFile.Close()
-			if !ok {
-				_ = os.Remove(tmpPath)
-			}
-		}()
-
-		if _, err = io.Copy(tmpFile, io.LimitReader(resp.Body, maxGeofileBytes+1)); err != nil {
-			return common.NewErrorf("Failed to save Geofile %s: %v", destPath, err)
-		}
-		if _, err = tmpFile.Seek(0, io.SeekStart); err != nil {
-			return common.NewErrorf("Failed to re-read Geofile %s: %v", destPath, err)
-		}
-		if err = verifyGeofile(tmpFile); err != nil {
-			return common.NewErrorf("Refusing to install Geofile %s: %v", destPath, err)
-		}
-		if err = tmpFile.Close(); err != nil {
-			return common.NewErrorf("Failed to finish writing Geofile %s: %v", destPath, err)
-		}
-		if err = os.Rename(tmpPath, destPath); err != nil {
-			return common.NewErrorf("Failed to install Geofile %s: %v", destPath, err)
-		}
-		ok = true
-
-		updateFileModTime()
-		return nil
+		return err
 	}
-
 	var errorMessages []string
 
 	if fileName == "" {
@@ -1629,7 +1615,7 @@ func (s *ServerService) UpdateGeofile(fileName string) error {
 	// Nothing was replaced, so there is nothing to pick up — and bouncing a
 	// healthy core to apply a download that did not happen is the whole of the
 	// outage this used to cause.
-	if len(errorMessages) == 0 {
+	if installed > 0 {
 		if err := s.RestartXrayService(); err != nil {
 			errorMessages = append(errorMessages, fmt.Sprintf("Updated Geofile '%s' but Failed to start Xray: %v", fileName, err))
 		}

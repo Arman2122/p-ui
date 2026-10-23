@@ -70,6 +70,14 @@ function targetStrategyFromWire(value: unknown): OutboundDomainStrategy | '' {
   ) ?? '';
 }
 
+export function freedomDomainStrategyFromWire(raw: { targetStrategy?: unknown; settings?: unknown; streamSettings?: unknown }): OutboundDomainStrategy | '' {
+  const settings = asObject(raw.settings);
+  const root = targetStrategyFromWire(raw.targetStrategy);
+  const legacy = root && root !== 'AsIs' ? root : targetStrategyFromWire(asString(settings.targetStrategy) || settings.domainStrategy);
+  if (legacy && legacy !== 'AsIs') return legacy;
+  return targetStrategyFromWire(asObject(asObject(raw.streamSettings).sockopt).domainStrategy);
+}
+
 const SNIFFING_DEST_VALUES: readonly SniffingDest[] = ['http', 'tls', 'quic', 'fakedns'];
 
 const SNIFFING_DEFAULT: Sniffing = {
@@ -259,7 +267,7 @@ function hysteriaFromWire(raw: Raw): HysteriaOutboundFormSettings {
   };
 }
 
-function freedomFromWire(raw: Raw): FreedomOutboundFormSettings {
+function freedomFromWire(raw: Raw, domainStrategy: OutboundDomainStrategy | ''): FreedomOutboundFormSettings {
   const fragment = asObject(raw.fragment);
   const noises = asArray(raw.noises).map((n) => {
     const nn = asObject(n);
@@ -299,9 +307,7 @@ function freedomFromWire(raw: Raw): FreedomOutboundFormSettings {
     && typeof raw.fragment === 'object'
     && Object.keys(fragment).length > 0;
   return {
-    domainStrategy: targetStrategyFromWire(
-      asString(raw.targetStrategy) || asString(raw.domainStrategy),
-    ),
+    domainStrategy,
     redirect: asString(raw.redirect),
     userLevel: asNumber(raw.userLevel, 0),
     proxyProtocol: ((): FreedomOutboundFormSettings['proxyProtocol'] => {
@@ -441,7 +447,7 @@ function foldQuicUdpHop(stream: Raw): Raw {
 }
 
 export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues {
-  const protocol = asString(raw.protocol, 'vless');
+  const protocol = asString(raw.protocol, 'vless').toLowerCase();
   const settings = asObject(raw.settings);
   const tag = asString(raw.tag);
   const sendThrough = asString(raw.sendThrough);
@@ -460,7 +466,7 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
     case 'http':        typed = { protocol: 'http',        settings: httpFromWire(settings) }; break;
     case 'wireguard':   typed = { protocol: 'wireguard',   settings: wireguardFromWire(settings) }; break;
     case 'hysteria':    typed = { protocol: 'hysteria',    settings: hysteriaFromWire(settings) }; break;
-    case 'freedom':     typed = { protocol: 'freedom',     settings: freedomFromWire(settings) }; break;
+    case 'freedom':     typed = { protocol: 'freedom',     settings: freedomFromWire(settings, freedomDomainStrategyFromWire(raw)) }; break;
     case 'blackhole':   typed = { protocol: 'blackhole',   settings: blackholeFromWire(settings) }; break;
     case 'dns':         typed = { protocol: 'dns',         settings: dnsFromWire(settings) }; break;
     case 'loopback':    typed = { protocol: 'loopback',    settings: loopbackFromWire(settings) }; break;
@@ -471,7 +477,7 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
     ...typed,
     tag,
     sendThrough,
-    targetStrategy,
+    targetStrategy: protocol === 'freedom' ? '' : targetStrategy,
     mux,
     streamSettings,
   };
@@ -595,8 +601,6 @@ function hysteriaToWire(s: HysteriaOutboundFormSettings) {
 }
 
 function freedomToWire(s: FreedomOutboundFormSettings) {
-  // The strategy is emitted under the legacy domainStrategy key: new cores
-  // fall back to it when targetStrategy is absent, old cores only know it.
   // Legacy semantics: emit fragment only when the user actually populated
   // at least one of the four sub-fields. Defaults like packets='1-3' alone
   // are not enough — the modal's Fragment Switch sets all four together.
@@ -606,7 +610,6 @@ function freedomToWire(s: FreedomOutboundFormSettings) {
   const fragmentEntries = Object.entries(fragment).filter(([, v]) => v !== '' && v != null);
   const fragmentEnabled = !!fragment.length || !!fragment.interval || !!fragment.maxSplit;
   return {
-    domainStrategy: s.domainStrategy || undefined,
     redirect: s.redirect || undefined,
     userLevel: s.userLevel || undefined,
     proxyProtocol: s.proxyProtocol || undefined,
@@ -635,7 +638,7 @@ function dnsRuleToWire(r: DnsRuleForm) {
   const result: Raw = { action };
   const qType = r.qType.trim();
   if (qType) {
-    result.qType = /^\d+$/.test(qType) ? Number(qType) : qType;
+    result.qType = /^\d+$/.test(qType) && Number(qType) > 0 ? Number(qType) : qType;
   }
   const domains = r.domain.split(',').map((d) => d.trim()).filter(Boolean);
   if (domains.length > 0) result.domain = domains;
@@ -724,7 +727,7 @@ export function formValuesToWirePayload(values: OutboundFormValues): WireOutboun
     settings,
   };
   if (values.tag) result.tag = values.tag;
-  if (values.targetStrategy) result.targetStrategy = values.targetStrategy;
+  if (values.targetStrategy && values.protocol !== 'freedom') result.targetStrategy = values.targetStrategy;
 
   // Gates on canEnableStream itself; a private copy of the list omitted
   // wireguard, whose UDP masks the core does apply. Others emit sockopt only.
@@ -735,6 +738,18 @@ export function formValuesToWirePayload(values: OutboundFormValues): WireOutboun
       const sockopt = (values.streamSettings as { sockopt?: unknown }).sockopt;
       if (sockopt) result.streamSettings = { sockopt };
     }
+  }
+
+  if (values.protocol === 'freedom') {
+    const stream = asObject(result.streamSettings);
+    const sockopt = { ...asObject(stream.sockopt) };
+    const strategy = values.settings.domainStrategy || values.targetStrategy;
+    if (strategy && strategy !== 'AsIs') sockopt.domainStrategy = strategy;
+    else delete sockopt.domainStrategy;
+    if (Object.keys(sockopt).length > 0) stream.sockopt = sockopt;
+    else delete stream.sockopt;
+    if (Object.keys(stream).length > 0) result.streamSettings = stream;
+    else delete result.streamSettings;
   }
 
   if (values.sendThrough) result.sendThrough = values.sendThrough;

@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
 
@@ -16,6 +17,14 @@ func (s *InboundService) GetAllInboundClientIps() ([]model.InboundClientIps, err
 	db := database.GetDB()
 	var ips []model.InboundClientIps
 	err := db.Model(&model.InboundClientIps{}).Find(&ips).Error
+	return ips, err
+}
+
+func (s *InboundService) GetNodeInboundClientIps(nodeID int) ([]model.InboundClientIps, error) {
+	db := database.GetDB()
+	emails := db.Model(&model.NodeClientTraffic{}).Select("email").Where("node_id = ?", nodeID)
+	var ips []model.InboundClientIps
+	err := db.Where("client_email IN (?)", emails).Find(&ips).Error
 	return ips, err
 }
 
@@ -135,36 +144,59 @@ func (s *InboundService) MergeInboundClientIps(incomingIps []model.InboundClient
 			// check_client_ip_job creates the same brand-new email between the
 			// snapshot above and this insert.
 			incoming.Id = 0
-			if err := tx.Clauses(clause.OnConflict{
+			result := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "client_email"}},
 				DoNothing: true,
-			}).Create(&incoming).Error; err != nil {
+			}).Create(&incoming)
+			if result.Error != nil {
+				tx.Rollback()
+				return result.Error
+			}
+			if result.RowsAffected > 0 {
+				currentMap[incoming.ClientEmail] = &incoming
+				continue
+			}
+			current = &model.InboundClientIps{}
+			if err := tx.Where("client_email = ?", incoming.ClientEmail).First(current).Error; err != nil {
 				tx.Rollback()
 				return err
 			}
-			continue
 		}
 
-		var oldEntries []clientIpEntry
-		if current.Ips != "" {
-			_ = json.Unmarshal([]byte(current.Ips), &oldEntries)
-		}
-
-		merged := mergeClientIpEntries(oldEntries, incomingEntries, cutoff)
-		b, _ := json.Marshal(merged)
-		mergedStr := string(b)
-
-		// A concurrent check_client_ip_job db.Save on the same row can interleave
-		// with this update (benign last-writer-wins; any dropped IP reappears on the
-		// next scan/sync), so only write when the blob actually changed.
-		if current.Ips != mergedStr {
-			if err := tx.Model(&model.InboundClientIps{}).Where("id = ?", current.Id).Update("ips", mergedStr).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
+		if err := mergeExistingClientIps(tx, current.Id, incomingEntries, cutoff); err != nil {
+			tx.Rollback()
+			return err
 		}
 	}
 	return tx.Commit().Error
+}
+
+// Re-read and merge after a lost compare-and-set so concurrent nodes keep both sightings.
+func mergeExistingClientIps(tx *gorm.DB, id int, incoming []clientIpEntry, cutoff int64) error {
+	for range 8 {
+		var current model.InboundClientIps
+		if err := tx.First(&current, id).Error; err != nil {
+			return err
+		}
+		var existing []clientIpEntry
+		_ = json.Unmarshal([]byte(current.Ips), &existing)
+		encoded, err := json.Marshal(mergeClientIpEntries(existing, incoming, cutoff))
+		if err != nil {
+			return err
+		}
+		if current.Ips == string(encoded) {
+			return nil
+		}
+		result := tx.Model(&model.InboundClientIps{}).
+			Where("id = ? AND COALESCE(ips, '') = ?", id, current.Ips).Update("ips", string(encoded))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected > 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("client IP merge changed concurrently too often for row %d", id)
 }
 
 func (s *InboundService) UpdateClientIPs(tx *gorm.DB, oldEmail string, newEmail string) error {

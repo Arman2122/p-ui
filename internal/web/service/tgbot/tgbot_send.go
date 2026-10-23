@@ -5,12 +5,57 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Arman2122/p-ui/internal/logger"
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 )
+
+const telegramPageLimit = 2000
+
+func pageMessage(message string) []string {
+	if len(message) <= telegramPageLimit {
+		return []string{message}
+	}
+	for _, line := range strings.SplitAfter(message, "\n") {
+		// A tag spanning lines cannot be paged safely without parsing its formatting.
+		if strings.Count(line, "<") != 2*strings.Count(line, "</") {
+			return []string{message}
+		}
+	}
+	var pages []string
+	var page string
+	for _, line := range strings.SplitAfter(message, "\n") {
+		if len(page)+len(line) <= telegramPageLimit {
+			page += line
+			continue
+		}
+		if page != "" {
+			pages = append(pages, page)
+			page = ""
+		}
+		formatted := strings.ContainsAny(line, "<&")
+		for len(line) > telegramPageLimit && !formatted {
+			end := telegramPageLimit
+			for !utf8.RuneStart(line[end]) {
+				end--
+			}
+			pages = append(pages, line[:end])
+			line = line[end:]
+		}
+		if len(line) > telegramPageLimit {
+			pages = append(pages, line)
+		} else {
+			page = line
+		}
+	}
+	if page != "" {
+		pages = append(pages, page)
+	}
+	return pages
+}
 
 // sendResponse sends the response message based on the onlyMessage flag.
 func (t *Tgbot) sendResponse(chatId int64, msg string, onlyMessage, isAdmin bool) {
@@ -88,28 +133,7 @@ func (t *Tgbot) SendMsgToTgbot(chatId int64, msg string, replyMarkup ...telego.R
 		return
 	}
 
-	var allMessages []string
-	limit := 2000
-
-	// paging message if it is big
-	if len(msg) > limit {
-		messages := strings.Split(msg, "\r\n\r\n")
-		lastIndex := -1
-
-		for _, message := range messages {
-			if (len(allMessages) == 0) || (len(allMessages[lastIndex])+len(message) > limit) {
-				allMessages = append(allMessages, message)
-				lastIndex++
-			} else {
-				allMessages[lastIndex] += "\r\n\r\n" + message
-			}
-		}
-		if strings.TrimSpace(allMessages[len(allMessages)-1]) == "" {
-			allMessages = allMessages[:len(allMessages)-1]
-		}
-	} else {
-		allMessages = append(allMessages, msg)
-	}
+	allMessages := pageMessage(msg)
 	for n, message := range allMessages {
 		params := telego.SendMessageParams{
 			ChatID:    tu.ID(chatId),
@@ -119,6 +143,21 @@ func (t *Tgbot) SendMsgToTgbot(chatId int64, msg string, replyMarkup ...telego.R
 		// only add replyMarkup to last message
 		if len(replyMarkup) > 0 && n == (len(allMessages)-1) {
 			params.ReplyMarkup = replyMarkup[0]
+		}
+		if len(message) > telegramPageLimit {
+			// A formatted line is indivisible; a text attachment preserves it without broken HTML.
+			document := tu.Document(tu.ID(chatId), tu.FileFromReader(strings.NewReader(message), "message.txt"))
+			document.ReplyMarkup = params.ReplyMarkup
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, err := bot.SendDocument(ctx, document)
+			cancel()
+			if err != nil {
+				logger.Warning("Error sending Telegram message attachment:", err)
+			}
+			if n < len(allMessages)-1 {
+				time.Sleep(100 * time.Millisecond)
+			}
+			continue
 		}
 
 		// Retry logic with exponential backoff for connection errors
@@ -195,7 +234,9 @@ func (t *Tgbot) editMessageCallbackTgBot(chatId int64, messageID int, inlineKeyb
 		ReplyMarkup: inlineKeyboard,
 	}
 	if _, err := bot.EditMessageReplyMarkup(context.Background(), &params); err != nil {
-		logger.Warning(err)
+		if !isTelegramNotModifiedError(err) {
+			logger.Warning(err)
+		}
 	}
 }
 
@@ -211,8 +252,14 @@ func (t *Tgbot) editMessageTgBot(chatId int64, messageID int, text string, inlin
 		params.ReplyMarkup = inlineKeyboard[0]
 	}
 	if _, err := bot.EditMessageText(context.Background(), &params); err != nil {
-		logger.Warning(err)
+		if !isTelegramNotModifiedError(err) {
+			logger.Warning(err)
+		}
 	}
+}
+
+func isTelegramNotModifiedError(err error) bool {
+	return err != nil && (strings.Contains(err.Error(), "message is not modified") || strings.Contains(err.Error(), "No fields to modify"))
 }
 
 // SendMsgToTgbotDeleteAfter sends a message and deletes it after a specified delay.

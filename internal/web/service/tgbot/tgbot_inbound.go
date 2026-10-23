@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 
@@ -108,12 +109,7 @@ func (t *Tgbot) getInboundsFor(nextAction string) (*telego.InlineKeyboardMarkup,
 }
 
 // getInboundClientsFor lists clients of an inbound with a specific action prefix to be appended with email
-func (t *Tgbot) getInboundClientsFor(inboundID int, action string) (*telego.InlineKeyboardMarkup, error) {
-	inbound, err := t.inboundService.GetInbound(inboundID)
-	if err != nil {
-		logger.Warning("getInboundClientsFor run failed:", err)
-		return nil, errors.New(t.I18nBot("tgbot.answers.getInboundsFailed"))
-	}
+func (t *Tgbot) getInboundClientsFor(inbound *model.Inbound, action string) (*telego.InlineKeyboardMarkup, error) {
 	clients, err := t.inboundService.GetClients(inbound)
 	var buttons []telego.InlineKeyboardButton
 
@@ -165,6 +161,9 @@ func (t *Tgbot) getInboundsAddClient() (*telego.InlineKeyboardMarkup, error) {
 		}
 		callbackData := t.encodeQuery(fmt.Sprintf("%s %d", "add_client_to", inbound.Id))
 		buttons = append(buttons, tu.InlineKeyboardButton(fmt.Sprintf("%v - %v", inbound.Remark, status)).WithCallbackData(callbackData))
+	}
+	if len(buttons) == 0 {
+		return nil, errors.New(t.I18nBot("tgbot.answers.getInboundsFailed"))
 	}
 
 	cols := 1

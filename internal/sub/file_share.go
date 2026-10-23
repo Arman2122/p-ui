@@ -69,11 +69,12 @@ func (s *SubService) FileShare(subId string, inboundId int, host string) (core.S
 // and the settings the server half is derived from.
 func instanceForShare(inbound *model.Inbound) core.Instance {
 	return core.Instance{
-		ID:       inbound.Id,
-		Kind:     core.Kind(inbound.Protocol),
-		Tag:      inbound.Tag,
-		Port:     inbound.Port,
-		Settings: inbound.Settings,
+		ID:             inbound.Id,
+		Kind:           core.Kind(inbound.Protocol),
+		Tag:            inbound.Tag,
+		Port:           inbound.Port,
+		Settings:       inbound.Settings,
+		StreamSettings: inbound.StreamSettings,
 	}
 }
 
@@ -85,6 +86,7 @@ func userForShare(client model.Client) core.User {
 		core.CredUUID: client.ID, core.CredPassword: client.Password, core.CredUsername: client.Username,
 		core.CredAuth: client.Auth, core.CredSecurity: client.Security, core.CredSecret: client.Secret, core.CredAdTag: client.AdTag,
 		core.CredTLSCryptV2: client.TLSCryptV2,
+		"flow":              client.Flow, "subId": client.SubID,
 	} {
 		if value != "" {
 			credentials[name] = value

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/goccy/go-json"
 
@@ -21,6 +22,7 @@ type externalLinkEntry struct {
 	Remark string
 	Email  string
 	Enable bool
+	Active bool
 }
 
 // expandedLink is a single share link contributed by an entry, with the display
@@ -68,6 +70,7 @@ func (s *SubService) getClientExternalLinksBySubId(subId string) ([]externalLink
 			Remark: r.Remark,
 			Email:  rec.Email,
 			Enable: rec.Enable,
+			Active: rec.Enable && (rec.ExpiryTime <= 0 || rec.ExpiryTime > time.Now().UnixMilli()),
 		})
 	}
 	return out, nil

@@ -259,6 +259,29 @@ type CredentialDeclarer interface {
 	ClientIdentity(kind Kind) string
 }
 
+// SourceCredentialResult contains only missing source values. NodeDerived fields
+// still need node-side fulfillment and never establish forwarding readiness.
+type SourceCredentialResult struct {
+	Values      map[string]string
+	NodeDerived []string
+}
+
+// SourceCredentialClaim identifies an authentication lookup key without exposing
+// it. Persistent ownership and safe retirement belong to the source transaction.
+type SourceCredentialClaim struct {
+	Scheme string   `json:"-"`
+	Digest [32]byte `json:"-"`
+}
+
+// SourceCredentialDeclarer is pure: no host files, daemon calls or supplied-value
+// replacement. Validation covers source credentials, not node readiness.
+type SourceCredentialDeclarer interface {
+	SourceClientCredentials(kind Kind) []string
+	MintSourceClientCredentials(kind Kind, settings string, have map[string]string) (SourceCredentialResult, error)
+	ValidateSourceClientCredentials(kind Kind, settings, email string, have map[string]string) error
+	SourceClientCredentialClaims(kind Kind, settings, email string, have map[string]string) ([]SourceCredentialClaim, error)
+}
+
 /*
 Transports is the L4 footprint one inbound occupies on its port.
 

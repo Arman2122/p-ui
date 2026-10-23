@@ -199,7 +199,7 @@ export default function OutboundsTab({
     const tags = new Set<string>();
     all.forEach((o, i) => {
       if (i === editingIndex) return;
-      if (o?.protocol === 'blackhole') return;
+      if (o?.protocol?.toLowerCase() === 'blackhole') return;
       if (o?.tag && !cycles.has(o.tag)) tags.add(o.tag);
     });
     for (const tag of subscriptionOutboundTags || []) {
@@ -246,7 +246,7 @@ export default function OutboundsTab({
   function onConfirm(outbound: Record<string, unknown>) {
     if (!templateSettings) { messageApi.error(t('uiRepair.outbounds.templateUnavailable')); return; }
     const previous = editingIndex == null ? undefined : outbounds[editingIndex];
-    if (previous && isBuiltinOutbound(previous) && (outbound.tag !== previous.tag || outbound.protocol !== previous.protocol)) {
+    if (previous && isBuiltinOutbound(previous) && (outbound.tag !== previous.tag || String(outbound.protocol ?? '').toLowerCase() !== previous.protocol?.toLowerCase())) {
       messageApi.error(t('uiRepair.outbounds.builtinFixed')); return;
     }
     mutate((tt) => {
@@ -345,7 +345,7 @@ export default function OutboundsTab({
     const seen = new Set(outbounds.map((outbound) => outbound.tag));
     for (const row of list) {
       if (!row || typeof row !== 'object' || Array.isArray(row) || typeof row.tag !== 'string' || !row.tag.trim()
-        || typeof row.protocol !== 'string' || !row.protocol.trim() || reservedOutboundTagMessage(row.tag) || seen.has(row.tag)) {
+        || typeof row.protocol?.toLowerCase() !== 'string' || !row.protocol.trim() || reservedOutboundTagMessage(row.tag) || seen.has(row.tag)) {
         messageApi.error(t('uiRepair.outbounds.importInvalidOutbound')); return;
       }
       seen.add(row.tag);

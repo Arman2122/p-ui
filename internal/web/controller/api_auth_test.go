@@ -88,25 +88,20 @@ func TestCheckAPIAuth_BearerSuccess(t *testing.T) {
 	}
 }
 
-// TestCheckAPIAuth_AcceptsVerifiedClientCert asserts that a completed mTLS
-// handshake (a non-empty verified client chain) authenticates the request even
-// with no bearer token and no session — the equivalent of a valid token — and
-// sets api_authed so the CSRF middleware lets mutations through.
-func TestCheckAPIAuth_AcceptsVerifiedClientCert(t *testing.T) {
+// A verified node certificate cannot substitute for panel login or a scoped API token.
+func TestCheckAPIAuth_RejectsCertificateOnlyPanelAccess(t *testing.T) {
 	engine, _ := newAPIAuthTestEngine(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/panel/api/ping", nil)
 	req.TLS = &tls.ConnectionState{
 		VerifiedChains: [][]*x509.Certificate{{&x509.Certificate{}}},
 	}
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
-	}
-	if got := w.Body.String(); got != `{"api_authed":true}` {
-		t.Fatalf("body = %s, want api_authed true", got)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("node certificate became panel authentication: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

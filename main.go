@@ -14,10 +14,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 	_ "unsafe"
 
 	"github.com/Arman2122/p-ui/internal/config"
+	"github.com/Arman2122/p-ui/internal/controlplane"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/sub"
@@ -36,6 +36,13 @@ import (
 
 // runWebServer initializes and starts the web server for the Penhoon UI panel.
 func runWebServer() {
+	role, err := config.RoleFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := role.ValidatePanel(); err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("Starting %v %v", config.GetName(), config.GetPanelVersion())
 
 	switch config.GetLogLevel() {
@@ -53,10 +60,10 @@ func runWebServer() {
 		log.Fatalf("Unknown log level: %v", config.GetLogLevel())
 	}
 
-	_ = godotenv.Load()
-
-	for _, line := range sys.ApplyMemoryTuning() {
-		logger.Info(line)
+	if !role.ManagementOnly() {
+		for _, line := range sys.ApplyMemoryTuning() {
+			logger.Info(line)
+		}
 	}
 
 	if os.Getenv("PUI_PPROF") == "true" {
@@ -68,12 +75,22 @@ func runWebServer() {
 		}()
 	}
 
-	err := database.InitDB()
+	err = database.InitDB()
 	if err != nil {
 		log.Fatalf("Error initializing database: %v", err)
 	}
+	roleCtx, stopRole := context.WithCancel(context.Background())
+	defer func() { stopRole() }()
+	serverOptions, err := roleServerOptions(roleCtx, role)
+	if err != nil {
+		log.Fatalf("Error preparing panel role: %v", err)
+	}
+	fleetCtx, stopFleet := context.WithCancel(context.Background())
+	fleetDone := make(chan struct{})
+	go func() { defer close(fleetDone); service.RunFleetControl(fleetCtx) }()
+	defer func() { stopFleet(); <-fleetDone }()
 
-	server := web.NewServer()
+	server := web.NewServer(serverOptions...)
 	global.SetWebServer(server)
 	err = server.Start()
 	if err != nil {
@@ -110,7 +127,7 @@ func runWebServer() {
 
 	var stopTunnelHealthMonitor context.CancelFunc
 	monitorCfg := tunnelmonitor.ConfigFromEnv()
-	if monitorCfg.Enabled {
+	if monitorCfg.Enabled && !role.ManagementOnly() {
 		if monitorCfg.ProxyURL == "" {
 			logger.Warning("Tunnel health monitor enabled without PUI_TUNNEL_HEALTH_PROXY: the probe measures host connectivity, not the xray tunnel, so failures will restart xray without fixing host network issues")
 		}
@@ -135,6 +152,7 @@ func runWebServer() {
 		case syscall.SIGHUP:
 			logger.Info("Received SIGHUP signal. Restarting servers...")
 
+			stopRole()
 			err := server.StopPanelOnly()
 			if err != nil {
 				logger.Debug("Error stopping web server:", err)
@@ -144,7 +162,12 @@ func runWebServer() {
 				logger.Debug("Error stopping sub server:", err)
 			}
 
-			server = web.NewServer()
+			roleCtx, stopRole = context.WithCancel(context.Background())
+			serverOptions, err = roleServerOptions(roleCtx, role)
+			if err != nil {
+				log.Fatalf("Error preparing restarted panel role: %v", err)
+			}
+			server = web.NewServer(serverOptions...)
 			global.SetWebServer(server)
 			err = server.StartPanelOnly()
 			if err != nil {
@@ -161,6 +184,10 @@ func runWebServer() {
 			}
 			log.Println("Sub server restarted successfully.")
 		case sys.SIGUSR1:
+			if role.ManagementOnly() {
+				logger.Warning("SIGUSR1 ignored: core restarts belong to node operations")
+				continue
+			}
 			logger.Info("Received USR1 signal, restarting xray-core...")
 			err := server.RestartXray()
 			if err != nil {
@@ -168,6 +195,7 @@ func runWebServer() {
 			}
 
 		default:
+			stopRole()
 			if stopTunnelHealthMonitor != nil {
 				stopTunnelHealthMonitor()
 			}
@@ -621,14 +649,12 @@ func GetApiToken(getApiToken bool) {
 		fmt.Printf("There are %d API token(s) configured. Existing tokens cannot be retrieved in plaintext because only hashes are stored.\n", len(tokens))
 		fmt.Println("If you have lost your token, you can manage and generate new tokens through the Panel UI (Settings -> API Tokens).")
 
-		// Create a new fallback token so the CLI is still useful without the UI
-		fallbackName := fmt.Sprintf("cli-fallback-%d", time.Now().Unix())
-		created, err := apiTokenService.Create(fallbackName, "", 0)
+		created, err := apiTokenService.RecreateByName("cli-fallback")
 		if err != nil {
 			fmt.Println("Failed to create a fallback API token:", err)
 			return
 		}
-		fmt.Println("\nA new fallback token has been generated for your convenience:")
+		fmt.Println("\nThe CLI fallback token has been regenerated (the previous one is now invalid):")
 		fmt.Println("apiToken:", created.Token)
 		return
 	}
@@ -672,6 +698,40 @@ func loadServiceEnvFile() {
 // It parses command-line arguments to run the web server, migrate database, or update settings.
 func main() {
 	loadServiceEnvFile()
+	_ = godotenv.Load()
+	role, err := config.RoleFromEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if handled, err := roleCommand(role, os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if err := role.ValidatePanel(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if role.ManagementOnly() && len(os.Args) > 1 && (os.Args[1] == "ban" || os.Args[1] == "migrate") {
+		fmt.Fprintln(os.Stderr, "legacy host ban and migration commands are unavailable in fleet roles")
+		os.Exit(1)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "fleet" {
+		if err := database.InitDB(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		err := controlplane.Command(context.Background(), database.GetDB(), os.Args[2:], os.Stdout)
+		_ = database.CloseDB()
+		if err != nil && !errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if len(os.Args) < 2 {
 		runWebServer()
@@ -746,8 +806,11 @@ func main() {
 		oldUsage()
 		fmt.Println()
 		fmt.Println("Commands:")
+		fmt.Println("    role           show process role without opening a database")
+		fmt.Println("    preflight      validate role environment without changing the host")
 		fmt.Println("    run            run web panel")
 		fmt.Println("    migrate        run pending data migrations on the configured database")
+		fmt.Println("    fleet          initialize node control and create enrollment packages")
 		fmt.Println("    setting        set settings")
 		fmt.Println("    ban            list, add or release device-cap bans")
 	}

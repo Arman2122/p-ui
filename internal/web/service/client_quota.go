@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -17,6 +18,26 @@ import (
 var ErrCoreQuotaReset = errors.New("daemon quota reset failed")
 
 var nativeRenewalMu sync.Mutex
+
+type clientRenewal struct {
+	email                    string
+	from, to                 int64
+	previousCount, nextCount int64
+	reset                    int
+}
+
+var errRenewalSuperseded = errors.New("client renewal superseded by a concurrent lifecycle change")
+
+func nextRenewalCount(current *int64, periods int64) (int64, error) {
+	count := int64(0)
+	if current != nil {
+		count = *current
+	}
+	if count < 0 || periods < 0 || periods > math.MaxInt64-count {
+		return 0, errors.New("client renewal count overflow")
+	}
+	return count + periods, nil
+}
 
 func nativeQuotaClients(tx *gorm.DB) *gorm.DB {
 	var kinds []core.Kind
@@ -37,6 +58,7 @@ func dueNativeRenewals(now time.Time) ([]string, error) {
 	db := database.GetDB()
 	var emails []string
 	err := db.Model(&core.ClientTraffic{}).
+		Where(legacyTrafficOwnerSQL).
 		Where("reset > 0 AND expiry_time > 0 AND expiry_time <= ?", now.UnixMilli()).
 		Where(ResellerClientEnabledSQL(), now.UnixMilli()).
 		Where("email IN (?)", nativeQuotaClients(db)).Pluck("email", &emails).Error
@@ -63,6 +85,21 @@ func (s *InboundService) renewNativeClients(ctx context.Context, emails []string
 		if rec.Reset <= 0 || rec.ExpiryTime <= 0 || rec.ExpiryTime > now {
 			continue
 		}
+		period := int64(rec.Reset) * 86400000
+		periods := (now-rec.ExpiryTime)/period + 1
+		traffic, err := s.GetClientTrafficByEmail(email)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if traffic == nil {
+			continue
+		}
+		nextCount, err := nextRenewalCount(traffic.ResetCount, periods)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
 		nr, err := s.clientService.ResetTrafficByEmail(s, email)
 		needRestart = needRestart || nr
 		if err != nil {
@@ -79,15 +116,21 @@ func (s *InboundService) renewNativeClients(ctx context.Context, emails []string
 		}
 		updated := current.ToClient()
 		updated.Enable = true
-		period := int64(rec.Reset) * 86400000
-		updated.ExpiryTime += ((now-rec.ExpiryTime)/period + 1) * period
+		updated.ExpiryTime += periods * period
 		if err := hydrateClientCredentials(nil, rec.Id, 0, updated); err != nil {
 			failures = append(failures, err)
 			continue
 		}
-		nr, err = s.clientService.Update(s, rec.Id, *updated)
+		renewing := *s
+		renewing.renewal = &clientRenewal{
+			email: email, from: rec.ExpiryTime, to: updated.ExpiryTime,
+			previousCount: nextCount - periods, nextCount: nextCount, reset: rec.Reset,
+		}
+		nr, err = s.clientService.Update(&renewing, rec.Id, *updated)
 		needRestart = needRestart || nr
-		failures = append(failures, err)
+		if !errors.Is(err, errRenewalSuperseded) {
+			failures = append(failures, err)
+		}
 	}
 	return needRestart, errors.Join(failures...)
 }

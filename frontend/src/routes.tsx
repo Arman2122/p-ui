@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, type RouteObject } from 'react-router';
+import { Spin } from 'antd';
 
 import PanelLayout from '@/layouts/PanelLayout';
 
@@ -22,7 +23,7 @@ const ResellerDashboardPage = lazy(() => import('@/pages/resellers/ResellerDashb
 const ResellerAccountPage = lazy(() => import('@/pages/resellers/ResellerAccountPage'));
 
 function withSuspense(node: React.ReactNode) {
-  return <Suspense fallback={null}>{node}</Suspense>;
+  return <Suspense fallback={<div style={{ display: 'grid', placeItems: 'center', minHeight: 160 }}><Spin size="large" /></div>}>{node}</Suspense>;
 }
 
 const routes: RouteObject[] = [

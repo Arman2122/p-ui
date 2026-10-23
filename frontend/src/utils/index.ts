@@ -862,15 +862,26 @@ export interface SupportedLanguage {
   icon: string;
 }
 
+export type LanguageScope = 'panel' | 'subscription';
+
 export class LanguageManager {
   static readonly supportedLanguages: readonly SupportedLanguage[] = [
     { name: 'English', value: 'en-US', icon: '🇺🇸' },
     { name: 'فارسی', value: 'fa-IR', icon: '🇮🇷' },
   ];
 
-  static getLanguage(): string {
-    let lang = CookieManager.getCookie('lang');
+  static getLanguage(scope: LanguageScope = 'panel'): string {
+    const cookieName = scope === 'subscription' ? 'subLang' : 'lang';
+    let lang = CookieManager.getCookie(cookieName);
     if (lang) return lang;
+
+    if (scope === 'subscription') {
+      const legacy = CookieManager.getCookie('lang');
+      if (LanguageManager.isSupportLanguage(legacy)) {
+        CookieManager.setCookie(cookieName, legacy, 365);
+        return legacy;
+      }
+    }
 
     if (window.navigator) {
       const nav = window.navigator as Navigator & { userLanguage?: string };
@@ -888,24 +899,24 @@ export class LanguageManager {
       });
 
       if (LanguageManager.isSupportLanguage(lang)) {
-        CookieManager.setCookie('lang', lang, 365);
+        CookieManager.setCookie(cookieName, lang, 365);
       } else {
-        CookieManager.setCookie('lang', 'en-US', 365);
+        CookieManager.setCookie(cookieName, 'en-US', 365);
         window.location.reload();
       }
     } else {
-      CookieManager.setCookie('lang', 'en-US', 365);
+      CookieManager.setCookie(cookieName, 'en-US', 365);
       window.location.reload();
     }
 
     return lang;
   }
 
-  static setLanguage(language: string): void {
+  static setLanguage(language: string, scope: LanguageScope = 'panel'): void {
     if (!LanguageManager.isSupportLanguage(language)) {
       language = 'en-US';
     }
-    CookieManager.setCookie('lang', language, 365);
+    CookieManager.setCookie(scope === 'subscription' ? 'subLang' : 'lang', language, 365);
     window.location.reload();
   }
 
@@ -934,12 +945,11 @@ export class FileManager {
 export type CalendarKind = 'gregorian' | 'jalalian';
 
 export class IntlUtil {
-  static formatDate(date: string | number | Date | null | undefined, calendar: CalendarKind = 'gregorian'): string {
+  static formatDate(date: string | number | Date | null | undefined, calendar: CalendarKind = 'gregorian', language?: string): string {
     if (date == null) return '';
     const d = new Date(date);
     if (!isFinite(d.getTime())) return '';
-    const language = LanguageManager.getLanguage();
-    const locale = calendar === 'jalalian' ? 'fa-IR' : language;
+    const locale = calendar === 'jalalian' ? 'fa-IR' : language ?? LanguageManager.getLanguage();
 
     const intlOptions: Intl.DateTimeFormatOptions = {
       year: 'numeric',

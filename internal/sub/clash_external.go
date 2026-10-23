@@ -6,11 +6,7 @@ import (
 	"strings"
 )
 
-// clashProxyFromExternal parses a pasted share link and converts it into a
-// mihomo/Clash proxy entry named `name`. Returns nil for links Clash can't
-// represent (the entry is then skipped, mirroring how getProxies drops
-// unsupported inbound protocols). vmess/vless/trojan reuse the existing
-// applyTransport/applySecurity helpers; ss/hysteria2/wireguard map directly.
+// Unrepresentable links are omitted, matching the local inbound renderer.
 func (s *SubClashService) clashProxyFromExternal(rawLink, name string) map[string]any {
 	ob := parseExternalLink(rawLink)
 	if ob == nil {
@@ -51,6 +47,9 @@ func (s *SubClashService) clashProxyFromExternal(rawLink, name string) map[strin
 		}
 		proxy["cipher"] = cipher
 	case "vless":
+		if encryption, _ := settings["encryption"].(string); strings.TrimSpace(encryption) != "" && strings.TrimSpace(encryption) != "none" {
+			proxy["encryption"] = strings.TrimSpace(encryption)
+		}
 		proxy["type"] = "vless"
 		proxy["server"] = fmt.Sprint(settings["address"])
 		proxy["port"] = clashInt(settings["port"])
@@ -81,7 +80,6 @@ func (s *SubClashService) clashProxyFromExternal(rawLink, name string) map[strin
 		proxy["port"] = clashInt(server["port"])
 		proxy["cipher"] = method
 		proxy["password"] = fmt.Sprint(server["password"])
-		return proxy
 	case "hysteria":
 		return clashHysteriaFromExternal(settings, stream, name)
 	case "wireguard":
@@ -137,6 +135,16 @@ func clashHysteriaFromExternal(settings, stream map[string]any, name string) map
 		if fp, _ := tls["fingerprint"].(string); fp != "" {
 			proxy["client-fingerprint"] = fp
 		}
+		if pin := mihomoCertFingerprint(tls["pinnedPeerCertSha256"]); pin != "" {
+			proxy["fingerprint"] = pin
+		}
+	}
+	if password := salamanderPassword(stream); password != "" {
+		proxy["obfs"] = "salamander"
+		proxy["obfs-password"] = password
+	}
+	if ports := hysteriaHopPorts(stream); ports != "" {
+		proxy["ports"] = ports
 	}
 	return proxy
 }

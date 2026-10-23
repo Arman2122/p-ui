@@ -63,6 +63,9 @@ coverage.html
 *.tar.gz
 *.zip
 release/
+!internal/node/release/
+__pycache__/
+/penhoon-native
 backup/
 bin/
 p-ui/

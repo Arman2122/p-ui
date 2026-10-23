@@ -21,9 +21,10 @@ whether a setting change has queued a restart, are not facts about the process.
 
 // Manager owns the current Xray process and the last result reported for it.
 type Manager struct {
-	mu      sync.RWMutex
-	process *Process
-	result  string
+	mu       sync.RWMutex
+	process  *Process
+	result   string
+	heldBack string
 	// Not mu: Replace and Snapshot are called from inside the critical
 	// section this guards, and would self-deadlock on the RWMutex.
 	applyMu sync.Mutex
@@ -66,7 +67,23 @@ func (m *Manager) Replace(process *Process) {
 	m.mu.Lock()
 	m.process = process
 	m.result = ""
+	m.heldBack = ""
 	m.mu.Unlock()
+}
+
+// SetHeldBack associates a rejected desired configuration with its surviving process.
+func (m *Manager) SetHeldBack(process *Process, reason string) {
+	m.mu.Lock()
+	if m.process == process {
+		m.heldBack = reason
+	}
+	m.mu.Unlock()
+}
+
+func (m *Manager) HeldBackReason() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.heldBack
 }
 
 // StoreResult records why a process ended, but only while it is still the

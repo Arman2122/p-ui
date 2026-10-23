@@ -40,18 +40,21 @@ func (c *Core) Transports(kind core.Kind, settings, streamSettings string) core.
 		var ss map[string]any
 		if json.Unmarshal([]byte(streamSettings), &ss) == nil {
 			network, _ = ss["network"].(string)
+			if method, ok := ss["method"].(string); ok {
+				network = method
+			}
 			security, _ = ss["security"].(string)
 			if tls, ok := ss["tlsSettings"].(map[string]any); ok {
 				alpn, _ = tls["alpn"].([]any)
 			}
 		}
 	}
-	switch network {
-	case "kcp", "quic":
+	switch strings.ToLower(network) {
+	case "kcp", "mkcp", "quic", "hysteria":
 		out.UDP = true
 	case "xhttp", "splithttp":
 		// Xray serves XHTTP over HTTP/3 alone, on QUIC, when TLS offers h3 only.
-		if security == "tls" && len(alpn) == 1 && alpn[0] == "h3" {
+		if strings.EqualFold(security, "tls") && len(alpn) == 1 && alpn[0] == "h3" {
 			out.UDP = true
 		} else {
 			out.TCP = true
@@ -68,11 +71,27 @@ func (c *Core) Transports(kind core.Kind, settings, streamSettings string) core.
 				key := "network"
 				if kind == "tunnel" {
 					key = "allowedNetwork"
+					if st["network"] != nil {
+						key = "network"
+					}
 				}
-				if n, ok := st[key].(string); ok && n != "" {
+				var networks []string
+				switch value := st[key].(type) {
+				case string:
+					if value != "" {
+						networks = strings.Split(value, ",")
+					}
+				case []any:
+					for _, item := range value {
+						if name, ok := item.(string); ok {
+							networks = append(networks, name)
+						}
+					}
+				}
+				if len(networks) > 0 {
 					out = core.Transports{}
-					for part := range strings.SplitSeq(n, ",") {
-						switch strings.TrimSpace(part) {
+					for _, part := range networks {
+						switch strings.ToLower(strings.TrimSpace(part)) {
 						case "tcp":
 							out.TCP = true
 						case "udp":

@@ -136,7 +136,14 @@ func resellerResetDue(a *model.ResellerAccount, now time.Time) bool {
 // resetUsageLocked opens a new period: the counter is zeroed, the ledger and per-client cursors stay.
 func (s *ResellerService) resetUsageLocked(a *model.ResellerAccount, now time.Time) error {
 	updates := map[string]any{"traffic_used": 0, "period_started_at": now.UnixMilli(), "traffic_warned_at": 0}
-	if err := database.GetDB().Model(&model.ResellerAccount{}).Where("user_id = ?", a.UserID).Updates(updates).Error; err != nil {
+	if err := submitTrafficWrite(func() error {
+		return database.GetDB().Transaction(func(tx *gorm.DB) error {
+			if err := requireLegacyPool(tx, &a.UserID, ""); err != nil {
+				return err
+			}
+			return tx.Model(&model.ResellerAccount{}).Where("user_id = ?", a.UserID).Updates(updates).Error
+		})
+	}); err != nil {
 		return err
 	}
 	a.TrafficUsed, a.PeriodStartedAt, a.TrafficWarnedAt = 0, now.UnixMilli(), 0

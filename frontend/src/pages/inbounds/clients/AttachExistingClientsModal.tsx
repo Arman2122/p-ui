@@ -113,7 +113,7 @@ export default function AttachExistingClientsModal({
         width: 150,
         ellipsis: true,
         render: (group: string) =>
-          group ? <Tag color="geekblue">{group}</Tag> : <span style={{ color: 'rgba(0,0,0,0.45)' }}>—</span>,
+          group ? <Tag color="geekblue">{group}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
       },
       {
         title: t('enable'),

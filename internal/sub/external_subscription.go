@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/web/service"
 )
 
@@ -130,6 +131,11 @@ func doFetchSubscriptionLinks(rawURL string) ([]string, error) {
 	}
 	// Some providers gate the link body on a known client User-Agent.
 	req.Header.Set("User-Agent", "v2rayNG/1.8.5")
+	if database.GetDB() != nil {
+		if guid, err := (&service.SettingService{}).GetPanelGuid(); err == nil && guid != "" {
+			req.Header.Set("X-HWID", guid)
+		}
+	}
 	resp, err := subscriptionHTTPClient.Do(req)
 	if err != nil {
 		return nil, err

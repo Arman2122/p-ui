@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [[ -n "${PUI_ROLE:-}" || -f /etc/penhoon/role.json ]]; then
+    echo "The ordinary updater cannot modify a role installation. Use its role release workflow." >&2
+    exit 1
+fi
+
 red='\033[0;31m'
 green='\033[0;32m'
 blue='\033[0;34m'

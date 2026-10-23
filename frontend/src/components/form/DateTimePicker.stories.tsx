@@ -29,7 +29,7 @@ function JalaliDemo() {
     setDatepicker('jalalian');
     return () => setDatepicker('gregorian');
   }, []);
-  return <DateTimePicker value={value} onChange={setValue} placeholder="Expiry date" />;
+  return <><DateTimePicker value={value} onChange={setValue} placeholder="Expiry date" /><Typography.Text>{value ? value.format('YYYY-MM-DD') : 'Never expires'}</Typography.Text></>;
 }
 
 const meta = {

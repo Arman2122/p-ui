@@ -16,11 +16,11 @@ func (s *SubClashService) buildProxyFromShare(subReq *SubService, inbound *model
 		return nil, false
 	}
 	if err != nil || share.Kind != "link" {
-		return nil, true
+		return nil, false
 	}
 	proxy := clashProxyFromShare(share.URI, subReq.endpointRemark(inbound, client.Email, ep, ""))
 	if proxy == nil {
-		return nil, true
+		return nil, false
 	}
 	if sni, ok := externalProxySNI(ep); ok && sni != "" {
 		proxy["sni"] = sni

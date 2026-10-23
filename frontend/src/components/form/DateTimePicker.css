@@ -69,3 +69,6 @@
 .jdp-ultra .jdp-clear:hover {
   color: rgba(255, 255, 255, 0.45);
 }
+.jdp-wrap.jdp-empty input {
+  color: transparent !important;
+}

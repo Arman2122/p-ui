@@ -30,6 +30,7 @@ type Field struct {
 	GoName   string
 	Type     TypeRef
 	Optional bool
+	Embedded bool
 	Skip     bool
 	Validate []ValidateRule
 	Doc      string
@@ -181,7 +182,7 @@ func flattenEmbedded(schemas []Schema) []Schema {
 		var resolved []Field
 		seen := make(map[string]bool, len(s.Fields))
 		for _, f := range s.Fields {
-			if f.Type.Kind == KindRef && f.Type.Name != "nullable" {
+			if f.Embedded && f.Type.Kind == KindRef && f.Type.Name != "nullable" {
 				if embedded, ok := byName[f.Type.Name]; ok && f.GoName == f.Type.Name {
 					for _, ef := range embedded.Fields {
 						if seen[ef.JSONName] {

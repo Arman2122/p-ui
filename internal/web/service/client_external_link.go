@@ -8,16 +8,13 @@ import (
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/util/link"
+	"github.com/Arman2122/p-ui/internal/web/entity"
 
 	"gorm.io/gorm"
 )
 
 // ExternalLinkInput is one row from the client form's Links tab.
-type ExternalLinkInput struct {
-	Kind   string `json:"kind"`
-	Value  string `json:"value"`
-	Remark string `json:"remark"`
-}
+type ExternalLinkInput = entity.ExternalLinkInput
 
 func (s *ClientService) GetExternalLinksForRecord(id int) ([]model.ClientExternalLink, error) {
 	var rows []model.ClientExternalLink

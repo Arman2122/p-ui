@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/util/link"
 	wgutil "github.com/Arman2122/p-ui/internal/util/wireguard"
 )
 
@@ -70,6 +72,10 @@ func (s *SubClashService) GetClash(subId string, host string) (string, string, e
 		}
 	}
 	for _, ext := range externalLinks {
+		seenEmails[ext.Email] = struct{}{}
+		if !ext.Active {
+			continue
+		}
 		for _, el := range expandEntry(ext) {
 			name := el.Name
 			if name == "" {
@@ -82,7 +88,7 @@ func (s *SubClashService) GetClash(subId string, host string) (string, string, e
 		}
 	}
 
-	if len(proxies) == 0 {
+	if len(proxies) == 0 && len(externalLinks) == 0 {
 		return "", "", nil
 	}
 
@@ -93,6 +99,9 @@ func (s *SubClashService) GetClash(subId string, host string) (string, string, e
 		emails = append(emails, e)
 	}
 	traffic, _ := subReq.AggregateTrafficByEmails(emails)
+	if len(proxies) == 0 {
+		return "", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", traffic.Up, traffic.Down, traffic.Total, traffic.ExpiryTime/1000), nil
+	}
 
 	proxyNames := make([]string, 0, len(proxies)+1)
 	for _, proxy := range proxies {
@@ -211,6 +220,7 @@ func (s *SubClashService) getProxies(subReq *SubService, inbound *model.Inbound,
 		subReq.renderHostRemark(inbound, client, extPrxy, network)
 		workingInbound := *inbound
 		workingInbound.Listen, _ = extPrxy["dest"].(string)
+		workingInbound.Listen = strings.Trim(workingInbound.Listen, "[]")
 		if port, ok := extPrxy["port"].(float64); ok {
 			workingInbound.Port = int(port)
 		}
@@ -366,11 +376,17 @@ func (s *SubClashService) buildHysteriaProxy(subReq *SubService, inbound *model.
 			if fp, ok := inner["fingerprint"].(string); ok && fp != "" {
 				proxy["client-fingerprint"] = fp
 			}
+			if pin := mihomoCertFingerprint(inner["pinnedPeerCertSha256"]); pin != "" {
+				proxy["fingerprint"] = pin
+			}
 		}
 		// A host override writes the flat form, so it wins over the inbound's.
 		if fp, ok := tlsSettings["fingerprint"].(string); ok && fp != "" {
 			proxy["client-fingerprint"] = fp
 		}
+	}
+	if pin := mihomoCertFingerprint(ep["pinnedPeerCertSha256"]); pin != "" {
+		proxy["fingerprint"] = pin
 	}
 	if insecure, ok := ep["allowInsecure"].(bool); ok && insecure {
 		proxy["skip-cert-verify"] = true
@@ -748,8 +764,10 @@ func (s *SubClashService) applySecurity(proxy map[string]any, security string, s
 			realityOpts["short-id"] = shortID
 		}
 		if len(realityOpts) > 0 {
+			realityOpts["support-x25519mlkem768"] = true
 			proxy["reality-opts"] = realityOpts
 		}
+		proxy["client-fingerprint"] = "chrome"
 		if fingerprint, ok := realitySettings["fingerprint"].(string); ok && fingerprint != "" {
 			proxy["client-fingerprint"] = fingerprint
 		}
@@ -910,4 +928,41 @@ func linesToClashRules(raw string) []any {
 		rules = append(rules, line)
 	}
 	return rules
+}
+
+func mihomoCertFingerprint(value any) string {
+	var pins []string
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if pin, ok := item.(string); ok {
+				pins = append(pins, pin)
+			}
+		}
+	case []string:
+		pins = typed
+	case string:
+		pins = strings.Split(typed, ",")
+	}
+
+	for _, pin := range pins {
+		normalized := link.NormalizePinHex(pin)
+		if len(normalized) != 64 {
+			continue
+		}
+		if _, err := hex.DecodeString(normalized); err != nil {
+			continue
+		}
+		normalized = strings.ToUpper(normalized)
+		var out strings.Builder
+		out.Grow(95)
+		for i := 0; i < len(normalized); i += 2 {
+			if i > 0 {
+				out.WriteByte(':')
+			}
+			out.WriteString(normalized[i : i+2])
+		}
+		return out.String()
+	}
+	return ""
 }

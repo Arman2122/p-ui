@@ -1,0 +1,15 @@
+# Automatic admission and shared rate allocation
+
+Fresh authenticated admission requests create bounded demand records. Four master workers claim nodes, process at most eight admission or rate reconciliation records within a two-second work window, and release their claims. The scheduler shares the control-plane host's database handle and cancellation lifecycle with automatic credit refill.
+
+An admission transaction revalidates source policy, placement, active term, session, deployment, descriptor and the agent/runtime/credit journal identities. It never activates or renews a term. A new grant reserves at most 64 MiB, clamped by the child's remaining allowance, parent pools and next speed-tier boundary. Reservation, directional rate assignment, authority outbox and demand settlement commit together. An existing grant receives rate reconciliation without additional quota; credit-only refills retain their separate delivery path.
+
+Rate allocation includes every outstanding share in the client's pool. Retired, offline, unready and unqualified placements retain their reserved authority. Eligible current holders and fresh demands divide the remaining directional bandwidth and burst allowance. Both directions must be usable before a new grant is issued. A rate decrease does not release capacity until its exact authority revision is acknowledged as applied.
+
+For example, when A holds 100 Mbps and B authenticates, B remains `awaiting-rate` and creates an intent to reconcile A. A separate transaction locks A, then the client and rate pool, recomputes the current allocation and queues A's 50 Mbps update. Only A's applied acknowledgment permits B's 50 Mbps grant. An offline A retains its reservation.
+
+Reconciliation intents deliberately have no cross-node target foreign keys: PostgreSQL's implicit foreign-key row locks can invert the node/client lock order. Targets are validated when the intent executes. Node queue insertion occurs outside the client transaction. A stale request, expired intent, changed session or replaced journal cannot authorize an update. Deadline-bound transactions and compare-and-swap settlement preserve newer demand and replacement lease owners.
+
+Demand outcomes distinguish `satisfied`, `awaiting-rate`, `deferred`, `rejected` and `expired`. Capacity constraints retain their diagnostic text and retry only within the original authentication deadline. Indexed, bounded cleanup removes expired rate intents from the active queue. These defaults establish bounded work and conservative authority handling; they do not constitute fleet throughput qualification or automatic native admission support.
+
+Linux PostgreSQL race tests cover the applied-acknowledgment handoff, unchanged-authority retries, credit-only refill separation, failed-publication rollback, expired intents, capacity diagnostics, offline and retired reservations, and scheduler cancellation. Four compiler-overlay controls reproduce failures when outstanding authority is replaced with desired rates, holder reconciliation is omitted, an existing grant is funded again, or the capacity diagnostic is discarded.

@@ -70,11 +70,13 @@ import { useDatepicker } from '@/hooks/useDatepicker';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
 import type { ClientRecord, InboundOption, ExternalLink, ExternalLinkInput } from '@/hooks/useClients';
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
+import { clientTrafficPolicy } from '@/lib/clients/traffic-display';
 import ClientSpeedTag, { isActiveSpeed } from '@/components/clients/ClientSpeedTag';
 import ClientCardComment from '@/components/clients/ClientCardComment';
 import { StatStrip } from '@/components/ui';
 import { PageHeader, StatusPip } from '@/components/ui/panel';
-import { IntlUtil, SizeFormatter } from '@/utils';
+import { IntlUtil, Msg, SizeFormatter } from '@/utils';
+import { useFleetClientCreation } from './useFleetClientCreation';
 import { setMessageInstance } from '@/utils/messageBus';
 import { LazyMount } from '@/components/utility';
 const ClientFormModal = lazy(() => import('./ClientFormModal'));
@@ -276,6 +278,10 @@ export default function ClientsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [initialPolicyId, setInitialPolicyId] = useState(0);
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
+  const creation = useFleetClientCreation(formOpen && formMode === 'add', (result) => {
+    void refresh();
+    messageApi.success(t(result.pending ? 'pages.clients.creation.savedPending' : 'pages.clients.creation.saved'));
+  });
   useEffect(() => {
     if (searchParams.get('create') !== '1') return;
     const planId = Number(searchParams.get('planId'));
@@ -470,13 +476,14 @@ export default function ClientsPage() {
     if (!row) return null;
     const traffic = row.traffic || {};
     const used = (traffic.up || 0) + (traffic.down || 0);
-    const total = row.totalGB || 0;
+    const policy = clientTrafficPolicy(row);
+    const total = policy.total || 0;
     const now = Date.now();
-    const expired = (row.expiryTime ?? 0) > 0 && (row.expiryTime ?? 0) <= now;
+    const expired = (policy.expiryTime ?? 0) > 0 && (policy.expiryTime ?? 0) <= now;
     const exhausted = total > 0 && used >= total;
     if (expired || exhausted) return 'depleted';
-    if (!row.enable) return 'deactive';
-    const nearExpiry = (row.expiryTime ?? 0) > 0 && (row.expiryTime ?? 0) - now < (expireDiff || 0);
+    if (!policy.enabled) return 'deactive';
+    const nearExpiry = (policy.expiryTime ?? 0) > 0 && (policy.expiryTime ?? 0) - now < (expireDiff || 0);
     const nearLimit = total > 0 && total - used < (trafficDiff || 0);
     if (nearExpiry || nearLimit) return 'expiring';
     return 'active';
@@ -502,29 +509,34 @@ export default function ClientsPage() {
   const sortedClients = filteredClients;
 
   function expiryLabel(row: ClientRecord) {
-    if (!row.expiryTime) return '∞';
-    if (row.expiryTime < 0) {
-      const days = Math.round(row.expiryTime / -86400000);
+    const expiry = clientTrafficPolicy(row).expiryTime;
+    if (expiry == null && row.traffic?.accounting?.source === 'fleet') return t('pages.clients.accounting.unknown');
+    if (!expiry) return '∞';
+    if (expiry < 0) {
+      const days = Math.round(expiry / -86400000);
       return `${t('pages.clients.delayedStart')}: ${days}d`;
     }
-    return IntlUtil.formatDate(row.expiryTime, datepicker);
+    return IntlUtil.formatDate(expiry, datepicker);
   }
 
   function expiryRelative(row: ClientRecord) {
-    if (!row.expiryTime) return '';
-    if (row.expiryTime < 0) {
-      const days = Math.round(row.expiryTime / -86400000);
+    const expiry = clientTrafficPolicy(row).expiryTime;
+    if (expiry == null && row.traffic?.accounting?.source === 'fleet') return t('pages.clients.accounting.unknown');
+    if (!expiry) return '∞';
+    if (expiry < 0) {
+      const days = Math.round(expiry / -86400000);
       return `${days}d`;
     }
-    return IntlUtil.formatRelativeTime(row.expiryTime);
+    return IntlUtil.formatRelativeTime(expiry);
   }
 
   function expiryColor(row: ClientRecord): string {
-    if (!row.expiryTime) return 'purple';
-    if (row.expiryTime < 0) return 'blue';
+    const expiry = clientTrafficPolicy(row).expiryTime;
+    if (!expiry) return 'purple';
+    if (expiry < 0) return 'blue';
     const now = Date.now();
-    if (row.expiryTime <= now) return 'red';
-    if (row.expiryTime - now < 86400 * 1000 * 3) return 'orange';
+    if (expiry <= now) return 'red';
+    if (expiry - now < 86400 * 1000 * 3) return 'orange';
     return 'green';
   }
 
@@ -537,6 +549,8 @@ export default function ClientsPage() {
       const skipped = msg?.obj?.skipped ?? [];
       if (!msg?.success || skipped.length > 0 || (msg?.obj?.changed ?? 0) === 0) {
         messageApi.error(skipped[0]?.reason || msg?.msg || t('somethingWentWrong'));
+      } else if ((msg.obj?.pending ?? 0) > 0) {
+        messageApi.info(t('pages.clients.toasts.bulkEnablePending', { count: msg.obj?.changed, pending: msg.obj?.pending }));
       }
     } finally {
       setTogglingEmail(null);
@@ -803,17 +817,22 @@ export default function ClientsPage() {
     const msg = enable ? await bulkEnable(selection) : await bulkDisable(selection);
     clearSelection();
     const changed = msg?.obj?.changed ?? 0;
+    const pending = msg?.obj?.pending ?? 0;
     const skipped = msg?.obj?.skipped ?? [];
     const failed = skipped.length;
     const firstError = skipped[0]?.reason ?? msg?.msg ?? '';
     const okKey = enable ? 'pages.clients.toasts.bulkEnabled' : 'pages.clients.toasts.bulkDisabled';
     const mixedKey = enable ? 'pages.clients.toasts.bulkEnabledMixed' : 'pages.clients.toasts.bulkDisabledMixed';
     if (failed === 0 && msg?.success) {
-      messageApi.success(t(okKey, { count: changed }));
+      if (pending > 0) messageApi.info(t('pages.clients.toasts.bulkEnablePending', { count: changed, pending }));
+      else messageApi.success(t(okKey, { count: changed }));
     } else {
+      const summary = pending > 0
+        ? t('pages.clients.toasts.bulkEnablePendingMixed', { ok: changed, pending, failed })
+        : t(mixedKey, { ok: changed, failed });
       messageApi.warning(firstError
-        ? `${t(mixedKey, { ok: changed, failed })} — ${firstError}`
-        : t(mixedKey, { ok: changed, failed }));
+        ? `${summary} — ${firstError}`
+        : summary);
     }
     reportBulk(t(enable ? 'pages.clients.enable' : 'pages.clients.disable'), msg?.obj?.outcome, (emails) => runSetEnable({ emails }, enable));
   }
@@ -917,7 +936,10 @@ export default function ClientsPage() {
       | { isEdit: true; email: string; attach: number[]; detach: number[]; externalLinks: ExternalLinkInput[]; policyId?: number; planOverrides?: ClientPlanOverrides },
   ) => {
     if (!meta.isEdit) {
-      const createMsg = await create({ ...payload, policyId: meta.policyId, planOverrides: meta.planOverrides, externalLinks: meta.externalLinks });
+      const request = { ...payload, policyId: meta.policyId, planOverrides: meta.planOverrides, externalLinks: meta.externalLinks };
+      if (creation.mode === 'fleet') return creation.submit(request);
+      if (creation.mode !== 'legacy') return new Msg(false);
+      const createMsg = await create(request);
       if (!createMsg?.success) return createMsg;
       if (!meta.policyId && meta.email && meta.externalLinks.length > 0) {
         const r = await setExternalLinks(meta.email, meta.externalLinks);
@@ -933,7 +955,7 @@ export default function ClientsPage() {
     const r = await setExternalLinks(emailKey, meta.externalLinks);
     if (!r?.success) return r;
     return updateMsg;
-  }, [create, update, setExternalLinks]);
+  }, [create, update, setExternalLinks, creation]);
 
   const pageClass = useMemo(() => {
     const classes = ['clients-page'];
@@ -952,15 +974,16 @@ export default function ClientsPage() {
       title: t('pages.clients.client'), key: 'email', width: twoLine ? undefined : 220,
       render: (_v, record) => {
         const bucket = clientBucket(record);
-        const key = bucket === 'depleted' ? 'ended' : !record.enable ? 'disabled' : bucket === 'expiring' ? 'expiring' : 'active';
-        const label = bucket === 'depleted' ? t('depleted') : !record.enable ? t('disabled') : bucket === 'expiring' ? t('depletingSoon') : t('subscription.active');
+        const enabled = clientTrafficPolicy(record).enabled;
+        const key = bucket === 'depleted' ? 'ended' : !enabled ? 'disabled' : bucket === 'expiring' ? 'expiring' : 'active';
+        const label = bucket === 'depleted' ? t('depleted') : !enabled ? t('disabled') : bucket === 'expiring' ? t('depletingSoon') : t('subscription.active');
         const color = key === 'ended' ? 'var(--p-error)' : key === 'disabled' ? 'var(--p-text-3)' : key === 'expiring' ? 'var(--p-warning)' : 'var(--p-success)';
         const reason = record.disabledReason ? t(`pages.clients.disabledBy.${record.disabledReason}`) : '';
         return (
           <div className="p-client-identity">
             <div className="p-client-name">
               <button className="p-text-action p-name" title={record.email} onClick={() => onShowInfo(record.email)}>{record.email}</button>
-              <StatusPip status={{ key, label, color }} online={!!record.enable && isOnline(record.email)}
+              <StatusPip status={{ key, label, color }} online={!!enabled && isOnline(record.email)}
                 note={`${reason ? `${reason} · ` : ''}${t('lastOnline')}: ${record.traffic?.lastOnline ? IntlUtil.formatDate(record.traffic.lastOnline, datepicker) : '—'}`} />
               {!twoLine && <Switch checked={!!record.enable} size="small" loading={togglingEmail === record.email}
                 aria-label={`${t('pages.clients.enabled')}: ${record.email}`} onChange={(next) => onToggleEnable(record, next)} />}
@@ -986,11 +1009,12 @@ export default function ClientsPage() {
     {
       title: t('pages.clients.traffic'), key: 'traffic', width: twoLine ? 240 : 172,
       render: (_v, record) => {
-        const total = record.totalGB ?? 0;
+        const policy = clientTrafficPolicy(record);
+        const total = policy.total ?? 0;
         const remaining = total - (record.traffic?.up ?? 0) - (record.traffic?.down ?? 0);
-        return <div className={record.enable && total > 0 && remaining > total * 0.1 && remaining > trafficDiff ? 'client-traffic-blue' : undefined}>
-          <ClientTrafficCell compact up={record.traffic?.up} down={record.traffic?.down} total={record.totalGB}
-            enabled={record.enable} trafficDiff={trafficDiff} /></div>;
+        return <div className={policy.enabled && total > 0 && remaining > total * 0.1 && remaining > trafficDiff ? 'client-traffic-blue' : undefined}>
+          <ClientTrafficCell compact up={record.traffic?.up} down={record.traffic?.down} total={policy.total}
+            enabled={policy.enabled} trafficDiff={trafficDiff} accounting={record.traffic?.accounting} /></div>;
       },
     },
     {
@@ -1010,7 +1034,7 @@ export default function ClientsPage() {
     {
       title: t('pages.clients.expiryTime'), key: 'expiryTime', width: 118, align: 'end',
       render: (_v, record) => <div className="p-client-expiry" title={expiryLabel(record)}>
-        <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 50%, var(--p-ink))` }}>{record.expiryTime ? expiryRelative(record) : '∞'}</span>
+        <span style={{ color: `color-mix(in srgb, ${expiryColor(record)} 50%, var(--p-ink))` }}>{expiryRelative(record)}</span>
         <div className="p-sub">{expiryLabel(record)}</div>
       </div>,
     },
@@ -1542,6 +1566,7 @@ export default function ClientsPage() {
                             )}
                             {filteredClients.map((row) => {
                               const bucket = clientBucket(row);
+                              const policy = clientTrafficPolicy(row);
                               return (
                                 <div key={row.email} className={`client-card${selectedRowKeys.includes(row.email) ? ' is-selected' : ''}`}>
                                   <div className="card-head">
@@ -1549,7 +1574,7 @@ export default function ClientsPage() {
                                       checked={selectedRowKeys.includes(row.email)}
                                       onChange={(e) => toggleSelect(row.email, e.target.checked)}
                                     />
-                                    {row.enable && bucket !== 'depleted' && isOnline(row.email)
+                                    {policy.enabled && bucket !== 'depleted' && isOnline(row.email)
                                       ? <span className="online-dot" style={{ marginInlineEnd: 0 }} />
                                       : <Badge status={bucketBadgeStatus(bucket)} />}
                                     <span className="tag-name">{row.email}</span>
@@ -1612,9 +1637,10 @@ export default function ClientsPage() {
                                     compact
                                     up={row.traffic?.up}
                                     down={row.traffic?.down}
-                                    total={row.totalGB}
-                                    enabled={row.enable}
+                                    total={policy.total}
+                                    enabled={policy.enabled}
                                     trafficDiff={trafficDiff}
+                                    accounting={row.traffic?.accounting}
                                   />
                                   {(() => {
                                     const speed = clientSpeed[row.email];
@@ -1641,6 +1667,7 @@ export default function ClientsPage() {
 
         <LazyMount when={formOpen}>
           <ClientFormModal
+            key={formMode === 'add' ? `create:${creation.actorId}` : 'edit'}
             initialPolicyId={initialPolicyId}
             subSettings={subSettings}
             open={formOpen}
@@ -1652,6 +1679,7 @@ export default function ClientsPage() {
             tgBotEnable={tgBotEnable}
             groups={allGroups}
             save={onSave}
+            creation={creation}
             resetTraffic={resetTraffic}
             onOpenChange={setFormOpen}
           />

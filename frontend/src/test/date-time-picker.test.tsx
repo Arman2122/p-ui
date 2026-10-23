@@ -1,10 +1,14 @@
-import { fireEvent } from '@testing-library/react';
+import { fireEvent, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import DateTimePicker from '@/components/form/DateTimePicker';
+import { setDatepicker } from '@/hooks/useDatepicker';
 import { renderWithProviders } from './test-utils';
+
+afterEach(() => setDatepicker('gregorian'));
 
 function openPicker(): void {
   const input = document.querySelector('.ant-picker input');
@@ -20,6 +24,20 @@ function clickDayCell(title: string): void {
 }
 
 describe('DateTimePicker', () => {
+  it('keeps a cleared Jalali expiry empty after the picker remounts', async () => {
+    setDatepicker('jalalian');
+    function ControlledPicker() {
+      const [value, setValue] = useState<Dayjs | null>(dayjs('2026-12-31'));
+      return <><DateTimePicker value={value} onChange={setValue} /><output>{value ? value.valueOf() : 'empty'}</output></>;
+    }
+    const { container } = renderWithProviders(<ControlledPicker />);
+    const clear = container.querySelector('.jdp-clear');
+    if (!clear) throw new Error('Jalali clear button not rendered');
+    fireEvent.click(clear);
+    await waitFor(() => expect(container.querySelector('output')?.textContent).toBe('empty'));
+    expect(container.querySelector('.jdp-empty')).not.toBeNull();
+  });
+
   it('commits a clicked calendar date without an OK press', () => {
     const onChange = vi.fn<(next: Dayjs | null) => void>();
     renderWithProviders(<DateTimePicker value={null} onChange={onChange} />);

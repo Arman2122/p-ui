@@ -66,9 +66,7 @@ func (c *Core) Describe() core.Descriptor {
 			PerUserStats:  core.Yes(),
 			QuotaPushdown: core.Yes(),
 			OnlineUsers:   core.Yes(),
-			// Share links are still rendered by the panel's own link builders;
-			// consolidating them onto LinkRenderer is a later phase.
-			ShareLink: core.No(),
+			ShareLink:     core.Yes(),
 		},
 	}
 }

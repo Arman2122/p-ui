@@ -87,5 +87,8 @@ func readClientHistories(db *gorm.DB, emails []string, now time.Time) (map[strin
 	for _, row := range rows {
 		out[row.Email] = append(out[row.Email], row.ClientHistoryPoint)
 	}
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	return out, projectFleetHistories(db, emails, now, out)
 }

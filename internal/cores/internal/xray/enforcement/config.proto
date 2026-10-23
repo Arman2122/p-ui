@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+package penhoon.node.xrayruntime;
+option go_package = "github.com/Arman2122/p-ui/internal/cores/internal/xray/enforcement";
+
+message Config {}

@@ -17,6 +17,7 @@ type HotDiff struct {
 	AddedInbounds       [][]byte
 	RemovedUsers        []UserOp
 	AddedUsers          []UserOp
+	DroppedClients      []UserOp
 	RemovedOutboundTags []string
 	AddedOutbounds      [][]byte
 	RoutingConfig       []byte // full new routing section; nil when unchanged
@@ -28,6 +29,23 @@ type UserOp struct {
 	Protocol string
 	Email    string
 	User     map[string]any
+}
+
+// DropsUsers identifies credentials removed without their email being re-added.
+func (d *HotDiff) DropsUsers() bool {
+	if len(d.DroppedClients) > 0 {
+		return true
+	}
+	readded := make(map[string]struct{}, len(d.AddedUsers))
+	for _, user := range d.AddedUsers {
+		readded[user.Tag+"\x00"+user.Email] = struct{}{}
+	}
+	for _, user := range d.RemovedUsers {
+		if _, ok := readded[user.Tag+"\x00"+user.Email]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Empty reports whether the diff contains no operations.
@@ -125,6 +143,17 @@ func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff) bool {
 			logger.Debug("hot diff: inbound [", oldIb.Tag, "] carries a reverse-tagged client, forcing a full restart instead of a hot swap")
 			return false
 		}
+		if exists {
+			oldClients, _, oldOK := splitSettingsClients(oldIb.Settings)
+			newClients, _, newOK := splitSettingsClients(newIb.Settings)
+			if oldOK && newOK {
+				for email := range oldClients {
+					if _, remains := newClients[email]; !remains {
+						diff.DroppedClients = append(diff.DroppedClients, UserOp{Tag: newIb.Tag, Protocol: newIb.Protocol, Email: email})
+					}
+				}
+			}
+		}
 		if exists && diffInboundUsers(oldIb, newIb, diff) {
 			continue
 		}
@@ -158,7 +187,7 @@ func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff) bool {
 	return true
 }
 
-var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}}
+var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}}
 
 // diffInboundUsers emits per-user AlterInbound ops when two same-tag inbounds
 // differ only in settings.clients, so the handler (and its listener) survives.

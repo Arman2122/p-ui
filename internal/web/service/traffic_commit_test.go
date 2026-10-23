@@ -74,14 +74,14 @@ func TestResetAllTrafficsZeroesUsage(t *testing.T) {
 	}
 }
 
-func TestResetAllTrafficsClearsNodeBaselines(t *testing.T) {
+func TestResetAllTrafficsPreservesNodeRenewalBaselines(t *testing.T) {
 	db := initTrafficTestDB(t)
 	svc := &ClientService{}
 
 	if err := db.Create(&xray.ClientTraffic{InboundId: 1, Email: "spent@x", Enable: true, Up: 60, Down: 60, Total: 100}).Error; err != nil {
 		t.Fatalf("seed traffic: %v", err)
 	}
-	if err := db.Create(&model.NodeClientTraffic{NodeId: 1, Email: "spent@x", Up: 60, Down: 60}).Error; err != nil {
+	if err := db.Create(&model.NodeClientTraffic{NodeId: 1, Email: "spent@x", Up: 60, Down: 60, ResetCount: new(int64(8))}).Error; err != nil {
 		t.Fatalf("seed node baseline: %v", err)
 	}
 
@@ -89,11 +89,15 @@ func TestResetAllTrafficsClearsNodeBaselines(t *testing.T) {
 		t.Fatalf("ResetAllTraffics: %v", err)
 	}
 
-	var cnt int64
-	if err := db.Model(&model.NodeClientTraffic{}).Where("email = ?", "spent@x").Count(&cnt).Error; err != nil {
-		t.Fatalf("count baselines: %v", err)
+	var baseline model.NodeClientTraffic
+	if err := db.Where("email = ?", "spent@x").First(&baseline).Error; err != nil {
+		t.Fatalf("read baseline: %v", err)
 	}
-	if cnt != 0 {
-		t.Fatalf("Reset All Client Traffic must clear node baselines like its sibling reset paths, found %d", cnt)
+	var pending bool
+	if err := db.Model(&model.NodeClientTraffic{}).Select("reset_pending").Where("id = ?", baseline.Id).Scan(&pending).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !pending || baseline.ResetCount == nil || *baseline.ResetCount != 8 {
+		t.Fatalf("reset pending=%v renewal count=%v, want true/8", pending, baseline.ResetCount)
 	}
 }

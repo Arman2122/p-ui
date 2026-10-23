@@ -86,6 +86,20 @@ func (s *NodeService) ClearDescendants(nodeID int) {
 	nodeDescendantsMu.Unlock()
 }
 
+func (s *NodeService) RetainEnabledNodeDescendants(nodes []*model.Node) {
+	enabled := make(map[int]bool, len(nodes))
+	for _, node := range nodes {
+		enabled[node.Id] = node.Enable
+	}
+	nodeDescendantsMu.Lock()
+	defer nodeDescendantsMu.Unlock()
+	for nodeID := range nodeDescendantsCache {
+		if !enabled[nodeID] {
+			delete(nodeDescendantsCache, nodeID)
+		}
+	}
+}
+
 func cachedDescendants() []model.NodeSummary {
 	nodeDescendantsMu.RLock()
 	defer nodeDescendantsMu.RUnlock()

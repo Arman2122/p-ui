@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package penhoon.node.v1;
+option go_package = "github.com/Arman2122/p-ui/api/node/v1;nodev1";
+
+service AuthorityDeliveryService {
+  rpc Fetch(AuthorityDeliveryRequest) returns (AuthorityUpdateBatch);
+  rpc Acknowledge(AuthorityUpdateBatch) returns (AuthorityUpdateReceipt);
+}
+
+message AuthorityDeliveryRequest {
+  string node_id = 1;
+  string installation_id = 2;
+  string agent_state_journal_id = 3;
+  string runtime_id = 4;
+  string state_journal_id = 5;
+  string credit_journal_id = 6;
+  uint64 base_configuration_revision = 7;
+  bytes base_payload_sha256 = 8;
+}
+
+enum AuthorityRateMode {
+  AUTHORITY_RATE_BLOCKED = 0;
+  AUTHORITY_RATE_LIMITED = 1;
+  AUTHORITY_RATE_UNLIMITED = 2;
+}
+
+message AuthorityRate {
+  AuthorityRateMode mode = 1;
+  uint64 bits_per_second = 2;
+  uint32 burst_bytes = 3;
+}
+
+message AuthorityUpdate {
+  string grant_id = 1;
+  string client_id = 2;
+  string term_id = 3;
+  uint64 authority_revision = 4;
+  uint64 credit_revision = 5;
+  uint64 credit_ceiling = 6;
+  bool quota_unlimited = 7;
+  bool enabled = 8;
+  int64 expires_unix_milli = 9;
+  AuthorityRate upload = 10;
+  AuthorityRate download = 11;
+  uint64 credential_generation = 12;
+  string placement_id = 13;
+  uint64 placement_revision = 14;
+  bytes descriptor_sha256 = 15;
+}
+
+message AuthorityUpdateBatch {
+  string node_id = 1;
+  string installation_id = 2;
+  string agent_state_journal_id = 3;
+  string runtime_id = 4;
+  string state_journal_id = 5;
+  string credit_journal_id = 6;
+  uint64 base_configuration_revision = 7;
+  bytes base_payload_sha256 = 8;
+  repeated AuthorityUpdate updates = 9;
+}
+
+message AuthorityUpdateReceipt {
+  bytes payload_sha256 = 1;
+}

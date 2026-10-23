@@ -99,6 +99,7 @@ func (j *NodeTrafficSyncJob) Run() {
 		logger.Warning("node traffic sync: load nodes failed:", err)
 		return
 	}
+	j.inboundService.RetainSyncedNodeOnlineClients(nodes)
 	if len(nodes) == 0 {
 		return
 	}
@@ -387,6 +388,7 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 		return nil
 	}
 
+	justPushed := false
 	if n.ConfigDirty {
 		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), nodeReconcileTimeout)
 		reconcileErr := j.inboundService.ReconcileNode(reconcileCtx, rt, n)
@@ -400,6 +402,7 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 			if clearErr := j.nodeService.ClearNodeDirty(n.Id, n.ConfigDirtyAt); clearErr != nil {
 				logger.Warningf("node traffic sync: clear dirty for %s failed: %v", n.Name, clearErr)
 			}
+			justPushed = true
 			j.structural.set()
 		}
 	}
@@ -413,6 +416,7 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 		j.inboundService.ClearNodeOnlineClients(n.Id)
 		return nil
 	}
+	snap.ManagedAliases = rt.AdoptedInboundAliases()
 	service.FilterNodeSnapshot(n, snap)
 	_, _, dirty, _, _ := j.nodeService.NodeSyncState(n.Id)
 	if !dirty {
@@ -429,7 +433,7 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 			}
 		}
 	}
-	changed, err := j.inboundService.SetRemoteTraffic(n.Id, snap, dirty)
+	changed, err := j.inboundService.SetRemoteTraffic(n.Id, snap, dirty, justPushed)
 	if err != nil {
 		logger.Warningf("node traffic sync: merge for %s failed: %v", n.Name, err)
 		return nil
@@ -437,7 +441,7 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 	if changed {
 		j.structural.set()
 	}
-	if !dirty && n.InboundsAdoptedAt == 0 {
+	if !dirty && n.InboundsAdoptedAt == 0 && (n.InboundSyncMode != "selected" || len(n.InboundTags) > 0 || len(snap.ManagedAliases) > 0) {
 		if markErr := j.nodeService.MarkNodeInboundsAdopted(n.Id); markErr != nil {
 			logger.Warningf("node traffic sync: mark inbounds adopted for %s failed: %v", n.Name, markErr)
 		}
@@ -465,7 +469,7 @@ func (j *NodeTrafficSyncJob) syncOne(mgr *runtime.Manager, n *model.Node, doIpSy
 		logger.Warningf("node traffic sync: fetch client ips from %s failed: %v", n.Name, err)
 	}
 
-	masterIps, err := j.inboundService.GetAllInboundClientIps()
+	masterIps, err := j.inboundService.GetNodeInboundClientIps(n.Id)
 	if err != nil {
 		logger.Warningf("node traffic sync: load client ips for push to %s failed: %v", n.Name, err)
 		return active

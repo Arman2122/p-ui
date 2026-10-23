@@ -28,6 +28,7 @@ export function formatPanelVersion(version: string | undefined | null): string {
 
 export function isPanelUpdateAvailable(latest: string, current: string): boolean {
   if (!latest || !current) return false;
+  if (latest.trim().startsWith('dev+') !== current.trim().startsWith('dev+')) return false;
   const a = parseVersionParts(latest);
   const b = parseVersionParts(current);
   if (!a || !b) {

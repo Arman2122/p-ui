@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TrafficAccountingSchema } from '@/generated/zod';
 
 const nullableStringArray = z.array(z.string()).nullable().transform((v) => v ?? []);
 const nullableNumberArray = z.array(z.number()).nullable().transform((v) => v ?? []);
@@ -10,6 +11,7 @@ export const ClientTrafficSchema = z.object({
   expiryTime: z.number().optional(),
   enable: z.boolean().optional(),
   lastOnline: z.number().optional(),
+  accounting: TrafficAccountingSchema.nullish(),
 });
 
 export const ClientPlanMetadataSchema = z.object({
@@ -167,6 +169,7 @@ export const BulkResetTrafficResultSchema = z.object({
 
 export const BulkSetEnableResultSchema = z.object({
   changed: z.number(),
+  pending: z.number().default(0),
   outcome: BulkOutcomeSchema.optional(),
   skipped: z
     .array(z.object({ email: z.string(), reason: z.string() }))

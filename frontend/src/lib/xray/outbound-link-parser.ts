@@ -1,5 +1,5 @@
 import { Base64 } from '@/utils';
-import { migrateQuicUdpHop } from '@/lib/xray/finalmask-migrate';
+import { migrateQuicUdpHop, UDPHOP_LEGACY_MODE } from '@/lib/xray/finalmask-migrate';
 
 // Focused share-link parser for the OutboundFormModal's link-import
 // helper. Each parser returns a wire-shape outbound record (the same
@@ -198,6 +198,14 @@ function applyTransportParams(stream: Raw, params: URLSearchParams): void {
       applyXhttpStringFromParams(xhttp, params);
       break;
     }
+    case 'kcp': {
+      const kcp = stream.kcpSettings as Raw;
+      const mtu = decimalParamInRange(params.get('mtu'), 21, 0x7fffffff);
+      const tti = decimalParamInRange(params.get('tti'), 10, 1000);
+      if (mtu !== null) kcp.mtu = mtu;
+      if (tti !== null) kcp.tti = tti;
+      break;
+    }
     case 'tcp':
       // vless/trojan TCP HTTP camouflage rides on header=http+host+path
       if (params.get('headerType') === 'http' || params.get('type') === 'http') {
@@ -215,22 +223,99 @@ function applyTransportParams(stream: Raw, params: URLSearchParams): void {
   }
 }
 
-// The inbound link emits the entire finalmask object as a JSON-encoded
-// `fm` query param. Decode and attach to streamSettings so udpHop /
-// quicParams / tcp+udp masks round-trip on outbound import.
+/* Preserve explicit finalmask settings before filling standard transport parameters. */
 function applyFinalMaskParam(stream: Raw, params: URLSearchParams): void {
   const fm = params.get('fm');
-  if (!fm) return;
-  try {
-    const parsed = JSON.parse(fm) as Record<string, unknown>;
-    if (parsed && typeof parsed === 'object') {
-      sanitizeFinalMaskQuicParams(parsed);
-      migrateQuicUdpHop(parsed);
-      stream.finalmask = parsed;
+  if (fm) {
+    try {
+      const parsed = JSON.parse(fm) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        sanitizeFinalMaskQuicParams(parsed);
+        migrateQuicUdpHop(parsed);
+        stream.finalmask = parsed;
+      }
+    } catch {
+      /* Malformed optional masks must not discard an otherwise usable link. */
     }
-  } catch {
-    // malformed fm — leave streamSettings.finalmask absent
   }
+  applyMkcpLegacyFromShare(stream, params);
+}
+
+function decimalParamInRange(raw: string | null, min: number, max: number): number | null {
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
+}
+
+const kcpHeaderTypeToMask: Record<string, string> = {
+  dns: 'dns', dtls: 'dtls', srtp: 'srtp', utp: 'utp', 'wechat-video': 'wechat', wireguard: 'wireguard',
+};
+
+function applyMkcpLegacyFromShare(stream: Raw, params: URLSearchParams): void {
+  if (stream.network !== 'kcp') return;
+  const headerType = (params.get('headerType') ?? '').trim();
+  const seed = params.get('seed') ?? '';
+  const header = headerType === 'none' ? '' : headerType;
+  if (!header && !seed) return;
+  if (header && !Object.hasOwn(kcpHeaderTypeToMask, header)) return;
+  const finalmask = ensureFinalMask(stream);
+  const udp = Array.isArray(finalmask.udp) ? [...finalmask.udp] : [];
+  if (udp.some((mask) => mask?.type === 'mkcp-legacy')) return;
+  /* The cipher must be inside the header; one mask with both fields loses the seed. */
+  if (seed) udp.push({ type: 'mkcp-legacy', settings: { header: '', value: seed } });
+  if (header) udp.push({ type: 'mkcp-legacy', settings: { header: kcpHeaderTypeToMask[header], value: '' } });
+  finalmask.udp = udp;
+}
+
+function ensureFinalMask(stream: Raw): Raw {
+  if (!stream.finalmask || typeof stream.finalmask !== 'object' || Array.isArray(stream.finalmask)) stream.finalmask = {};
+  return stream.finalmask as Raw;
+}
+
+function applyHysteria2Obfs(stream: Raw, params: URLSearchParams): void {
+  const obfs = (params.get('obfs') ?? '').toLowerCase();
+  if (obfs !== 'salamander' && obfs !== 'gecko') return;
+  const password = firstParam(params, 'obfs-password', 'obfs_password', 'obfsPassword');
+  if (!password) return;
+  const min = decimalParamInRange(params.get('minPacketSize')?.trim() ?? null, 1, 2048);
+  const max = decimalParamInRange(params.get('maxPacketSize')?.trim() ?? null, 1, 2048);
+  const packetSize = obfs === 'gecko' && min !== null && max !== null && max >= min ? `${min}-${max}` : '';
+  const finalmask = ensureFinalMask(stream);
+  const udp = Array.isArray(finalmask.udp) ? finalmask.udp as Raw[] : [];
+  const existing = udp.find((mask) => mask?.type === 'salamander');
+  if (existing) {
+    const settings = existing.settings && typeof existing.settings === 'object' && !Array.isArray(existing.settings)
+      ? existing.settings as Raw : (existing.settings = {}) as Raw;
+    if (typeof settings.password !== 'string' || !settings.password) settings.password = password;
+    if (packetSize && !(typeof settings.packetSize === 'string' && settings.packetSize)) settings.packetSize = packetSize;
+    return;
+  }
+  finalmask.udp = [...udp, { type: 'salamander', settings: { password, ...(packetSize ? { packetSize } : {}) } }];
+}
+
+function applyHysteria2Hop(stream: Raw, params: URLSearchParams): void {
+  const ports = firstParam(params, 'mport');
+  if (!ports) return;
+  const finalmask = ensureFinalMask(stream);
+  const udp = Array.isArray(finalmask.udp) ? finalmask.udp as Raw[] : [];
+  if (udp.some((mask) => mask?.type === 'udphop')) return;
+  finalmask.udp = [...udp, { type: 'udphop', settings: { mode: UDPHOP_LEGACY_MODE, interval: '5-10', remotePorts: ports } }];
+}
+
+function applyObfsLocalPluginParams(params: URLSearchParams): void {
+  const network = params.get('type');
+  if (params.get('headerType') || (network && network !== 'tcp')) return;
+  const [plugin, ...options] = (params.get('plugin') ?? '').split(';');
+  if (plugin !== 'obfs-local') return;
+  const parsed = new Map(options.flatMap((part) => {
+    const separator = part.indexOf('=');
+    return separator < 0 ? [] : [[part.slice(0, separator), part.slice(separator + 1)] as const];
+  }));
+  if (parsed.get('obfs') !== 'http') return;
+  params.set('type', 'tcp');
+  params.set('headerType', 'http');
+  const host = parsed.get('obfs-host');
+  if (host) params.set('host', host);
 }
 
 const QUIC_PARAMS_NUMERIC_KEYS = [
@@ -356,7 +441,7 @@ export function parseVmessLink(link: string): Raw | null {
       const xhttp = stream.xhttpSettings as Raw;
       xhttp.host = json.host ?? '';
       xhttp.path = json.path ?? '/';
-      if (json.mode) xhttp.mode = json.mode;
+      if (json.mode || json.type) xhttp.mode = json.mode || json.type;
       applyXhttpStringFromJson(xhttp, json);
     }
     if (security === 'tls') {
@@ -364,7 +449,11 @@ export function parseVmessLink(link: string): Raw | null {
       tls.serverName = json.sni ?? '';
       tls.fingerprint = json.fp ?? '';
       if (json.alpn) tls.alpn = (json.alpn as string).split(',');
+      if (typeof json.ech === 'string') tls.echConfigList = json.ech;
+      if (typeof json.vcn === 'string') tls.verifyPeerCertByName = json.vcn;
+      if (typeof json.pcs === 'string') tls.pinnedPeerCertSha256 = json.pcs;
     }
+    if (typeof json.fm === 'string') applyFinalMaskParam(stream, new URLSearchParams({ fm: json.fm }));
 
     const port = Number(json.port) || 443;
     const rawScy = (json.scy as string) || 'auto';
@@ -462,6 +551,7 @@ export function parseShadowsocksLink(link: string): Raw | null {
     try { remark = decodeURIComponent(link.slice(hashIndex + 1)); } catch { remark = ''; }
   }
   const queryIndex = linkNoHash.indexOf('?');
+  const rawQuery = queryIndex >= 0 ? linkNoHash.slice(queryIndex + 1) : '';
   const core = queryIndex >= 0 ? linkNoHash.slice(0, queryIndex) : linkNoHash;
   const atIndex = core.indexOf('@');
   if (atIndex >= 0) {
@@ -474,7 +564,7 @@ export function parseShadowsocksLink(link: string): Raw | null {
       try { userInfo = Base64.decode(rawUserInfo); }
       catch { userInfo = rawUserInfo; }
     }
-    const hostPort = core.slice(atIndex + 1);
+    const hostPort = core.slice(atIndex + 1).replace(/\/+$/, '');
     const colon = hostPort.lastIndexOf(':');
     if (colon < 0) return null;
     host = hostPort.slice(0, colon);
@@ -495,12 +585,19 @@ export function parseShadowsocksLink(link: string): Raw | null {
   const sep = userInfo.indexOf(':');
   const method = sep < 0 ? '2022-blake3-aes-128-gcm' : userInfo.slice(0, sep);
   const password = sep < 0 ? userInfo : userInfo.slice(sep + 1);
+  const params = new URLSearchParams(rawQuery);
+  applyObfsLocalPluginParams(params);
+  const stream = buildStream(params.get('type') ?? 'tcp', params.get('security') ?? 'none');
+  applyTransportParams(stream, params);
+  applySecurityParams(stream, params);
+  applyFinalMaskParam(stream, params);
   return {
     protocol: 'shadowsocks',
     tag: remark,
     settings: {
       servers: [{ address: host, port, password, method }],
     },
+    streamSettings: stream,
   };
 }
 
@@ -532,6 +629,8 @@ export function parseHysteria2Link(link: string): Raw | null {
     },
   };
   applyFinalMaskParam(stream, params);
+  applyHysteria2Obfs(stream, params);
+  applyHysteria2Hop(stream, params);
   return {
     protocol: 'hysteria',
     tag: decodeRemark(url),

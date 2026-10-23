@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/xlzd/gotp"
 	"gorm.io/gorm"
 
 	"github.com/Arman2122/p-ui/internal/config"
@@ -26,6 +25,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/util/netproxy"
 	"github.com/Arman2122/p-ui/internal/util/random"
 	"github.com/Arman2122/p-ui/internal/util/reflect_util"
+	"github.com/Arman2122/p-ui/internal/util/totp"
 	"github.com/Arman2122/p-ui/internal/web/entity"
 )
 
@@ -397,11 +397,17 @@ func (s *SettingService) setInt(key string, value int) error {
 }
 
 func (s *SettingService) GetWarpLastUpdate() (int64, error) {
-	val, err := s.getString("warpLastUpdate")
-	if err != nil || val == "" {
+	setting, err := s.getSetting("warpLastUpdate")
+	if database.IsNotFound(err) {
+		return 0, nil
+	}
+	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseInt(val, 10, 64)
+	if setting.Value == "" {
+		return 0, nil
+	}
+	return strconv.ParseInt(setting.Value, 10, 64)
 }
 
 func (s *SettingService) SetWarpLastUpdate(val int64) error {
@@ -614,7 +620,7 @@ func (s *SettingService) VerifyTwoFactorCode(code string) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(token) == "" || !gotp.NewDefaultTOTP(token).Verify(strings.TrimSpace(code), time.Now().Unix()) {
+	if !totp.VerifyWithSkew(token, code, time.Now()) {
 		return common.NewError("invalid two factor code")
 	}
 	return nil
@@ -697,13 +703,18 @@ func (s *SettingService) GetSubShowIdentityOnAllLinks() (bool, error) {
 
 func (s *SettingService) GetSecret() ([]byte, error) {
 	secret, err := s.getString("secret")
+	if err != nil {
+		return nil, err
+	}
+	if secret == "" {
+		secret = defaultValueMap["secret"]
+	}
 	if secret == defaultValueMap["secret"] {
-		err := s.saveSetting("secret", secret)
-		if err != nil {
-			logger.Warning("save secret failed:", err)
+		if err := s.saveSetting("secret", secret); err != nil {
+			return nil, err
 		}
 	}
-	return []byte(secret), err
+	return []byte(secret), nil
 }
 
 // GetPanelGuid returns this panel's stable self-identifier, persisting a

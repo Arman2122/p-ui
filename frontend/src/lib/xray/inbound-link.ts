@@ -782,14 +782,22 @@ export function genHysteriaLink(input: GenHysteriaLinkInput): string {
     const salamander = udpMasks.find((m) => m?.type === 'salamander');
     const obfsPassword = salamander?.settings?.password;
     if (typeof obfsPassword === 'string' && obfsPassword.length > 0) {
-      params.set('obfs', 'salamander');
+      const size = String(salamander?.settings?.packetSize ?? '').trim();
+      const match = /^(\d+)-(\d+)$/.exec(size);
+      const min = Number(match?.[1]);
+      const max = Number(match?.[2]);
+      const gecko = Number.isSafeInteger(min) && Number.isSafeInteger(max) && min >= 1 && max >= min && max <= 2048;
+      params.set('obfs', gecko ? 'gecko' : 'salamander');
+      if (gecko) {
+        params.set('minPacketSize', String(min));
+        params.set('maxPacketSize', String(max));
+      }
       params.set('obfs-password', obfsPassword);
     }
   }
 
-  applyFinalMaskToParams(stream.finalmask, params);
-
-  const hopPorts = stream.finalmask?.quicParams?.udpHop?.ports?.trim() ?? '';
+  const hopMask = udpMasks?.find((mask) => mask.type === 'udphop');
+  const hopPorts = String(hopMask?.settings?.remotePorts ?? stream.finalmask?.quicParams?.udpHop?.ports ?? '').trim();
   if (hopPorts.length > 0) {
     params.set('mport', hopPorts);
   }

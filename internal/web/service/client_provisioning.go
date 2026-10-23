@@ -214,6 +214,9 @@ func (s *ClientService) BulkCreateWithPlans(inboundSvc *InboundService, payloads
 // CreateWithPlan stores the prepared client and assignment together before any
 // runtime call; a failed provisioning removes only the identity this call created.
 func (s *ClientService) CreateWithPlan(inboundSvc *InboundService, scope PlanScope, payload *ClientCreatePayload) (bool, error) {
+	if err := requireLegacyClientCreation(payload); err != nil {
+		return false, err
+	}
 	if payload == nil || payload.PolicyID == nil || *payload.PolicyID <= 0 {
 		return false, errors.New("a positive policyId is required")
 	}

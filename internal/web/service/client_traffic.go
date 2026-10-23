@@ -132,6 +132,25 @@ func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email st
 	}
 
 	needRestart := false
+	if len(inboundIds) == 0 {
+		if rErr := inboundSvc.ResetClientTrafficByEmail(email); rErr != nil {
+			return needRestart, rErr
+		}
+	}
+
+	for _, ibId := range inboundIds {
+		var nr bool
+		rErr := submitTrafficWrite(func() error {
+			var err error
+			nr, err = inboundSvc.resetClientTrafficLocked(ibId, email)
+			return err
+		})
+		needRestart = needRestart || nr
+		if rErr != nil {
+			return needRestart, rErr
+		}
+	}
+	// Zero usage before enabling so a concurrent traffic tick cannot disable it again.
 	expiredDetached := len(inboundIds) == 0 && rec.ExpiryTime > 0 && rec.ExpiryTime <= time.Now().UnixMilli()
 	if !rec.Enable && !expiredDetached {
 		var ownerAllowsEnable bool
@@ -156,18 +175,14 @@ func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email st
 		}
 	}
 
-	if len(inboundIds) == 0 {
-		if rErr := inboundSvc.ResetClientTrafficByEmail(email); rErr != nil {
-			return needRestart, rErr
+	if len(inboundIds) > 0 {
+		if err := resetCoreQuotas(context.Background(), []string{email}); err != nil {
+			return needRestart, err
 		}
-		return needRestart, nil
-	}
-
-	for _, ibId := range inboundIds {
-		nr, rErr := inboundSvc.ResetClientTraffic(ibId, email)
-		needRestart = needRestart || nr
-		if rErr != nil {
-			return needRestart, rErr
+		for _, id := range inboundIds {
+			if err := markInboundTrafficReset(id); err != nil {
+				return needRestart, err
+			}
 		}
 	}
 	return needRestart, nil
@@ -194,6 +209,42 @@ func (s *ClientService) BulkResetTraffic(inboundSvc *InboundService, emails []st
 		return 0, nil
 	}
 
+	affected := 0
+	err := submitTrafficWrite(func() error {
+		db := database.GetDB()
+		return db.Transaction(func(tx *gorm.DB) error {
+			if err := requireLegacyClientLifecycle(tx, cleanEmails); err != nil {
+				return err
+			}
+			if err := CaptureClientHistoryBeforeReset(tx, cleanEmails, time.Now()); err != nil {
+				return err
+			}
+			if err := adjustGroupBaselinesForRemovedTraffic(tx, cleanEmails); err != nil {
+				return err
+			}
+			for _, batch := range chunkStrings(cleanEmails, sqlInChunk) {
+				res := tx.Model(xray.ClientTraffic{}).
+					Where("email IN ?", batch).
+					Updates(map[string]any{"enable": gorm.Expr(ResellerClientEnabledSQL(), time.Now().UnixMilli()), "up": 0, "down": 0})
+				if res.Error != nil {
+					return res.Error
+				}
+				affected += int(res.RowsAffected)
+			}
+			if err := clearGlobalTraffic(tx, cleanEmails...); err != nil {
+				return err
+			}
+			for _, batch := range chunkStrings(cleanEmails, sqlInChunk) {
+				if err := tx.Model(&model.NodeClientTraffic{}).Where("email IN ?", batch).Updates(map[string]any{"reset_pending": true, "reset_after_count": gorm.Expr("COALESCE(observed_reset_count, reset_count, 0)")}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return 0, err
+	}
 	for _, e := range cleanEmails {
 		rec, err := s.GetRecordByEmail(nil, e)
 		if err == nil && !rec.Enable {
@@ -223,39 +274,6 @@ func (s *ClientService) BulkResetTraffic(inboundSvc *InboundService, emails []st
 		}
 	}
 
-	affected := 0
-	err := submitTrafficWrite(func() error {
-		db := database.GetDB()
-		return db.Transaction(func(tx *gorm.DB) error {
-			if err := CaptureClientHistoryBeforeReset(tx, cleanEmails, time.Now()); err != nil {
-				return err
-			}
-			if err := adjustGroupBaselinesForRemovedTraffic(tx, cleanEmails); err != nil {
-				return err
-			}
-			for _, batch := range chunkStrings(cleanEmails, sqlInChunk) {
-				res := tx.Model(xray.ClientTraffic{}).
-					Where("email IN ?", batch).
-					Updates(map[string]any{"enable": gorm.Expr(ResellerClientEnabledSQL(), time.Now().UnixMilli()), "up": 0, "down": 0})
-				if res.Error != nil {
-					return res.Error
-				}
-				affected += int(res.RowsAffected)
-			}
-			if err := clearGlobalTraffic(tx, cleanEmails...); err != nil {
-				return err
-			}
-			for _, batch := range chunkStrings(cleanEmails, sqlInChunk) {
-				if err := tx.Where("email IN ?", batch).Delete(&model.NodeClientTraffic{}).Error; err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-	})
-	if err != nil {
-		return 0, err
-	}
 	// The sidecar counts for itself, so a panel-side zero means nothing to it:
 	// an mtproto client stays blocked on its own quota until this call.
 	return affected, resetCoreQuotas(context.Background(), cleanEmails)
@@ -308,6 +326,9 @@ func (s *ClientService) resetAllClientTrafficsLocked(id int) ([]string, []string
 		if len(resetEmails) == 0 {
 			return nil
 		}
+		if err := requireLegacyClientLifecycle(tx, resetEmails); err != nil {
+			return err
+		}
 
 		if err := CaptureClientHistoryBeforeReset(tx, resetEmails, time.Now()); err != nil {
 			return err
@@ -335,7 +356,7 @@ func (s *ClientService) resetAllClientTrafficsLocked(id int) ([]string, []string
 		}
 
 		for _, batch := range chunkStrings(resetEmails, sqlInChunk) {
-			if err := tx.Where("email IN ?", batch).Delete(&model.NodeClientTraffic{}).Error; err != nil {
+			if err := tx.Model(&model.NodeClientTraffic{}).Where("email IN ?", batch).Updates(map[string]any{"reset_pending": true, "reset_after_count": gorm.Expr("COALESCE(observed_reset_count, reset_count, 0)")}).Error; err != nil {
 				return err
 			}
 		}
@@ -368,6 +389,9 @@ func (s *ClientService) ResetAllTraffics(inboundSvc *InboundService) (bool, erro
 			if err := tx.Model(&xray.ClientTraffic{}).Pluck("email", &resetEmails).Error; err != nil {
 				return err
 			}
+			if err := requireLegacyClientLifecycle(tx, resetEmails); err != nil {
+				return err
+			}
 			if err := CaptureClientHistoryBeforeReset(tx, resetEmails, time.Now()); err != nil {
 				return err
 			}
@@ -388,7 +412,7 @@ func (s *ClientService) ResetAllTraffics(inboundSvc *InboundService) (bool, erro
 			if err := tx.Where("1 = 1").Delete(&model.ClientGlobalTraffic{}).Error; err != nil {
 				return err
 			}
-			return tx.Where("1 = 1").Delete(&model.NodeClientTraffic{}).Error
+			return tx.Model(&model.NodeClientTraffic{}).Where("1 = 1").Updates(map[string]any{"reset_pending": true, "reset_after_count": gorm.Expr("COALESCE(observed_reset_count, reset_count, 0)")}).Error
 		})
 	})
 	if err != nil {

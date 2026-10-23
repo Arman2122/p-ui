@@ -99,7 +99,6 @@ func TestNativeQuotaFailureAndRetry(t *testing.T) {
 			{"periodic", true, func(ib *model.Inbound, _ string) error { return clients.ResetAllClientTraffics(inbounds, ib.Id) }},
 			{"all clients", true, func(_ *model.Inbound, _ string) error { return clients.ResetAllClientTraffics(inbounds, -1) }},
 			{"all traffic", false, func(_ *model.Inbound, _ string) error { _, err := clients.ResetAllTraffics(inbounds); return err }},
-			{"all inbounds", true, func(_ *model.Inbound, _ string) error { return inbounds.ResetAllTraffics() }},
 			{"hand counter", false, func(_ *model.Inbound, email string) error { return inbounds.UpdateClientTrafficByEmail(email, 0, 0) }},
 		} {
 			t.Run(tc.name, func(t *testing.T) {

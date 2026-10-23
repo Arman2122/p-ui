@@ -23,6 +23,7 @@ type Bound struct {
 	Users         UserProvisioner
 	UserSet       WholeSetUserProvisioner
 	Creds         CredentialDeclarer
+	SourceCreds   SourceCredentialDeclarer
 	Validate      InstanceValidator
 	Transports    TransportDeclarer
 	Traffic       TrafficSource
@@ -70,6 +71,9 @@ func Bind(c Core) *Bound {
 	}
 	if v, ok := c.(CredentialDeclarer); ok {
 		b.Creds = v
+	}
+	if v, ok := c.(SourceCredentialDeclarer); ok {
+		b.SourceCreds = v
 	}
 	if v, ok := c.(InstanceValidator); ok {
 		b.Validate = v

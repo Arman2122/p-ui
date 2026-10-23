@@ -23,8 +23,8 @@ export function OutboundProtocolCell({ row }: { row: OutboundRow }) {
 export function OutboundDestinationCell({ row }: { row: OutboundRow }) {
   const { t } = useTranslation();
   const addresses = outboundAddresses(row);
-  const local = row.protocol === 'freedom' ? t('uiRepair.outbounds.directDestination')
-    : row.protocol === 'blackhole' ? t('uiRepair.outbounds.blockDestination') : '—';
+  const local = row.protocol?.toLowerCase() === 'freedom' ? t('uiRepair.outbounds.directDestination')
+    : row.protocol?.toLowerCase() === 'blackhole' ? t('uiRepair.outbounds.blockDestination') : '—';
   return <div className="outbound-destination">
     {addresses.length ? addresses.map((address) => <Tooltip key={address} title={address}><span className="p-mono">{address}</span></Tooltip>)
       : <span className="p-sub">{local}</span>}

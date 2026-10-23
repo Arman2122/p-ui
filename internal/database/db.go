@@ -37,15 +37,18 @@ unsynchronised pointer swap there is a data race, and the Go memory model gives
 no guarantee about which handle a reader sees.
 */
 var (
-	db   *gorm.DB
-	dbMu sync.RWMutex
+	db       *gorm.DB
+	dbMu     sync.RWMutex
+	dbInitMu sync.Mutex
 )
 
 // setDB replaces the handle. Only InitDB should call it.
-func setDB(conn *gorm.DB) {
+func setDB(conn *gorm.DB) *gorm.DB {
 	dbMu.Lock()
+	previous := db
 	db = conn
 	dbMu.Unlock()
+	return previous
 }
 
 const (
@@ -94,10 +97,84 @@ func allModels() []any {
 		&model.ClientHistoryCursor{},
 		&model.GroupQuota{},
 		&model.GroupInbound{},
+		&model.FleetNode{},
+		&model.FleetAuthority{},
+		&model.FleetRecoveryChallenge{},
+		&model.FleetNodeObservation{},
+		&model.FleetNodeJournal{},
+		&model.FleetRuntimeJournal{},
+		&model.FleetGrantAuthority{},
+		&model.FleetCreditUpdate{},
+		&model.FleetAuthorityUpdate{},
+		&model.FleetCreditCandidate{},
+		&model.FleetCreditNodeQueue{},
+		&model.FleetAdmissionDemand{},
+		&model.FleetAdmissionNodeQueue{},
+		&model.FleetRateReconciliation{},
+		&model.FleetSourceWork{},
+		&model.FleetPublishedRuntime{},
+		&model.FleetPublishedClientAdmission{},
+		&model.FleetPublishedAdmissionBinding{},
+		&model.FleetNetworkRevision{},
+		&model.FleetNetworkDefaultsHead{},
+		&model.FleetNodeNetworkHead{},
+		&model.FleetNetworkAssetHead{},
+		&model.FleetNetworkAssetRevision{},
+		&model.FleetNetworkCompilation{},
+		&model.FleetNetworkPublication{},
+		&model.FleetNodePlacementPolicy{},
+		&model.FleetPlacementDefaults{},
+		&model.FleetPlacementRule{},
+		&model.FleetNodeCapabilitySnapshot{},
+		&model.FleetPlacementIntent{},
+		&model.FleetPlacementFanout{},
+		&model.FleetNativeBinding{},
+		&model.FleetOutboundProvider{},
+		&model.FleetOutboundProviderRevision{},
+		&model.FleetPublishedProviderBinding{},
+		&model.FleetProviderRollout{},
+		&model.FleetDeployment{},
+		&model.FleetBudget{},
+		&model.FleetGrant{},
+		&model.FleetGrantBudget{},
+		&model.FleetUsageCursor{},
+		&model.FleetMeter{},
+		&model.FleetOperation{},
+		&model.FleetEnrollment{},
+		&model.FleetCredential{},
+		&model.FleetFence{},
+		&model.FleetRateBudget{},
+		&model.FleetRateShare{},
+		&model.FleetClient{},
+		&model.FleetSourceCredentialClaim{},
+		&model.FleetTerm{},
+		&model.FleetGrantStop{},
+		&model.FleetPlacement{},
+		&model.FleetPlacementInbound{},
+		&model.FleetBudgetScope{},
+		&model.FleetTermUsage{},
+		&model.FleetTermUsageDay{},
+		&model.FleetTermGroup{},
+		&model.FleetResetSchedule{},
 	}
 }
 
 func initModels() error {
+	if err := migrateFleetObservedAuthorityRevision(); err != nil {
+		return err
+	}
+	if err := migrateFleetPublishedRuntimeCompleteness(); err != nil {
+		return err
+	}
+	if err := migrateFleetCredentialSerial(); err != nil {
+		return err
+	}
+	if err := migrateFleetClientRatePool(); err != nil {
+		return err
+	}
+	if err := migrateClientRenewalGeneration(); err != nil {
+		return err
+	}
 	// Runs before AutoMigrate so the decided composite key is the one that ships.
 	if err := migrateClientCredentialsTable(); err != nil {
 		return err
@@ -116,7 +193,19 @@ func initModels() error {
 			return err
 		}
 	}
+	if err := db.Exec("DROP INDEX IF EXISTS idx_fleet_source_work_due").Error; err != nil {
+		return err
+	}
 	if err := migrateHostVerifyPeerCertByNameColumn(); err != nil {
+		return err
+	}
+	if err := migrateFleetReferences(); err != nil {
+		return err
+	}
+	if err := migrateFleetClientReferences(); err != nil {
+		return err
+	}
+	if err := migrateFleetUsageProjection(); err != nil {
 		return err
 	}
 	if err := migrateDropHostIsHidden(); err != nil {
@@ -1437,7 +1526,7 @@ func runSeeders(isUsersEmpty bool) error {
 	}
 
 	if priorSeeders == 0 && isUsersEmpty {
-		seeders := []string{"UserPasswordHash", "ClientsTable", "InboundClientsArrayFix", "InboundClientTgIdFix2", "InboundClientSubIdFix", "FreedomFinalRulesReverseFix", "FreedomFinalRulesPrivateEgressBlock", "InboundRealityFinalmaskTcpStrip", "OutboundProxySettingsToDialerProxy", "OutboundQuicUdpHopToMask", "ApiTokensHash", "LegacyProxySettingsCleanup", "WireguardPeersToClients", "MtprotoSecretsToClients", "NodeInboundsAdopted", "ResetIpLimitNoFail2ban"}
+		seeders := []string{"UserPasswordHash", "ClientsTable", "InboundClientsArrayFix", "InboundClientTgIdFix2", "InboundClientSubIdFix", "FreedomFinalRulesReverseFix", "FreedomFinalRulesPrivateEgressBlock", "InboundRealityFinalmaskTcpStrip", "OutboundProxySettingsToDialerProxy", "OutboundQuicUdpHopToMask", "OutboundCoreSettings", "ApiTokensHash", "LegacyProxySettingsCleanup", "WireguardPeersToClients", "MtprotoSecretsToClients", "NodeInboundsAdopted", "ResetIpLimitNoFail2ban"}
 		for _, name := range seeders {
 			if err := db.Create(&model.HistoryOfSeeders{SeederName: name}).Error; err != nil {
 				return err
@@ -1544,6 +1633,12 @@ func runSeeders(isUsersEmpty bool) error {
 
 	if !slices.Contains(seedersHistory, "OutboundQuicUdpHopToMask") {
 		if err := migrateOutboundUdpHop(); err != nil {
+			return err
+		}
+	}
+
+	if !slices.Contains(seedersHistory, "OutboundCoreSettings") {
+		if err := migrateOutboundCoreSettings(); err != nil {
 			return err
 		}
 	}
@@ -1888,7 +1983,7 @@ func rewriteFreedomFinalRules(raw string) (string, bool, error) {
 		if !ok {
 			continue
 		}
-		if proto, _ := obj["protocol"].(string); proto != "freedom" {
+		if proto, _ := obj["protocol"].(string); !strings.EqualFold(proto, "freedom") {
 			continue
 		}
 		settings, ok := obj["settings"].(map[string]any)
@@ -1983,7 +2078,7 @@ func rewriteFreedomFinalRulesPrivateEgress(raw string) (string, bool, error) {
 		if !ok {
 			continue
 		}
-		if proto, _ := obj["protocol"].(string); proto != "freedom" {
+		if proto, _ := obj["protocol"].(string); !strings.EqualFold(proto, "freedom") {
 			continue
 		}
 		settings, ok := obj["settings"].(map[string]any)
@@ -2026,6 +2121,28 @@ func migrateOutboundUdpHop() error {
 		}
 		log.Printf("OutboundQuicUdpHopToMask: outbound %q: finalmask.quicParams.udpHop moved to a udphop UDP mask", obj["tag"])
 		return true
+	})
+}
+
+func migrateOutboundCoreSettings() error {
+	return migrateTemplateOutbounds("OutboundCoreSettings", func(obj map[string]any) bool {
+		changed := rewriteOutboundCoreSettings(obj)
+		protocol, _ := obj["protocol"].(string)
+		if protocol == "freedom" || !strings.EqualFold(protocol, "freedom") {
+			return changed
+		}
+		changed = rewriteOutboundProxySettings(obj) || changed
+		settings, _ := obj["settings"].(map[string]any)
+		// Earlier seeders missed mixed-case freedom IDs. Leave customized rules
+		// and the lowercase outbounds those seeders already visited unchanged.
+		if isAllowOnlyFinalRules(settings["finalRules"]) || isLegacyPrivateOnlyFinalRules(settings["finalRules"]) {
+			settings["finalRules"] = []any{
+				map[string]any{"action": "block", "ip": []any{"geoip:private"}},
+				map[string]any{"action": "allow"},
+			}
+			changed = true
+		}
+		return changed
 	})
 }
 
@@ -2117,7 +2234,7 @@ func rewriteOutboundProxySettings(obj map[string]any) bool {
 			log.Printf("OutboundProxySettingsToDialerProxy: outbound %q: proxySettings.tag %q moved to sockopt.dialerProxy", tag, proxyTag)
 		}
 	}
-	if proto, _ := obj["protocol"].(string); proto != "freedom" {
+	if proto, _ := obj["protocol"].(string); !strings.EqualFold(proto, "freedom") {
 		return changed
 	}
 	stream, _ := obj["streamSettings"].(map[string]any)
@@ -2423,6 +2540,9 @@ func requireDSN() (string, error) {
 // InitDB opens the PostgreSQL database named by PUI_DB_DSN, brings the schema
 // up to date and runs the seeders.
 func InitDB() error {
+	dbInitMu.Lock()
+	defer dbInitMu.Unlock()
+
 	dsn, err := requireDSN()
 	if err != nil {
 		return err
@@ -2451,12 +2571,7 @@ func InitDB() error {
 		// broken until a restart, but diagnosable rather than a panic storm.
 		return err
 	}
-	setDB(conn)
-	if err != nil {
-		return err
-	}
-
-	sqlDB, err := db.DB()
+	sqlDB, err := conn.DB()
 	if err != nil {
 		return err
 	}
@@ -2464,6 +2579,13 @@ func InitDB() error {
 	sqlDB.SetMaxIdleConns(envInt("PUI_DB_MAX_IDLE_CONNS", 25))
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
+	if previous := setDB(conn); previous != nil && previous != conn {
+		if oldPool, err := previous.DB(); err == nil && oldPool != sqlDB {
+			if err := oldPool.Close(); err != nil {
+				log.Printf("Error closing replaced PostgreSQL pool: %v", err)
+			}
+		}
+	}
 
 	if err := initModels(); err != nil {
 		return err
@@ -2643,4 +2765,197 @@ func migrateActivityReadReferences() error {
 		}
 	}
 	return nil
+}
+
+func migrateClientRenewalGeneration() error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&core.ClientTraffic{}) {
+			for _, query := range []string{
+				"ALTER TABLE client_traffics ADD COLUMN IF NOT EXISTS reset_count bigint DEFAULT 0",
+				"UPDATE client_traffics SET reset_count = 0 WHERE reset_count IS NULL",
+				"ALTER TABLE client_traffics ALTER COLUMN reset_count SET DEFAULT 0, ALTER COLUMN reset_count SET NOT NULL",
+			} {
+				if err := tx.Exec(query).Error; err != nil {
+					return err
+				}
+			}
+		}
+		if tx.Migrator().HasTable(&model.NodeClientTraffic{}) {
+			return tx.Exec("ALTER TABLE node_client_traffics ADD COLUMN IF NOT EXISTS reset_count bigint, ADD COLUMN IF NOT EXISTS observed_reset_count bigint, ADD COLUMN IF NOT EXISTS reset_pending boolean NOT NULL DEFAULT false, ADD COLUMN IF NOT EXISTS reset_after_count bigint").Error
+		}
+		return nil
+	})
+}
+
+func migrateFleetClientRatePool() error {
+	if !db.Migrator().HasTable(&model.FleetRateBudget{}) {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("LOCK TABLE fleet_rate_budgets IN ACCESS EXCLUSIVE MODE").Error; err != nil {
+			return err
+		}
+		var ambiguous bool
+		if err := tx.Raw("SELECT EXISTS (SELECT 1 FROM fleet_rate_budgets GROUP BY client_id HAVING COUNT(*) > 1)").Scan(&ambiguous).Error; err != nil {
+			return err
+		}
+		if ambiguous {
+			return errors.New("fleet client has multiple rate pools; reconcile outstanding authority before upgrading")
+		}
+		if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_fleet_rate_client ON fleet_rate_budgets (client_id)").Error; err != nil {
+			return err
+		}
+		return tx.Exec("DROP INDEX IF EXISTS idx_fleet_rate_client_term").Error
+	})
+}
+
+func migrateFleetClientReferences() error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, reference := range []struct{ table, column, parent, key, action, name string }{
+			{"fleet_clients", "panel_client_id", "clients", "id", "SET NULL", "fk_fleet_client_panel"},
+			{"fleet_clients", "current_term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_client_current"},
+			{"fleet_clients", "pending_term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_client_pending"},
+			{"fleet_source_credential_claims", "client_id", "fleet_clients", "id", "RESTRICT", "fk_fleet_source_claim_client"},
+			{"fleet_source_credential_claims", "inbound_id", "inbounds", "id", "RESTRICT", "fk_fleet_source_claim_inbound"},
+			{"fleet_terms", "client_id", "fleet_clients", "id", "RESTRICT", "fk_fleet_term_client"},
+			{"fleet_terms", "predecessor_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_term_predecessor"},
+			{"fleet_terms", "budget_id", "fleet_budgets", "id", "RESTRICT", "fk_fleet_term_budget"},
+			{"fleet_grant_stops", "grant_id", "fleet_grants", "id", "RESTRICT", "fk_fleet_grant_stop"},
+			{"fleet_placements", "client_id", "fleet_clients", "id", "RESTRICT", "fk_fleet_placement_client"},
+			{"fleet_placements", "node_id", "fleet_nodes", "id", "RESTRICT", "fk_fleet_placement_node"},
+			{"fleet_placement_inbounds", "placement_id", "fleet_placements", "id", "RESTRICT", "fk_fleet_placement_parent"},
+			{"fleet_placement_inbounds", "panel_inbound", "inbounds", "id", "SET NULL", "fk_fleet_placement_source"},
+			{"fleet_budget_scopes", "budget_id", "fleet_budgets", "id", "RESTRICT", "fk_fleet_budget_scope"},
+			{"fleet_grants", "placement_id", "fleet_placements", "id", "RESTRICT", "fk_fleet_grant_placement"},
+			{"fleet_placements", "current_grant_id", "fleet_grants", "id", "RESTRICT", "fk_fleet_placement_current_grant"},
+			{"fleet_placements", "current_grant_term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_placement_current_term"},
+			{"fleet_term_usages", "term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_term_usage"},
+			{"fleet_term_usage_days", "term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_term_usage_day"},
+			{"fleet_term_groups", "term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_term_group_term"},
+			{"fleet_term_groups", "group_id", "client_groups", "id", "RESTRICT", "fk_fleet_term_group_source"},
+			{"fleet_reset_schedules", "client_id", "fleet_clients", "id", "RESTRICT", "fk_fleet_reset_client"},
+			{"fleet_reset_schedules", "bound_term_id", "fleet_terms", "id", "RESTRICT", "fk_fleet_reset_term"},
+			{"fleet_reset_schedules", "pending_operation_id", "fleet_operations", "id", "RESTRICT", "fk_fleet_reset_pending"},
+			{"fleet_reset_schedules", "last_completed_operation_id", "fleet_operations", "id", "RESTRICT", "fk_fleet_reset_completed"},
+			{"fleet_network_asset_revisions", "asset_id", "fleet_network_asset_heads", "asset_id", "RESTRICT", "fk_fleet_asset_revision_head"},
+			{"fleet_published_runtimes", "node_id, revision", "fleet_deployments", "node_id, revision", "CASCADE", "fk_fleet_published_deployment"},
+			{"fleet_published_client_admissions", "node_id, revision, runtime_id", "fleet_published_runtimes", "node_id, revision, runtime_id", "CASCADE", "fk_fleet_published_runtime"},
+			{"fleet_published_client_admissions", "client_id", "fleet_clients", "id", "RESTRICT", "fk_fleet_published_client"},
+			{"fleet_published_client_admissions", "placement_id", "fleet_placements", "id", "RESTRICT", "fk_fleet_published_placement"},
+			{"fleet_published_admission_bindings", "node_id, revision, runtime_id, client_id", "fleet_published_client_admissions", "node_id, revision, runtime_id, client_id", "CASCADE", "fk_fleet_published_binding_client"},
+		} {
+			var exists bool
+			if err := tx.Raw("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = ? AND conrelid = ?::regclass)", reference.name, reference.table).Scan(&exists).Error; err != nil {
+				return err
+			}
+			if !exists {
+				statement := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s) ON DELETE %s", reference.table, reference.name, reference.column, reference.parent, reference.key, reference.action)
+				if err := tx.Exec(statement).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func migrateFleetPublishedRuntimeCompleteness() error {
+	if !db.Migrator().HasTable(&model.FleetPublishedRuntime{}) {
+		return nil
+	}
+	return db.Exec("ALTER TABLE fleet_published_runtimes ADD COLUMN IF NOT EXISTS grant_scopes_complete boolean NOT NULL DEFAULT false").Error
+}
+
+func migrateFleetObservedAuthorityRevision() error {
+	var nullable bool
+	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema()
+AND table_name = 'fleet_grant_authorities' AND column_name = 'authority_revision' AND is_nullable = 'YES')`).Scan(&nullable).Error; err != nil {
+		return err
+	}
+	if !nullable {
+		return nil
+	}
+	return db.Model(&model.FleetGrantAuthority{}).Where("authority_revision IS NULL").Update("authority_revision", 0).Error
+}
+
+func migrateFleetCredentialSerial() error {
+	if !db.Migrator().HasTable(&model.FleetCredential{}) {
+		return nil
+	}
+	return db.Exec("ALTER TABLE fleet_credentials ADD COLUMN IF NOT EXISTS previous_serial varchar(64) NOT NULL DEFAULT ''").Error
+}
+
+func migrateFleetReferences() error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, reference := range []struct{ table, column, parent, name string }{
+			{"fleet_grants", "node_id", "fleet_nodes", "fk_fleet_grant_node"},
+			{"fleet_grant_budgets", "grant_id", "fleet_grants", "fk_fleet_grant_budget_grant"},
+			{"fleet_grant_budgets", "budget_id", "fleet_budgets", "fk_fleet_grant_budget_budget"},
+			{"fleet_meters", "grant_id", "fleet_grants", "fk_fleet_meter_grant"},
+			{"fleet_usage_cursors", "node_id", "fleet_nodes", "fk_fleet_cursor_node"},
+			{"fleet_deployments", "node_id", "fleet_nodes", "fk_fleet_deployment_node"},
+			{"fleet_enrollments", "node_id", "fleet_nodes", "fk_fleet_enrollment_node"},
+			{"fleet_credentials", "node_id", "fleet_nodes", "fk_fleet_credential_node"},
+			{"fleet_recovery_challenges", "node_id", "fleet_nodes", "fk_fleet_recovery_node"},
+			{"fleet_node_observations", "node_id", "fleet_nodes", "fk_fleet_observation_node"},
+			{"fleet_node_journals", "node_id", "fleet_nodes", "fk_fleet_node_journal_node"},
+			{"fleet_runtime_journals", "node_id", "fleet_nodes", "fk_fleet_runtime_journal_node"},
+			{"fleet_grant_authorities", "grant_id", "fleet_grants", "fk_fleet_grant_authority_grant"},
+			{"fleet_grant_authorities", "node_id", "fleet_nodes", "fk_fleet_grant_authority_node"},
+			{"fleet_credit_updates", "grant_id", "fleet_grants", "fk_fleet_credit_update_grant"},
+			{"fleet_credit_updates", "node_id", "fleet_nodes", "fk_fleet_credit_update_node"},
+			{"fleet_authority_updates", "grant_id", "fleet_grants", "fk_fleet_authority_update_grant"},
+			{"fleet_authority_updates", "node_id", "fleet_nodes", "fk_fleet_authority_update_node"},
+			{"fleet_authority_updates", "client_id", "fleet_clients", "fk_fleet_authority_update_client"},
+			{"fleet_authority_updates", "term_id", "fleet_terms", "fk_fleet_authority_update_term"},
+			{"fleet_authority_updates", "placement_id", "fleet_placements", "fk_fleet_authority_update_placement"},
+			{"fleet_credit_candidates", "grant_id", "fleet_grants", "fk_fleet_credit_candidate_grant"},
+			{"fleet_credit_candidates", "node_id", "fleet_nodes", "fk_fleet_credit_candidate_node"},
+			{"fleet_credit_node_queues", "node_id", "fleet_nodes", "fk_fleet_credit_queue_node"},
+			{"fleet_admission_demands", "placement_id", "fleet_placements", "fk_fleet_admission_placement"},
+			{"fleet_admission_demands", "node_id", "fleet_nodes", "fk_fleet_admission_node"},
+			{"fleet_admission_demands", "client_id", "fleet_clients", "fk_fleet_admission_client"},
+			{"fleet_admission_demands", "term_id", "fleet_terms", "fk_fleet_admission_term"},
+			{"fleet_admission_node_queues", "node_id", "fleet_nodes", "fk_fleet_admission_queue_node"},
+			{"fleet_network_revisions", "node_id", "fleet_nodes", "fk_fleet_network_revision_node"},
+			{"fleet_network_revisions", "based_on_defaults_id", "fleet_network_revisions", "fk_fleet_network_revision_defaults"},
+			{"fleet_network_defaults_heads", "current_revision_id", "fleet_network_revisions", "fk_fleet_network_defaults_head"},
+			{"fleet_node_network_heads", "node_id", "fleet_nodes", "fk_fleet_network_head_node"},
+			{"fleet_node_network_heads", "current_revision_id", "fleet_network_revisions", "fk_fleet_network_node_head"},
+			{"fleet_node_network_heads", "desired_defaults_id", "fleet_network_revisions", "fk_fleet_network_node_defaults"},
+			{"fleet_network_asset_heads", "node_id", "fleet_nodes", "fk_fleet_asset_head_node"},
+			{"fleet_network_asset_revisions", "node_id", "fleet_nodes", "fk_fleet_asset_revision_node"},
+			{"fleet_network_compilations", "node_id", "fleet_nodes", "fk_fleet_compilation_node"},
+			{"fleet_outbound_provider_revisions", "provider_id", "fleet_outbound_providers", "fk_fleet_provider_cache_source"},
+			{"fleet_node_placement_policies", "node_id", "fleet_nodes", "fk_fleet_node_placement_policy_node"},
+			{"fleet_node_capability_snapshots", "node_id", "fleet_nodes", "fk_fleet_node_capability_node"},
+			{"fleet_native_bindings", "node_id", "fleet_nodes", "fk_fleet_native_binding_node"},
+			{"fleet_native_bindings", "placement_id", "fleet_placements", "fk_fleet_native_binding_placement"},
+			{"fleet_native_bindings", "client_id", "fleet_clients", "fk_fleet_native_binding_client"},
+			{"fleet_network_compilations", "node_revision_id", "fleet_network_revisions", "fk_fleet_compilation_node_revision"},
+			{"fleet_network_compilations", "defaults_revision_id", "fleet_network_revisions", "fk_fleet_compilation_defaults_revision"},
+			{"fleet_node_network_heads", "latest_compilation_id", "fleet_network_compilations", "fk_fleet_network_preview"},
+			{"fleet_node_network_heads", "published_compilation_id", "fleet_network_compilations", "fk_fleet_network_published"},
+			{"fleet_network_publications", "compilation_id", "fleet_network_compilations", "fk_fleet_publication_compilation"},
+			{"fleet_network_publications", "node_id", "fleet_nodes", "fk_fleet_publication_node"},
+			{"fleet_rate_shares", "id", "fleet_grants", "fk_fleet_rate_share_grant"},
+			{"fleet_rate_shares", "node_id", "fleet_nodes", "fk_fleet_rate_share_node"},
+			{"fleet_rate_shares", "budget_id", "fleet_rate_budgets", "fk_fleet_rate_share_budget"},
+		} {
+			var exists bool
+			if err := tx.Raw("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = ? AND conrelid = ?::regclass)",
+				reference.name, reference.table).Scan(&exists).Error; err != nil {
+				return err
+			}
+			if exists {
+				continue
+			}
+			statement := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(id) ON DELETE RESTRICT",
+				reference.table, reference.name, reference.column, reference.parent)
+			if err := tx.Exec(statement).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

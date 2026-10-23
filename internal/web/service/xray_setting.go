@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/common"
 	"github.com/Arman2122/p-ui/internal/xray"
@@ -32,6 +33,9 @@ func (s *XraySettingService) SaveXraySetting(newXraySettings string) error {
 	// back here. Strip it before validation/storage, otherwise we save
 	// garbage the next read can't recover from without this same call.
 	newXraySettings = UnwrapXrayTemplateConfig(newXraySettings)
+	if normalized, changed, err := database.NormalizeXrayOutboundSettings(newXraySettings); err == nil && changed {
+		newXraySettings = normalized
+	}
 	if err := s.checkTemplateOnSave(newXraySettings); err != nil {
 		return err
 	}

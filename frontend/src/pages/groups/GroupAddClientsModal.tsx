@@ -74,7 +74,7 @@ export default function GroupAddClientsModal({
         width: 140,
         ellipsis: true,
         render: (g: string) =>
-          g ? <Tag color="geekblue">{g}</Tag> : <span style={{ color: 'rgba(0,0,0,0.45)' }}>—</span>,
+          g ? <Tag color="geekblue">{g}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
       },
       {
         title: t('enable'),

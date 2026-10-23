@@ -721,12 +721,7 @@ func (c *Core) MintClientCredentials(kind core.Kind, settings string, have map[s
 	if kind != Kind {
 		return minted, nil
 	}
-	if have[core.CredUsername] == "" {
-		minted[core.CredUsername] = "u" + randomToken(7)
-	}
-	if len(have[core.CredPassword]) < 8 {
-		minted[core.CredPassword] = randomToken(16)
-	}
+	minted = mintLoginCredentials(have)
 	// The wrapped key needs the inbound's server key; a client minted before the
 	// inbound has one (or with no settings at all) gets it on its next save.
 	if serverKey := tlsCryptV2ServerKeyOf(settings); have[core.CredTLSCryptV2] == "" && serverKey != "" {

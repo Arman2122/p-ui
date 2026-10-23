@@ -80,8 +80,9 @@ func (e *remoteAPIError) Error() string { return "remote: " + e.msg }
 type Remote struct {
 	node *model.Node
 
-	mu            sync.RWMutex
-	remoteIDByTag map[string]int
+	mu             sync.RWMutex
+	remoteIDByTag  map[string]int
+	adoptedAliases map[string]string
 	// pushedFP holds the fingerprint of the last inbound wire payload successfully
 	// pushed, keyed by panel-side tag, so reconcile can skip re-sending an
 	// unchanged inbound. Guarded by mu; dropped with the Remote on node config change.
@@ -101,8 +102,10 @@ type Remote struct {
 }
 
 type RemoteInboundOption struct {
+	Id       int            `json:"id"`
 	Tag      string         `json:"tag"`
 	Remark   string         `json:"remark"`
+	Listen   string         `json:"listen"`
 	Protocol model.Protocol `json:"protocol"`
 	Port     int            `json:"port"`
 }
@@ -111,6 +114,7 @@ func NewRemote(n *model.Node, r NodeEgressResolver) *Remote {
 	return &Remote{
 		node:           n,
 		remoteIDByTag:  make(map[string]int),
+		adoptedAliases: make(map[string]string),
 		pushedFP:       make(map[string]string),
 		egressResolver: r,
 	}
@@ -350,6 +354,14 @@ func (r *Remote) cacheDel(tag string) {
 	defer r.mu.Unlock()
 	delete(r.remoteIDByTag, tag)
 	delete(r.pushedFP, tag)
+	for centralTag, nodeTag := range r.adoptedAliases {
+		if centralTag == tag || nodeTag == tag {
+			delete(r.adoptedAliases, centralTag)
+			delete(r.remoteIDByTag, centralTag)
+			delete(r.remoteIDByTag, nodeTag)
+			delete(r.pushedFP, centralTag)
+		}
+	}
 }
 
 func (r *Remote) ListRemoteTags(ctx context.Context) ([]string, error) {
@@ -397,6 +409,15 @@ func (r *Remote) refreshRemoteIDs(ctx context.Context) error {
 		next[ib.Tag] = ib.Id
 	}
 	r.mu.Lock()
+	for centralTag, nodeTag := range r.adoptedAliases {
+		if _, reported := next[centralTag]; reported {
+			delete(r.adoptedAliases, centralTag)
+			continue
+		}
+		if id, ok := next[nodeTag]; ok {
+			next[centralTag] = id
+		}
+	}
 	r.remoteIDByTag = next
 	r.mu.Unlock()
 	return nil
@@ -481,11 +502,31 @@ func (r *Remote) recordPushedInbound(ib *model.Inbound) {
 	r.mu.Unlock()
 }
 
-// RecordAdoptedInbound stamps the fingerprint when the master adopts the
-// node's own settings serialization into its DB — direct knowledge of the
-// exact payload the node holds.
+// RecordAdoptedInbound stamps the exact payload fingerprint after the master
+// adopts a node's settings serialization.
 func (r *Remote) RecordAdoptedInbound(ib *model.Inbound) {
 	r.recordPushedInbound(ib)
+}
+
+// AdoptInboundAlias records a deployed alias without mutating either panel.
+// The runtime association is rediscovered after a master restart.
+func (r *Remote) AdoptInboundAlias(ib *model.Inbound, remote RemoteInboundOption) {
+	r.mu.Lock()
+	r.remoteIDByTag[remote.Tag] = remote.Id
+	r.remoteIDByTag[ib.Tag] = remote.Id
+	r.adoptedAliases[ib.Tag] = remote.Tag
+	delete(r.pushedFP, ib.Tag)
+	r.mu.Unlock()
+}
+
+func (r *Remote) AdoptedInboundAliases() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	aliases := make([]string, 0, len(r.adoptedAliases))
+	for _, alias := range r.adoptedAliases {
+		aliases = append(aliases, alias)
+	}
+	return aliases
 }
 
 // AdvancePushedInbound moves the reconcile-skip fingerprint from an inbound's
@@ -670,8 +711,9 @@ func (r *Remote) ResetInboundTraffic(ctx context.Context, ib *model.Inbound) err
 }
 
 type TrafficSnapshot struct {
-	Inbounds     []*model.Inbound
-	OnlineEmails []string
+	Inbounds       []*model.Inbound
+	OnlineEmails   []string
+	ManagedAliases []string
 	// OnlineTree is the node's GUID-keyed online subtree (its own clients under
 	// its panelGuid plus every descendant under theirs). Preferred over the flat
 	// OnlineEmails so the master can attribute deeply nested clients to the real

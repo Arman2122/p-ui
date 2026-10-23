@@ -112,7 +112,7 @@ export default function SubPage() {
   useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
 
   const [isMobile, setIsMobile] = useState<boolean>(() => window.innerWidth < 576);
-  const [lang, setLang] = useState<string>(() => LanguageManager.getLanguage());
+  const [lang, setLang] = useState<string>(() => LanguageManager.getLanguage('subscription'));
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 576);
@@ -122,7 +122,7 @@ export default function SubPage() {
 
   const onLangChange = useCallback((next: string) => {
     setLang(next);
-    LanguageManager.setLanguage(next);
+    LanguageManager.setLanguage(next, 'subscription');
   }, []);
 
   const cycleTheme = useCallback(() => {
@@ -206,17 +206,17 @@ export default function SubPage() {
     items.push({
       key: 'lastOnline',
       label: t('lastOnline'),
-      children: lastOnlineMs > 0 ? IntlUtil.formatDate(lastOnlineMs, datepicker) : '-',
+      children: lastOnlineMs > 0 ? IntlUtil.formatDate(lastOnlineMs, datepicker, lang) : '-',
     });
     items.push({
       key: 'expiry',
       label: t('subscription.expiry'),
       children: expireMs === 0
         ? t('subscription.noExpiry')
-        : IntlUtil.formatDate(expireMs, datepicker),
+        : IntlUtil.formatDate(expireMs, datepicker, lang),
     });
     return items;
-  }, [t]);
+  }, [t, lang]);
 
   const androidMenuItems = useMemo(() => [
     {

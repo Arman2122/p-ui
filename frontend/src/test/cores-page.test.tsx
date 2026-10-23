@@ -19,7 +19,7 @@ function renderCores(cores = corePageFixtures()) {
   client.setQueryData(keys.cores.status(), cores);
   client.setQueryData(keys.cores.list(), coreDescriptorFixtures());
   client.setQueryData(keys.inbounds.options(), CORE_INBOUND_FIXTURES);
-  client.setQueryData(keys.inbounds.slim(), CORE_TRAFFIC_FIXTURES);
+  client.setQueryData(keys.inbounds.slim(), CORE_TRAFFIC_FIXTURES, { updatedAt: Date.now() - 1000 });
   return { ...renderWithProviders(<MemoryRouter><CoresPage /><Location /></MemoryRouter>, { queryClient: client }), queryClient: client };
 }
 
@@ -119,6 +119,7 @@ describe('Cores page metadata', () => {
   });
 
   it('switches all eight cores between cards and rows and exports only real status and aggregate data', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const download = vi.spyOn(FileManager, 'downloadTextFile').mockImplementation(() => undefined);
     const { container } = renderCores();
     fireEvent.click(screen.getByRole('radio', { name: i18next.t('pages.cores.fidelity.cards') }));

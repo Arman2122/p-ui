@@ -68,7 +68,7 @@ func TestTheNodePushIsMadeOutsideTheTrafficWriter(t *testing.T) {
 	runtime.SetManager(mgr)
 	t.Cleanup(func() { runtime.SetManager(nil) })
 
-	(&InboundService{}).applyPendingClientDisables(pendingClientDisable{
+	(&InboundService{}).applyPendingClientDisables(pendingTrafficApply{
 		remote: map[int]map[string]struct{}{ib.Id: {email: {}}},
 	})
 

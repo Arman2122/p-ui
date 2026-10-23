@@ -349,6 +349,58 @@ export const EXAMPLES: Record<string, unknown> = {
     "source": "203.0.113.7",
     "until": 1788701800
   },
+  "BulkOutcome": {
+    "failed": [
+      {
+        "email": "user1",
+        "reason": "client not found"
+      }
+    ],
+    "ok": [
+      ""
+    ],
+    "skipped": [
+      {
+        "email": "user1",
+        "reason": "client not found"
+      }
+    ]
+  },
+  "BulkRow": {
+    "email": "user1",
+    "reason": "client not found"
+  },
+  "BulkSetEnableReport": {
+    "email": "carol",
+    "reason": "client not found"
+  },
+  "BulkSetEnableResult": {
+    "changed": 2,
+    "outcome": {
+      "failed": [
+        {
+          "email": "user1",
+          "reason": "client not found"
+        }
+      ],
+      "ok": [
+        ""
+      ],
+      "skipped": [
+        {
+          "email": "user1",
+          "reason": "client not found"
+        }
+      ]
+    },
+    "pending": 1,
+    "skipped": [
+      {
+        "email": "carol",
+        "reason": "client not found"
+      }
+    ]
+  },
   "Capabilities": {
     "onlineUsers": null,
     "perUserStats": null,
@@ -403,16 +455,44 @@ export const EXAMPLES: Record<string, unknown> = {
     "filename": "peer-alice.conf"
   },
   "ClientCreatePayload": {
-    "adTag": "0123456789abcdef0123456789abcdef",
-    "allowedIPs": [
-      ""
+    "client": {
+      "adTag": "0123456789abcdef0123456789abcdef",
+      "allowedIPs": [
+        ""
+      ],
+      "auth": "",
+      "comment": "",
+      "created_at": 0,
+      "email": "",
+      "enable": false,
+      "expiryTime": 0,
+      "flow": "",
+      "group": "",
+      "id": "",
+      "keepAlive": 0,
+      "limitIp": 0,
+      "password": "",
+      "preSharedKey": null,
+      "privateKey": "",
+      "publicKey": "",
+      "reset": 0,
+      "reverse": null,
+      "secret": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
+      "security": "",
+      "subId": "",
+      "tgId": 0,
+      "tlsCryptV2": "",
+      "totalGB": 0,
+      "updated_at": 0,
+      "username": ""
+    },
+    "credentialBindings": [
+      {
+        "inboundId": 1,
+        "values": {}
+      }
     ],
-    "auth": "",
-    "comment": "",
-    "created_at": 0,
-    "email": "",
-    "enable": false,
-    "expiryTime": 0,
+    "expectedActorId": 1,
     "externalLinks": [
       {
         "kind": "",
@@ -420,30 +500,16 @@ export const EXAMPLES: Record<string, unknown> = {
         "value": ""
       }
     ],
-    "flow": "",
-    "group": "",
-    "id": "",
     "inboundIds": [
-      0
+      1
     ],
-    "keepAlive": 0,
-    "limitIp": 0,
-    "password": "",
+    "operationId": "11111111-1111-4111-8111-111111111111",
     "planOverrides": null,
-    "policyId": 1,
-    "preSharedKey": null,
-    "privateKey": "",
-    "publicKey": "",
-    "reset": 0,
-    "reverse": null,
-    "secret": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
-    "security": "",
-    "subId": "",
-    "tgId": 0,
-    "tlsCryptV2": "",
-    "totalGB": 0,
-    "updated_at": 0,
-    "username": ""
+    "policyId": 1
+  },
+  "ClientCredentialBindingInput": {
+    "inboundId": 1,
+    "values": {}
   },
   "ClientGroup": {
     "createdAt": 0,
@@ -609,6 +675,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "updatedAt": 0
   },
   "ClientTraffic": {
+    "accounting": null,
     "down": 2097152,
     "email": "user1",
     "enable": true,
@@ -617,6 +684,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "inboundId": 1,
     "lastOnline": 1735680000000,
     "reset": 0,
+    "resetCount": 0,
     "subId": "i7tvdpeffi0hvvf1",
     "total": 10737418240,
     "up": 1048576,
@@ -843,6 +911,861 @@ export const EXAMPLES: Record<string, unknown> = {
     "masterId": 0,
     "path": ""
   },
+  "FleetAssetReference": {
+    "assetId": "",
+    "revision": 0
+  },
+  "FleetClientCreateCapabilities": {
+    "actorId": 1,
+    "supported": true
+  },
+  "FleetClientCreateResult": {
+    "actorId": 1,
+    "clientId": "22222222-2222-4222-8222-222222222222",
+    "nodeDerived": [
+      {
+        "fields": [
+          "tlsCryptV2"
+        ],
+        "inboundId": 1
+      }
+    ],
+    "panelClientId": 1,
+    "pending": true,
+    "revision": 1
+  },
+  "FleetClientSourceBinding": {
+    "flowOverride": "xtls-rprx-vision",
+    "inboundId": 1,
+    "scope": "effective",
+    "values": {}
+  },
+  "FleetClientSourceView": {
+    "actorId": 1,
+    "client": {
+      "adTag": "0123456789abcdef0123456789abcdef",
+      "allowedIPs": [
+        ""
+      ],
+      "auth": "",
+      "comment": "",
+      "created_at": 0,
+      "email": "",
+      "enable": false,
+      "expiryTime": 0,
+      "flow": "",
+      "group": "",
+      "id": "",
+      "keepAlive": 0,
+      "limitIp": 0,
+      "password": "",
+      "preSharedKey": null,
+      "privateKey": "",
+      "publicKey": "",
+      "reset": 0,
+      "reverse": null,
+      "secret": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
+      "security": "",
+      "subId": "",
+      "tgId": 0,
+      "tlsCryptV2": "",
+      "totalGB": 0,
+      "updated_at": 0,
+      "username": ""
+    },
+    "clientId": "22222222-2222-4222-8222-222222222222",
+    "credentialBindings": [
+      {
+        "flowOverride": "xtls-rprx-vision",
+        "inboundId": 1,
+        "scope": "effective",
+        "values": {}
+      }
+    ],
+    "dependencyDiagnostic": "",
+    "effectiveInboundIds": [
+      1,
+      2
+    ],
+    "effectiveScopeKnown": true,
+    "explicitInboundIds": [
+      1
+    ],
+    "externalLinks": [
+      {
+        "kind": "",
+        "remark": "",
+        "value": ""
+      }
+    ],
+    "panelClientId": 1,
+    "pending": true,
+    "planOverrides": null,
+    "policyId": 1,
+    "revision": 1
+  },
+  "FleetEnrollmentRequest": {
+    "name": "fra-1"
+  },
+  "FleetEnrollmentView": {
+    "expiresUnixMilli": 0,
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "packageJson": "{}"
+  },
+  "FleetInboundNetwork": {
+    "addresses": [
+      ""
+    ],
+    "assets": {},
+    "bridgeId": "",
+    "egressMode": "",
+    "listen": null,
+    "mtproto": null,
+    "mtu": 0,
+    "port": null,
+    "settings": null,
+    "sniffing": null,
+    "streamSettings": null,
+    "subnet": "",
+    "targetId": 0,
+    "targetTag": ""
+  },
+  "FleetMTProtoBinding": {
+    "trustedProxies": [
+      ""
+    ],
+    "web": null
+  },
+  "FleetMTProtoWEBBinding": {
+    "listen": "",
+    "port": 0,
+    "publicPort": 0
+  },
+  "FleetNativeBindingPin": {
+    "clientId": "",
+    "id": "",
+    "inboundInstanceId": "",
+    "maxSessions": 0,
+    "placementId": "",
+    "poolSha256": "",
+    "prefix": "",
+    "targetId": 0
+  },
+  "FleetNetworkAssetPage": {
+    "items": [
+      {
+        "assetId": "",
+        "createdUnixMilli": 0,
+        "installationId": "",
+        "kind": "",
+        "nodeId": "",
+        "revision": 0,
+        "sha256": "",
+        "size": 0
+      }
+    ],
+    "nextCursor": ""
+  },
+  "FleetNetworkAssetPin": {
+    "assetId": "",
+    "kind": "",
+    "revision": 0,
+    "sha256": "",
+    "slot": ""
+  },
+  "FleetNetworkAssetRequest": {
+    "assetId": "17f763c4-6530-41f7-8a88-534560d4397e",
+    "data": "AQ==",
+    "expectedRevision": 0,
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "kind": "tls-certificate",
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+  },
+  "FleetNetworkAssetView": {
+    "assetId": "",
+    "createdUnixMilli": 0,
+    "installationId": "",
+    "kind": "",
+    "nodeId": "",
+    "revision": 0,
+    "sha256": "",
+    "size": 0
+  },
+  "FleetNetworkAuthorityIdentity": {
+    "clientId": "",
+    "credentialGeneration": 0,
+    "inboundInstanceIds": [
+      ""
+    ],
+    "inboundTags": {},
+    "placementId": "",
+    "placementRevision": 0,
+    "runtimeId": "",
+    "state": "",
+    "termId": ""
+  },
+  "FleetNetworkBridge": {
+    "core": "",
+    "endpoint": "",
+    "runtimeId": "",
+    "udp": false
+  },
+  "FleetNetworkDefaultsRequest": {
+    "expectedRevision": 0,
+    "specification": {
+      "assetSlots": {},
+      "bases": {},
+      "bridges": {},
+      "inbounds": {},
+      "nativeNetwork": null,
+      "sshHostKeys": null,
+      "version": 1
+    }
+  },
+  "FleetNetworkDefaultsView": {
+    "revision": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    },
+    "specification": {
+      "assetSlots": {},
+      "bases": {},
+      "bridges": {},
+      "inbounds": {},
+      "nativeNetwork": null,
+      "sshHostKeys": null,
+      "version": 1
+    }
+  },
+  "FleetNetworkDiagnostic": {
+    "assetSlot": "",
+    "clientId": "",
+    "code": "",
+    "inboundId": 0,
+    "placementId": "",
+    "runtimeId": ""
+  },
+  "FleetNetworkListenerView": {
+    "address": "",
+    "inboundId": 0,
+    "port": 0,
+    "protocol": "",
+    "role": "",
+    "runtimeId": ""
+  },
+  "FleetNetworkManifest": {
+    "assets": [
+      {
+        "assetId": "",
+        "kind": "",
+        "revision": 0,
+        "sha256": "",
+        "slot": ""
+      }
+    ],
+    "baseDeploymentRevision": 0,
+    "defaultsRevisionId": "",
+    "identities": [
+      {
+        "clientId": "",
+        "credentialGeneration": 0,
+        "inboundInstanceIds": [
+          ""
+        ],
+        "inboundTags": {},
+        "placementId": "",
+        "placementRevision": 0,
+        "runtimeId": "",
+        "state": "",
+        "termId": ""
+      }
+    ],
+    "installationId": "",
+    "nativeBindings": [
+      {
+        "clientId": "",
+        "id": "",
+        "inboundInstanceId": "",
+        "maxSessions": 0,
+        "placementId": "",
+        "poolSha256": "",
+        "prefix": "",
+        "targetId": 0
+      }
+    ],
+    "nodeId": "",
+    "nodeRevision": 0,
+    "nodeRevisionId": "",
+    "placements": [
+      {
+        "clientId": "",
+        "credentialGeneration": 0,
+        "credentialSha256": "",
+        "definitionSha256": "",
+        "enabled": false,
+        "graphSha256": "",
+        "owned": false,
+        "placementId": "",
+        "policySha256": "",
+        "revision": 0,
+        "termId": ""
+      }
+    ],
+    "providers": [
+      {
+        "configurationRevision": 0,
+        "followLatest": false,
+        "providerId": "",
+        "revision": 0,
+        "runtimeId": "",
+        "sha256": ""
+      }
+    ],
+    "version": 0
+  },
+  "FleetNetworkOperation": {
+    "asset": null,
+    "assetKind": null,
+    "base": null,
+    "bridge": null,
+    "inbound": null,
+    "inboundId": 0,
+    "key": "",
+    "nativeNetwork": null,
+    "operation": "",
+    "section": "",
+    "sshHostKeys": null
+  },
+  "FleetNetworkOverrides": {
+    "assetBindings": {},
+    "assetSlots": {},
+    "bases": {},
+    "bridges": {},
+    "followDefaults": false,
+    "inbounds": {},
+    "nativeNetwork": null,
+    "pinnedDefaultsId": "",
+    "removedAssetSlots": [
+      ""
+    ],
+    "removedBases": [
+      ""
+    ],
+    "removedBridges": [
+      ""
+    ],
+    "sshHostKeys": null,
+    "version": 1
+  },
+  "FleetNetworkPlacementPin": {
+    "clientId": "",
+    "credentialGeneration": 0,
+    "credentialSha256": "",
+    "definitionSha256": "",
+    "enabled": false,
+    "graphSha256": "",
+    "owned": false,
+    "placementId": "",
+    "policySha256": "",
+    "revision": 0,
+    "termId": ""
+  },
+  "FleetNetworkPreview": {
+    "assets": [
+      {
+        "assetId": "",
+        "kind": "",
+        "revision": 0,
+        "sha256": "",
+        "slot": ""
+      }
+    ],
+    "defaults": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    },
+    "diagnostics": [
+      {
+        "assetSlot": "",
+        "clientId": "",
+        "code": "",
+        "inboundId": 0,
+        "placementId": "",
+        "runtimeId": ""
+      }
+    ],
+    "id": "",
+    "identities": [
+      {
+        "clientId": "",
+        "credentialGeneration": 0,
+        "inboundInstanceIds": [
+          ""
+        ],
+        "inboundTags": {},
+        "placementId": "",
+        "placementRevision": 0,
+        "runtimeId": "",
+        "state": "",
+        "termId": ""
+      }
+    ],
+    "installationId": "",
+    "listeners": [
+      {
+        "address": "",
+        "inboundId": 0,
+        "port": 0,
+        "protocol": "",
+        "role": "",
+        "runtimeId": ""
+      }
+    ],
+    "nativeBindings": [
+      {
+        "clientId": "",
+        "id": "",
+        "inboundInstanceId": "",
+        "maxSessions": 0,
+        "placementId": "",
+        "poolSha256": "",
+        "prefix": "",
+        "targetId": 0
+      }
+    ],
+    "nodeId": "",
+    "nodeRevision": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    },
+    "origins": {},
+    "ready": false,
+    "runtimes": [
+      {
+        "clients": 0,
+        "core": "",
+        "id": "",
+        "sha256": ""
+      }
+    ],
+    "sha256": ""
+  },
+  "FleetNetworkPreviewRequest": {
+    "expectedDefaultsId": "87cb0f1e-6f1f-466a-91d3-8a8dd983b458",
+    "expectedRevision": 1,
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+  },
+  "FleetNetworkProviderPin": {
+    "configurationRevision": 0,
+    "followLatest": false,
+    "providerId": "",
+    "revision": 0,
+    "runtimeId": "",
+    "sha256": ""
+  },
+  "FleetNetworkPublicationView": {
+    "compilationId": "",
+    "deploymentRevision": 0,
+    "nodeId": "",
+    "replayed": false
+  },
+  "FleetNetworkPublishRequest": {
+    "compilationId": "70966504-cde8-478b-9f3a-1ca59d52131a",
+    "operationId": "e8c5a425-11b1-4f3a-9718-a60251d6810e"
+  },
+  "FleetNetworkRevisionView": {
+    "createdUnixMilli": 0,
+    "id": "",
+    "revision": 0,
+    "sha256": ""
+  },
+  "FleetNetworkRuntimeView": {
+    "clients": 0,
+    "core": "",
+    "id": "",
+    "sha256": ""
+  },
+  "FleetNetworkSpec": {
+    "assetSlots": {},
+    "bases": {},
+    "bridges": {},
+    "inbounds": {},
+    "nativeNetwork": null,
+    "sshHostKeys": null,
+    "version": 1
+  },
+  "FleetNodeNetworkRequest": {
+    "expectedRevision": 1,
+    "followDefaults": true,
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "operations": [
+      {
+        "asset": null,
+        "assetKind": null,
+        "base": null,
+        "bridge": null,
+        "inbound": null,
+        "inboundId": 0,
+        "key": "",
+        "nativeNetwork": null,
+        "operation": "",
+        "section": "",
+        "sshHostKeys": null
+      }
+    ],
+    "pinnedDefaultsId": "b84cf341-f5e1-4dc6-b520-63a7d0e4b970"
+  },
+  "FleetNodeNetworkStateView": {
+    "configured": false,
+    "defaults": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    },
+    "diagnostics": [
+      {
+        "assetSlot": "",
+        "clientId": "",
+        "code": "",
+        "inboundId": 0,
+        "placementId": "",
+        "runtimeId": ""
+      }
+    ],
+    "effective": {
+      "assetSlots": {},
+      "bases": {},
+      "bridges": {},
+      "inbounds": {},
+      "nativeNetwork": null,
+      "sshHostKeys": null,
+      "version": 1
+    },
+    "followDefaults": false,
+    "installationId": "",
+    "nodeId": "",
+    "origins": {},
+    "overrides": {
+      "assetBindings": {},
+      "assetSlots": {},
+      "bases": {},
+      "bridges": {},
+      "followDefaults": false,
+      "inbounds": {},
+      "nativeNetwork": null,
+      "pinnedDefaultsId": "",
+      "removedAssetSlots": [
+        ""
+      ],
+      "removedBases": [
+        ""
+      ],
+      "removedBridges": [
+        ""
+      ],
+      "sshHostKeys": null,
+      "version": 1
+    },
+    "pending": false,
+    "revision": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    }
+  },
+  "FleetNodeNetworkView": {
+    "defaults": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    },
+    "followDefaults": false,
+    "installationId": "",
+    "nodeId": "",
+    "origins": {},
+    "pending": false,
+    "revision": {
+      "createdUnixMilli": 0,
+      "id": "",
+      "revision": 0,
+      "sha256": ""
+    }
+  },
+  "FleetNodePage": {
+    "items": [
+      {
+        "appliedRevision": 4,
+        "deploymentState": "applied",
+        "desiredRevision": 4,
+        "enrolled": true,
+        "id": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+        "lastSeenUnixMilli": 0,
+        "name": "fra-1",
+        "online": true,
+        "runtimeConditions": [
+          {
+            "condition": "CONFIGURATION_APPLIED",
+            "ready": true,
+            "resourceId": "xray"
+          }
+        ],
+        "runtimeObservedAt": 0,
+        "runtimeState": "ready"
+      }
+    ],
+    "nextCursor": ""
+  },
+  "FleetNodePlacementRequest": {
+    "enabled": true,
+    "expectedRevision": 0,
+    "inboundIds": [
+      1,
+      2
+    ],
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "labels": {
+      "region": "eu"
+    },
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+  },
+  "FleetNodePlacementView": {
+    "enabled": true,
+    "inboundIds": [
+      1,
+      2
+    ],
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "labels": {
+      "region": "eu"
+    },
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "pending": true,
+    "revision": 1,
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "FleetNodeView": {
+    "appliedRevision": 4,
+    "deploymentState": "applied",
+    "desiredRevision": 4,
+    "enrolled": true,
+    "id": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "lastSeenUnixMilli": 0,
+    "name": "fra-1",
+    "online": true,
+    "runtimeConditions": [
+      {
+        "condition": "CONFIGURATION_APPLIED",
+        "ready": true,
+        "resourceId": "xray"
+      }
+    ],
+    "runtimeObservedAt": 0,
+    "runtimeState": "ready"
+  },
+  "FleetPlacementDefaultRequest": {
+    "expectedRevision": 0,
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+  },
+  "FleetPlacementDefaultView": {
+    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "pending": true,
+    "revision": 1
+  },
+  "FleetPlacementProjection": {
+    "clientId": "",
+    "credentialGeneration": 0,
+    "sourceRevision": 0,
+    "targets": [
+      {
+        "applicationEligible": false,
+        "capabilityRevision": 0,
+        "coreId": "",
+        "defaultRevision": 0,
+        "diagnostic": "",
+        "inboundIds": [
+          0
+        ],
+        "installationId": "",
+        "manualInboundIds": [
+          0
+        ],
+        "nodeId": "",
+        "nodePolicyRevision": 0,
+        "rules": [
+          {
+            "id": "",
+            "revision": 0
+          }
+        ],
+        "runtimeId": ""
+      }
+    ]
+  },
+  "FleetPlacementRulePin": {
+    "id": "",
+    "revision": 0
+  },
+  "FleetPlacementRuleRequest": {
+    "enabled": true,
+    "expectedRevision": 0,
+    "groupId": 0,
+    "id": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+    "inboundIds": [
+      1,
+      2
+    ],
+    "labels": {
+      "region": "eu"
+    },
+    "nodeIds": [
+      "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+    ],
+    "planId": 1,
+    "scope": "plan"
+  },
+  "FleetPlacementRuleView": {
+    "enabled": true,
+    "groupId": 0,
+    "id": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+    "inboundIds": [
+      1,
+      2
+    ],
+    "labels": {
+      "region": "eu"
+    },
+    "nodeIds": [
+      "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+    ],
+    "pending": true,
+    "planId": 1,
+    "revision": 1,
+    "scope": "plan",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "FleetPlacementTarget": {
+    "applicationEligible": false,
+    "capabilityRevision": 0,
+    "coreId": "",
+    "defaultRevision": 0,
+    "diagnostic": "",
+    "inboundIds": [
+      0
+    ],
+    "installationId": "",
+    "manualInboundIds": [
+      0
+    ],
+    "nodeId": "",
+    "nodePolicyRevision": 0,
+    "rules": [
+      {
+        "id": "",
+        "revision": 0
+      }
+    ],
+    "runtimeId": ""
+  },
+  "FleetProviderBinding": {
+    "followLatest": false,
+    "providerId": "",
+    "revision": 0
+  },
+  "FleetProviderFetchSpec": {
+    "allowInsecure": false,
+    "allowPrivate": false,
+    "format": "auto",
+    "hwid": "",
+    "intervalSeconds": 60,
+    "tagPrefix": "",
+    "url": "https://provider.example/feed",
+    "version": 1
+  },
+  "FleetProviderRefreshRequest": {
+    "expectedRevision": 0,
+    "operationId": "",
+    "providerId": ""
+  },
+  "FleetProviderRefreshResult": {
+    "cachedRevision": 0,
+    "changed": false,
+    "configurationRevision": 0,
+    "entries": 0,
+    "providerId": "",
+    "sha256": ""
+  },
+  "FleetProviderRequest": {
+    "coreId": "",
+    "expectedRevision": 0,
+    "fetch": {
+      "allowInsecure": false,
+      "allowPrivate": false,
+      "format": "auto",
+      "hwid": "",
+      "intervalSeconds": 60,
+      "tagPrefix": "",
+      "url": "https://provider.example/feed",
+      "version": 1
+    },
+    "installationId": "",
+    "name": "",
+    "nodeId": "",
+    "operationId": "",
+    "providerId": "",
+    "refreshEnabled": false,
+    "scope": ""
+  },
+  "FleetProviderView": {
+    "cachedRevision": 0,
+    "configurationRevision": 0,
+    "coreId": "",
+    "diagnostic": "",
+    "installationId": "",
+    "name": "",
+    "nodeId": "",
+    "providerId": "",
+    "refreshEnabled": false,
+    "scope": ""
+  },
+  "FleetRuntimeBase": {
+    "assets": {},
+    "configuration": null,
+    "core": "",
+    "providers": []
+  },
+  "FleetRuntimeConditionView": {
+    "condition": "CONFIGURATION_APPLIED",
+    "ready": true,
+    "resourceId": "xray"
+  },
+  "FleetSSHHostKeys": {
+    "assetSlot": "",
+    "generateLocally": false
+  },
+  "FleetStatusView": {
+    "certificateExpiresUnixMilli": 0,
+    "controlAddress": "control.example.com:7443",
+    "controlPlaneId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "enrollmentUrl": "https://control.example.com:7444/enroll",
+    "error": "",
+    "ready": true,
+    "recoveryReason": "",
+    "recoveryRequired": false,
+    "rootSha256": ""
+  },
   "GroupDetails": {
     "clientCount": 3,
     "down": 9437184,
@@ -991,6 +1914,7 @@ export const EXAMPLES: Record<string, unknown> = {
   "Inbound": {
     "clientStats": [
       {
+        "accounting": null,
         "down": 2097152,
         "email": "user1",
         "enable": true,
@@ -999,6 +1923,7 @@ export const EXAMPLES: Record<string, unknown> = {
         "inboundId": 1,
         "lastOnline": 1735680000000,
         "reset": 0,
+        "resetCount": 0,
         "subId": "i7tvdpeffi0hvvf1",
         "total": 10737418240,
         "up": 1048576,
@@ -1101,6 +2026,10 @@ export const EXAMPLES: Record<string, unknown> = {
     "obj": null,
     "success": false,
     "warning": "the device refused the configuration"
+  },
+  "NetworkBinding": {
+    "gatewayIPv4": "",
+    "peerIPv4": ""
   },
   "Node": {
     "activeCount": 23,
@@ -1650,6 +2579,30 @@ export const EXAMPLES: Record<string, unknown> = {
     "trafficUsed": 10737418240,
     "username": "sina"
   },
+  "ResetScheduleCancelRequest": {
+    "clientId": "22222222-2222-4222-8222-222222222222",
+    "expectedRevision": 1,
+    "operationId": "11111111-1111-4111-8111-111111111111",
+    "pendingOperationId": "33333333-3333-4333-8333-333333333333"
+  },
+  "ResetScheduleRequest": {
+    "clientId": "22222222-2222-4222-8222-222222222222",
+    "cycle": "monthly",
+    "expectedRevision": 1,
+    "operationId": "11111111-1111-4111-8111-111111111111",
+    "override": true
+  },
+  "ResetScheduleView": {
+    "anchorUnixMilli": 1792353600000,
+    "clientId": "22222222-2222-4222-8222-222222222222",
+    "cycle": "monthly",
+    "diagnostic": "WAITING_FOR_STOP",
+    "inherited": false,
+    "nextAttemptUnixMilli": 1795032000000,
+    "nextDueUnixMilli": 1795032000000,
+    "pendingOperationId": "33333333-3333-4333-8333-333333333333",
+    "revision": 1
+  },
   "RoutingExitView": {
     "id": 4,
     "label": "US-sfo | Surfshark"
@@ -1747,6 +2700,28 @@ export const EXAMPLES: Record<string, unknown> = {
     "role": "reseller",
     "username": "sina"
   },
+  "SourceClientCredentialRequirement": {
+    "fields": [
+      "tlsCryptV2"
+    ],
+    "inboundId": 1
+  },
+  "SourcePlacementRequest": {
+    "action": "restrict",
+    "clientId": "70924ba1-e366-4638-801c-b1055cabcd77",
+    "expectedRevision": 1,
+    "inboundIds": [
+      1,
+      2
+    ],
+    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "operationId": "39226ea4-a89b-4377-8c2a-c32c977ead47"
+  },
+  "SourcePlacementResult": {
+    "clientId": "70924ba1-e366-4638-801c-b1055cabcd77",
+    "pending": true,
+    "revision": 2
+  },
   "Status": {
     "appStats": null,
     "cpu": 0,
@@ -1773,6 +2748,22 @@ export const EXAMPLES: Record<string, unknown> = {
     "unavailable": [],
     "uptime": 0,
     "xray": null
+  },
+  "TrafficAccounting": {
+    "clientId": "22222222-2222-4222-8222-222222222222",
+    "historyBasis": "reported",
+    "historyGranularity": "day",
+    "measuredDownloaded": 2097152,
+    "measuredUploaded": 1048576,
+    "observedUnixMilli": 1791498431342,
+    "openingDownloaded": 0,
+    "openingUploaded": 0,
+    "reportedUnixMilli": 1791498431342,
+    "reservedBytes": 8388608,
+    "source": "fleet",
+    "state": "active",
+    "termId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+    "uncertainBytes": null
   },
   "User": {
     "id": 0,

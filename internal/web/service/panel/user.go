@@ -3,8 +3,8 @@ package panel
 import (
 	"errors"
 	"strings"
+	"time"
 
-	"github.com/xlzd/gotp"
 	"gorm.io/gorm"
 
 	"github.com/Arman2122/p-ui/internal/database"
@@ -12,6 +12,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/logger"
 	"github.com/Arman2122/p-ui/internal/util/crypto"
 	ldaputil "github.com/Arman2122/p-ui/internal/util/ldap"
+	"github.com/Arman2122/p-ui/internal/util/totp"
 	"github.com/Arman2122/p-ui/internal/web/service"
 	"github.com/Arman2122/p-ui/internal/web/session"
 )
@@ -124,26 +125,12 @@ func (s *UserService) CheckUser(username string, password string, twoFactorCode 
 			return nil, err
 		}
 
-		/*
-			An empty secret is not a second factor.
-
-			gotp base32-decodes "" to an empty key without error and HMACs the time
-			counter under it, so .Now() returns a well-defined six-digit code that
-			anyone can compute offline from the clock. Measured: "843635" for the
-			window it was run in. Refuse rather than compare against it.
-
-			Only the guard is added. The comparison below is left exactly as it was:
-			switching it to gotp.Verify would buy symmetry with the settings-side
-			verifier and nothing else — measured, Verify is `otp == t.At(ts)`, with no
-			skew tolerance and not constant-time — while silently changing how
-			whitespace in a submitted code is handled. That divergence is real and is
-			ledger L14, to be decided on its own.
-		*/
+		// Empty-key TOTP codes are publicly computable and never authenticate anyone.
 		if strings.TrimSpace(twoFactorToken) == "" {
 			return nil, errors.New("invalid 2fa code")
 		}
 
-		if gotp.NewDefaultTOTP(twoFactorToken).Now() != strings.TrimSpace(twoFactorCode) {
+		if !totp.VerifyWithSkew(twoFactorToken, twoFactorCode, time.Now()) {
 			return nil, errors.New("invalid 2fa code")
 		}
 	}

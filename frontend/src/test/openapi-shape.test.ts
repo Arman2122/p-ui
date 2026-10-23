@@ -167,7 +167,9 @@ describe('openapi.json', () => {
   });
 
   it('preserves the nested client create contract, bulk array, and flat update options', () => {
-    const source = readFileSync(resolve(process.cwd(), '../internal/web/service/client.go'), 'utf8');
+    const service = readFileSync(resolve(process.cwd(), '../internal/web/service/client.go'), 'utf8');
+    expect(service).toMatch(/type ClientCreatePayload\s*=\s*entity\.ClientCreatePayload/);
+    const source = readFileSync(resolve(process.cwd(), '../internal/web/entity/client_source.go'), 'utf8');
     expect(source).toMatch(/Client\s+model\.Client\s+`json:"client"/);
     for (const path of ['/panel/api/clients/add', '/panel/api/clients/bulkCreate']) {
       const schema = request(path);

@@ -41,7 +41,7 @@ function buildDarkTheme({ bg, panelBg, activeBg, border, selection }: DarkPalett
       '.cm-gutters': {
         backgroundColor: bg,
         borderRight: `1px solid ${border}`,
-        color: '#6a6a6a',
+        color: '#929292',
       },
       '.cm-activeLine': { backgroundColor: activeBg },
       '.cm-activeLineGutter': { backgroundColor: activeBg, color: '#dcdcdc' },

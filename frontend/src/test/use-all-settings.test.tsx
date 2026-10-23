@@ -13,6 +13,19 @@ afterEach(() => {
 });
 
 describe('useAllSettings', () => {
+  it('refreshes subscription URL defaults after saving settings', async () => {
+    vi.spyOn(HttpUtil, 'post').mockResolvedValue(new Msg(true, '', {}));
+    const queryClient = makeTestQueryClient();
+    const queryFn = vi.fn().mockResolvedValueOnce({ subURI: '/old/' }).mockResolvedValueOnce({ subURI: '/new/' });
+    const defaultsQuery = { queryKey: keys.settings.defaults(), queryFn, staleTime: Infinity };
+    await queryClient.fetchQuery(defaultsQuery);
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    const { result } = renderHook(() => useAllSettings(), { wrapper });
+    await waitFor(() => expect(result.current.fetched).toBe(true));
+    await act(async () => { await result.current.saveAll(); });
+    expect(await queryClient.fetchQuery(defaultsQuery)).toEqual({ subURI: '/new/' });
+  });
+
   it('keeps backend-accepted settings editable when the frontend schema is stricter', async () => {
     const subJsonUserAgentRegex = 'x'.repeat(2_049);
     vi.spyOn(HttpUtil, 'post').mockResolvedValue(new Msg(true, '', { subJsonUserAgentRegex }));

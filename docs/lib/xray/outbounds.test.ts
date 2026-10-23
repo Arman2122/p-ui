@@ -18,7 +18,8 @@ describe('buildOutbound — freedom & blackhole', () => {
 
   it('freedom carries domainStrategy when set', () => {
     const ob = buildOutbound({ kind: 'freedom', tag: 'direct', domainStrategy: 'UseIP' });
-    expect(ob.settings).toEqual({ domainStrategy: 'UseIP' });
+    expect(ob.settings).toEqual({});
+    expect(ob.streamSettings).toEqual({ sockopt: { domainStrategy: 'UseIP' } });
   });
 
   it('blackhole has empty settings', () => {

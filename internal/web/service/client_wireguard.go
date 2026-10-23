@@ -393,9 +393,14 @@ func allocateWireguardAddress(used []string, base string, blocked []netip.Prefix
 		return "", err
 	}
 	taken := make(map[netip.Addr]struct{}, len(used))
+	var ranges []netip.Prefix
 	for _, u := range used {
-		if a := wireguardHostAddr(u); a.IsValid() {
-			taken[a] = struct{}{}
+		if prefix, ok := wireguardClaimedPrefix(u); ok {
+			if prefix.IsSingleIP() {
+				taken[prefix.Addr()] = struct{}{}
+			} else {
+				ranges = append(ranges, prefix)
+			}
 		}
 	}
 	scopes := []netip.Prefix{prefix}
@@ -409,7 +414,7 @@ func allocateWireguardAddress(used []string, base string, blocked []netip.Prefix
 		for scope.Contains(addr) {
 			// The widened scope reaches past this inbound's own subnet, so an address
 			// another host device already answers for has to be stepped over.
-			if _, ok := taken[addr]; !ok && !insideAny(addr, blocked) {
+			if _, ok := taken[addr]; !ok && !insideAny(addr, ranges) && !insideAny(addr, blocked) {
 				return netip.PrefixFrom(addr, addr.BitLen()).String(), nil
 			}
 			addr = addr.Next()
@@ -455,14 +460,34 @@ func normalizeWireguardAllowedIPs(values []string) ([]string, error) {
 	return out, nil
 }
 
+// Legacy default routes do not claim an allocated peer address.
+func wireguardClaimedPrefix(value string) (netip.Prefix, bool) {
+	value = strings.TrimSpace(value)
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil {
+		addr, err := netip.ParseAddr(value)
+		if err != nil {
+			return netip.Prefix{}, false
+		}
+		prefix = netip.PrefixFrom(addr, addr.BitLen())
+	}
+	return prefix.Masked(), prefix.Bits() > 0
+}
+
 func wireguardAllowedIPsCollision(entries, used []string) string {
-	taken := make(map[string]struct{}, len(used))
+	taken := make([]netip.Prefix, 0, len(used))
 	for _, u := range used {
-		taken[strings.TrimSpace(u)] = struct{}{}
+		if prefix, ok := wireguardClaimedPrefix(u); ok {
+			taken = append(taken, prefix)
+		}
 	}
 	for _, e := range entries {
-		if _, ok := taken[e]; ok {
-			return e
+		if prefix, ok := wireguardClaimedPrefix(e); ok {
+			for _, other := range taken {
+				if prefix.Overlaps(other) {
+					return e
+				}
+			}
 		}
 	}
 	return ""

@@ -2,13 +2,27 @@ package xray
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/xtls/xray-core/proxy/shadowsocks"
 
 	"github.com/Arman2122/p-ui/internal/util/random"
 )
+
+// ShadowsocksClientIdentity uses the pinned AEAD account derivation and effective
+// cipher, so equivalent method aliases reserve the same authentication identity.
+func ShadowsocksClientIdentity(method, password string) ([]byte, error) {
+	account, err := (&shadowsocks.Account{CipherType: shadowsocksCipherType(method), Password: password}).AsAccount()
+	if err != nil {
+		return nil, err
+	}
+	memory := account.(*shadowsocks.MemoryAccount)
+	identity := binary.BigEndian.AppendUint32(nil, uint32(memory.CipherType))
+	return append(identity, memory.Key...), nil
+}
 
 /*
 Shadowsocks client-key knowledge, in the engine so the core adapter and the

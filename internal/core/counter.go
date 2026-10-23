@@ -55,7 +55,10 @@ func NewCounter() *Counter {
 func (c *Counter) Observe(epoch string, readings map[string]int64) map[string]int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.observe(epoch, readings)
+}
 
+func (c *Counter) observe(epoch string, readings map[string]int64) map[string]int64 {
 	deltas := make(map[string]int64, len(readings))
 	// An empty epoch is the source declining to say, not evidence of a restart:
 	// treating it as one flips the epoch twice and re-bills every counter.

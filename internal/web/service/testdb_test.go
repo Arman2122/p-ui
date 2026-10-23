@@ -30,6 +30,14 @@ func initTestDB(t *testing.T) {
 		t.Fatalf("PUI_DB_DSN=%q is not a usable PostgreSQL URL: %v", dsn, err)
 	}
 
+	requested, completed := sessionDropRequested.Load(), sessionDropCompleted.Load()
+	sessionDropRequested.Store(0)
+	sessionDropCompleted.Store(0)
+	t.Cleanup(func() {
+		sessionDropRequested.Store(requested)
+		sessionDropCompleted.Store(completed)
+	})
+
 	schema := fmt.Sprintf("pui_svc_test_%d_%d", os.Getpid(), testSchemaSeq.Add(1))
 	if err := execOnDSN(dsn, `CREATE SCHEMA "`+schema+`"`); err != nil {
 		t.Fatalf("create test schema %s: %v", schema, err)

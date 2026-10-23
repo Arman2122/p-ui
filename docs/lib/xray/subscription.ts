@@ -145,13 +145,20 @@ function subJsonSkeleton(): Record<string, unknown> {
     },
     inbounds: [
       {
+        listen: '127.0.0.1',
         port: 10808,
-        protocol: 'mixed',
+        protocol: 'socks',
         settings: { auth: 'noauth', udp: true, userLevel: 8 },
         sniffing: { destOverride: ['http', 'tls', 'quic', 'fakedns'], enabled: true },
         tag: 'mixed',
       },
-      { port: 10809, protocol: 'http', settings: { userLevel: 8 }, tag: 'http' },
+      {
+        listen: '127.0.0.1',
+        port: 10809,
+        protocol: 'http',
+        settings: { userLevel: 8 },
+        tag: 'http',
+      },
     ],
     log: { loglevel: 'warning' },
     policy: {
@@ -171,7 +178,7 @@ function skeletonOutbounds(): Record<string, unknown>[] {
     {
       tag: 'direct',
       protocol: 'freedom',
-      settings: { domainStrategy: 'AsIs', redirect: '', noises: [] },
+      settings: { redirect: '', noises: [] },
     },
     { tag: 'block', protocol: 'blackhole', settings: { response: { type: 'http' } } },
   ];

@@ -78,9 +78,9 @@ func (c *Core) Describe() core.Descriptor {
 			PerUserStats: core.Yes(),
 			OnlineUsers:  core.Yes(),
 			// Xray has no per-user byte budget to push down; quota is enforced
-			// by the panel revoking the user. Links are still the panel's.
+			// by the panel revoking the user.
 			QuotaPushdown: core.No(),
-			ShareLink:     core.No(),
+			ShareLink:     core.Yes(),
 		},
 	}
 }
@@ -143,12 +143,19 @@ func (c *Core) Reconcile(_ context.Context, desired []core.Instance) error {
 	process := c.mgr.Current()
 	if process != nil && process.IsRunning() {
 		if process.GetConfig().Equals(cfg) {
+			c.mgr.SetHeldBack(process, "")
 			return nil
 		}
-		if c.hotApply(process, cfg) {
+		applied, err := c.hotApply(process, cfg)
+		if err != nil {
+			return err
+		}
+		if applied {
 			return nil
 		}
 		_ = process.Stop()
+	} else if err := c.mgr.CheckBindings(cfg, c.Transports); err != nil {
+		return err
 	}
 
 	process = engine.NewProcess(cfg)
@@ -219,7 +226,11 @@ func (c *Core) ApplyInstance(_ context.Context, inst core.Instance) error {
 		return errors.New("xray: core is not running")
 	}
 	next := withInbound(process.GetConfig(), inst)
-	if !c.hotApply(process, next) {
+	applied, err := c.hotApply(process, next)
+	if err != nil {
+		return err
+	}
+	if !applied {
 		return fmt.Errorf("xray: inbound %q cannot be applied in place", inst.Tag)
 	}
 	return nil
@@ -237,7 +248,11 @@ func (c *Core) DropInstance(_ context.Context, inst core.Instance) error {
 	disabled := inst
 	disabled.Enable = false
 	next := withInbound(process.GetConfig(), disabled)
-	if !c.hotApply(process, next) {
+	applied, err := c.hotApply(process, next)
+	if err != nil {
+		return err
+	}
+	if !applied {
 		return fmt.Errorf("xray: inbound %q cannot be removed in place", inst.Tag)
 	}
 	return nil
@@ -448,24 +463,29 @@ func (c *Core) noteRestart() {
 	}
 }
 
-func (c *Core) hotApply(process *engine.Process, newCfg *engine.Config) bool {
+func (c *Core) hotApply(process *engine.Process, newCfg *engine.Config) (bool, error) {
+	if err := c.mgr.CheckBindings(newCfg, c.Transports); err != nil {
+		return false, err
+	}
 	diff, ok := engine.ComputeHotDiff(process.GetConfig(), newCfg)
 	if !ok {
-		return false
+		return false, nil
 	}
 	if diff.Empty() {
 		process.SetConfig(newCfg)
-		return true
+		c.mgr.SetHeldBack(process, "")
+		return true, nil
 	}
 	api, err := c.connect()
 	if err != nil {
-		return false
+		return false, nil
 	}
 	if !engine.ApplyHotDiff(api, diff) {
-		return false
+		return false, nil
 	}
 	process.SetConfig(newCfg)
-	return true
+	c.mgr.SetHeldBack(process, "")
+	return true, nil
 }
 
 // IngressSelector: every kind xray serves is routed by xray itself, so its
@@ -515,6 +535,9 @@ func (c *Core) Health(ctx context.Context) (core.Health, error) {
 			h.Ready = true
 		} else {
 			h.Detail = "the API port does not answer: " + err.Error()
+		}
+		if heldBack := c.mgr.HeldBackReason(); heldBack != "" {
+			h.Detail = heldBack
 		}
 	case process.GetErr() != nil:
 		h.State, h.Detail = core.HealthFailed, process.GetResult()

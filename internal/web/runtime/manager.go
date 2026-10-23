@@ -14,14 +14,27 @@ type NodeEgressResolver interface {
 }
 
 type Manager struct {
-	local Runtime
-	cores *core.Registry
+	local     Runtime
+	cores     *core.Registry
+	fleetOnly bool
 
 	mu             sync.RWMutex
 	remotes        map[int]*Remote
 	overrides      map[int]Runtime // test-only: forces RuntimeFor to return a stub
 	localOverride  Runtime         // test-only: forces RuntimeFor(nil) to return a stub
 	egressResolver NodeEgressResolver
+}
+
+var (
+	ErrFleetDispatcher = errors.New("fleet runtime dispatcher is required")
+	ErrLegacyRuntime   = errors.New("legacy node runtime is unavailable in a fleet role")
+)
+
+func NewFleetManager(dispatch Runtime) (*Manager, error) {
+	if dispatch == nil {
+		return nil, ErrFleetDispatcher
+	}
+	return &Manager{local: dispatch, fleetOnly: true}, nil
 }
 
 func NewManager(localDeps LocalDeps) *Manager {
@@ -68,6 +81,9 @@ func (m *Manager) SetNodeEgressResolver(r NodeEgressResolver) {
 }
 
 func (m *Manager) NodeEgressProxyURL(nodeID int) string {
+	if m.fleetOnly {
+		return ""
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.egressResolver == nil {
@@ -77,6 +93,12 @@ func (m *Manager) NodeEgressProxyURL(nodeID int) string {
 }
 
 func (m *Manager) RuntimeFor(nodeID *int) (Runtime, error) {
+	if m.fleetOnly {
+		if nodeID != nil {
+			return nil, ErrLegacyRuntime
+		}
+		return m.local, nil
+	}
 	if nodeID == nil {
 		m.mu.RLock()
 		if m.localOverride != nil {
@@ -118,6 +140,9 @@ func (m *Manager) RuntimeFor(nodeID *int) (Runtime, error) {
 func (m *Manager) Local() Runtime { return m.local }
 
 func (m *Manager) RemoteFor(node *model.Node) (*Remote, error) {
+	if m.fleetOnly {
+		return nil, ErrLegacyRuntime
+	}
 	if node == nil {
 		return nil, errors.New("node is nil")
 	}

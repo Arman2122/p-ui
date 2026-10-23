@@ -83,6 +83,10 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		result.Outcome.finalize()
 		return result, false, nil
 	}
+	flowsByEmail, err := s.EffectiveFlowsByEmails(nil, recordEmails)
+	if err != nil {
+		return result, false, err
+	}
 
 	emailSubIDs, sidErr := inboundSvc.getAllEmailSubIDs()
 	if sidErr != nil {
@@ -117,6 +121,9 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 				continue
 			}
 			client := *rec.ToClient()
+			if flow := flowsByEmail[rec.Email]; flow != "" {
+				client.Flow = flow
+			}
 			client.UpdatedAt = time.Now().UnixMilli()
 			if hErr := hydrateClientCredentials(nil, rec.Id, ibId, &client); hErr != nil {
 				recordErr("%s -> inbound %d: %v", rec.Email, ibId, hErr)
@@ -808,53 +815,10 @@ func (s *ClientService) bulkAdjustInboundClients(
 		res.needRestart = true
 	}
 
-	if oldInbound.NodeID != nil {
-		rt, push, _, perr := inboundSvc.nodePushPlan(oldInbound)
-		if perr != nil {
-			for email := range foundEmails {
-				res.perEmailSkipped[email] = perr.Error()
-				delete(foundEmails, email)
-			}
-		} else {
-			if flowChanged || credsChanged || subIDChanged {
-				push = false
-			}
-			// Large batches collapse into one reconcile push rather than M updates.
-			if push && len(foundEmails) > nodeBulkPushThreshold {
-				push = false
-			}
-			if push {
-				pushFailed := false
-				for email := range foundEmails {
-					entry := plan[email]
-					updated := *entry.record.ToClient()
-					if hErr := hydrateClientCredentials(nil, entry.record.Id, 0, &updated); hErr != nil {
-						logger.Warning("Failed to read stored credentials for node push:", hErr)
-					}
-					if entry.applyExpiry {
-						updated.ExpiryTime = entry.newExpiry
-					}
-					if entry.applyTotal {
-						updated.TotalGB = entry.newTotal
-					}
-					applyBulkSetPatch(&updated, entry.patch)
-					updated.UpdatedAt = nowMs
-					if err1 := rt.UpdateUser(context.Background(), oldInbound, email, updated); err1 != nil {
-						logger.Warning("Error in updating client on", rt.Name(), ":", err1)
-						pushFailed = true
-					}
-				}
-				if !pushFailed {
-					advancePushedInbound(rt, prevSettings, oldInbound)
-				}
-			}
-		}
-	}
-
 	// Serialize against the traffic poll to avoid the cross-transaction
 	// lock-order deadlock on inbounds/client_records (runSerializedTx).
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
-		if err := tx.Save(oldInbound).Error; err != nil {
+		if err := commitInboundClientSettings(tx, oldInbound, prevSettings); err != nil {
 			return err
 		}
 		finalClients, gcErr := inboundSvc.GetClients(oldInbound)
@@ -873,6 +837,47 @@ func (s *ClientService) bulkAdjustInboundClients(
 		for email := range foundEmails {
 			if _, skip := res.perEmailSkipped[email]; !skip {
 				res.perEmailSkipped[email] = txErr.Error()
+			}
+		}
+	}
+	if txErr == nil {
+		if oldInbound.NodeID != nil {
+			rt, push, _, perr := inboundSvc.nodePushPlan(oldInbound)
+			if perr != nil {
+				logger.Warning("BulkAdjust: node lookup after commit failed:", perr)
+			} else {
+				if flowChanged || credsChanged || subIDChanged {
+					push = false
+				}
+				// Large batches collapse into one reconcile push rather than M updates.
+				if push && len(foundEmails) > nodeBulkPushThreshold {
+					push = false
+				}
+				if push {
+					pushFailed := false
+					for email := range foundEmails {
+						entry := plan[email]
+						updated := *entry.record.ToClient()
+						if hErr := hydrateClientCredentials(nil, entry.record.Id, 0, &updated); hErr != nil {
+							logger.Warning("Failed to read stored credentials for node push:", hErr)
+						}
+						if entry.applyExpiry {
+							updated.ExpiryTime = entry.newExpiry
+						}
+						if entry.applyTotal {
+							updated.TotalGB = entry.newTotal
+						}
+						applyBulkSetPatch(&updated, entry.patch)
+						updated.UpdatedAt = nowMs
+						if err1 := rt.UpdateUser(context.Background(), oldInbound, email, updated); err1 != nil {
+							logger.Warning("Error in updating client on", rt.Name(), ":", err1)
+							pushFailed = true
+						}
+					}
+					if !pushFailed {
+						advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
+					}
+				}
 			}
 		}
 	}
@@ -1189,81 +1194,11 @@ func (s *ClientService) bulkDelInboundClients(
 			return res
 		}
 	}
+	var purge []string
 	if !keepTraffic {
-		purge := make([]string, 0, len(foundEmails))
 		for email := range foundEmails {
 			if !sharedSet[strings.ToLower(strings.TrimSpace(email))] {
 				purge = append(purge, email)
-			}
-		}
-		if len(purge) > 0 {
-			// Serialize the IP/stat purge against the traffic poll to avoid the
-			// cross-transaction lock-order deadlock on client_traffics.
-			if delErr := runSerializedTx(func(tx *gorm.DB) error {
-				if e := inboundSvc.delClientIPsByEmails(tx, purge); e != nil {
-					logger.Error("Error in delete client IPs")
-					return e
-				}
-				if e := inboundSvc.delClientStatsByEmails(tx, purge); e != nil {
-					logger.Error("Delete stats Data Error")
-					return e
-				}
-				return nil
-			}); delErr != nil {
-				for _, email := range purge {
-					res.perEmailSkipped[email] = delErr.Error()
-					delete(foundEmails, email)
-				}
-			}
-		}
-	}
-
-	if oldInbound.NodeID == nil {
-		rt, rterr := inboundSvc.runtimeFor(oldInbound)
-		if rterr != nil {
-			res.needRestart = true
-		} else {
-			for email := range foundEmails {
-				if !enableByEmail[email] || !notDepletedByEmail[email] {
-					continue
-				}
-				err1 := rt.RemoveUser(context.Background(), oldInbound, email)
-				if err1 == nil {
-					logger.Debug("Client deleted on", rt.Name(), ":", email)
-				} else if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", email)) {
-					logger.Debug("User is already deleted. Nothing to do more...")
-				} else {
-					logger.Debug("Error in deleting client on", rt.Name(), ":", err1)
-					res.needRestart = true
-				}
-			}
-		}
-	} else {
-		rt, push, _, perr := inboundSvc.nodePushPlan(oldInbound)
-		if perr != nil {
-			for email := range foundEmails {
-				res.perEmailSkipped[email] = perr.Error()
-				delete(foundEmails, email)
-			}
-		} else {
-			// Large batches collapse into one reconcile push rather than M deletes.
-			if push && len(foundEmails) > nodeBulkPushThreshold {
-				push = false
-			}
-			if push {
-				// bulkDelInboundClients only runs for full client deletion
-				// (BulkDelete), so the node must drop its client record too,
-				// not just detach from this inbound (#5797).
-				pushFailed := false
-				for email := range foundEmails {
-					if err1 := rt.DeleteClient(context.Background(), email); err1 != nil {
-						logger.Warning("Error in deleting client on", rt.Name(), ":", err1)
-						pushFailed = true
-					}
-				}
-				if !pushFailed {
-					advancePushedInbound(rt, prevSettings, oldInbound)
-				}
 			}
 		}
 	}
@@ -1271,7 +1206,15 @@ func (s *ClientService) bulkDelInboundClients(
 	// Serialize against the traffic poll to avoid the cross-transaction
 	// lock-order deadlock on inbounds/client_records (runSerializedTx).
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
-		if err := tx.Save(oldInbound).Error; err != nil {
+		if len(purge) > 0 {
+			if err := inboundSvc.delClientIPsByEmails(tx, purge); err != nil {
+				return err
+			}
+			if err := inboundSvc.delClientStatsByEmails(tx, purge); err != nil {
+				return err
+			}
+		}
+		if err := commitInboundClientSettings(tx, oldInbound, prevSettings); err != nil {
 			return err
 		}
 		finalClients, err := inboundSvc.GetClients(oldInbound)
@@ -1290,6 +1233,60 @@ func (s *ClientService) bulkDelInboundClients(
 		for email := range foundEmails {
 			if _, skip := res.perEmailSkipped[email]; !skip {
 				res.perEmailSkipped[email] = txErr.Error()
+			}
+		}
+	}
+
+	if txErr == nil {
+		restartOnDrop := droppedClientNeedsRestart(oldInbound)
+		if oldInbound.NodeID == nil {
+			rt, rterr := inboundSvc.runtimeFor(oldInbound)
+			if rterr != nil {
+				res.needRestart = true
+			} else {
+				for email := range foundEmails {
+					if enableByEmail[email] && restartOnDrop {
+						queueXraySessionDrop()
+						res.needRestart = true
+						restartOnDrop = false
+					}
+					if !enableByEmail[email] || !notDepletedByEmail[email] {
+						continue
+					}
+					err1 := rt.RemoveUser(context.Background(), oldInbound, email)
+					if err1 == nil {
+						logger.Debug("Client deleted on", rt.Name(), ":", email)
+					} else if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", email)) {
+						logger.Debug("User is already deleted. Nothing to do more...")
+					} else {
+						logger.Debug("Error in deleting client on", rt.Name(), ":", err1)
+						res.needRestart = true
+					}
+				}
+			}
+		} else {
+			rt, push, _, perr := inboundSvc.nodePushPlan(oldInbound)
+			if perr != nil {
+				logger.Warning("BulkDelete: node lookup after commit failed:", perr)
+			} else {
+				// Large batches collapse into one reconcile push rather than M deletes.
+				if push && len(foundEmails) > nodeBulkPushThreshold {
+					push = false
+				}
+				if push {
+					// A full deletion removes the node's client record too,
+					// not just its inbound attachment (#5797).
+					pushFailed := false
+					for email := range foundEmails {
+						if err1 := rt.DeleteClient(context.Background(), email); err1 != nil {
+							logger.Warning("Error in deleting client on", rt.Name(), ":", err1)
+							pushFailed = true
+						}
+					}
+					if !pushFailed {
+						advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
+					}
+				}
 			}
 		}
 	}
@@ -1603,17 +1600,26 @@ func (s *ClientService) DelDepleted(inboundSvc *InboundService) (int, bool, erro
 }
 
 type BulkSetEnableResult struct {
-	Changed int                   `json:"changed"`
+	Changed int                   `json:"changed" example:"2"`
+	Pending int                   `json:"pending" example:"1"`
 	Skipped []BulkSetEnableReport `json:"skipped,omitempty"`
 	Outcome BulkOutcome           `json:"outcome"`
 }
 
 type BulkSetEnableReport struct {
-	Email  string `json:"email"`
-	Reason string `json:"reason"`
+	Email  string `json:"email" example:"carol"`
+	Reason string `json:"reason" example:"client not found"`
 }
 
 func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []string, enable bool) (BulkSetEnableResult, bool, error) {
+	return s.bulkSetEnable(context.Background(), nil, inboundSvc, emails, enable)
+}
+
+func (s *ClientService) BulkSetEnableAuthorized(ctx context.Context, actor *model.User, inboundSvc *InboundService, emails []string, enable bool) (BulkSetEnableResult, bool, error) {
+	return s.bulkSetEnable(ctx, actor, inboundSvc, emails, enable)
+}
+
+func (s *ClientService) bulkSetEnable(ctx context.Context, actor *model.User, inboundSvc *InboundService, emails []string, enable bool) (BulkSetEnableResult, bool, error) {
 	result := BulkSetEnableResult{}
 
 	seen := map[string]struct{}{}
@@ -1652,6 +1658,40 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 	for _, email := range cleanEmails {
 		if _, ok := recordsByEmail[email]; !ok {
 			skippedReasons[email] = "client not found"
+		}
+	}
+	owned, err := ownedFleetEnableTargets(db, recordsByEmail)
+	if err != nil {
+		return result, false, err
+	}
+	if len(owned) != 0 {
+		if actor == nil {
+			return result, false, ErrFleetLifecycle
+		}
+		dispatch, err := fleetEnableDispatcher()
+		if err != nil {
+			return result, false, err
+		}
+		for _, email := range cleanEmails {
+			record := recordsByEmail[email]
+			if record == nil {
+				continue
+			}
+			client, isOwned := owned[record.Id]
+			if !isOwned {
+				continue
+			}
+			delete(recordsByEmail, email)
+			mutation, err := dispatchFleetSourceEnable(ctx, db, dispatch, actor, *record, client, enable)
+			if err != nil {
+				skippedReasons[email] = err.Error()
+				continue
+			}
+			result.Changed++
+			if mutation.Pending {
+				result.Pending++
+			}
+			result.Outcome.ok(email)
 		}
 	}
 
@@ -1705,6 +1745,13 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 	if len(successEmails) > 0 {
 		now := time.Now().UnixMilli()
 		if err := runSerializedTx(func(tx *gorm.DB) error {
+			var clients []model.Client
+			for _, email := range successEmails {
+				clients = append(clients, model.Client{Email: email})
+			}
+			if err := lockLegacyEnableSources(tx, clients, successEmails); err != nil {
+				return err
+			}
 			for _, batch := range chunkStrings(successEmails, sqlInChunk) {
 				if e := tx.Model(xray.ClientTraffic{}).Where("email IN ?", batch).Update("enable", enable).Error; e != nil {
 					return e
@@ -1720,7 +1767,7 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 		}
 	}
 
-	result.Changed = len(successEmails)
+	result.Changed += len(successEmails)
 	for _, email := range successEmails {
 		result.Outcome.ok(email)
 	}
@@ -1835,15 +1882,24 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 	}
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
-		if e := tx.Save(oldInbound).Error; e != nil {
-			return e
+		var changedEmails []string
+		for _, client := range changed {
+			changedEmails = append(changedEmails, client.email)
 		}
 		finalClients, gcErr := inboundSvc.GetClients(oldInbound)
 		if gcErr != nil {
 			return gcErr
 		}
-		if err := s.SyncInbound(tx, inboundId, finalClients); err != nil {
+		if err := lockLegacyEnableSources(tx, finalClients, changedEmails); err != nil {
 			return err
+		}
+		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
+			return e
+		}
+		for _, batch := range chunkStrings(changedEmails, sqlInChunk) {
+			if err := tx.Model(&model.ClientRecord{}).Where("email IN ?", batch).Updates(map[string]any{"enable": enable, "updated_at": nowMs}).Error; err != nil {
+				return err
+			}
 		}
 		if oldInbound.NodeID != nil {
 			return (&NodeService{}).MarkNodeDirtyTx(tx, *oldInbound.NodeID)
@@ -1857,6 +1913,7 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 		return res
 	}
 
+	restartOnDrop := !enable && droppedClientNeedsRestart(oldInbound)
 	if oldInbound.NodeID == nil {
 		if !push {
 			res.needRestart = true
@@ -1869,6 +1926,11 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 						res.needRestart = true
 					}
 				} else if ch.wasEnable {
+					if restartOnDrop {
+						queueXraySessionDrop()
+						res.needRestart = true
+						restartOnDrop = false
+					}
 					err1 := rt.RemoveUser(context.Background(), oldInbound, ch.email)
 					if err1 != nil && !strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", ch.email)) {
 						logger.Debug("Error in removing client on", rt.Name(), ":", err1)
@@ -1888,7 +1950,7 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 			}
 		}
 		if !pushFailed {
-			advancePushedInbound(rt, prevSettings, oldInbound)
+			advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
 		}
 	}
 

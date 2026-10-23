@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 
 	"github.com/Arman2122/p-ui/internal/database"
@@ -21,48 +20,7 @@ type GroupSummary struct {
 }
 
 func (s *ClientService) ListGroups() ([]GroupSummary, error) {
-	db := database.GetDB()
-	// email is unique in both clients and client_traffics, so the LEFT JOIN
-	// never double-counts a client's traffic.
-	var derived []GroupSummary
-	if err := db.Table("clients AS c").
-		Select("c.group_name AS name, COUNT(*) AS client_count, COALESCE(SUM(ct.up + ct.down), 0) AS traffic_used, COALESCE(SUM(ct.up), 0) AS up, COALESCE(SUM(ct.down), 0) AS down").
-		Joins("LEFT JOIN client_traffics ct ON ct.email = c.email").
-		Where("c.group_name <> ''").
-		Group("c.group_name").
-		Scan(&derived).Error; err != nil {
-		return nil, err
-	}
-	var stored []model.ClientGroup
-	if err := db.Find(&stored).Error; err != nil {
-		return nil, err
-	}
-	type groupAgg struct {
-		count int
-		up    int64
-		down  int64
-	}
-	baseUp := make(map[string]int64, len(stored))
-	baseDown := make(map[string]int64, len(stored))
-	merged := make(map[string]groupAgg, len(derived)+len(stored))
-	for _, g := range stored {
-		merged[g.Name] = groupAgg{}
-		baseUp[g.Name] = g.ResetUp
-		baseDown[g.Name] = g.ResetDown
-	}
-	for _, g := range derived {
-		merged[g.Name] = groupAgg{count: g.ClientCount, up: g.Up, down: g.Down}
-	}
-	out := make([]GroupSummary, 0, len(merged))
-	for name, agg := range merged {
-		up := max(agg.up-baseUp[name], 0)
-		down := max(agg.down-baseDown[name], 0)
-		out = append(out, GroupSummary{Name: name, ClientCount: agg.count, TrafficUsed: up + down, Up: up, Down: down})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
-	})
-	return out, nil
+	return readFleetGroupSummaries(database.GetDB(), false)
 }
 
 // adjustGroupBaselinesForRemovedTraffic shifts group baselines down by the clients'
@@ -83,6 +41,7 @@ func adjustGroupBaselinesForRemovedTraffic(tx *gorm.DB, emails []string) error {
 			Select("c.group_name AS name, COALESCE(SUM(ct.up), 0) AS up, COALESCE(SUM(ct.down), 0) AS down").
 			Joins("JOIN client_traffics ct ON ct.email = c.email").
 			Where("c.group_name <> '' AND c.email IN ?", batch).
+			Where("NOT EXISTS (SELECT 1 FROM fleet_clients fc WHERE fc.panel_client_id=c.id AND fc.owned)").
 			Group("c.group_name").
 			Scan(&part).Error; err != nil {
 			return err
@@ -140,27 +99,33 @@ func (s *ClientService) ResetGroupTraffic(name string) error {
 	if name == "" {
 		return common.NewError("group name is required")
 	}
-	db := database.GetDB()
-	var agg struct {
-		Up   int64
-		Down int64
-	}
-	if err := db.Table("clients AS c").
-		Select("COALESCE(SUM(ct.up), 0) AS up, COALESCE(SUM(ct.down), 0) AS down").
-		Joins("LEFT JOIN client_traffics ct ON ct.email = c.email").
-		Where("c.group_name = ?", name).
-		Scan(&agg).Error; err != nil {
-		return err
-	}
-	var count int64
-	if err := db.Model(&model.ClientGroup{}).Where("name = ?", name).Count(&count).Error; err != nil {
-		return err
-	}
-	if count == 0 {
-		return db.Create(&model.ClientGroup{Name: name, ResetUp: agg.Up, ResetDown: agg.Down}).Error
-	}
-	return db.Model(&model.ClientGroup{}).Where("name = ?", name).
-		Updates(map[string]any{"reset_up": agg.Up, "reset_down": agg.Down}).Error
+	return submitTrafficWrite(func() error {
+		return database.GetDB().Transaction(func(db *gorm.DB) error {
+			if err := requireLegacyPool(db, nil, name); err != nil {
+				return err
+			}
+			var agg struct {
+				Up   int64
+				Down int64
+			}
+			if err := db.Table("clients AS c").
+				Select("COALESCE(SUM(ct.up), 0) AS up, COALESCE(SUM(ct.down), 0) AS down").
+				Joins("LEFT JOIN client_traffics ct ON ct.email = c.email").
+				Where("c.group_name = ?", name).
+				Scan(&agg).Error; err != nil {
+				return err
+			}
+			var count int64
+			if err := db.Model(&model.ClientGroup{}).Where("name = ?", name).Count(&count).Error; err != nil {
+				return err
+			}
+			if count == 0 {
+				return db.Create(&model.ClientGroup{Name: name, ResetUp: agg.Up, ResetDown: agg.Down}).Error
+			}
+			return db.Model(&model.ClientGroup{}).Where("name = ?", name).
+				Updates(map[string]any{"reset_up": agg.Up, "reset_down": agg.Down}).Error
+		})
+	})
 }
 
 func (s *ClientService) CreateGroup(name string) error {
@@ -211,7 +176,14 @@ func (s *ClientService) AddToGroup(emails []string, group string) (int, error) {
 	if len(emails) == 0 {
 		return 0, nil
 	}
-	db := database.GetDB()
+	db := database.GetDB().Begin()
+	if db.Error != nil {
+		return 0, db.Error
+	}
+	defer db.Rollback()
+	if err := lockLegacyGroupMutationTx(db, emails, []string{group}, group); err != nil {
+		return 0, err
+	}
 	if group != "" {
 		for _, batch := range chunkStrings(emails, sqlInChunk) {
 			var owned int64
@@ -245,31 +217,36 @@ func (s *ClientService) AddToGroup(emails []string, group string) (int, error) {
 	var records []model.ClientRecord
 	for _, batch := range chunkStrings(emails, sqlInChunk) {
 		var rows []model.ClientRecord
-		if err := db.Where("email IN ?", batch).Find(&rows).Error; err != nil {
+		if err := db.Where("email IN ?", batch).
+			Where("group_name IS NULL OR group_name <> ?", group).Find(&rows).Error; err != nil {
 			return 0, err
 		}
 		records = append(records, rows...)
 	}
 	if len(records) == 0 {
-		return 0, nil
+		return 0, db.Commit().Error
 	}
 	affectedEmails := make([]string, 0, len(records))
 	for _, r := range records {
 		affectedEmails = append(affectedEmails, r.Email)
 	}
 
-	tx := db.Begin()
+	tx := db
 	if err := preserveGroupTransfer(tx, affectedEmails, group); err != nil {
 		tx.Rollback()
 		return 0, err
 	}
+	var affected int64
 	for _, batch := range chunkStrings(affectedEmails, sqlInChunk) {
-		if err := tx.Model(&model.ClientRecord{}).
+		result := tx.Model(&model.ClientRecord{}).
 			Where("email IN ?", batch).
-			UpdateColumn("group_name", group).Error; err != nil {
+			Where("group_name IS NULL OR group_name <> ?", group).
+			UpdateColumn("group_name", group)
+		if result.Error != nil {
 			tx.Rollback()
-			return 0, err
+			return 0, result.Error
 		}
+		affected += result.RowsAffected
 	}
 
 	var inboundIDs []int
@@ -346,11 +323,25 @@ func (s *ClientService) AddToGroup(emails []string, group string) (int, error) {
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
-	return len(records), nil
+	return int(affected), nil
 }
 
 func (s *ClientService) replaceGroupValue(oldName, newName string) (int, error) {
-	db := database.GetDB()
+	db := database.GetDB().Begin()
+	if db.Error != nil {
+		return 0, db.Error
+	}
+	defer db.Rollback()
+	var exists bool
+	if err := db.Raw("SELECT EXISTS (SELECT 1 FROM client_groups WHERE name=?) OR EXISTS (SELECT 1 FROM clients WHERE group_name=?)", oldName, oldName).Scan(&exists).Error; err != nil {
+		return 0, err
+	}
+	if !exists {
+		return 0, db.Commit().Error
+	}
+	if err := lockLegacyGroupMutationTx(db, nil, []string{oldName, newName}, ""); err != nil {
+		return 0, err
+	}
 	if newName == "" {
 		if err := db.Where("name = ?", oldName).Delete(&model.ClientGroup{}).Error; err != nil {
 			return 0, err
@@ -365,14 +356,14 @@ func (s *ClientService) replaceGroupValue(oldName, newName string) (int, error) 
 		return 0, err
 	}
 	if len(records) == 0 {
-		return 0, nil
+		return 0, db.Commit().Error
 	}
 	affectedEmails := make([]string, 0, len(records))
 	for _, r := range records {
 		affectedEmails = append(affectedEmails, r.Email)
 	}
 
-	tx := db.Begin()
+	tx := db
 	if err := tx.Model(&model.ClientRecord{}).
 		Where("group_name = ?", oldName).
 		UpdateColumn("group_name", newName).Error; err != nil {

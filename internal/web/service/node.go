@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -479,6 +480,9 @@ func (s *NodeService) Update(id int, in *model.Node) error {
 		"inbound_tags":          string(inboundTagsJSON),
 		"outbound_tag":          in.OutboundTag,
 	}
+	if nodeSelectionGrew(existing, in) {
+		updates["inbounds_adopted_at"] = 0
+	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(model.Node{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			return err
@@ -536,11 +540,16 @@ func (s *NodeService) UpdateFromRequest(id int, req *NodeMutationRequest) error 
 		"inbound_tags":          string(inboundTagsJSON),
 		"outbound_tag":          in.OutboundTag,
 	}
-	if err := db.Model(model.Node{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		return err
+	if nodeSelectionGrew(existing, in) {
+		updates["inbounds_adopted_at"] = 0
 	}
-	if dErr := s.MarkNodeDirty(id); dErr != nil {
-		logger.Warning("mark node dirty after update failed:", dErr)
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(model.Node{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return err
+		}
+		return s.MarkNodeDirtyTx(tx, id)
+	}); err != nil {
+		return err
 	}
 	if mgr := runtime.GetManager(); mgr != nil {
 		mgr.InvalidateNode(id)
@@ -696,6 +705,9 @@ func FilterNodeSnapshot(n *model.Node, snap *runtime.TrafficSnapshot) {
 		return
 	}
 	allowed := nodeSelectedTagSet(n)
+	for _, tag := range snap.ManagedAliases {
+		allowed[tag] = struct{}{}
+	}
 	filtered := make([]*model.Inbound, 0, len(snap.Inbounds))
 	for _, inbound := range snap.Inbounds {
 		if inbound == nil {
@@ -1183,7 +1195,7 @@ func (s *NodeService) probe(ctx context.Context, n *model.Node, proxyURL string)
 			Unavailable []string `json:"unavailable"`
 		} `json:"obj"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&envelope); err != nil {
 		patch.LastError = "decode response: " + err.Error()
 		return patch, err
 	}
@@ -1255,4 +1267,20 @@ func FriendlyProbeError(msg string) string {
 		return "the server speaks HTTP, not HTTPS; set the node scheme to http"
 	}
 	return msg
+}
+
+func nodeSelectionGrew(existing, in *model.Node) bool {
+	if in.InboundSyncMode != "selected" {
+		return existing.InboundSyncMode == "selected"
+	}
+	old := make(map[string]struct{}, len(existing.InboundTags))
+	for _, tag := range existing.InboundTags {
+		old[tag] = struct{}{}
+	}
+	for _, tag := range in.InboundTags {
+		if _, ok := old[tag]; !ok {
+			return true
+		}
+	}
+	return false
 }

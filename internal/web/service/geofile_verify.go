@@ -14,23 +14,8 @@ const maxGeofileBytes = 200 << 20
 // errGeofileTruncated is what a partial download looks like from the inside.
 var errGeofileTruncated = errors.New("the file ends in the middle of a record")
 
-/*
-verifyGeofile walks a .dat the way xray-core's own loader does and insists it
-ends exactly on a record boundary.
-
-A geofile is a bare serialized GeoIPList/GeoSiteList — no header, no trailer,
-just repeated length-delimited records — so a truncated download is still a
-readable file for however many records survived. Measured against the pinned
-core (RUNTIME-RESULTS §8), a half-downloaded geoip.dat is ACCEPTED by
-`xray -test` whenever the codes a rule happens to name sit before the cut:
-geoip:cn, ir, de, jp and br all load, while us, ru, za and zw refuse. So the
-pre-flight cannot be relied on to catch this — which of the two happens is
-decided by protobuf ordering, not by whether the file is intact.
-
-Structural is enough, and semantic would be wrong: the loader reads each
-matching record whole before unmarshalling it, so a code that resolves always
-carries its complete list. There is no half-populated country to detect.
-*/
+// A truncated protobuf list can still satisfy Xray's queried country codes.
+// Verify whole-record framing in addition to the downloader's published digest.
 func verifyGeofile(r io.Reader) error {
 	br := bufio.NewReaderSize(r, 64*1024)
 	records := 0

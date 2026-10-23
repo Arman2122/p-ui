@@ -4,14 +4,44 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"strings"
 	"time"
 )
 
+var blockedPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("2002::/16"),
+	netip.MustParsePrefix("2001::/32"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("fec0::/10"),
+}
+
+// DNS64 networks use this prefix for public IPv4 hosts too, so inspect the
+// embedded address instead of rejecting every translated destination.
+var nat64WellKnown = netip.MustParsePrefix("64:ff9b::/96")
+
 func IsBlockedIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return false
+	}
+	addr = addr.Unmap()
+	for _, prefix := range blockedPrefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	if nat64WellKnown.Contains(addr) {
+		embedded := addr.As16()
+		return IsBlockedIP(net.IP(embedded[12:16]))
+	}
+	return false
 }
 
 type allowPrivateCtxKey struct{}

@@ -44,6 +44,8 @@ export default defineConfig({
         plugins: [storybookTest({ configDir: path.join(dirname, '.storybook') })],
         test: {
           name: 'storybook',
+          // Keep cold browser module transforms separate from the jsdom workload.
+          sequence: { groupOrder: 1 },
           browser: {
             enabled: true,
             headless: true,

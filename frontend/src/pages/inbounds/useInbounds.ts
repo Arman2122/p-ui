@@ -112,6 +112,16 @@ function toGuidOnlineMap(data: Record<string, string[]>): Map<string, Set<string
   return map;
 }
 
+function sameGuidSets(previous: Map<string, Set<string>>, next: Map<string, Set<string>>): boolean {
+  if (previous.size !== next.size) return false;
+  for (const [key, values] of next) {
+    const old = previous.get(key);
+    if (!old || old.size !== values.size) return false;
+    for (const value of values) if (!old.has(value)) return false;
+  }
+  return true;
+}
+
 async function fetchLastOnlineMap(): Promise<Record<string, number>> {
   const msg = await HttpUtil.post('/panel/api/clients/lastOnline', undefined, { silent: true });
   if (!msg?.success) throw new Error(msg?.msg || 'Failed to fetch lastOnline');
@@ -429,15 +439,28 @@ export function useInbounds() {
         activeInbounds?: Record<string, string[]>;
         lastOnlineMap?: Record<string, number>;
       };
+      let countsChanged = false;
       if (Array.isArray(p.onlineClients)) {
-        onlineClientsRef.current = p.onlineClients;
-        setOnlineClients(p.onlineClients);
+        const previous = new Set(onlineClientsRef.current);
+        if (previous.size !== p.onlineClients.length || p.onlineClients.some((email) => !previous.has(email))) {
+          onlineClientsRef.current = p.onlineClients;
+          setOnlineClients(p.onlineClients);
+          countsChanged = true;
+        }
       }
       if (p.onlineByGuid && typeof p.onlineByGuid === 'object') {
-        onlineByGuidRef.current = toGuidOnlineMap(p.onlineByGuid);
+        const next = toGuidOnlineMap(p.onlineByGuid);
+        if (!sameGuidSets(onlineByGuidRef.current, next)) {
+          onlineByGuidRef.current = next;
+          countsChanged = true;
+        }
       }
       if (p.activeInbounds && typeof p.activeInbounds === 'object') {
-        activeByGuidRef.current = toGuidOnlineMap(p.activeInbounds);
+        const next = toGuidOnlineMap(p.activeInbounds);
+        if (!sameGuidSets(activeByGuidRef.current, next)) {
+          activeByGuidRef.current = next;
+          countsChanged = true;
+        }
       }
       if (p.lastOnlineMap && typeof p.lastOnlineMap === 'object') {
         setLastOnlineMap((prev) => ({ ...prev, ...p.lastOnlineMap! }));
@@ -476,7 +499,7 @@ export function useInbounds() {
       };
       if (Array.isArray(p.traffics)) applyTraffics(p.traffics, (ib) => ib.nodeId == null);
       if (Array.isArray(p.nodeTraffics)) applyTraffics(p.nodeTraffics, (ib) => ib.nodeId != null);
-      rebuildClientCount();
+      if (countsChanged) rebuildClientCount();
     },
     [rebuildClientCount],
   );
@@ -499,6 +522,10 @@ export function useInbounds() {
           const upd = byId.get((ib as unknown as { id: number }).id);
           if (!upd) continue;
           const ibRec = ib as unknown as { up: number; down: number; total: number; enable: boolean };
+          if (!((typeof upd.up === 'number' && upd.up !== ibRec.up)
+            || (typeof upd.down === 'number' && upd.down !== ibRec.down)
+            || (typeof upd.total === 'number' && upd.total !== ibRec.total)
+            || (typeof upd.enable === 'boolean' && upd.enable !== ibRec.enable))) continue;
           if (typeof upd.up === 'number') ibRec.up = upd.up;
           if (typeof upd.down === 'number') ibRec.down = upd.down;
           if (typeof upd.total === 'number') ibRec.total = upd.total;
@@ -519,6 +546,11 @@ export function useInbounds() {
             const stat = stats[i];
             const upd = byEmail.get(stat.email);
             if (!upd) continue;
+            if (!((typeof upd.up === 'number' && upd.up !== stat.up)
+              || (typeof upd.down === 'number' && upd.down !== stat.down)
+              || (typeof upd.total === 'number' && upd.total !== stat.total)
+              || (typeof upd.expiryTime === 'number' && upd.expiryTime !== stat.expiryTime)
+              || (typeof upd.enable === 'boolean' && upd.enable !== stat.enable))) continue;
             if (typeof upd.up === 'number') stat.up = upd.up;
             if (typeof upd.down === 'number') stat.down = upd.down;
             if (typeof upd.total === 'number') stat.total = upd.total;

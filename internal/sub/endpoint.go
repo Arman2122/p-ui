@@ -87,6 +87,7 @@ func (s *SubService) buildEndpointLinks(
 			securityToApply = e.ForceTls
 		}
 		nextParams := cloneStringMap(params)
+		dropBaseRealityParams(nextParams, baseSecurity, securityToApply)
 		applyEndpointTLSParams(e, nextParams, securityToApply)
 		applyEndpointRealityParams(e, nextParams, securityToApply)
 		applyEndpointHostPath(e, nextParams)
@@ -127,4 +128,15 @@ func (s *SubService) buildEndpointVmessLinks(eps []ShareEndpoint, baseObj map[st
 		links.WriteString(buildVmessLink(newObj))
 	}
 	return links.String()
+}
+
+func dropBaseRealityParams(params map[string]string, baseSecurity, securityToApply string) {
+	if baseSecurity != "reality" || securityToApply == "reality" {
+		return
+	}
+	// sni and fp name the master's reality dest, not this endpoint's own
+	// certificate; the host's values are re-applied right after this.
+	for _, k := range []string{"pbk", "sid", "spx", "pqv", "sni", "fp"} {
+		delete(params, k)
+	}
 }

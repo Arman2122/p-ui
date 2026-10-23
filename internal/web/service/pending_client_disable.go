@@ -1,41 +1,31 @@
 package service
 
 import (
+	"context"
+
 	"gorm.io/gorm"
 
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/logger"
+	"github.com/Arman2122/p-ui/internal/xray"
 )
 
-/*
-pendingClientDisable is the half of a depletion that must not happen inside the
-traffic transaction: rewriting inbounds.settings, and pushing the same change to
-a remote node.
-
-Both were done in-transaction and unlocked. inbounds.settings is a JSON blob
-read, edited and written back whole, and every admin mutation does the same
-under lockInbound — so the poll, which took no lock, raced them. An add that had
-already read the blob saved its own copy afterwards and restored a depleted
-client's "enable": true.
-
-That is not transient. The add's SyncInbound flips clients.enable back as well,
-and the depleted predicate only ever selects rows that are still enabled in
-client_traffics — which the poll had already flipped false. Nothing re-detects
-the client, both places the config builders read say enabled, and an exhausted
-quota is served until someone resets that client's traffic by hand.
-*/
-type pendingClientDisable struct {
-	local  map[int]map[string]struct{}
-	remote map[int]map[string]struct{}
+// Runtime effects wait for commit; settings writes also wait for lockInbound,
+// which must be acquired outside the traffic writer to avoid lock inversion.
+type pendingTrafficApply struct {
+	local    map[int]map[string]struct{}
+	remote   map[int]map[string]struct{}
+	renewals []renewedClient
+	inbounds []*model.Inbound
 }
 
-func (p pendingClientDisable) isEmpty() bool {
-	return len(p.local) == 0 && len(p.remote) == 0
+func (p pendingTrafficApply) hasDisables() bool {
+	return len(p.local) > 0 || len(p.remote) > 0 || len(p.inbounds) > 0
 }
 
 // emails lists every client the pass switched off, on any inbound.
-func (p pendingClientDisable) emails() []string {
+func (p pendingTrafficApply) emails() []string {
 	seen := map[string]struct{}{}
 	out := []string{}
 	for _, byInbound := range []map[int]map[string]struct{}{p.local, p.remote} {
@@ -67,20 +57,24 @@ Re-reading the row under the lock is what makes this correct rather than merely
 deadlock-free. It sees whatever an admin mutation committed in the meantime and
 disables the client in that merged blob.
 */
-func (s *InboundService) applyPendingClientDisables(pending pendingClientDisable) {
-	if pending.isEmpty() {
+func (s *InboundService) applyPendingClientDisables(pending pendingTrafficApply) (needRestart bool) {
+	if !pending.hasDisables() {
 		return
 	}
 
 	for inboundID, emails := range pending.local {
-		s.applyOneDisable(inboundID, emails, false)
+		needRestart = s.applyOneDisable(inboundID, emails, false) || needRestart
 	}
 	for inboundID, emails := range pending.remote {
-		s.applyOneDisable(inboundID, emails, true)
+		needRestart = s.applyOneDisable(inboundID, emails, true) || needRestart
 	}
+	for _, inbound := range pending.inbounds {
+		needRestart = s.applyInboundDisable(inbound.Id) || needRestart
+	}
+	return
 }
 
-func (s *InboundService) applyOneDisable(inboundID int, emails map[string]struct{}, remote bool) {
+func (s *InboundService) applyOneDisable(inboundID int, emails map[string]struct{}, remote bool) (needRestart bool) {
 	lock := lockInbound(inboundID)
 	defer lock.Unlock()
 
@@ -106,9 +100,7 @@ func (s *InboundService) applyOneDisable(inboundID int, emails map[string]struct
 		if mErr != nil {
 			return mErr
 		}
-		if remote {
-			oldSnapshot, updated = before, after
-		}
+		oldSnapshot, updated = before, after
 		return nil
 	})
 	if err != nil {
@@ -118,9 +110,72 @@ func (s *InboundService) applyOneDisable(inboundID int, emails map[string]struct
 	if updated == nil {
 		return
 	}
-	if pushErr := s.pushDisabledClientsToNode(oldSnapshot, updated); pushErr != nil {
-		logger.Warning("disableInvalidClients: node push failed for inbound", inboundID, ":", pushErr)
+	if remote {
+		if pushErr := s.pushDisabledClientsToNode(oldSnapshot, updated); pushErr != nil {
+			logger.Warning("disableInvalidClients: node push failed for inbound", inboundID, ":", pushErr)
+		}
+		return
 	}
+	rt, err := s.runtimeFor(updated)
+	if err != nil {
+		logger.Warning("disableInvalidClients: runtime lookup after commit failed:", err)
+		return true
+	}
+	for email := range live {
+		if err := rt.RemoveUser(context.Background(), updated, email); err != nil && !restartCannotFix(err, email) {
+			logger.Warning("disableInvalidClients: runtime removal after commit failed:", err)
+			needRestart = true
+		}
+	}
+	return
+}
+
+func (s *InboundService) applyInboundDisable(id int) bool {
+	defer lockInbound(id).Unlock()
+	inbound, err := s.GetInbound(id)
+	if err != nil || inbound.Enable {
+		return false
+	}
+	rt, err := s.runtimeFor(inbound)
+	if err == nil {
+		err = rt.DelInbound(context.Background(), inbound)
+	}
+	if err != nil && !xray.IsMissingHandlerErr(err) {
+		logger.Warning("disableInvalidInbounds: runtime drop after commit failed:", err)
+		return true
+	}
+	return false
+}
+
+func (s *InboundService) applyRenewedClients(clients []renewedClient) (needRestart bool) {
+	for _, client := range clients {
+		if err := s.applyRenewedClient(client); err != nil {
+			logger.Warning("autoRenewClients: runtime restore after commit failed:", err)
+			needRestart = true
+		}
+	}
+	return
+}
+
+func (s *InboundService) applyRenewedClient(client renewedClient) error {
+	defer lockInbound(client.inbound.Id).Unlock()
+	inbound, err := s.GetInbound(client.inbound.Id)
+	if err != nil || !inbound.Enable {
+		return err
+	}
+	traffic, err := s.GetClientTrafficByEmail(client.email)
+	if err != nil || traffic == nil || !traffic.Enable {
+		return err
+	}
+	record, err := s.clientService.GetRecordByEmail(nil, client.email)
+	if err != nil || !record.Enable {
+		return err
+	}
+	rt, err := s.runtimeFor(inbound)
+	if err != nil {
+		return err
+	}
+	return rt.AddUser(context.Background(), inbound, client.email)
 }
 
 // stillDepletedEmails drops any client whose traffic row has been re-enabled

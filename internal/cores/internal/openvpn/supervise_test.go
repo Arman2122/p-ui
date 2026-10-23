@@ -19,6 +19,11 @@ func TestADeadDaemonIsStartedAgain(t *testing.T) {
 	ledger := newUnitLedger()
 	c := New(Deps{Backend: ledger, Binary: "/usr/sbin/openvpn", StateDir: t.TempDir()})
 	ctx := context.Background()
+	t.Cleanup(func() {
+		if err := c.StopAll(ctx); err != nil {
+			t.Error(err)
+		}
+	})
 	settings, err := c.MintInstance(Kind, `{"proto":"udp","subnet":"10.9.0.0/24"}`, "")
 	if err != nil {
 		t.Fatal(err)

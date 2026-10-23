@@ -73,6 +73,9 @@ func (s *XrayService) GetXrayErr() error {
 // GetXrayResult returns the result string from the Xray process.
 func (s *XrayService) GetXrayResult() string {
 	process, cachedResult := xrayState().Snapshot()
+	if process != nil && process.IsRunning() {
+		return xrayState().HeldBackReason()
+	}
 	if cachedResult != "" {
 		return cachedResult
 	}
@@ -1011,6 +1014,18 @@ func ensureStatsPolicy(policy json_util.RawMessage) json_util.RawMessage {
 	return out
 }
 
+// Sort variants so folding mixed-case Xray JSON keys is deterministic.
+func caseVariantKeys(parsed map[string]any, want string) []string {
+	var keys []string
+	for key := range parsed {
+		if strings.EqualFold(key, want) {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
 func resolveXrayLogPaths(logCfg json_util.RawMessage) json_util.RawMessage {
 	if len(logCfg) == 0 {
 		return logCfg
@@ -1021,10 +1036,23 @@ func resolveXrayLogPaths(logCfg json_util.RawMessage) json_util.RawMessage {
 	}
 	changed := false
 	for _, key := range []string{"access", "error"} {
-		v, ok := parsed[key].(string)
+		variants := caseVariantKeys(parsed, key)
+		value, hasValue := parsed[key]
+		for _, variant := range variants {
+			if variant == key {
+				continue
+			}
+			if !hasValue {
+				value, hasValue = parsed[variant], true
+			}
+			delete(parsed, variant)
+			changed = true
+		}
+		v, ok := value.(string)
 		if !ok {
 			continue
 		}
+		parsed[key] = v
 		trimmed := strings.TrimSpace(v)
 		if trimmed == "" || strings.EqualFold(trimmed, "none") {
 			continue
@@ -1297,16 +1325,23 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		return nil
 	}
 	isManuallyStopped.Store(false)
+	dropRevision, pendingDrops := pendingXraySessionDrop()
 
 	xrayConfig, err := s.GetXrayConfig(true)
 	if err != nil {
+		return err
+	}
+	xrayState().LockApply()
+	defer xrayState().UnlockApply()
+	if err := xrayState().CheckBindings(xrayConfig, generatedXrayTransports); err != nil {
 		return err
 	}
 
 	process := currentXrayProcess()
 	if process != nil && process.IsRunning() {
 		configUnchanged := process.GetConfig().Equals(xrayConfig)
-		if !isForce && configUnchanged && !isNeedXrayRestart.Load() {
+		if !isForce && !pendingDrops && configUnchanged && !isNeedXrayRestart.Load() {
+			xrayState().SetHeldBack(process, "")
 			logger.Debug("It does not need to restart Xray")
 			return nil
 		}
@@ -1318,7 +1353,8 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		if err := xray.TestConfig(xrayConfig); err != nil {
 			return common.NewError("refusing to restart xray, the generated config is rejected by the core:", err)
 		}
-		if !isForce && !configUnchanged && s.tryHotApply(process, xrayConfig) {
+		if !isForce && !pendingDrops && !configUnchanged && s.tryHotApply(process, xrayConfig) {
+			xrayState().SetHeldBack(process, "")
 			logger.Info("Xray config changes applied through the core API, no restart needed")
 			return nil
 		}
@@ -1336,11 +1372,19 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	if err != nil {
 		return err
 	}
+	sessionDropCompleted.Store(dropRevision)
 
 	// The fronts died with the old process and the kernel does not restore the
 	// route into them, so every egress table holds only its blackhole until now.
 	kickEgressAfterCoreRestart()
 	return nil
+}
+
+func generatedXrayTransports(kind core.Kind, settings, streamSettings string) core.Transports {
+	if authority, ok := cores.TransportAuthority(kind); ok {
+		return authority.Transports(kind, settings, streamSettings)
+	}
+	return core.Transports{TCP: true}
 }
 
 // tryHotApply attempts to reconcile the running Xray instance with newCfg
@@ -1358,6 +1402,15 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bo
 	if diff.Empty() {
 		process.SetConfig(newCfg)
 		return true
+	}
+	if diff.DropsUsers() {
+		restart, err := s.settingService.GetRestartXrayOnClientDisable()
+		if err != nil {
+			logger.Warning("get RestartXrayOnClientDisable failed:", err)
+		}
+		if restart {
+			return false
+		}
 	}
 	apiPort := process.GetAPIPort()
 	if apiPort <= 0 {
@@ -1386,12 +1439,20 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bo
 func (s *XrayService) StopXray() error {
 	lock.Lock()
 	defer lock.Unlock()
+	xrayState().LockApply()
+	defer xrayState().UnlockApply()
 	isManuallyStopped.Store(true)
+	dropRevision := sessionDropRequested.Load()
 	logger.Debug("Attempting to stop Xray...")
 	process := currentXrayProcess()
 	if process != nil && process.IsRunning() {
-		return process.Stop()
+		if err := process.Stop(); err != nil {
+			return err
+		}
+		sessionDropCompleted.Store(dropRevision)
+		return nil
 	}
+	sessionDropCompleted.Store(dropRevision)
 	return errors.New("xray is not running")
 }
 
@@ -1422,7 +1483,9 @@ func (s *XrayService) IsNeedRestartAndSetFalse() bool {
 // the old process running), it re-arms the flag so the next tick retries instead
 // of silently dropping the pending config change.
 func (s *XrayService) ApplyPendingRestart() {
-	if !s.IsNeedRestartAndSetFalse() {
+	restartRequested := s.IsNeedRestartAndSetFalse()
+	_, pendingDrops := pendingXraySessionDrop()
+	if !restartRequested && !pendingDrops {
 		return
 	}
 	if err := s.RestartXray(false); err != nil {

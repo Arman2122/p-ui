@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [[ -n "${PUI_ROLE:-}" || -f /etc/penhoon/role.json ]]; then
+    echo "Use python3 deploy/install.py --role master|node|combined with the authenticated release inputs. The ordinary installer cannot modify a role installation." >&2
+    exit 1
+fi
+
 red='\033[0;31m'
 green='\033[0;32m'
 blue='\033[0;34m'

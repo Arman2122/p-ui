@@ -1453,6 +1453,97 @@
         ],
         "type": "object"
       },
+      "BulkOutcome": {
+        "description": "BulkOutcome is the per-row account every bulk endpoint returns beside its\nlegacy counts: who it changed, who it left alone, who it could not change.",
+        "properties": {
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/BulkRow"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/BulkRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "failed",
+          "ok",
+          "skipped"
+        ],
+        "type": "object"
+      },
+      "BulkRow": {
+        "description": "BulkRow is one client a bulk operation did not carry out, and why.",
+        "properties": {
+          "email": {
+            "example": "user1",
+            "type": "string"
+          },
+          "reason": {
+            "example": "client not found",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "BulkSetEnableReport": {
+        "properties": {
+          "email": {
+            "example": "carol",
+            "type": "string"
+          },
+          "reason": {
+            "example": "client not found",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "BulkSetEnableResult": {
+        "properties": {
+          "changed": {
+            "example": 2,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/BulkOutcome"
+          },
+          "pending": {
+            "example": 1,
+            "type": "integer"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/BulkSetEnableReport"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed",
+          "outcome",
+          "pending"
+        ],
+        "type": "object"
+      },
       "Capabilities": {
         "description": "Capabilities is what a core claims it can do. Every field is a *bool because\nnil means UNKNOWN, which is a normal state: a master talking to a node one\nrelease behind cannot distinguish \"cannot\" from \"was never asked\".",
         "properties": {
@@ -1683,40 +1774,17 @@
       },
       "ClientCreatePayload": {
         "properties": {
-          "adTag": {
-            "example": "0123456789abcdef0123456789abcdef",
-            "type": "string"
+          "client": {
+            "$ref": "#/components/schemas/Client"
           },
-          "allowedIPs": {
+          "credentialBindings": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClientCredentialBindingInput"
             },
             "type": "array"
           },
-          "auth": {
-            "description": "Auth password (Hysteria)",
-            "type": "string"
-          },
-          "comment": {
-            "description": "Client comment",
-            "type": "string"
-          },
-          "created_at": {
-            "description": "Creation timestamp",
-            "format": "int64",
-            "type": "integer"
-          },
-          "email": {
-            "description": "Client email identifier",
-            "type": "string"
-          },
-          "enable": {
-            "description": "Whether the client is enabled",
-            "type": "boolean"
-          },
-          "expiryTime": {
-            "description": "Expiration timestamp",
-            "format": "int64",
+          "expectedActorId": {
+            "example": 1,
             "type": "integer"
           },
           "externalLinks": {
@@ -1725,33 +1793,17 @@
             },
             "type": "array"
           },
-          "flow": {
-            "description": "Flow control (XTLS)",
-            "type": "string"
-          },
-          "group": {
-            "description": "Logical grouping label",
-            "type": "string"
-          },
-          "id": {
-            "description": "Unique client identifier",
-            "type": "string"
-          },
           "inboundIds": {
+            "example": [
+              1
+            ],
             "items": {
               "type": "integer"
             },
             "type": "array"
           },
-          "keepAlive": {
-            "type": "integer"
-          },
-          "limitIp": {
-            "description": "IP limit for this client",
-            "type": "integer"
-          },
-          "password": {
-            "description": "Client password",
+          "operationId": {
+            "example": "11111111-1111-4111-8111-111111111111",
             "type": "string"
           },
           "planOverrides": {
@@ -1766,79 +1818,30 @@
             "example": 1,
             "nullable": true,
             "type": "integer"
-          },
-          "preSharedKey": {
-            "description": "Omit to keep the stored key, send empty to clear it",
-            "nullable": true,
-            "type": "string"
-          },
-          "privateKey": {
-            "type": "string"
-          },
-          "publicKey": {
-            "type": "string"
-          },
-          "reset": {
-            "description": "Reset period in days",
-            "type": "integer"
-          },
-          "reverse": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ClientReverse"
-              }
-            ],
-            "description": "VLESS simple reverse proxy settings",
-            "nullable": true
-          },
-          "secret": {
-            "example": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
-            "type": "string"
-          },
-          "security": {
-            "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
-            "type": "string"
-          },
-          "subId": {
-            "description": "Subscription identifier",
-            "type": "string"
-          },
-          "tgId": {
-            "description": "Telegram user ID for notifications",
-            "format": "int64",
-            "type": "integer"
-          },
-          "tlsCryptV2": {
-            "description": "OpenVPN wrapped client key, per inbound",
-            "type": "string"
-          },
-          "totalGB": {
-            "description": "Total traffic limit in GB",
-            "format": "int64",
-            "type": "integer"
-          },
-          "updated_at": {
-            "description": "Last update timestamp",
-            "format": "int64",
-            "type": "integer"
-          },
-          "username": {
-            "description": "Login name for a core that takes one (SSH)",
-            "type": "string"
           }
         },
         "required": [
-          "comment",
-          "email",
-          "enable",
-          "expiryTime",
-          "inboundIds",
-          "limitIp",
-          "reset",
-          "security",
-          "subId",
-          "tgId",
-          "totalGB"
+          "client",
+          "inboundIds"
+        ],
+        "type": "object"
+      },
+      "ClientCredentialBindingInput": {
+        "properties": {
+          "inboundId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "inboundId",
+          "values"
         ],
         "type": "object"
       },
@@ -2336,6 +2339,14 @@
       "ClientTraffic": {
         "description": "ClientTraffic is the per-client usage row. It is keyed by email and shared by\nevery inbound a client uses, which is what makes one quota span every core.",
         "properties": {
+          "accounting": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TrafficAccounting"
+              }
+            ],
+            "nullable": true
+          },
           "down": {
             "example": 2097152,
             "format": "int64",
@@ -2369,6 +2380,13 @@
           },
           "reset": {
             "example": 0,
+            "type": "integer"
+          },
+          "resetCount": {
+            "description": "Nil exists only on legacy node payloads; persisted rows always advertise a generation.",
+            "example": 0,
+            "format": "int64",
+            "nullable": true,
             "type": "integer"
           },
           "subId": {
@@ -3105,7 +3123,6 @@
         "type": "object"
       },
       "ExternalLinkInput": {
-        "description": "ExternalLinkInput is one row from the client form's Links tab.",
         "properties": {
           "kind": {
             "type": "string"
@@ -3136,6 +3153,2174 @@
         },
         "required": [
           "masterId"
+        ],
+        "type": "object"
+      },
+      "FleetAssetReference": {
+        "properties": {
+          "assetId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assetId",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetClientCreateCapabilities": {
+        "properties": {
+          "actorId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "supported": {
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "actorId",
+          "supported"
+        ],
+        "type": "object"
+      },
+      "FleetClientCreateResult": {
+        "properties": {
+          "actorId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "clientId": {
+            "example": "22222222-2222-4222-8222-222222222222",
+            "type": "string"
+          },
+          "nodeDerived": {
+            "items": {
+              "$ref": "#/components/schemas/SourceClientCredentialRequirement"
+            },
+            "type": "array"
+          },
+          "panelClientId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "pending": {
+            "example": true,
+            "type": "boolean"
+          },
+          "revision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "actorId",
+          "clientId",
+          "nodeDerived",
+          "panelClientId",
+          "pending",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetClientSourceBinding": {
+        "properties": {
+          "flowOverride": {
+            "example": "xtls-rprx-vision",
+            "type": "string"
+          },
+          "inboundId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "scope": {
+            "example": "effective",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "flowOverride",
+          "inboundId",
+          "scope",
+          "values"
+        ],
+        "type": "object"
+      },
+      "FleetClientSourceView": {
+        "properties": {
+          "actorId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "client": {
+            "$ref": "#/components/schemas/Client"
+          },
+          "clientId": {
+            "example": "22222222-2222-4222-8222-222222222222",
+            "type": "string"
+          },
+          "credentialBindings": {
+            "items": {
+              "$ref": "#/components/schemas/FleetClientSourceBinding"
+            },
+            "type": "array"
+          },
+          "dependencyDiagnostic": {
+            "type": "string"
+          },
+          "effectiveInboundIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "effectiveScopeKnown": {
+            "example": true,
+            "type": "boolean"
+          },
+          "explicitInboundIds": {
+            "example": [
+              1
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "externalLinks": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalLinkInput"
+            },
+            "type": "array"
+          },
+          "panelClientId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "pending": {
+            "example": true,
+            "type": "boolean"
+          },
+          "planOverrides": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlanOverrides"
+              }
+            ],
+            "nullable": true
+          },
+          "policyId": {
+            "example": 1,
+            "nullable": true,
+            "type": "integer"
+          },
+          "revision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "actorId",
+          "client",
+          "clientId",
+          "credentialBindings",
+          "dependencyDiagnostic",
+          "effectiveScopeKnown",
+          "explicitInboundIds",
+          "externalLinks",
+          "panelClientId",
+          "pending",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetEnrollmentRequest": {
+        "properties": {
+          "name": {
+            "example": "fra-1",
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "FleetEnrollmentView": {
+        "properties": {
+          "expiresUnixMilli": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "packageJson": {
+            "example": "{}",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expiresUnixMilli",
+          "nodeId",
+          "packageJson"
+        ],
+        "type": "object"
+      },
+      "FleetInboundNetwork": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "assets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "bridgeId": {
+            "type": "string"
+          },
+          "egressMode": {
+            "type": "string"
+          },
+          "listen": {
+            "nullable": true,
+            "type": "string"
+          },
+          "mtproto": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetMTProtoBinding"
+              }
+            ],
+            "nullable": true
+          },
+          "mtu": {
+            "type": "integer"
+          },
+          "port": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "settings": {
+            "nullable": true
+          },
+          "sniffing": {
+            "nullable": true
+          },
+          "streamSettings": {
+            "nullable": true
+          },
+          "subnet": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "integer"
+          },
+          "targetTag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FleetMTProtoBinding": {
+        "properties": {
+          "trustedProxies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "web": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetMTProtoWEBBinding"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "type": "object"
+      },
+      "FleetMTProtoWEBBinding": {
+        "properties": {
+          "listen": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "publicPort": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "listen",
+          "port",
+          "publicPort"
+        ],
+        "type": "object"
+      },
+      "FleetNativeBindingPin": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inboundInstanceId": {
+            "type": "string"
+          },
+          "maxSessions": {
+            "type": "integer"
+          },
+          "placementId": {
+            "type": "string"
+          },
+          "poolSha256": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clientId",
+          "id",
+          "inboundInstanceId",
+          "maxSessions",
+          "placementId",
+          "poolSha256",
+          "prefix",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkAssetPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkAssetView"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkAssetPin": {
+        "properties": {
+          "assetId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetId",
+          "kind",
+          "revision",
+          "sha256",
+          "slot"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkAssetRequest": {
+        "properties": {
+          "assetId": {
+            "example": "17f763c4-6530-41f7-8a88-534560d4397e",
+            "type": "string"
+          },
+          "data": {
+            "example": "AQ==",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "type": "string"
+          },
+          "kind": {
+            "example": "tls-certificate",
+            "type": "string"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetId",
+          "data",
+          "expectedRevision",
+          "installationId",
+          "kind",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkAssetView": {
+        "properties": {
+          "assetId": {
+            "type": "string"
+          },
+          "createdUnixMilli": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assetId",
+          "createdUnixMilli",
+          "installationId",
+          "kind",
+          "nodeId",
+          "revision",
+          "sha256",
+          "size"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkAuthorityIdentity": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "credentialGeneration": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inboundInstanceIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "inboundTags": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "placementId": {
+            "type": "string"
+          },
+          "placementRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runtimeId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "termId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "credentialGeneration",
+          "inboundInstanceIds",
+          "inboundTags",
+          "placementId",
+          "placementRevision",
+          "runtimeId",
+          "state"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkBridge": {
+        "properties": {
+          "core": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "runtimeId": {
+            "type": "string"
+          },
+          "udp": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "core",
+          "endpoint",
+          "runtimeId",
+          "udp"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkDefaultsRequest": {
+        "properties": {
+          "expectedRevision": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "specification": {
+            "$ref": "#/components/schemas/FleetNetworkSpec"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "specification"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkDefaultsView": {
+        "properties": {
+          "revision": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          },
+          "specification": {
+            "$ref": "#/components/schemas/FleetNetworkSpec"
+          }
+        },
+        "required": [
+          "revision",
+          "specification"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkDiagnostic": {
+        "properties": {
+          "assetSlot": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "inboundId": {
+            "type": "integer"
+          },
+          "placementId": {
+            "type": "string"
+          },
+          "runtimeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkListenerView": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "inboundId": {
+            "type": "integer"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "runtimeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "inboundId",
+          "port",
+          "protocol",
+          "role",
+          "runtimeId"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkManifest": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkAssetPin"
+            },
+            "type": "array"
+          },
+          "baseDeploymentRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "defaultsRevisionId": {
+            "type": "string"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkAuthorityIdentity"
+            },
+            "type": "array"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "nativeBindings": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNativeBindingPin"
+            },
+            "type": "array"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "nodeRevisionId": {
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkPlacementPin"
+            },
+            "type": "array"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkProviderPin"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assets",
+          "baseDeploymentRevision",
+          "defaultsRevisionId",
+          "identities",
+          "installationId",
+          "nodeId",
+          "nodeRevision",
+          "nodeRevisionId",
+          "placements",
+          "version"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkOperation": {
+        "properties": {
+          "asset": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetAssetReference"
+              }
+            ],
+            "nullable": true
+          },
+          "assetKind": {
+            "nullable": true,
+            "type": "string"
+          },
+          "base": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetRuntimeBase"
+              }
+            ],
+            "nullable": true
+          },
+          "bridge": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetNetworkBridge"
+              }
+            ],
+            "nullable": true
+          },
+          "inbound": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetInboundNetwork"
+              }
+            ],
+            "nullable": true
+          },
+          "inboundId": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "nativeNetwork": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NetworkBinding"
+              }
+            ],
+            "nullable": true
+          },
+          "operation": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          },
+          "sshHostKeys": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetSSHHostKeys"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "operation",
+          "section"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkOverrides": {
+        "properties": {
+          "assetBindings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetAssetReference"
+            },
+            "type": "object"
+          },
+          "assetSlots": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "bases": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetRuntimeBase"
+            },
+            "type": "object"
+          },
+          "bridges": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetNetworkBridge"
+            },
+            "type": "object"
+          },
+          "followDefaults": {
+            "type": "boolean"
+          },
+          "inbounds": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetInboundNetwork"
+            },
+            "type": "object"
+          },
+          "nativeNetwork": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NetworkBinding"
+              }
+            ],
+            "nullable": true
+          },
+          "pinnedDefaultsId": {
+            "type": "string"
+          },
+          "removedAssetSlots": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "removedBases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "removedBridges": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sshHostKeys": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetSSHHostKeys"
+              }
+            ],
+            "nullable": true
+          },
+          "version": {
+            "example": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "followDefaults",
+          "version"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkPlacementPin": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "credentialGeneration": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "credentialSha256": {
+            "type": "string"
+          },
+          "definitionSha256": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "graphSha256": {
+            "type": "string"
+          },
+          "owned": {
+            "type": "boolean"
+          },
+          "placementId": {
+            "type": "string"
+          },
+          "policySha256": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "termId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "credentialGeneration",
+          "credentialSha256",
+          "definitionSha256",
+          "enabled",
+          "graphSha256",
+          "owned",
+          "placementId",
+          "policySha256",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkPreview": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkAssetPin"
+            },
+            "type": "array"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkDiagnostic"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkAuthorityIdentity"
+            },
+            "type": "array"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "listeners": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkListenerView"
+            },
+            "type": "array"
+          },
+          "nativeBindings": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNativeBindingPin"
+            },
+            "type": "array"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeRevision": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          },
+          "origins": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "runtimes": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkRuntimeView"
+            },
+            "type": "array"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assets",
+          "defaults",
+          "diagnostics",
+          "id",
+          "identities",
+          "installationId",
+          "listeners",
+          "nodeId",
+          "nodeRevision",
+          "origins",
+          "ready",
+          "runtimes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkPreviewRequest": {
+        "properties": {
+          "expectedDefaultsId": {
+            "example": "87cb0f1e-6f1f-466a-91d3-8a8dd983b458",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "type": "string"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedDefaultsId",
+          "expectedRevision",
+          "installationId",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkProviderPin": {
+        "properties": {
+          "configurationRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "followLatest": {
+            "type": "boolean"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runtimeId": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configurationRevision",
+          "followLatest",
+          "providerId",
+          "revision",
+          "runtimeId",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkPublicationView": {
+        "properties": {
+          "compilationId": {
+            "type": "string"
+          },
+          "deploymentRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "compilationId",
+          "deploymentRevision",
+          "nodeId",
+          "replayed"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkPublishRequest": {
+        "properties": {
+          "compilationId": {
+            "example": "70966504-cde8-478b-9f3a-1ca59d52131a",
+            "type": "string"
+          },
+          "operationId": {
+            "example": "e8c5a425-11b1-4f3a-9718-a60251d6810e",
+            "type": "string"
+          }
+        },
+        "required": [
+          "compilationId",
+          "operationId"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkRevisionView": {
+        "properties": {
+          "createdUnixMilli": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdUnixMilli",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkRuntimeView": {
+        "properties": {
+          "clients": {
+            "type": "integer"
+          },
+          "core": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clients",
+          "core",
+          "id",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetNetworkSpec": {
+        "properties": {
+          "assetSlots": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "bases": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetRuntimeBase"
+            },
+            "type": "object"
+          },
+          "bridges": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetNetworkBridge"
+            },
+            "type": "object"
+          },
+          "inbounds": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FleetInboundNetwork"
+            },
+            "type": "object"
+          },
+          "nativeNetwork": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NetworkBinding"
+              }
+            ],
+            "nullable": true
+          },
+          "sshHostKeys": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FleetSSHHostKeys"
+              }
+            ],
+            "nullable": true
+          },
+          "version": {
+            "example": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
+      "FleetNodeNetworkRequest": {
+        "properties": {
+          "expectedRevision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "followDefaults": {
+            "example": true,
+            "nullable": true,
+            "type": "boolean"
+          },
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "type": "string"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkOperation"
+            },
+            "type": "array"
+          },
+          "pinnedDefaultsId": {
+            "example": "b84cf341-f5e1-4dc6-b520-63a7d0e4b970",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "installationId",
+          "nodeId",
+          "operations"
+        ],
+        "type": "object"
+      },
+      "FleetNodeNetworkStateView": {
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNetworkDiagnostic"
+            },
+            "type": "array"
+          },
+          "effective": {
+            "$ref": "#/components/schemas/FleetNetworkSpec"
+          },
+          "followDefaults": {
+            "type": "boolean"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "origins": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "overrides": {
+            "$ref": "#/components/schemas/FleetNetworkOverrides"
+          },
+          "pending": {
+            "type": "boolean"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          }
+        },
+        "required": [
+          "configured",
+          "defaults",
+          "effective",
+          "followDefaults",
+          "installationId",
+          "nodeId",
+          "origins",
+          "overrides",
+          "pending",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetNodeNetworkView": {
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          },
+          "followDefaults": {
+            "type": "boolean"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "origins": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "pending": {
+            "type": "boolean"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/FleetNetworkRevisionView"
+          }
+        },
+        "required": [
+          "defaults",
+          "followDefaults",
+          "installationId",
+          "nodeId",
+          "origins",
+          "pending",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetNodePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FleetNodeView"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "FleetNodePlacementRequest": {
+        "properties": {
+          "enabled": {
+            "example": true,
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "inboundIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "region": "eu"
+            },
+            "type": "object"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "expectedRevision",
+          "inboundIds",
+          "installationId",
+          "labels",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "FleetNodePlacementView": {
+        "properties": {
+          "enabled": {
+            "example": true,
+            "type": "boolean"
+          },
+          "inboundIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "region": "eu"
+            },
+            "type": "object"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "pending": {
+            "example": true,
+            "type": "boolean"
+          },
+          "revision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "sha256": {
+            "example": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "inboundIds",
+          "installationId",
+          "labels",
+          "nodeId",
+          "pending",
+          "revision",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetNodeView": {
+        "properties": {
+          "appliedRevision": {
+            "example": 4,
+            "format": "int64",
+            "type": "integer"
+          },
+          "deploymentState": {
+            "example": "applied",
+            "type": "string"
+          },
+          "desiredRevision": {
+            "example": 4,
+            "format": "int64",
+            "type": "integer"
+          },
+          "enrolled": {
+            "example": true,
+            "type": "boolean"
+          },
+          "id": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "lastSeenUnixMilli": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "example": "fra-1",
+            "type": "string"
+          },
+          "online": {
+            "example": true,
+            "type": "boolean"
+          },
+          "runtimeConditions": {
+            "items": {
+              "$ref": "#/components/schemas/FleetRuntimeConditionView"
+            },
+            "type": "array"
+          },
+          "runtimeObservedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runtimeState": {
+            "example": "ready",
+            "type": "string"
+          }
+        },
+        "required": [
+          "appliedRevision",
+          "deploymentState",
+          "desiredRevision",
+          "enrolled",
+          "id",
+          "lastSeenUnixMilli",
+          "name",
+          "online",
+          "runtimeConditions",
+          "runtimeObservedAt",
+          "runtimeState"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementDefaultRequest": {
+        "properties": {
+          "expectedRevision": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "nullable": true,
+            "type": "string"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementDefaultView": {
+        "properties": {
+          "installationId": {
+            "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+            "nullable": true,
+            "type": "string"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "nullable": true,
+            "type": "string"
+          },
+          "pending": {
+            "example": true,
+            "type": "boolean"
+          },
+          "revision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementProjection": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "credentialGeneration": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sourceRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/FleetPlacementTarget"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "clientId",
+          "credentialGeneration",
+          "sourceRevision",
+          "targets"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementRulePin": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementRuleRequest": {
+        "properties": {
+          "enabled": {
+            "example": true,
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "groupId": {
+            "example": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "example": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+            "type": "string"
+          },
+          "inboundIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "region": "eu"
+            },
+            "type": "object"
+          },
+          "nodeIds": {
+            "example": [
+              "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "planId": {
+            "example": 1,
+            "nullable": true,
+            "type": "integer"
+          },
+          "scope": {
+            "example": "plan",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "expectedRevision",
+          "id",
+          "inboundIds",
+          "labels",
+          "nodeIds",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementRuleView": {
+        "properties": {
+          "enabled": {
+            "example": true,
+            "type": "boolean"
+          },
+          "groupId": {
+            "example": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "example": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+            "type": "string"
+          },
+          "inboundIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "region": "eu"
+            },
+            "type": "object"
+          },
+          "nodeIds": {
+            "example": [
+              "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pending": {
+            "example": true,
+            "type": "boolean"
+          },
+          "planId": {
+            "example": 1,
+            "nullable": true,
+            "type": "integer"
+          },
+          "revision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "scope": {
+            "example": "plan",
+            "type": "string"
+          },
+          "sha256": {
+            "example": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "id",
+          "inboundIds",
+          "labels",
+          "nodeIds",
+          "pending",
+          "revision",
+          "scope",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetPlacementTarget": {
+        "properties": {
+          "applicationEligible": {
+            "type": "boolean"
+          },
+          "capabilityRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "coreId": {
+            "type": "string"
+          },
+          "defaultRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "diagnostic": {
+            "type": "string"
+          },
+          "inboundIds": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "manualInboundIds": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodePolicyRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/FleetPlacementRulePin"
+            },
+            "type": "array"
+          },
+          "runtimeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "applicationEligible",
+          "capabilityRevision",
+          "coreId",
+          "defaultRevision",
+          "inboundIds",
+          "installationId",
+          "manualInboundIds",
+          "nodeId",
+          "nodePolicyRevision",
+          "rules",
+          "runtimeId"
+        ],
+        "type": "object"
+      },
+      "FleetProviderBinding": {
+        "properties": {
+          "followLatest": {
+            "type": "boolean"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "followLatest",
+          "providerId",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "FleetProviderFetchSpec": {
+        "properties": {
+          "allowInsecure": {
+            "type": "boolean"
+          },
+          "allowPrivate": {
+            "type": "boolean"
+          },
+          "format": {
+            "example": "auto",
+            "type": "string"
+          },
+          "hwid": {
+            "type": "string"
+          },
+          "intervalSeconds": {
+            "example": 60,
+            "type": "integer"
+          },
+          "tagPrefix": {
+            "type": "string"
+          },
+          "url": {
+            "example": "https://provider.example/feed",
+            "type": "string"
+          },
+          "version": {
+            "example": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "allowInsecure",
+          "allowPrivate",
+          "format",
+          "intervalSeconds",
+          "url",
+          "version"
+        ],
+        "type": "object"
+      },
+      "FleetProviderRefreshRequest": {
+        "properties": {
+          "expectedRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "operationId",
+          "providerId"
+        ],
+        "type": "object"
+      },
+      "FleetProviderRefreshResult": {
+        "properties": {
+          "cachedRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "configurationRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "entries": {
+            "type": "integer"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cachedRevision",
+          "changed",
+          "configurationRevision",
+          "entries",
+          "providerId",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "FleetProviderRequest": {
+        "properties": {
+          "coreId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "fetch": {
+            "$ref": "#/components/schemas/FleetProviderFetchSpec"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "refreshEnabled": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "coreId",
+          "expectedRevision",
+          "fetch",
+          "name",
+          "operationId",
+          "providerId",
+          "refreshEnabled",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "FleetProviderView": {
+        "properties": {
+          "cachedRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "configurationRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "coreId": {
+            "type": "string"
+          },
+          "diagnostic": {
+            "type": "string"
+          },
+          "installationId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "refreshEnabled": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cachedRevision",
+          "configurationRevision",
+          "coreId",
+          "name",
+          "providerId",
+          "refreshEnabled",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "FleetRuntimeBase": {
+        "properties": {
+          "assets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "configuration": {},
+          "core": {
+            "type": "string"
+          },
+          "providers": {
+            "example": [],
+            "items": {
+              "$ref": "#/components/schemas/FleetProviderBinding"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "configuration",
+          "core"
+        ],
+        "type": "object"
+      },
+      "FleetRuntimeConditionView": {
+        "properties": {
+          "condition": {
+            "example": "CONFIGURATION_APPLIED",
+            "type": "string"
+          },
+          "ready": {
+            "example": true,
+            "type": "boolean"
+          },
+          "resourceId": {
+            "example": "xray",
+            "type": "string"
+          }
+        },
+        "required": [
+          "condition",
+          "ready",
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "FleetSSHHostKeys": {
+        "properties": {
+          "assetSlot": {
+            "type": "string"
+          },
+          "generateLocally": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generateLocally"
+        ],
+        "type": "object"
+      },
+      "FleetStatusView": {
+        "properties": {
+          "certificateExpiresUnixMilli": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "controlAddress": {
+            "example": "control.example.com:7443",
+            "type": "string"
+          },
+          "controlPlaneId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "enrollmentUrl": {
+            "example": "https://control.example.com:7444/enroll",
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "ready": {
+            "example": true,
+            "type": "boolean"
+          },
+          "recoveryReason": {
+            "type": "string"
+          },
+          "recoveryRequired": {
+            "type": "boolean"
+          },
+          "rootSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "certificateExpiresUnixMilli",
+          "controlAddress",
+          "controlPlaneId",
+          "enrollmentUrl",
+          "error",
+          "ready",
+          "recoveryReason",
+          "recoveryRequired",
+          "rootSha256"
         ],
         "type": "object"
       },
@@ -4145,6 +6330,21 @@
           "msg",
           "obj",
           "success"
+        ],
+        "type": "object"
+      },
+      "NetworkBinding": {
+        "properties": {
+          "gatewayIPv4": {
+            "type": "string"
+          },
+          "peerIPv4": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "gatewayIPv4",
+          "peerIPv4"
         ],
         "type": "object"
       },
@@ -6095,6 +8295,129 @@
         ],
         "type": "object"
       },
+      "ResetScheduleCancelRequest": {
+        "properties": {
+          "clientId": {
+            "example": "22222222-2222-4222-8222-222222222222",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "example": 1,
+            "exclusiveMinimum": true,
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "operationId": {
+            "example": "11111111-1111-4111-8111-111111111111",
+            "type": "string"
+          },
+          "pendingOperationId": {
+            "example": "33333333-3333-4333-8333-333333333333",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "expectedRevision",
+          "operationId",
+          "pendingOperationId"
+        ],
+        "type": "object"
+      },
+      "ResetScheduleRequest": {
+        "properties": {
+          "clientId": {
+            "example": "22222222-2222-4222-8222-222222222222",
+            "type": "string"
+          },
+          "cycle": {
+            "enum": [
+              "none",
+              "hourly",
+              "daily",
+              "weekly",
+              "monthly"
+            ],
+            "example": "monthly",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "operationId": {
+            "example": "11111111-1111-4111-8111-111111111111",
+            "type": "string"
+          },
+          "override": {
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientId",
+          "expectedRevision",
+          "operationId",
+          "override"
+        ],
+        "type": "object"
+      },
+      "ResetScheduleView": {
+        "properties": {
+          "anchorUnixMilli": {
+            "example": 1792353600000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "clientId": {
+            "example": "22222222-2222-4222-8222-222222222222",
+            "type": "string"
+          },
+          "cycle": {
+            "example": "monthly",
+            "type": "string"
+          },
+          "diagnostic": {
+            "example": "WAITING_FOR_STOP",
+            "type": "string"
+          },
+          "inherited": {
+            "example": false,
+            "type": "boolean"
+          },
+          "nextAttemptUnixMilli": {
+            "example": 1795032000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "nextDueUnixMilli": {
+            "example": 1795032000000,
+            "format": "int64",
+            "type": "integer"
+          },
+          "pendingOperationId": {
+            "example": "33333333-3333-4333-8333-333333333333",
+            "type": "string"
+          },
+          "revision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "anchorUnixMilli",
+          "clientId",
+          "cycle",
+          "inherited",
+          "nextAttemptUnixMilli",
+          "nextDueUnixMilli",
+          "revision"
+        ],
+        "type": "object"
+      },
       "RoutingExitView": {
         "description": "/*\nRoutingExitView is one uplink as the rule editor offers it.\n\nThe handle is deliberately not here: which device or port realises an exit is\nthe compile's business, and an editor that showed it would invite an operator to\ndepend on it.\n*/",
         "properties": {
@@ -6474,6 +8797,94 @@
         ],
         "type": "object"
       },
+      "SourceClientCredentialRequirement": {
+        "properties": {
+          "fields": {
+            "example": [
+              "tlsCryptV2"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "inboundId": {
+            "example": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fields",
+          "inboundId"
+        ],
+        "type": "object"
+      },
+      "SourcePlacementRequest": {
+        "properties": {
+          "action": {
+            "example": "restrict",
+            "type": "string"
+          },
+          "clientId": {
+            "example": "70924ba1-e366-4638-801c-b1055cabcd77",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "inboundIds": {
+            "example": [
+              1,
+              2
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "nodeId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "operationId": {
+            "example": "39226ea4-a89b-4377-8c2a-c32c977ead47",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "clientId",
+          "expectedRevision",
+          "operationId"
+        ],
+        "type": "object"
+      },
+      "SourcePlacementResult": {
+        "properties": {
+          "clientId": {
+            "example": "70924ba1-e366-4638-801c-b1055cabcd77",
+            "type": "string"
+          },
+          "pending": {
+            "example": true,
+            "type": "boolean"
+          },
+          "revision": {
+            "example": 2,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clientId",
+          "pending",
+          "revision"
+        ],
+        "type": "object"
+      },
       "Status": {
         "description": "Status represents comprehensive system and application status information.\nIt includes CPU, memory, disk, network statistics, and Xray process status.",
         "properties": {
@@ -6564,6 +8975,89 @@
         ],
         "type": "object"
       },
+      "TrafficAccounting": {
+        "properties": {
+          "clientId": {
+            "example": "22222222-2222-4222-8222-222222222222",
+            "type": "string"
+          },
+          "historyBasis": {
+            "example": "reported",
+            "type": "string"
+          },
+          "historyGranularity": {
+            "example": "day",
+            "type": "string"
+          },
+          "measuredDownloaded": {
+            "example": 2097152,
+            "format": "int64",
+            "type": "integer"
+          },
+          "measuredUploaded": {
+            "example": 1048576,
+            "format": "int64",
+            "type": "integer"
+          },
+          "observedUnixMilli": {
+            "example": 1791498431342,
+            "format": "int64",
+            "type": "integer"
+          },
+          "openingDownloaded": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "openingUploaded": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "reportedUnixMilli": {
+            "example": 1791498431342,
+            "format": "int64",
+            "type": "integer"
+          },
+          "reservedBytes": {
+            "example": 8388608,
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "source": {
+            "example": "fleet",
+            "type": "string"
+          },
+          "state": {
+            "example": "active",
+            "type": "string"
+          },
+          "termId": {
+            "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+            "type": "string"
+          },
+          "uncertainBytes": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "historyBasis",
+          "historyGranularity",
+          "measuredDownloaded",
+          "measuredUploaded",
+          "observedUnixMilli",
+          "openingDownloaded",
+          "openingUploaded",
+          "reportedUnixMilli",
+          "source",
+          "state",
+          "termId"
+        ],
+        "type": "object"
+      },
       "User": {
         "description": "User represents a user account in the Penhoon UI panel.",
         "properties": {
@@ -6644,7 +9138,7 @@
     },
     {
       "name": "Nodes",
-      "description": "Manage remote Penhoon UI panels acting as nodes for a central panel. All endpoints under /panel/api/nodes."
+      "description": "Enroll and configure headless nodes, inspect deployment state, and manage node networking resources."
     },
     {
       "name": "Routing",
@@ -6954,6 +9448,7 @@
                     {
                       "clientStats": [
                         {
+                          "accounting": null,
                           "down": 2097152,
                           "email": "user1",
                           "enable": true,
@@ -6962,6 +9457,7 @@
                           "inboundId": 1,
                           "lastOnline": 1735680000000,
                           "reset": 0,
+                          "resetCount": 0,
                           "subId": "i7tvdpeffi0hvvf1",
                           "total": 10737418240,
                           "up": 1048576,
@@ -7727,6 +10223,7 @@
               "example": {
                 "clientStats": [
                   {
+                    "accounting": null,
                     "down": 2097152,
                     "email": "user1",
                     "enable": true,
@@ -7735,6 +10232,7 @@
                     "inboundId": 1,
                     "lastOnline": 1735680000000,
                     "reset": 0,
+                    "resetCount": 0,
                     "subId": "i7tvdpeffi0hvvf1",
                     "total": 10737418240,
                     "up": 1048576,
@@ -11157,7 +13655,6 @@
                   "externalLinks": {
                     "type": "array",
                     "items": {
-                      "description": "ExternalLinkInput is one row from the client form's Links tab.",
                       "properties": {
                         "kind": {
                           "type": "string"
@@ -12763,7 +15260,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
+        "summary": "Record the desired enable state for many clients. Owned fleet clients atomically queue per-placement work; pending counts clients awaiting applied node convergence and does not promise an immediate remote change. Other clients retain their inbound and runtime update behavior. Returns changed, pending, per-email skip reasons and outcome lists. Accepts emails or the /list/paged filter, capped at 20000 clients.",
         "operationId": "post_panel_api_clients_bulkEnable",
         "parameters": [
           {
@@ -12821,27 +15318,39 @@
                     "msg": {
                       "type": "string"
                     },
-                    "obj": {}
+                    "obj": {
+                      "$ref": "#/components/schemas/BulkSetEnableResult"
+                    }
                   }
                 },
                 "example": {
                   "success": true,
                   "obj": {
                     "changed": 2,
+                    "outcome": {
+                      "failed": [
+                        {
+                          "email": "user1",
+                          "reason": "client not found"
+                        }
+                      ],
+                      "ok": [
+                        ""
+                      ],
+                      "skipped": [
+                        {
+                          "email": "user1",
+                          "reason": "client not found"
+                        }
+                      ]
+                    },
+                    "pending": 1,
                     "skipped": [
                       {
                         "email": "carol",
                         "reason": "client not found"
                       }
-                    ],
-                    "outcome": {
-                      "ok": [
-                        "alice",
-                        "bob"
-                      ],
-                      "skipped": [],
-                      "failed": []
-                    }
+                    ]
                   }
                 }
               }
@@ -12855,7 +15364,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Disable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to remove each user. Returns the changed count and per-email skip reasons. Instead of emails, pass filter (the same query object /list/paged takes) to act on every matching client, capped at 20000. The response also carries outcome: per-row ok, skipped and failed lists with reasons.",
+        "summary": "Record the desired disable state for many clients. Owned fleet clients atomically queue per-placement work; pending counts clients awaiting applied node convergence and does not promise an immediate remote change. Other clients retain their inbound and runtime update behavior. Returns changed, pending, per-email skip reasons and outcome lists. Accepts emails or the /list/paged filter, capped at 20000 clients.",
         "operationId": "post_panel_api_clients_bulkDisable",
         "parameters": [
           {
@@ -12913,27 +15422,39 @@
                     "msg": {
                       "type": "string"
                     },
-                    "obj": {}
+                    "obj": {
+                      "$ref": "#/components/schemas/BulkSetEnableResult"
+                    }
                   }
                 },
                 "example": {
                   "success": true,
                   "obj": {
                     "changed": 2,
+                    "outcome": {
+                      "failed": [
+                        {
+                          "email": "user1",
+                          "reason": "client not found"
+                        }
+                      ],
+                      "ok": [
+                        ""
+                      ],
+                      "skipped": [
+                        {
+                          "email": "user1",
+                          "reason": "client not found"
+                        }
+                      ]
+                    },
+                    "pending": 1,
                     "skipped": [
                       {
                         "email": "carol",
                         "reason": "client not found"
                       }
-                    ],
-                    "outcome": {
-                      "ok": [
-                        "alice",
-                        "bob"
-                      ],
-                      "skipped": [],
-                      "failed": []
-                    }
+                    ]
                   }
                 }
               }
@@ -13215,7 +15736,6 @@
                     "externalLinks": {
                       "type": "array",
                       "items": {
-                        "description": "ExternalLinkInput is one row from the client form's Links tab.",
                         "properties": {
                           "kind": {
                             "type": "string"
@@ -14693,6 +17213,7 @@
                 "example": {
                   "success": true,
                   "obj": {
+                    "accounting": null,
                     "down": 2097152,
                     "email": "user1",
                     "enable": true,
@@ -14701,6 +17222,7 @@
                     "inboundId": 1,
                     "lastOnline": 1735680000000,
                     "reset": 0,
+                    "resetCount": 0,
                     "subId": "i7tvdpeffi0hvvf1",
                     "total": 10737418240,
                     "up": 1048576,
@@ -14944,6 +17466,2466 @@
                     ],
                     "name": "Family",
                     "quotaBytes": 107374182400
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/status": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read headless-node control-plane readiness, public endpoints, certificate expiry, and recovery status.",
+        "operationId": "get_panel_api_fleet_status",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetStatusView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "certificateExpiresUnixMilli": 0,
+                    "controlAddress": "control.example.com:7443",
+                    "controlPlaneId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "enrollmentUrl": "https://control.example.com:7444/enroll",
+                    "error": "",
+                    "ready": true,
+                    "recoveryReason": "",
+                    "recoveryRequired": false,
+                    "rootSha256": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/clients/capabilities": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read the authenticated actor ID and whether the selected runtime implements atomic owned client creation. This is not node forwarding readiness.",
+        "operationId": "get_panel_api_fleet_clients_capabilities",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetClientCreateCapabilities"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "actorId": 1,
+                    "supported": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/clients": {
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Atomically create an owned client, plan assignment, explicit template memberships, scoped credentials, external links, and placement intent. Reuse the operation UUID only with the exact original request; retries return the original receipt without creating another identity or billing term. Requires a configuration administrator.",
+        "operationId": "post_panel_api_fleet_clients",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "client": {
+                    "$ref": "#/components/schemas/Client"
+                  },
+                  "credentialBindings": {
+                    "items": {
+                      "$ref": "#/components/schemas/ClientCredentialBindingInput"
+                    },
+                    "type": "array"
+                  },
+                  "expectedActorId": {
+                    "example": 1,
+                    "type": "integer"
+                  },
+                  "externalLinks": {
+                    "items": {
+                      "$ref": "#/components/schemas/ExternalLinkInput"
+                    },
+                    "type": "array"
+                  },
+                  "inboundIds": {
+                    "example": [
+                      1
+                    ],
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": "array"
+                  },
+                  "operationId": {
+                    "example": "11111111-1111-4111-8111-111111111111",
+                    "type": "string"
+                  },
+                  "planOverrides": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/PlanOverrides"
+                      }
+                    ],
+                    "nullable": true
+                  },
+                  "policyId": {
+                    "example": 1,
+                    "nullable": true,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "expectedActorId",
+                  "client",
+                  "inboundIds"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "client": {
+                  "adTag": "0123456789abcdef0123456789abcdef",
+                  "allowedIPs": [
+                    ""
+                  ],
+                  "auth": "",
+                  "comment": "",
+                  "created_at": 0,
+                  "email": "",
+                  "enable": false,
+                  "expiryTime": 0,
+                  "flow": "",
+                  "group": "",
+                  "id": "",
+                  "keepAlive": 0,
+                  "limitIp": 0,
+                  "password": "",
+                  "preSharedKey": null,
+                  "privateKey": "",
+                  "publicKey": "",
+                  "reset": 0,
+                  "reverse": null,
+                  "secret": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
+                  "security": "",
+                  "subId": "",
+                  "tgId": 0,
+                  "tlsCryptV2": "",
+                  "totalGB": 0,
+                  "updated_at": 0,
+                  "username": ""
+                },
+                "credentialBindings": [
+                  {
+                    "inboundId": 1,
+                    "values": {}
+                  }
+                ],
+                "expectedActorId": 1,
+                "externalLinks": [
+                  {
+                    "kind": "",
+                    "remark": "",
+                    "value": ""
+                  }
+                ],
+                "inboundIds": [
+                  1
+                ],
+                "operationId": "11111111-1111-4111-8111-111111111111",
+                "planOverrides": null,
+                "policyId": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetClientCreateResult"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "actorId": 1,
+                    "clientId": "22222222-2222-4222-8222-222222222222",
+                    "nodeDerived": [
+                      {
+                        "fields": [
+                          "tlsCryptV2"
+                        ],
+                        "inboundId": 1
+                      }
+                    ],
+                    "panelClientId": 1,
+                    "pending": true,
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/clients/creation/{operationId}": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Recover a committed creation receipt for the same current administrator. Returns metadata only, never credentials; pending is the original durable intent result, not live forwarding status.",
+        "operationId": "get_panel_api_fleet_clients_creation_operationId",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "description": "Original creation operation UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetClientCreateResult"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "actorId": 1,
+                    "clientId": "22222222-2222-4222-8222-222222222222",
+                    "nodeDerived": [
+                      {
+                        "fields": [
+                          "tlsCryptV2"
+                        ],
+                        "inboundId": 1
+                      }
+                    ],
+                    "panelClientId": 1,
+                    "pending": true,
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/clients/{id}/source": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read one coherent source revision with common credentials, scoped binding overrides, explicit and inherited templates, plan overrides, links and pending source work. Requires configuration administrator access. This is source state, not proof of applied node configuration. Unknown membership is explicit and effectiveInboundIds is null.",
+        "operationId": "get_panel_api_fleet_clients_id_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Immutable fleet client UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetClientSourceView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "actorId": 1,
+                    "client": {
+                      "adTag": "0123456789abcdef0123456789abcdef",
+                      "allowedIPs": [
+                        ""
+                      ],
+                      "auth": "",
+                      "comment": "",
+                      "created_at": 0,
+                      "email": "",
+                      "enable": false,
+                      "expiryTime": 0,
+                      "flow": "",
+                      "group": "",
+                      "id": "",
+                      "keepAlive": 0,
+                      "limitIp": 0,
+                      "password": "",
+                      "preSharedKey": null,
+                      "privateKey": "",
+                      "publicKey": "",
+                      "reset": 0,
+                      "reverse": null,
+                      "secret": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
+                      "security": "",
+                      "subId": "",
+                      "tgId": 0,
+                      "tlsCryptV2": "",
+                      "totalGB": 0,
+                      "updated_at": 0,
+                      "username": ""
+                    },
+                    "clientId": "22222222-2222-4222-8222-222222222222",
+                    "credentialBindings": [
+                      {
+                        "flowOverride": "xtls-rprx-vision",
+                        "inboundId": 1,
+                        "scope": "effective",
+                        "values": {}
+                      }
+                    ],
+                    "dependencyDiagnostic": "",
+                    "effectiveInboundIds": [
+                      1,
+                      2
+                    ],
+                    "effectiveScopeKnown": true,
+                    "explicitInboundIds": [
+                      1
+                    ],
+                    "externalLinks": [
+                      {
+                        "kind": "",
+                        "remark": "",
+                        "value": ""
+                      }
+                    ],
+                    "panelClientId": 1,
+                    "pending": true,
+                    "planOverrides": null,
+                    "policyId": 1,
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/nodes": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "List enrolled and pending headless nodes with their applied and desired configuration revisions.",
+        "operationId": "get_panel_api_fleet_nodes",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Continuation cursor returned by the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size from 1 to 200.",
+            "schema": {
+              "type": "integer",
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNodePage"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "items": [
+                      {
+                        "appliedRevision": 4,
+                        "deploymentState": "applied",
+                        "desiredRevision": 4,
+                        "enrolled": true,
+                        "id": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                        "lastSeenUnixMilli": 0,
+                        "name": "fra-1",
+                        "online": true,
+                        "runtimeConditions": [
+                          {
+                            "condition": "CONFIGURATION_APPLIED",
+                            "ready": true,
+                            "resourceId": "xray"
+                          }
+                        ],
+                        "runtimeObservedAt": 0,
+                        "runtimeState": "ready"
+                      }
+                    ],
+                    "nextCursor": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/enroll": {
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Create a private ten-minute enrollment package for a headless node. Store the returned package securely.",
+        "operationId": "post_panel_api_fleet_enroll",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "name": {
+                    "example": "fra-1",
+                    "maxLength": 128,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "name": "fra-1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetEnrollmentView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "expiresUnixMilli": 0,
+                    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "packageJson": "{}"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/clients/{id}/reset-schedule": {
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Configure one shared reset schedule through the fleet runtime. Inherit the applied plan or override with none/hourly/daily/weekly/monthly. Cadence is anchored in UTC, monthly dates clamp without drifting, and saving policy does not reset quota. Pending transitions must complete or be explicitly resolved first.",
+        "operationId": "post_panel_api_fleet_clients_id_reset_schedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Immutable fleet client UUID; must match clientId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "clientId": {
+                    "example": "22222222-2222-4222-8222-222222222222",
+                    "type": "string"
+                  },
+                  "cycle": {
+                    "enum": [
+                      "none",
+                      "hourly",
+                      "daily",
+                      "weekly",
+                      "monthly"
+                    ],
+                    "example": "monthly",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "example": 1,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "operationId": {
+                    "example": "11111111-1111-4111-8111-111111111111",
+                    "type": "string"
+                  },
+                  "override": {
+                    "example": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "clientId",
+                  "expectedRevision",
+                  "override"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "clientId": "22222222-2222-4222-8222-222222222222",
+                "cycle": "monthly",
+                "expectedRevision": 1,
+                "operationId": "11111111-1111-4111-8111-111111111111",
+                "override": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ResetScheduleView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "anchorUnixMilli": 1792353600000,
+                    "clientId": "22222222-2222-4222-8222-222222222222",
+                    "cycle": "monthly",
+                    "diagnostic": "WAITING_FOR_STOP",
+                    "inherited": false,
+                    "nextAttemptUnixMilli": 1795032000000,
+                    "nextDueUnixMilli": 1795032000000,
+                    "pendingOperationId": "33333333-3333-4333-8333-333333333333",
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read the shared plan/client reset policy and any pending operation. nextDueUnixMilli is the original cadence; nextAttemptUnixMilli is worker eligibility. Pending stops preserve old reservations and do not authorize the next allowance.",
+        "operationId": "get_panel_api_fleet_clients_id_reset_schedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Immutable fleet client UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ResetScheduleView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "anchorUnixMilli": 1792353600000,
+                    "clientId": "22222222-2222-4222-8222-222222222222",
+                    "cycle": "monthly",
+                    "diagnostic": "WAITING_FOR_STOP",
+                    "inherited": false,
+                    "nextAttemptUnixMilli": 1795032000000,
+                    "nextDueUnixMilli": 1795032000000,
+                    "pendingOperationId": "33333333-3333-4333-8333-333333333333",
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/clients/{id}/reset-schedule/cancel": {
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Cancel the exact pending scheduled reset through the owned runtime. Keeps the existing term, used and reserved credit, skips missed reset intervals, and preserves required node stops before service can resume. Does not replenish quota or adopt changed credentials.",
+        "operationId": "post_panel_api_fleet_clients_id_reset_schedule_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Immutable fleet client UUID; must match clientId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "clientId": {
+                    "example": "22222222-2222-4222-8222-222222222222",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "example": 1,
+                    "exclusiveMinimum": true,
+                    "format": "int64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "operationId": {
+                    "example": "11111111-1111-4111-8111-111111111111",
+                    "type": "string"
+                  },
+                  "pendingOperationId": {
+                    "example": "33333333-3333-4333-8333-333333333333",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "clientId",
+                  "pendingOperationId",
+                  "expectedRevision"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "clientId": "22222222-2222-4222-8222-222222222222",
+                "expectedRevision": 1,
+                "operationId": "11111111-1111-4111-8111-111111111111",
+                "pendingOperationId": "33333333-3333-4333-8333-333333333333"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ResetScheduleView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "anchorUnixMilli": 1792353600000,
+                    "clientId": "22222222-2222-4222-8222-222222222222",
+                    "cycle": "monthly",
+                    "diagnostic": "WAITING_FOR_STOP",
+                    "inherited": false,
+                    "nextAttemptUnixMilli": 1795032000000,
+                    "nextDueUnixMilli": 1795032000000,
+                    "pendingOperationId": "33333333-3333-4333-8333-333333333333",
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/network/defaults": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read the current immutable fleet networking defaults. Requires configuration administrator access.",
+        "operationId": "get_panel_api_fleet_network_defaults",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNetworkDefaultsView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "revision": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    },
+                    "specification": {
+                      "assetSlots": {},
+                      "bases": {},
+                      "bridges": {},
+                      "inbounds": {},
+                      "nativeNetwork": null,
+                      "sshHostKeys": null,
+                      "version": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Approve a new networking default revision using optimistic concurrency. Following nodes become pending.",
+        "operationId": "post_panel_api_fleet_network_defaults",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "expectedRevision": {
+                    "example": 0,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "specification": {
+                    "$ref": "#/components/schemas/FleetNetworkSpec"
+                  }
+                },
+                "required": [
+                  "expectedRevision",
+                  "specification"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "expectedRevision": 0,
+                "specification": {
+                  "assetSlots": {},
+                  "bases": {},
+                  "bridges": {},
+                  "inbounds": {},
+                  "nativeNetwork": null,
+                  "sshHostKeys": null,
+                  "version": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNetworkRevisionView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "createdUnixMilli": 0,
+                    "id": "",
+                    "revision": 0,
+                    "sha256": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/placement/nodes/{id}": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read master-owned node labels and explicitly eligible inbound templates. Node observations cannot change placement eligibility.",
+        "operationId": "get_panel_api_fleet_placement_nodes_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Fleet node UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNodePlacementView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "enabled": true,
+                    "inboundIds": [
+                      1,
+                      2
+                    ],
+                    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "labels": {
+                      "region": "eu"
+                    },
+                    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "pending": true,
+                    "revision": 1,
+                    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Revise master-owned node placement policy and durably queue reevaluation. An empty template set permits no targets.",
+        "operationId": "post_panel_api_fleet_placement_nodes_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Fleet node UUID; must match nodeId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "enabled": {
+                    "example": true,
+                    "type": "boolean"
+                  },
+                  "expectedRevision": {
+                    "example": 0,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "inboundIds": {
+                    "example": [
+                      1,
+                      2
+                    ],
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": "array"
+                  },
+                  "installationId": {
+                    "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "region": "eu"
+                    },
+                    "type": "object"
+                  },
+                  "nodeId": {
+                    "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "nodeId",
+                  "installationId",
+                  "expectedRevision",
+                  "enabled",
+                  "labels",
+                  "inboundIds"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "enabled": true,
+                "expectedRevision": 0,
+                "inboundIds": [
+                  1,
+                  2
+                ],
+                "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                "labels": {
+                  "region": "eu"
+                },
+                "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNodePlacementView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "enabled": true,
+                    "inboundIds": [
+                      1,
+                      2
+                    ],
+                    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "labels": {
+                      "region": "eu"
+                    },
+                    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "pending": true,
+                    "revision": 1,
+                    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/placement/rules": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "List explicit plan or single-group placement rules in UUID order. Matching targets are combined and intersected with current restrictions.",
+        "operationId": "get_panel_api_fleet_placement_rules",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Last rule UUID from the preceding page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size from 1 to 200.",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FleetPlacementRuleView"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "enabled": true,
+                      "groupId": 0,
+                      "id": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+                      "inboundIds": [
+                        1,
+                        2
+                      ],
+                      "labels": {
+                        "region": "eu"
+                      },
+                      "nodeIds": [
+                        "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+                      ],
+                      "pending": true,
+                      "planId": 1,
+                      "revision": 1,
+                      "scope": "plan",
+                      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Create or revise a placement rule with explicit node IDs or master label selectors. Rule scope is immutable; disable a rule to retire its derived targets.",
+        "operationId": "post_panel_api_fleet_placement_rules",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "enabled": {
+                    "example": true,
+                    "type": "boolean"
+                  },
+                  "expectedRevision": {
+                    "example": 0,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "groupId": {
+                    "example": 0,
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "id": {
+                    "example": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+                    "type": "string"
+                  },
+                  "inboundIds": {
+                    "example": [
+                      1,
+                      2
+                    ],
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": "array"
+                  },
+                  "labels": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "region": "eu"
+                    },
+                    "type": "object"
+                  },
+                  "nodeIds": {
+                    "example": [
+                      "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "planId": {
+                    "example": 1,
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "scope": {
+                    "example": "plan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "expectedRevision",
+                  "scope",
+                  "enabled",
+                  "inboundIds"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "enabled": true,
+                "expectedRevision": 0,
+                "groupId": 0,
+                "id": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+                "inboundIds": [
+                  1,
+                  2
+                ],
+                "labels": {
+                  "region": "eu"
+                },
+                "nodeIds": [
+                  "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+                ],
+                "planId": 1,
+                "scope": "plan"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetPlacementRuleView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "enabled": true,
+                    "groupId": 0,
+                    "id": "04ba844f-c64b-4453-82f5-d19a3b81e2f3",
+                    "inboundIds": [
+                      1,
+                      2
+                    ],
+                    "labels": {
+                      "region": "eu"
+                    },
+                    "nodeIds": [
+                      "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+                    ],
+                    "pending": true,
+                    "planId": 1,
+                    "revision": 1,
+                    "scope": "plan",
+                    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/placement/default": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read the explicit standalone placement default. A null node leaves unplanned, ungrouped clients unplaced.",
+        "operationId": "get_panel_api_fleet_placement_default",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetPlacementDefaultView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "pending": true,
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Choose an already enrolled and policy-approved node installation for standalone clients, or clear the default. Explicit manual targets take precedence.",
+        "operationId": "post_panel_api_fleet_placement_default",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "expectedRevision": {
+                    "example": 0,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "installationId": {
+                    "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "nodeId": {
+                    "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedRevision",
+                  "nodeId",
+                  "installationId"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "expectedRevision": 0,
+                "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetPlacementDefaultView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "pending": true,
+                    "revision": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/placement/clients/{id}": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Preview deterministic placement targets and application diagnostics from current policy. This read allocates no quota and starts no billing term.",
+        "operationId": "get_panel_api_fleet_placement_clients_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Immutable fleet client UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetPlacementProjection"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "clientId": "",
+                    "credentialGeneration": 0,
+                    "sourceRevision": 0,
+                    "targets": [
+                      {
+                        "applicationEligible": false,
+                        "capabilityRevision": 0,
+                        "coreId": "",
+                        "defaultRevision": 0,
+                        "diagnostic": "",
+                        "inboundIds": [
+                          0
+                        ],
+                        "installationId": "",
+                        "manualInboundIds": [
+                          0
+                        ],
+                        "nodeId": "",
+                        "nodePolicyRevision": 0,
+                        "rules": [
+                          {
+                            "id": "",
+                            "revision": 0
+                          }
+                        ],
+                        "runtimeId": ""
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Commit an owned client restriction, explicit target attachment, or scoped suppression through the fleet runtime. restrict accepts null to inherit or [] to deny all; attach/detach require nodeId and nonempty template IDs. Pending never means remote stop is already applied.",
+        "operationId": "post_panel_api_fleet_placement_clients_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Immutable fleet client UUID; must match clientId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "action": {
+                    "example": "restrict",
+                    "type": "string"
+                  },
+                  "clientId": {
+                    "example": "70924ba1-e366-4638-801c-b1055cabcd77",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "example": 1,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "inboundIds": {
+                    "example": [
+                      1,
+                      2
+                    ],
+                    "items": {
+                      "type": "integer"
+                    },
+                    "nullable": true,
+                    "type": "array"
+                  },
+                  "nodeId": {
+                    "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "type": "string"
+                  },
+                  "operationId": {
+                    "example": "39226ea4-a89b-4377-8c2a-c32c977ead47",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "clientId",
+                  "expectedRevision",
+                  "action",
+                  "inboundIds"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "action": "restrict",
+                "clientId": "70924ba1-e366-4638-801c-b1055cabcd77",
+                "expectedRevision": 1,
+                "inboundIds": [
+                  1,
+                  2
+                ],
+                "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                "operationId": "39226ea4-a89b-4377-8c2a-c32c977ead47"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/SourcePlacementResult"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "clientId": "70924ba1-e366-4638-801c-b1055cabcd77",
+                    "pending": true,
+                    "revision": 2
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/network/preview": {
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Compile a pinned node networking preview with resource claims and readiness diagnostics. Creates no traffic authority or billing activation.",
+        "operationId": "post_panel_api_fleet_network_preview",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "expectedDefaultsId": {
+                    "example": "87cb0f1e-6f1f-466a-91d3-8a8dd983b458",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "example": 1,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "installationId": {
+                    "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "type": "string"
+                  },
+                  "nodeId": {
+                    "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "nodeId",
+                  "installationId",
+                  "expectedRevision",
+                  "expectedDefaultsId"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "expectedDefaultsId": "87cb0f1e-6f1f-466a-91d3-8a8dd983b458",
+                "expectedRevision": 1,
+                "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNetworkPreview"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "assets": [
+                      {
+                        "assetId": "",
+                        "kind": "",
+                        "revision": 0,
+                        "sha256": "",
+                        "slot": ""
+                      }
+                    ],
+                    "defaults": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    },
+                    "diagnostics": [
+                      {
+                        "assetSlot": "",
+                        "clientId": "",
+                        "code": "",
+                        "inboundId": 0,
+                        "placementId": "",
+                        "runtimeId": ""
+                      }
+                    ],
+                    "id": "",
+                    "identities": [
+                      {
+                        "clientId": "",
+                        "credentialGeneration": 0,
+                        "inboundInstanceIds": [
+                          ""
+                        ],
+                        "inboundTags": {},
+                        "placementId": "",
+                        "placementRevision": 0,
+                        "runtimeId": "",
+                        "state": "",
+                        "termId": ""
+                      }
+                    ],
+                    "installationId": "",
+                    "listeners": [
+                      {
+                        "address": "",
+                        "inboundId": 0,
+                        "port": 0,
+                        "protocol": "",
+                        "role": "",
+                        "runtimeId": ""
+                      }
+                    ],
+                    "nativeBindings": [
+                      {
+                        "clientId": "",
+                        "id": "",
+                        "inboundInstanceId": "",
+                        "maxSessions": 0,
+                        "placementId": "",
+                        "poolSha256": "",
+                        "prefix": "",
+                        "targetId": 0
+                      }
+                    ],
+                    "nodeId": "",
+                    "nodeRevision": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    },
+                    "origins": {},
+                    "ready": false,
+                    "runtimes": [
+                      {
+                        "clients": 0,
+                        "core": "",
+                        "id": "",
+                        "sha256": ""
+                      }
+                    ],
+                    "sha256": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/network/publish": {
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Publish a previously reviewed compilation after revalidating its sources and existing settled authority. Networking input cannot choose quota or rate funding.",
+        "operationId": "post_panel_api_fleet_network_publish",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "compilationId": {
+                    "example": "70966504-cde8-478b-9f3a-1ca59d52131a",
+                    "type": "string"
+                  },
+                  "operationId": {
+                    "example": "e8c5a425-11b1-4f3a-9718-a60251d6810e",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "compilationId"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "compilationId": "70966504-cde8-478b-9f3a-1ca59d52131a",
+                "operationId": "e8c5a425-11b1-4f3a-9718-a60251d6810e"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNetworkPublicationView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "compilationId": "",
+                    "deploymentRevision": 0,
+                    "nodeId": "",
+                    "replayed": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/network/nodes/{id}": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Read a node’s networking overrides, resolved settings, pinned defaults and inheritance origins.",
+        "operationId": "get_panel_api_fleet_network_nodes_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Fleet node UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNodeNetworkStateView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "configured": false,
+                    "defaults": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    },
+                    "diagnostics": [
+                      {
+                        "assetSlot": "",
+                        "clientId": "",
+                        "code": "",
+                        "inboundId": 0,
+                        "placementId": "",
+                        "runtimeId": ""
+                      }
+                    ],
+                    "effective": {
+                      "assetSlots": {},
+                      "bases": {},
+                      "bridges": {},
+                      "inbounds": {},
+                      "nativeNetwork": null,
+                      "sshHostKeys": null,
+                      "version": 1
+                    },
+                    "followDefaults": false,
+                    "installationId": "",
+                    "nodeId": "",
+                    "origins": {},
+                    "overrides": {
+                      "assetBindings": {},
+                      "assetSlots": {},
+                      "bases": {},
+                      "bridges": {},
+                      "followDefaults": false,
+                      "inbounds": {},
+                      "nativeNetwork": null,
+                      "pinnedDefaultsId": "",
+                      "removedAssetSlots": [
+                        ""
+                      ],
+                      "removedBases": [
+                        ""
+                      ],
+                      "removedBridges": [
+                        ""
+                      ],
+                      "sshHostKeys": null,
+                      "version": 1
+                    },
+                    "pending": false,
+                    "revision": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Create a node networking revision with explicit replace, reset or removal operations.",
+        "operationId": "post_panel_api_fleet_network_nodes_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Fleet node UUID; must match nodeId in the request.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "expectedRevision": {
+                    "example": 1,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "followDefaults": {
+                    "example": true,
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "installationId": {
+                    "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "type": "string"
+                  },
+                  "nodeId": {
+                    "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "type": "string"
+                  },
+                  "operations": {
+                    "items": {
+                      "$ref": "#/components/schemas/FleetNetworkOperation"
+                    },
+                    "type": "array"
+                  },
+                  "pinnedDefaultsId": {
+                    "example": "b84cf341-f5e1-4dc6-b520-63a7d0e4b970",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "nodeId",
+                  "installationId",
+                  "expectedRevision",
+                  "operations"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "expectedRevision": 1,
+                "followDefaults": true,
+                "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                "operations": [
+                  {
+                    "asset": null,
+                    "assetKind": null,
+                    "base": null,
+                    "bridge": null,
+                    "inbound": null,
+                    "inboundId": 0,
+                    "key": "",
+                    "nativeNetwork": null,
+                    "operation": "",
+                    "section": "",
+                    "sshHostKeys": null
+                  }
+                ],
+                "pinnedDefaultsId": "b84cf341-f5e1-4dc6-b520-63a7d0e4b970"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNodeNetworkView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "defaults": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    },
+                    "followDefaults": false,
+                    "installationId": "",
+                    "nodeId": "",
+                    "origins": {},
+                    "pending": false,
+                    "revision": {
+                      "createdUnixMilli": 0,
+                      "id": "",
+                      "revision": 0,
+                      "sha256": ""
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/fleet/network/nodes/{id}/assets": {
+      "get": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "List node-scoped asset metadata and digests without returning secret contents.",
+        "operationId": "get_panel_api_fleet_network_nodes_id_assets",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Fleet node UUID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Continuation cursor returned by the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size from 1 to 200.",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNetworkAssetPage"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "items": [
+                      {
+                        "assetId": "",
+                        "createdUnixMilli": 0,
+                        "installationId": "",
+                        "kind": "",
+                        "nodeId": "",
+                        "revision": 0,
+                        "sha256": "",
+                        "size": 0
+                      }
+                    ],
+                    "nextCursor": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Nodes"
+        ],
+        "summary": "Store an immutable asset revision bound to one node and installation. Data is base64-encoded; the response contains metadata only.",
+        "operationId": "post_panel_api_fleet_network_nodes_id_assets",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Fleet node UUID; must match nodeId in the request.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "description": "Required with a session cookie. Fetch /csrf-token under the panel base path and refresh after login. Authenticated API Bearer or mTLS requests bypass this check.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "assetId": {
+                    "example": "17f763c4-6530-41f7-8a88-534560d4397e",
+                    "type": "string"
+                  },
+                  "data": {
+                    "example": "AQ==",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "example": 0,
+                    "format": "int64",
+                    "type": "integer"
+                  },
+                  "installationId": {
+                    "example": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "example": "tls-certificate",
+                    "type": "string"
+                  },
+                  "nodeId": {
+                    "example": "33253fd2-c71a-43c6-84e5-6277e435e4d2",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "assetId",
+                  "nodeId",
+                  "installationId",
+                  "kind",
+                  "expectedRevision",
+                  "data"
+                ],
+                "type": "object"
+              },
+              "example": {
+                "assetId": "17f763c4-6530-41f7-8a88-534560d4397e",
+                "data": "AQ==",
+                "expectedRevision": 0,
+                "installationId": "948a18c5-a5d0-4c28-8052-d46224088bd6",
+                "kind": "tls-certificate",
+                "nodeId": "33253fd2-c71a-43c6-84e5-6277e435e4d2"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/FleetNetworkAssetView"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "assetId": "",
+                    "createdUnixMilli": 0,
+                    "installationId": "",
+                    "kind": "",
+                    "nodeId": "",
+                    "revision": 0,
+                    "sha256": "",
+                    "size": 0
                   }
                 }
               }

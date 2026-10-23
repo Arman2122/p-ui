@@ -36,3 +36,32 @@ func TestMigrationRequirementsCleansLegacyTagsWithoutExternalProxy(t *testing.T)
 		t.Fatalf("tag after MigrationRequirements = %q, want the legacy 0.0.0.0: prefix stripped", got.Tag)
 	}
 }
+
+func TestLegacyTagCleanupKeepsCollidingTags(t *testing.T) {
+	initTestDB(t)
+	db := database.GetDB()
+	wanted := []string{"occupied", "0.0.0.0:occupied", "0.0.0.0:ambiguous", "0.0.0.0:0.0.0.0:ambiguous", "available"}
+	var rows []model.Inbound
+	for i, tag := range wanted {
+		if tag == "available" {
+			tag = "0.0.0.0:available"
+		}
+		row := model.Inbound{UserId: 1, Tag: tag, Port: 47600 + i, Protocol: model.VLESS, Settings: `{"clients":[]}`, StreamSettings: `{}`}
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatal(err)
+		}
+		rows = append(rows, row)
+	}
+	if err := (&InboundService{}).MigrationRequirements(); err != nil {
+		t.Fatalf("tag collision aborted startup migration: %v", err)
+	}
+	for i, row := range rows {
+		var stored model.Inbound
+		if err := db.First(&stored, row.Id).Error; err != nil {
+			t.Fatal(err)
+		}
+		if stored.Tag != wanted[i] {
+			t.Fatalf("tag %q became %q, want %q", row.Tag, stored.Tag, wanted[i])
+		}
+	}
+}

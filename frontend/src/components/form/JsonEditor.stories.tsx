@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Typography } from 'antd';
 
-import { ThemeProvider } from '@/hooks/useTheme';
+import { ThemeProvider, useTheme } from '@/hooks/useTheme';
 
 import JsonEditor from './JsonEditor';
+
+function StoryTheme({ dark, children }: { dark: boolean; children: ReactNode }) {
+  const { isDark, toggleTheme } = useTheme();
+  useEffect(() => { if (isDark !== dark) toggleTheme(); }, [dark, isDark, toggleTheme]);
+  return children;
+}
 
 const warpOutbound = JSON.stringify(
   {
@@ -88,9 +95,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story) => (
+    (Story, context) => (
       <ThemeProvider>
-        <Story />
+        <StoryTheme dark={context.globals.theme === 'dark'}><Story /></StoryTheme>
       </ThemeProvider>
     ),
   ],
@@ -109,6 +116,11 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: { value: warpOutbound },
+};
+
+export const Dark: Story = {
+  args: { value: warpOutbound },
+  globals: { theme: 'dark' },
 };
 
 export const ReadOnly: Story = {

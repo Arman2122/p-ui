@@ -255,15 +255,22 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 
 	if systemdRun, err := exec.LookPath("systemd-run"); err == nil {
 		unitName := fmt.Sprintf("p-ui-web-update-%d", time.Now().Unix())
-		cmd := exec.CommandContext(context.Background(), systemdRun,
+		args := []string{
 			"--unit", unitName,
-			"--setenv", "PUI_MAIN_FOLDER="+mainFolder,
-			"--setenv", "PUI_SERVICE="+serviceFolder,
-			"--setenv", "PUI_UPDATE_TAG="+updateTag,
+			"--setenv", "PUI_MAIN_FOLDER=" + mainFolder,
+			"--setenv", "PUI_SERVICE=" + serviceFolder,
+			"--setenv", "PUI_UPDATE_TAG=" + updateTag,
 			"--setenv", runIDEnv,
 			"--setenv", statusFileEnv,
-			bash, "-lc", updateScript,
-		)
+		}
+		// Unlike the detached fallback, systemd does not inherit ambient proxy settings.
+		for _, key := range []string{"https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY"} {
+			if value := os.Getenv(key); value != "" {
+				args = append(args, "--setenv", key+"="+value)
+			}
+		}
+		args = append(args, bash, "-lc", updateScript)
+		cmd := exec.CommandContext(context.Background(), systemdRun, args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			output := strings.TrimSpace(string(out))

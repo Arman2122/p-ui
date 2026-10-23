@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
 	"github.com/Arman2122/p-ui/internal/util/common"
@@ -109,6 +111,26 @@ func (s *ApiTokenService) Delete(id int) error {
 	}
 	db := database.GetDB()
 	return db.Where("id = ?", id).Delete(model.ApiToken{}).Error
+}
+
+func (s *ApiTokenService) RecreateByName(name string) (*ApiTokenView, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 64 {
+		return nil, common.NewError("token name must contain 1 to 64 characters")
+	}
+	plaintext := random.Seq(apiTokenLength)
+	row := &model.ApiToken{Name: name, Token: crypto.HashTokenSHA256(plaintext), Enabled: true, Scope: model.ApiTokenScopeAdmin}
+	if err := database.GetDB().Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("name = ?", name).Delete(&model.ApiToken{}).Error; err != nil {
+			return err
+		}
+		return tx.Create(row).Error
+	}); err != nil {
+		return nil, err
+	}
+	view := toView(row)
+	view.Token = plaintext
+	return view, nil
 }
 
 func (s *ApiTokenService) SetEnabled(id int, enabled bool) error {

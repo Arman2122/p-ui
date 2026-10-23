@@ -1,0 +1,15 @@
+# Node forwarding authority
+
+Measured traffic remains the only input to billable usage. An authority report is a separate observation of issued credit, durable reservation high-water, permanently unavailable restart authority, known admission, and conservative spendable bytes. Unknown quantities are explicit; neither missing counters nor unused reservations release a budget.
+
+Before funding or delivering configuration, the master binds the installation to its agent state journal and each runtime's state/credit journal pair. Workers authenticate the local agent through the existing Unix socket transport. The agent durably pins those pairs and supplies expected identities on configuration application. Replacing both runtime databases therefore cannot replay old credit. Replacing the agent database while retaining enrollment credentials creates a durable master recovery hold. Re-registration cannot clear that hold.
+
+Each worker retains one immutable pending authority report until an exact receipt arrives. Reports contain at most 1,024 changed grants; unchanged grants are omitted and runtime freshness uses a sparse heartbeat. The master accepts the next sequence or an exact replay of the latest report. Replays do not refresh timestamps. Runtime observation and receipt times both constrain refill eligibility. Native admission stays unknown; a coherent kernel slice can establish conservative remaining spendable authority without claiming measured usage.
+
+Authority and credit polling isolate runtime failures with bounded concurrency and per-runtime deadlines. A failed earlier runtime cannot starve healthy peers. These loops do not bootstrap master trust: the control connection registers journals first, and unregistered report or credit requests are refused. Repeated checks of an unchanged local binding use a read-only journal transaction.
+
+Credit-only delivery carries at most 128 cumulative top-ups, bound to the settled configuration revision and exact runtime journals. Credit revisions are independent of configuration and rate revisions. The worker changes only an existing finite grant's ceiling; expired, suspended, mismatched, or pending-configuration authority cannot expand. Rate buckets, sessions, accounting counters, and native active slices remain intact. Durable per-grant revision/ceiling values make lost requests and receipts replayable without minting additional bytes.
+
+A same-base process restore may retain an already persisted higher credit revision only when every other policy field is identical. A new configuration supplies canonical master authority. The signed configuration payload and digest remain unchanged by local top-ups. Master outbox acknowledgement changes delivery state only and never refunds quota.
+
+These bounds limit message and retry state. They do not certify the target fleet capacity. Full graph/rate updates still use configuration deployment; million-client throughput requires measured qualification of placement, compilation, reporting, database writes, and delivery together.

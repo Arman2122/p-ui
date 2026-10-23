@@ -160,6 +160,7 @@ func buildFields(fld *ast.Field, overrides []walkOverride) []Field {
 		fields = append(fields, Field{
 			JSONName: fname,
 			GoName:   exprIdentName(fld.Type),
+			Embedded: jsonName == "",
 			Type:     t,
 			Optional: omitempty || isPointer(fld.Type),
 			Validate: validate,
@@ -179,10 +180,16 @@ func exprToType(expr ast.Expr) TypeRef {
 		inner := exprToType(e.X)
 		return TypeRef{Kind: KindRef, Name: "nullable", Inner: &inner}
 	case *ast.ArrayType:
+		if element, ok := e.Elt.(*ast.Ident); ok && e.Len == nil && (element.Name == "byte" || element.Name == "uint8") {
+			return TypeRef{Kind: KindString}
+		}
 		elem := exprToType(e.Elt)
 		return TypeRef{Kind: KindArray, Element: &elem}
 	case *ast.MapType:
 		k := exprToType(e.Key)
+		if k.Kind == KindInt {
+			k = TypeRef{Kind: KindString}
+		}
 		v := exprToType(e.Value)
 		return TypeRef{Kind: KindMap, Key: &k, Value: &v}
 	case *ast.SelectorExpr:
@@ -193,6 +200,9 @@ func exprToType(expr ast.Expr) TypeRef {
 		}
 		if pkg == "time" && name == "Time" {
 			return TypeRef{Kind: KindString, Name: "datetime"}
+		}
+		if pkg == "netip" && (name == "Addr" || name == "AddrPort" || name == "Prefix") {
+			return TypeRef{Kind: KindString}
 		}
 		return TypeRef{Kind: KindRef, Name: name}
 	case *ast.InterfaceType:

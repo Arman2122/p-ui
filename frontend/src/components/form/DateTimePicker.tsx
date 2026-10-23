@@ -65,6 +65,12 @@ export default function DateTimePicker({
   // Bumped on clear: persian-calendar-suite reads `value` only on mount, so
   // remounting via key is the only way to reflect an externally cleared value.
   const [clearNonce, setClearNonce] = useState(0);
+  const suppressMountEmit = useRef(true);
+
+  useEffect(() => {
+    suppressMountEmit.current = false;
+    return () => { suppressMountEmit.current = true; };
+  }, [clearNonce]);
 
   const persianTheme = useMemo(() => {
     if (isUltra) return ULTRA_DARK_THEME;
@@ -86,11 +92,12 @@ export default function DateTimePicker({
 
   if (datepicker === 'jalalian') {
     return (
-      <div ref={jalaliRef} className={`jdp-wrap${isDark ? ' jdp-dark' : ''}${isUltra ? ' jdp-ultra' : ''}${disabled ? ' jdp-disabled' : ''}`}>
+      <div ref={jalaliRef} className={`jdp-wrap${isDark ? ' jdp-dark' : ''}${isUltra ? ' jdp-ultra' : ''}${disabled ? ' jdp-disabled' : ''}${value ? '' : ' jdp-empty'}`}>
         <PersianDateTimePicker
           key={clearNonce}
           value={value ? value.valueOf() : null}
           onChange={(next: number | string | null) => {
+            if (suppressMountEmit.current) return;
             if (next == null || next === '') {
               onChange(null);
               return;

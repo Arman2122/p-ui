@@ -342,6 +342,33 @@ export const BanViewSchema = z.object({
 });
 export type BanView = z.infer<typeof BanViewSchema>;
 
+export const BulkOutcomeSchema = z.object({
+  failed: z.array(z.lazy(() => BulkRowSchema)),
+  ok: z.array(z.string()),
+  skipped: z.array(z.lazy(() => BulkRowSchema)),
+});
+export type BulkOutcome = z.infer<typeof BulkOutcomeSchema>;
+
+export const BulkRowSchema = z.object({
+  email: z.string(),
+  reason: z.string(),
+});
+export type BulkRow = z.infer<typeof BulkRowSchema>;
+
+export const BulkSetEnableReportSchema = z.object({
+  email: z.string(),
+  reason: z.string(),
+});
+export type BulkSetEnableReport = z.infer<typeof BulkSetEnableReportSchema>;
+
+export const BulkSetEnableResultSchema = z.object({
+  changed: z.number().int(),
+  outcome: z.lazy(() => BulkOutcomeSchema),
+  pending: z.number().int(),
+  skipped: z.array(z.lazy(() => BulkSetEnableReportSchema)).optional(),
+});
+export type BulkSetEnableResult = z.infer<typeof BulkSetEnableResultSchema>;
+
 export const CapabilitiesSchema = z.object({
   onlineUsers: z.boolean().nullable().optional(),
   perUserStats: z.boolean().nullable().optional(),
@@ -402,39 +429,22 @@ export const ClientConfigFileSchema = z.object({
 export type ClientConfigFile = z.infer<typeof ClientConfigFileSchema>;
 
 export const ClientCreatePayloadSchema = z.object({
-  adTag: z.string().optional(),
-  allowedIPs: z.array(z.string()).optional(),
-  auth: z.string().optional(),
-  comment: z.string(),
-  created_at: z.number().int().optional(),
-  email: z.string(),
-  enable: z.boolean(),
-  expiryTime: z.number().int(),
+  client: z.lazy(() => ClientSchema),
+  credentialBindings: z.array(z.lazy(() => ClientCredentialBindingInputSchema)).optional(),
+  expectedActorId: z.number().int().optional(),
   externalLinks: z.array(z.lazy(() => ExternalLinkInputSchema)).optional(),
-  flow: z.string().optional(),
-  group: z.string().optional(),
-  id: z.string().optional(),
   inboundIds: z.array(z.number().int()),
-  keepAlive: z.number().int().optional(),
-  limitIp: z.number().int(),
-  password: z.string().optional(),
+  operationId: z.string().optional(),
   planOverrides: z.lazy(() => PlanOverridesSchema).nullable().optional(),
   policyId: z.number().int().nullable().optional(),
-  preSharedKey: z.string().nullable().optional(),
-  privateKey: z.string().optional(),
-  publicKey: z.string().optional(),
-  reset: z.number().int(),
-  reverse: z.lazy(() => ClientReverseSchema).nullable().optional(),
-  secret: z.string().optional(),
-  security: z.string(),
-  subId: z.string(),
-  tgId: z.number().int(),
-  tlsCryptV2: z.string().optional(),
-  totalGB: z.number().int(),
-  updated_at: z.number().int().optional(),
-  username: z.string().optional(),
 });
 export type ClientCreatePayload = z.infer<typeof ClientCreatePayloadSchema>;
+
+export const ClientCredentialBindingInputSchema = z.object({
+  inboundId: z.number().int(),
+  values: z.record(z.string(), z.string()),
+});
+export type ClientCredentialBindingInput = z.infer<typeof ClientCredentialBindingInputSchema>;
 
 export const ClientGroupSchema = z.object({
   createdAt: z.number().int(),
@@ -564,6 +574,7 @@ export const ClientSlimSchema = z.object({
 export type ClientSlim = z.infer<typeof ClientSlimSchema>;
 
 export const ClientTrafficSchema = z.object({
+  accounting: z.lazy(() => TrafficAccountingSchema).nullable().optional(),
   down: z.number().int(),
   email: z.string(),
   enable: z.boolean(),
@@ -572,6 +583,7 @@ export const ClientTrafficSchema = z.object({
   inboundId: z.number().int(),
   lastOnline: z.number().int(),
   reset: z.number().int(),
+  resetCount: z.number().int().nullable().optional(),
   subId: z.string(),
   total: z.number().int(),
   up: z.number().int(),
@@ -745,6 +757,589 @@ export const FallbackParentInfoSchema = z.object({
   path: z.string().optional(),
 });
 export type FallbackParentInfo = z.infer<typeof FallbackParentInfoSchema>;
+
+export const FleetAssetReferenceSchema = z.object({
+  assetId: z.string(),
+  revision: z.number().int(),
+});
+export type FleetAssetReference = z.infer<typeof FleetAssetReferenceSchema>;
+
+export const FleetClientCreateCapabilitiesSchema = z.object({
+  actorId: z.number().int(),
+  supported: z.boolean(),
+});
+export type FleetClientCreateCapabilities = z.infer<typeof FleetClientCreateCapabilitiesSchema>;
+
+export const FleetClientCreateResultSchema = z.object({
+  actorId: z.number().int(),
+  clientId: z.string(),
+  nodeDerived: z.array(z.lazy(() => SourceClientCredentialRequirementSchema)),
+  panelClientId: z.number().int(),
+  pending: z.boolean(),
+  revision: z.number().int(),
+});
+export type FleetClientCreateResult = z.infer<typeof FleetClientCreateResultSchema>;
+
+export const FleetClientSourceBindingSchema = z.object({
+  flowOverride: z.string(),
+  inboundId: z.number().int(),
+  scope: z.string(),
+  values: z.record(z.string(), z.string()),
+});
+export type FleetClientSourceBinding = z.infer<typeof FleetClientSourceBindingSchema>;
+
+export const FleetClientSourceViewSchema = z.object({
+  actorId: z.number().int(),
+  client: z.lazy(() => ClientSchema),
+  clientId: z.string(),
+  credentialBindings: z.array(z.lazy(() => FleetClientSourceBindingSchema)),
+  dependencyDiagnostic: z.string(),
+  effectiveInboundIds: z.array(z.number().int()).nullable().optional(),
+  effectiveScopeKnown: z.boolean(),
+  explicitInboundIds: z.array(z.number().int()),
+  externalLinks: z.array(z.lazy(() => ExternalLinkInputSchema)),
+  panelClientId: z.number().int(),
+  pending: z.boolean(),
+  planOverrides: z.lazy(() => PlanOverridesSchema).nullable().optional(),
+  policyId: z.number().int().nullable().optional(),
+  revision: z.number().int(),
+});
+export type FleetClientSourceView = z.infer<typeof FleetClientSourceViewSchema>;
+
+export const FleetEnrollmentRequestSchema = z.object({
+  name: z.string().max(128),
+});
+export type FleetEnrollmentRequest = z.infer<typeof FleetEnrollmentRequestSchema>;
+
+export const FleetEnrollmentViewSchema = z.object({
+  expiresUnixMilli: z.number().int(),
+  nodeId: z.string(),
+  packageJson: z.string(),
+});
+export type FleetEnrollmentView = z.infer<typeof FleetEnrollmentViewSchema>;
+
+export const FleetInboundNetworkSchema = z.object({
+  addresses: z.array(z.string()).optional(),
+  assets: z.record(z.string(), z.string()).optional(),
+  bridgeId: z.string().optional(),
+  egressMode: z.string().optional(),
+  listen: z.string().nullable().optional(),
+  mtproto: z.lazy(() => FleetMTProtoBindingSchema).nullable().optional(),
+  mtu: z.number().int().optional(),
+  port: z.number().int().nullable().optional(),
+  settings: z.unknown().nullable().optional(),
+  sniffing: z.unknown().nullable().optional(),
+  streamSettings: z.unknown().nullable().optional(),
+  subnet: z.string().optional(),
+  targetId: z.number().int().optional(),
+  targetTag: z.string().optional(),
+});
+export type FleetInboundNetwork = z.infer<typeof FleetInboundNetworkSchema>;
+
+export const FleetMTProtoBindingSchema = z.object({
+  trustedProxies: z.array(z.string()).optional(),
+  web: z.lazy(() => FleetMTProtoWEBBindingSchema).nullable().optional(),
+});
+export type FleetMTProtoBinding = z.infer<typeof FleetMTProtoBindingSchema>;
+
+export const FleetMTProtoWEBBindingSchema = z.object({
+  listen: z.string(),
+  port: z.number().int(),
+  publicPort: z.number().int(),
+});
+export type FleetMTProtoWEBBinding = z.infer<typeof FleetMTProtoWEBBindingSchema>;
+
+export const FleetNativeBindingPinSchema = z.object({
+  clientId: z.string(),
+  id: z.string(),
+  inboundInstanceId: z.string(),
+  maxSessions: z.number().int(),
+  placementId: z.string(),
+  poolSha256: z.string(),
+  prefix: z.string(),
+  targetId: z.number().int(),
+});
+export type FleetNativeBindingPin = z.infer<typeof FleetNativeBindingPinSchema>;
+
+export const FleetNetworkAssetPageSchema = z.object({
+  items: z.array(z.lazy(() => FleetNetworkAssetViewSchema)),
+  nextCursor: z.string(),
+});
+export type FleetNetworkAssetPage = z.infer<typeof FleetNetworkAssetPageSchema>;
+
+export const FleetNetworkAssetPinSchema = z.object({
+  assetId: z.string(),
+  kind: z.string(),
+  revision: z.number().int(),
+  sha256: z.string(),
+  slot: z.string(),
+});
+export type FleetNetworkAssetPin = z.infer<typeof FleetNetworkAssetPinSchema>;
+
+export const FleetNetworkAssetRequestSchema = z.object({
+  assetId: z.string(),
+  data: z.string(),
+  expectedRevision: z.number().int(),
+  installationId: z.string(),
+  kind: z.string(),
+  nodeId: z.string(),
+});
+export type FleetNetworkAssetRequest = z.infer<typeof FleetNetworkAssetRequestSchema>;
+
+export const FleetNetworkAssetViewSchema = z.object({
+  assetId: z.string(),
+  createdUnixMilli: z.number().int(),
+  installationId: z.string(),
+  kind: z.string(),
+  nodeId: z.string(),
+  revision: z.number().int(),
+  sha256: z.string(),
+  size: z.number().int(),
+});
+export type FleetNetworkAssetView = z.infer<typeof FleetNetworkAssetViewSchema>;
+
+export const FleetNetworkAuthorityIdentitySchema = z.object({
+  clientId: z.string(),
+  credentialGeneration: z.number().int(),
+  inboundInstanceIds: z.array(z.string()),
+  inboundTags: z.record(z.string(), z.string()),
+  placementId: z.string(),
+  placementRevision: z.number().int(),
+  runtimeId: z.string(),
+  state: z.string(),
+  termId: z.string().optional(),
+});
+export type FleetNetworkAuthorityIdentity = z.infer<typeof FleetNetworkAuthorityIdentitySchema>;
+
+export const FleetNetworkBridgeSchema = z.object({
+  core: z.string(),
+  endpoint: z.string(),
+  runtimeId: z.string(),
+  udp: z.boolean(),
+});
+export type FleetNetworkBridge = z.infer<typeof FleetNetworkBridgeSchema>;
+
+export const FleetNetworkDefaultsRequestSchema = z.object({
+  expectedRevision: z.number().int(),
+  specification: z.lazy(() => FleetNetworkSpecSchema),
+});
+export type FleetNetworkDefaultsRequest = z.infer<typeof FleetNetworkDefaultsRequestSchema>;
+
+export const FleetNetworkDefaultsViewSchema = z.object({
+  revision: z.lazy(() => FleetNetworkRevisionViewSchema),
+  specification: z.lazy(() => FleetNetworkSpecSchema),
+});
+export type FleetNetworkDefaultsView = z.infer<typeof FleetNetworkDefaultsViewSchema>;
+
+export const FleetNetworkDiagnosticSchema = z.object({
+  assetSlot: z.string().optional(),
+  clientId: z.string().optional(),
+  code: z.string(),
+  inboundId: z.number().int().optional(),
+  placementId: z.string().optional(),
+  runtimeId: z.string().optional(),
+});
+export type FleetNetworkDiagnostic = z.infer<typeof FleetNetworkDiagnosticSchema>;
+
+export const FleetNetworkListenerViewSchema = z.object({
+  address: z.string(),
+  inboundId: z.number().int(),
+  port: z.number().int(),
+  protocol: z.string(),
+  role: z.string(),
+  runtimeId: z.string(),
+});
+export type FleetNetworkListenerView = z.infer<typeof FleetNetworkListenerViewSchema>;
+
+export const FleetNetworkManifestSchema = z.object({
+  assets: z.array(z.lazy(() => FleetNetworkAssetPinSchema)),
+  baseDeploymentRevision: z.number().int(),
+  defaultsRevisionId: z.string(),
+  identities: z.array(z.lazy(() => FleetNetworkAuthorityIdentitySchema)),
+  installationId: z.string(),
+  nativeBindings: z.array(z.lazy(() => FleetNativeBindingPinSchema)).optional(),
+  nodeId: z.string(),
+  nodeRevision: z.number().int(),
+  nodeRevisionId: z.string(),
+  placements: z.array(z.lazy(() => FleetNetworkPlacementPinSchema)),
+  providers: z.array(z.lazy(() => FleetNetworkProviderPinSchema)).optional(),
+  version: z.number().int(),
+});
+export type FleetNetworkManifest = z.infer<typeof FleetNetworkManifestSchema>;
+
+export const FleetNetworkOperationSchema = z.object({
+  asset: z.lazy(() => FleetAssetReferenceSchema).nullable().optional(),
+  assetKind: z.string().nullable().optional(),
+  base: z.lazy(() => FleetRuntimeBaseSchema).nullable().optional(),
+  bridge: z.lazy(() => FleetNetworkBridgeSchema).nullable().optional(),
+  inbound: z.lazy(() => FleetInboundNetworkSchema).nullable().optional(),
+  inboundId: z.number().int().optional(),
+  key: z.string().optional(),
+  nativeNetwork: z.lazy(() => NetworkBindingSchema).nullable().optional(),
+  operation: z.string(),
+  section: z.string(),
+  sshHostKeys: z.lazy(() => FleetSSHHostKeysSchema).nullable().optional(),
+});
+export type FleetNetworkOperation = z.infer<typeof FleetNetworkOperationSchema>;
+
+export const FleetNetworkOverridesSchema = z.object({
+  assetBindings: z.record(z.string(), z.lazy(() => FleetAssetReferenceSchema)).optional(),
+  assetSlots: z.record(z.string(), z.string()).optional(),
+  bases: z.record(z.string(), z.lazy(() => FleetRuntimeBaseSchema)).optional(),
+  bridges: z.record(z.string(), z.lazy(() => FleetNetworkBridgeSchema)).optional(),
+  followDefaults: z.boolean(),
+  inbounds: z.record(z.string(), z.lazy(() => FleetInboundNetworkSchema)).optional(),
+  nativeNetwork: z.lazy(() => NetworkBindingSchema).nullable().optional(),
+  pinnedDefaultsId: z.string().optional(),
+  removedAssetSlots: z.array(z.string()).optional(),
+  removedBases: z.array(z.string()).optional(),
+  removedBridges: z.array(z.string()).optional(),
+  sshHostKeys: z.lazy(() => FleetSSHHostKeysSchema).nullable().optional(),
+  version: z.number().int(),
+});
+export type FleetNetworkOverrides = z.infer<typeof FleetNetworkOverridesSchema>;
+
+export const FleetNetworkPlacementPinSchema = z.object({
+  clientId: z.string(),
+  credentialGeneration: z.number().int(),
+  credentialSha256: z.string(),
+  definitionSha256: z.string(),
+  enabled: z.boolean(),
+  graphSha256: z.string(),
+  owned: z.boolean(),
+  placementId: z.string(),
+  policySha256: z.string(),
+  revision: z.number().int(),
+  termId: z.string().optional(),
+});
+export type FleetNetworkPlacementPin = z.infer<typeof FleetNetworkPlacementPinSchema>;
+
+export const FleetNetworkPreviewSchema = z.object({
+  assets: z.array(z.lazy(() => FleetNetworkAssetPinSchema)),
+  defaults: z.lazy(() => FleetNetworkRevisionViewSchema),
+  diagnostics: z.array(z.lazy(() => FleetNetworkDiagnosticSchema)),
+  id: z.string(),
+  identities: z.array(z.lazy(() => FleetNetworkAuthorityIdentitySchema)),
+  installationId: z.string(),
+  listeners: z.array(z.lazy(() => FleetNetworkListenerViewSchema)),
+  nativeBindings: z.array(z.lazy(() => FleetNativeBindingPinSchema)).optional(),
+  nodeId: z.string(),
+  nodeRevision: z.lazy(() => FleetNetworkRevisionViewSchema),
+  origins: z.record(z.string(), z.string()),
+  ready: z.boolean(),
+  runtimes: z.array(z.lazy(() => FleetNetworkRuntimeViewSchema)),
+  sha256: z.string(),
+});
+export type FleetNetworkPreview = z.infer<typeof FleetNetworkPreviewSchema>;
+
+export const FleetNetworkPreviewRequestSchema = z.object({
+  expectedDefaultsId: z.string(),
+  expectedRevision: z.number().int(),
+  installationId: z.string(),
+  nodeId: z.string(),
+});
+export type FleetNetworkPreviewRequest = z.infer<typeof FleetNetworkPreviewRequestSchema>;
+
+export const FleetNetworkProviderPinSchema = z.object({
+  configurationRevision: z.number().int(),
+  followLatest: z.boolean(),
+  providerId: z.string(),
+  revision: z.number().int(),
+  runtimeId: z.string(),
+  sha256: z.string(),
+});
+export type FleetNetworkProviderPin = z.infer<typeof FleetNetworkProviderPinSchema>;
+
+export const FleetNetworkPublicationViewSchema = z.object({
+  compilationId: z.string(),
+  deploymentRevision: z.number().int(),
+  nodeId: z.string(),
+  replayed: z.boolean(),
+});
+export type FleetNetworkPublicationView = z.infer<typeof FleetNetworkPublicationViewSchema>;
+
+export const FleetNetworkPublishRequestSchema = z.object({
+  compilationId: z.string(),
+  operationId: z.string(),
+});
+export type FleetNetworkPublishRequest = z.infer<typeof FleetNetworkPublishRequestSchema>;
+
+export const FleetNetworkRevisionViewSchema = z.object({
+  createdUnixMilli: z.number().int(),
+  id: z.string(),
+  revision: z.number().int(),
+  sha256: z.string(),
+});
+export type FleetNetworkRevisionView = z.infer<typeof FleetNetworkRevisionViewSchema>;
+
+export const FleetNetworkRuntimeViewSchema = z.object({
+  clients: z.number().int(),
+  core: z.string(),
+  id: z.string(),
+  sha256: z.string(),
+});
+export type FleetNetworkRuntimeView = z.infer<typeof FleetNetworkRuntimeViewSchema>;
+
+export const FleetNetworkSpecSchema = z.object({
+  assetSlots: z.record(z.string(), z.string()).optional(),
+  bases: z.record(z.string(), z.lazy(() => FleetRuntimeBaseSchema)).optional(),
+  bridges: z.record(z.string(), z.lazy(() => FleetNetworkBridgeSchema)).optional(),
+  inbounds: z.record(z.string(), z.lazy(() => FleetInboundNetworkSchema)).optional(),
+  nativeNetwork: z.lazy(() => NetworkBindingSchema).nullable().optional(),
+  sshHostKeys: z.lazy(() => FleetSSHHostKeysSchema).nullable().optional(),
+  version: z.number().int(),
+});
+export type FleetNetworkSpec = z.infer<typeof FleetNetworkSpecSchema>;
+
+export const FleetNodeNetworkRequestSchema = z.object({
+  expectedRevision: z.number().int(),
+  followDefaults: z.boolean().nullable().optional(),
+  installationId: z.string(),
+  nodeId: z.string(),
+  operations: z.array(z.lazy(() => FleetNetworkOperationSchema)),
+  pinnedDefaultsId: z.string().optional(),
+});
+export type FleetNodeNetworkRequest = z.infer<typeof FleetNodeNetworkRequestSchema>;
+
+export const FleetNodeNetworkStateViewSchema = z.object({
+  configured: z.boolean(),
+  defaults: z.lazy(() => FleetNetworkRevisionViewSchema),
+  diagnostics: z.array(z.lazy(() => FleetNetworkDiagnosticSchema)).optional(),
+  effective: z.lazy(() => FleetNetworkSpecSchema),
+  followDefaults: z.boolean(),
+  installationId: z.string(),
+  nodeId: z.string(),
+  origins: z.record(z.string(), z.string()),
+  overrides: z.lazy(() => FleetNetworkOverridesSchema),
+  pending: z.boolean(),
+  revision: z.lazy(() => FleetNetworkRevisionViewSchema),
+});
+export type FleetNodeNetworkStateView = z.infer<typeof FleetNodeNetworkStateViewSchema>;
+
+export const FleetNodeNetworkViewSchema = z.object({
+  defaults: z.lazy(() => FleetNetworkRevisionViewSchema),
+  followDefaults: z.boolean(),
+  installationId: z.string(),
+  nodeId: z.string(),
+  origins: z.record(z.string(), z.string()),
+  pending: z.boolean(),
+  revision: z.lazy(() => FleetNetworkRevisionViewSchema),
+});
+export type FleetNodeNetworkView = z.infer<typeof FleetNodeNetworkViewSchema>;
+
+export const FleetNodePageSchema = z.object({
+  items: z.array(z.lazy(() => FleetNodeViewSchema)),
+  nextCursor: z.string(),
+});
+export type FleetNodePage = z.infer<typeof FleetNodePageSchema>;
+
+export const FleetNodePlacementRequestSchema = z.object({
+  enabled: z.boolean(),
+  expectedRevision: z.number().int(),
+  inboundIds: z.array(z.number().int()),
+  installationId: z.string(),
+  labels: z.record(z.string(), z.string()),
+  nodeId: z.string(),
+});
+export type FleetNodePlacementRequest = z.infer<typeof FleetNodePlacementRequestSchema>;
+
+export const FleetNodePlacementViewSchema = z.object({
+  enabled: z.boolean(),
+  inboundIds: z.array(z.number().int()),
+  installationId: z.string(),
+  labels: z.record(z.string(), z.string()),
+  nodeId: z.string(),
+  pending: z.boolean(),
+  revision: z.number().int(),
+  sha256: z.string(),
+});
+export type FleetNodePlacementView = z.infer<typeof FleetNodePlacementViewSchema>;
+
+export const FleetNodeViewSchema = z.object({
+  appliedRevision: z.number().int(),
+  deploymentState: z.string(),
+  desiredRevision: z.number().int(),
+  enrolled: z.boolean(),
+  id: z.string(),
+  lastSeenUnixMilli: z.number().int(),
+  name: z.string(),
+  online: z.boolean(),
+  runtimeConditions: z.array(z.lazy(() => FleetRuntimeConditionViewSchema)),
+  runtimeObservedAt: z.number().int(),
+  runtimeState: z.string(),
+});
+export type FleetNodeView = z.infer<typeof FleetNodeViewSchema>;
+
+export const FleetPlacementDefaultRequestSchema = z.object({
+  expectedRevision: z.number().int(),
+  installationId: z.string().nullable().optional(),
+  nodeId: z.string().nullable().optional(),
+});
+export type FleetPlacementDefaultRequest = z.infer<typeof FleetPlacementDefaultRequestSchema>;
+
+export const FleetPlacementDefaultViewSchema = z.object({
+  installationId: z.string().nullable().optional(),
+  nodeId: z.string().nullable().optional(),
+  pending: z.boolean(),
+  revision: z.number().int(),
+});
+export type FleetPlacementDefaultView = z.infer<typeof FleetPlacementDefaultViewSchema>;
+
+export const FleetPlacementProjectionSchema = z.object({
+  clientId: z.string(),
+  credentialGeneration: z.number().int(),
+  sourceRevision: z.number().int(),
+  targets: z.array(z.lazy(() => FleetPlacementTargetSchema)),
+});
+export type FleetPlacementProjection = z.infer<typeof FleetPlacementProjectionSchema>;
+
+export const FleetPlacementRulePinSchema = z.object({
+  id: z.string(),
+  revision: z.number().int(),
+});
+export type FleetPlacementRulePin = z.infer<typeof FleetPlacementRulePinSchema>;
+
+export const FleetPlacementRuleRequestSchema = z.object({
+  enabled: z.boolean(),
+  expectedRevision: z.number().int(),
+  groupId: z.number().int().nullable().optional(),
+  id: z.string(),
+  inboundIds: z.array(z.number().int()),
+  labels: z.record(z.string(), z.string()),
+  nodeIds: z.array(z.string()),
+  planId: z.number().int().nullable().optional(),
+  scope: z.string(),
+});
+export type FleetPlacementRuleRequest = z.infer<typeof FleetPlacementRuleRequestSchema>;
+
+export const FleetPlacementRuleViewSchema = z.object({
+  enabled: z.boolean(),
+  groupId: z.number().int().nullable().optional(),
+  id: z.string(),
+  inboundIds: z.array(z.number().int()),
+  labels: z.record(z.string(), z.string()),
+  nodeIds: z.array(z.string()),
+  pending: z.boolean(),
+  planId: z.number().int().nullable().optional(),
+  revision: z.number().int(),
+  scope: z.string(),
+  sha256: z.string(),
+});
+export type FleetPlacementRuleView = z.infer<typeof FleetPlacementRuleViewSchema>;
+
+export const FleetPlacementTargetSchema = z.object({
+  applicationEligible: z.boolean(),
+  capabilityRevision: z.number().int(),
+  coreId: z.string(),
+  defaultRevision: z.number().int(),
+  diagnostic: z.string().optional(),
+  inboundIds: z.array(z.number().int()),
+  installationId: z.string(),
+  manualInboundIds: z.array(z.number().int()),
+  nodeId: z.string(),
+  nodePolicyRevision: z.number().int(),
+  rules: z.array(z.lazy(() => FleetPlacementRulePinSchema)),
+  runtimeId: z.string(),
+});
+export type FleetPlacementTarget = z.infer<typeof FleetPlacementTargetSchema>;
+
+export const FleetProviderBindingSchema = z.object({
+  followLatest: z.boolean(),
+  providerId: z.string(),
+  revision: z.number().int(),
+});
+export type FleetProviderBinding = z.infer<typeof FleetProviderBindingSchema>;
+
+export const FleetProviderFetchSpecSchema = z.object({
+  allowInsecure: z.boolean(),
+  allowPrivate: z.boolean(),
+  format: z.string(),
+  hwid: z.string().optional(),
+  intervalSeconds: z.number().int(),
+  tagPrefix: z.string().optional(),
+  url: z.string(),
+  version: z.number().int(),
+});
+export type FleetProviderFetchSpec = z.infer<typeof FleetProviderFetchSpecSchema>;
+
+export const FleetProviderRefreshRequestSchema = z.object({
+  expectedRevision: z.number().int(),
+  operationId: z.string(),
+  providerId: z.string(),
+});
+export type FleetProviderRefreshRequest = z.infer<typeof FleetProviderRefreshRequestSchema>;
+
+export const FleetProviderRefreshResultSchema = z.object({
+  cachedRevision: z.number().int(),
+  changed: z.boolean(),
+  configurationRevision: z.number().int(),
+  entries: z.number().int(),
+  providerId: z.string(),
+  sha256: z.string(),
+});
+export type FleetProviderRefreshResult = z.infer<typeof FleetProviderRefreshResultSchema>;
+
+export const FleetProviderRequestSchema = z.object({
+  coreId: z.string(),
+  expectedRevision: z.number().int(),
+  fetch: z.lazy(() => FleetProviderFetchSpecSchema),
+  installationId: z.string().optional(),
+  name: z.string(),
+  nodeId: z.string().optional(),
+  operationId: z.string(),
+  providerId: z.string(),
+  refreshEnabled: z.boolean(),
+  scope: z.string(),
+});
+export type FleetProviderRequest = z.infer<typeof FleetProviderRequestSchema>;
+
+export const FleetProviderViewSchema = z.object({
+  cachedRevision: z.number().int(),
+  configurationRevision: z.number().int(),
+  coreId: z.string(),
+  diagnostic: z.string().optional(),
+  installationId: z.string().optional(),
+  name: z.string(),
+  nodeId: z.string().optional(),
+  providerId: z.string(),
+  refreshEnabled: z.boolean(),
+  scope: z.string(),
+});
+export type FleetProviderView = z.infer<typeof FleetProviderViewSchema>;
+
+export const FleetRuntimeBaseSchema = z.object({
+  assets: z.record(z.string(), z.string()).optional(),
+  configuration: z.unknown(),
+  core: z.string(),
+  providers: z.array(z.lazy(() => FleetProviderBindingSchema)).optional(),
+});
+export type FleetRuntimeBase = z.infer<typeof FleetRuntimeBaseSchema>;
+
+export const FleetRuntimeConditionViewSchema = z.object({
+  condition: z.string(),
+  ready: z.boolean(),
+  resourceId: z.string(),
+});
+export type FleetRuntimeConditionView = z.infer<typeof FleetRuntimeConditionViewSchema>;
+
+export const FleetSSHHostKeysSchema = z.object({
+  assetSlot: z.string().optional(),
+  generateLocally: z.boolean(),
+});
+export type FleetSSHHostKeys = z.infer<typeof FleetSSHHostKeysSchema>;
+
+export const FleetStatusViewSchema = z.object({
+  certificateExpiresUnixMilli: z.number().int(),
+  controlAddress: z.string(),
+  controlPlaneId: z.string(),
+  enrollmentUrl: z.string(),
+  error: z.string(),
+  ready: z.boolean(),
+  recoveryReason: z.string(),
+  recoveryRequired: z.boolean(),
+  rootSha256: z.string(),
+});
+export type FleetStatusView = z.infer<typeof FleetStatusViewSchema>;
 
 export const GroupDetailsSchema = z.object({
   clientCount: z.number().int(),
@@ -977,6 +1572,12 @@ export const MsgSchema = z.object({
   warning: z.string().optional(),
 });
 export type Msg = z.infer<typeof MsgSchema>;
+
+export const NetworkBindingSchema = z.object({
+  gatewayIPv4: z.string(),
+  peerIPv4: z.string(),
+});
+export type NetworkBinding = z.infer<typeof NetworkBindingSchema>;
 
 export const NodeSchema = z.object({
   activeCount: z.number().int(),
@@ -1436,6 +2037,36 @@ export const ResellerViewSchema = z.object({
 });
 export type ResellerView = z.infer<typeof ResellerViewSchema>;
 
+export const ResetScheduleCancelRequestSchema = z.object({
+  clientId: z.string(),
+  expectedRevision: z.number().int().gt(0),
+  operationId: z.string(),
+  pendingOperationId: z.string(),
+});
+export type ResetScheduleCancelRequest = z.infer<typeof ResetScheduleCancelRequestSchema>;
+
+export const ResetScheduleRequestSchema = z.object({
+  clientId: z.string(),
+  cycle: z.enum(['none', 'hourly', 'daily', 'weekly', 'monthly']).optional(),
+  expectedRevision: z.number().int(),
+  operationId: z.string(),
+  override: z.boolean(),
+});
+export type ResetScheduleRequest = z.infer<typeof ResetScheduleRequestSchema>;
+
+export const ResetScheduleViewSchema = z.object({
+  anchorUnixMilli: z.number().int(),
+  clientId: z.string(),
+  cycle: z.string(),
+  diagnostic: z.string().optional(),
+  inherited: z.boolean(),
+  nextAttemptUnixMilli: z.number().int(),
+  nextDueUnixMilli: z.number().int(),
+  pendingOperationId: z.string().optional(),
+  revision: z.number().int(),
+});
+export type ResetScheduleView = z.infer<typeof ResetScheduleViewSchema>;
+
 export const RoutingExitViewSchema = z.object({
   id: z.number().int(),
   label: z.string(),
@@ -1531,6 +2162,29 @@ export const SignedInUserSchema = z.object({
 });
 export type SignedInUser = z.infer<typeof SignedInUserSchema>;
 
+export const SourceClientCredentialRequirementSchema = z.object({
+  fields: z.array(z.string()),
+  inboundId: z.number().int(),
+});
+export type SourceClientCredentialRequirement = z.infer<typeof SourceClientCredentialRequirementSchema>;
+
+export const SourcePlacementRequestSchema = z.object({
+  action: z.string(),
+  clientId: z.string(),
+  expectedRevision: z.number().int(),
+  inboundIds: z.array(z.number().int()).nullable().optional(),
+  nodeId: z.string().optional(),
+  operationId: z.string(),
+});
+export type SourcePlacementRequest = z.infer<typeof SourcePlacementRequestSchema>;
+
+export const SourcePlacementResultSchema = z.object({
+  clientId: z.string(),
+  pending: z.boolean(),
+  revision: z.number().int(),
+});
+export type SourcePlacementResult = z.infer<typeof SourcePlacementResultSchema>;
+
 export const StatusSchema = z.object({
   appStats: z.unknown(),
   cpu: z.number(),
@@ -1557,6 +2211,24 @@ export const StatusSchema = z.object({
   xray: z.unknown(),
 });
 export type Status = z.infer<typeof StatusSchema>;
+
+export const TrafficAccountingSchema = z.object({
+  clientId: z.string().optional(),
+  historyBasis: z.string(),
+  historyGranularity: z.string(),
+  measuredDownloaded: z.number().int(),
+  measuredUploaded: z.number().int(),
+  observedUnixMilli: z.number().int(),
+  openingDownloaded: z.number().int(),
+  openingUploaded: z.number().int(),
+  reportedUnixMilli: z.number().int(),
+  reservedBytes: z.number().int().nullable().optional(),
+  source: z.string(),
+  state: z.string(),
+  termId: z.string(),
+  uncertainBytes: z.number().int().nullable().optional(),
+});
+export type TrafficAccounting = z.infer<typeof TrafficAccountingSchema>;
 
 export const UserSchema = z.object({
   id: z.number().int(),

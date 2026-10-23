@@ -2,11 +2,11 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
-# Force any vulnerable transitive postcss (pulled in by next) up to a patched
-# release — fixes GHSA-qx2v-qp2m-jg93 / CVE-2026-41305 (vulnerable < 8.5.10).
+# Keep nested CSS processors and image decoders on patched compatible releases.
 overrides:
-  'postcss@<8.5.10': '^8.5.15'
-  'sharp@<0.35.0': '^0.35.3'
+  'postcss@<8.5.23': '^8.5.23'
+  'sharp@<0.35.4': '^0.35.4'
+  'brace-expansion@>=5 <5.0.9': '5.0.9'
 minimumReleaseAgeExclude:
   - '@mermaid-js/parser@1.2.0'
   - mermaid@11.16.0

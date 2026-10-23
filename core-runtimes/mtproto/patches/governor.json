@@ -1,0 +1,170 @@
+{
+  "Module": "github.com/Arman2122/mtg-proxy",
+  "Version": "v1.9.0",
+  "Files": [
+    {
+      "Path": "mtglib/proxy_opts.go",
+      "SHA256": "b95ab519df3398a5c80744ca9c0a385696b513441695f642f8e68e21204ea8e8",
+      "Reason": "Inject an optional authenticated stream governor without changing standalone proxy behavior.",
+      "Replacements": [
+        {
+          "From": "import (\n\t\"fmt\"",
+          "To": "import (\n\t\"context\"\n\t\"fmt\""
+        },
+        {
+          "From": "\t\"github.com/Arman2122/mtg-proxy/mtglib/internal/doppel\"",
+          "To": "\t\"github.com/Arman2122/mtg-proxy/essentials\"\n\t\"github.com/Arman2122/mtg-proxy/mtglib/internal/doppel\""
+        },
+        {
+          "From": "type ProxyOpts struct {\n",
+          "To": "type ProxyOpts struct {\n\tGovernStream func(context.Context, string, Authentication, essentials.Conn, func()) (essentials.Conn, error)\n\tAuthentication map[string]Authentication\n"
+        },
+        {
+          "From": "type SecretConfig struct {\n",
+          "To": "type Authentication interface {\n\tCurrent() bool\n\tRequest(context.Context) error\n}\n\ntype SecretConfig struct {\n\tAuthentication map[string]Authentication\n"
+        }
+      ]
+    },
+    {
+      "Path": "mtglib/proxy.go",
+      "SHA256": "6d68b6734191b8d84e9f530e417cb12c9350006dab8c92166f84cf5afddce5ab",
+      "Reason": "Retain the configured governor for the proxy lifetime.",
+      "Replacements": [
+        {
+          "From": "type Proxy struct {\n",
+          "To": "type Proxy struct {\n\tgovernStream func(context.Context, string, Authentication, essentials.Conn, func()) (essentials.Conn, error)\n"
+        },
+        {
+          "From": "\tproxy := &Proxy{\n",
+          "To": "\tproxy := &Proxy{\n\t\tgovernStream: opts.GovernStream,\n"
+        },
+        {
+          "From": "initialSet := buildSecretSet(opts.getSecrets(), opts.SecretAdTags, opts.GlobalAdTag, opts.SecretLimits)",
+          "To": "initialSet := buildSecretSet(opts.getSecrets(), opts.SecretAdTags, opts.GlobalAdTag, opts.SecretLimits)\n\tinitialSet.setAuthentication(opts.Authentication)"
+        }
+      ]
+    },
+    {
+      "Path": "mtglib/proxy_serve.go",
+      "SHA256": "1b55e9d8cd7063c088a49ffe90d54275635a24f49bea84c7a50f05a8ad78a9a2",
+      "Reason": "Govern the authenticated, decrypted client stream before direct or advertised Telegram forwarding.",
+      "Replacements": [
+        {
+          "From": "\tif err := p.doTelegramCall(ctx); err != nil {",
+          "To": "\tif p.governStream != nil {\n\t\tgoverned, err := p.governStream(ctx.ctx, ctx.secretName, ctx.authentication, ctx.client(), ctx.Close)\n\t\tif err != nil {\n\t\t\tctx.logger.WarningError(\"stream admission rejected\", err)\n\t\t\treturn\n\t\t}\n\t\tctx.setClient(governed)\n\t}\n\n\tif ctx.Err() != nil || ctx.authentication != nil && !ctx.authentication.Current() { return }\n\tif err := p.doTelegramCall(ctx); err != nil {"
+        },
+        {
+          "From": "\ttracker := newIdleTracker(p.idleTimeout)",
+          "To": "\tclient, telegram := ctx.client(), ctx.telegram()\n\tif ctx.Err() != nil || client == nil || telegram == nil {\n\t\treturn\n\t}\n\n\ttracker := newIdleTracker(p.idleTimeout)"
+        },
+        {
+          "From": "connIdleTimeout{Conn: ctx.telegram(), tracker: tracker}",
+          "To": "connIdleTimeout{Conn: telegram, tracker: tracker}"
+        },
+        {
+          "From": "connIdleTimeout{Conn: ctx.client(), tracker: tracker}",
+          "To": "connIdleTimeout{Conn: client, tracker: tracker}"
+        },
+        {
+          "From": "ctx.matchedSecretKey = set.secrets[i].Key[:]",
+          "To": "ctx.matchedSecretKey = append([]byte(nil), set.secrets[i].Key[:]...)\n\tctx.authentication = set.authentication[set.names[i]]"
+        },
+        {
+          "From": "func (p *Proxy) tryRegisterConn(ctx *streamContext) bool {",
+          "To": "func (p *Proxy) InvalidateAuthentication(names []string) {\n\tvar connections []*streamContext\n\tp.liveMu.Lock()\n\tfor _, name := range names { for connection := range p.liveConns[name] { connections = append(connections, connection) } }\n\tp.liveMu.Unlock()\n\tfor _, connection := range connections { connection.Close() }\n}\n\nfunc (p *Proxy) tryRegisterConn(ctx *streamContext) bool {"
+        },
+        {
+          "From": "\tswitch {\n\tcase hasKey:",
+          "To": "\tif p.governStream != nil {\n\t\tset := p.secrets.Load()\n\t\tkey, ok := set.keys[ctx.secretName]\n\t\tif !ok || len(ctx.matchedSecretKey) != SecretKeyLength || key != [SecretKeyLength]byte(ctx.matchedSecretKey) || ctx.authentication != nil && !ctx.authentication.Current() { return false }\n\t}\n\n\tswitch {\n\tcase hasKey:"
+        }
+      ]
+    },
+    {
+      "Path": "internal/webrelay/origin.go",
+      "SHA256": "342e9b0d047ff46147eeb023421adfed727784fa934b184dd238c994928d2f01",
+      "Reason": "Allow explicit public HTTPS ports in WEB bootstrap and CSP while preserving host-only capabilities and the existing default443 API.",
+      "Replacements": [
+        {
+          "From": "type OriginOptions struct {\n",
+          "To": "type OriginOptions struct {\n\t// PublicPort changes browser URLs without changing capability identity.\n\tPublicPort uint16\n\n"
+        },
+        {
+          "From": "bridge, err := page.New(host)",
+          "To": "bridge, err := page.NewWithPort(host, opts.PublicPort)"
+        }
+      ]
+    },
+    {
+      "Path": "internal/webrelay/page/page.go",
+      "SHA256": "f42ab24b1ead54ac6421b0ff81ccfd16696b41fd830a0b4cc79eb52f5eaee5a5",
+      "Reason": "Allow explicit public HTTPS ports in WEB bootstrap and CSP while preserving host-only capabilities and the existing default443 API.",
+      "Replacements": [
+        {
+          "From": "func New(host string) (*Bridge, error) {\n",
+          "To": "func New(host string) (*Bridge, error) { return NewWithPort(host, 443) }\n\n// NewWithPort keeps the hostname identity separate from its HTTPS authority.\nfunc NewWithPort(host string, port uint16) (*Bridge, error) {\n"
+        },
+        {
+          "From": "\tbridge := &Bridge{host: host}",
+          "To": "\tauthority := host\n\tif port != 0 && port != 443 {\n\t\tauthority = fmt.Sprintf(\"%s:%d\", host, port)\n\t}\n\tbridge := &Bridge{host: authority}"
+        },
+        {
+          "From": "\"connect-src 'self' wss://\" + host,",
+          "To": "\"connect-src 'self' wss://\" + authority,"
+        }
+      ]
+    },
+    {
+      "Path": "mtglib/stream_context.go",
+      "SHA256": "27581384fa8c53534c80e6e71c8bcea819b29c668fac6cf397611fac9a296520",
+      "Reason": "Carry the proof selected by the exact credential snapshot through authentication.",
+      "Replacements": [
+        {
+          "From": "\tmatchedSecretKey []byte",
+          "To": "\tauthentication Authentication\n\tmatchedSecretKey []byte"
+        }
+      ]
+    },
+    {
+      "Path": "mtglib/proxy_secrets.go",
+      "SHA256": "de7ab0de4c9f7f8ce8ebe09a396356edc5207d0cbc1cf644d9f491613f946b21",
+      "Reason": "Keep key and immutable proof in one snapshot; reject old registrations after hot edits.",
+      "Replacements": [
+        {
+          "From": "type secretSet struct {\n",
+          "To": "type secretSet struct {\n\tauthentication map[string]Authentication\n\tkeys map[string][SecretKeyLength]byte\n"
+        },
+        {
+          "From": "return SecretConfig{Secrets: secrets, SecretAdTags: perSecret, GlobalAdTag: s.globalAdTag, Limits: limits}",
+          "To": "return SecretConfig{Secrets: secrets, SecretAdTags: perSecret, GlobalAdTag: s.globalAdTag, Limits: limits, Authentication: s.authentication}"
+        },
+        {
+          "From": "newSet := buildSecretSet(cfg.Secrets, cfg.SecretAdTags, cfg.GlobalAdTag, cfg.Limits)",
+          "To": "newSet := buildSecretSet(cfg.Secrets, cfg.SecretAdTags, cfg.GlobalAdTag, cfg.Limits)\n\tnewSet.setAuthentication(cfg.Authentication)"
+        },
+        {
+          "From": "func (s *secretSet) effectiveAdTag(i int) *[AdTagLength]byte {",
+          "To": "func (s *secretSet) setAuthentication(proofs map[string]Authentication) {\n\ts.authentication = make(map[string]Authentication, len(proofs))\n\ts.keys = make(map[string][SecretKeyLength]byte, len(s.names))\n\tfor i, name := range s.names {\n\t\ts.keys[name] = s.secrets[i].Key\n\t\tif proof := proofs[name]; proof != nil { s.authentication[name] = proof }\n\t}\n}\n\nfunc (s *secretSet) effectiveAdTag(i int) *[AdTagLength]byte {"
+        }
+      ]
+    },
+    {
+      "Path": "mtglib/proxy_telegram.go",
+      "SHA256": "fe2c2ea514da6b5f3c76d3f1afac57ef2f62786d786c1760d909173f44b22d27",
+      "Reason": "Cancel the upstream dial when a credential or connection is retired.",
+      "Replacements": [
+        {
+          "From": "p.network.Dial(addr.Network, addr.Address)",
+          "To": "p.network.DialContext(ctx.ctx, addr.Network, addr.Address)"
+        }
+      ]
+    }
+  ],
+  "Additions": [
+    {
+      "Path": "nodeweb/relay.go",
+      "Source": "web-facade.go.patch",
+      "SHA256": "790a2cc0c49f96f0dbaa086c6c79d6f65466a018f913170e84fcaf43881b6f02",
+      "Reason": "Expose the pinned WEB relay and frame codec through a thin facade; preserve upstream authentication and wire behavior."
+    }
+  ]
+}

@@ -40,20 +40,7 @@ func NewAPIController(g *gin.RouterGroup) *APIController {
 }
 
 func (a *APIController) checkAPIAuth(c *gin.Context) {
-	// A verified client certificate (a completed mTLS handshake) authenticates
-	// the caller, equivalent to a valid bearer token. api_authed must be set so
-	// the CSRF middleware lets cert-authed mutations through.
-	if c.Request.TLS != nil && len(c.Request.TLS.VerifiedChains) > 0 {
-		u, err := a.userService.GetFirstUser()
-		if err != nil || !session.IsAdminUser(u) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, entity.Msg{Success: false, Msg: http.StatusText(http.StatusUnauthorized)})
-			return
-		}
-		session.SetAPIAuthUser(c, u)
-		c.Set("api_authed", true)
-		c.Next()
-		return
-	}
+	// Node certificates authorize the dedicated control protocol, never a panel administrator.
 	auth := c.GetHeader("Authorization")
 	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
 		tok := after
@@ -111,6 +98,7 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	api.Use(requireAdmin)
 	NewBackupController(api)
 	NewCoreConfigController(api)
+	NewFleetController(api.Group("/fleet"))
 
 	api.GET("/cores", a.getCores)
 	api.GET("/cores/status", a.getCoresStatus)

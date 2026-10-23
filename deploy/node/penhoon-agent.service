@@ -1,0 +1,39 @@
+[Unit]
+Description=Penhoon node control agent
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=penhoon-agent
+Group=penhoon-agent
+StateDirectory=penhoon-agent
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/penhoon-agent
+ExecStart=/usr/local/lib/penhoon/current/penhoon-agent run --state-dir /var/lib/penhoon-agent --runtimes /etc/penhoon/runtimes.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

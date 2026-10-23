@@ -14,6 +14,7 @@ import (
 	"github.com/Arman2122/p-ui/internal/core"
 	"github.com/Arman2122/p-ui/internal/database"
 	"github.com/Arman2122/p-ui/internal/database/model"
+	"github.com/Arman2122/p-ui/internal/web/entity"
 )
 
 var planAssignmentMu sync.Mutex
@@ -80,6 +81,11 @@ func (s *PolicyService) PreparePlanClientTx(tx *gorm.DB, scope PlanScope, id int
 	if row.Archived {
 		return ErrPlanArchived
 	}
+	preparePlanClientFields(row, client, inboundIDs)
+	return validatePlanInbounds(tx, scope, row, *inboundIDs)
+}
+
+func preparePlanClientFields(row *model.Policy, client *model.Client, inboundIDs *[]int) {
 	if row.QuotaBytes != nil {
 		client.TotalGB = *row.QuotaBytes
 	}
@@ -93,15 +99,9 @@ func (s *PolicyService) PreparePlanClientTx(tx *gorm.DB, scope PlanScope, id int
 	if len(row.InboundIDs) > 0 {
 		*inboundIDs = slices.Clone(row.InboundIDs)
 	}
-	return validatePlanInbounds(tx, scope, row, *inboundIDs)
 }
 
-type PlanOverrides struct {
-	Quota    *bool `json:"quota" example:"true"`
-	Expiry   *bool `json:"expiry" example:"true"`
-	LimitIP  *bool `json:"limitIp" example:"true"`
-	Inbounds *bool `json:"inbounds" example:"true"`
-}
+type PlanOverrides = entity.PlanOverrides
 
 func (s *PolicyService) SetPlanOverridesTx(tx *gorm.DB, scope PlanScope, email string, overrides PlanOverrides) error {
 	var count int64

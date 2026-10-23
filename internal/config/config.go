@@ -177,6 +177,9 @@ func GetDBFolderPath() string {
 	if testing.Testing() {
 		return testStateFolder()
 	}
+	if role, err := RoleFromEnv(); err == nil && role.ManagementOnly() {
+		return "/var/lib/penhoon-master"
+	}
 	return "/etc/p-ui"
 }
 

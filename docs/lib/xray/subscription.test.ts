@@ -102,6 +102,27 @@ describe('buildBase64Subscription', () => {
 });
 
 describe('buildJsonSubscription', () => {
+  it('limits the compatible SOCKS and HTTP listeners to this device', () => {
+    const cfg = JSON.parse(buildJsonSubscription([vlessClient]));
+    expect(cfg.inbounds).toEqual([
+      {
+        listen: '127.0.0.1',
+        port: 10808,
+        protocol: 'socks',
+        settings: { auth: 'noauth', udp: true, userLevel: 8 },
+        sniffing: { destOverride: ['http', 'tls', 'quic', 'fakedns'], enabled: true },
+        tag: 'mixed',
+      },
+      {
+        listen: '127.0.0.1',
+        port: 10809,
+        protocol: 'http',
+        settings: { userLevel: 8 },
+        tag: 'http',
+      },
+    ]);
+  });
+
   it('emits a single object for one client with a FLAT proxy outbound (settings.id, no vnext)', () => {
     const cfg = JSON.parse(buildJsonSubscription([vlessClient]));
     expect(Array.isArray(cfg)).toBe(false);

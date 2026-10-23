@@ -15,7 +15,7 @@ function defaultCertificate(): Record<string, unknown> {
 }
 
 export function createTlsSettingsWithDefaultCert(): Record<string, unknown> {
-  const tls = TlsStreamSettingsSchema.parse({}) as Record<string, unknown>;
+  const tls = TlsStreamSettingsSchema.parse({ settings: { fingerprint: 'chrome' } }) as Record<string, unknown>;
   tls.certificates = [defaultCertificate()];
   return tls;
 }
